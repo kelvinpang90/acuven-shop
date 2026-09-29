@@ -125,7 +125,7 @@ tasks:
       会员在「我的订单」确认收货与申请退款、收货资料长期保存，并落实 Kelvin 对 UX 待决问题的决定。
       交 Kelvin 审阅；审阅通过前不实现任何页面。只写文档，不碰 frontend/、后端代码、docs/DESIGN.md、docs/REQUIREMENTS.md、
       docs/HANDOFF.md、CI 与部署配置。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-001
     acceptance_criteria:
