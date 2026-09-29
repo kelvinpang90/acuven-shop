@@ -43,7 +43,7 @@ execution:
 # 仓库事实：来自 git remote 与 GitHub 设置，不是实时读取的。GitHub 上改了保护规则要回来同步这里。
 repository:
   host: github.com
-  slug: <owner>/<repo>
+  slug: kelvinpang90/acuven-shop
   default_branch: main
   merge_method: squash
   protected_branches:
