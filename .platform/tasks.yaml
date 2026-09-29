@@ -143,7 +143,6 @@ tasks:
       - docs/UX-COPY.md
       - docs/TODO.md
     allowed_commands:
-      - tests.unit
       - lint.check
       - format.check
     creates_branch: true
