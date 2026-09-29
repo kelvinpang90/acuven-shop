@@ -6,6 +6,9 @@
 ## 0. 阅读说明
 
 - 线框为文本线框，只表达区块、顺序与操作，不表达视觉样式。`[key]` 指 [UX-COPY.md](UX-COPY.md) 的文案键；`( … )` 是按钮；`[____]` 是输入框；`<…>` 是运行时数据。
+- **凡向用户显示的界面文字（含后台）都写成 `[key]`，在 UX-COPY 中有英、中、马三列。** 线框里其余不在 `[ ]` 内的中文——如「错误：」「提交中：」「会员：」「游客：」「底部固定：」「--- 失败时替换为 ---」「（常驻，不可关闭）」「☰ 导航」「→ P09」——都是给审阅者的**标注，不向用户显示**。
+- `<…>` 运行时数据包括商品名称、分类、规格名与规格值、描述（来自后台维护的商品三语文案，见 UX-COPY「约定」）以及订单号、日期、数量、SKU 等；`[图]`、`[主图]`、`[缩略图]` 是图片区块；`☐`、`( )`、`▾`、`▸`、`(-)`、`(+)`、`(‹)`、`(›)`、`⏱`、`✓`、`✗`、`☰` 是无文字的控件或图标，读屏标签用 `common.a11y_*` 与 `common.nav_menu`。品牌字样 `ACUVEN SHOP`，以及 `WhatsApp`、`SKU`、`RM`、`MYR`、`+60` 等不翻译。
+- **订单号统一标 `[K]`**：订单号是查单凭据之一，线框中凡出现订单号（`<订单号>`、含 `{orderNo}` 的 `order.title` 与 `account.coupon_used_on`、查单输入框、后台订单号列与搜索框）都标 `[K]`，并在该页表格列出 K 行，依据 DESIGN 1.6「权限与资料保护」（订单号不出现在公共索引或分析事件；与电话合起来可看到完整收货资料）。
 - **默认语言英文**，页头可切换中文、马来文（见 UX-COPY「约定」）。
 - 金额与个人资料元素在线框中用 `[M1]`（金额）、`[P1]`（个人资料）等标记，并在每页「金额与个人资料元素」表中逐处写出所依据的 `docs/DESIGN.md` 1.6 小节标题。DESIGN 1.6 的小节为：「边界与原则」「数据模型」「计价、优惠、积分与库存」「订单与退款状态」「失败、并发与重试」「权限与资料保护」「保留与匿名化」「上线依赖与设计闸门」。
 - 所有金额由服务端计算后返回，前端只显示，不在浏览器计算价格、优惠、积分、运费或退款（DESIGN 1.6「数据模型」`Cart`、「计价、优惠、积分与库存」）。
@@ -26,10 +29,12 @@
 
 ```text
 +-----------------------------------------------------------------------+
-| [common.demo_banner]                                 (常驻，不可关闭) |
+| [common.demo_banner]                                 （常驻，不可关闭）|
 +-----------------------------------------------------------------------+
-| ACUVEN SHOP  [list.search_placeholder_______][搜]  Shop  Track order  |
-|                          EN | 中文 | BM    Log in / My account  Cart(2)|
+| ACUVEN SHOP  [list.search_placeholder_______]([common.search])         |
+|   [common.nav_shop]  [common.nav_track]                               |
+|   [common.nav_login] 或 [common.nav_account]   [common.nav_cart]       |
+|   [common.lang_en] | [common.lang_zh] | [common.lang_ms]              |
 +-----------------------------------------------------------------------+
 |                                                                       |
 |                          <页面主体>                                    |
@@ -46,7 +51,8 @@
 +--------------------------------+
 | [common.demo_banner_short]     |
 +--------------------------------+
-| ☰  ACUVEN SHOP    EN▾  Cart(2) |
+| ☰  ACUVEN SHOP  <当前语言>▾      |
+|              [common.nav_cart] |
 | [list.search_placeholder___]   |
 +--------------------------------+
 |        <页面主体，单列>          |
@@ -55,7 +61,8 @@
 | [common.nav_privacy]           |
 | ( [common.whatsapp_cta] )      |
 +--------------------------------+
-☰ 菜单：Shop / Track order / Log in 或 My account / Privacy / 语言
+☰ 菜单（读屏标签 [common.nav_menu]）：[common.nav_shop] / [common.nav_track] / [common.nav_login] 或 [common.nav_account] / [common.nav_privacy] / [common.lang_en] · [common.lang_zh] · [common.lang_ms]
+<当前语言>▾ 显示当前语言的 [common.lang_*]，点开即上述三项。
 ```
 
 ## 2. 页面地图
@@ -109,7 +116,7 @@
 |  ① [home.how_1]  ② [home.how_2]  ③ [home.how_3]  ④ [home.how_4]      |
 +-----------------------------------------------------------------------+
 | [home.categories]                                                     |
-|  [分类卡]  [分类卡]  [分类卡]  [分类卡]                                  |
+|  [图]<分类>  [图]<分类>  [图]<分类>  [图]<分类>                          |
 +-----------------------------------------------------------------------+
 | [home.featured]                          ★ [home.demo_hint]           |
 |  [图]<名称>[M1]  [图]<名称>[M1]  [图]<名称>[M1]  [图]<名称>[M1]          |
@@ -130,7 +137,8 @@
 |  ② [home.how_2]                |
 |  ③ [home.how_3]                |
 |  ④ [home.how_4]                |
-| [home.categories] 横向滑动      |
+| [home.categories]              |
+| [图]<分类> [图]<分类> …（横向滑动）|
 | [home.featured]                |
 | ★ [home.demo_hint]             |
 | [图]<名称>[M1] | [图]<名称>[M1] |
@@ -163,11 +171,12 @@
 | [list.filter_category]                                                |
 |  ☐ <分类>        | [图] <名称>        [图] <名称>      [图] <名称>     |
 |  ☐ <分类>        |      [M1]               [M1]             [M1]     |
-| <属性，如颜色>     |                        [list.out_of_stock]         |
+| <规格名>         |                        [list.out_of_stock]         |
 |  ☐ <值> ☐ <值>   | [图] <名称>        [图] <名称>      [图] <名称>     |
-| <属性，如尺寸>     |      [M1]               [M1]             [M1]     |
+| <规格名>         |      [M1]               [M1]             [M1]     |
 |  ☐ <值> ☐ <值>   |                                                    |
-| ([list.filter_clear])  < 1 2 3 >                                      |
+| ([list.filter_clear])  (‹) 1 2 3 (›)                                  |
+（<规格名> 如颜色、尺寸；(‹)(›) 读屏标签 [common.a11y_page_prev] / [common.a11y_page_next]）
 +------------------+----------------------------------------------------+
 空结果：[list.empty] ([list.filter_clear])
 ```
@@ -185,10 +194,10 @@
 |     [M1]       |     [M1]       |
 | [图]<名称>     | [图]<名称>     |
 |  [list.out_of_stock]           |
-| ( 加载更多 )                    |
+| ( [list.load_more] )           |
 +-- 筛选抽屉（全屏）-------------+
 | [list.filter_category] ☐…      |
-| <属性> ☐…                      |
+| <规格名> ☐…                    |
 | ([list.filter_clear]) ([list.filter_apply]) |
 ```
 
@@ -212,13 +221,13 @@
 ```text
 | [common.demo_banner]                                                  |
 | <页头>                                                                |
-| < 面包屑：Shop / <分类> / <名称> >                                    |
+| 面包屑：[common.nav_shop] / <分类> / <名称>                            |
 +-------------------------------+---------------------------------------+
 | [主图]                        | <商品名称>   [detail.english_only]?   |
 |                               | [M1] RM <所选规格单价>                 |
 | [缩略图][缩略图][缩略图]        | [detail.options]                      |
-|                               |  <颜色>: (红) (蓝) (黑)                |
-|                               |  <尺寸>: (S) (M) (L)                   |
+|                               |  <规格名>: (<值>) (<值>) (<值>)         |
+|                               |  <规格名>: (<值>) (<值>) (<值>)         |
 |                               | [detail.quantity]  ( - ) 1 ( + )      |
 |                               | [detail.stock_left]                   |
 |                               | ( [detail.add_to_cart] )              |
@@ -239,8 +248,8 @@
 | <商品名称>                      |
 | [M1] RM <单价>                 |
 | [detail.options]               |
-|  <颜色>: (红)(蓝)(黑)           |
-|  <尺寸>: (S)(M)(L)              |
+|  <规格名>: (<值>)(<值>)(<值>)   |
+|  <规格名>: (<值>)(<值>)(<值>)   |
 | [detail.quantity] (-) 1 (+)    |
 | [detail.stock_left]            |
 | ★ [detail.demo_hint]           |
@@ -324,7 +333,7 @@
 | [checkout.title]                              ★ [checkout.demo_hint]  |
 +---------------------------------------------+-------------------------+
 | [checkout.guest_notice] ([common.nav_login]) ([common.nav_register])  |
-|   （会员登录后不显示此行）                    | 订单摘要                 |
+|   （会员登录后不显示此行）                    | [checkout.summary_title] |
 | [checkout.recipient_title]                  | <名称>/<规格> x2  [M1]   |
 | ┌ 收货表单旁提示（常显，无勾选框）─────────┐   | <名称>/<规格> x1  [M1]   |
 | │ [checkout.form_notice]                   │ |-------------------------|
@@ -355,7 +364,7 @@
 | [common.demo_banner_short]     |
 | [checkout.title]               |
 | ★ [checkout.demo_hint]         |
-| ▸ 订单摘要 [M6]（点开见明细）     |
+| ▸ [checkout.summary_title] [M6]（点开见明细）|
 | [checkout.guest_notice]        |
 | ([common.nav_login]) ([common.nav_register]) |
 | [checkout.recipient_title]     |
@@ -371,9 +380,13 @@
 | [checkout.phone]   [P3 ____]   |
 |  [checkout.phone_hint]         |
 |  [checkout.phone_lookup_hint]  |
-| 会员：优惠券 [M3] / 积分 [M4]     |
+| 会员：[checkout.coupon] [M3]     |
+|  ([checkout.coupon_apply])     |
+|  [checkout.points] [M4]        |
+|  [checkout.points_available]   |
 |  [checkout.points_not_shipping]|
-| 游客：[checkout.points_guest]    |
+| 游客：[checkout.coupon_members_only] |
+|      [checkout.points_guest]   |
 | [cart.subtotal]            [M2]|
 | [checkout.summary_coupon]  [M3]|
 | [checkout.summary_points]  [M4]|
@@ -421,7 +434,7 @@
 | [common.demo_banner]                                                  |
 | [pay.title]   [common.demo_badge]            ★ [pay.demo_hint]        |
 +-----------------------------------------------------------------------+
-| [pay.order_no]  <订单号>  ([common.copy])                              |
+| [pay.order_no]  [K] <订单号>  ([common.copy])                          |
 | [pay.save_order_no]                                                   |
 | [pay.amount_due]  [M1] RM <合计>   [M2] [common.fx_reference]?         |
 | [pay.expires]  ⏱ <剩余分钟>                                            |
@@ -444,7 +457,7 @@
 | [pay.title] [common.demo_badge]|
 | ★ [pay.demo_hint]              |
 | [pay.order_no]                 |
-| <订单号> ([common.copy])        |
+| [K] <订单号> ([common.copy])    |
 | [pay.save_order_no]            |
 | [pay.amount_due]               |
 | [M1] RM <合计>                  |
@@ -468,7 +481,7 @@
 | --- | --- | --- |
 | M1 | 应付金额（订单快照） | 「数据模型」（`Order`）「计价、优惠、积分与库存」（第 1 条） |
 | M2 | 参考币种金额（下单时的汇率版本快照） | 「边界与原则」「数据模型」（`DemoFxRate`） |
-| — | 订单号：查单凭据之一，不进路径、查询参数或分析事件 | 「权限与资料保护」 |
+| K | 订单号：查单凭据之一，不进路径、查询参数或分析事件 | 「权限与资料保护」 |
 | — | 成功/失败按钮：幂等提交，失败停在 `awaiting_demo_payment` 可重试 | 「订单与退款状态」「失败、并发与重试」 |
 | — | 倒计时与取消：15 分钟未付自动取消并释放预占 | 「计价、优惠、积分与库存」（第 6 条）「订单与退款状态」 |
 
@@ -488,7 +501,7 @@
 +---------------------------- 成功 ------------------------------------+
 | ✓ [result.success_title]                                              |
 | [result.success_body]                                                 |
-| [pay.order_no] <订单号> ([common.copy])   [pay.save_order_no]          |
+| [pay.order_no] [K] <订单号> ([common.copy])   [pay.save_order_no]      |
 | [pay.amount_due] [M1]                                                 |
 | 会员：[result.points_earned] [M2]   游客：[result.guest_register] → P11 |
 | ★ [result.demo_hint]                                                  |
@@ -509,9 +522,9 @@
 | ✓ [result.success_title]       |
 | [result.success_body]          |
 | [pay.order_no]                 |
-| <订单号> ([common.copy])        |
+| [K] <订单号> ([common.copy])    |
 | [pay.save_order_no]            |
-| [M1]                           |
+| [pay.amount_due] [M1]          |
 | [result.points_earned] [M2]    |
 |  或 [result.guest_register]     |
 | ★ [result.demo_hint]           |
@@ -533,6 +546,7 @@
 | --- | --- | --- |
 | M1 | 已模拟支付金额（快照） | 「数据模型」（`Order`、`PaymentAttempt`） |
 | M2 | 本单获得积分（整单现金实付每满 RM1 得 1 积分；游客不累积） | 「计价、优惠、积分与库存」（第 3 条） |
+| K | 订单号：查单凭据之一，不进路径、查询参数或分析事件 | 「权限与资料保护」 |
 | — | 重试不重复下单 | 「订单与退款状态」「失败、并发与重试」 |
 
 ---
@@ -550,8 +564,8 @@
 | [common.demo_banner]                                                  |
 | [lookup.title]                               ★ [lookup.demo_hint]     |
 +-----------------------------------------------------------------------+
-|   [pay.order_no]   [P1 ______________________]                        |
-|   [lookup.phone]   [P2 ______________________]                        |
+|   [pay.order_no]   [K ______________________]                         |
+|   [lookup.phone]   [P1 ______________________]                        |
 |                    [checkout.phone_hint]                              |
 |   ( [lookup.submit] )                                                 |
 |   [lookup.privacy_warning]                                            |
@@ -566,9 +580,9 @@
 | [lookup.title]                 |
 | ★ [lookup.demo_hint]           |
 | [pay.order_no]                 |
-| [P1 ______________________]    |
+| [K ______________________]     |
 | [lookup.phone]                 |
-| [P2 ______________________]    |
+| [P1 ______________________]    |
 | [checkout.phone_hint]          |
 | ( [lookup.submit] )            |
 | [lookup.privacy_warning]       |
@@ -581,8 +595,8 @@
 
 | 标记 | 元素 | 依据 DESIGN 1.6 小节 |
 | --- | --- | --- |
-| P1 | 订单号输入 | 「权限与资料保护」 |
-| P2 | 电话输入，按与下单相同的 E.164 规范化比对 | 「权限与资料保护」 |
+| K | 订单号输入：查单凭据之一，只以请求体提交 | 「权限与资料保护」 |
+| P1 | 电话输入，按与下单相同的 E.164 规范化比对 | 「权限与资料保护」 |
 | — | 查询限流、防枚举、不缓存敏感响应；Redis 不可用时拒绝 | 「权限与资料保护」「失败、并发与重试」 |
 | — | 仅凭电话可查 30 天（资料删除后失效） | 「保留与匿名化」 |
 
@@ -599,8 +613,9 @@
 
 ```text
 | [common.demo_banner]                                                  |
-| [order.title]   状态：[order.status_*]       ★ [order.demo_hint]      |
-| 进度：待支付 → 已支付 → 已打包 → 已发货 → 已完成（均带「演示」）       |
+| [order.title] [K]   [order.current_status] [order.status_*]   ★ [order.demo_hint] |
+| [order.progress] [order.status_awaiting] → [order.status_paid] →      |
+|   [order.status_packed] → [order.status_shipped] → [order.status_completed] |
 +---------------------------------------------+-------------------------+
 | [order.items]                               | [checkout.recipient_title] |
 | <名称>/<规格> x2 [order.unit_price][M1]       | [P1] <姓名>             |
@@ -625,16 +640,16 @@
 
 ```text
 | [common.demo_banner_short]     |
-| [order.title]                  |
-| [order.status_*]               |
+| [order.title] [K]              |
+| [order.current_status] [order.status_*] |
 | ★ [order.demo_hint]            |
-| 进度条（纵向）                  |
+| [order.progress]（纵向，各步同桌面的 [order.status_*]）|
 | [order.items]                  |
 | <名称>/<规格> x2               |
 |  [M1] / [order.cash_paid][M2]  |
-| ▸ 金额明细 [M3]                 |
+| ▸ [order.amount_breakdown] [M3]|
 | ▸ [checkout.recipient_title]   |
-|    [P1] 姓名/电话/地址          |
+|    [P1] <姓名>/<电话>/<地址>    |
 |    或 [order.recipient_anonymised] |
 | ( [order.confirm_receipt] )    |
 | [order.confirm_receipt_hint]   |
@@ -655,6 +670,7 @@
 | M3 | 小计、优惠、积分、示例运费、合计快照 | 「数据模型」（`Order`）「计价、优惠、积分与库存」（第 7 条） |
 | M4 | 累计已退、剩余可退、每笔申请金额 | 「订单与退款状态」 |
 | P1 | 完整收货姓名、电话、地址（查询通过后可见；到期显示已匿名化） | 「权限与资料保护」「保留与匿名化」 |
+| K | 页标题 `order.title` 中的订单号 | 「权限与资料保护」 |
 | — | 确认收货：仅 `demo_shipped` 可点；7 天自动完成；全退后冻结 | 「订单与退款状态」 |
 | — | 退款入口：支付后 30 天内显示（待决 Q2） | 「订单与退款状态」 |
 
@@ -671,11 +687,11 @@
 
 ```text
 | [common.demo_banner]                                                  |
-| [refund.title]   [order.title]                ★ [refund.demo_hint]    |
+| [refund.title]   [order.title] [K]            ★ [refund.demo_hint]    |
 +-----------------------------------------------------------------------+
 | [refund.select_items]                                                 |
-|  <名称>/<规格>  [order.cash_paid] [M1]   数量 (-) 0 (+) [refund.max_qty] |
-|  <名称>/<规格>  [order.cash_paid] [M1]   数量 (-) 0 (+) [refund.max_qty] |
+|  <名称>/<规格>  [order.cash_paid] [M1]   [detail.quantity] (-) 0 (+) [refund.max_qty] |
+|  <名称>/<规格>  [order.cash_paid] [M1]   [detail.quantity] (-) 0 (+) [refund.max_qty] |
 +-----------------------------------------------------------------------+
 | [refund.estimate]         [M2]                                        |
 | 会员：[refund.points_back] [M3]  [refund.points_reversed] [M3]         |
@@ -691,11 +707,13 @@
 ```text
 | [common.demo_banner_short]     |
 | [refund.title]                 |
+| [order.title] [K]              |
 | ★ [refund.demo_hint]           |
 | [refund.select_items]          |
 | <名称>/<规格>                   |
 |  [order.cash_paid] [M1]        |
-|  (-) 0 (+) [refund.max_qty]    |
+|  [detail.quantity] (-) 0 (+)   |
+|  [refund.max_qty]              |
 | <名称>/<规格> …                 |
 | [refund.shipping_not_refunded] |
 | [refund.coupon_not_restored]   |
@@ -715,6 +733,7 @@
 | M1 | 每件现金实付快照；可退数量 = 购买数量 − 已批准 − 审核中 | 「订单与退款状态」「数据模型」（`RefundLine`） |
 | M2 | 预计模拟退现金，由服务端按逐件快照计算；运费不退 | 「订单与退款状态」「计价、优惠、积分与库存」（第 4、5 条） |
 | M3 | 返还抵扣积分（已过期不返还）、追回获得积分 | 「计价、优惠、积分与库存」（第 5 条）「订单与退款状态」 |
+| K | 页标题 `order.title` 中的订单号 | 「权限与资料保护」 |
 | — | 提交幂等；同一可退数量重复申请被拒 | 「失败、并发与重试」「订单与退款状态」 |
 
 ---
@@ -736,7 +755,7 @@
 |            | [auth.sms_scope]                          |              |
 |            | [auth.phone] [+60 ▾][P1 ______________]   |              |
 |            | [auth.challenge]                          |              |
-|            | [ 托管人机挑战 ]                           |              |
+|            | <托管人机挑战组件>                           |              |
 |            | ( [auth.send_code] )                      |              |
 |            | [auth.code_sent]                          |              |
 |            | [auth.code]     [______]                  |              |
@@ -759,7 +778,7 @@
 | [auth.sms_scope]               |
 | [auth.phone]                   |
 | [+60▾][P1 _______________]     |
-| [ 托管人机挑战 ]                 |
+| <托管人机挑战组件>                 |
 | ( [auth.send_code] )           |
 | [auth.code_sent]               |
 | [auth.code] [______]           |
@@ -768,6 +787,8 @@
 | ( [auth.register_submit] )     |
 | <错误> ([auth.continue_guest])  |
 ```
+
+说明：`<托管人机挑战组件>` 由人机挑战托管服务渲染，其内文字不在 UX-COPY 中，按当前界面语言请求该服务的对应语言；`[+60 ▾]` 为国家码选择（仅 +60、+65）。
 
 金额与个人资料元素：
 
@@ -795,7 +816,7 @@
 |    | [auth.login_title]           |   | [auth.reset_title]       |     |
 |    | ★ [auth.login_demo_hint]     |   | [auth.sms_scope]         |     |
 |    | [auth.phone] [+60▾][P1 ____] |   | [auth.phone] [P1 ____]   |     |
-|    | [auth.password] [P2 ____]    |   | [ 托管人机挑战 ]          |     |
+|    | [auth.password] [P2 ____]    |   | <托管人机挑战组件>          |     |
 |    | ( [auth.login_submit] )      |   | ( [auth.send_code] )     |     |
 |    | ([auth.forgot]) → 右栏        |   | [auth.code] [____]       |     |
 |    | [common.nav_register] → P11  |   | [auth.new_password][P2]  |     |
@@ -821,7 +842,7 @@
 | [auth.reset_title]             |
 | [auth.sms_scope]               |
 | [auth.phone] [P1 ____]         |
-| [ 托管人机挑战 ]                 |
+| <托管人机挑战组件>                 |
 | ( [auth.send_code] )           |
 | [auth.code] [____]             |
 | [auth.new_password] [P2 ____]  |
@@ -853,19 +874,22 @@
 +----------------+------------------------------------------------------+
 | [account.orders]| ★ [account.demo_hint]                               |
 | [account.points]| [account.orders]                                    |
-| [account.coupons]| <日期> <订单号> [order.status_*] [M1]  ( 查看 → P09 )|
-| [account.delete]| <日期> <订单号> [order.status_*] [M1]                |
+| [account.coupons]| <日期> [K]<订单号> [order.status_*] [M1] ([account.order_view]) → P09 |
+| [account.settings]| <日期> [K]<订单号> [order.status_*] [M1]           |
 |                |   [order.recipient_anonymised]（已匿名化的只显示摘要）|
+|                | 无订单时：[account.orders_empty]                      |
 |                |------------------------------------------------------|
 |                | [account.points]                                     |
 |                | [account.points_balance] [M2]                        |
 |                | [account.points_pending] [M2]（>0 时显示）             |
 |                | [account.points_expiry]  [M2]                        |
-|                | [account.points_history]: <日期> <类型> ±<积分> <订单> |
+|                | [account.points_history]                             |
+|                |  <日期> [account.points_type_*] ±<积分> [K]<订单号>    |
 |                |------------------------------------------------------|
 |                | [account.coupons]（待决 Q13）                          |
-|                | <代码> [account.coupon_used_on] [M3]                 |
+|                | <代码> [account.coupon_used_on] [K] [M3]             |
 |                |------------------------------------------------------|
+|                | [account.settings]                                   |
 |                | [account.delete]                                     |
 |                | [account.delete_warning]                             |
 |                | ( [account.delete_confirm] )（确认方式待决 Q15）        |
@@ -878,17 +902,19 @@
 | [common.demo_banner_short]     |
 | [common.nav_account]           |
 | ★ [account.demo_hint]          |
-| [订单][积分][优惠券][设置]        |
+| [account.orders][account.points][account.coupons][account.settings] |
 --- 订单 ---
 | <日期> [order.status_*]        |
-| <订单号> [M1]  >               |
+| [K]<订单号> [M1]  >            |
+|  （> 读屏标签 [account.order_view]）|
 --- 积分 ---
 | [account.points_balance] [M2]  |
 | [account.points_pending] [M2]  |
 | [account.points_expiry] [M2]   |
 | ▸ [account.points_history]     |
+|  <日期> [account.points_type_*] ±<积分> [K]<订单号> |
 --- 优惠券 ---
-| <代码> [account.coupon_used_on] [M3] |
+| <代码> [account.coupon_used_on] [K] [M3] |
 --- 设置 ---
 | [P1] <手机号部分遮盖>           |
 | ([common.nav_logout])          |
@@ -905,6 +931,8 @@
 | M2 | 积分余额、待抵扣、到期批次、流水 | 「计价、优惠、积分与库存」（第 3、5 条）「数据模型」（`PointLedger`） |
 | M3 | 优惠券使用记录 | 「数据模型」（`Coupon` / `CouponUse`） |
 | P1 | 会员手机号（部分遮盖显示） | 「权限与资料保护」「保留与匿名化」 |
+| K | 订单列表、积分明细与 `account.coupon_used_on` 中的订单号 | 「权限与资料保护」 |
+| — | 积分明细类型 `account.points_type_*`（获得、抵扣、到期、退款返还、退款追回） | 「计价、优惠、积分与库存」（第 3、5 条）「数据模型」（`PointLedger`） |
 | — | 注销：撤销会话、删除手机号与密码、解除订单关联、积分与未用券作废 | 「权限与资料保护」 |
 | — | 仅显示本人下单或认领的订单 | 「权限与资料保护」 |
 
@@ -924,14 +952,15 @@
 | [privacy.title]                              ★ [privacy.demo_hint]    |
 +-----------------------------------------------------------------------+
 | [privacy.intro]                                                       |
-| 收集什么   [P1] [privacy.collect]                                      |
-|           [privacy.fictional]                                         |
-| 保留多久   [P2] [privacy.retention_recipient]                          |
-|           [P3] [privacy.retention_backup]（草稿，待决 Q3）              |
-|           [P4] [privacy.member]                                       |
-| 谁能看到   [P5] [privacy.lookup_risk]                                  |
-| 短信与日志 [P6] [privacy.sms]  [privacy.logs]                           |
-| 联系      [privacy.contact] ( WhatsApp → {{WHATSAPP_CONTACT_LINK}} 占位 ) |
+| [privacy.h_collect]    [P1] [privacy.collect]                          |
+|                        [privacy.fictional]                             |
+| [privacy.h_retention]  [P2] [privacy.retention_recipient]              |
+|                        [P3] [privacy.retention_backup]（草稿，待决 Q3） |
+|                        [P4] [privacy.member]                           |
+| [privacy.h_access]     [P5] [privacy.lookup_risk]                      |
+| [privacy.h_sms_logs]   [P6] [privacy.sms]  [privacy.logs]              |
+| [privacy.h_contact]    [privacy.contact]                               |
+|                        ( [privacy.contact_button] ) → {{WHATSAPP_CONTACT_LINK}} 占位 |
 ```
 
 手机：
@@ -941,12 +970,13 @@
 | [privacy.title]                |
 | ★ [privacy.demo_hint]          |
 | [privacy.intro]                |
-| ▾ 收集什么 [P1]                 |
-| ▾ 保留多久 [P2][P3][P4]         |
-| ▾ 谁能看到 [P5]                 |
-| ▾ 短信与日志 [P6]               |
+| ▾ [privacy.h_collect] [P1]     |
+| ▾ [privacy.h_retention] [P2][P3][P4] |
+| ▾ [privacy.h_access] [P5]      |
+| ▾ [privacy.h_sms_logs] [P6]    |
+| [privacy.h_contact]            |
 | [privacy.contact]              |
-| ( WhatsApp 占位 )               |
+| ( [privacy.contact_button] ) → 占位链接 |
 （手机上各段默认展开；▾ 仅示意分段）
 ```
 
@@ -967,7 +997,8 @@
 
 - 单一管理员；后台同样支持英文、中文、马来文，默认英文。
 - 每页顶部常驻 `[admin.demo_banner]`，作为后台每页的演示提示（★）；各页另有操作旁提示。
-- 桌面：左侧导航 + 右侧内容；手机：顶部 ☰ 导航，表格改为卡片列表。
+- 桌面：左侧导航 + 右侧内容；手机：顶部 ☰ 导航，表格改为卡片列表。导航项依次为 `[admin.nav_orders]`、`[admin.nav_refunds]`、`[admin.nav_products]`、`[admin.nav_coupons]`、`[admin.nav_shipping]`、`[admin.nav_stock_resets]`，界面语言切换用 `[common.lang_*]`；A02 线框展开写出导航，A03–A07 以「☰ 导航」标注代替。手机顶栏「☰ [admin.nav_*]」显示当前页的导航项名称。
+- 表格列头、状态值、按钮与区块标题同样都用 `[key]`；`<…>` 为运行时数据，与前台约定相同。
 - 所有权限由服务端检查，前端隐藏按钮不代替授权（DESIGN 1.6「权限与资料保护」）。
 
 ## A01 后台登录
@@ -982,7 +1013,8 @@
 ```text
 | [admin.demo_banner]                                                   |
 |            +-------------------------------+                          |
-|            | [admin.login_title]   EN|中文|BM |                          |
+|            | [admin.login_title]           |                          |
+|            | [common.lang_en]|[common.lang_zh]|[common.lang_ms] |          |
 |            | [admin.username] [________]   |                          |
 |            | [auth.password]  [________]   |                          |
 |            | ( [auth.login_submit] )       |                          |
@@ -995,7 +1027,7 @@
 
 ```text
 | [admin.demo_banner]            |
-| [admin.login_title]  EN▾       |
+| [admin.login_title] <当前语言>▾ |
 | [admin.username] [________]    |
 | [auth.password]  [________]    |
 | ( [auth.login_submit] )        |
@@ -1020,20 +1052,23 @@
 ```text
 | [admin.demo_banner]                                                   |
 +-----------+-----------------------------------------------------------+
-| ☰ 导航     | [admin.search_order][________]  [admin.filter_status] ▾   |
-| Orders    | 订单号     日期     状态             合计   退款            |
-| Refunds   | <订单号>   <日期>   [order.status_*]  [M1]   <n 待审>        |
-| Products  |-----------------------------------------------------------|
-| Coupons   | 选中订单详情                                               |
-| Shipping  |  [order.items] <名称>/<规格> x2 [M2]                       |
-| Stock     |  金额明细 [M1]                                             |
-| resets    |  [admin.recipient_raw]  [P1] <姓名>/<电话>/<地址>/<邮编>    |
+| [admin.nav_orders]  | [admin.search_order][K ________]  [admin.filter_status] ▾ |
+| [admin.nav_refunds] | [pay.order_no] [admin.col_date] [admin.filter_status] [admin.col_total] [admin.col_refunds] |
+| [admin.nav_products]| [K]<订单号> <日期> [order.status_*] [M1] [admin.refunds_pending] |
+| [admin.nav_coupons] |-------------------------------------------------|
+| [admin.nav_shipping]| [admin.order_detail]  [K]<订单号>                 |
+| [admin.nav_stock_resets] |  [order.items] <名称>/<规格> x2 [M2]         |
+|           |  [order.amount_breakdown] [M1]                             |
+|           |  [admin.recipient_raw]  [P1] <姓名>/<电话>/<地址>/<邮编>    |
 |           |    [admin.recipient_audited] / 或 [order.recipient_anonymised] |
 |           |  ( [admin.mark_packed] ) ( [admin.mark_shipped] )          |
 |           |  [admin.ship_hint]                                         |
 |           |  全部已退：[admin.frozen]（按钮禁用）                        |
-|           |  事件记录：<时间> <状态变更> <操作者类别>                    |
+|           |  [admin.event_log]                                         |
+|           |   [admin.col_time] [admin.col_event] [admin.col_actor]     |
+|           |   <时间> [order.status_*] [admin.actor_*]                   |
 +-----------+-----------------------------------------------------------+
+（状态筛选选项为各 [order.status_*]；事件列显示变更后的 [order.status_*]）
 （不设导出按钮，待决 Q7）
 ```
 
@@ -1041,20 +1076,23 @@
 
 ```text
 | [admin.demo_banner]            |
-| ☰  Orders                      |
-| [admin.search_order][____]     |
+| ☰  [admin.nav_orders]          |
+| [admin.search_order][K ____]   |
 | [admin.filter_status] ▾        |
-| <订单号> [order.status_*]      |
-|  <日期> [M1]  >                |
+| [K]<订单号> [order.status_*]   |
+|  <日期> [M1] [admin.refunds_pending] > |
 --- 详情（下一屏）---
+| [admin.order_detail] [K]<订单号> |
 | [order.items] … [M2]           |
-| ▸ 金额明细 [M1]                 |
+| ▸ [order.amount_breakdown] [M1]|
 | ▸ [admin.recipient_raw] [P1]   |
 |   [admin.recipient_audited]    |
 | ( [admin.mark_packed] )        |
 | ( [admin.mark_shipped] )       |
 | [admin.ship_hint]              |
 | [admin.frozen]?                |
+| ▸ [admin.event_log]            |
+|   <时间> [order.status_*] [admin.actor_*] |
 ```
 
 金额与个人资料元素：
@@ -1064,6 +1102,7 @@
 | M1 | 订单金额快照 | 「数据模型」（`Order`） |
 | M2 | 行项目与逐件分摊快照 | 「数据模型」（`OrderItem`）「计价、优惠、积分与库存」（第 2 条） |
 | P1 | 原始收货资料，仅管理员可见，查看留审计；到期显示已匿名化 | 「权限与资料保护」「保留与匿名化」 |
+| K | 订单号列、订单号搜索框与详情标题中的订单号 | 「权限与资料保护」 |
 | — | 状态推进校验当前状态，全退后冻结，已完成不可倒退 | 「订单与退款状态」 |
 | — | 事件记录不含收货资料原文 | 「数据模型」（`PaymentAttempt` / `OrderEvent`） |
 
@@ -1079,12 +1118,12 @@
 ```text
 | [admin.demo_banner]                                                   |
 +-----------+-----------------------------------------------------------+
-| ☰ 导航     | [admin.filter_status] ▾ (requested/approved/rejected)      |
-|           | 申请时间  订单号  商品 x数量   金额   状态                  |
-|           | <时间>   <订单号> <名称> x1   [M1]   [order.refund_requested] |
+| ☰ 导航     | [admin.filter_status] ▾（选项：[order.refund_requested] / [order.refund_approved] / [order.refund_rejected]） |
+|           | [admin.col_requested_at] [pay.order_no] [order.items] [detail.quantity] [admin.col_amount] [admin.filter_status] |
+|           | <时间> [K]<订单号> <名称> x1 [M1] [order.refund_requested] |
 |           |-----------------------------------------------------------|
-|           | 选中申请                                                   |
-|           |  <名称>/<规格> 申请 1 / 购买 2 / 已批准 0                    |
+|           | [admin.refund_detail]  [K]<订单号>                         |
+|           |  <名称>/<规格> [admin.refund_qty]                          |
 |           |  [admin.refund_amount] [M1]                               |
 |           |  [admin.refund_points] [M2]                               |
 |           |  [order.refunded_total] [M3] [order.refundable_left] [M3] |
@@ -1099,11 +1138,14 @@
 
 ```text
 | [admin.demo_banner]            |
-| ☰  Refunds                     |
+| ☰  [admin.nav_refunds]         |
 | [admin.filter_status] ▾        |
-| <时间> <订单号>                 |
-|  <名称> x1 [M1] [状态]  >       |
+| <时间> [K]<订单号>              |
+|  <名称> x1 [M1]                 |
+|  [order.refund_requested|approved|rejected] > |
 --- 详情 ---
+| [admin.refund_detail] [K]<订单号> |
+| <名称>/<规格> [admin.refund_qty] |
 | [admin.refund_amount] [M1]     |
 | [admin.refund_points] [M2]     |
 | [order.refunded_total] [M3]    |
@@ -1121,6 +1163,7 @@
 | M1 | 模拟退现金，按原逐件现金实付快照 | 「订单与退款状态」「计价、优惠、积分与库存」（第 4、5 条） |
 | M2 | 返还抵扣积分与追回获得积分，余额不足记待抵扣 | 「计价、优惠、积分与库存」（第 5 条）「订单与退款状态」 |
 | M3 | 累计已退与剩余可退，累计上限约束 | 「计价、优惠、积分与库存」（第 5 条） |
+| K | 申请列表与详情中的订单号 | 「权限与资料保护」 |
 | — | 批准/拒绝幂等；已批准不可再批 | 「失败、并发与重试」「订单与退款状态」 |
 
 ## A04 后台商品、图片、规格与库存
@@ -1135,16 +1178,19 @@
 ```text
 | [admin.demo_banner]                                                   |
 +-----------+-----------------------------------------------------------+
-| ☰ 导航     | 商品列表：<名称> <分类> [admin.active] ( 编辑 ) ( 新建 )    |
+| ☰ 导航     | [admin.nav_products]                        ( [common.create] ) |
+|           | <名称> <分类> [admin.active] ( [common.edit] )             |
 |           |-----------------------------------------------------------|
-|           | 编辑商品   语言页签：[EN] [中文] [BM]                        |
-|           |  [admin.product_name] [__________]  描述 [__________]      |
+|           | [admin.product_edit]                                       |
+|           |  [admin.content_language] ([common.lang_en]) ([common.lang_zh]) ([common.lang_ms]) |
+|           |  [admin.product_name] [__________]                         |
+|           |  [admin.product_description] [__________]                  |
 |           |  [admin.translation_missing]（缺译时）                     |
-|           |  分类 [▾]   [admin.active] ☐                               |
-|           |  [admin.product_images] [上传] [admin.image_rules]         |
-|           |  [admin.product_options] 颜色: 红,蓝  尺寸: S,M             |
-|           |  SKU   规格    [admin.price]  [admin.initial_stock] [admin.available_today] |
-|           |  <sku> 红/S    [M1 ____]      [M2 ___]           <n> ([admin.adjust_today]) |
+|           |  [admin.product_category] [▾]   [admin.active] ☐           |
+|           |  [admin.product_images] ( [admin.upload] ) [admin.image_rules] |
+|           |  [admin.product_options] <规格名>: <值>,<值>  <规格名>: <值>,<值> |
+|           |  [admin.sku] [admin.variant] [admin.price] [admin.initial_stock] [admin.available_today] |
+|           |  <sku> <规格值> [M1 ____] [M2 ___] <n> ([admin.adjust_today]) |
 |           |  [admin.initial_stock_note]  [admin.rules_apply_new]       |
 |           |  ( [common.save] )                                        |
 +-----------+-----------------------------------------------------------+
@@ -1154,16 +1200,27 @@
 
 ```text
 | [admin.demo_banner]            |
-| ☰  Products   ( 新建 )         |
+| ☰  [admin.nav_products]        |
+|   ( [common.create] )          |
 | <名称> [admin.active]  >       |
+|  （> 读屏标签 [common.edit]）    |
 --- 编辑 ---
-| [EN][中文][BM]                 |
+| [admin.product_edit]           |
+| [admin.content_language]       |
+| ([common.lang_en])([common.lang_zh])([common.lang_ms]) |
 | [admin.product_name] [____]    |
+| [admin.product_description] [____] |
 | [admin.translation_missing]?   |
-| [admin.product_images] [上传]  |
+| [admin.product_category] [▾]   |
+| [admin.active] ☐               |
+| [admin.product_images]         |
+| ( [admin.upload] )             |
 | [admin.image_rules]            |
+| [admin.product_options]        |
+|  <规格名>: <值>,<值>            |
 | SKU 卡片：                      |
-|  <sku> 红/S                    |
+|  [admin.sku] <sku>             |
+|  [admin.variant] <规格值>       |
 |  [admin.price] [M1 ____]       |
 |  [admin.initial_stock][M2 __]  |
 |  [admin.available_today] <n>   |
@@ -1192,11 +1249,14 @@
 ```text
 | [admin.demo_banner]                                                   |
 +-----------+-----------------------------------------------------------+
-| ☰ 导航     | 代码   类型   面额   有效期   已用/上限   状态  ( 新建 )     |
-|           | <代码> 百分比 [M1]   <起止>   <n>/<m>    启用 ([admin.coupon_disable]) |
+| ☰ 导航     | [admin.nav_coupons]                         ( [common.create] ) |
+|           | [admin.coupon_code] [admin.coupon_type] [admin.coupon_value] [admin.coupon_valid] [admin.coupon_usage] [admin.filter_status] |
+|           | <代码> [admin.coupon_percent] [M1] <起止> <n>/<m> [admin.coupon_enabled] ([admin.coupon_disable]) |
+|           | <代码> [admin.coupon_fixed] [M1] <起止> <n>/<m> [admin.coupon_disabled] |
 |           |-----------------------------------------------------------|
 |           | [admin.coupon_code] [______]                              |
-|           | ( ) [admin.coupon_fixed] [M1 ____]  ( ) [admin.coupon_percent] [M1 __] |
+|           | [admin.coupon_type] ( ) [admin.coupon_fixed] ( ) [admin.coupon_percent] |
+|           | [admin.coupon_value] [M1 ____]                            |
 |           | [admin.coupon_valid] [____] ~ [____]                      |
 |           | [admin.coupon_min_spend] [M2 ____]                        |
 |           | [admin.coupon_total_limit] [__] [admin.coupon_member_limit] [__] |
@@ -1208,13 +1268,17 @@
 
 ```text
 | [admin.demo_banner]            |
-| ☰  Coupons   ( 新建 )          |
-| <代码> [M1] <状态>              |
-|  <n>/<m>  ([admin.coupon_disable]) |
+| ☰  [admin.nav_coupons]         |
+|   ( [common.create] )          |
+| <代码> [M1] [admin.coupon_enabled]/[admin.coupon_disabled] |
+|  [admin.coupon_usage] <n>/<m>  |
+|  ([admin.coupon_disable])      |
 --- 新建 ---
 | [admin.coupon_code] [____]     |
-| 类型 ( )固定 ( )百分比           |
-| 面额 [M1 ____]                  |
+| [admin.coupon_type]            |
+|  ( )[admin.coupon_fixed]       |
+|  ( )[admin.coupon_percent]     |
+| [admin.coupon_value] [M1 ____] |
 | [admin.coupon_valid] [__]~[__] |
 | [admin.coupon_min_spend][M2 _] |
 | [admin.coupon_total_limit][__] |
@@ -1242,14 +1306,16 @@
 ```text
 | [admin.demo_banner]                                                   |
 +-----------+-----------------------------------------------------------+
-| ☰ 导航     | 运费                                                      |
+| ☰ 导航     | [admin.shipping_title]                                    |
 |           | [admin.shipping_my_state]                                 |
 |           |   <州属>  [admin.shipping_fee] [M1 ____]  × 各州           |
-|           | [admin.shipping_country] <国家> [M1 ____]  ( 新增国家 )     |
-|           | [admin.shipping_other]   [M1 ____]                        |
+|           | [admin.shipping_by_country]                               |
+|           |   [admin.shipping_country] <国家> [admin.shipping_fee] [M1 ____] |
+|           |   ( [admin.add_country] )                                 |
+|           | [admin.shipping_other]  [admin.shipping_fee] [M1 ____]    |
 |           |-----------------------------------------------------------|
-|           | 演示汇率                                                   |
-|           |  <国家> → <币种>  [admin.fx_rate] [M2 ____]   版本 <n>      |
+|           | [admin.fx_title]                                          |
+|           |  <国家> → <币种>  [admin.fx_rate] [M2 ____]  [admin.fx_version] |
 |           | [admin.rules_apply_new]      ( [common.save] )            |
 +-----------+-----------------------------------------------------------+
 ```
@@ -1258,14 +1324,18 @@
 
 ```text
 | [admin.demo_banner]            |
-| ☰  Shipping & demo rates       |
+| ☰  [admin.nav_shipping]        |
+| [admin.shipping_title]         |
 | ▸ [admin.shipping_my_state]    |
 |   <州属> [M1 ____]              |
-| ▸ 国家运费                      |
+| ▸ [admin.shipping_by_country]  |
 |   <国家> [M1 ____]              |
+|   ( [admin.add_country] )      |
 | [admin.shipping_other][M1 __]  |
-| ▸ 演示汇率                      |
-|   <币种> [M2 ____]              |
+| ▸ [admin.fx_title]             |
+|   <国家> → <币种>               |
+|   [admin.fx_rate] [M2 ____]    |
+|   [admin.fx_version]           |
 | [admin.rules_apply_new]        |
 | ( [common.save] )              |
 ```
@@ -1291,10 +1361,10 @@
 +-----------+-----------------------------------------------------------+
 | ☰ 导航     | [admin.stock_reset_title]                                 |
 |           | [admin.stock_reset_note]                                  |
-|           | 日期（马来西亚时间）  结果                     SKU 数        |
+|           | [admin.col_date_myt]  [admin.col_result]   [admin.col_sku_count] |
 |           | <日期>               [admin.stock_reset_ok]    <n>         |
 |           | <日期>               [admin.stock_reset_failed] <n>        |
-|           |  ▸ 展开：<sku> 初始 <a> − 有效预留 <b> = 当日可用 [M1]      |
+|           |  ▸（展开后）<sku> [admin.stock_reset_breakdown] [M1]       |
 +-----------+-----------------------------------------------------------+
 ```
 
@@ -1302,11 +1372,13 @@
 
 ```text
 | [admin.demo_banner]            |
-| ☰  Stock resets                |
+| ☰  [admin.nav_stock_resets]    |
+| [admin.stock_reset_title]      |
 | [admin.stock_reset_note]       |
 | <日期> [admin.stock_reset_ok]  |
+|  [admin.col_sku_count] <n>     |
 | <日期> [admin.stock_reset_failed] |
-|  ▸ <sku> 当日可用 [M1]          |
+|  ▸ <sku> [admin.stock_reset_breakdown] [M1] |
 ```
 
 金额与个人资料元素：

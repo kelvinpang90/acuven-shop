@@ -7,6 +7,7 @@
 
 - **默认语言：英文（English）。** 访客可在页头切换为中文或马来文（Bahasa Melayu），选择只保存在本浏览器；不按 IP 或浏览器语言自动切换。
 - 每条文案有英文、中文、马来文三列，均不留空。`{…}` 为运行时替换的变量，三种语言保留同名变量。
+- UX.md 线框中向用户显示的界面文字（前台与后台，含按钮、列头、区块标题、状态值与读屏标签）都以本表的键引用；线框里不在 `[ ]` 内的中文只是给审阅者的标注，不向用户显示。线框中的 `[order.status_*]`、`[account.points_type_*]`、`[admin.actor_*]`、`[admin.nav_*]`、`[common.lang_*]` 指本表中该前缀下的一组键；`[order.refund_requested|approved|rejected]` 指三选一。
 - 商品名称、分类、规格等商品数据的三语文案由管理员在后台维护，不在本表；缺少当前语言时回退英文（DESIGN 1.6「数据模型」）。
 - 金额一律以 MYR 显示为 `RM {amount}`，`{amount}` 由整数仙格式化为两位小数；积分一律称「积分 / points / mata」，不与金额混称（DESIGN 1.6「边界与原则」）。
 - 联系入口只有 WhatsApp，链接由私有配置 `{{WHATSAPP_CONTACT_LINK}}` 提供；本文件与仓库不写任何真实电话、WhatsApp 号码、邮箱或地址。
@@ -47,6 +48,13 @@
 | `common.back` | Back | 返回 | Kembali | — |
 | `common.cancel` | Cancel | 取消 | Batal | — |
 | `common.save` | Save | 保存 | Simpan | — |
+| `common.search` | Search | 搜索 | Cari | 页头搜索按钮 |
+| `common.create` | New | 新建 | Baharu | 后台 |
+| `common.edit` | Edit | 编辑 | Sunting | 后台 |
+| `common.a11y_qty_decrease` | Decrease quantity | 减少数量 | Kurangkan kuantiti | 读屏标签，`(-)` |
+| `common.a11y_qty_increase` | Increase quantity | 增加数量 | Tambah kuantiti | 读屏标签，`(+)` |
+| `common.a11y_page_prev` | Previous page | 上一页 | Halaman sebelumnya | 读屏标签，`(‹)` |
+| `common.a11y_page_next` | Next page | 下一页 | Halaman seterusnya | 读屏标签，`(›)` |
 
 ## 2. 首页（P01）
 
@@ -81,6 +89,7 @@
 | `list.results_count` | {count} products | 共 {count} 件商品 | {count} produk | — |
 | `list.price_from` | From RM {amount} | RM {amount} 起 | Dari RM {amount} | — |
 | `list.out_of_stock` | Out of stock today | 今日已售罄 | Kehabisan stok hari ini | — |
+| `list.load_more` | Load more | 加载更多 | Muat lagi | 手机 |
 | `list.empty` | No products match your search. | 没有符合条件的商品。 | Tiada produk sepadan dengan carian anda. | — |
 | `list.demo_hint` | Sample products for demonstration only; none are for real sale. | 示例商品仅供演示，均不真实出售。 | Produk contoh untuk demo sahaja; tiada yang dijual secara sebenar. | ★ |
 | `detail.options` | Choose options | 选择规格 | Pilih pilihan | — |
@@ -136,6 +145,7 @@
 | `checkout.points_available` | {points} points available (100 points = RM1) | 可用 {points} 积分（100 积分抵 RM1） | {points} mata tersedia (100 mata = RM1) | — |
 | `checkout.points_guest` | Guests don't earn points. Register to earn 1 point for every RM1 paid. | 游客不累积积分。注册会员后每实付 RM1 得 1 积分。 | Tetamu tidak mengumpul mata. Daftar untuk dapat 1 mata bagi setiap RM1 dibayar. | — |
 | `checkout.points_not_shipping` | Coupons and points reduce the item amount only, not shipping. | 优惠券与积分只抵商品金额，不抵运费。 | Kupon dan mata hanya mengurangkan jumlah item, bukan kos penghantaran. | — |
+| `checkout.summary_title` | Order summary | 订单摘要 | Ringkasan pesanan | — |
 | `checkout.summary_coupon` | Coupon discount | 优惠券抵扣 | Diskaun kupon | — |
 | `checkout.summary_points` | Points discount | 积分抵扣 | Diskaun mata | — |
 | `checkout.summary_shipping` | Sample shipping | 示例运费 | Kos penghantaran contoh | — |
@@ -189,6 +199,9 @@
 | `lookup.privacy_warning` | Anyone who knows both the order number and the phone number can see the full shipping details. Keep them private. | 同时知道订单号和电话的人都能看到完整收货资料，请妥善保管。 | Sesiapa yang tahu nombor pesanan dan nombor telefon boleh melihat butiran penghantaran penuh. Simpan dengan selamat. | — |
 | `lookup.demo_hint` | Demo orders have no real parcel or tracking number. | 演示订单没有真实包裹或物流单号。 | Pesanan demo tiada bungkusan atau nombor penjejakan sebenar. | ★ |
 | `order.title` | Order {orderNo} | 订单 {orderNo} | Pesanan {orderNo} | — |
+| `order.current_status` | Status: | 状态： | Status: | — |
+| `order.progress` | Progress | 进度 | Kemajuan | — |
+| `order.amount_breakdown` | Amount details | 金额明细 | Butiran jumlah | 前台 P09 与后台 A02 共用 |
 | `order.status_awaiting` | Awaiting demo payment | 待模拟支付 | Menunggu bayaran demo | — |
 | `order.status_paid` | Paid (demo) | 已支付（演示） | Dibayar (demo) | — |
 | `order.status_packed` | Packed (demo) | 已打包（演示） | Dibungkus (demo) | — |
@@ -258,6 +271,13 @@
 | `auth.login_demo_hint` | Members can see order history, demo points and coupons. | 会员可查看历史订单、演示积分与优惠券。 | Ahli boleh melihat sejarah pesanan, mata demo dan kupon. | ★ P12 |
 | `account.orders` | My orders | 我的订单 | Pesanan saya | — |
 | `account.orders_empty` | No orders yet. | 还没有订单。 | Tiada pesanan lagi. | — |
+| `account.order_view` | View | 查看 | Lihat | 链到 P09 |
+| `account.settings` | Settings | 设置 | Tetapan | — |
+| `account.points_type_earned` | Earned | 获得 | Diperoleh | 积分明细类型 |
+| `account.points_type_redeemed` | Used at checkout | 结账抵扣 | Digunakan semasa daftar keluar | 积分明细类型 |
+| `account.points_type_expired` | Expired | 到期失效 | Tamat tempoh | 积分明细类型 |
+| `account.points_type_returned` | Returned after refund | 退款返还 | Dikembalikan selepas bayaran balik | 积分明细类型 |
+| `account.points_type_reversed` | Taken back after refund | 退款追回 | Ditarik balik selepas bayaran balik | 积分明细类型 |
 | `account.points` | My points | 我的积分 | Mata saya | — |
 | `account.points_balance` | Balance: {points} points | 余额：{points} 积分 | Baki: {points} mata | — |
 | `account.points_pending` | Owed from refunds: {points} points (settled from future points) | 待抵扣：{points} 积分（以后获得的积分先偿还） | Tertunggak daripada bayaran balik: {points} mata (dijelaskan daripada mata akan datang) | — |
@@ -276,6 +296,12 @@
 | --- | --- | --- | --- | --- |
 | `privacy.title` | Privacy | 隐私说明 | Privasi | — |
 | `privacy.intro` | This site is a demo store. We collect only what is needed to run the demo, and nothing is really paid for or delivered. | 本站是演示网店，只收集完成演示所需的资料，不发生真实付款或寄送。 | Laman ini ialah kedai demo. Kami hanya mengumpul apa yang diperlukan untuk demo, dan tiada apa yang benar-benar dibayar atau dihantar. | — |
+| `privacy.h_collect` | What we collect | 收集什么 | Apa yang kami kumpul | 段标题 |
+| `privacy.h_retention` | How long we keep it | 保留多久 | Berapa lama kami menyimpannya | 段标题 |
+| `privacy.h_access` | Who can see it | 谁能看到 | Siapa yang boleh melihatnya | 段标题 |
+| `privacy.h_sms_logs` | SMS and logs | 短信与日志 | SMS dan log | 段标题 |
+| `privacy.h_contact` | Contact | 联系 | Hubungi | 段标题 |
+| `privacy.contact_button` | Chat on WhatsApp | 通过 WhatsApp 联系 | Sembang di WhatsApp | 链接为占位 `{{WHATSAPP_CONTACT_LINK}}` |
 | `privacy.collect` | For orders: recipient name, phone number, country, region, address and postcode. For members: mobile number and a securely hashed password. We do not ask for email or ID documents. | 订单：收货人姓名、电话、国家、地区、地址与邮编。会员：手机号与安全哈希后的密码。不收集邮箱或证件。 | Untuk pesanan: nama penerima, nombor telefon, negara, wilayah, alamat dan poskod. Untuk ahli: nombor telefon bimbit dan kata laluan yang di-hash dengan selamat. Kami tidak meminta e-mel atau dokumen pengenalan. | — |
 | `privacy.fictional` | You may use fictional shipping details. | 收货资料可以填写虚构内容。 | Anda boleh menggunakan butiran penghantaran rekaan. | — |
 | `privacy.retention_recipient` | Shipping details are deleted from the live system 30 days after payment, or 30 days after the order was placed if it was never paid. Order items, amounts and status are kept without them. | 收货资料在支付成功后 30 天（未支付订单为下单后 30 天）从在线系统删除；订单商品、金额与状态会保留，但不再含这些资料。 | Butiran penghantaran dipadam daripada sistem langsung 30 hari selepas pembayaran, atau 30 hari selepas pesanan dibuat jika ia tidak pernah dibayar. Item, jumlah dan status pesanan disimpan tanpa butiran itu. | — |
@@ -303,20 +329,42 @@
 | `admin.nav_stock_resets` | Stock resets | 库存重置 | Tetapan semula stok | — |
 | `admin.filter_status` | Status | 状态 | Status | — |
 | `admin.search_order` | Search by order number | 按订单号搜索 | Cari mengikut nombor pesanan | — |
+| `admin.col_date` | Date | 日期 | Tarikh | 列头 |
+| `admin.col_total` | Total (MYR) | 合计（MYR） | Jumlah (MYR) | 列头 |
+| `admin.col_refunds` | Refunds | 退款 | Bayaran balik | 列头 |
+| `admin.refunds_pending` | {count} pending | {count} 项待审 | {count} menunggu | — |
+| `admin.order_detail` | Order details | 订单详情 | Butiran pesanan | — |
+| `admin.event_log` | Event log | 事件记录 | Log peristiwa | 不含收货资料原文 |
+| `admin.col_time` | Time | 时间 | Masa | 列头 |
+| `admin.col_event` | Event | 事件 | Peristiwa | 列头 |
+| `admin.col_actor` | By | 操作者 | Oleh | 列头 |
+| `admin.actor_admin` | Admin | 管理员 | Pentadbir | 操作者类别 |
+| `admin.actor_system` | System | 系统 | Sistem | 操作者类别 |
+| `admin.actor_customer` | Customer | 顾客 | Pelanggan | 操作者类别 |
 | `admin.recipient_raw` | Shipping details (original) | 原始收货资料 | Butiran penghantaran (asal) | — |
 | `admin.recipient_audited` | Viewing these details is recorded in the audit log. | 查看此资料会记入审计记录。 | Paparan butiran ini direkodkan dalam log audit. | — |
 | `admin.mark_packed` | Mark as packed (demo) | 标记为已打包（演示） | Tandakan dibungkus (demo) | — |
 | `admin.mark_shipped` | Mark as shipped (demo) | 标记为已发货（演示） | Tandakan dihantar (demo) | — |
 | `admin.ship_hint` | No real parcel or courier booking is created. | 不会产生真实包裹或物流下单。 | Tiada bungkusan atau tempahan kurier sebenar dicipta. | — |
 | `admin.frozen` | All items refunded — fulfilment is frozen. | 全部商品已退款，履约已冻结。 | Semua item dibayar balik — pemenuhan dibekukan. | — |
+| `admin.col_requested_at` | Requested at | 申请时间 | Dimohon pada | 列头 |
+| `admin.col_amount` | Amount (MYR) | 金额（MYR） | Amaun (MYR) | 列头 |
+| `admin.refund_detail` | Refund request details | 退款申请详情 | Butiran permohonan bayaran balik | — |
+| `admin.refund_qty` | Requested {requested} / bought {bought} / approved {approved} | 申请 {requested} / 购买 {bought} / 已批准 {approved} | Dimohon {requested} / dibeli {bought} / diluluskan {approved} | — |
 | `admin.refund_amount` | Cash refund (demo): RM {amount} | 模拟退现金：RM {amount} | Bayaran balik tunai (demo): RM {amount} | — |
 | `admin.refund_points` | Points returned {returned} / taken back {reversed} | 返还积分 {returned} / 追回积分 {reversed} | Mata dikembalikan {returned} / ditarik balik {reversed} | — |
 | `admin.refund_approve` | Approve (demo) | 批准（演示） | Luluskan (demo) | — |
 | `admin.refund_reject` | Reject | 拒绝 | Tolak | — |
 | `admin.refund_reason` | Reason | 理由 | Sebab | — |
 | `admin.refund_hint` | Approving never sends real money. | 批准不会退还任何真实款项。 | Kelulusan tidak pernah menghantar wang sebenar. | — |
+| `admin.product_edit` | Edit product | 编辑商品 | Sunting produk | — |
+| `admin.content_language` | Content language | 内容语言 | Bahasa kandungan | 商品三语文案页签 |
 | `admin.product_name` | Product name | 商品名称 | Nama produk | — |
+| `admin.product_description` | Description | 描述 | Penerangan | — |
+| `admin.product_category` | Category | 分类 | Kategori | — |
 | `admin.product_images` | Images | 图片 | Imej | — |
+| `admin.upload` | Upload | 上传 | Muat naik | — |
+| `admin.variant` | Option values | 规格 | Nilai pilihan | 列头 |
 | `admin.image_rules` | Allowed types: {types}. Max size: {size} MB. | 允许格式：{types}；大小上限：{size} MB。 | Jenis dibenarkan: {types}. Saiz maksimum: {size} MB. | — |
 | `admin.product_options` | Options (e.g. colour, size) | 规格（如颜色、尺寸） | Pilihan (cth. warna, saiz) | — |
 | `admin.sku` | SKU | SKU | SKU | — |
@@ -329,6 +377,11 @@
 | `admin.translation_missing` | {language} text is missing and will fall back to English. English text is required to publish. | 缺少{language}文案，将回退英文；缺少英文则不能上架。 | Teks {language} tiada dan akan kembali kepada bahasa Inggeris. Teks bahasa Inggeris diperlukan untuk diterbitkan. | — |
 | `admin.rules_apply_new` | Changes apply to new orders only. Existing orders keep their original amounts. | 修改只影响新订单，已有订单保持原金额。 | Perubahan hanya terpakai untuk pesanan baharu. Pesanan sedia ada mengekalkan jumlah asal. | — |
 | `admin.coupon_code` | Coupon code | 优惠券代码 | Kod kupon | — |
+| `admin.coupon_type` | Type | 类型 | Jenis | — |
+| `admin.coupon_value` | Value | 面额 | Nilai | RM 或 % |
+| `admin.coupon_usage` | Used / limit | 已用 / 上限 | Digunakan / had | 列头 |
+| `admin.coupon_enabled` | Active | 启用 | Aktif | 状态 |
+| `admin.coupon_disabled` | Disabled | 已停用 | Dinyahaktifkan | 状态 |
 | `admin.coupon_fixed` | Fixed amount (RM) | 固定金额（RM） | Jumlah tetap (RM) | — |
 | `admin.coupon_percent` | Percentage (%) | 百分比（%） | Peratusan (%) | — |
 | `admin.coupon_valid` | Valid from / until | 有效期起止 | Sah dari / hingga | — |
@@ -336,12 +389,21 @@
 | `admin.coupon_total_limit` | Total uses allowed | 总使用次数上限 | Had jumlah penggunaan | — |
 | `admin.coupon_member_limit` | Uses per member | 每会员使用次数上限 | Had penggunaan setiap ahli | — |
 | `admin.coupon_disable` | Disable | 停用 | Nyahaktifkan | — |
+| `admin.shipping_title` | Sample shipping fees | 示例运费 | Kos penghantaran contoh | 区块标题 |
+| `admin.shipping_by_country` | By country | 按国家 | Mengikut negara | — |
+| `admin.add_country` | Add country | 新增国家 | Tambah negara | — |
 | `admin.shipping_country` | Country | 国家/地区 | Negara | — |
 | `admin.shipping_my_state` | Malaysia, by state | 马来西亚（按州属） | Malaysia, mengikut negeri | — |
 | `admin.shipping_other` | All other countries | 其他国家 | Semua negara lain | — |
 | `admin.shipping_fee` | Sample shipping fee (RM) | 示例运费（RM） | Kos penghantaran contoh (RM) | — |
+| `admin.fx_title` | Demo exchange rates | 演示汇率 | Kadar pertukaran demo | 区块标题 |
 | `admin.fx_rate` | Demo rate: 1 MYR = {rate} {currency} | 演示汇率：1 MYR = {rate} {currency} | Kadar demo: 1 MYR = {rate} {currency} | — |
+| `admin.fx_version` | Version {n} | 版本 {n} | Versi {n} | — |
 | `admin.stock_reset_title` | Daily stock reset results | 每日库存重置结果 | Keputusan tetapan semula stok harian | — |
+| `admin.col_date_myt` | Date (Malaysia time) | 日期（马来西亚时间） | Tarikh (waktu Malaysia) | 列头 |
+| `admin.col_result` | Result | 结果 | Keputusan | 列头 |
+| `admin.col_sku_count` | SKUs | SKU 数 | Bilangan SKU | 列头 |
+| `admin.stock_reset_breakdown` | Initial {initial} − active holds {held} = available today {available} | 初始 {initial} − 有效预留 {held} = 当日可用 {available} | Awal {initial} − tahanan aktif {held} = tersedia hari ini {available} | — |
 | `admin.stock_reset_ok` | Completed | 已完成 | Selesai | — |
 | `admin.stock_reset_failed` | Failed — the operator has been alerted | 失败——已告警运营者 | Gagal — pengendali telah dimaklumkan | — |
 | `admin.stock_reset_note` | Resets restore today's stock only. Past orders, refunds and points are not changed. | 重置只恢复当日库存，不改动历史订单、退款与积分。 | Tetapan semula hanya memulihkan stok hari ini. Pesanan, bayaran balik dan mata lalu tidak diubah. | — |
@@ -363,5 +425,5 @@
 - **Q11 虚构电话被真实号码持有人认领。** 表单鼓励填写虚构资料；DESIGN 规定注册后按手机号自动认领近 30 天游客订单。若游客填的“虚构”号码恰好属于真人，该号码的持有人注册后即可认领该单并看到收货资料。这是设计层面的剩余风险，本稿不改设计，请 Kelvin 判断是否接受或另议。
 - **Q12 待支付订单的取消入口与操作者。** DESIGN 写「待支付订单可取消或超时为 `demo_cancelled`」，未写由谁取消。线框在支付页放 `pay.cancel_order`（访客取消），待确认；若不允许访客取消则删除该按钮，仅靠 15 分钟超时。
 - **Q13 会员中心「优惠券」的含义。** REQUIREMENTS 写会员可查看优惠券；DESIGN 的 `Coupon` 没有发放给某会员的字段，只有代码与使用记录。线框暂把「我的优惠券」做成使用记录，是否还要列出当前可用的公开券待定。
-- **Q14 马来文文案审校。** 本表马来文为草稿，须母语者审校用词（如 troli、daftar keluar、bayaran balik）后再实现。
+- **Q14 马来文文案审校。** UX-COPY 的马来文为草稿，须母语者审校用词（如 troli、daftar keluar、bayaran balik）后再实现。
 - **Q15 密码规则与注销确认方式。** DESIGN 只要求密码安全哈希，未定长度或复杂度；账号注销的确认方式（再次输入密码或短信验证）也未定义。线框只放确认按钮，待定。
