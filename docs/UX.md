@@ -1,29 +1,42 @@
 # Acuven Shop 前端页面结构与线框（审阅稿）
 
 > **审阅稿，Kelvin 审阅通过前不实现任何页面。**
-> 版本 0.1（2026-09-29），任务 `SHOP-TASK-001`。依据 `docs/REQUIREMENTS.md` 1.5「前端页面设计安排」与 `docs/DESIGN.md` 1.6；三语文案见 [UX-COPY.md](UX-COPY.md)。本稿不改设计与需求，冲突之处列入文末「待决问题」。
+> 版本 0.2（2026-09-29），任务 `SHOP-TASK-003`（修订 `SHOP-TASK-001` 的 0.1）。依据 `docs/REQUIREMENTS.md` 1.7 与 `docs/DESIGN.md` 1.8（均于 2026-09-29 获 Kelvin 批准，批准记录见 `docs/HANDOFF.md` 0.16；文件抬头的「候批」字样被该记录覆盖）；三语文案见 [UX-COPY.md](UX-COPY.md)。本稿不改设计与需求，冲突之处列入文末「待决问题」。
+
+## 0.2 修订要点
+
+- **结账先填手机号**（P05）：马来西亚、新加坡号码依次经人机挑战与短信验证码，通过后自动注册或登录，再以会员身份继续；白名单外号码走游客流程；短信无法送达或停发时可改为游客下单，验证码错误不降级；已登录会员不再验证，收货电话默认会员手机号且可改。手机号旁告知自动注册与保留期限，收货表单旁告知长期保存；删除全部「30 天后匿名化」文案，不设勾选框，不设访客删除收货资料的入口。
+- **两种订单授权**：游客下单后的短期凭据 `[G]`（P06、P07）与查单授权 `[L]`（P08–P10），各自只在当前浏览器、只针对该单、30 分钟内有效，能做的操作互不重叠。
+- **支付页取消**（P06）：游客与会员都可取消待支付订单。
+- **登录**（P12）：密码登录与短信验证码登录两种方式；注册（P11）与短信登录共用同一短信验证流程 V1。
+- **会员中心**（P13）：首次设置密码、「我的订单」确认收货与申请退款（P09、P10 会员模式）、「我的优惠券」列出可用公开券与使用记录、以短信验证码确认注销。
+- 落实 Kelvin 对待决问题的决定（演示信用卡/借记卡、「仅英文」标签、参考外币只在结账显示、WhatsApp 未配置时隐藏、后台不设导出）；待决问题更新并新增 Q16–Q19。
 
 ## 0. 阅读说明
 
 - 线框为文本线框，只表达区块、顺序与操作，不表达视觉样式。`[key]` 指 [UX-COPY.md](UX-COPY.md) 的文案键；`( … )` 是按钮；`[____]` 是输入框；`<…>` 是运行时数据。
 - **凡向用户显示的界面文字（含后台）都写成 `[key]`，在 UX-COPY 中有英、中、马三列。** 线框里其余不在 `[ ]` 内的中文——如「错误：」「提交中：」「会员：」「游客：」「底部固定：」「--- 失败时替换为 ---」「（常驻，不可关闭）」「☰ 导航」「→ P09」——都是给审阅者的**标注，不向用户显示**。
-- `<…>` 运行时数据包括商品名称、分类、规格名与规格值、描述（来自后台维护的商品三语文案，见 UX-COPY「约定」）以及订单号、日期、数量、SKU 等；`[图]`、`[主图]`、`[缩略图]` 是图片区块；`☐`、`( )`、`▾`、`▸`、`(-)`、`(+)`、`(‹)`、`(›)`、`⏱`、`✓`、`✗`、`☰` 是无文字的控件或图标，读屏标签用 `common.a11y_*` 与 `common.nav_menu`。品牌字样 `ACUVEN SHOP`，以及 `WhatsApp`、`SKU`、`RM`、`MYR`、`+60` 等不翻译。
-- **订单号统一标 `[K]`**：订单号是查单凭据之一，线框中凡出现订单号（`<订单号>`、含 `{orderNo}` 的 `order.title` 与 `account.coupon_used_on`、查单输入框、后台订单号列与搜索框）都标 `[K]`，并在该页表格列出 K 行，依据 DESIGN 1.6「权限与资料保护」（订单号不出现在公共索引或分析事件；与电话合起来可看到完整收货资料）。
+- `<…>` 运行时数据包括商品名称、分类、规格名与规格值、描述（来自后台维护的商品三语文案，见 UX-COPY「约定」）以及订单号、日期、数量、SKU 等；`[图]`、`[主图]`、`[缩略图]` 是图片区块；`☐`、`( )`、`▾`、`▸`、`(-)`、`(+)`、`(‹)`、`(›)`、`⏱`、`✓`、`✗`、`☰` 是无文字的控件或图标，读屏标签用 `common.a11y_*` 与 `common.nav_menu`。品牌字样 `ACUVEN SHOP`，以及 `WhatsApp`、`SKU`、`RM`、`MYR`、`+60`、`+65` 等不翻译。
+- **订单号统一标 `[K]`**：订单号是查单凭据之一，线框中凡出现订单号（`<订单号>`、含 `{orderNo}` 的 `order.title` 与 `account.coupon_used_on`、查单输入框、后台订单号列与搜索框）都标 `[K]`，并在该页表格列出 K 行，依据 DESIGN 1.8「权限与资料保护」（订单号不出现在公共索引或分析事件；与电话合起来可看到完整收货资料）。
+- **两种订单授权分别标 `[G]` 与 `[L]`**，依据 DESIGN 1.8「权限与资料保护」：
+  - `[G]` **游客短期凭据**：每张游客订单（白名单外号码，以及白名单号码短信无法送达或停发时的降级下单）创建成功后，服务端只给当前浏览器发一个不可猜测、30 分钟有效、仅限该单的凭据；只用于该单的模拟支付、失败重试、取消与结果页，这些页面可显示该单收货资料原文；不能用于确认收货、退款或其他订单。
+  - `[L]` **查单授权**：以订单号加电话查单通过后，仅对该单在本浏览器保持 30 分钟；只能查看该单、确认收货、申请退款，不能支付或取消；查其他订单须重新输入该单的订单号和电话；过期须重新查单。
+  - 两者都是服务端会话，经 HttpOnly、Secure、SameSite=Lax 的 cookie 交给浏览器，不交给页面脚本，不写入浏览器持久存储、网址、Referer、日志、分析事件或错误回显；支付、取消、确认收货与退款申请等写操作另须 CSRF 令牌。一个浏览器可同时持有多张订单的授权，各自独立到期。**页面上不显示剩余时间倒计时以外的任何凭据内容。**
 - **默认语言英文**，页头可切换中文、马来文（见 UX-COPY「约定」）。
-- 金额与个人资料元素在线框中用 `[M1]`（金额）、`[P1]`（个人资料）等标记，并在每页「金额与个人资料元素」表中逐处写出所依据的 `docs/DESIGN.md` 1.6 小节标题。DESIGN 1.6 的小节为：「边界与原则」「数据模型」「计价、优惠、积分与库存」「订单与退款状态」「失败、并发与重试」「权限与资料保护」「保留与匿名化」「上线依赖与设计闸门」。
-- 所有金额由服务端计算后返回，前端只显示，不在浏览器计算价格、优惠、积分、运费或退款（DESIGN 1.6「数据模型」`Cart`、「计价、优惠、积分与库存」）。
-- 页面路径仅作示意；**任何路径、查询参数与分析事件都不得包含订单号或电话**（DESIGN 1.6「权限与资料保护」：订单号不出现在公共索引或分析事件；应用日志不记录订单查询参数）。
-- 本稿不写任何真实联系方式。WhatsApp 入口只写占位 `{{WHATSAPP_CONTACT_LINK}}`，上线前由私有配置提供（DESIGN 1.6「上线依赖与设计闸门」）。
+- 金额与个人资料元素在线框中用 `[M1]`（金额）、`[P1]`（个人资料）、`[K]`、`[G]`、`[L]` 等标记，并在每页「金额与个人资料元素」表中逐处写出所依据的 `docs/DESIGN.md` 1.8 小节标题。DESIGN 1.8 的小节为：「边界与原则」「数据模型」「计价、优惠、积分与库存」「订单与退款状态」「失败、并发与重试」「权限与资料保护」「资料保留」「上线依赖与设计闸门」（原「保留与匿名化」一节在 1.8 改名为「资料保留」）。
+- 所有金额由服务端计算后返回，前端只显示，不在浏览器计算价格、优惠、积分、运费或退款（DESIGN 1.8「数据模型」`Cart`、「计价、优惠、积分与库存」）。
+- 页面路径仅作示意；**任何路径、查询参数与分析事件都不得包含订单号或电话**（DESIGN 1.8「权限与资料保护」：订单号不出现在公共索引或分析事件；应用日志不记录订单查询参数）。
+- 本稿不写任何真实联系方式。WhatsApp 入口只写占位 `{{WHATSAPP_CONTACT_LINK}}`，上线前由私有配置提供（DESIGN 1.8「上线依赖与设计闸门」）；**配置缺失时隐藏所有 WhatsApp 按钮与联系段落，不显示占位文字**（Q10 已决）。
 
 ## 1. 全局框架
 
 所有前台页面共用：
 
 - **演示横幅**：页头上方常驻、不可关闭，桌面显示 `[common.demo_banner]`，手机显示 `[common.demo_banner_short]`。这是每一页的基础演示提示；各页另有本页演示提示（★）。
-- **页头**：品牌、搜索框、导航（商品、查询订单、登录/会员中心）、语言切换 EN | 中文 | BM、购物车数量。
-- **页脚**：`[common.footer_demo]`、`[common.nav_privacy]` 链到 P14、`[common.whatsapp_cta]` 链到占位 `{{WHATSAPP_CONTACT_LINK}}`（配置缺失时的行为见待决 Q10）。不设站内联系表单。
-- **网络中断**：下单、模拟支付、确认收货、退款申请提交后如网络中断，先显示 `[common.network_check]` 并查询原订单或申请状态，再允许重试；按钮提交期间禁用（DESIGN 1.6「失败、并发与重试」）。
-- **限流/服务不可用**：查单、登录、短信被拒时显示 `[common.rate_limited]` 或 `[common.service_unavailable]`；商品浏览继续可用（DESIGN 1.6「失败、并发与重试」）。
+- **页头**：品牌、搜索框、导航（商品、查询订单、登录/会员中心）、语言切换 EN | 中文 | BM、购物车数量。页头「查询订单」是全站导航，进入 P08 须重新输入订单号和电话，不构成任何订单的免验证入口。
+- **页脚**：`[common.footer_demo]`、`[common.nav_privacy]` 链到 P14、`[common.whatsapp_cta]` 链到占位 `{{WHATSAPP_CONTACT_LINK}}`（配置缺失时隐藏）。不设站内联系表单。
+- **网络中断**：下单、模拟支付、取消订单、确认收货、退款申请提交后如网络中断，先显示 `[common.network_check]` 并查询原订单或申请状态，再允许重试；按钮提交期间禁用（DESIGN 1.8「失败、并发与重试」）。
+- **限流/服务不可用**：查单、登录、短信被拒时显示 `[common.rate_limited]` 或 `[common.service_unavailable]`；商品浏览继续可用（DESIGN 1.8「失败、并发与重试」）。结账时短信停发另有降级提示，见 V1 与 P05。
 
 桌面框架：
 
@@ -42,6 +55,7 @@
 +-----------------------------------------------------------------------+
 | [common.footer_demo]                                                  |
 | [common.nav_privacy]        ( [common.whatsapp_cta] → 占位链接 )       |
+|                             （WhatsApp 未配置时整个按钮隐藏）           |
 +-----------------------------------------------------------------------+
 ```
 
@@ -60,10 +74,51 @@
 | [common.footer_demo]           |
 | [common.nav_privacy]           |
 | ( [common.whatsapp_cta] )      |
+|  （未配置时隐藏）                 |
 +--------------------------------+
 ☰ 菜单（读屏标签 [common.nav_menu]）：[common.nav_shop] / [common.nav_track] / [common.nav_login] 或 [common.nav_account] / [common.nav_privacy] / [common.lang_en] · [common.lang_zh] · [common.lang_ms]
 <当前语言>▾ 显示当前语言的 [common.lang_*]，点开即上述三项。
 ```
+
+### V1 短信验证组件（P05、P11、P12、P13 共用）
+
+DESIGN 1.8「权限与资料保护」：注册、短信登录与结账验证是同一个短信验证流程——验证通过后号码已注册则登录，未注册则创建（无密码）会员并登录；密码重设与注销确认也经短信验证。「失败、并发与重试」：结账验证、短信登录、注册与密码重设共用同一白名单、人机挑战、限流和每日预算。本组件按用途嵌入各页，只换标题与成功后的去向：
+
+| 用途 | 嵌入页 | 成功后 |
+| --- | --- | --- |
+| 结账验证 | P05 第 2 步 | 显示 `[checkout.verified_member]` 或 `[checkout.verified_new]`，以会员身份进入 P05 第 3 步 |
+| 注册 / 短信登录 | P11、P12 短信登录页签 | 显示 `[auth.verified_login]` 或 `[auth.verified_registered]`，去来源页或 P13 |
+| 重设密码 | P12 忘记密码 | 显示新密码输入，见 P12 |
+| 注销确认 | P13 设置 | 显示 `[account.delete_confirm]` 按钮，见 P13 |
+
+```text
+| [auth.phone] [P1 <国家码> ▾][P1 ______________]  （结账以外只列 +60、+65）|
+| [auth.sms_scope]                                                      |
+| [auth.claim_notice]            （仅结账验证、注册、短信登录显示）        |
+| [auth.challenge]                                                      |
+| <托管人机挑战组件>                                                      |
+| ( [auth.send_code] )                                                  |
+| [auth.code_sent]                                                      |
+| [auth.code] [______]   ( [auth.verify_submit] )   ([auth.resend_code]) |
+| 提交中：按钮禁用                                                       |
+| 错误（不降级，留在本组件）：[auth.challenge_failed] / [auth.code_wrong] / |
+|   [auth.code_too_many] / [common.rate_limited]                        |
+| 号码不在白名单（注册、登录、重设、注销时）：[auth.not_supported_country]  |
+| 短信无法送达或停发（服务端判定）：                                       |
+|   结账验证 → 见 P05 [checkout.sms_unavailable]                         |
+|   其他用途 → [auth.sms_failed] ([auth.continue_guest])                 |
+```
+
+说明：`<托管人机挑战组件>` 由人机挑战托管服务渲染，其内文字不在 UX-COPY 中，按当前界面语言请求该服务的对应语言。人机挑战在发送短信前完成，后端核验令牌。**验证码错误或超过尝试次数不降级为游客**；是否属于「无法送达或停发」、能否降级，由服务端判定并记录，前端只按响应显示对应提示（DESIGN 1.8「失败、并发与重试」）。短信失败不创建已验证账号。
+
+V1 金额与个人资料元素：
+
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
+| --- | --- | --- |
+| P1 | 手机号，服务端规范化为 E.164；白名单马来西亚、新加坡；`{phoneMasked}` 只显示部分号码；不写入日志 | 「边界与原则」「权限与资料保护」「失败、并发与重试」 |
+| — | 人机挑战在发送短信前；限流与每日预算；Redis 或 MySQL 不可用时停发 | 「失败、并发与重试」 |
+| — | 通过后已注册则登录，未注册则创建无密码会员并登录；随后自动认领该号码近 30 天、未认领的游客订单，不补发积分 | 「权限与资料保护」「数据模型」（`Member` / `VerificationAttempt`）「计价、优惠、积分与库存」（第 3 条） |
+| — | 不存验证码，只存提供方请求 ID、结果与限流元数据 | 「数据模型」（`Member` / `VerificationAttempt`）「失败、并发与重试」 |
 
 ## 2. 页面地图
 
@@ -73,15 +128,15 @@
 | P02 | 商品列表（搜索、分类、属性筛选） | `/products` | P03 |
 | P03 | 商品详情（规格、数量、加入购物车） | `/products/<slug>` | P04、P02 |
 | P04 | 购物车 | `/cart` | P05、P02 |
-| P05 | 结账（收货资料、优惠券、积分、运费、合计） | `/checkout` | P06、P11、P12、P14 |
-| P06 | 模拟支付 | `/pay` | P07 |
-| P07 | 模拟支付结果（成功/失败/已取消） | `/pay/result` | P06（重试）、P09、P02、P11 |
+| P05 | 结账（手机号与短信验证、收货资料、优惠券、积分、运费、合计） | `/checkout` | P06、P12、P14 |
+| P06 | 模拟支付（含取消待支付订单） | `/pay` | P07 |
+| P07 | 模拟支付结果（成功/失败/已取消） | `/pay/result` | P06（重试）、P09（会员）、P08（游客过期后）、P02、P11 |
 | P08 | 订单查询 | `/track` | P09 |
-| P09 | 订单详情（确认收货、退款入口） | `/track/order` | P10、P08 |
-| P10 | 退款申请 | `/track/order/refund` | P09 |
-| P11 | 注册（短信验证） | `/register` | P13、P05（游客继续） |
-| P12 | 登录与忘记密码 | `/login`、`/forgot-password` | P13、P11 |
-| P13 | 会员中心（我的订单、积分、优惠券、注销） | `/account` | P09、P01 |
+| P09 | 订单详情（确认收货、退款入口；查单模式 / 会员模式） | `/track/order`、`/account/order` | P10、P08、P13 |
+| P10 | 退款申请（查单模式 / 会员模式） | `/track/order/refund`、`/account/order/refund` | P09 |
+| P11 | 注册（短信验证，V1） | `/register` | P13、来源页、P05（游客继续） |
+| P12 | 登录（密码 / 短信验证码）与忘记密码 | `/login`、`/forgot-password` | P13、来源页、P11 |
+| P13 | 会员中心（我的订单、积分、优惠券、密码、注销） | `/account` | P09、P06、P12、P01 |
 | P14 | 隐私说明 | `/privacy` | 来源页、WhatsApp 占位 |
 | A01 | 后台登录 | `/admin/login` | A02 |
 | A02 | 后台订单与模拟发货 | `/admin/orders` | A03 |
@@ -91,7 +146,9 @@
 | A06 | 后台运费区与演示汇率 | `/admin/shipping` | — |
 | A07 | 后台库存重置结果 | `/admin/stock-resets` | A04 |
 
-主流程：P01 → P02 → P03 → P04 → P05 →（下单）→ P06 →（成功/失败）→ P07 →（失败重试回 P06）→ 管理员 A02 模拟发货 → P08 → P09（确认收货）→ P10（退款）→ 管理员 A03 审核 → P09 显示结果。
+会员订单详情路径 `/account/order` 不带订单号；页面以不含订单号的内部引用在请求体中取单，服务端按会员会话校验归属。
+
+主流程：P01 → P02 → P03 → P04 → P05（先填手机号；马新号码短信验证后以会员继续，其他号码以游客继续）→（下单）→ P06 →（成功/失败/取消）→ P07 →（失败重试回 P06）→ 管理员 A02 模拟发货 → 游客 P08 → P09（查单模式）/ 会员 P13 → P09（会员模式）→ 确认收货 → P10（退款）→ 管理员 A03 审核 → P09 显示结果。
 
 ---
 
@@ -99,7 +156,7 @@
 
 - **目的**：一眼说明这是演示站，引导访客走完整购物流程；提供 WhatsApp 联系入口（占位）。
 - **入口**：直接访问；任意页的品牌标志。
-- **去向**：P02（开始购物、分类、搜索）；P03（精选商品）；P14；WhatsApp 占位链接。
+- **去向**：P02（开始购物、分类、搜索）；P03（精选商品）；P14；WhatsApp 占位链接（未配置时隐藏）。
 - **演示提示**：常驻横幅；★ `[home.demo_hint]`；「演示怎么玩」四步。
 
 桌面：
@@ -121,7 +178,7 @@
 | [home.featured]                          ★ [home.demo_hint]           |
 |  [图]<名称>[M1]  [图]<名称>[M1]  [图]<名称>[M1]  [图]<名称>[M1]          |
 +-----------------------------------------------------------------------+
-| <页脚，含 WhatsApp 占位>                                               |
+| <页脚，含 WhatsApp 占位；未配置时隐藏按钮>                              |
 ```
 
 手机：
@@ -147,9 +204,9 @@
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
-| M1 | 商品卡价格（MYR；多规格时 `[list.price_from]`） | 「数据模型」「边界与原则」 |
+| M1 | 商品卡价格（仅 MYR；多规格时 `[list.price_from]`；不显示参考外币，Q9 已决） | 「数据模型」「边界与原则」 |
 
 ---
 
@@ -203,9 +260,9 @@
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
-| M1 | 商品卡价格与「价格」排序，仅显示 MYR，不显示参考币种（待决 Q9） | 「数据模型」「边界与原则」 |
+| M1 | 商品卡价格与「价格」排序，仅显示 MYR，不显示参考外币（Q9 已决） | 「数据模型」「边界与原则」 |
 
 ---
 
@@ -245,7 +302,7 @@
 | [common.demo_banner_short]     |
 | <页头>                         |
 | [主图，可左右滑动]               |
-| <商品名称>                      |
+| <商品名称> [detail.english_only]? |
 | [M1] RM <单价>                 |
 | [detail.options]               |
 |  <规格名>: (<值>)(<值>)(<值>)   |
@@ -258,11 +315,13 @@
 | 底部固定：( [detail.add_to_cart] ) |
 ```
 
+说明：当前语言缺少商品文案、回退英文时，在商品名称旁显示「仅英文」标签 `[detail.english_only]`（Q8 已决）。
+
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
-| M1 | 所选规格的 MYR 单价；切换规格时由服务端数据刷新 | 「数据模型」「边界与原则」 |
+| M1 | 所选规格的 MYR 单价；切换规格时由服务端数据刷新；不显示参考外币 | 「数据模型」「边界与原则」 |
 | — | 库存剩余只作提示，加入购物车不预留库存 | 「计价、优惠、积分与库存」（第 6 条） |
 
 ---
@@ -311,51 +370,109 @@
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
 | M1 | 行小计（单价 × 数量），由服务端按当前价格返回，不信任浏览器保存的价格 | 「数据模型」（`Cart`） |
-| M2 | 商品小计；运费、优惠、积分不在此计算 | 「数据模型」（`Cart`）「计价、优惠、积分与库存」（第 1 条） |
+| M2 | 商品小计（仅 MYR）；运费、优惠、积分不在此计算 | 「数据模型」（`Cart`）「计价、优惠、积分与库存」（第 1 条） |
 
 ---
 
 ## P05 结账
 
-- **目的**：填写收货资料，会员可用优惠券与积分，查看 MYR 小计、抵扣、示例运费、合计及参考币种金额，提交演示订单。
+- **目的**：未登录访客先填手机号，马来西亚、新加坡号码经人机挑战与短信验证后自动注册或登录，以会员身份继续；白名单外号码以游客继续；然后填写收货资料，会员可用优惠券与积分，查看 MYR 小计、抵扣、示例运费、合计及参考外币金额，提交演示订单。
 - **入口**：P04 `[cart.checkout]`。
-- **去向**：P06（下单成功）；P11/P12（游客点注册/登录，返回后保留购物车与已填内容）；P14（资料处理说明）。
-- **演示提示**：常驻横幅；★ `[checkout.demo_hint]`；收货表单旁 `[checkout.form_notice]`（**不真实扣款、不真实发货、收货资料 30 天后匿名化；不设确认勾选框**）；◆ 下单按钮旁 `[checkout.place_order_hint]`。
+- **去向**：P06（下单成功）；P12（已有密码的会员点 `[checkout.login_password]`，返回后保留购物车与已填内容）；P14（资料处理说明）。
+- **演示提示**：常驻横幅；★ `[checkout.demo_hint]`；手机号旁 `[checkout.phone_notice]`（马新号码会收到验证短信并自动注册会员、手机号保留至注销、可在会员中心注销）；收货表单旁 `[checkout.form_notice]`（不真实扣款、不真实发货、收货资料会长期保存）；◆ 下单按钮旁 `[checkout.place_order_hint]`。**两处告知都常显，不设勾选框；不提供访客删除收货资料的入口。**
 
-桌面：
+### 步骤与分支
+
+| 访客状态 | 第 1 步 手机号 | 第 2 步 验证 | 第 3 步 收货与下单 |
+| --- | --- | --- | --- |
+| 未登录，马来西亚/新加坡号码 | 填手机号 | V1：人机挑战 → 短信验证码 → 注册或登录 | 会员表单（可用券与积分） |
+| 未登录，马新号码，短信无法送达或停发（服务端判定） | 填手机号 | 显示 `[checkout.sms_unavailable]`，可点 `[checkout.continue_guest]` | 游客表单（降级） |
+| 未登录，马新号码，验证码错误或超过尝试次数 | 填手机号 | 留在 V1，显示 `[auth.code_wrong]` / `[auth.code_too_many]`，**不显示游客选项** | —（不降级） |
+| 未登录，白名单外号码 | 填手机号 | 不发短信，显示 `[checkout.guest_other_country]` | 游客表单 |
+| 已登录会员 | 跳过 | 跳过（不再验证） | 会员表单，收货电话默认会员手机号，可改 |
+
+桌面——第 1 步（未登录）：
 
 ```text
 | [common.demo_banner]                                                  |
 | <页头>                                                                |
 | [checkout.title]                              ★ [checkout.demo_hint]  |
 +---------------------------------------------+-------------------------+
-| [checkout.guest_notice] ([common.nav_login]) ([common.nav_register])  |
-|   （会员登录后不显示此行）                    | [checkout.summary_title] |
-| [checkout.recipient_title]                  | <名称>/<规格> x2  [M1]   |
-| ┌ 收货表单旁提示（常显，无勾选框）─────────┐   | <名称>/<规格> x1  [M1]   |
-| │ [checkout.form_notice]                   │ |-------------------------|
-| │ ([checkout.form_notice_link] → P14)      │ | [cart.subtotal]    [M2] |
-| └──────────────────────────────────────────┘ | [checkout.summary_coupon] [M3] |
-| [checkout.name]      [P1 ______________]    | [checkout.summary_points] [M4] |
-| [checkout.country]   [P2 <国家> ▾]           | [checkout.summary_shipping][M5]|
-| [checkout.state_my]  [P2 <州属> ▾]（马来西亚）| [checkout.summary_total]  [M6] |
-|   或 [checkout.region] [P2 ________]（其他） | [M7] [common.fx_reference]      |
-| [checkout.address]   [P1 ______________]    |   [checkout.fx_note]      |
-| [checkout.postcode]  [P1 ______]            |   或 [checkout.fx_none]   |
-| [checkout.phone]     [P3 ______________]    |                          |
-|   [checkout.phone_hint]                     | ( [checkout.place_order] )|
-|   [checkout.phone_lookup_hint]              | ◆ [checkout.place_order_hint] |
-|   错误：[checkout.phone_invalid]             |                          |
+| [checkout.phone_step_title]                 | [checkout.summary_title] |
+| ┌ 手机号旁告知（常显，无勾选框）───────────┐  | <名称>/<规格> x2  [M1]   |
+| │ [checkout.phone_notice]                  │  | <名称>/<规格> x1  [M1]   |
+| │ ([checkout.form_notice_link] → P14)      │  |-------------------------|
+| └──────────────────────────────────────────┘  | [cart.subtotal]    [M2] |
+| [auth.phone] [P4 +60 ▾][P4 ______________]   | [cart.shipping_later]   |
+|   [checkout.phone_step_hint]                |                         |
+|   错误：[checkout.phone_invalid]             |                         |
+| ( [checkout.phone_continue] )               |                         |
+| [checkout.login_password] → P12             |                         |
++---------------------------------------------+-------------------------+
+（国家码下拉列出所有国家，默认 +60，待决 Q16；以 + 开头输入时以输入为准）
+```
+
+桌面——第 2 步（马来西亚/新加坡号码，嵌入 V1）：
+
+```text
++---------------------------------------------+-------------------------+
+| [checkout.phone_step_title]                 | <摘要同第 1 步>          |
+|   [P4] <号码部分遮盖> ([checkout.phone_change]) |                      |
+| [checkout.phone_notice]（常显）              |                         |
+| [auth.claim_notice]                         |                         |
+| [auth.challenge]                            |                         |
+| <托管人机挑战组件>                             |                         |
+| ( [auth.send_code] )                        |                         |
+| [auth.code_sent]                            |                         |
+| [auth.code] [______] ( [auth.verify_submit] ) ([auth.resend_code])    |
+| 错误（不降级）：[auth.challenge_failed] / [auth.code_wrong] /            |
+|   [auth.code_too_many] / [common.rate_limited]                        |
+| --- 服务端判定短信无法送达或停发时 ---                                   |
+| [checkout.sms_unavailable]                                            |
+| ( [checkout.continue_guest] ) → 第 3 步游客表单                         |
+| --- 验证通过 ---                                                       |
+| ✓ [checkout.verified_member] 或 ✓ [checkout.verified_new]             |
+|   → 页头变为 [common.nav_account]，进入第 3 步会员表单                  |
++---------------------------------------------+-------------------------+
+白名单外号码：不出现本步，直接在第 3 步顶部显示 [checkout.guest_other_country]
+```
+
+桌面——第 3 步（收货资料与下单）：
+
+```text
++---------------------------------------------+-------------------------+
+| 游客：[checkout.guest_other_country] 或（降级时）[checkout.sms_unavailable] | [checkout.summary_title] |
+|       [checkout.guest_notice]               | <名称>/<规格> x2  [M1]   |
+| [checkout.recipient_title]                  | <名称>/<规格> x1  [M1]   |
+| ┌ 收货表单旁提示（常显，无勾选框）─────────┐   |-------------------------|
+| │ [checkout.form_notice]                   │ | [cart.subtotal]    [M2] |
+| │ ([checkout.form_notice_link] → P14)      │ | [checkout.summary_coupon] [M3] |
+| └──────────────────────────────────────────┘ | [checkout.summary_points] [M4] |
+| [checkout.name]      [P1 ______________]    | [checkout.summary_shipping][M5]|
+| [checkout.country]   [P2 <国家> ▾]           | [checkout.summary_total]  [M6] |
+| [checkout.state_my]  [P2 <州属> ▾]（马来西亚）| 选定国家后：[M7] [common.fx_reference] |
+|   或 [checkout.region] [P2 ________]（其他） |   [checkout.fx_note]      |
+| [checkout.address]   [P1 ______________]    |   或 [checkout.fx_none]   |
+| [checkout.postcode]  [P1 ______]            |                          |
+| [checkout.phone]                            | ( [checkout.place_order] )|
+|  游客：[P3] <第 1 步号码>（只读）([checkout.phone_change]) | ◆ [checkout.place_order_hint] |
+|        [checkout.phone_lookup_hint]         |                          |
+|  会员：[P3 <会员手机号，预填> ______]        |                          |
+|        [checkout.member_phone_hint]         |                          |
+|        [checkout.phone_hint]                |                          |
+|        错误：[checkout.phone_invalid]        |                          |
 |---------------------------------------------|                          |
 | 会员：[checkout.coupon] [M3 ______] ([checkout.coupon_apply])          |
+|       错误：[checkout.coupon_invalid]                                   |
 |       [checkout.points] [M4 ______]  [checkout.points_available]       |
 |       [checkout.points_not_shipping]                                   |
 | 游客：[checkout.coupon_members_only] [checkout.points_guest]           |
 +---------------------------------------------+-------------------------+
 提交中：按钮禁用，显示 [checkout.submitting]
+游客下单成功：服务端发 [G] 短期凭据（cookie）后进入 P06
 ```
 
 手机（单列，摘要折叠在顶部）：
@@ -365,8 +482,36 @@
 | [checkout.title]               |
 | ★ [checkout.demo_hint]         |
 | ▸ [checkout.summary_title] [M6]（点开见明细）|
-| [checkout.guest_notice]        |
-| ([common.nav_login]) ([common.nav_register]) |
+--- 第 1 步（未登录）---
+| [checkout.phone_step_title]    |
+| ┌──────────────────────────┐   |
+| │[checkout.phone_notice]   │   |
+| │([checkout.form_notice_link])│|
+| └──────────────────────────┘   |
+| [auth.phone]                   |
+| [P4 +60▾][P4 ______________]   |
+| [checkout.phone_step_hint]     |
+| <错误>                          |
+| ( [checkout.phone_continue] )  |
+| [checkout.login_password]      |
+--- 第 2 步（马新号码）---
+| [P4] <号码遮盖>                 |
+| ([checkout.phone_change])      |
+| [checkout.phone_notice]        |
+| [auth.claim_notice]            |
+| <托管人机挑战组件>                 |
+| ( [auth.send_code] )           |
+| [auth.code_sent]               |
+| [auth.code] [______]           |
+| ( [auth.verify_submit] )       |
+| ([auth.resend_code])           |
+| <错误，不降级>                   |
+| 或 [checkout.sms_unavailable]  |
+|  ( [checkout.continue_guest] ) |
+| 或 ✓ [checkout.verified_member]/[checkout.verified_new] |
+--- 第 3 步 ---
+| 游客：[checkout.guest_other_country]/[checkout.sms_unavailable] |
+|      [checkout.guest_notice]   |
 | [checkout.recipient_title]     |
 | ┌──────────────────────────┐   |
 | │[checkout.form_notice]    │   |
@@ -377,9 +522,13 @@
 | [checkout.state_my]/[checkout.region] [P2] |
 | [checkout.address] [P1 ____]   |
 | [checkout.postcode][P1 ____]   |
-| [checkout.phone]   [P3 ____]   |
-|  [checkout.phone_hint]         |
-|  [checkout.phone_lookup_hint]  |
+| [checkout.phone]               |
+|  游客：[P3] <号码>（只读）        |
+|   ([checkout.phone_change])    |
+|   [checkout.phone_lookup_hint] |
+|  会员：[P3 <预填> ____]          |
+|   [checkout.member_phone_hint] |
+|   [checkout.phone_hint]        |
 | 会员：[checkout.coupon] [M3]     |
 |  ([checkout.coupon_apply])     |
 |  [checkout.points] [M4]        |
@@ -392,7 +541,7 @@
 | [checkout.summary_points]  [M4]|
 | [checkout.summary_shipping][M5]|
 | [checkout.summary_total]   [M6]|
-| [M7][common.fx_reference]      |
+| 选定国家后：[M7][common.fx_reference] |
 | [checkout.fx_note]             |
 +--------------------------------+
 | 底部固定：[M6]                  |
@@ -400,32 +549,42 @@
 | ◆ [checkout.place_order_hint]  |
 ```
 
-说明：收货表单旁提示在桌面与手机都**常显在表单上方**，不折叠、不设勾选框。改变国家或州属后，运费与参考币种由服务端重算。
+说明：
+
+- 手机号旁告知与收货表单旁告知在桌面与手机都**常显**，不折叠、不设勾选框。页面不提供任何删除收货资料的入口。
+- 游客的收货电话就是第 1 步的号码（即查单凭据），只读；要改须点 `[checkout.phone_change]` 回到第 1 步重新判定（改为马新号码则须验证）。会员的收货电话默认会员手机号，可改为其他号码或虚构号码，按收货国家补默认区号（`[checkout.phone_hint]`）。
+- 服务端创建订单时强制执行：游客订单的收货电话属于白名单国家即拒绝，除非服务端记录显示该号码刚遇到短信无法送达或停发；前端游客表单不是这一规则的依据。
+- 参考外币金额 `[M7]` 只在选定收货国家后显示，改变国家或州属后运费与参考外币由服务端重算；未选国家时不显示 `[M7]`、`[checkout.fx_note]` 或 `[checkout.fx_none]`（Q9 已决）。
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
 | M1 | 摘要行金额（按服务端返回的价格快照） | 「计价、优惠、积分与库存」（第 1 条）「数据模型」（`Cart`） |
 | M2 | 商品小计 | 「计价、优惠、积分与库存」（第 1 条） |
-| M3 | 优惠券输入与抵扣额；仅会员；只抵商品额 | 「计价、优惠、积分与库存」（第 1、2 条）「数据模型」（`Coupon`） |
+| M3 | 优惠券输入与抵扣额；仅会员；只抵商品额 | 「计价、优惠、积分与库存」（第 1、2 条）「数据模型」（`Coupon` / `CouponUse`） |
 | M4 | 积分输入、可用积分与抵扣额；100 积分抵 RM1；仅会员；不抵运费 | 「计价、优惠、积分与库存」（第 1、3 条）「边界与原则」 |
-| M5 | 示例运费（按国家，马来西亚按州属，其他国家兜底） | 「数据模型」（`ShippingRate`） |
+| M5 | 示例运费（按国家，马来西亚按州属，其他国家兜底） | 「数据模型」（`ShippingRate` / `DemoFxRate`） |
 | M6 | MYR 合计，不低于运费；不单列税费 | 「计价、优惠、积分与库存」（第 1 条）「边界与原则」 |
-| M7 | 参考币种金额，按收货国家与固定演示汇率；该国无汇率时只显示 MYR | 「边界与原则」「数据模型」（`DemoFxRate`） |
-| P1 | 收货人姓名、地址、邮编（自由文本，可虚构） | 「边界与原则」「数据模型」（`OrderRecipient`） |
-| P2 | 国家、州属/地区（决定运费、参考币种与默认区号） | 「边界与原则」「权限与资料保护」 |
-| P3 | 电话；按收货国家补默认区号，`+` 开头以输入为准；只做格式校验 | 「权限与资料保护」 |
-| — | 表单旁告知 `[checkout.form_notice]`，无勾选框 | 「权限与资料保护」「保留与匿名化」 |
-| — | 下单按钮：库存/券/积分预占，15 分钟未付自动取消；幂等提交 | 「计价、优惠、积分与库存」（第 1、3、6 条）「失败、并发与重试」 |
+| M7 | 参考外币金额，按收货国家与固定演示汇率，只在选定收货国家后显示；该国无汇率时只显示 MYR | 「边界与原则」「数据模型」（`ShippingRate` / `DemoFxRate`） |
+| P4 | 结账手机号（身份判定）：规范化为 E.164；马新号码经人机挑战与短信验证后注册或登录，白名单外号码游客下单；验证码错误不降级 | 「权限与资料保护」「边界与原则」「失败、并发与重试」 |
+| — | 手机号旁告知 `[checkout.phone_notice]`：自动注册、手机号保留至注销、可在会员中心注销；无勾选框 | 「权限与资料保护」「资料保留」 |
+| — | 验证通过后自动认领该号码近 30 天游客订单 `[auth.claim_notice]`，不补发积分 | 「权限与资料保护」「计价、优惠、积分与库存」（第 3 条） |
+| P1 | 收货人姓名、地址、邮编（自由文本，可虚构）；长期保存 | 「边界与原则」「数据模型」（`OrderRecipient`）「资料保留」 |
+| P2 | 国家、州属/地区（决定运费、参考外币与会员收货电话的默认区号） | 「边界与原则」「权限与资料保护」 |
+| P3 | 收货电话：游客为第 1 步号码（查单凭据，只读）；会员默认会员手机号，可改为其他或虚构号码；只做格式校验 | 「权限与资料保护」 |
+| — | 表单旁告知 `[checkout.form_notice]`：不真实扣款、不真实发货、收货资料长期保存；无勾选框；无访客删除入口 | 「权限与资料保护」「资料保留」 |
+| G | 游客下单成功后发给当前浏览器的短期凭据（30 分钟、仅限该单） | 「权限与资料保护」 |
+| — | 下单按钮：库存/券/积分预占，15 分钟未付自动取消；幂等提交；服务端拒绝未降级的白名单号码游客订单 | 「计价、优惠、积分与库存」（第 1、3、6 条）「失败、并发与重试」「权限与资料保护」 |
 
 ---
 
 ## P06 模拟支付
 
-- **目的**：选择演示支付方式并点击「成功」或「失败」，不输入任何银行卡资料。
-- **入口**：P05 下单成功；P07 失败后的 `[result.retry]`。
+- **目的**：选择演示支付方式并点击「成功」或「失败」，不输入任何银行卡资料；可取消待支付订单；核对该单收货资料。
+- **入口**：P05 下单成功；P07 失败后的 `[result.retry]`；会员另可从 P09 会员模式 `[account.order_pay]` 进入（待决 Q17）。
 - **去向**：P07（成功/失败/已取消）。
+- **访问授权**：游客凭该单短期凭据 `[G]`（当前浏览器、仅该单、30 分钟）；会员凭登录会话访问自己的订单。
 - **演示提示**：常驻横幅；★ `[pay.demo_hint]`；◆ 成功/失败按钮旁 `[pay.action_hint]`；`[pay.expires]` 倒计时。
 
 桌面：
@@ -438,6 +597,10 @@
 | [pay.save_order_no]                                                   |
 | [pay.amount_due]  [M1] RM <合计>   [M2] [common.fx_reference]?         |
 | [pay.expires]  ⏱ <剩余分钟>                                            |
+| 游客：[G] [pay.guest_access]                                           |
++-----------------------------------------------------------------------+
+| [checkout.recipient_title]                                            |
+|  [P1] <姓名> / <电话> / <地址> / <邮编> / <地区> / <国家>               |
 +-----------------------------------------------------------------------+
 | [pay.choose_method]                                                   |
 |  ( ) [pay.method_card]   ( ) [pay.method_bank]   ( ) [pay.method_ewallet] |
@@ -445,9 +608,13 @@
 |  ( [pay.simulate_success] )     ( [pay.simulate_failure] )            |
 |  ◆ [pay.action_hint]                                                  |
 |                                                                       |
-|  ([pay.cancel_order])  ← 待决 Q12                                      |
+|  ([pay.cancel_order])                                                 |
 +-----------------------------------------------------------------------+
-提交中：两个按钮禁用，显示 [pay.processing]
+提交中：按钮禁用，显示 [pay.processing]
+点取消后确认框：[pay.cancel_confirm] ( [pay.cancel_confirm_yes] ) ([pay.cancel_confirm_no])
+--- 游客凭据过期或不属于该单时替换整页 ---
+| [pay.session_expired]                                                 |
+| ( [common.nav_track] ) → P08（须输入订单号和电话）                       |
 ```
 
 手机：
@@ -463,6 +630,9 @@
 | [M1] RM <合计>                  |
 | [M2] [common.fx_reference]?    |
 | [pay.expires] ⏱               |
+| 游客：[G] [pay.guest_access]    |
+| ▸ [checkout.recipient_title]   |
+|   [P1] <姓名>/<电话>/<地址>     |
 | [pay.choose_method]            |
 | ( ) [pay.method_card]          |
 | ( ) [pay.method_bank]          |
@@ -471,27 +641,34 @@
 | ( [pay.simulate_success] )     |
 | ( [pay.simulate_failure] )     |
 | ([pay.cancel_order])           |
+--- 过期时 ---
+| [pay.session_expired]          |
+| ( [common.nav_track] )         |
 ```
 
-说明：本页不显示收货资料原文（待决 Q1）。不出现任何卡号、有效期、CVV 输入框。
+说明：不出现任何卡号、有效期、CVV 输入框；`[pay.method_card]` 写明无需输入卡号（Q6 已决）。**游客页面上不提供确认收货、退款或其他订单的入口**；凭据过期后只提示凭订单号和电话查单。
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
-| M1 | 应付金额（订单快照） | 「数据模型」（`Order`）「计价、优惠、积分与库存」（第 1 条） |
-| M2 | 参考币种金额（下单时的汇率版本快照） | 「边界与原则」「数据模型」（`DemoFxRate`） |
+| M1 | 应付金额（订单快照） | 「数据模型」（`Order` / `OrderItem`）「计价、优惠、积分与库存」（第 1 条） |
+| M2 | 参考外币金额（下单时收货国家与汇率版本快照） | 「边界与原则」「数据模型」（`ShippingRate` / `DemoFxRate`） |
+| P1 | 该单收货资料原文：游客仅凭该单短期凭据可见，会员凭会话可见自己的订单 | 「权限与资料保护」「数据模型」（`OrderRecipient`） |
+| G | 游客短期凭据：当前浏览器、仅该单、30 分钟；只用于支付、失败重试、取消与结果页，不能用于确认收货、退款或其他订单；过期提示凭订单号和电话查单 | 「权限与资料保护」 |
 | K | 订单号：查单凭据之一，不进路径、查询参数或分析事件 | 「权限与资料保护」 |
-| — | 成功/失败按钮：幂等提交，失败停在 `awaiting_demo_payment` 可重试 | 「订单与退款状态」「失败、并发与重试」 |
-| — | 倒计时与取消：15 分钟未付自动取消并释放预占 | 「计价、优惠、积分与库存」（第 6 条）「订单与退款状态」 |
+| — | 成功/失败按钮：幂等提交，失败停在 `awaiting_demo_payment` 可重试；写操作须 CSRF 令牌 | 「订单与退款状态」「失败、并发与重试」「权限与资料保护」 |
+| — | 取消按钮：游客与会员都有；由下单者取消为 `demo_cancelled`，释放库存、券及积分预占 | 「订单与退款状态」「权限与资料保护」「计价、优惠、积分与库存」（第 1、3、6 条） |
+| — | 倒计时：15 分钟未付自动取消并释放预占 | 「计价、优惠、积分与库存」（第 6 条）「订单与退款状态」 |
 
 ---
 
 ## P07 模拟支付结果
 
-- **目的**：显示模拟支付成功、失败或订单已超时取消，并给出下一步。
-- **入口**：P06 点击成功/失败后；超时后再次打开支付页。
-- **去向**：成功 → P09（`[result.track]`）、P02（`[result.continue]`）、游客可去 P11；失败 → P06（`[result.retry]`，同一订单）；已取消 → P02。
+- **目的**：显示模拟支付成功、失败或订单已取消（超时或本人取消），并给出下一步。
+- **入口**：P06 点击成功/失败/取消后；超时后再次打开支付页。
+- **去向**：成功 → 会员 P09（`[result.track]`，会员模式）；游客只见 `[result.guest_next]` 说明，不设订单详情按钮；P02（`[result.continue]`）；游客可去 P11。失败 → P06（`[result.retry]`，同一订单）。已取消 → P02。游客凭据过期 → `[pay.session_expired]` 与 P08。
+- **访问授权**：游客凭该单短期凭据 `[G]`；会员凭登录会话。
 - **演示提示**：常驻横幅；★ `[result.demo_hint]`；成功文案写明未扣真实款项。
 
 桌面：
@@ -503,16 +680,20 @@
 | [result.success_body]                                                 |
 | [pay.order_no] [K] <订单号> ([common.copy])   [pay.save_order_no]      |
 | [pay.amount_due] [M1]                                                 |
-| 会员：[result.points_earned] [M2]   游客：[result.guest_register] → P11 |
+| [checkout.recipient_title] [P1] <姓名>/<电话>/<地址>/<地区>/<国家>      |
+| 会员：[result.points_earned] [M2]   ( [result.track] ) → P09 会员模式  |
+| 游客：[G] [result.guest_next]   [result.guest_register] → P11          |
 | ★ [result.demo_hint]                                                  |
-| ( [result.track] )   ([result.continue])                               |
+| ([result.continue])                                                   |
 +---------------------------- 失败 ------------------------------------+
 | ✗ [result.failure_title]                                              |
 | [result.failure_body]                                                 |
 | [pay.expires] ⏱                                                       |
 | ( [result.retry] )                                                    |
 +---------------------------- 已取消 ----------------------------------+
-| [result.cancelled]            ([result.continue])                     |
+| [result.cancelled] 或 [result.cancelled_by_you]   ([result.continue]) |
++---------------------------- 游客凭据过期 ----------------------------+
+| [pay.session_expired]   ( [common.nav_track] ) → P08                  |
 ```
 
 手机：
@@ -525,10 +706,12 @@
 | [K] <订单号> ([common.copy])    |
 | [pay.save_order_no]            |
 | [pay.amount_due] [M1]          |
-| [result.points_earned] [M2]    |
-|  或 [result.guest_register]     |
+| ▸ [checkout.recipient_title] [P1] |
+| 会员：[result.points_earned] [M2] |
+|  ( [result.track] )            |
+| 游客：[result.guest_next]        |
+|  [result.guest_register]       |
 | ★ [result.demo_hint]           |
-| ( [result.track] )             |
 | ([result.continue])            |
 --- 失败时替换为 ---
 | ✗ [result.failure_title]       |
@@ -536,16 +719,23 @@
 | [pay.expires] ⏱               |
 | ( [result.retry] )             |
 --- 已取消时 ---
-| [result.cancelled]             |
+| [result.cancelled] 或 [result.cancelled_by_you] |
 | ([result.continue])            |
+--- 游客凭据过期时 ---
+| [pay.session_expired]          |
+| ( [common.nav_track] )         |
 ```
+
+说明：游客结果页**不提供确认收货、退款或其他订单的入口**，也不设直达 P09 的按钮；页头「查询订单」为全站导航，须重新输入订单号和电话。
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
-| M1 | 已模拟支付金额（快照） | 「数据模型」（`Order`、`PaymentAttempt`） |
+| M1 | 已模拟支付金额（快照） | 「数据模型」（`Order` / `OrderItem`、`PaymentAttempt` / `OrderEvent`） |
 | M2 | 本单获得积分（整单现金实付每满 RM1 得 1 积分；游客不累积） | 「计价、优惠、积分与库存」（第 3 条） |
+| P1 | 该单收货资料原文（游客凭短期凭据；会员凭会话） | 「权限与资料保护」「数据模型」（`OrderRecipient`） |
+| G | 游客短期凭据：结果页可用，确认收货、退款须改用查单；过期提示凭订单号和电话查单 | 「权限与资料保护」 |
 | K | 订单号：查单凭据之一，不进路径、查询参数或分析事件 | 「权限与资料保护」 |
 | — | 重试不重复下单 | 「订单与退款状态」「失败、并发与重试」 |
 
@@ -554,9 +744,9 @@
 ## P08 订单查询
 
 - **目的**：以订单号及下单电话查询订单（不使用短信验证码）。
-- **入口**：页头「Track order」；P07；P14。
-- **去向**：P09（查询成功）；失败留在本页。
-- **演示提示**：常驻横幅；★ `[lookup.demo_hint]`；`[lookup.privacy_warning]`（剩余风险告知）。
+- **入口**：页头「Track order」；P06/P07 游客凭据过期后；P09 `[order.lookup_another]` 与查单授权过期后；P14。
+- **去向**：P09（查询成功，查单模式）；失败留在本页。
+- **演示提示**：常驻横幅；★ `[lookup.demo_hint]`；`[lookup.privacy_warning]`（剩余风险告知）；`[lookup.access_note]`（查单授权范围）。
 
 桌面：
 
@@ -566,8 +756,9 @@
 +-----------------------------------------------------------------------+
 |   [pay.order_no]   [K ______________________]                         |
 |   [lookup.phone]   [P1 ______________________]                        |
-|                    [checkout.phone_hint]                              |
+|                    [lookup.phone_hint]                                |
 |   ( [lookup.submit] )                                                 |
+|   [L] [lookup.access_note]                                            |
 |   [lookup.privacy_warning]                                            |
 |   错误：[lookup.not_found] / [common.rate_limited] / [common.service_unavailable] |
 +-----------------------------------------------------------------------+
@@ -583,37 +774,43 @@
 | [K ______________________]     |
 | [lookup.phone]                 |
 | [P1 ______________________]    |
-| [checkout.phone_hint]          |
+| [lookup.phone_hint]            |
 | ( [lookup.submit] )            |
+| [lookup.access_note]           |
 | [lookup.privacy_warning]       |
 | <错误提示>                      |
 ```
 
-说明：订单号与电话只以请求体提交，不进路径或查询参数；「不存在」「电话不符」「已匿名化」统一显示 `[lookup.not_found]`，不泄露订单是否存在。
+说明：订单号与电话只以请求体提交，不进路径或查询参数；每次打开本页输入框为空，不预填上一单。「不存在」「电话不符」统一显示 `[lookup.not_found]`，不泄露订单是否存在。收货资料长期保存，查单不随时间失效。
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
 | K | 订单号输入：查单凭据之一，只以请求体提交 | 「权限与资料保护」 |
-| P1 | 电话输入，按与下单相同的 E.164 规范化比对 | 「权限与资料保护」 |
-| — | 查询限流、防枚举、不缓存敏感响应；Redis 不可用时拒绝 | 「权限与资料保护」「失败、并发与重试」 |
-| — | 仅凭电话可查 30 天（资料删除后失效） | 「保留与匿名化」 |
+| P1 | 电话输入，按与下单相同的 E.164 规范化后与该单 `OrderRecipient` 比对 | 「权限与资料保护」「数据模型」（`OrderRecipient`） |
+| L | 查单通过后授予的查单授权：当前浏览器、仅该单、30 分钟；只可查看、确认收货、申请退款；不能支付或取消 | 「权限与资料保护」 |
+| — | 查询限流、防批量枚举、不缓存敏感响应；Redis 不可用时拒绝 | 「权限与资料保护」「失败、并发与重试」 |
+| — | 收货资料长期保存，凭订单号与电话可随时查单；剩余风险 `[lookup.privacy_warning]` 随订单累积 | 「资料保留」「权限与资料保护」 |
 
 ---
 
 ## P09 订单详情（确认收货与退款入口）
 
 - **目的**：查看订单状态、商品与金额、完整收货资料，确认收货，查看退款记录并进入退款申请。
-- **入口**：P08 查询成功；P07 `[result.track]`；P13 我的订单（会员，待决 Q5）。
-- **去向**：P10；P08（返回）。
-- **演示提示**：常驻横幅；★ `[order.demo_hint]`；确认收货旁 `[order.confirm_receipt_hint]`。
+- **两种模式**：
+  - **查单模式 `[L]`**：从 P08 查询成功进入；只在当前浏览器、只针对该单、30 分钟内可查看、确认收货、申请退款；**不提供支付或取消**；查其他订单须经 `[order.lookup_another]` 回 P08 重新输入订单号和电话；过期显示 `[order.session_expired]`，须重新查单。
+  - **会员模式**：从 P13「我的订单」或 P07 `[result.track]` 进入；凭会员会话，只能访问自己下单或认领的订单；确认收货与退款规则与查单模式相同（Q5 已决）；待支付订单另见 `[account.order_pay]`（待决 Q17）。
+- **去向**：P10；P08（查单模式返回或查其他订单）；P13（会员模式返回）。
+- **演示提示**：常驻横幅；★ `[order.demo_hint]`；确认收货旁 `[order.confirm_receipt_hint]`；查单模式 `[order.lookup_access]`。
 
 桌面：
 
 ```text
 | [common.demo_banner]                                                  |
 | [order.title] [K]   [order.current_status] [order.status_*]   ★ [order.demo_hint] |
+| 查单模式：[L] [order.lookup_access]  ([order.lookup_another]) → P08    |
+| 会员模式：([account.orders]) → P13                                    |
 | [order.progress] [order.status_awaiting] → [order.status_paid] →      |
 |   [order.status_packed] → [order.status_shipped] → [order.status_completed] |
 +---------------------------------------------+-------------------------+
@@ -622,7 +819,7 @@
 |        [order.cash_paid] [M2]               | [P1] <电话>             |
 | <名称>/<规格> x1 …                           | [P1] <地址>/<邮编>      |
 |---------------------------------------------|      <地区>/<国家>      |
-| [cart.subtotal]            [M3]             | 或 [order.recipient_anonymised] |
+| [cart.subtotal]            [M3]             |                         |
 | [checkout.summary_coupon]  [M3]             |                         |
 | [checkout.summary_points]  [M3]             |                         |
 | [checkout.summary_shipping][M3]             |                         |
@@ -634,6 +831,10 @@
 | [order.refund_requests]                                               |
 |  <日期> <商品 x数量> [M4] [order.refund_requested|approved|rejected]   |
 | 全部已退时：[order.fulfilment_frozen]                                  |
+| 待支付订单——查单模式：[order.lookup_no_pay]（无支付、取消按钮）           |
+|            会员模式：( [account.order_pay] ) → P06（待决 Q17）          |
+--- 查单授权过期或不属于该单时替换整页 ---
+| [order.session_expired]  ( [common.nav_track] ) → P08（须重新输入订单号和电话） |
 ```
 
 手机：
@@ -643,6 +844,9 @@
 | [order.title] [K]              |
 | [order.current_status] [order.status_*] |
 | ★ [order.demo_hint]            |
+| 查单模式：[order.lookup_access]  |
+|  ([order.lookup_another])      |
+| 会员模式：([account.orders])     |
 | [order.progress]（纵向，各步同桌面的 [order.status_*]）|
 | [order.items]                  |
 | <名称>/<规格> x2               |
@@ -650,7 +854,6 @@
 | ▸ [order.amount_breakdown] [M3]|
 | ▸ [checkout.recipient_title]   |
 |    [P1] <姓名>/<电话>/<地址>    |
-|    或 [order.recipient_anonymised] |
 | ( [order.confirm_receipt] )    |
 | [order.confirm_receipt_hint]   |
 | ( [order.request_refund] )     |
@@ -659,28 +862,35 @@
 | [order.refundable_left] [M4]   |
 | ▸ [order.refund_requests]      |
 | [order.fulfilment_frozen]?     |
+| 待支付：[order.lookup_no_pay] 或 ( [account.order_pay] ) |
+--- 过期时 ---
+| [order.session_expired]        |
+| ( [common.nav_track] )         |
 ```
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
-| M1 | 商品单价快照 | 「数据模型」（`OrderItem`） |
+| M1 | 商品单价快照 | 「数据模型」（`Order` / `OrderItem`） |
 | M2 | 逐件现金实付快照（不含积分抵扣） | 「计价、优惠、积分与库存」（第 2、4 条） |
-| M3 | 小计、优惠、积分、示例运费、合计快照 | 「数据模型」（`Order`）「计价、优惠、积分与库存」（第 7 条） |
+| M3 | 小计、优惠、积分、示例运费、合计快照 | 「数据模型」（`Order` / `OrderItem`）「计价、优惠、积分与库存」（第 7 条） |
 | M4 | 累计已退、剩余可退、每笔申请金额 | 「订单与退款状态」 |
-| P1 | 完整收货姓名、电话、地址（查询通过后可见；到期显示已匿名化） | 「权限与资料保护」「保留与匿名化」 |
+| P1 | 完整收货姓名、电话、地址：查单模式凭查单授权可见；会员模式仅本人下单或认领的订单可见；长期保存，不再显示「已匿名化」 | 「权限与资料保护」「资料保留」 |
+| L | 查单授权：当前浏览器、仅该单、30 分钟；可查看、确认收货、申请退款；不能支付或取消；查其他订单须重新输入订单号和电话；过期须重新查单 | 「权限与资料保护」 |
 | K | 页标题 `order.title` 中的订单号 | 「权限与资料保护」 |
-| — | 确认收货：仅 `demo_shipped` 可点；7 天自动完成；全退后冻结 | 「订单与退款状态」 |
-| — | 退款入口：支付后 30 天内显示（待决 Q2） | 「订单与退款状态」 |
+| — | 会员模式：仅访问自己认领或下单的订单，确认收货、退款规则与查单页相同 | 「权限与资料保护」「订单与退款状态」 |
+| — | 确认收货：仅 `demo_shipped` 可点；7 天自动完成；全退后冻结；幂等，须 CSRF 令牌 | 「订单与退款状态」「失败、并发与重试」「权限与资料保护」 |
+| — | 退款入口：支付成功后 30 天内显示，截止时间以服务端 `order.refund_deadline` 为准（Q2 已决） | 「订单与退款状态」 |
 
 ---
 
 ## P10 退款申请
 
 - **目的**：选择要退的商品与数量，查看系统计算的模拟退款金额（会员另见积分返还与追回），提交申请。
-- **入口**：P09 `[order.request_refund]`。
+- **入口**：P09 `[order.request_refund]`（查单模式或会员模式）。
 - **去向**：P09（提交后显示 `[refund.submitted]` 与记录）。
+- **访问授权**：查单模式沿用该单查单授权 `[L]`，过期显示 `[order.session_expired]`；会员模式凭会员会话。
 - **演示提示**：常驻横幅；★ `[refund.demo_hint]`；◆ 提交按钮旁 `[refund.submit_hint]`。
 
 桌面：
@@ -688,18 +898,20 @@
 ```text
 | [common.demo_banner]                                                  |
 | [refund.title]   [order.title] [K]            ★ [refund.demo_hint]    |
+| 查单模式：[L] [order.lookup_access]                                    |
 +-----------------------------------------------------------------------+
 | [refund.select_items]                                                 |
 |  <名称>/<规格>  [order.cash_paid] [M1]   [detail.quantity] (-) 0 (+) [refund.max_qty] |
 |  <名称>/<规格>  [order.cash_paid] [M1]   [detail.quantity] (-) 0 (+) [refund.max_qty] |
 +-----------------------------------------------------------------------+
 | [refund.estimate]         [M2]                                        |
-| 会员：[refund.points_back] [M3]  [refund.points_reversed] [M3]         |
+| 会员订单：[refund.points_back] [M3]  [refund.points_reversed] [M3]     |
 |       [refund.expired_points_note]                                    |
 | [refund.shipping_not_refunded]  [refund.coupon_not_restored]          |
 | ( [refund.submit] )                                                   |
 | ◆ [refund.submit_hint]                                                |
-| 错误：[refund.duplicate] / [refund.nothing_left] / [refund.window_closed] |
+| 错误：[refund.duplicate] / [refund.nothing_left] / [refund.window_closed] / |
+|   [order.session_expired]（查单授权过期）                               |
 ```
 
 手机：
@@ -709,6 +921,7 @@
 | [refund.title]                 |
 | [order.title] [K]              |
 | ★ [refund.demo_hint]           |
+| 查单模式：[order.lookup_access]  |
 | [refund.select_items]          |
 | <名称>/<规格>                   |
 |  [order.cash_paid] [M1]        |
@@ -726,24 +939,28 @@
 |  ( [refund.submit] )           |
 ```
 
+说明：积分行只在该单属于会员（下单时为会员）时显示；由会员认领的游客订单没有获得积分，也没有积分抵扣，服务端返回零时不显示积分行。
+
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
-| M1 | 每件现金实付快照；可退数量 = 购买数量 − 已批准 − 审核中 | 「订单与退款状态」「数据模型」（`RefundLine`） |
+| M1 | 每件现金实付快照；可退数量 = 购买数量 − 已批准 − 审核中 | 「订单与退款状态」「数据模型」（`RefundRequest` / `RefundLine`） |
 | M2 | 预计模拟退现金，由服务端按逐件快照计算；运费不退 | 「订单与退款状态」「计价、优惠、积分与库存」（第 4、5 条） |
 | M3 | 返还抵扣积分（已过期不返还）、追回获得积分 | 「计价、优惠、积分与库存」（第 5 条）「订单与退款状态」 |
+| L | 查单模式：沿用该单查单授权，仅该单、30 分钟；过期须重新查单 | 「权限与资料保护」 |
 | K | 页标题 `order.title` 中的订单号 | 「权限与资料保护」 |
-| — | 提交幂等；同一可退数量重复申请被拒 | 「失败、并发与重试」「订单与退款状态」 |
+| — | 会员模式：仅本人下单或认领的订单，规则与查单页相同 | 「权限与资料保护」「订单与退款状态」 |
+| — | 提交幂等并须 CSRF 令牌；同一可退数量重复申请被拒 | 「失败、并发与重试」「订单与退款状态」「权限与资料保护」 |
 
 ---
 
 ## P11 注册（短信验证）
 
-- **目的**：以马来西亚或新加坡手机号经真实短信验证注册会员，设置密码。
-- **入口**：页头「Register」；P05 游客提示；P07 `[result.guest_register]`；P12。
-- **去向**：P13（注册成功并登录）；P05 或 P01（`[auth.continue_guest]`）。
-- **演示提示**：常驻横幅；★ `[auth.register_demo_hint]`（写明这是真实短信）；`[auth.sms_scope]`。
+- **目的**：以马来西亚或新加坡手机号经真实短信验证成为会员；与短信登录、结账验证是同一个 V1 流程——号码已注册则直接登录。注册时不设密码，之后可在 P13 设置。
+- **入口**：页头「Register」；P07 `[result.guest_register]`；P12。
+- **去向**：P13（注册或登录成功，显示 `[account.password_none]` 提示可设密码）；来源页；P05 或 P01（`[auth.continue_guest]`）。
+- **演示提示**：常驻横幅；★ `[auth.register_demo_hint]`（写明这是真实短信）；`[auth.sms_scope]`；`[auth.same_flow_note]`。
 
 桌面（居中单栏卡片）：
 
@@ -752,20 +969,23 @@
 |            +-------------------------------------------+              |
 |            | [auth.register_title]                     |              |
 |            | ★ [auth.register_demo_hint]               |              |
-|            | [auth.sms_scope]                          |              |
-|            | [auth.phone] [+60 ▾][P1 ______________]   |              |
-|            | [auth.challenge]                          |              |
-|            | <托管人机挑战组件>                           |              |
-|            | ( [auth.send_code] )                      |              |
-|            | [auth.code_sent]                          |              |
-|            | [auth.code]     [______]                  |              |
-|            | [auth.password] [P2 ______________]       |              |
-|            | [auth.claim_notice]                       |              |
-|            | ( [auth.register_submit] )                |              |
-|            | 错误：[auth.not_supported_country] /       |              |
+|            | [auth.same_flow_note]                     |              |
+|            | <V1：用途「注册 / 短信登录」>                  |              |
+|            |  [auth.phone] [+60 ▾][P1 ____________]    |              |
+|            |  [auth.sms_scope]                         |              |
+|            |  [auth.claim_notice]                      |              |
+|            |  [auth.challenge] <托管人机挑战组件>          |              |
+|            |  ( [auth.send_code] )                     |              |
+|            |  [auth.code_sent]                         |              |
+|            |  [auth.code] [______] ( [auth.verify_submit] ) |          |
+|            |  ([auth.resend_code])                     |              |
+|            |  错误：[auth.not_supported_country] /      |              |
 |            |   [auth.sms_failed] / [auth.code_wrong] / |              |
-|            |   [common.rate_limited]                   |              |
-|            |   → ([auth.continue_guest])               |              |
+|            |   [auth.code_too_many] / [common.rate_limited] |          |
+|            |   → ([auth.continue_guest])（仅前两种）      |              |
+|            |  成功：[auth.verified_registered] 或       |              |
+|            |        [auth.verified_login] → P13        |              |
+|            | [common.nav_login] → P12                  |              |
 |            +-------------------------------------------+              |
 ```
 
@@ -775,54 +995,63 @@
 | [common.demo_banner_short]     |
 | [auth.register_title]          |
 | ★ [auth.register_demo_hint]    |
-| [auth.sms_scope]               |
+| [auth.same_flow_note]          |
 | [auth.phone]                   |
 | [+60▾][P1 _______________]     |
+| [auth.sms_scope]               |
+| [auth.claim_notice]            |
 | <托管人机挑战组件>                 |
 | ( [auth.send_code] )           |
 | [auth.code_sent]               |
 | [auth.code] [______]           |
-| [auth.password] [P2 ______]    |
-| [auth.claim_notice]            |
-| ( [auth.register_submit] )     |
+| ( [auth.verify_submit] )       |
+| ([auth.resend_code])           |
 | <错误> ([auth.continue_guest])  |
+| [common.nav_login]             |
 ```
 
-说明：`<托管人机挑战组件>` 由人机挑战托管服务渲染，其内文字不在 UX-COPY 中，按当前界面语言请求该服务的对应语言；`[+60 ▾]` 为国家码选择（仅 +60、+65）。
+说明：`[+60 ▾]` 为国家码选择（仅 +60、+65）。`[auth.continue_guest]` 只在号码不在白名单或短信发送失败时出现；验证码错误不出现。
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
-| P1 | 手机号（E.164；白名单马来西亚、新加坡；`{phoneMasked}` 只显示部分号码） | 「边界与原则」「失败、并发与重试」「权限与资料保护」 |
-| P2 | 密码（安全哈希，规则待决 Q15） | 「权限与资料保护」「数据模型」（`Member`） |
+| P1 | 手机号（E.164；白名单马来西亚、新加坡；`{phoneMasked}` 只显示部分号码）；保留至注销 | 「边界与原则」「失败、并发与重试」「权限与资料保护」「资料保留」 |
+| — | 与短信登录、结账验证同一流程：已注册则登录，未注册则创建无密码会员 | 「权限与资料保护」「数据模型」（`Member` / `VerificationAttempt`） |
 | — | 人机挑战在发送短信前；短信失败不创建账号 | 「失败、并发与重试」 |
-| — | 自动认领近 30 天、未匿名化的游客订单，不补发积分 | 「权限与资料保护」「计价、优惠、积分与库存」（第 3 条） |
+| — | 自动认领近 30 天、未认领的游客订单，不补发积分（相关剩余风险见待决 Q11） | 「权限与资料保护」「计价、优惠、积分与库存」（第 3 条） |
 
 ---
 
 ## P12 登录与忘记密码
 
-- **目的**：会员以手机号加密码登录；忘记密码时经短信验证重设。
-- **入口**：页头「Log in」；P05 游客提示；P11。
-- **去向**：登录成功 → 来源页或 P13；P11（未注册）；重设完成 → 登录。
-- **演示提示**：常驻横幅；★ `[auth.login_demo_hint]`；忘记密码步骤显示 `[auth.sms_scope]`。
+- **目的**：会员以**手机号加密码**或**手机号加短信验证码**登录；已设密码者忘记密码时经短信验证重设。
+- **入口**：页头「Log in」；P05 `[checkout.login_password]`；P11；P13 `[account.password_change]`（进入重设）。
+- **去向**：登录成功 → 来源页或 P13；P11；重设完成 → 登录。
+- **演示提示**：常驻横幅；★ `[auth.login_demo_hint]`；短信登录与忘记密码显示 `[auth.sms_scope]`。
 
 桌面：
 
 ```text
 | [common.demo_banner]                                                  |
-|    +------------ 登录 ------------+   +-------- 忘记密码 ---------+     |
-|    | [auth.login_title]           |   | [auth.reset_title]       |     |
-|    | ★ [auth.login_demo_hint]     |   | [auth.sms_scope]         |     |
-|    | [auth.phone] [+60▾][P1 ____] |   | [auth.phone] [P1 ____]   |     |
-|    | [auth.password] [P2 ____]    |   | <托管人机挑战组件>          |     |
-|    | ( [auth.login_submit] )      |   | ( [auth.send_code] )     |     |
-|    | ([auth.forgot]) → 右栏        |   | [auth.code] [____]       |     |
-|    | [common.nav_register] → P11  |   | [auth.new_password][P2]  |     |
-|    | 错误：[auth.login_failed] /   |   | ( [auth.reset_submit] )  |     |
-|    |  [common.rate_limited]       |   | [auth.reset_done]        |     |
-|    +------------------------------+   +--------------------------+     |
+|    +------------ 登录 ------------------+   +-------- 忘记密码 ---------+ |
+|    | [auth.login_title]                 |   | [auth.reset_title]       | |
+|    | ★ [auth.login_demo_hint]           |   | <V1：用途「重设密码」>      | |
+|    | ([auth.login_method_password]) | ([auth.login_method_sms]) |      | |
+|    | --- 密码页签 ---                     |   |  [auth.phone] [P1 ____]  | |
+|    | [auth.phone] [+60▾][P1 ________]   |   |  [auth.sms_scope]        | |
+|    | [auth.password] [P2 ________]      |   |  <托管人机挑战组件>         | |
+|    | ( [auth.login_submit] )            |   |  ( [auth.send_code] )    | |
+|    | ([auth.forgot]) → 右栏              |   |  [auth.code] [____]      | |
+|    | 错误：[auth.login_failed] /         |   |  ( [auth.verify_submit] )| |
+|    |  [common.rate_limited]             |   | [auth.new_password][P2]  | |
+|    | --- 短信验证码页签 ---                |   | [auth.password_rule]     | |
+|    | [auth.same_flow_note]              |   | ( [auth.reset_submit] )  | |
+|    | <V1：用途「注册 / 短信登录」>          |   | [auth.reset_done]        | |
+|    |  成功：[auth.verified_login] 或      |   +--------------------------+ |
+|    |   [auth.verified_registered]       |                                |
+|    | [common.nav_register] → P11        |                                |
+|    +------------------------------------+                                |
 （忘记密码为独立步骤页，桌面以右栏示意）
 ```
 
@@ -832,38 +1061,49 @@
 | [common.demo_banner_short]     |
 | [auth.login_title]             |
 | ★ [auth.login_demo_hint]       |
+| ([auth.login_method_password])([auth.login_method_sms]) |
+--- 密码页签 ---
 | [auth.phone]                   |
 | [+60▾][P1 _______________]     |
 | [auth.password] [P2 ______]    |
 | ( [auth.login_submit] )        |
 | ([auth.forgot])                |
+| <错误：[auth.login_failed]>     |
+--- 短信验证码页签 ---
+| [auth.same_flow_note]          |
+| <V1 同 P11>                     |
 | [common.nav_register]          |
 --- 忘记密码（下一屏）---
 | [auth.reset_title]             |
-| [auth.sms_scope]               |
-| [auth.phone] [P1 ____]         |
-| <托管人机挑战组件>                 |
-| ( [auth.send_code] )           |
-| [auth.code] [____]             |
+| <V1：[auth.phone] … ( [auth.verify_submit] )> |
 | [auth.new_password] [P2 ____]  |
+| [auth.password_rule]           |
 | ( [auth.reset_submit] )        |
+| [auth.reset_done]              |
 ```
+
+说明：
+
+- **未设密码的账号与密码错误显示同一条** `[auth.login_failed]`，不暴露账号是否存在或是否设过密码；该文案同时提示可改用短信验证码登录。
+- 短信验证码页签与 P11 走同一 V1 流程：号码已注册则登录，未注册则创建会员并登录。
+- 忘记密码：V1 验证通过后才显示新密码输入；未设过密码的账号验证通过后同样可设置（等同首次设密码）。
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
 | P1 | 手机号 | 「权限与资料保护」「失败、并发与重试」 |
-| P2 | 密码、新密码 | 「权限与资料保护」 |
-| — | 登录/重设限流；错误不区分号码是否已注册 | 「失败、并发与重试」「权限与资料保护」 |
+| P2 | 密码、新密码：至少 8 位，不强制复杂度，安全哈希存储 | 「权限与资料保护」「数据模型」（`Member` / `VerificationAttempt`） |
+| — | 密码登录对未设密码账号与错误密码返回相同通用失败；登录/重设限流 | 「权限与资料保护」「失败、并发与重试」 |
+| — | 短信登录与注册、结账验证同一流程；重设须再次短信验证 | 「权限与资料保护」 |
 
 ---
 
 ## P13 会员中心
 
-- **目的**：查看我的订单（含自动认领的游客订单）、积分余额/到期/待抵扣与明细、优惠券，退出登录，注销账号。
-- **入口**：页头「My account」；P11 注册成功；P12 登录成功。
-- **去向**：P09（订单详情，待决 Q5）；P01（退出或注销后）。
+- **目的**：查看我的订单（含自动认领的游客订单）并进入订单详情确认收货、申请退款；积分余额/到期/待抵扣与明细；可用优惠券与使用记录；设置或更改密码；退出登录；以短信验证码注销账号。
+- **入口**：页头「My account」；P11、P12 登录成功；P05 验证通过后页头。
+- **去向**：P09、P10（会员模式）；P06（待支付订单，待决 Q17）；P12 忘记密码流程（更改已有密码）；P01（退出或注销后）。
 - **演示提示**：常驻横幅；★ `[account.demo_hint]`。
 
 桌面：
@@ -874,9 +1114,9 @@
 +----------------+------------------------------------------------------+
 | [account.orders]| ★ [account.demo_hint]                               |
 | [account.points]| [account.orders]                                    |
-| [account.coupons]| <日期> [K]<订单号> [order.status_*] [M1] ([account.order_view]) → P09 |
-| [account.settings]| <日期> [K]<订单号> [order.status_*] [M1]           |
-|                |   [order.recipient_anonymised]（已匿名化的只显示摘要）|
+| [account.coupons]| <日期> [K]<订单号> [order.status_*] [M1] ([account.order_view]) → P09 会员模式 |
+| [account.settings]| <日期> [K]<订单号> [order.status_*] [M1] ([account.order_view]) |
+|                |   [account.orders_hint]                              |
 |                | 无订单时：[account.orders_empty]                      |
 |                |------------------------------------------------------|
 |                | [account.points]                                     |
@@ -886,13 +1126,30 @@
 |                | [account.points_history]                             |
 |                |  <日期> [account.points_type_*] ±<积分> [K]<订单号>    |
 |                |------------------------------------------------------|
-|                | [account.coupons]（待决 Q13）                          |
-|                | <代码> [account.coupon_used_on] [K] [M3]             |
+|                | [account.coupons]                                    |
+|                | [account.coupons_available]                          |
+|                |  <代码> [account.coupon_value_fixed]/[account.coupon_value_percent] [M3] |
+|                |   [account.coupon_min_spend] [M3] [account.coupon_valid_until] |
+|                |  [account.coupon_use_hint]                           |
+|                |  无可用券：[account.coupons_available_empty]           |
+|                | [account.coupons_used]                               |
+|                |  <代码> [account.coupon_used_on] [K] [M4]            |
+|                |  无记录：[account.coupons_used_empty]                  |
 |                |------------------------------------------------------|
 |                | [account.settings]                                   |
+|                | [account.password_title]                             |
+|                |  未设密码：[account.password_none]                     |
+|                |   [auth.new_password] [P2 ______] [auth.password_rule] |
+|                |   ( [account.password_set_submit] ) → [account.password_set_done] |
+|                |  已设密码：[account.password_exists]                   |
+|                |   ([account.password_change]) → P12 忘记密码流程       |
+|                |------------------------------------------------------|
 |                | [account.delete]                                     |
 |                | [account.delete_warning]                             |
-|                | ( [account.delete_confirm] )（确认方式待决 Q15）        |
+|                | [account.delete_verify]                              |
+|                | <V1：用途「注销确认」，号码固定为本账号>                 |
+|                |  验证通过后：( [account.delete_confirm] )             |
+|                |  完成：[account.deleted] → P01                        |
 +----------------+------------------------------------------------------+
 ```
 
@@ -904,6 +1161,7 @@
 | ★ [account.demo_hint]          |
 | [account.orders][account.points][account.coupons][account.settings] |
 --- 订单 ---
+| [account.orders_hint]          |
 | <日期> [order.status_*]        |
 | [K]<订单号> [M1]  >            |
 |  （> 读屏标签 [account.order_view]）|
@@ -914,35 +1172,60 @@
 | ▸ [account.points_history]     |
 |  <日期> [account.points_type_*] ±<积分> [K]<订单号> |
 --- 优惠券 ---
-| <代码> [account.coupon_used_on] [K] [M3] |
+| [account.coupons_available]    |
+| <代码> [account.coupon_value_*] [M3] |
+|  [account.coupon_min_spend] [M3] |
+|  [account.coupon_valid_until]  |
+| [account.coupon_use_hint]      |
+| [account.coupons_used]         |
+| <代码> [account.coupon_used_on] [K] [M4] |
 --- 设置 ---
 | [P1] <手机号部分遮盖>           |
+| [account.password_title]       |
+| [account.password_none]        |
+|  [auth.new_password][P2 ____]  |
+|  [auth.password_rule]          |
+|  ( [account.password_set_submit] ) |
+| 或 [account.password_exists]    |
+|  ([account.password_change])   |
 | ([common.nav_logout])          |
 | [account.delete]               |
 | [account.delete_warning]       |
+| [account.delete_verify]        |
+| <V1 注销确认>                    |
 | ( [account.delete_confirm] )   |
 ```
 
+说明：
+
+- 「我的订单」中的订单都可点 `[account.order_view]` 进入 P09 会员模式，在其中确认收货与申请退款，规则与查单页相同（Q5 已决）。
+- 「我的优惠券」同时列出当前可用的公开券（`[account.coupons_available]`）与本人使用记录（`[account.coupons_used]`）（Q13 已决；「公开券」范围见待决 Q19）。
+- 首次设置密码在已登录会话内完成，不需短信；更改已有密码须经短信验证（P12 忘记密码流程）。
+- 注销须先以短信验证码确认（V1），验证通过后才出现 `[account.delete_confirm]`；自动注册的账号可能从未设过密码，故不以密码确认（Q15 已决）。
+
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
-| M1 | 订单合计快照；匿名化后仍显示摘要 | 「数据模型」（`Order`）「保留与匿名化」 |
+| M1 | 订单合计快照 | 「数据模型」（`Order` / `OrderItem`） |
 | M2 | 积分余额、待抵扣、到期批次、流水 | 「计价、优惠、积分与库存」（第 3、5 条）「数据模型」（`PointLedger`） |
-| M3 | 优惠券使用记录 | 「数据模型」（`Coupon` / `CouponUse`） |
-| P1 | 会员手机号（部分遮盖显示） | 「权限与资料保护」「保留与匿名化」 |
+| M3 | 可用公开券的面额（固定金额或百分比）与最低商品消费 | 「数据模型」（`Coupon` / `CouponUse`）「计价、优惠、积分与库存」（第 1 条） |
+| M4 | 优惠券使用记录 | 「数据模型」（`Coupon` / `CouponUse`） |
+| P1 | 会员手机号（部分遮盖显示）；保留至主动注销 | 「权限与资料保护」「资料保留」 |
+| P2 | 首次设置密码：至少 8 位，不强制复杂度，安全哈希；在已登录会话内进行 | 「权限与资料保护」「数据模型」（`Member` / `VerificationAttempt`） |
 | K | 订单列表、积分明细与 `account.coupon_used_on` 中的订单号 | 「权限与资料保护」 |
 | — | 积分明细类型 `account.points_type_*`（获得、抵扣、到期、退款返还、退款追回） | 「计价、优惠、积分与库存」（第 3、5 条）「数据模型」（`PointLedger`） |
-| — | 注销：撤销会话、删除手机号与密码、解除订单关联、积分与未用券作废 | 「权限与资料保护」 |
-| — | 仅显示本人下单或认领的订单 | 「权限与资料保护」 |
+| — | 仅显示本人下单或认领的订单；可在「我的订单」确认收货、申请退款，规则与查单页相同 | 「权限与资料保护」「订单与退款状态」 |
+| — | 注销：先短信验证码确认，再撤销会话、删除手机号与密码、清空订单会员 ID；积分与未用券作废；订单收货资料不删除 | 「权限与资料保护」「资料保留」 |
+| — | 注销后手机号与密码哈希仍可能在共享备份中残留，核实前无确定上限（对外措辞见待决 Q18） | 「资料保留」 |
 
 ---
 
 ## P14 隐私说明
 
-- **目的**：说明收集哪些资料、用途、保留与匿名化时间、查单剩余风险、短信与日志，以及联系入口（占位）。
+- **目的**：说明收集哪些资料、用途、保留期限（收货资料长期保存、会员手机号保留至注销）、两种订单授权、查单剩余风险、短信与日志，以及联系入口（占位）。
 - **入口**：页脚「Privacy」；P05 `[checkout.form_notice_link]`。
-- **去向**：来源页；WhatsApp 占位链接。
+- **去向**：来源页；WhatsApp 占位链接（未配置时隐藏）。
 - **演示提示**：常驻横幅；★ `[privacy.demo_hint]`。
 
 桌面：
@@ -955,12 +1238,14 @@
 | [privacy.h_collect]    [P1] [privacy.collect]                          |
 |                        [privacy.fictional]                             |
 | [privacy.h_retention]  [P2] [privacy.retention_recipient]              |
-|                        [P3] [privacy.retention_backup]（草稿，待决 Q3） |
-|                        [P4] [privacy.member]                           |
-| [privacy.h_access]     [P5] [privacy.lookup_risk]                      |
-| [privacy.h_sms_logs]   [P6] [privacy.sms]  [privacy.logs]              |
+|                        [P3] [privacy.member]                           |
+|                        [P4] [privacy.member_backup]（草稿，待决 Q18）   |
+| [privacy.h_access]     [P5] [privacy.browser_access]                   |
+|                        [P6] [privacy.lookup_risk]                      |
+| [privacy.h_sms_logs]   [P7] [privacy.sms]  [privacy.logs]              |
 | [privacy.h_contact]    [privacy.contact]                               |
 |                        ( [privacy.contact_button] ) → {{WHATSAPP_CONTACT_LINK}} 占位 |
+|                        （WhatsApp 未配置时隐藏整个「联系」段）            |
 ```
 
 手机：
@@ -972,24 +1257,27 @@
 | [privacy.intro]                |
 | ▾ [privacy.h_collect] [P1]     |
 | ▾ [privacy.h_retention] [P2][P3][P4] |
-| ▾ [privacy.h_access] [P5]      |
-| ▾ [privacy.h_sms_logs] [P6]    |
+| ▾ [privacy.h_access] [P5][P6]  |
+| ▾ [privacy.h_sms_logs] [P7]    |
 | [privacy.h_contact]            |
 | [privacy.contact]              |
 | ( [privacy.contact_button] ) → 占位链接 |
-（手机上各段默认展开；▾ 仅示意分段）
+（手机上各段默认展开；▾ 仅示意分段；联系段未配置时隐藏）
 ```
+
+说明：本页不提供、也不暗示访客删除收货资料的入口（DESIGN 1.8「资料保留」：首版不提供该能力）。
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
-| P1 | 收集字段清单、不收集邮箱与证件、可虚构 | 「边界与原则」 |
-| P2 | 收货资料在线 30 天删除及起算点 | 「保留与匿名化」 |
-| P3 | 共享备份残留说明（不写天数） | 「保留与匿名化」「上线依赖与设计闸门」 |
-| P4 | 会员手机号保留至注销；短信记录短期保留 | 「保留与匿名化」 |
-| P5 | 订单号 + 电话可见完整收货资料的剩余风险 | 「权限与资料保护」 |
-| P6 | 真实短信；日志最长 30 天且不含个人资料 | 「失败、并发与重试」「权限与资料保护」「保留与匿名化」 |
+| P1 | 收集字段清单、不收集邮箱与证件、可虚构（马新结账手机号须能收短信） | 「边界与原则」 |
+| P2 | 收货资料随订单长期保存，不删除、不匿名化，注销后也保留；访客不能自行删除 | 「资料保留」「边界与原则」 |
+| P3 | 会员手机号保留至注销，长期未登录不自动注销；短信记录短期保留 | 「资料保留」 |
+| P4 | 注销后手机号与密码哈希在共享备份中的残留说明（不写天数） | 「资料保留」「上线依赖与设计闸门」 |
+| P5 | 游客短期凭据与查单授权：仅当前浏览器、仅该单、30 分钟 | 「权限与资料保护」 |
+| P6 | 订单号 + 电话可见完整收货资料的剩余风险，随订单累积 | 「权限与资料保护」「资料保留」 |
+| P7 | 真实短信（结账验证、注册、短信登录、重设密码、注销确认）；日志最长 30 天且不含个人资料 | 「失败、并发与重试」「权限与资料保护」「资料保留」 |
 
 ---
 
@@ -999,7 +1287,8 @@
 - 每页顶部常驻 `[admin.demo_banner]`，作为后台每页的演示提示（★）；各页另有操作旁提示。
 - 桌面：左侧导航 + 右侧内容；手机：顶部 ☰ 导航，表格改为卡片列表。导航项依次为 `[admin.nav_orders]`、`[admin.nav_refunds]`、`[admin.nav_products]`、`[admin.nav_coupons]`、`[admin.nav_shipping]`、`[admin.nav_stock_resets]`，界面语言切换用 `[common.lang_*]`；A02 线框展开写出导航，A03–A07 以「☰ 导航」标注代替。手机顶栏「☰ [admin.nav_*]」显示当前页的导航项名称。
 - 表格列头、状态值、按钮与区块标题同样都用 `[key]`；`<…>` 为运行时数据，与前台约定相同。
-- 所有权限由服务端检查，前端隐藏按钮不代替授权（DESIGN 1.6「权限与资料保护」）。
+- 所有权限由服务端检查，前端隐藏按钮不代替授权（DESIGN 1.8「权限与资料保护」）。
+- **后台任何页面都不设导出按钮**（DESIGN 1.8「权限与资料保护」：首版不提供后台导出；Q7 已决）。
 
 ## A01 后台登录
 
@@ -1018,7 +1307,7 @@
 |            | [admin.username] [________]   |                          |
 |            | [auth.password]  [________]   |                          |
 |            | ( [auth.login_submit] )       |                          |
-|            | 错误：[auth.login_failed] /    |                          |
+|            | 错误：[admin.login_failed] /   |                          |
 |            |   [admin.locked]              |                          |
 |            +-------------------------------+                          |
 ```
@@ -1034,9 +1323,11 @@
 | <错误>                          |
 ```
 
+说明：前台 `auth.login_failed` 在 0.2 改为提示可用短信验证码登录，不适用于后台，故后台登录失败改用 `[admin.login_failed]`。
+
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
 | — | 管理员凭据；按来源与账号限流，连续失败短时锁定并告警 | 「权限与资料保护」「失败、并发与重试」 |
 
@@ -1060,7 +1351,7 @@
 | [admin.nav_stock_resets] |  [order.items] <名称>/<规格> x2 [M2]         |
 |           |  [order.amount_breakdown] [M1]                             |
 |           |  [admin.recipient_raw]  [P1] <姓名>/<电话>/<地址>/<邮编>    |
-|           |    [admin.recipient_audited] / 或 [order.recipient_anonymised] |
+|           |    [admin.recipient_audited]                               |
 |           |  ( [admin.mark_packed] ) ( [admin.mark_shipped] )          |
 |           |  [admin.ship_hint]                                         |
 |           |  全部已退：[admin.frozen]（按钮禁用）                        |
@@ -1069,7 +1360,7 @@
 |           |   <时间> [order.status_*] [admin.actor_*]                   |
 +-----------+-----------------------------------------------------------+
 （状态筛选选项为各 [order.status_*]；事件列显示变更后的 [order.status_*]）
-（不设导出按钮，待决 Q7）
+（不设导出按钮，Q7 已决）
 ```
 
 手机：
@@ -1097,11 +1388,11 @@
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
-| M1 | 订单金额快照 | 「数据模型」（`Order`） |
-| M2 | 行项目与逐件分摊快照 | 「数据模型」（`OrderItem`）「计价、优惠、积分与库存」（第 2 条） |
-| P1 | 原始收货资料，仅管理员可见，查看留审计；到期显示已匿名化 | 「权限与资料保护」「保留与匿名化」 |
+| M1 | 订单金额快照 | 「数据模型」（`Order` / `OrderItem`） |
+| M2 | 行项目与逐件分摊快照 | 「数据模型」（`Order` / `OrderItem`）「计价、优惠、积分与库存」（第 2 条） |
+| P1 | 原始收货资料，仅管理员可见，查看留审计；长期保存，不再显示「已匿名化」；不设导出 | 「权限与资料保护」「资料保留」 |
 | K | 订单号列、订单号搜索框与详情标题中的订单号 | 「权限与资料保护」 |
 | — | 状态推进校验当前状态，全退后冻结，已完成不可倒退 | 「订单与退款状态」 |
 | — | 事件记录不含收货资料原文 | 「数据模型」（`PaymentAttempt` / `OrderEvent`） |
@@ -1158,7 +1449,7 @@
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
 | M1 | 模拟退现金，按原逐件现金实付快照 | 「订单与退款状态」「计价、优惠、积分与库存」（第 4、5 条） |
 | M2 | 返还抵扣积分与追回获得积分，余额不足记待抵扣 | 「计价、优惠、积分与库存」（第 5 条）「订单与退款状态」 |
@@ -1231,7 +1522,7 @@
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
 | M1 | 规格 MYR 价格（非负；只影响新订单） | 「数据模型」（`Product` / `Variant`）「计价、优惠、积分与库存」（第 7 条） |
 | M2 | 每日初始库存（次日生效）与当日库存调整 | 「计价、优惠、积分与库存」（第 6 条） |
@@ -1242,7 +1533,7 @@
 - **目的**：创建、停用固定金额或百分比优惠券，设置有效期、最低消费、总次数与每会员次数上限。
 - **入口**：后台导航。
 - **去向**：—（本页内完成）。
-- **演示提示**：★ `[admin.demo_banner]`；`[admin.rules_apply_new]`。
+- **演示提示**：★ `[admin.demo_banner]`；`[admin.rules_apply_new]`；`[admin.coupon_listed_note]`（启用中、在有效期内的券会列在会员中心「我的优惠券」，待决 Q19）。
 
 桌面：
 
@@ -1250,6 +1541,7 @@
 | [admin.demo_banner]                                                   |
 +-----------+-----------------------------------------------------------+
 | ☰ 导航     | [admin.nav_coupons]                         ( [common.create] ) |
+|           | [admin.coupon_listed_note]                                |
 |           | [admin.coupon_code] [admin.coupon_type] [admin.coupon_value] [admin.coupon_valid] [admin.coupon_usage] [admin.filter_status] |
 |           | <代码> [admin.coupon_percent] [M1] <起止> <n>/<m> [admin.coupon_enabled] ([admin.coupon_disable]) |
 |           | <代码> [admin.coupon_fixed] [M1] <起止> <n>/<m> [admin.coupon_disabled] |
@@ -1270,6 +1562,7 @@
 | [admin.demo_banner]            |
 | ☰  [admin.nav_coupons]         |
 |   ( [common.create] )          |
+| [admin.coupon_listed_note]     |
 | <代码> [M1] [admin.coupon_enabled]/[admin.coupon_disabled] |
 |  [admin.coupon_usage] <n>/<m>  |
 |  ([admin.coupon_disable])      |
@@ -1288,15 +1581,15 @@
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
-| M1 | 固定金额（RM）或百分比 | 「数据模型」（`Coupon`）「计价、优惠、积分与库存」（第 2 条） |
-| M2 | 最低商品消费 | 「数据模型」（`Coupon`） |
+| M1 | 固定金额（RM）或百分比 | 「数据模型」（`Coupon` / `CouponUse`）「计价、优惠、积分与库存」（第 2 条） |
+| M2 | 最低商品消费 | 「数据模型」（`Coupon` / `CouponUse`） |
 | — | 使用上限与预占；修改只影响新订单 | 「计价、优惠、积分与库存」（第 1、7 条） |
 
 ## A06 后台运费区与演示汇率
 
-- **目的**：维护各国示例运费、马来西亚各州属运费、「其他国家」兜底运费，以及参考币种固定演示汇率。
+- **目的**：维护各国示例运费、马来西亚各州属运费、「其他国家」兜底运费，以及参考外币固定演示汇率。
 - **入口**：后台导航。
 - **去向**：—。
 - **演示提示**：★ `[admin.demo_banner]`；`[admin.rules_apply_new]`。
@@ -1342,10 +1635,10 @@
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
-| M1 | 国家/州属/兜底示例运费（MYR） | 「数据模型」（`ShippingRate`） |
-| M2 | 固定演示汇率及版本；只作参考不参与结算 | 「边界与原则」「数据模型」（`DemoFxRate`） |
+| M1 | 国家/州属/兜底示例运费（MYR） | 「数据模型」（`ShippingRate` / `DemoFxRate`） |
+| M2 | 固定演示汇率及版本；只作参考不参与结算 | 「边界与原则」「数据模型」（`ShippingRate` / `DemoFxRate`） |
 
 ## A07 后台库存重置结果
 
@@ -1383,7 +1676,7 @@
 
 金额与个人资料元素：
 
-| 标记 | 元素 | 依据 DESIGN 1.6 小节 |
+| 标记 | 元素 | 依据 DESIGN 1.8 小节 |
 | --- | --- | --- |
 | M1 | 当日可用库存 = 初始库存 − 仍有效预留；不改历史订单 | 「计价、优惠、积分与库存」（第 6 条） |
 | — | 重置可重复运行、只生效一次；失败告警 | 「失败、并发与重试」 |
@@ -1399,30 +1692,36 @@
 | ◆ 下单 | P05 下单按钮旁 `[checkout.place_order_hint]` |
 | ◆ 模拟支付 | P06 成功/失败按钮旁 `[pay.action_hint]` |
 | ◆ 退款 | P10 提交按钮旁 `[refund.submit_hint]`；后台 A03 `[admin.refund_hint]` |
-| 收货表单旁 | P05 `[checkout.form_notice]`：不真实扣款、不真实发货、收货资料 30 天后匿名化；**无确认勾选框** |
+| 结账手机号旁 | P05 `[checkout.phone_notice]`：马新号码会收到验证短信并自动注册会员、手机号保留至注销、可在会员中心注销；**无勾选框** |
+| 收货表单旁 | P05 `[checkout.form_notice]`：不真实扣款、不真实发货、收货资料会长期保存；**无确认勾选框，无删除入口** |
+| 真实短信 | V1 `[auth.sms_scope]`；P11 `[auth.register_demo_hint]` |
 
 ## 不在本稿范围
 
 - 视觉稿（配色、字体、图标、品牌素材）与具体组件实现。
-- 任何 `frontend/`、后端、`docs/DESIGN.md`、`docs/REQUIREMENTS.md`、CI 或部署配置的改动。
+- 任何 `frontend/`、后端、`docs/DESIGN.md`、`docs/REQUIREMENTS.md`、`docs/HANDOFF.md`、CI 或部署配置的改动。
 - 浏览器验收脚本与步骤（页面实现任务再登记）。
 
 ## 待决问题
 
-与 [UX-COPY.md](UX-COPY.md)「待决问题」同一编号、同一内容，共 15 项。本稿只列出，不自行改设计或需求。
+与 [UX-COPY.md](UX-COPY.md)「待决问题」同一编号、同一内容，共 19 项（Q1–Q15 编号不变，Q16–Q19 为 0.2 新增）。本稿只列出，不自行改设计或需求。状态：已决 11 项（Q1、Q2、Q5–Q10、Q12、Q13、Q15）；不再适用 2 项（Q3、Q4）；部分已决 1 项（Q11）；待决 5 项（Q14、Q16–Q19）。
 
-- **Q1 下单后支付页与结果页的访问授权。** DESIGN 1.6「权限与资料保护」写「访客仅能访问已通过查询验证的订单」，但游客下单后需要直接进入模拟支付、失败重试与结果页，未定义此时如何授权。线框假设下单响应只给当前浏览器一个仅限该单支付与结果查看的短期凭据，且支付/结果页不显示收货资料原文。同理，查单通过后在本浏览器保持多久也未定义。需 Kelvin 决定；若需改权限规则，可能触及设计闸门。
-- **Q2 第 30 天退款截止与收货资料删除同日。** 游客退款须先凭电话查单，而已支付订单的收货资料也在支付后第 30 天删除，届时查单失效，游客退款入口随之关闭；两者的先后与具体截止时刻未定义。线框显示服务端给出的截止时间 `order.refund_deadline`，以服务端判定为准。
-- **Q3 共享备份残留期的对外措辞。** REQUIREMENTS 写「收货资料 30 天后匿名化」；DESIGN 1.6「保留与匿名化」写在线第 30 天删除，但副本最迟第 30 + max(binlog 残留期, N) 天才消失，且运营核实前没有确定上限。收货表单旁按验收要求只写「30 天后匿名化」；隐私页草拟 `privacy.retention_backup`，不写天数。是否对外披露及如何措辞需 Kelvin 决定；运营核实前不得写具体天数或「有限期」。
-- **Q4 「30 天」的起算点。** DESIGN 区分已支付（支付起算）与未支付（创建起算）。收货表单短文案只写「30 天后」，完整规则放隐私页 `privacy.retention_recipient`。请确认是否接受。
-- **Q5 会员能否在会员中心直接确认收货、申请退款。** REQUIREMENTS 写访客「在查询页确认收货」；DESIGN 允许会员访问自己认领或下单的订单。线框假设会员订单详情复用 P09 并提供同样操作，需确认。
-- **Q6 模拟支付方式清单。** 需求只写「选择支付方式」。线框用「演示银行卡 / 演示网上银行 / 演示电子钱包」三项，均不输入任何资料；名称与数量待定。「银行卡」字样是否会让访客误以为要填卡号，也请一并判断。
-- **Q7 后台导出。** DESIGN 1.6「权限与资料保护」提到「后台导出仍受服务端权限控制并留审计记录」，REQUIREMENTS 未列导出功能。线框不设导出按钮，待定。
-- **Q8 商品文案回退英文时是否标示。** DESIGN 只规定回退英文。线框在回退时显示 `detail.english_only` 小标签，待定。
-- **Q9 参考币种的显示范围。** REQUIREMENTS 写「按固定演示汇率显示访客国家货币参考金额」；DESIGN 1.6「边界与原则」规定按收货国家、不按 IP 决定。故线框只在结账页选定收货国家后显示参考金额，列表、详情、购物车只显示 MYR。请确认。
-- **Q10 WhatsApp 联系方式未配置时的行为。** 线框在配置缺失时隐藏 WhatsApp 按钮（不显示占位文字）；也可显示「即将开放」。待定。
-- **Q11 虚构电话被真实号码持有人认领。** 表单鼓励填写虚构资料；DESIGN 规定注册后按手机号自动认领近 30 天游客订单。若游客填的“虚构”号码恰好属于真人，该号码的持有人注册后即可认领该单并看到收货资料。这是设计层面的剩余风险，本稿不改设计，请 Kelvin 判断是否接受或另议。
-- **Q12 待支付订单的取消入口与操作者。** DESIGN 写「待支付订单可取消或超时为 `demo_cancelled`」，未写由谁取消。线框在支付页放 `pay.cancel_order`（访客取消），待确认；若不允许访客取消则删除该按钮，仅靠 15 分钟超时。
-- **Q13 会员中心「优惠券」的含义。** REQUIREMENTS 写会员可查看优惠券；DESIGN 的 `Coupon` 没有发放给某会员的字段，只有代码与使用记录。线框暂把「我的优惠券」做成使用记录，是否还要列出当前可用的公开券待定。
-- **Q14 马来文文案审校。** UX-COPY 的马来文为草稿，须母语者审校用词（如 troli、daftar keluar、bayaran balik）后再实现。
-- **Q15 密码规则与注销确认方式。** DESIGN 只要求密码安全哈希，未定长度或复杂度；账号注销的确认方式（再次输入密码或短信验证）也未定义。线框只放确认按钮，待定。
+- **Q1 下单后支付页与结果页的访问授权。** **已决**，依据 DESIGN 1.8「权限与资料保护」：每张游客订单创建后，服务端只给当前浏览器一个不可猜测、30 分钟有效、仅限该单的短期凭据，用于该单的模拟支付、失败重试、取消与结果页，这些页面可显示该单收货资料原文，凭据不能用于确认收货、退款或其他订单；查单通过后仅对该单在本浏览器保持 30 分钟，只能查看、确认收货和申请退款，不能支付或取消；两者均为服务端会话，经 HttpOnly、Secure、SameSite=Lax 的 cookie 交付，写操作另须 CSRF 令牌。线框见 P06、P07（`[G]`）与 P08–P10（`[L]`）；0.1 中「支付/结果页不显示收货资料原文」的假设随之取消。
+- **Q2 第 30 天退款截止与收货资料删除同日。** **已决**，依据 DESIGN 1.8「资料保留」（收货资料不再删除，游客凭订单号与电话可随时查单）与「订单与退款状态」（支付成功后 30 天内可申请退款）：查单不再在第 30 天失效，两者不再冲突；退款截止时间以服务端返回的 `order.refund_deadline` 为准。
+- **Q3 共享备份残留期的对外措辞。** **不再适用**：收货资料不再删除或匿名化（DESIGN 1.8「资料保留」），不存在收货资料在备份中残留的对外措辞问题；表单旁「30 天后匿名化」已删除，隐私页 `privacy.retention_recipient` 改写为长期保存，原 `privacy.retention_backup` 删除。会员注销后手机号与密码哈希在备份中残留的措辞另列为 Q18。
+- **Q4 「30 天」的起算点。** **不再适用**：收货资料不再按 30 天删除，已无起算点；相关文案已改写。
+- **Q5 会员能否在会员中心直接确认收货、申请退款。** **已决**，依据 DESIGN 1.8「订单与退款状态」「权限与资料保护」（会员在「我的订单」对自己认领或下单的订单确认收货、申请退款，规则与查单页相同）。线框以 P09、P10 的会员模式实现。
+- **Q6 模拟支付方式清单。** **已决**，依据 Kelvin 2026-09-29 的决定：「演示银行卡」改为「演示信用卡/借记卡（无需输入卡号）」（`pay.method_card`）；演示网上银行、演示电子钱包保留；三项均不输入任何资料。
+- **Q7 后台导出。** **已决**，依据 DESIGN 1.8「权限与资料保护」（首版不提供后台导出）：后台不设导出按钮。
+- **Q8 商品文案回退英文时是否标示。** **已决**，依据 Kelvin 2026-09-29 的决定：回退英文时保留「仅英文」标签 `detail.english_only`。
+- **Q9 参考币种的显示范围。** **已决**，依据 Kelvin 2026-09-29 的决定与 DESIGN 1.8「边界与原则」（按收货国家、不按 IP）：参考外币金额只在结账页选定收货国家后显示；首页、列表、详情、购物车只显示 MYR。
+- **Q10 WhatsApp 联系方式未配置时的行为。** **已决**，依据 Kelvin 2026-09-29 的决定：配置缺失时隐藏 WhatsApp 按钮（页脚、隐私页联系段），不显示占位文字或「即将开放」。
+- **Q11 虚构电话被真实号码持有人认领。** **部分已决**：1.7 起马来西亚、新加坡（短信白名单）号码结账须先短信验证并成为会员，不再用于游客订单（DESIGN 1.8「权限与资料保护」），一般情形下游客订单上不再出现可被他人注册认领的白名单号码。但**短信无法送达或停发时降级的游客下单**，以及**以后扩大白名单**时，这些游客订单仍可能被该号码的真实持有人注册后认领并看到收货资料（DESIGN 1.8 也写明认领主要在这两种情形下生效）。此剩余风险仍待 Kelvin 决定是否接受或另议。
+- **Q12 待支付订单的取消入口与操作者。** **已决**，依据 DESIGN 1.8「订单与退款状态」「权限与资料保护」：待支付订单由下单者在支付页取消，游客凭该单短期凭据，会员凭登录会话；P06 为两者都提供 `pay.cancel_order`；查单页不提供取消。
+- **Q13 会员中心「优惠券」的含义。** **已决**，依据 Kelvin 2026-09-29 的决定：「我的优惠券」同时列出当前可用的公开券与本人使用记录（P13）。「公开券」的范围见 Q19。
+- **Q14 马来文文案审校。** **待决**：UX-COPY 的马来文为草稿，须母语者审校用词（如 troli、daftar keluar、bayaran balik）后再实现。
+- **Q15 密码规则与注销确认方式。** **已决**，依据 DESIGN 1.8「权限与资料保护」：密码至少 8 位、不强制复杂度（`auth.password_rule`）；注销须先以短信验证码确认（P13 嵌入 V1）。
+- **Q16 结账第一步手机号的默认区号。**（0.2 新增）**待决**：DESIGN 1.8「权限与资料保护」写「以收货国家作为默认区号解析自由文本电话」，但结账改为先填手机号后，第 1 步时尚未选收货国家。线框假设第 1 步另设国家码下拉（列出所有国家，默认 +60），以 `+` 开头输入时以输入为准；之后选的收货国家不改变已判定的号码。默认值与做法请 Kelvin 确认；若须改解析规则，可能触及设计闸门。
+- **Q17 会员待支付订单能否从会员中心回到支付页。**（0.2 新增）**待决**：DESIGN 1.8 写会员凭登录会话在支付页取消待支付订单，但「我的订单」只写确认收货与申请退款，未写能否继续支付。线框在 P09 会员模式为待支付订单放 `account.order_pay`（进入 P06），请确认；若不允许，则会员离开支付页后只能等 15 分钟超时。
+- **Q18 会员注销后手机号在共享备份中的残留期措辞。**（0.2 新增，承接原 Q3）**待决**：DESIGN 1.8「资料保留」写注销时在线删除的手机号与密码哈希，最迟在注销后第 max(binlog 残留期, N) 天才从共享备份与 binlog 中消失，运营核实前没有确定上限。隐私页草拟 `privacy.member_backup`，不写天数、不写「有限期」；是否对外披露及如何措辞需 Kelvin 决定。
+- **Q19 「可用的公开券」的范围。**（0.2 新增）**待决**：DESIGN 1.8「数据模型」的 `Coupon` 没有「公开/不公开」或「在会员中心列出」字段。线框按「启用中、在有效期内、该会员尚未达到每会员使用上限」的券全部列出，即所有启用中的券对全部会员可见，后台 A05 以 `admin.coupon_listed_note` 提示管理员。若需要只凭代码使用、不在会员中心列出的券，须改数据模型并重新批准设计。请 Kelvin 确认。
