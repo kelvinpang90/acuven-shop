@@ -13,12 +13,12 @@
 # 必须是整数 1。
 schema_version: 1
 # 与 .platform/project.yaml 的 project_id 相同。
-project_id: <project_id>
+project_id: acuven_shop
 # 必须是 deny。
 default: deny
 
 # 每个任务的字段（标 * 的由 Worker 机器校验，不合规则整个任务加载失败）：
-#   id *                   符合控制面登记的 task_id_pattern（例如 ^<PREFIX>-TASK-[0-9]{3}$），全文件唯一
+#   id *                   符合控制面登记的 task_id_pattern（本项目为 ^SHOP-TASK-[0-9]{3}$），全文件唯一
 #   title *                一行英文或中文标题
 #   purpose *              为什么做、做到什么程度、明确不碰什么
 #   status *               ready = 已登记、可以在 Telegram 发「开启」；done = 已交付（合并并部署）；
@@ -35,31 +35,82 @@ default: deny
 # ⚠️ title / purpose / acceptance_criteria / allowed_change_paths / allowed_commands 会原样进 PR 正文并过泄漏规则：
 #    不写任何 xxx:// 形式的地址、主机名、邮箱地址、IP、绝对路径。被拒的文本会让 run 以 pr_policy_failed 结束。
 #
-# 例（取消注释并按项目实际改写）：
-#   - id: <PREFIX>-TASK-001
-#     title: <一行标题>
-#     purpose: >-
-#       <为什么做；做到什么程度；明确不碰什么>
-#     status: ready
-#     depends_on: []
-#     acceptance_criteria:
-#       - <一条可验证的标准>
-#       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖
-#       - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付，不合并、不直推
-#     allowed_change_paths:
-#       - <path/to/file>
-#     allowed_commands:
-#       - <command.id>
-#     creates_branch: true
-#     creates_pull_request: true
+# 写法照下面已登记的任务；每个任务的验收标准末尾都带这两条通用约束：
+#   - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖
+#   - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付，不合并、不直推
 #
 # 浏览器验收块（只有有用户可见页面的前端任务才带；需要 project.yaml 的 acceptance_hosts
 # 与 commands.yaml 里一条 network: true 的验收命令，而且那条命令**不能**同时写在 allowed_commands 里）：
 #     acceptance:
 #       kind: browser
-#       command: <acceptance.command.id>
+#       command: 验收命令的 id（commands.yaml 里 network: true 的那条）
 #       writes: false
 #       steps:
-#         - <lowercase_step_name>
+#         - 小写下划线的步骤名
 #       timeout_seconds: 300
-tasks: []
+tasks:
+  # 页面审阅稿：只写文档，Kelvin 审阅通过前不实现任何页面（REQUIREMENTS「前端页面设计安排」）。
+  # 纯文档，按 CLAUDE.md 不走设计闸门；但凡是涉及金额或个人资料的地方都要标出所依据的 DESIGN 1.6 小节，
+  # 与设计冲突的只列为待决问题，不改设计。
+  - id: SHOP-TASK-001
+    title: 前端页面结构、线框与三语文案审阅稿
+    purpose: >-
+      按 docs/REQUIREMENTS.md「前端页面设计安排」产出页面结构、桌面与手机文本线框、英中马三语文案与演示提示，
+      交 Kelvin 审阅；审阅通过前不实现任何页面。只写文档，不碰 frontend/、后端代码、docs/DESIGN.md、
+      docs/REQUIREMENTS.md、CI 与部署配置。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 新建 docs/UX.md，页面至少包括首页、商品列表与详情、购物车、结账、模拟支付结果、订单查询/确认收货/退款、注册登录与会员中心、管理后台、隐私说明
+      - docs/UX.md 每页写目的、入口和去向，并各有桌面、手机两种文本线框
+      - 新建 docs/UX-COPY.md，三语文案表每条都有英文、中文、马来文三列且不留空；默认语言写明为英文
+      - 每页都有演示提示，下单、模拟支付、退款三处另有演示提示；收货表单附近说明不真实扣款、不真实发货、收货资料 30 天后匿名化，不设确认勾选框
+      - 凡涉及金额或个人资料的页面元素逐处标出所依据的 docs/DESIGN.md 1.6 小节标题；与设计或需求冲突之处列入两份文档里的「待决问题」一节，不自行改设计
+      - 两份文档顶部写明「审阅稿，Kelvin 审阅通过前不实现任何页面」；不写任何真实联系方式（电话、WhatsApp 号码、邮箱、地址），联系入口只写占位说明
+      - docs/TODO.md 新增 SHOP-TASK-001 记录段（做了什么、待决问题数、验证到什么程度）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，只写审阅文档、不实现页面），不合并、不直推
+    allowed_change_paths:
+      - docs/UX.md
+      - docs/UX-COPY.md
+      - docs/TODO.md
+    allowed_commands:
+      - tests.unit
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 碰钱，已过设计闸门：docs/DESIGN.md 1.6（提交 845fd93，Kelvin 批准 1A、2A）。
+  # 只做计价第 2–4 条的纯函数；下单、预占、库存、积分到期与退款都是之后的任务。
+  - id: SHOP-TASK-002
+    title: 计价逐件分摊纯函数
+    purpose: >-
+      按 docs/DESIGN.md 1.6「计价、优惠、积分与库存」第 2–4 条（已批准的 1A、2A）实现逐件分摊纯函数：
+      只用标准库，金额一律整数仙，积分一律整数积分。不碰数据库、API、库存、积分到期与退款，不改设计。
+      设计闸门：DESIGN 1.6（提交 845fd93）。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.6 计价第 2–4 条逐条一致；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - app/services/pricing.py 只 import 标准库；金额与积分的输入输出都是 int；百分比券的比率以 Decimal 传入（Decimal 10 表示 10%）；任何参数都不接受 float
+      - 商品按订单行序、件序展开；百分比券对整单商品小计算一次，用 decimal 定点数四舍五入到整仙，恰好半仙进一仙；固定额券取券额与商品小计中较小的
+      - 券折扣按每件原价占商品小计的比例分摊，积分抵扣按每件券后金额占整单券后金额的比例分摊；每次分摊先向下取整到仙，余下的仙按小数余数从大到小各补 1 仙，平手按行序、件序；分母为零时抵扣为零
+      - 每件现金实付等于原价减分摊券额减分摊积分额；获得积分按整单现金实付合计每满 100 仙给 1 积分，再按逐件现金实付用同一算法分摊，不按行分别取整
+      - 积分抵扣超过券后商品额时拒绝；任何负数输入拒绝；百分比超出 0 到 100 拒绝
+      - tests/test_pricing.py 逐字复现设计文档算例（A 两件各 1000 仙、B 一件 500 仙、10% 券、300 积分）：券分摊 100/100/50，积分分摊 120/120/60，现金实付 780/780/390，获得 19 积分分为 8/7/4
+      - 另测半仙进位边界、固定额券大于小计、余数平手按行序件序、零小计、积分超额被拒、负数输入被拒；每条测试写明它守住的是设计里哪一句
+      - docs/TODO.md 新增 SHOP-TASK-002 记录段；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表、不加迁移、不加接口
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.6，提交 845fd93），不合并、不直推
+    allowed_change_paths:
+      - app/services/__init__.py
+      - app/services/pricing.py
+      - tests/test_pricing.py
+      - docs/TODO.md
+    allowed_commands:
+      - tests.unit
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true

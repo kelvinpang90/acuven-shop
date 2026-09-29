@@ -22,7 +22,7 @@
 # 必须是整数 1。
 schema_version: 1
 # 与 .platform/project.yaml 的 project_id 相同。
-project_id: <project_id>
+project_id: acuven_shop
 # 必须是 deny。
 default: deny
 
@@ -48,7 +48,39 @@ default: deny
 #     timeout_seconds: 600
 #     network: false
 #     writes: cache
-commands: []
+# 三条都与 .github/workflows/ci.yml 的 backend job 逐字相同地运行。都用 `-I` 隔离模式。
+# Worker 主机上固定的 python 要装好 pyproject.toml 里的运行依赖与 dev 依赖（fastapi、pydantic-settings、
+# sqlalchemy、alembic、pymysql、httpx2、pytest、ruff 等）；沙箱里不装依赖。
+commands:
+  - id: tests.unit
+    description: 后端单元测试（pytest，testpaths 指向 tests；不需要数据库、缓存或网络）
+    executable: python
+    args: ["-I", "-m", "pytest"]
+    working_directory: repository_root
+    risk: low
+    timeout_seconds: 600
+    network: false
+    writes: cache
+
+  - id: lint.check
+    description: 后端 lint（ruff check，只报告不改写）
+    executable: python
+    args: ["-I", "-m", "ruff", "check", "."]
+    working_directory: repository_root
+    risk: low
+    timeout_seconds: 300
+    network: false
+    writes: cache
+
+  - id: format.check
+    description: 后端格式检查（ruff format --check，只报告不改写）
+    executable: python
+    args: ["-I", "-m", "ruff", "format", "--check", "."]
+    working_directory: repository_root
+    risk: low
+    timeout_seconds: 300
+    network: false
+    writes: cache
 
 # 下面这些**不是命令**，是明确不得混进 allowlist 的动作类别，由人或 CI/CD 做。
 never_low_risk:

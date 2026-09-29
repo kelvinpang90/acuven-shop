@@ -10,7 +10,7 @@
 # 必须是整数 1；别的值整份契约作废。
 schema_version: 1
 # 与控制面登记表里的 project_id 逐字相同：^[a-z][a-z0-9_]{1,30}$，全表唯一，运营者要手打它，短一点好。
-project_id: <project_id>
+project_id: acuven_shop
 
 # 合并之后由谁来判「这次到底上没上生产」（OpenClaw 部署观察契约，ONBOARD-PROJECT.md 的 D1–D5）。
 #
@@ -37,7 +37,7 @@ execution:
 # 主机只写在这里一处，验收脚本里不写死主机。另需 commands.yaml 里一条 network: true 的验收命令，
 # 以及任务上的 acceptance 块（见 tasks.yaml 注释）。
 # acceptance_hosts:
-#   - <acceptance_host>
+#   - 验收入口的主机名（小写）
 
 # ── 人读记录（Worker 不读，接入复审时核对）──────────────────────────────────────
 # 仓库事实：来自 git remote 与 GitHub 设置，不是实时读取的。GitHub 上改了保护规则要回来同步这里。
