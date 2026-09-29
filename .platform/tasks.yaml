@@ -58,7 +58,7 @@ tasks:
       按 docs/REQUIREMENTS.md「前端页面设计安排」产出页面结构、桌面与手机文本线框、英中马三语文案与演示提示，
       交 Kelvin 审阅；审阅通过前不实现任何页面。只写文档，不碰 frontend/、后端代码、docs/DESIGN.md、
       docs/REQUIREMENTS.md、CI 与部署配置。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 新建 docs/UX.md，页面至少包括首页、商品列表与详情、购物车、结账、模拟支付结果、订单查询/确认收货/退款、注册登录与会员中心、管理后台、隐私说明
