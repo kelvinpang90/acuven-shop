@@ -53,7 +53,8 @@ repository:
       require_pull_request: true
       # 与 .github/workflows/ci.yml 的 job 名一一对应；在 GitHub 分支保护里设为必需检查。
       required_status_checks:
-        - ci
+        - backend
+        - frontend
 
 roles:
   development_owner: claude_code

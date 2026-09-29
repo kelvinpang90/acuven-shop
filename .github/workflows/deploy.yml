@@ -1,19 +1,18 @@
-# 部署到生产 —— OpenClaw 部署观察契约（ONBOARD-PROJECT.md 的 D1–D5）的骨架。
+# 部署到生产 —— OpenClaw 部署观察契约（ONBOARD-PROJECT.md 的 D1–D5）。
 #
 # .platform/project.yaml 写了 `deploy_workflow: deploy.yml`，就是承诺本工作流满足：
 #   D1 触发：由 push 到默认分支触发，每次合并都产生一次以合并提交为 headSha 的 push 运行。
-#            workflow_dispatch 可以保留（手工重部署 / 回滚），但不计入观察。
-#   D2 对象：部署的正是触发它的那个提交（DEPLOY_SHA），不是「分支最新」，也不是其他输入。
-#   D3 结论：只有新版本已上线、且上线后健康检查通过才以 success 结束；健康检查失败、回滚
-#            （无论回滚是否成功）、部署中断，都必须以失败结束。不要用 continue-on-error，
-#            不要用 `|| true` 吞掉失败。
+#            workflow_dispatch 保留给手工重部署 / 回滚，不计入观察。
+#   D2 对象：部署的正是触发它的那个提交（DEPLOY_SHA）：镜像以它为标签构建，服务器上
+#            `git checkout --detach` 到它再跑它自己的 deploy/deploy.sh，不 `git pull` 分支最新。
+#   D3 结论：只有新版本已上线、且上线后健康检查报出 DEPLOY_SHA 才以 success 结束；迁移失败、
+#            不健康、回滚（无论回滚是否成功）、中断都以失败结束。没有 continue-on-error。
 #   D4 并发：不取消进行中的部署（被取消的运行按失败处理）。
-#   D5 期限：一次部署在 30 分钟内给出结论（下面 timeout-minutes 留了余量）。
-# OpenClaw 只读结论：不部署、不回滚、不重跑，也不登录生产。D2–D5 靠接入时人工审阅本文件确认。
+#   D5 期限：两个 job 的 timeout-minutes 合计 24 分钟，30 分钟内给出结论；不用需要人工批准的 environment。
+# OpenClaw 只读结论：不部署、不回滚、不重跑，也不登录生产。
 #
-# ⚠️ 本文件不写主机名、IP、域名、路径、密钥：连接信息放 GitHub 的 secrets，健康检查地址放
-#    repository variables（HEALTHCHECK_URL）。
-# ⚠️ 占位步骤故意以失败结束：没配好的部署必须是失败，不能是「成功但什么也没做」（那违反 D3）。
+# 本文件不写主机名、IP、域名、路径、密钥：连接信息与部署目录放 GitHub secrets，
+# 健康检查地址放 repository variable HEALTHCHECK_URL。
 name: Deploy
 
 on:
@@ -34,24 +33,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    name: deploy
-    # 只在模板仓库本身跳过（占位步骤会失败）。生成项目后删掉这一行——被跳过的运行结论是 success，
-    # 留着它就可能违反 D3。
-    if: ${{ !github.event.repository.is_template }}
+  build:
+    name: build
     runs-on: ubuntu-latest
-    # D5：整次部署（含健康检查）25 分钟内必须给出结论，给排队留余量。
-    timeout-minutes: 25
-    # 可选：在 GitHub → Settings → Environments 配一个 production 环境，限制只能从默认分支部署。
-    # 不要给它加「人工批准」：等批准会让 D5 的 30 分钟超时。
-    # environment: production
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+      image_repo: ${{ steps.resolve.outputs.image_repo }}
     steps:
-      # D2：先定下要部署的确切提交，后面所有步骤只用 DEPLOY_SHA。
+      # D2：先定下要部署的确切提交，后面所有步骤只用这一步的输出。
       # 手工输入只经 env 进 shell（不直接 ${{ }} 拼进脚本，防注入），且只放行 40 位小写十六进制。
       - name: Resolve the commit to deploy
         id: resolve
         env:
           REF: ${{ inputs.ref || github.sha }}
+          REPOSITORY: ${{ github.repository }}
         shell: bash
         run: |
           if [[ ! "$REF" =~ ^[0-9a-f]{40}$ ]]; then
@@ -59,28 +58,98 @@ jobs:
             exit 1
           fi
           echo "sha=$REF" >> "$GITHUB_OUTPUT"
+          # 镜像仓库名必须小写，而账号或仓库名可能带大写。
+          echo "image_repo=ghcr.io/${REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v4
         with:
           ref: ${{ steps.resolve.outputs.sha }}
 
-      # <替换>：真实的部署命令。必须部署 DEPLOY_SHA 这个提交（例如构建以它为 tag 的镜像、
-      # 在目标机上 `git checkout --detach "$DEPLOY_SHA"`），不要 `git pull` 拿分支最新。
-      # 部署脚本自己失败要非零退出；如果有自动回滚，回滚之后也要非零退出（D3）。
-      - name: Deploy (placeholder)
-        env:
-          DEPLOY_SHA: ${{ steps.resolve.outputs.sha }}
-        shell: bash
-        run: |
-          echo "::error::deploy step is not configured yet; replace it with the project's real deploy"
-          exit 1
+      - uses: docker/setup-buildx-action@v3
 
-      # D3：上线后健康检查。要求健康检查端点返回 HTTP 200，且响应里带着线上版本的 commit SHA——
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 镜像在这里构建，不在共享服务器上构建：那台机器还跑着别的项目。
+      # GIT_SHA 进镜像，健康检查把它原样返回（最后一步据此确认线上版本）。
+      # acuven.project 标签让 deploy/deploy.sh 只清理本项目的旧镜像。
+      - name: Build and push the API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          build-args: GIT_SHA=${{ steps.resolve.outputs.sha }}
+          labels: acuven.project=acuven_shop
+          tags: ${{ steps.resolve.outputs.image_repo }}-api:${{ steps.resolve.outputs.sha }}
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
+
+      - name: Build and push the web image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          labels: acuven.project=acuven_shop
+          tags: ${{ steps.resolve.outputs.image_repo }}-web:${{ steps.resolve.outputs.sha }}
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,mode=max,scope=web
+
+  deploy:
+    name: deploy
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      # 主机指纹没配就直接失败：ssh-action 的 fingerprint 留空时是静默跳过校验。
+      - name: Require the host fingerprint
+        env:
+          FINGERPRINT: ${{ secrets.VPS_FINGERPRINT }}
+        run: |
+          if [ -z "$FINGERPRINT" ]; then
+            echo "::error::VPS_FINGERPRINT is not set; refusing to SSH without verifying the host key"
+            exit 1
+          fi
+
+      # 所有值经 envs 传给远端脚本，不拼进脚本文本。
+      # 远端先检出 DEPLOY_SHA，再跑那个提交里的 deploy/deploy.sh（D2）；它失败即非零退出（D3）。
+      # 结束时登出仓库；登出失败只会把结论变成失败，不会把失败变成成功。
+      - name: Deploy
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          DEPLOY_SHA: ${{ needs.build.outputs.sha }}
+          IMAGE_REPO: ${{ needs.build.outputs.image_repo }}
+          APP_DIR: ${{ secrets.VPS_APP_DIR }}
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ secrets.VPS_PORT }}
+          fingerprint: ${{ secrets.VPS_FINGERPRINT }}
+          envs: DEPLOY_SHA,IMAGE_REPO,APP_DIR,GHCR_USER,GHCR_TOKEN
+          script: |
+            set -euo pipefail
+            cd "$APP_DIR"
+            git fetch --quiet origin
+            git checkout --quiet --detach "$DEPLOY_SHA"
+            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+            trap 'docker logout ghcr.io >/dev/null 2>&1' EXIT
+            SHOP_IMAGE_REPO="$IMAGE_REPO" bash deploy/deploy.sh "$DEPLOY_SHA"
+
+      # D3：上线后健康检查。要求 HTTP 200，且响应里带着线上版本的 commit SHA——
       # 这样「检查通过」同时证明了上线的就是 DEPLOY_SHA（D2），而不只是「服务活着」。
-      # 项目的健康端点做不到返回 SHA 时，改成项目自己能证明新版本已上线的检查，不要去掉这一步。
       - name: Post-deploy health check
         env:
-          DEPLOY_SHA: ${{ steps.resolve.outputs.sha }}
+          DEPLOY_SHA: ${{ needs.build.outputs.sha }}
           HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
         shell: bash
         run: |

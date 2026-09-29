@@ -1,0 +1,24 @@
+# 后端构建上下文是仓库根。Dockerfile 只 COPY 需要的路径，但整个上下文仍会发给 daemon，
+# 所以把大目录与可能带凭据的文件挡在外面。
+.git/
+.github/
+.venv/
+venv/
+**/node_modules/
+frontend/
+docs/
+tests/
+
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+**/__pycache__/
+**/*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/

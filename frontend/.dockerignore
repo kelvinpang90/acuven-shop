@@ -1,0 +1,7 @@
+# 前端构建上下文是 ./frontend，归这份管（仓库根那份管不到这里）。
+node_modules/
+dist/
+.vite/
+.env
+.env.*
+*.md

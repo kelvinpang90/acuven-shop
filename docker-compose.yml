@@ -1,0 +1,56 @@
+# 生产栈：只有本项目的 API 与前端两个容器，数据库与 Redis 用共享基建，本项目不起数据库容器。
+#
+# 只在服务器上用，由 deploy/deploy.sh 驱动：它设置 SHOP_API_IMAGE / SHOP_WEB_IMAGE 为本次提交
+# SHA 标记的镜像。其余变量从服务器上本目录的 .env 读（模板见 .env.example），不进仓库。
+#
+# 接入方式沿用共享基建的约定：边缘反向代理在 proxy_net 上按服务名找到本项目，TLS 在它那层终止，
+# 本项目不发布任何端口；API 另挂 data_net 连共享数据库。
+# 服务名带 shop_ 前缀：compose 把服务名注册成它在每张网络上的 DNS 别名，proxy_net 是多个项目共用的，
+# 叫 backend / frontend 会和别的项目撞名。
+
+name: acuven_shop
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  shop_api:
+    # 不给默认值：没经 deploy/deploy.sh 指定镜像时直接报错，不会悄悄起一个不知道是哪个提交的版本。
+    image: ${SHOP_API_IMAGE:?set by deploy/deploy.sh to the commit-tagged image}
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 256m
+    environment:
+      SHOP_DATABASE_URL: ${SHOP_DATABASE_URL:?set SHOP_DATABASE_URL in .env (see .env.example)}
+    networks: [proxy_net, data_net]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request as u,sys; sys.exit(0 if u.urlopen('http://127.0.0.1:8000/api/healthz', timeout=3).status==200 else 1)"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  shop_web:
+    image: ${SHOP_WEB_IMAGE:?set by deploy/deploy.sh to the commit-tagged image}
+    restart: unless-stopped
+    logging: *logging
+    mem_limit: 64m
+    networks: [proxy_net]
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/index.html"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+
+networks:
+  proxy_net:
+    external: true
+  data_net:
+    external: true
