@@ -1,17 +1,24 @@
 # Acuven Shop 三语文案与演示提示（审阅稿）
 
 > **审阅稿，Kelvin 审阅通过前不实现任何页面。**
-> 版本 0.1（2026-09-29），任务 `SHOP-TASK-001`。页面结构与线框见 [UX.md](UX.md)；依据 `docs/REQUIREMENTS.md` 1.5 与 `docs/DESIGN.md` 1.6。
+> 版本 0.2（2026-09-29），任务 `SHOP-TASK-003`（修订 `SHOP-TASK-001` 的 0.1）。页面结构与线框见 [UX.md](UX.md)；依据 `docs/REQUIREMENTS.md` 1.7 与 `docs/DESIGN.md` 1.8（均于 2026-09-29 获 Kelvin 批准，批准记录见 `docs/HANDOFF.md` 0.16；文件抬头的「候批」字样被该记录覆盖）。
+
+## 0.2 修订要点
+
+- 新增结账手机号步骤、短信验证组件 V1、游客短期凭据与查单授权、支付页取消、两种登录方式、首次设置密码、短信确认注销、「我的优惠券」可用券等文案键；改写涉及保留期限的文案，**删除全部「30 天后匿名化」措辞**（`checkout.form_notice`、`lookup.not_found`、`auth.claim_notice`、`privacy.*`），删除 `order.recipient_anonymised`、`privacy.retention_backup`、`auth.register_submit`。
+- `pay.method_card` 改为「演示信用卡/借记卡（无需输入卡号）」；`detail.english_only` 改为「仅英文」。
+- 「提示」列中依据 DESIGN 的小节一律指 `docs/DESIGN.md` 1.8。
 
 ## 约定
 
 - **默认语言：英文（English）。** 访客可在页头切换为中文或马来文（Bahasa Melayu），选择只保存在本浏览器；不按 IP 或浏览器语言自动切换。
 - 每条文案有英文、中文、马来文三列，均不留空。`{…}` 为运行时替换的变量，三种语言保留同名变量。
-- UX.md 线框中向用户显示的界面文字（前台与后台，含按钮、列头、区块标题、状态值与读屏标签）都以本表的键引用；线框里不在 `[ ]` 内的中文只是给审阅者的标注，不向用户显示。线框中的 `[order.status_*]`、`[account.points_type_*]`、`[admin.actor_*]`、`[admin.nav_*]`、`[common.lang_*]` 指本表中该前缀下的一组键；`[order.refund_requested|approved|rejected]` 指三选一。
-- 商品名称、分类、规格等商品数据的三语文案由管理员在后台维护，不在本表；缺少当前语言时回退英文（DESIGN 1.6「数据模型」）。
-- 金额一律以 MYR 显示为 `RM {amount}`，`{amount}` 由整数仙格式化为两位小数；积分一律称「积分 / points / mata」，不与金额混称（DESIGN 1.6「边界与原则」）。
-- 联系入口只有 WhatsApp，链接由私有配置 `{{WHATSAPP_CONTACT_LINK}}` 提供；本文件与仓库不写任何真实电话、WhatsApp 号码、邮箱或地址。
+- UX.md 线框中向用户显示的界面文字（前台与后台，含按钮、列头、区块标题、状态值与读屏标签）都以本表的键引用；线框里不在 `[ ]` 内的中文只是给审阅者的标注，不向用户显示。线框中的 `[order.status_*]`、`[account.points_type_*]`、`[account.coupon_value_*]`、`[admin.actor_*]`、`[admin.nav_*]`、`[common.lang_*]` 指本表中该前缀下的一组键；`[order.refund_requested|approved|rejected]` 指三选一。
+- 商品名称、分类、规格等商品数据的三语文案由管理员在后台维护，不在本表；缺少当前语言时回退英文，并显示「仅英文」标签 `detail.english_only`（DESIGN 1.8「数据模型」；Q8 已决）。
+- 金额一律以 MYR 显示为 `RM {amount}`，`{amount}` 由整数仙格式化为两位小数；积分一律称「积分 / points / mata」，不与金额混称（DESIGN 1.8「边界与原则」）。
+- 联系入口只有 WhatsApp，链接由私有配置 `{{WHATSAPP_CONTACT_LINK}}` 提供，未配置时隐藏按钮（Q10 已决）；本文件与仓库不写任何真实电话、WhatsApp 号码、邮箱或地址。
 - 「演示提示」列标 ★ 的是每页的演示提示；标 ◆ 的是下单、模拟支付、退款三处操作旁的专门演示提示。
+- 收货资料长期保存（DESIGN 1.8「资料保留」）：任何文案都不得写「30 天后删除/匿名化」，也不得提供或暗示访客删除收货资料的入口。
 - 马来文为草稿，须母语者审校（见「待决问题」Q14）。
 
 ## 1. 全局
@@ -27,17 +34,17 @@
 | `common.nav_home` | Home | 首页 | Laman utama | — |
 | `common.nav_shop` | Shop | 商品 | Kedai | — |
 | `common.nav_cart` | Cart ({count}) | 购物车（{count}） | Troli ({count}) | — |
-| `common.nav_track` | Track order | 查询订单 | Semak pesanan | — |
+| `common.nav_track` | Track order | 查询订单 | Semak pesanan | 也用作凭据/授权过期后去 P08 的按钮 |
 | `common.nav_login` | Log in | 登录 | Log masuk | — |
 | `common.nav_register` | Register | 注册 | Daftar | — |
 | `common.nav_account` | My account | 会员中心 | Akaun saya | — |
 | `common.nav_logout` | Log out | 退出登录 | Log keluar | — |
 | `common.nav_privacy` | Privacy | 隐私说明 | Privasi | — |
 | `common.nav_menu` | Menu | 菜单 | Menu | — |
-| `common.whatsapp_cta` | Interested in a store like this? Chat with Acuven on WhatsApp | 想要这样的网店？通过 WhatsApp 联系 Acuven | Berminat dengan kedai seperti ini? Hubungi Acuven melalui WhatsApp | 链接为占位 `{{WHATSAPP_CONTACT_LINK}}` |
+| `common.whatsapp_cta` | Interested in a store like this? Chat with Acuven on WhatsApp | 想要这样的网店？通过 WhatsApp 联系 Acuven | Berminat dengan kedai seperti ini? Hubungi Acuven melalui WhatsApp | 链接为占位 `{{WHATSAPP_CONTACT_LINK}}`；未配置时隐藏 |
 | `common.footer_demo` | Acuven demo store for showcasing online store solutions. All products, prices, stock, payments, shipping and refunds are simulated. | Acuven 网店方案演示站。所有商品、价格、库存、支付、运费、发货与退款均为模拟。 | Kedai demo Acuven untuk mempamerkan penyelesaian kedai dalam talian. Semua produk, harga, stok, bayaran, penghantaran dan bayaran balik adalah simulasi. | ★ 页脚 |
 | `common.price_myr` | RM {amount} | RM {amount} | RM {amount} | — |
-| `common.fx_reference` | ≈ {currency} {amount} (demo rate, for reference only) | ≈ {currency} {amount}（演示汇率，仅供参考） | ≈ {currency} {amount} (kadar demo, untuk rujukan sahaja) | — |
+| `common.fx_reference` | ≈ {currency} {amount} (demo rate, for reference only) | ≈ {currency} {amount}（演示汇率，仅供参考） | ≈ {currency} {amount} (kadar demo, untuk rujukan sahaja) | 只在结账页选定收货国家后显示（Q9 已决） |
 | `common.points_unit` | {points} points | {points} 积分 | {points} mata | — |
 | `common.error_retry` | Something went wrong. Please try again. | 出错了，请重试。 | Berlaku ralat. Sila cuba lagi. | — |
 | `common.network_check` | Connection lost. Checking whether your last action went through… | 网络中断，正在确认上一步是否已完成… | Sambungan terputus. Menyemak sama ada tindakan terakhir anda berjaya… | — |
@@ -100,7 +107,7 @@
 | `detail.view_cart` | View cart | 查看购物车 | Lihat troli | — |
 | `detail.select_all_options` | Please choose all options first. | 请先选择全部规格。 | Sila pilih semua pilihan dahulu. | — |
 | `detail.description` | Description | 商品描述 | Penerangan | — |
-| `detail.english_only` | Shown in English | 仅提供英文 | Dipaparkan dalam bahasa Inggeris | 待决 Q8 |
+| `detail.english_only` | English only | 仅英文 | Bahasa Inggeris sahaja | 商品文案回退英文时的标签（Q8 已决） |
 | `detail.demo_hint` | This is a sample product. Adding it to your cart does not reserve stock. | 这是示例商品；加入购物车不会预留库存。 | Ini produk contoh. Menambahnya ke troli tidak menempah stok. | ★ |
 
 ## 4. 购物车（P04）
@@ -123,19 +130,31 @@
 | 键 | English | 中文 | Bahasa Melayu | 提示 |
 | --- | --- | --- | --- | --- |
 | `checkout.title` | Checkout | 结账 | Daftar keluar | — |
-| `checkout.guest_notice` | You are checking out as a guest. Log in or register to use coupons and points. | 您正以游客身份结账。登录或注册后可使用优惠券与积分。 | Anda mendaftar keluar sebagai tetamu. Log masuk atau daftar untuk guna kupon dan mata. | — |
-| `checkout.recipient_title` | Shipping details | 收货资料 | Butiran penghantaran | — |
+| `checkout.phone_step_title` | Your mobile number | 您的手机号 | Nombor telefon bimbit anda | 第 1 步标题 |
+| `checkout.phone_notice` | Malaysian (+60) and Singapore (+65) numbers will receive a verification SMS and be registered as a member automatically (or logged in if already registered). Your mobile number is kept until you delete your account, which you can do anytime in My account. Other numbers check out as a guest without SMS. | 马来西亚（+60）和新加坡（+65）号码会收到验证短信，并自动注册为会员（已注册则直接登录）。手机号保留至您注销账号，您可随时在会员中心注销。其他号码不发短信，以游客身份结账。 | Nombor Malaysia (+60) dan Singapura (+65) akan menerima SMS pengesahan dan didaftarkan sebagai ahli secara automatik (atau dilog masuk jika sudah berdaftar). Nombor telefon bimbit anda disimpan sehingga anda memadam akaun, yang boleh dibuat pada bila-bila masa di Akaun saya. Nombor lain mendaftar keluar sebagai tetamu tanpa SMS. | 手机号旁常显；无勾选框；DESIGN「权限与资料保护」「资料保留」 |
+| `checkout.phone_step_hint` | Choose the country code, or start with + to type it yourself. | 请选择国家码，或以 + 开头自行输入。 | Pilih kod negara, atau mulakan dengan + untuk menaipnya sendiri. | 默认区号待决 Q16 |
+| `checkout.phone_continue` | Continue | 继续 | Teruskan | — |
+| `checkout.phone_change` | Change | 更改 | Tukar | 回到第 1 步 |
+| `checkout.login_password` | Already set a password? Log in | 已设置密码？直接登录 | Sudah menetapkan kata laluan? Log masuk | 链到 P12 |
+| `checkout.guest_other_country` | This number is outside Malaysia and Singapore, so no SMS is sent and you'll check out as a guest. | 此号码不属于马来西亚或新加坡，不会发送短信，将以游客身份结账。 | Nombor ini di luar Malaysia dan Singapura, jadi tiada SMS dihantar dan anda akan mendaftar keluar sebagai tetamu. | 白名单外号码 |
+| `checkout.sms_unavailable` | We can't send an SMS to this number right now, so you can't be registered. You can place this demo order as a guest instead. | 目前无法向此号码发送短信，因此暂时无法注册。您可以改为以游客身份提交此演示订单。 | Kami tidak dapat menghantar SMS ke nombor ini sekarang, jadi anda tidak boleh didaftarkan. Anda boleh membuat pesanan demo ini sebagai tetamu. | 仅在服务端判定短信无法送达或停发时显示；验证码错误不显示 |
+| `checkout.continue_guest` | Continue as a guest | 以游客身份继续 | Teruskan sebagai tetamu | 降级按钮 |
+| `checkout.verified_member` | Verified. You're logged in as {phoneMasked}. | 验证成功，您已以 {phoneMasked} 登录。 | Disahkan. Anda telah log masuk sebagai {phoneMasked}. | 号码已注册 |
+| `checkout.verified_new` | Verified. We've created a member account for {phoneMasked} and logged you in. You can set a password later in My account. | 验证成功，已为 {phoneMasked} 创建会员账号并登录。您可稍后在会员中心设置密码。 | Disahkan. Kami telah mencipta akaun ahli untuk {phoneMasked} dan melog masuk anda. Anda boleh menetapkan kata laluan kemudian di Akaun saya. | 新建账号 |
+| `checkout.guest_notice` | You are checking out as a guest. Coupons and points are for members, who register with a Malaysian or Singapore mobile number. | 您正以游客身份结账。优惠券与积分仅限会员使用；会员须以马来西亚或新加坡手机号注册。 | Anda mendaftar keluar sebagai tetamu. Kupon dan mata untuk ahli, yang mendaftar dengan nombor telefon bimbit Malaysia atau Singapura. | — |
+| `checkout.recipient_title` | Shipping details | 收货资料 | Butiran penghantaran | 也用于 P06、P07、P09 |
 | `checkout.name` | Recipient name | 收货人姓名 | Nama penerima | — |
 | `checkout.phone` | Phone number | 电话 | Nombor telefon | — |
-| `checkout.phone_hint` | The country below sets the default country code. Start with + to use a different one. | 默认按下方国家补全区号；以 + 开头可输入其他国家码。 | Kod negara lalai mengikut negara di bawah. Mulakan dengan + untuk kod lain. | — |
-| `checkout.phone_invalid` | This phone number doesn't look valid for the selected country. Please check it. | 该电话号码与所选国家的格式不符，请修改。 | Nombor telefon ini tidak sah untuk negara yang dipilih. Sila semak. | — |
-| `checkout.phone_lookup_hint` | You'll need this phone number and your order number to track the order. | 查询订单需要此电话号码和订单号。 | Anda perlukan nombor telefon ini dan nombor pesanan untuk menyemak pesanan. | — |
+| `checkout.phone_hint` | The country above sets the default country code. Start with + to use a different one. | 默认按上方国家补全区号；以 + 开头可输入其他国家码。 | Kod negara lalai mengikut negara di atas. Mulakan dengan + untuk kod lain. | 会员收货电话 |
+| `checkout.member_phone_hint` | Defaults to your member mobile number. You can change it to another number, including a fictional one. | 默认为您的会员手机号，可改为其他号码或虚构号码。 | Lalai kepada nombor telefon bimbit ahli anda. Anda boleh menukarnya kepada nombor lain, termasuk nombor rekaan. | 仅会员 |
+| `checkout.phone_invalid` | This phone number doesn't look valid. Please check the country code and number. | 该电话号码格式不符，请检查国家码和号码。 | Nombor telefon ini tidak kelihatan sah. Sila semak kod negara dan nombor. | — |
+| `checkout.phone_lookup_hint` | You'll need this phone number and your order number to track the order. | 查询订单需要此电话号码和订单号。 | Anda perlukan nombor telefon ini dan nombor pesanan untuk menyemak pesanan. | 仅游客 |
 | `checkout.country` | Country | 国家/地区 | Negara | — |
 | `checkout.state_my` | State | 州属 | Negeri | 仅马来西亚 |
 | `checkout.region` | State / province / region | 州/省/地区 | Negeri / wilayah | 其他国家 |
 | `checkout.address` | Address | 地址 | Alamat | — |
 | `checkout.postcode` | Postcode | 邮编 | Poskod | — |
-| `checkout.form_notice` | Demo only: you will not be charged and nothing will be shipped. You may use fictional details. Shipping details are used only for this demo and are anonymised after 30 days. | 仅为演示：不会真实扣款，也不会真实发货。可填写虚构资料。收货资料仅用于本次演示，30 天后匿名化。 | Demo sahaja: anda tidak akan dicaj dan tiada barang akan dihantar. Anda boleh guna butiran rekaan. Butiran penghantaran digunakan untuk demo ini sahaja dan dianonimkan selepas 30 hari. | 收货表单旁；无勾选框；待决 Q3、Q4 |
+| `checkout.form_notice` | Demo only: you will not be charged and nothing will be shipped. You may use fictional shipping details. Shipping details are used only for this demo and are kept long-term with the order. | 仅为演示：不会真实扣款，也不会真实发货。收货资料可填写虚构内容，仅用于本次演示，并会随订单长期保存。 | Demo sahaja: anda tidak akan dicaj dan tiada barang akan dihantar. Anda boleh guna butiran penghantaran rekaan. Butiran penghantaran digunakan untuk demo ini sahaja dan disimpan untuk jangka panjang bersama pesanan. | 收货表单旁常显；无勾选框；DESIGN「资料保留」 |
 | `checkout.form_notice_link` | How we handle your details | 我们如何处理您的资料 | Cara kami mengendalikan butiran anda | 链到 P14 |
 | `checkout.coupon` | Coupon code | 优惠券代码 | Kod kupon | — |
 | `checkout.coupon_apply` | Apply | 使用 | Guna | — |
@@ -143,15 +162,15 @@
 | `checkout.coupon_invalid` | This coupon can't be used for this order. | 此优惠券不适用于本订单。 | Kupon ini tidak boleh digunakan untuk pesanan ini. | — |
 | `checkout.points` | Use points | 使用积分 | Guna mata | — |
 | `checkout.points_available` | {points} points available (100 points = RM1) | 可用 {points} 积分（100 积分抵 RM1） | {points} mata tersedia (100 mata = RM1) | — |
-| `checkout.points_guest` | Guests don't earn points. Register to earn 1 point for every RM1 paid. | 游客不累积积分。注册会员后每实付 RM1 得 1 积分。 | Tetamu tidak mengumpul mata. Daftar untuk dapat 1 mata bagi setiap RM1 dibayar. | — |
+| `checkout.points_guest` | Guests don't earn points. Members with a Malaysian or Singapore mobile number earn 1 point for every RM1 paid. | 游客不累积积分。以马来西亚或新加坡手机号注册的会员每实付 RM1 得 1 积分。 | Tetamu tidak mengumpul mata. Ahli dengan nombor telefon bimbit Malaysia atau Singapura mendapat 1 mata bagi setiap RM1 dibayar. | — |
 | `checkout.points_not_shipping` | Coupons and points reduce the item amount only, not shipping. | 优惠券与积分只抵商品金额，不抵运费。 | Kupon dan mata hanya mengurangkan jumlah item, bukan kos penghantaran. | — |
 | `checkout.summary_title` | Order summary | 订单摘要 | Ringkasan pesanan | — |
 | `checkout.summary_coupon` | Coupon discount | 优惠券抵扣 | Diskaun kupon | — |
 | `checkout.summary_points` | Points discount | 积分抵扣 | Diskaun mata | — |
 | `checkout.summary_shipping` | Sample shipping | 示例运费 | Kos penghantaran contoh | — |
 | `checkout.summary_total` | Total (MYR) | 合计（MYR） | Jumlah (MYR) | — |
-| `checkout.fx_note` | Reference amounts use a fixed demo rate and are never charged. | 参考金额按固定演示汇率换算，不会收取。 | Jumlah rujukan menggunakan kadar demo tetap dan tidak pernah dicaj. | — |
-| `checkout.fx_none` | No reference currency for this country; amounts are shown in MYR only. | 该国家暂无参考币种，仅显示 MYR。 | Tiada mata wang rujukan untuk negara ini; jumlah dipaparkan dalam MYR sahaja. | — |
+| `checkout.fx_note` | Reference amounts use a fixed demo rate and are never charged. | 参考金额按固定演示汇率换算，不会收取。 | Jumlah rujukan menggunakan kadar demo tetap dan tidak pernah dicaj. | 选定收货国家后显示 |
+| `checkout.fx_none` | No reference currency for this country; amounts are shown in MYR only. | 该国家暂无参考币种，仅显示 MYR。 | Tiada mata wang rujukan untuk negara ini; jumlah dipaparkan dalam MYR sahaja. | 选定收货国家后显示 |
 | `checkout.place_order` | Place demo order | 提交演示订单 | Buat pesanan demo | — |
 | `checkout.place_order_hint` | Placing the order holds stock for 15 minutes while you complete the simulated payment. No money is taken. | 提交后为您保留库存 15 分钟以完成模拟支付，不会扣任何钱。 | Membuat pesanan menahan stok selama 15 minit sementara anda melengkapkan pembayaran simulasi. Tiada wang diambil. | ◆ 下单 |
 | `checkout.submitting` | Placing your order… | 正在提交订单… | Sedang membuat pesanan… | — |
@@ -165,26 +184,33 @@
 | `pay.order_no` | Order number | 订单号 | Nombor pesanan | — |
 | `pay.save_order_no` | Save this order number. You'll need it with your phone number to track the order. | 请保存订单号，查询订单时需要它和您的电话号码。 | Simpan nombor pesanan ini. Anda perlukannya bersama nombor telefon untuk menyemak pesanan. | — |
 | `pay.amount_due` | Amount due (demo) | 应付金额（演示） | Jumlah perlu dibayar (demo) | — |
+| `pay.guest_access` | For your privacy, only this browser can open this order's payment and result pages, for 30 minutes after the order was placed. | 为保护您的资料，只有本浏览器能在下单后 30 分钟内打开此订单的支付与结果页。 | Demi privasi anda, hanya pelayar ini boleh membuka halaman pembayaran dan keputusan pesanan ini, selama 30 minit selepas pesanan dibuat. | 游客短期凭据；DESIGN「权限与资料保护」 |
+| `pay.session_expired` | This page is no longer available in this browser. To view the order, confirm receipt or request a refund, track it with your order number and phone number. | 本浏览器已无法打开此页面。如需查看订单、确认收货或申请退款，请凭订单号和电话查询订单。 | Halaman ini tidak lagi tersedia dalam pelayar ini. Untuk melihat pesanan, mengesahkan penerimaan atau memohon bayaran balik, semak pesanan dengan nombor pesanan dan nombor telefon anda. | 游客凭据过期或不属于该单 |
 | `pay.choose_method` | Choose a demo payment method | 选择演示支付方式 | Pilih kaedah pembayaran demo | — |
-| `pay.method_card` | Demo card (no card details needed) | 演示银行卡（无需填写卡资料） | Kad demo (tiada butiran kad diperlukan) | 待决 Q6 |
-| `pay.method_bank` | Demo online banking | 演示网上银行 | Perbankan dalam talian demo | 待决 Q6 |
-| `pay.method_ewallet` | Demo e-wallet | 演示电子钱包 | E-dompet demo | 待决 Q6 |
+| `pay.method_card` | Demo credit/debit card (no card number needed) | 演示信用卡/借记卡（无需输入卡号） | Kad kredit/debit demo (tiada nombor kad diperlukan) | Q6 已决 |
+| `pay.method_bank` | Demo online banking | 演示网上银行 | Perbankan dalam talian demo | Q6 已决 |
+| `pay.method_ewallet` | Demo e-wallet | 演示电子钱包 | E-dompet demo | Q6 已决 |
 | `pay.simulate_success` | Simulate success | 模拟支付成功 | Simulasi berjaya | — |
 | `pay.simulate_failure` | Simulate failure | 模拟支付失败 | Simulasi gagal | — |
 | `pay.action_hint` | No card details are collected and no money moves. Pick an outcome to see what happens. | 不收集任何银行卡资料，也不会有资金流动。选择一个结果看看会发生什么。 | Tiada butiran kad dikumpul dan tiada wang berpindah. Pilih keputusan untuk melihat apa yang berlaku. | ◆ 模拟支付 |
 | `pay.expires` | Complete within {minutes} min, or the demo order is cancelled and stock is released. | 请在 {minutes} 分钟内完成，否则演示订单将取消并释放库存。 | Lengkapkan dalam {minutes} minit, atau pesanan demo dibatalkan dan stok dilepaskan. | — |
-| `pay.cancel_order` | Cancel this order | 取消此订单 | Batalkan pesanan ini | 待决 Q12 |
+| `pay.cancel_order` | Cancel this order | 取消此订单 | Batalkan pesanan ini | 游客与会员都显示（Q12 已决） |
+| `pay.cancel_confirm` | Cancel this demo order? The held stock, coupon and points will be released. This cannot be undone. | 确定取消此演示订单？保留的库存、优惠券与积分将被释放，此操作不可撤销。 | Batalkan pesanan demo ini? Stok, kupon dan mata yang ditahan akan dilepaskan. Tindakan ini tidak boleh dibatalkan. | — |
+| `pay.cancel_confirm_yes` | Yes, cancel order | 确认取消 | Ya, batalkan pesanan | — |
+| `pay.cancel_confirm_no` | Keep order | 保留订单 | Kekalkan pesanan | — |
 | `pay.processing` | Recording your simulated result… | 正在记录模拟结果… | Sedang merekod keputusan simulasi… | — |
 | `pay.demo_hint` | This page stands in for a payment provider. It is not a real payment page. | 本页模拟支付服务商，并非真实支付页面。 | Halaman ini menggantikan penyedia pembayaran. Ia bukan halaman pembayaran sebenar. | ★ |
 | `result.success_title` | Demo payment successful | 模拟支付成功 | Pembayaran demo berjaya | — |
 | `result.success_body` | No real money was taken. Your order is now "Paid (demo)". | 未扣任何真实款项。订单状态为“已支付（演示）”。 | Tiada wang sebenar diambil. Pesanan anda kini "Dibayar (demo)". | — |
 | `result.points_earned` | You earned {points} demo points. | 您获得了 {points} 演示积分。 | Anda memperoleh {points} mata demo. | 仅会员 |
-| `result.guest_register` | Register to earn points next time. | 注册会员，下次购物可得积分。 | Daftar untuk dapat mata pada pembelian seterusnya. | 仅游客 |
+| `result.guest_next` | To view this order later, confirm receipt or request a refund, use "Track order" with your order number and phone number. | 之后如需查看此订单、确认收货或申请退款，请在“查询订单”中输入订单号和电话。 | Untuk melihat pesanan ini kemudian, mengesahkan penerimaan atau memohon bayaran balik, gunakan "Semak pesanan" dengan nombor pesanan dan nombor telefon anda. | 仅游客；页面不设订单详情按钮 |
+| `result.guest_register` | Have a Malaysian or Singapore mobile number? Register to earn points next time. | 有马来西亚或新加坡手机号？注册会员，下次购物可得积分。 | Ada nombor telefon bimbit Malaysia atau Singapura? Daftar untuk dapat mata pada pembelian seterusnya. | 仅游客，链到 P11 |
 | `result.failure_title` | Demo payment failed | 模拟支付失败 | Pembayaran demo gagal | — |
 | `result.failure_body` | You chose to simulate a failure. Your order is kept, and you can try again without creating a new order. | 您选择了模拟失败。订单已保留，可直接重试，不会重复下单。 | Anda memilih simulasi gagal. Pesanan anda disimpan dan anda boleh cuba lagi tanpa membuat pesanan baharu. | — |
 | `result.retry` | Try payment again | 重新支付 | Cuba bayar semula | — |
-| `result.cancelled` | This order was cancelled because payment was not completed in time. | 订单因未按时完成支付已取消。 | Pesanan ini dibatalkan kerana pembayaran tidak dilengkapkan tepat pada masanya. | — |
-| `result.track` | View this order | 查看订单 | Lihat pesanan ini | — |
+| `result.cancelled` | This order was cancelled because payment was not completed in time. | 订单因未按时完成支付已取消。 | Pesanan ini dibatalkan kerana pembayaran tidak dilengkapkan tepat pada masanya. | 超时 |
+| `result.cancelled_by_you` | You cancelled this demo order. The held stock, coupon and points have been released. | 您已取消此演示订单，保留的库存、优惠券与积分已释放。 | Anda telah membatalkan pesanan demo ini. Stok, kupon dan mata yang ditahan telah dilepaskan. | 本人取消 |
+| `result.track` | View this order | 查看订单 | Lihat pesanan ini | 仅会员，去 P09 会员模式 |
 | `result.continue` | Continue shopping | 继续购物 | Teruskan membeli-belah | — |
 | `result.demo_hint` | Next, the store admin will "ship" the order in the demo back office — nothing is actually sent. | 接下来管理员会在后台模拟发货——不会真的寄出。 | Seterusnya, pentadbir kedai akan "menghantar" pesanan dalam pejabat belakang demo — tiada apa yang benar-benar dihantar. | ★ |
 
@@ -194,14 +220,20 @@
 | --- | --- | --- | --- | --- |
 | `lookup.title` | Track your order | 查询订单 | Semak pesanan anda | — |
 | `lookup.phone` | Phone number used for the order | 下单时填写的电话 | Nombor telefon yang digunakan untuk pesanan | — |
+| `lookup.phone_hint` | Enter the number with its country code, starting with +. | 请输入带国家码的号码，以 + 开头。 | Masukkan nombor bersama kod negara, bermula dengan +. | — |
 | `lookup.submit` | Find order | 查询 | Cari pesanan | — |
-| `lookup.not_found` | We couldn't find an order with these details. Orders can be looked up by phone for 30 days. | 找不到与此资料相符的订单。订单只能在 30 天内凭电话查询。 | Kami tidak menemui pesanan dengan butiran ini. Pesanan boleh disemak dengan nombor telefon selama 30 hari. | 不区分“不存在”与“已匿名化” |
+| `lookup.not_found` | We couldn't find an order with these details. Please check the order number and phone number. | 找不到与此资料相符的订单，请检查订单号和电话。 | Kami tidak menemui pesanan dengan butiran ini. Sila semak nombor pesanan dan nombor telefon. | 不区分“不存在”与“电话不符” |
+| `lookup.access_note` | After a successful lookup, this browser can view this order, confirm receipt and request a refund for 30 minutes. Payment and cancellation are not available here. Each other order needs its own order number and phone number. | 查询成功后，本浏览器可在 30 分钟内查看此订单、确认收货和申请退款；此处不能支付或取消。查询其他订单须另行输入该单的订单号和电话。 | Selepas semakan berjaya, pelayar ini boleh melihat pesanan ini, mengesahkan penerimaan dan memohon bayaran balik selama 30 minit. Pembayaran dan pembatalan tidak tersedia di sini. Setiap pesanan lain memerlukan nombor pesanan dan nombor telefonnya sendiri. | 查单授权；DESIGN「权限与资料保护」 |
 | `lookup.privacy_warning` | Anyone who knows both the order number and the phone number can see the full shipping details. Keep them private. | 同时知道订单号和电话的人都能看到完整收货资料，请妥善保管。 | Sesiapa yang tahu nombor pesanan dan nombor telefon boleh melihat butiran penghantaran penuh. Simpan dengan selamat. | — |
 | `lookup.demo_hint` | Demo orders have no real parcel or tracking number. | 演示订单没有真实包裹或物流单号。 | Pesanan demo tiada bungkusan atau nombor penjejakan sebenar. | ★ |
 | `order.title` | Order {orderNo} | 订单 {orderNo} | Pesanan {orderNo} | — |
 | `order.current_status` | Status: | 状态： | Status: | — |
 | `order.progress` | Progress | 进度 | Kemajuan | — |
 | `order.amount_breakdown` | Amount details | 金额明细 | Butiran jumlah | 前台 P09 与后台 A02 共用 |
+| `order.lookup_access` | You can view this order, confirm receipt and request a refund in this browser for 30 minutes after looking it up. | 查询后 30 分钟内，您可在本浏览器查看此订单、确认收货和申请退款。 | Anda boleh melihat pesanan ini, mengesahkan penerimaan dan memohon bayaran balik dalam pelayar ini selama 30 minit selepas menyemaknya. | 查单模式 |
+| `order.lookup_another` | Track another order | 查询其他订单 | Semak pesanan lain | 去 P08，输入框为空 |
+| `order.session_expired` | Access to this order has ended in this browser. Please look it up again with the order number and phone number. | 本浏览器对此订单的访问已结束，请凭订单号和电话重新查询。 | Akses kepada pesanan ini telah tamat dalam pelayar ini. Sila semak semula dengan nombor pesanan dan nombor telefon. | 查单授权过期或不属于该单 |
+| `order.lookup_no_pay` | Payment and cancellation are not available from order tracking. Unpaid demo orders are cancelled automatically after 15 minutes. | 查询订单页不提供支付或取消。未支付的演示订单会在 15 分钟后自动取消。 | Pembayaran dan pembatalan tidak tersedia melalui semakan pesanan. Pesanan demo yang belum dibayar dibatalkan secara automatik selepas 15 minit. | 查单模式，待支付订单 |
 | `order.status_awaiting` | Awaiting demo payment | 待模拟支付 | Menunggu bayaran demo | — |
 | `order.status_paid` | Paid (demo) | 已支付（演示） | Dibayar (demo) | — |
 | `order.status_packed` | Packed (demo) | 已打包（演示） | Dibungkus (demo) | — |
@@ -211,11 +243,10 @@
 | `order.items` | Items | 商品 | Item | — |
 | `order.unit_price` | Unit price | 单价 | Harga seunit | — |
 | `order.cash_paid` | Paid in cash (demo) | 现金实付（演示） | Dibayar tunai (demo) | — |
-| `order.recipient_anonymised` | Shipping details were anonymised after 30 days. | 收货资料已按 30 天规则匿名化。 | Butiran penghantaran telah dianonimkan selepas 30 hari. | — |
-| `order.confirm_receipt` | Confirm receipt | 确认收货 | Sahkan penerimaan | — |
+| `order.confirm_receipt` | Confirm receipt | 确认收货 | Sahkan penerimaan | 查单模式与会员模式 |
 | `order.confirm_receipt_hint` | Nothing was really delivered — confirming only moves the demo order to "Completed". If you do nothing, it completes automatically 7 days after shipping. | 并没有真实包裹——确认只会把演示订单改为“已完成”。若不操作，模拟发货 7 天后自动完成。 | Tiada penghantaran sebenar — pengesahan hanya menukar pesanan demo kepada "Selesai". Jika tiada tindakan, ia selesai secara automatik 7 hari selepas penghantaran. | — |
-| `order.request_refund` | Request a refund | 申请退款 | Mohon bayaran balik | — |
-| `order.refund_deadline` | Refunds can be requested until {date}. | 可在 {date} 前申请退款。 | Bayaran balik boleh dimohon sehingga {date}. | 待决 Q2 |
+| `order.request_refund` | Request a refund | 申请退款 | Mohon bayaran balik | 查单模式与会员模式 |
+| `order.refund_deadline` | Refunds can be requested until {date}. | 可在 {date} 前申请退款。 | Bayaran balik boleh dimohon sehingga {date}. | 以服务端截止时间为准（Q2 已决） |
 | `order.refunded_total` | Refunded so far (demo): RM {amount} | 累计已退（演示）：RM {amount} | Telah dibayar balik (demo): RM {amount} | — |
 | `order.refundable_left` | Still refundable: RM {amount} | 剩余可退：RM {amount} | Baki boleh dibayar balik: RM {amount} | — |
 | `order.refund_requests` | Refund requests | 退款申请记录 | Permohonan bayaran balik | — |
@@ -228,9 +259,9 @@
 | `refund.select_items` | Choose items and quantities | 选择商品与数量 | Pilih item dan kuantiti | — |
 | `refund.max_qty` | Up to {count} | 最多 {count} 件 | Sehingga {count} | — |
 | `refund.estimate` | Estimated refund (demo): RM {amount} | 预计退款（演示）：RM {amount} | Anggaran bayaran balik (demo): RM {amount} | — |
-| `refund.points_back` | Points returned: {points} | 返还积分：{points} | Mata dikembalikan: {points} | 仅会员 |
-| `refund.points_reversed` | Points taken back: {points} | 追回积分：{points} | Mata ditarik balik: {points} | 仅会员 |
-| `refund.expired_points_note` | Points that have already expired are not returned. | 已过期的积分不返还。 | Mata yang telah tamat tempoh tidak dikembalikan. | 仅会员 |
+| `refund.points_back` | Points returned: {points} | 返还积分：{points} | Mata dikembalikan: {points} | 仅会员订单 |
+| `refund.points_reversed` | Points taken back: {points} | 追回积分：{points} | Mata ditarik balik: {points} | 仅会员订单 |
+| `refund.expired_points_note` | Points that have already expired are not returned. | 已过期的积分不返还。 | Mata yang telah tamat tempoh tidak dikembalikan. | 仅会员订单 |
 | `refund.shipping_not_refunded` | Sample shipping fees are not refunded. | 示例运费不退。 | Kos penghantaran contoh tidak dibayar balik. | — |
 | `refund.coupon_not_restored` | Used coupons are not restored. | 已使用的优惠券不恢复。 | Kupon yang telah digunakan tidak dipulihkan. | — |
 | `refund.submit` | Submit refund request | 提交退款申请 | Hantar permohonan bayaran balik | — |
@@ -241,37 +272,48 @@
 | `refund.window_closed` | The 30-day refund period for this order has ended. | 此订单的 30 天退款期已过。 | Tempoh bayaran balik 30 hari untuk pesanan ini telah tamat. | — |
 | `refund.demo_hint` | Refunds are reviewed by the admin in the demo back office. | 退款由管理员在演示后台审核。 | Bayaran balik disemak oleh pentadbir dalam pejabat belakang demo. | ★ |
 
-## 8. 注册、登录与会员中心（P11、P12、P13）
+## 8. 短信验证、注册、登录与会员中心（V1、P11、P12、P13）
 
 | 键 | English | 中文 | Bahasa Melayu | 提示 |
 | --- | --- | --- | --- | --- |
 | `auth.register_title` | Create a member account | 注册会员 | Daftar akaun ahli | — |
-| `auth.sms_scope` | SMS verification is currently available for Malaysia (+60) and Singapore (+65) mobile numbers only. | 短信验证目前仅支持马来西亚（+60）和新加坡（+65）手机号。 | Pengesahan SMS kini hanya untuk nombor telefon bimbit Malaysia (+60) dan Singapura (+65). | — |
-| `auth.phone` | Mobile number | 手机号 | Nombor telefon bimbit | — |
-| `auth.challenge` | Please complete the check below first. | 请先完成下方人机验证。 | Sila lengkapkan semakan di bawah dahulu. | — |
-| `auth.send_code` | Send code | 发送验证码 | Hantar kod | — |
-| `auth.code_sent` | We sent a code by SMS to {phoneMasked}. | 验证码已通过短信发送至 {phoneMasked}。 | Kami telah menghantar kod melalui SMS ke {phoneMasked}. | — |
-| `auth.code` | Verification code | 验证码 | Kod pengesahan | — |
-| `auth.code_wrong` | That code is incorrect or has expired. | 验证码错误或已过期。 | Kod itu salah atau telah tamat tempoh. | — |
-| `auth.password` | Password | 密码 | Kata laluan | 规则待决 Q15 |
-| `auth.register_submit` | Create account | 完成注册 | Cipta akaun | — |
-| `auth.not_supported_country` | We can't send SMS to this number yet. You can still check out as a guest. | 暂时无法向此号码发送短信。您仍可以游客身份下单。 | Kami belum dapat menghantar SMS ke nombor ini. Anda masih boleh membuat pesanan sebagai tetamu. | — |
-| `auth.sms_failed` | The SMS could not be sent, so your account was not created. You can still check out as a guest. | 短信发送失败，账号未创建。您仍可以游客身份下单。 | SMS tidak dapat dihantar, jadi akaun anda tidak dicipta. Anda masih boleh membuat pesanan sebagai tetamu. | — |
+| `auth.same_flow_note` | Verify your mobile number by SMS. If it already belongs to a member, you'll be logged in; otherwise a member account is created. | 通过短信验证手机号。号码已是会员则直接登录，否则创建会员账号。 | Sahkan nombor telefon bimbit anda melalui SMS. Jika ia sudah milik ahli, anda akan dilog masuk; jika tidak, akaun ahli akan dicipta. | P11 与 P12 短信页签共用 |
+| `auth.sms_scope` | SMS verification is currently available for Malaysia (+60) and Singapore (+65) mobile numbers only. | 短信验证目前仅支持马来西亚（+60）和新加坡（+65）手机号。 | Pengesahan SMS kini hanya untuk nombor telefon bimbit Malaysia (+60) dan Singapura (+65). | V1 |
+| `auth.phone` | Mobile number | 手机号 | Nombor telefon bimbit | V1、P05 第 1 步 |
+| `auth.challenge` | Please complete the check below first. | 请先完成下方人机验证。 | Sila lengkapkan semakan di bawah dahulu. | V1 |
+| `auth.challenge_failed` | The check wasn't completed. Please try again. | 人机验证未完成，请重试。 | Semakan tidak dilengkapkan. Sila cuba lagi. | V1 |
+| `auth.send_code` | Send code | 发送验证码 | Hantar kod | V1 |
+| `auth.resend_code` | Send a new code | 重新发送验证码 | Hantar kod baharu | V1；受限流 |
+| `auth.code_sent` | We sent a code by SMS to {phoneMasked}. | 验证码已通过短信发送至 {phoneMasked}。 | Kami telah menghantar kod melalui SMS ke {phoneMasked}. | V1 |
+| `auth.code` | Verification code | 验证码 | Kod pengesahan | V1 |
+| `auth.verify_submit` | Verify | 验证 | Sahkan | V1 |
+| `auth.code_wrong` | That code is incorrect or has expired. | 验证码错误或已过期。 | Kod itu salah atau telah tamat tempoh. | V1；不降级为游客 |
+| `auth.code_too_many` | Too many incorrect codes. Please wait and request a new code later. | 验证码错误次数过多，请稍后重新获取验证码。 | Terlalu banyak kod salah. Sila tunggu dan minta kod baharu kemudian. | V1；不降级为游客 |
+| `auth.verified_login` | Verified. You're logged in. | 验证成功，您已登录。 | Disahkan. Anda telah log masuk. | V1，号码已注册 |
+| `auth.verified_registered` | Verified. Your member account has been created and you're logged in. You can set a password in My account. | 验证成功，会员账号已创建并已登录。您可在会员中心设置密码。 | Disahkan. Akaun ahli anda telah dicipta dan anda telah log masuk. Anda boleh menetapkan kata laluan di Akaun saya. | V1，新建账号 |
+| `auth.not_supported_country` | We can't send SMS to this number yet. You can still check out as a guest. | 暂时无法向此号码发送短信。您仍可以游客身份下单。 | Kami belum dapat menghantar SMS ke nombor ini. Anda masih boleh membuat pesanan sebagai tetamu. | 注册、登录、重设、注销时 |
+| `auth.sms_failed` | The SMS could not be sent, so no account was created or changed. You can still check out as a guest. | 短信发送失败，账号未创建或更改。您仍可以游客身份下单。 | SMS tidak dapat dihantar, jadi tiada akaun dicipta atau diubah. Anda masih boleh membuat pesanan sebagai tetamu. | 结账以外的 V1 |
 | `auth.continue_guest` | Continue as guest | 以游客身份继续 | Teruskan sebagai tetamu | — |
-| `auth.claim_notice` | After you register, guest orders placed with this number in the last 30 days that are not yet anonymised are added to your account. | 注册后，近 30 天内用此号码下单且尚未匿名化的游客订单会自动归入您的账号。 | Selepas anda mendaftar, pesanan tetamu dengan nombor ini dalam 30 hari lalu yang belum dianonimkan akan ditambah ke akaun anda. | 待决 Q11 |
+| `auth.claim_notice` | Once verified, guest orders placed with this number in the last 30 days are added to your account. Points are not added for past orders. | 验证通过后，近 30 天内用此号码下单的游客订单会自动归入您的账号；过去的订单不补发积分。 | Setelah disahkan, pesanan tetamu dengan nombor ini dalam 30 hari lalu akan ditambah ke akaun anda. Mata tidak ditambah untuk pesanan lalu. | 剩余风险见 Q11 |
 | `auth.register_demo_hint` | Registration sends a real SMS to your phone. Everything else remains a demo. | 注册会向您的手机发送真实短信；其余一切仍是演示。 | Pendaftaran menghantar SMS sebenar ke telefon anda. Selain itu, semuanya kekal demo. | ★ P11 |
 | `auth.login_title` | Log in | 登录 | Log masuk | — |
+| `auth.login_method_password` | Password | 密码登录 | Kata laluan | 登录方式页签 |
+| `auth.login_method_sms` | SMS code | 短信验证码登录 | Kod SMS | 登录方式页签 |
+| `auth.password` | Password | 密码 | Kata laluan | P12、A01 |
+| `auth.password_rule` | At least 8 characters. | 至少 8 位。 | Sekurang-kurangnya 8 aksara. | Q15 已决 |
 | `auth.login_submit` | Log in | 登录 | Log masuk | — |
-| `auth.login_failed` | Mobile number or password is incorrect. | 手机号或密码不正确。 | Nombor telefon bimbit atau kata laluan salah. | — |
+| `auth.login_failed` | Mobile number or password is incorrect. If you haven't set a password, log in with an SMS code. | 手机号或密码不正确。如未设置密码，请用短信验证码登录。 | Nombor telefon bimbit atau kata laluan salah. Jika anda belum menetapkan kata laluan, log masuk dengan kod SMS. | 未设密码与密码错误同一条 |
 | `auth.forgot` | Forgot password? | 忘记密码？ | Lupa kata laluan? | — |
 | `auth.reset_title` | Reset password | 重设密码 | Tetapkan semula kata laluan | — |
-| `auth.new_password` | New password | 新密码 | Kata laluan baharu | — |
+| `auth.new_password` | New password | 新密码 | Kata laluan baharu | P12、P13 |
 | `auth.reset_submit` | Set new password | 设置新密码 | Tetapkan kata laluan baharu | — |
 | `auth.reset_done` | Password updated. Please log in. | 密码已更新，请重新登录。 | Kata laluan dikemas kini. Sila log masuk. | — |
-| `auth.login_demo_hint` | Members can see order history, demo points and coupons. | 会员可查看历史订单、演示积分与优惠券。 | Ahli boleh melihat sejarah pesanan, mata demo dan kupon. | ★ P12 |
-| `account.orders` | My orders | 我的订单 | Pesanan saya | — |
+| `auth.login_demo_hint` | Members can see order history, demo points and coupons, and confirm receipt or request refunds for their orders. | 会员可查看历史订单、演示积分与优惠券，并对自己的订单确认收货或申请退款。 | Ahli boleh melihat sejarah pesanan, mata demo dan kupon, serta mengesahkan penerimaan atau memohon bayaran balik bagi pesanan mereka. | ★ P12 |
+| `account.orders` | My orders | 我的订单 | Pesanan saya | 也用作 P09 会员模式返回按钮 |
+| `account.orders_hint` | Open an order to confirm receipt or request a refund. | 打开订单可确认收货或申请退款。 | Buka pesanan untuk mengesahkan penerimaan atau memohon bayaran balik. | — |
 | `account.orders_empty` | No orders yet. | 还没有订单。 | Tiada pesanan lagi. | — |
-| `account.order_view` | View | 查看 | Lihat | 链到 P09 |
+| `account.order_view` | View | 查看 | Lihat | 链到 P09 会员模式 |
+| `account.order_pay` | Continue payment | 继续支付 | Teruskan pembayaran | 会员待支付订单，待决 Q17 |
 | `account.settings` | Settings | 设置 | Tetapan | — |
 | `account.points_type_earned` | Earned | 获得 | Diperoleh | 积分明细类型 |
 | `account.points_type_redeemed` | Used at checkout | 结账抵扣 | Digunakan semasa daftar keluar | 积分明细类型 |
@@ -283,11 +325,28 @@
 | `account.points_pending` | Owed from refunds: {points} points (settled from future points) | 待抵扣：{points} 积分（以后获得的积分先偿还） | Tertunggak daripada bayaran balik: {points} mata (dijelaskan daripada mata akan datang) | — |
 | `account.points_expiry` | {points} points expire on {date} | {points} 积分将于 {date} 到期 | {points} mata tamat tempoh pada {date} | — |
 | `account.points_history` | Points history | 积分明细 | Sejarah mata | — |
-| `account.coupons` | My coupons | 我的优惠券 | Kupon saya | 含义待决 Q13 |
+| `account.coupons` | My coupons | 我的优惠券 | Kupon saya | 可用券 + 使用记录（Q13 已决） |
+| `account.coupons_available` | Available coupons | 可用优惠券 | Kupon tersedia | 范围见待决 Q19 |
+| `account.coupon_value_fixed` | RM {amount} off | 减 RM {amount} | Potongan RM {amount} | — |
+| `account.coupon_value_percent` | {percent}% off | 减 {percent}% | Potongan {percent}% | — |
+| `account.coupon_min_spend` | Minimum item spend: RM {amount} | 最低商品消费：RM {amount} | Perbelanjaan item minimum: RM {amount} | — |
+| `account.coupon_valid_until` | Valid until {date} | 有效期至 {date} | Sah sehingga {date} | — |
+| `account.coupon_use_hint` | Enter the code at checkout. Coupons reduce the item amount only. | 结账时输入代码即可使用；优惠券只抵商品金额。 | Masukkan kod semasa daftar keluar. Kupon hanya mengurangkan jumlah item. | — |
+| `account.coupons_available_empty` | No coupons are available right now. | 目前没有可用的优惠券。 | Tiada kupon tersedia buat masa ini. | — |
+| `account.coupons_used` | Coupons you've used | 使用记录 | Kupon yang telah anda gunakan | — |
 | `account.coupon_used_on` | Used on order {orderNo} | 用于订单 {orderNo} | Digunakan pada pesanan {orderNo} | — |
+| `account.coupons_used_empty` | You haven't used any coupons yet. | 您还没有使用过优惠券。 | Anda belum menggunakan sebarang kupon. | — |
+| `account.password_title` | Password | 密码 | Kata laluan | — |
+| `account.password_none` | You haven't set a password yet. You can keep logging in with an SMS code, or set a password now. | 您尚未设置密码。可继续用短信验证码登录，或现在设置密码。 | Anda belum menetapkan kata laluan. Anda boleh terus log masuk dengan kod SMS, atau tetapkan kata laluan sekarang. | 首次设置，已登录即可 |
+| `account.password_set_submit` | Set password | 设置密码 | Tetapkan kata laluan | — |
+| `account.password_set_done` | Password set. You can now log in with your password or an SMS code. | 密码已设置，之后可用密码或短信验证码登录。 | Kata laluan ditetapkan. Anda kini boleh log masuk dengan kata laluan atau kod SMS. | — |
+| `account.password_exists` | A password is set. Changing it requires SMS verification. | 已设置密码；更改密码须经短信验证。 | Kata laluan telah ditetapkan. Menukarnya memerlukan pengesahan SMS. | — |
+| `account.password_change` | Change password | 更改密码 | Tukar kata laluan | 去 P12 重设流程 |
 | `account.delete` | Delete account | 注销账号 | Padam akaun | — |
-| `account.delete_warning` | Deleting your account removes your mobile number and password, logs you out everywhere, and forfeits your points and unused coupons. Your orders stay in our records without your number. This cannot be undone. | 注销将删除您的手机号和密码并退出所有登录，积分余额与未用优惠券作废；订单记录保留但不再关联您的手机号。此操作不可撤销。 | Memadam akaun akan membuang nombor telefon bimbit dan kata laluan anda, log keluar di semua peranti, dan melucutkan mata serta kupon yang belum digunakan. Pesanan anda kekal dalam rekod tanpa nombor anda. Tindakan ini tidak boleh dibatalkan. | — |
-| `account.delete_confirm` | Delete my account | 确认注销 | Padam akaun saya | 确认方式待决 Q15 |
+| `account.delete_warning` | Deleting your account removes your mobile number and password, logs you out everywhere, and forfeits your points and unused coupons. Your orders, including their shipping details, stay in our records but are no longer linked to you, and registering again with the same number will not restore them. This cannot be undone. | 注销将删除您的手机号和密码并退出所有登录，积分余额与未用优惠券作废。订单（含收货资料）仍保留在记录中，但不再与您关联，用同一号码重新注册也不会恢复。此操作不可撤销。 | Memadam akaun akan membuang nombor telefon bimbit dan kata laluan anda, log keluar di semua peranti, dan melucutkan mata serta kupon yang belum digunakan. Pesanan anda, termasuk butiran penghantaran, kekal dalam rekod tetapi tidak lagi dikaitkan dengan anda, dan mendaftar semula dengan nombor yang sama tidak akan memulihkannya. Tindakan ini tidak boleh dibatalkan. | DESIGN「权限与资料保护」「资料保留」 |
+| `account.delete_verify` | To confirm, verify your mobile number by SMS first. | 请先通过短信验证手机号以确认注销。 | Untuk mengesahkan, sahkan nombor telefon bimbit anda melalui SMS dahulu. | Q15 已决 |
+| `account.delete_confirm` | Delete my account | 确认注销 | Padam akaun saya | 短信验证通过后才显示 |
+| `account.deleted` | Your account has been deleted. | 您的账号已注销。 | Akaun anda telah dipadam. | — |
 | `account.demo_hint` | Points and coupons are demo only and have no cash value. | 积分与优惠券均为演示，没有现金价值。 | Mata dan kupon adalah demo sahaja dan tiada nilai tunai. | ★ P13 |
 
 ## 9. 隐私说明（P14）
@@ -300,17 +359,18 @@
 | `privacy.h_retention` | How long we keep it | 保留多久 | Berapa lama kami menyimpannya | 段标题 |
 | `privacy.h_access` | Who can see it | 谁能看到 | Siapa yang boleh melihatnya | 段标题 |
 | `privacy.h_sms_logs` | SMS and logs | 短信与日志 | SMS dan log | 段标题 |
-| `privacy.h_contact` | Contact | 联系 | Hubungi | 段标题 |
-| `privacy.contact_button` | Chat on WhatsApp | 通过 WhatsApp 联系 | Sembang di WhatsApp | 链接为占位 `{{WHATSAPP_CONTACT_LINK}}` |
-| `privacy.collect` | For orders: recipient name, phone number, country, region, address and postcode. For members: mobile number and a securely hashed password. We do not ask for email or ID documents. | 订单：收货人姓名、电话、国家、地区、地址与邮编。会员：手机号与安全哈希后的密码。不收集邮箱或证件。 | Untuk pesanan: nama penerima, nombor telefon, negara, wilayah, alamat dan poskod. Untuk ahli: nombor telefon bimbit dan kata laluan yang di-hash dengan selamat. Kami tidak meminta e-mel atau dokumen pengenalan. | — |
-| `privacy.fictional` | You may use fictional shipping details. | 收货资料可以填写虚构内容。 | Anda boleh menggunakan butiran penghantaran rekaan. | — |
-| `privacy.retention_recipient` | Shipping details are deleted from the live system 30 days after payment, or 30 days after the order was placed if it was never paid. Order items, amounts and status are kept without them. | 收货资料在支付成功后 30 天（未支付订单为下单后 30 天）从在线系统删除；订单商品、金额与状态会保留，但不再含这些资料。 | Butiran penghantaran dipadam daripada sistem langsung 30 hari selepas pembayaran, atau 30 hari selepas pesanan dibuat jika ia tidak pernah dibayar. Item, jumlah dan status pesanan disimpan tanpa butiran itu. | — |
-| `privacy.retention_backup` | Copies made before deletion may remain in routine database backups until those backups expire. | 删除前产生的副本可能仍留在例行数据库备份中，直到这些备份到期清除。 | Salinan yang dibuat sebelum pemadaman mungkin kekal dalam sandaran pangkalan data rutin sehingga sandaran itu tamat tempoh. | 草稿，待决 Q3；运营核实前不写天数 |
-| `privacy.lookup_risk` | While shipping details are stored, anyone who knows both the order number and the phone number can view them in full. | 在资料保存期间，同时知道订单号和电话的人可以查看完整收货资料。 | Selagi butiran penghantaran disimpan, sesiapa yang tahu nombor pesanan dan nombor telefon boleh melihatnya sepenuhnya. | — |
-| `privacy.member` | Member mobile numbers are kept until you delete your account. SMS verification records are kept briefly to prevent abuse. | 会员手机号保留至您注销账号。短信验证记录短期保留，用于防滥用。 | Nombor telefon bimbit ahli disimpan sehingga anda memadam akaun. Rekod pengesahan SMS disimpan untuk tempoh singkat bagi mencegah penyalahgunaan. | — |
-| `privacy.sms` | Registration and password reset send a real SMS through our SMS provider. | 注册与重设密码会通过短信服务商发送真实短信。 | Pendaftaran dan tetapan semula kata laluan menghantar SMS sebenar melalui penyedia SMS kami. | — |
+| `privacy.h_contact` | Contact | 联系 | Hubungi | 段标题；WhatsApp 未配置时整段隐藏 |
+| `privacy.contact_button` | Chat on WhatsApp | 通过 WhatsApp 联系 | Sembang di WhatsApp | 链接为占位 `{{WHATSAPP_CONTACT_LINK}}`；未配置时隐藏 |
+| `privacy.collect` | For orders: recipient name, phone number, country, region, address and postcode. For members: mobile number and, if you set one, a securely hashed password. We do not ask for email or ID documents. | 订单：收货人姓名、电话、国家、地区、地址与邮编。会员：手机号，以及（如已设置）安全哈希后的密码。不收集邮箱或证件。 | Untuk pesanan: nama penerima, nombor telefon, negara, wilayah, alamat dan poskod. Untuk ahli: nombor telefon bimbit dan, jika ditetapkan, kata laluan yang di-hash dengan selamat. Kami tidak meminta e-mel atau dokumen pengenalan. | — |
+| `privacy.fictional` | You may use fictional shipping details. The exception is a Malaysian or Singapore mobile number entered at checkout, which must be able to receive our verification SMS. | 收货资料可以填写虚构内容。唯一例外是结账时填写的马来西亚或新加坡手机号，须能收到验证短信。 | Anda boleh menggunakan butiran penghantaran rekaan. Pengecualiannya ialah nombor telefon bimbit Malaysia atau Singapura yang dimasukkan semasa daftar keluar, yang mesti boleh menerima SMS pengesahan kami. | — |
+| `privacy.retention_recipient` | Shipping details are kept long-term together with the order's items, amounts and status. They are not deleted or anonymised, including after a member account is deleted. | 收货资料与订单商品、金额和状态一起长期保存，不删除、不匿名化；会员注销后也同样保留。 | Butiran penghantaran disimpan untuk jangka panjang bersama item, jumlah dan status pesanan. Ia tidak dipadam atau dianonimkan, termasuk selepas akaun ahli dipadam. | DESIGN「资料保留」；不提供删除入口 |
+| `privacy.member` | Member mobile numbers, including accounts created automatically at checkout, are kept until you delete your account; inactive accounts are not deleted automatically. SMS verification records are kept briefly to prevent abuse. | 会员手机号（含结账时自动注册的账号）保留至您注销账号，长期未登录也不会自动注销。短信验证记录短期保留，用于防滥用。 | Nombor telefon bimbit ahli, termasuk akaun yang dicipta secara automatik semasa daftar keluar, disimpan sehingga anda memadam akaun; akaun yang tidak aktif tidak dipadam secara automatik. Rekod pengesahan SMS disimpan untuk tempoh singkat bagi mencegah penyalahgunaan. | — |
+| `privacy.member_backup` | After you delete your account, copies of your mobile number and password made before deletion may remain in routine database backups until those backups are cleared. | 注销账号后，注销前产生的手机号和密码副本可能仍留在例行数据库备份中，直到这些备份被清除。 | Selepas anda memadam akaun, salinan nombor telefon bimbit dan kata laluan anda yang dibuat sebelum pemadaman mungkin kekal dalam sandaran pangkalan data rutin sehingga sandaran itu dikosongkan. | 草稿，待决 Q18；运营核实前不写天数 |
+| `privacy.browser_access` | After a guest order is placed, or an order is looked up, only that browser can open that one order, for 30 minutes. | 游客下单后或查询订单后，只有该浏览器能在 30 分钟内打开该张订单。 | Selepas pesanan tetamu dibuat, atau pesanan disemak, hanya pelayar itu boleh membuka pesanan tersebut, selama 30 minit. | DESIGN「权限与资料保护」 |
+| `privacy.lookup_risk` | Anyone who knows both the order number and the phone number can view the full shipping details. Because shipping details are kept long-term, this stays possible for as long as the order exists. | 同时知道订单号和电话的人可以查看完整收货资料。由于收货资料长期保存，只要订单存在，这一点就一直成立。 | Sesiapa yang tahu nombor pesanan dan nombor telefon boleh melihat butiran penghantaran penuh. Oleh sebab butiran penghantaran disimpan untuk jangka panjang, ini kekal boleh berlaku selagi pesanan wujud. | — |
+| `privacy.sms` | Checkout verification for Malaysian and Singapore numbers, registration, SMS login, password reset and account deletion send a real SMS through our SMS provider. | 马新号码结账验证、注册、短信登录、重设密码与注销确认会通过短信服务商发送真实短信。 | Pengesahan daftar keluar untuk nombor Malaysia dan Singapura, pendaftaran, log masuk SMS, tetapan semula kata laluan dan pemadaman akaun menghantar SMS sebenar melalui penyedia SMS kami. | — |
 | `privacy.logs` | Our logs are kept for up to 30 days and do not contain your name, full phone number, address or password. | 日志最多保留 30 天，不含您的姓名、完整电话、地址或密码。 | Log kami disimpan sehingga 30 hari dan tidak mengandungi nama, nombor telefon penuh, alamat atau kata laluan anda. | — |
-| `privacy.contact` | Questions? Contact Acuven on WhatsApp. | 有疑问？请通过 WhatsApp 联系 Acuven。 | Ada soalan? Hubungi Acuven melalui WhatsApp. | 链接为占位 |
+| `privacy.contact` | Questions? Contact Acuven on WhatsApp. | 有疑问？请通过 WhatsApp 联系 Acuven。 | Ada soalan? Hubungi Acuven melalui WhatsApp. | 链接为占位；未配置时隐藏 |
 | `privacy.demo_hint` | This whole site is a demonstration; no real orders are fulfilled. | 整个网站都是演示，不履行任何真实订单。 | Seluruh laman ini adalah demonstrasi; tiada pesanan sebenar dipenuhi. | ★ |
 
 ## 10. 管理后台（A01–A07）
@@ -320,6 +380,7 @@
 | `admin.demo_banner` | Admin — demo store. Actions here never move real money or goods. | 管理后台——演示网店。这里的操作不会产生真实资金或货物流动。 | Pentadbir — kedai demo. Tindakan di sini tidak pernah memindahkan wang atau barang sebenar. | ★ 后台常驻 |
 | `admin.login_title` | Admin log in | 管理员登录 | Log masuk pentadbir | — |
 | `admin.username` | Username | 用户名 | Nama pengguna | — |
+| `admin.login_failed` | Username or password is incorrect. | 用户名或密码不正确。 | Nama pengguna atau kata laluan salah. | A01 |
 | `admin.locked` | Too many failed attempts. This sign-in is locked for a short time. | 失败次数过多，登录已短时锁定。 | Terlalu banyak cubaan gagal. Log masuk ini dikunci untuk seketika. | — |
 | `admin.nav_orders` | Orders | 订单 | Pesanan | — |
 | `admin.nav_refunds` | Refunds | 退款审核 | Bayaran balik | — |
@@ -341,7 +402,7 @@
 | `admin.actor_admin` | Admin | 管理员 | Pentadbir | 操作者类别 |
 | `admin.actor_system` | System | 系统 | Sistem | 操作者类别 |
 | `admin.actor_customer` | Customer | 顾客 | Pelanggan | 操作者类别 |
-| `admin.recipient_raw` | Shipping details (original) | 原始收货资料 | Butiran penghantaran (asal) | — |
+| `admin.recipient_raw` | Shipping details (original) | 原始收货资料 | Butiran penghantaran (asal) | 长期保存；不设导出 |
 | `admin.recipient_audited` | Viewing these details is recorded in the audit log. | 查看此资料会记入审计记录。 | Paparan butiran ini direkodkan dalam log audit. | — |
 | `admin.mark_packed` | Mark as packed (demo) | 标记为已打包（演示） | Tandakan dibungkus (demo) | — |
 | `admin.mark_shipped` | Mark as shipped (demo) | 标记为已发货（演示） | Tandakan dihantar (demo) | — |
@@ -376,6 +437,7 @@
 | `admin.active` | Published | 上架 | Diterbitkan | — |
 | `admin.translation_missing` | {language} text is missing and will fall back to English. English text is required to publish. | 缺少{language}文案，将回退英文；缺少英文则不能上架。 | Teks {language} tiada dan akan kembali kepada bahasa Inggeris. Teks bahasa Inggeris diperlukan untuk diterbitkan. | — |
 | `admin.rules_apply_new` | Changes apply to new orders only. Existing orders keep their original amounts. | 修改只影响新订单，已有订单保持原金额。 | Perubahan hanya terpakai untuk pesanan baharu. Pesanan sedia ada mengekalkan jumlah asal. | — |
+| `admin.coupon_listed_note` | Active coupons within their valid dates are listed to all members under "My coupons". | 启用中且在有效期内的优惠券会在会员中心「我的优惠券」中向所有会员列出。 | Kupon aktif dalam tempoh sah disenaraikan kepada semua ahli di bawah "Kupon saya". | 待决 Q19 |
 | `admin.coupon_code` | Coupon code | 优惠券代码 | Kod kupon | — |
 | `admin.coupon_type` | Type | 类型 | Jenis | — |
 | `admin.coupon_value` | Value | 面额 | Nilai | RM 或 % |
@@ -410,20 +472,24 @@
 
 ## 待决问题
 
-与 [UX.md](UX.md)「待决问题」同一编号、同一内容。本稿只列出，不自行改设计或需求。
+与 [UX.md](UX.md)「待决问题」同一编号、同一内容，共 19 项（Q1–Q15 编号不变，Q16–Q19 为 0.2 新增）。本稿只列出，不自行改设计或需求。状态：已决 11 项（Q1、Q2、Q5–Q10、Q12、Q13、Q15）；不再适用 2 项（Q3、Q4）；部分已决 1 项（Q11）；待决 5 项（Q14、Q16–Q19）。
 
-- **Q1 下单后支付页与结果页的访问授权。** DESIGN 1.6「权限与资料保护」写「访客仅能访问已通过查询验证的订单」，但游客下单后需要直接进入模拟支付、失败重试与结果页，未定义此时如何授权。线框假设下单响应只给当前浏览器一个仅限该单支付与结果查看的短期凭据，且支付/结果页不显示收货资料原文。同理，查单通过后在本浏览器保持多久也未定义。需 Kelvin 决定；若需改权限规则，可能触及设计闸门。
-- **Q2 第 30 天退款截止与收货资料删除同日。** 游客退款须先凭电话查单，而已支付订单的收货资料也在支付后第 30 天删除，届时查单失效，游客退款入口随之关闭；两者的先后与具体截止时刻未定义。线框显示服务端给出的截止时间 `order.refund_deadline`，以服务端判定为准。
-- **Q3 共享备份残留期的对外措辞。** REQUIREMENTS 写「收货资料 30 天后匿名化」；DESIGN 1.6「保留与匿名化」写在线第 30 天删除，但副本最迟第 30 + max(binlog 残留期, N) 天才消失，且运营核实前没有确定上限。收货表单旁按验收要求只写「30 天后匿名化」；隐私页草拟 `privacy.retention_backup`，不写天数。是否对外披露及如何措辞需 Kelvin 决定；运营核实前不得写具体天数或「有限期」。
-- **Q4 「30 天」的起算点。** DESIGN 区分已支付（支付起算）与未支付（创建起算）。收货表单短文案只写「30 天后」，完整规则放隐私页 `privacy.retention_recipient`。请确认是否接受。
-- **Q5 会员能否在会员中心直接确认收货、申请退款。** REQUIREMENTS 写访客「在查询页确认收货」；DESIGN 允许会员访问自己认领或下单的订单。线框假设会员订单详情复用 P09 并提供同样操作，需确认。
-- **Q6 模拟支付方式清单。** 需求只写「选择支付方式」。线框用「演示银行卡 / 演示网上银行 / 演示电子钱包」三项，均不输入任何资料；名称与数量待定。「银行卡」字样是否会让访客误以为要填卡号，也请一并判断。
-- **Q7 后台导出。** DESIGN 1.6「权限与资料保护」提到「后台导出仍受服务端权限控制并留审计记录」，REQUIREMENTS 未列导出功能。线框不设导出按钮，待定。
-- **Q8 商品文案回退英文时是否标示。** DESIGN 只规定回退英文。线框在回退时显示 `detail.english_only` 小标签，待定。
-- **Q9 参考币种的显示范围。** REQUIREMENTS 写「按固定演示汇率显示访客国家货币参考金额」；DESIGN 1.6「边界与原则」规定按收货国家、不按 IP 决定。故线框只在结账页选定收货国家后显示参考金额，列表、详情、购物车只显示 MYR。请确认。
-- **Q10 WhatsApp 联系方式未配置时的行为。** 线框在配置缺失时隐藏 WhatsApp 按钮（不显示占位文字）；也可显示「即将开放」。待定。
-- **Q11 虚构电话被真实号码持有人认领。** 表单鼓励填写虚构资料；DESIGN 规定注册后按手机号自动认领近 30 天游客订单。若游客填的“虚构”号码恰好属于真人，该号码的持有人注册后即可认领该单并看到收货资料。这是设计层面的剩余风险，本稿不改设计，请 Kelvin 判断是否接受或另议。
-- **Q12 待支付订单的取消入口与操作者。** DESIGN 写「待支付订单可取消或超时为 `demo_cancelled`」，未写由谁取消。线框在支付页放 `pay.cancel_order`（访客取消），待确认；若不允许访客取消则删除该按钮，仅靠 15 分钟超时。
-- **Q13 会员中心「优惠券」的含义。** REQUIREMENTS 写会员可查看优惠券；DESIGN 的 `Coupon` 没有发放给某会员的字段，只有代码与使用记录。线框暂把「我的优惠券」做成使用记录，是否还要列出当前可用的公开券待定。
-- **Q14 马来文文案审校。** UX-COPY 的马来文为草稿，须母语者审校用词（如 troli、daftar keluar、bayaran balik）后再实现。
-- **Q15 密码规则与注销确认方式。** DESIGN 只要求密码安全哈希，未定长度或复杂度；账号注销的确认方式（再次输入密码或短信验证）也未定义。线框只放确认按钮，待定。
+- **Q1 下单后支付页与结果页的访问授权。** **已决**，依据 DESIGN 1.8「权限与资料保护」：每张游客订单创建后，服务端只给当前浏览器一个不可猜测、30 分钟有效、仅限该单的短期凭据，用于该单的模拟支付、失败重试、取消与结果页，这些页面可显示该单收货资料原文，凭据不能用于确认收货、退款或其他订单；查单通过后仅对该单在本浏览器保持 30 分钟，只能查看、确认收货和申请退款，不能支付或取消；两者均为服务端会话，经 HttpOnly、Secure、SameSite=Lax 的 cookie 交付，写操作另须 CSRF 令牌。线框见 P06、P07（`[G]`）与 P08–P10（`[L]`）；0.1 中「支付/结果页不显示收货资料原文」的假设随之取消。
+- **Q2 第 30 天退款截止与收货资料删除同日。** **已决**，依据 DESIGN 1.8「资料保留」（收货资料不再删除，游客凭订单号与电话可随时查单）与「订单与退款状态」（支付成功后 30 天内可申请退款）：查单不再在第 30 天失效，两者不再冲突；退款截止时间以服务端返回的 `order.refund_deadline` 为准。
+- **Q3 共享备份残留期的对外措辞。** **不再适用**：收货资料不再删除或匿名化（DESIGN 1.8「资料保留」），不存在收货资料在备份中残留的对外措辞问题；表单旁「30 天后匿名化」已删除，隐私页 `privacy.retention_recipient` 改写为长期保存，原 `privacy.retention_backup` 删除。会员注销后手机号与密码哈希在备份中残留的措辞另列为 Q18。
+- **Q4 「30 天」的起算点。** **不再适用**：收货资料不再按 30 天删除，已无起算点；相关文案已改写。
+- **Q5 会员能否在会员中心直接确认收货、申请退款。** **已决**，依据 DESIGN 1.8「订单与退款状态」「权限与资料保护」（会员在「我的订单」对自己认领或下单的订单确认收货、申请退款，规则与查单页相同）。线框以 P09、P10 的会员模式实现。
+- **Q6 模拟支付方式清单。** **已决**，依据 Kelvin 2026-09-29 的决定：「演示银行卡」改为「演示信用卡/借记卡（无需输入卡号）」（`pay.method_card`）；演示网上银行、演示电子钱包保留；三项均不输入任何资料。
+- **Q7 后台导出。** **已决**，依据 DESIGN 1.8「权限与资料保护」（首版不提供后台导出）：后台不设导出按钮。
+- **Q8 商品文案回退英文时是否标示。** **已决**，依据 Kelvin 2026-09-29 的决定：回退英文时保留「仅英文」标签 `detail.english_only`。
+- **Q9 参考币种的显示范围。** **已决**，依据 Kelvin 2026-09-29 的决定与 DESIGN 1.8「边界与原则」（按收货国家、不按 IP）：参考外币金额只在结账页选定收货国家后显示；首页、列表、详情、购物车只显示 MYR。
+- **Q10 WhatsApp 联系方式未配置时的行为。** **已决**，依据 Kelvin 2026-09-29 的决定：配置缺失时隐藏 WhatsApp 按钮（页脚、隐私页联系段），不显示占位文字或「即将开放」。
+- **Q11 虚构电话被真实号码持有人认领。** **部分已决**：1.7 起马来西亚、新加坡（短信白名单）号码结账须先短信验证并成为会员，不再用于游客订单（DESIGN 1.8「权限与资料保护」），一般情形下游客订单上不再出现可被他人注册认领的白名单号码。但**短信无法送达或停发时降级的游客下单**，以及**以后扩大白名单**时，这些游客订单仍可能被该号码的真实持有人注册后认领并看到收货资料（DESIGN 1.8 也写明认领主要在这两种情形下生效）。此剩余风险仍待 Kelvin 决定是否接受或另议。
+- **Q12 待支付订单的取消入口与操作者。** **已决**，依据 DESIGN 1.8「订单与退款状态」「权限与资料保护」：待支付订单由下单者在支付页取消，游客凭该单短期凭据，会员凭登录会话；P06 为两者都提供 `pay.cancel_order`；查单页不提供取消。
+- **Q13 会员中心「优惠券」的含义。** **已决**，依据 Kelvin 2026-09-29 的决定：「我的优惠券」同时列出当前可用的公开券与本人使用记录（P13）。「公开券」的范围见 Q19。
+- **Q14 马来文文案审校。** **待决**：UX-COPY 的马来文为草稿，须母语者审校用词（如 troli、daftar keluar、bayaran balik）后再实现。
+- **Q15 密码规则与注销确认方式。** **已决**，依据 DESIGN 1.8「权限与资料保护」：密码至少 8 位、不强制复杂度（`auth.password_rule`）；注销须先以短信验证码确认（P13 嵌入 V1）。
+- **Q16 结账第一步手机号的默认区号。**（0.2 新增）**待决**：DESIGN 1.8「权限与资料保护」写「以收货国家作为默认区号解析自由文本电话」，但结账改为先填手机号后，第 1 步时尚未选收货国家。线框假设第 1 步另设国家码下拉（列出所有国家，默认 +60），以 `+` 开头输入时以输入为准；之后选的收货国家不改变已判定的号码。默认值与做法请 Kelvin 确认；若须改解析规则，可能触及设计闸门。
+- **Q17 会员待支付订单能否从会员中心回到支付页。**（0.2 新增）**待决**：DESIGN 1.8 写会员凭登录会话在支付页取消待支付订单，但「我的订单」只写确认收货与申请退款，未写能否继续支付。线框在 P09 会员模式为待支付订单放 `account.order_pay`（进入 P06），请确认；若不允许，则会员离开支付页后只能等 15 分钟超时。
+- **Q18 会员注销后手机号在共享备份中的残留期措辞。**（0.2 新增，承接原 Q3）**待决**：DESIGN 1.8「资料保留」写注销时在线删除的手机号与密码哈希，最迟在注销后第 max(binlog 残留期, N) 天才从共享备份与 binlog 中消失，运营核实前没有确定上限。隐私页草拟 `privacy.member_backup`，不写天数、不写「有限期」；是否对外披露及如何措辞需 Kelvin 决定。
+- **Q19 「可用的公开券」的范围。**（0.2 新增）**待决**：DESIGN 1.8「数据模型」的 `Coupon` 没有「公开/不公开」或「在会员中心列出」字段。线框按「启用中、在有效期内、该会员尚未达到每会员使用上限」的券全部列出，即所有启用中的券对全部会员可见，后台 A05 以 `admin.coupon_listed_note` 提示管理员。若需要只凭代码使用、不在会员中心列出的券，须改数据模型并重新批准设计。请 Kelvin 确认。
