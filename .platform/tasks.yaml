@@ -88,7 +88,7 @@ tasks:
       按 docs/DESIGN.md 1.6「计价、优惠、积分与库存」第 2–4 条（已批准的 1A、2A）实现逐件分摊纯函数：
       只用标准库，金额一律整数仙，积分一律整数积分。不碰数据库、API、库存、积分到期与退款，不改设计。
       设计闸门：DESIGN 1.6（提交 845fd93）。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 实现与 docs/DESIGN.md 1.6 计价第 2–4 条逐条一致；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
@@ -143,7 +143,6 @@ tasks:
       - docs/UX-COPY.md
       - docs/TODO.md
     allowed_commands:
-      - tests.unit
       - lint.check
       - format.check
     creates_branch: true
