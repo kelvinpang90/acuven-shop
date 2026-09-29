@@ -173,7 +173,7 @@ tasks:
       - 单价、每日初始库存、当日可用库存都是整数，数据库层用显式命名的检查约束保证不小于零；不使用浮点或 Decimal 存金额；alembic check 不比较检查约束与表选项，PR 正文逐表列出迁移中的检查约束与 InnoDB、utf8mb4 选项，供审查核对与模型一致
       - 所有表显式指定 InnoDB 与 utf8mb4（三语文案含中文）；外键删除行为写明，不留默认
       - alembic/env.py 的 target_metadata 接上模型的 MetaData；新迁移文件 alembic/versions/20260929_0002_catalog.py，revision 为 0002、down_revision 为 0001，upgrade 建全部表，downgrade 删除全部表
-      - 迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，且之后 alembic check 报告模型与迁移无差异，均由 PR 的必需 CI 检查 backend 执行
+      - 迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，且之后 alembic check 在它比较的范围内（表、列、类型、索引、唯一约束、外键）报告模型与迁移无差异，均由 PR 的必需 CI 检查 backend 执行
       - tests/test_catalog_models.py 用 SQLite 内存库按模型建表，验证负单价、负库存被检查约束拒绝，重复 SKU、重复 slug、同一 SKU 在同一规格名下关联两个值被唯一约束拒绝，SKU 关联其他商品的规格值、规格值与所关联的规格名不匹配被外键拒绝（SQLite 须开启外键检查）；每条测试写明它守住的是设计里哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
       - docs/TODO.md 新增 SHOP-TASK-004 记录段（列出表与关键约束、偏离、验证到什么程度）；不改 planning-v1 块；复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加 API、会话或种子数据
