@@ -1,0 +1,63 @@
+# 控制契约 —— Worker 可执行命令的 allowlist
+#
+# 默认 deny：这里没有的命令一律不可执行。任务只能按 id 引用这里的命令，
+# 不能追加参数、不能改工作目录、不能注入环境变量。
+# 只列仓库里真实存在、CI 里也在跑的检查；不要往这里加仓库里没有的脚本。
+#
+# Worker 在 MXC 沙箱里跑这些命令，环境与普通终端不同：
+# - 环境变量清空，只按名放行最小集（PATH / SYSTEMROOT / TEMP / TMP 一类），凭据类变量一律拿不到；
+# - network: false 的命令在禁止出站网络的环境里跑；
+# - 沙箱里没有真实 Git：依赖 git 的检查只放 CI；
+# - 可执行程序在 Worker 主机上固定成绝对路径（不从 PATH 查找），路径属于本机信息，不写进仓库。
+#   所以 executable 只写程序名（如 python），接入后由 Worker 主机固定。
+#
+# ⚠️ node 检查（vitest、tsc、eslint 等）：在 MXC 里跑 node 只有控制面代码里的闭集条目授权
+#    （控制面 worker/config.py 的 NODE_WIN32K_CHECKS / NODE_DEPENDENCIES）。新增条目是放宽安全边界，
+#    要改控制面代码、受限评审、Kelvin 批准。在那之前**前端检查只放在 CI 里，不列在这里**——
+#    Worker 本来就要等 PR 的 CI 全绿才进入「等待批准」。自检（worker.contract_check）会把这类命令列为 WARN。
+#
+# ⚠️ Worker 里的 skipped 不是 passed：需要数据库、缓存等服务的测试在沙箱里拿不到服务会 skip，
+#    准入以 CI 为准。
+
+# 必须是整数 1。
+schema_version: 1
+# 与 .platform/project.yaml 的 project_id 相同。
+project_id: <project_id>
+# 必须是 deny。
+default: deny
+
+# 每条命令的字段（全部写上；标 * 的由 Worker 机器校验，缺一条或类型不对整份契约作废）：
+#   id *             点分小写名，任务的 allowed_commands 按它引用，全文件唯一
+#   description      一句话说明（人读）
+#   executable *     程序名，不写路径（Worker 主机固定解析）
+#   args *           固定字面量字符串数组；不做模板替换、变量展开、通配符展开，不经 shell
+#   working_directory 只写 repository_root（Worker 永远在仓库根跑）
+#   risk             只写 low（其余动作走人工，不进 allowlist）
+#   timeout_seconds * 1–7200 的整数
+#   network *        布尔；false 在进程边界上强制无出站网络，不是元数据。只有浏览器验收命令是 true
+#   writes *         none = 不写工作区任何文件；cache = 只写已被 .gitignore 忽略的缓存。
+#                    没有第三种：会改动被跟踪文件的命令一条都不许有
+#
+# 例（按项目实际技术栈改写后取消注释；Python 用 -I 隔离模式，防止工作区里同名模块顶替真正的包）：
+#   - id: tests.unit
+#     description: 单元测试（不需要任何外部服务）
+#     executable: python
+#     args: ["-I", "-m", "unittest", "discover", "-s", "tests"]
+#     working_directory: repository_root
+#     risk: low
+#     timeout_seconds: 600
+#     network: false
+#     writes: cache
+commands: []
+
+# 下面这些**不是命令**，是明确不得混进 allowlist 的动作类别，由人或 CI/CD 做。
+never_low_risk:
+  - create_or_update_pull_request
+  - dependency_install
+  - external_notification
+  - deployment
+  - database_migration
+  - delete_or_truncate
+  - service_restart
+  - credential_access_or_rotation
+  - security_configuration_change

@@ -1,0 +1,100 @@
+# 部署到生产 —— OpenClaw 部署观察契约（ONBOARD-PROJECT.md 的 D1–D5）的骨架。
+#
+# .platform/project.yaml 写了 `deploy_workflow: deploy.yml`，就是承诺本工作流满足：
+#   D1 触发：由 push 到默认分支触发，每次合并都产生一次以合并提交为 headSha 的 push 运行。
+#            workflow_dispatch 可以保留（手工重部署 / 回滚），但不计入观察。
+#   D2 对象：部署的正是触发它的那个提交（DEPLOY_SHA），不是「分支最新」，也不是其他输入。
+#   D3 结论：只有新版本已上线、且上线后健康检查通过才以 success 结束；健康检查失败、回滚
+#            （无论回滚是否成功）、部署中断，都必须以失败结束。不要用 continue-on-error，
+#            不要用 `|| true` 吞掉失败。
+#   D4 并发：不取消进行中的部署（被取消的运行按失败处理）。
+#   D5 期限：一次部署在 30 分钟内给出结论（下面 timeout-minutes 留了余量）。
+# OpenClaw 只读结论：不部署、不回滚、不重跑，也不登录生产。D2–D5 靠接入时人工审阅本文件确认。
+#
+# ⚠️ 本文件不写主机名、IP、域名、路径、密钥：连接信息放 GitHub 的 secrets，健康检查地址放
+#    repository variables（HEALTHCHECK_URL）。
+# ⚠️ 占位步骤故意以失败结束：没配好的部署必须是失败，不能是「成功但什么也没做」（那违反 D3）。
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "要部署的完整 40 位 commit SHA（回滚时填上一个好的那个）"
+        required: true
+
+permissions:
+  contents: read
+
+# D4：不允许并发部署，也不取消正在跑的那个——取消到一半会把线上停在中间状态。
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy
+    # 只在模板仓库本身跳过（占位步骤会失败）。生成项目后删掉这一行——被跳过的运行结论是 success，
+    # 留着它就可能违反 D3。
+    if: ${{ !github.event.repository.is_template }}
+    runs-on: ubuntu-latest
+    # D5：整次部署（含健康检查）25 分钟内必须给出结论，给排队留余量。
+    timeout-minutes: 25
+    # 可选：在 GitHub → Settings → Environments 配一个 production 环境，限制只能从默认分支部署。
+    # 不要给它加「人工批准」：等批准会让 D5 的 30 分钟超时。
+    # environment: production
+    steps:
+      # D2：先定下要部署的确切提交，后面所有步骤只用 DEPLOY_SHA。
+      # 手工输入只经 env 进 shell（不直接 ${{ }} 拼进脚本，防注入），且只放行 40 位小写十六进制。
+      - name: Resolve the commit to deploy
+        id: resolve
+        env:
+          REF: ${{ inputs.ref || github.sha }}
+        shell: bash
+        run: |
+          if [[ ! "$REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::ref must be a full 40-character lowercase commit SHA"
+            exit 1
+          fi
+          echo "sha=$REF" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.resolve.outputs.sha }}
+
+      # <替换>：真实的部署命令。必须部署 DEPLOY_SHA 这个提交（例如构建以它为 tag 的镜像、
+      # 在目标机上 `git checkout --detach "$DEPLOY_SHA"`），不要 `git pull` 拿分支最新。
+      # 部署脚本自己失败要非零退出；如果有自动回滚，回滚之后也要非零退出（D3）。
+      - name: Deploy (placeholder)
+        env:
+          DEPLOY_SHA: ${{ steps.resolve.outputs.sha }}
+        shell: bash
+        run: |
+          echo "::error::deploy step is not configured yet; replace it with the project's real deploy"
+          exit 1
+
+      # D3：上线后健康检查。要求健康检查端点返回 HTTP 200，且响应里带着线上版本的 commit SHA——
+      # 这样「检查通过」同时证明了上线的就是 DEPLOY_SHA（D2），而不只是「服务活着」。
+      # 项目的健康端点做不到返回 SHA 时，改成项目自己能证明新版本已上线的检查，不要去掉这一步。
+      - name: Post-deploy health check
+        env:
+          DEPLOY_SHA: ${{ steps.resolve.outputs.sha }}
+          HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
+        shell: bash
+        run: |
+          if [ -z "$HEALTHCHECK_URL" ]; then
+            echo "::error::repository variable HEALTHCHECK_URL is not set"
+            exit 1
+          fi
+          for attempt in $(seq 1 30); do
+            body="$(curl --silent --show-error --fail --max-time 10 "$HEALTHCHECK_URL" || true)"
+            if [[ "$body" == *"$DEPLOY_SHA"* ]]; then
+              echo "healthy on attempt $attempt"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::health check did not report $DEPLOY_SHA within 5 minutes"
+          exit 1

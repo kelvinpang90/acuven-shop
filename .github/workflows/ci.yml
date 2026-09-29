@@ -1,0 +1,43 @@
+# CI —— 每个 PR 与每次合并都跑。job 名（ci）要与 .platform/project.yaml 的
+# required_status_checks 一致，并在 GitHub 分支保护里设为必需检查。
+#
+# OpenClaw 的 Worker 要等 PR 的 CI 全绿才把 run 交给人批准，所以这里是准入的依据：
+# - .platform/commands.yaml 里的每条检查，这里都要跑（Worker 沙箱里的 skipped 不算 passed，以这里为准）；
+# - Worker 沙箱里跑不了的检查（前端 node 检查、要数据库 / 缓存服务的测试、依赖 git 的检查）只放这里。
+#
+# ⚠️ 占位步骤故意以失败结束：生成骨架时把它换成项目真实的检查，不要留一个永远绿的空 CI。
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: ci
+    # 只在模板仓库本身跳过（占位步骤会失败）。生成项目后删掉这一行。
+    if: ${{ !github.event.repository.is_template }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # <替换>：安装运行时与依赖、跑 lint / 格式 / 测试 / 构建。例如 Python：
+      #   - uses: actions/setup-python@v5
+      #     with:
+      #       python-version: "3.12"
+      #   - run: python -I -m unittest discover -s tests
+      # 前端（node）检查也放在这里，不放进 .platform/commands.yaml。
+      - name: Checks (placeholder)
+        run: |
+          echo "::error::CI checks are not configured yet; replace this step with the project's real checks"
+          exit 1
