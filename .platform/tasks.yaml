@@ -152,3 +152,80 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 第一个建表任务，碰钱（规格价格），已过设计闸门：docs/DESIGN.md 1.8（提交 2b68ad0）「数据模型」的 Product / Variant 一行。
+  # 只建数据库地基与商品目录表；查询接口是 SHOP-TASK-005，下单、预留、每日重置、后台维护都是之后的任务。
+  - id: SHOP-TASK-004
+    title: 商品目录数据模型与迁移
+    purpose: >-
+      按 docs/DESIGN.md 1.8「数据模型」的 Product / Variant 一行，建立本项目第一批表：SQLAlchemy 声明式基类与
+      约束命名约定、分类、商品、商品图片引用、规格名与规格值、SKU 规格及其价格与库存字段，并写对应的 Alembic 迁移。
+      金额一律整数仙。不加数据库会话、API、种子数据、库存预留或每日重置逻辑，不碰订单、会员与个人资料，不改设计。
+      设计闸门：DESIGN 1.8（提交 2b68ad0）。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.8「数据模型」Product / Variant 一行逐项一致；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - app/db/base.py 定义声明式基类，其 MetaData 带主键、外键、唯一、检查、索引的约束命名约定；app/models/catalog.py 定义商品目录模型，app/models/__init__.py 导出它们
+      - 分类、商品、规格名、规格值各有英文、中文、马来文三列文案（可为空，是否发布由查询任务按「缺少当前语言回退英文，再缺失则不发布」判断）；商品另有三语描述；分类与商品有唯一 slug 与启用状态；商品有创建时间（UTC），供按最新排序
+      - 商品图片只存存储引用与排列序号，同一商品内序号唯一，不存图片内容
+      - 规格名与规格值属于商品、各有稳定代码与排列序号；每个 SKU 规格属于一个商品，有全局唯一的 SKU、MYR 单价（整数仙）、管理员设定的每日初始库存、当日可用库存与启用状态，并关联其规格值：同一 SKU 在同一规格名下至多关联一个值，由数据库唯一约束保证；每个规格名都有值由之后的后台维护任务校验
+      - 单价、每日初始库存、当日可用库存都是整数，数据库层用检查约束保证不小于零；不使用浮点或 Decimal 存金额
+      - 所有表显式指定 InnoDB 与 utf8mb4（三语文案含中文）；外键删除行为写明，不留默认
+      - alembic/env.py 的 target_metadata 接上模型的 MetaData；新迁移文件 alembic/versions/20260929_0002_catalog.py，revision 为 0002、down_revision 为 0001，upgrade 建全部表，downgrade 删除全部表；迁移与模型逐列一致
+      - 迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，由 PR 的必需 CI 检查 backend 执行
+      - tests/test_catalog_models.py 用 SQLite 内存库按模型建表，验证负单价、负库存被检查约束拒绝，重复 SKU、重复 slug、同一 SKU 在同一规格名下关联两个值被唯一约束拒绝；每条测试写明它守住的是设计里哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-004 记录段（列出表与关键约束、偏离、验证到什么程度）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加 API、会话或种子数据
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.8，提交 2b68ad0），不合并、不直推
+    allowed_change_paths:
+      - app/db/__init__.py
+      - app/db/base.py
+      - app/models/__init__.py
+      - app/models/catalog.py
+      - alembic/env.py
+      - alembic/versions/20260929_0002_catalog.py
+      - tests/test_catalog_models.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 只读商品目录接口，展示价格（碰钱），已过设计闸门：docs/DESIGN.md 1.8（提交 2b68ad0）「数据模型」「边界与原则」。
+  # 只读、不写库；参考外币、购物车、结账计价、库存预留都不在本任务。页面实现仍等审阅稿通过。
+  - id: SHOP-TASK-005
+    title: 商品目录只读查询与筛选 API
+    purpose: >-
+      在 SHOP-TASK-004 的表上提供公开只读的商品目录接口：分类列表、商品列表（搜索、按分类与规格值筛选、排序、分页）
+      与商品详情，按请求语言返回文案并回退英文，价格只返回 MYR 整数仙。只读、不写库；不做参考外币、购物车、
+      结账计价、库存预留、后台维护或任何页面，不碰订单、会员与个人资料，不改设计。设计闸门：DESIGN 1.8（提交 2b68ad0）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-004
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.8「数据模型」「边界与原则」一致；接口字段参照 docs/UX.md 0.2 的 P01–P03 审阅稿，与设计冲突时以设计为准并在 PR 里说明，不改设计与审阅稿
+      - app/db/session.py 按 SHOP_DATABASE_URL 惰性创建引擎与会话，并提供 FastAPI 依赖；未配置数据库时应用照常启动，健康检查不受影响
+      - 只有 GET 接口，全部在 /api/catalog/ 下：分类列表、商品列表、按 slug 取商品详情；语言参数只接受 en、zh、ms，默认 en
+      - 发布规则：商品本身与所属分类都启用、有英文名称与英文描述、至少一个启用的 SKU 规格才出现在列表与详情里；否则详情返回 404，与不存在的 slug 同一响应
+      - 文案按请求语言返回，缺少时回退英文，并标出哪些字段回退了英文，供页面显示「仅英文」标签
+      - 列表每项给出 slug、名称、分类、首张图片引用、启用 SKU 中的最低单价（整数仙，供「RM x 起」）以及今日是否售罄（所有启用 SKU 当日可用库存均为 0）；详情给出按序的图片引用、规格名与规格值、每个启用 SKU 的 SKU、所选规格值、单价与当日可用库存
+      - 搜索按当前语言名称或英文名称做不区分大小写的包含匹配；筛选：同一规格名下多个值为或、不同规格名之间为且，且须由同一个启用 SKU 同时满足；排序只接受最新、价格从低到高、价格从高到低（价格按最低单价），平手按商品 id 保持稳定；分页返回总数，每页条数有上限
+      - 响应只含 MYR 整数仙，不含参考外币、每日初始库存、启用状态等后台字段；接口不写数据库
+      - tests/test_catalog_api.py 用 TestClient 与 SQLite 内存库（覆盖会话依赖）验证：发布规则与 404、回退英文及其标记、最低单价与售罄、搜索、筛选的或与且、三种排序与稳定平手、分页总数、非法语言参数被拒；每条测试写明它守住的是哪一句规则；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-005 记录段（接口清单、偏离、验证到什么程度）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表、不加迁移、不加写接口
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.8，提交 2b68ad0），不合并、不直推
+    allowed_change_paths:
+      - app/db/session.py
+      - app/services/catalog.py
+      - app/api/catalog.py
+      - app/main.py
+      - tests/test_catalog_api.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
