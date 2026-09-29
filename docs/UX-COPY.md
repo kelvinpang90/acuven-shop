@@ -44,7 +44,7 @@
 | `common.whatsapp_cta` | Interested in a store like this? Chat with Acuven on WhatsApp | 想要这样的网店？通过 WhatsApp 联系 Acuven | Berminat dengan kedai seperti ini? Hubungi Acuven melalui WhatsApp | 链接为占位 `{{WHATSAPP_CONTACT_LINK}}`；未配置时隐藏 |
 | `common.footer_demo` | Acuven demo store for showcasing online store solutions. All products, prices, stock, payments, shipping and refunds are simulated. | Acuven 网店方案演示站。所有商品、价格、库存、支付、运费、发货与退款均为模拟。 | Kedai demo Acuven untuk mempamerkan penyelesaian kedai dalam talian. Semua produk, harga, stok, bayaran, penghantaran dan bayaran balik adalah simulasi. | ★ 页脚 |
 | `common.price_myr` | RM {amount} | RM {amount} | RM {amount} | — |
-| `common.fx_reference` | ≈ {currency} {amount} (demo rate, for reference only) | ≈ {currency} {amount}（演示汇率，仅供参考） | ≈ {currency} {amount} (kadar demo, untuk rujukan sahaja) | 只在结账选定收货国家后及订单快照中显示（Q9 已决） |
+| `common.fx_reference` | ≈ {currency} {amount} (demo rate, for reference only) | ≈ {currency} {amount}（演示汇率，仅供参考） | ≈ {currency} {amount} (kadar demo, untuk rujukan sahaja) | 只在结账页选定收货国家后显示（Q9 已决） |
 | `common.points_unit` | {points} points | {points} 积分 | {points} mata | — |
 | `common.error_retry` | Something went wrong. Please try again. | 出错了，请重试。 | Berlaku ralat. Sila cuba lagi. | — |
 | `common.network_check` | Connection lost. Checking whether your last action went through… | 网络中断，正在确认上一步是否已完成… | Sambungan terputus. Menyemak sama ada tindakan terakhir anda berjaya… | — |
