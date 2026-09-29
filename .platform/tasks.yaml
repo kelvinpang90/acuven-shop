@@ -75,7 +75,6 @@ tasks:
       - docs/UX-COPY.md
       - docs/TODO.md
     allowed_commands:
-      - tests.unit
       - lint.check
       - format.check
     creates_branch: true
@@ -100,6 +99,7 @@ tasks:
       - 积分抵扣超过券后商品额时拒绝；任何负数输入拒绝；百分比超出 0 到 100 拒绝
       - tests/test_pricing.py 逐字复现设计文档算例（A 两件各 1000 仙、B 一件 500 仙、10% 券、300 积分）：券分摊 100/100/50，积分分摊 120/120/60，现金实付 780/780/390，获得 19 积分分为 8/7/4
       - 另测半仙进位边界、固定额券大于小计、余数平手按行序件序、零小计、积分超额被拒、负数输入被拒；每条测试写明它守住的是设计里哪一句
+      - tests/test_pricing.py 与已有后端测试由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
       - docs/TODO.md 新增 SHOP-TASK-002 记录段；不改 planning-v1 块；复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表、不加迁移、不加接口
       - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.6，提交 845fd93），不合并、不直推
@@ -109,7 +109,6 @@ tasks:
       - tests/test_pricing.py
       - docs/TODO.md
     allowed_commands:
-      - tests.unit
       - lint.check
       - format.check
     creates_branch: true
