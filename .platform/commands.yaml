@@ -52,6 +52,8 @@ default: deny
 # Worker 主机上固定的 python 要装好 pyproject.toml 里的运行依赖与 dev 依赖（fastapi、pydantic-settings、
 # sqlalchemy、alembic、pymysql、httpx2、pytest、ruff 等）；沙箱里不装依赖。
 commands:
+  # tests.unit 只保留定义、不被任何任务引用：TestClient 要 ssl 与回环 socket，Worker 的 MXC 沙箱里都跑不通，
+  # 只在 CI 的 backend job 跑（见 CLAUDE.md「登记任务」）。
   - id: tests.unit
     description: 后端单元测试（pytest，testpaths 指向 tests；不需要数据库、缓存或网络）
     executable: python

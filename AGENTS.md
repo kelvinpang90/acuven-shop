@@ -37,6 +37,10 @@
 - 每个 `ready` 任务都要出现在 [docs/TODO.md](docs/TODO.md) 的 planning-v1 块里；「当前计划」里的每一项都要在 `tasks.yaml` 登记为 `ready`。
   格式见 `docs/TODO.md` 块上方的注释，格式不对整块作废、项目 fail closed。
 - `allowed_change_paths` 逐个写精确文件路径（不是目录、不是通配符）；`allowed_commands` 只引用 `.platform/commands.yaml` 里已有的 id。
+- **只在 CI 跑的检查不写进 `allowed_commands`**：用 TestClient / asyncio 的后端 pytest（`tests.unit`）和前端检查只在 CI 跑。
+  Worker 的 MXC 沙箱里 ssl 等扩展加载失败、回环 socket 被禁，这类测试跑不通；Worker 本来就要等 PR 的必需 CI 检查
+  （backend、frontend）全绿才进入「等待批准」，测试照样被强制。任务的 `allowed_commands` 目前只写 `lint.check`、`format.check`；
+  验收标准依赖测试通过时，写明由 PR 的必需 CI 检查 `backend`（或 `frontend`）执行。
 - **任务的标题、目的与验收标准里不写任何 `xxx://` 形式的地址、主机名、邮箱地址**（也不写 IP、绝对路径）：它们会原样进 PR 正文并过泄漏规则，被拒即 run 失败。
 
 ```text
