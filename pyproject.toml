@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "acuven-shop"
+version = "0.1.0"
+description = "Acuven Shop — public demo storefront (no real payment, shipping or refund)"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.141",
+    "pydantic-settings>=2.6",
+    "uvicorn[standard]>=0.32",
+    "sqlalchemy>=2.0",
+    "alembic>=1.13",
+    # 纯 Python 的 MySQL 驱动；[rsa] 带上 cryptography：共享 infra_mysql 是 8.0，
+    # 新建账号默认 caching_sha2_password，不走 TLS 时首次认证要 RSA 交换密码。
+    "pymysql[rsa]>=1.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    # starlette 的 TestClient 用的 HTTP 传输（与 ai_billing_hub 同一对下界）。
+    "httpx2>=2.12",
+    "pytest>=8.3",
+    "ruff>=0.8",
+]
+
+# 必须用自动发现：只写 packages = ["app"] 会把 app.api / app.core 这些子包漏出 wheel。
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# ruff 会格式化 Markdown 里的 Python 代码块；docs/ 下的是获批设计原文，不许被工具改写。
+extend-exclude = ["*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Worker 用 `python -I` 跑（隔离模式不把 cwd 放进 sys.path），靠这一行找到源码树里的 app。
+pythonpath = ["."]

@@ -1,15 +1,19 @@
-# <project_id> — 项目规则
+# acuven_shop — 项目规则
 
 > 本文件与同目录 `AGENTS.md` 是同一份内容的两个副本（分别给 Claude Code / Codex），改一个必须同步另一个。
-> 由 Acuven 项目模板生成。<在模板仓库里这份是骨架：维护模板本身时以 README.md 为准；生成项目后删掉这一行。>
 
 ---
 
 ## 项目概况
 
-- **是什么**：<一两句话：给谁用、解决什么问题>
-- **技术栈**：<语言 / 框架 / 数据库 / 部署方式>
-- **任务编号**：`<PREFIX>-TASK-NNN`（控制面登记的 task_id_pattern：`<task_id_pattern>`）
+- **是什么**：Acuven 品牌的公开网店演示站，给有意购买网店方案的潜在客户亲自走一遍完整购物流程，之后自行经 WhatsApp 联系 Acuven。
+  商品、金额、库存、支付、运费、发货与退款全是演示，不发生真实交易或履约。
+- **技术栈**：前端 TypeScript + React + Vite；后端 Python 3.12 + FastAPI + Pydantic + SQLAlchemy + Alembic；
+  数据库用共享 MySQL 里的本项目独立库，Redis 用共享 Redis 里分给本项目的独立库编号（本项目不起数据库容器）；
+  Docker Compose 部署、接入现有反向代理，镜像按提交 SHA 标记。
+- **需求与设计**：[docs/REQUIREMENTS.md](docs/REQUIREMENTS.md) 1.5、[docs/DESIGN.md](docs/DESIGN.md) 1.6（金额与个人资料代码的设计依据）；
+  批准状态以 [docs/HANDOFF.md](docs/HANDOFF.md) 为准。
+- **任务编号**：`SHOP-TASK-NNN`（控制面登记的 task_id_pattern：`^SHOP-TASK-[0-9]{3}$`）
 - **任务清单**：[docs/TODO.md](docs/TODO.md)（顶部的 planning-v1 块决定下一项任务）
 - **OpenClaw 契约**：[.platform/](.platform/)（project / commands / tasks 三个文件，默认 deny）
 
@@ -19,7 +23,7 @@
 - 一个编号任务一个分支一个 PR，不夹带；以 Draft PR 交付，CI 全绿后再请求审查。
 - **碰钱、碰个人数据的任务先出设计、Kelvin 批准后才写代码**：钱包 / 账本 / 定价 / 支付 / 退款 / 幂等 / 状态机，
   以及收集、存储、展示、导出个人数据（姓名、电话、邮箱、地址、证件等）的改动。设计一变，之前的批准作废。
-  纯前端样式、文档、CI、脚本不走闸门。PR 正文写明「设计闸门：<设计的 Issue 或 PR>」或「设计闸门：不适用」并给出理由。
+  纯前端样式、文档、CI、脚本不走闸门。PR 正文写明「设计闸门：」加设计所在的 Issue 或 PR，或「设计闸门：不适用」并给出理由。
 - `.platform/` 只由运营者的 PR 改；OpenClaw 的 run 改不了它。任务交付后由收尾 PR 把 `ready` 改成 `done`、移出「当前计划」。
 
 ## 密钥与敏感信息不进仓库
