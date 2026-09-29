@@ -24,6 +24,22 @@ jobs:
     name: backend
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # 与共享 infra_mysql 同一个大版本，给迁移检查用的一次性库；账号密码只存在于这台 CI 机器上。
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci
+          MYSQL_DATABASE: ci
+          MYSQL_USER: ci
+          MYSQL_PASSWORD: ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uci -pci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=30
     steps:
       - uses: actions/checkout@v4
 
@@ -45,12 +61,16 @@ jobs:
       - name: Tests (tests.unit)
         run: python -I -m pytest
 
-      # 离线生成迁移 SQL：不连数据库，只证明 alembic 环境与迁移链能加载。
-      # 这个连接串不指向任何真实服务。
-      - name: Migrations load
+      # 对真 MySQL 在线跑迁移（部署脚本同样是在线 upgrade head），再降到底、升回来：
+      # 建表语句在 MySQL 上不成立、或 downgrade 没写对，在合并前失败而不是在部署时。
+      # 这个连接串只指向上面的 CI 服务容器。
+      - name: Migrations round-trip on MySQL
         env:
           SHOP_DATABASE_URL: mysql+pymysql://ci:ci@127.0.0.1:3306/ci
-        run: alembic upgrade head --sql > /dev/null
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
 
       - name: Deploy script lint
         run: shellcheck deploy/deploy.sh
