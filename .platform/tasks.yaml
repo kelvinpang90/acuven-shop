@@ -113,3 +113,38 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 审阅稿修订：只写文档，按 2026-09-29 批准的 DESIGN 1.7 / REQUIREMENTS 1.6（提交 cb45a31）改结账身份、登录与会员订单操作。
+  # 纯文档，按 CLAUDE.md 不走设计闸门；只落实已批准的设计，与设计冲突的只列为待决问题，不改设计。
+  - id: SHOP-TASK-003
+    title: 按设计 1.7 修订页面线框与三语文案审阅稿
+    purpose: >-
+      按 docs/DESIGN.md 1.7 与 docs/REQUIREMENTS.md 1.6（2026-09-29 批准）修订 SHOP-TASK-001 的审阅稿：结账先填手机号、
+      马新号码短信验证后自动注册或登录、白名单外号码游客下单、密码与短信验证码两种登录、会员在「我的订单」确认收货与申请退款。
+      交 Kelvin 审阅；审阅通过前不实现任何页面。只写文档，不碰 frontend/、后端代码、docs/DESIGN.md、docs/REQUIREMENTS.md、
+      docs/HANDOFF.md、CI 与部署配置。
+    status: ready
+    depends_on:
+      - SHOP-TASK-001
+    acceptance_criteria:
+      - 修订 docs/UX.md 与 docs/UX-COPY.md，两份文档的依据改为 docs/REQUIREMENTS.md 1.6 与 docs/DESIGN.md 1.7，版本改为 0.2，顶部保留「审阅稿，Kelvin 审阅通过前不实现任何页面」
+      - 结账页：未登录访客先填手机号；马来西亚、新加坡号码依次经人机挑战与短信验证码，通过后注册或登录再以会员身份继续；白名单外号码走游客流程；短信无法送达或停发时提示可改为游客下单，验证码错误不降级；已登录会员不再验证、收货电话默认会员手机号且可改
+      - 结账手机号旁告知马新号码会收到验证短信并自动注册会员、手机号保留至注销、可在会员中心注销；不设勾选框
+      - 登录页提供密码登录与短信验证码登录两种方式；未设密码的账号与密码错误显示同一条通用失败文案；注册页与短信登录走同一个验证流程
+      - 会员中心可在已登录状态首次设置密码；「我的订单」可对自己的订单确认收货与申请退款，规则与查单页相同
+      - 新增或改动的界面文字都写成文案键，docs/UX-COPY.md 中英文、中文、马来文三列齐全不留空；凡涉及金额或个人资料的页面元素逐处标出所依据的 docs/DESIGN.md 1.7 小节标题
+      - 两份文档的「待决问题」：Q5 标为已决并写明依据；Q1、Q11、Q15 按 1.7 更新为已决或部分已决并写明剩余部分；其余问题原样保留、编号不变；与设计或需求冲突之处新增为待决问题，不自行改设计
+      - 不写任何真实联系方式（电话、WhatsApp 号码、邮箱、地址），联系入口只写占位说明
+      - docs/TODO.md 新增 SHOP-TASK-003 记录段（改了什么、待决问题变化、验证到什么程度）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，只修订审阅文档、不实现页面），不合并、不直推
+    allowed_change_paths:
+      - docs/UX.md
+      - docs/UX-COPY.md
+      - docs/TODO.md
+    allowed_commands:
+      - tests.unit
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
