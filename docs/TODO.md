@@ -26,8 +26,7 @@
 
 <!-- openclaw:planning-v1:begin -->
 ### 当前计划
-1. `SHOP-TASK-001` 前端页面结构、线框与三语文案审阅稿
-2. `SHOP-TASK-002` 计价逐件分摊纯函数
+1. `SHOP-TASK-002` 计价逐件分摊纯函数
 
 ### 已阻塞
 - 待登记：用户可见页面实现｜阻塞：等 SHOP-TASK-001 的线框与三语文案经 Kelvin 审阅
