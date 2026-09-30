@@ -16,6 +16,9 @@ dependencies = [
     # 纯 Python 的 MySQL 驱动；[rsa] 带上 cryptography：共享 infra_mysql 是 8.0，
     # 新建账号默认 caching_sha2_password，不走 TLS 时首次认证要 RSA 交换密码。
     "pymysql[rsa]>=1.1",
+    # 手机号规范化为 E.164 与「区号和长度是否可能成立」的判断（DESIGN 1.9「权限与资料保护」），
+    # Google libphonenumber 的 Python 版，纯 Python、无网络访问。Kelvin 2026-09-30 选定。
+    "phonenumbers>=9.0",
 ]
 
 [project.optional-dependencies]
