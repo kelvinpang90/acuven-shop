@@ -1,25 +1,34 @@
 # Acuven Shop 三语文案与演示提示（审阅稿）
 
-> **审阅稿，Kelvin 审阅通过前不实现任何页面。**
-> 版本 0.2（2026-09-29），任务 `SHOP-TASK-003`（修订 `SHOP-TASK-001` 的 0.1）。页面结构与线框见 [UX.md](UX.md)；依据 `docs/REQUIREMENTS.md` 1.7 与 `docs/DESIGN.md` 1.8（均于 2026-09-29 获 Kelvin 批准，批准记录见 `docs/HANDOFF.md` 0.16；文件抬头的「候批」字样被该记录覆盖）。
+> **审阅稿，Kelvin 已于 2026-09-30 审阅，0.3 合并后可开始页面实现。**
+> 版本 0.3（2026-09-30），任务 `SHOP-TASK-008`（按 Kelvin 2026-09-30 对 0.2 的审阅意见修订 `SHOP-TASK-003` 的 0.2）。页面结构与线框见 [UX.md](UX.md)；依据 `docs/REQUIREMENTS.md` 1.8 与 `docs/DESIGN.md` 1.9（均于 2026-09-30 获 Kelvin 批准，批准记录见 `docs/HANDOFF.md` 0.19；文件抬头的「候批」字样被该记录覆盖）；Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
+
+## 0.3 修订要点
+
+- 依据改为 `docs/REQUIREMENTS.md` 1.8 与 `docs/DESIGN.md` 1.9；「提示」列中依据 DESIGN 的小节自 0.3 起一律指 `docs/DESIGN.md` 1.9（小节标题不变）。
+- 新增 `auth.sms_not_sent_no_change`（V1 用于重设密码与注销确认时，短信未发出或号码不在白名单：账号未作任何更改、请稍后再试，不提游客）与 `auth.reset_not_registered`（忘记密码遇到未注册号码：不创建账号，提供去注册的链接）。`auth.not_supported_country`、`auth.sms_failed` 只用于注册与短信登录，措辞不变。
+- 改写 `privacy.member_backup`（Q18 已决：对外披露，用「密码哈希」，不写天数、不暗示一定清除，已定稿）、`privacy.browser_access`（30 分钟后或在其他浏览器须重新查单，不表示只能在本浏览器打开）、`admin.coupon_listed_note`（Q19 已决：对全部会员相同，不按使用上限过滤）。
+- 前台不再用「现金 / cash / tunai」指不含积分抵扣的实付金额：改写 `order.cash_paid`、`refund.submit_hint`；`account.points_pending` 中文改写；后台 `admin.refund_amount` 保留；键名均不变。
+- 改写 `home.how_2`，不再暗示马新号码可选择游客结账。
+- 「提示」列中 Q16–Q19 的标注改为已决；Q14 改为上线后补审校（见「约定」）。未删除任何键。
 
 ## 0.2 修订要点
 
 - 新增结账手机号步骤、短信验证组件 V1、游客短期凭据与查单授权、支付页取消、两种登录方式、首次设置密码、短信确认注销、「我的优惠券」可用券等文案键；改写涉及保留期限的文案，**删除全部「30 天后匿名化」措辞**（`checkout.form_notice`、`lookup.not_found`、`auth.claim_notice`、`privacy.*`），删除 `order.recipient_anonymised`、`privacy.retention_backup`、`auth.register_submit`。
 - `pay.method_card` 改为「演示信用卡/借记卡（无需输入卡号）」；`detail.english_only` 改为「仅英文」。
-- 「提示」列中依据 DESIGN 的小节一律指 `docs/DESIGN.md` 1.8。
+- 「提示」列中依据 DESIGN 的小节一律指当时的现行批准版（0.3 起改指 `docs/DESIGN.md` 1.9，见上）。
 
 ## 约定
 
 - **默认语言：英文（English）。** 访客可在页头切换为中文或马来文（Bahasa Melayu），选择只保存在本浏览器；不按 IP 或浏览器语言自动切换。
 - 每条文案有英文、中文、马来文三列，均不留空。`{…}` 为运行时替换的变量，三种语言保留同名变量。
 - UX.md 线框中向用户显示的界面文字（前台与后台，含按钮、列头、区块标题、状态值与读屏标签）都以本表的键引用；线框里不在 `[ ]` 内的中文只是给审阅者的标注，不向用户显示。线框中的 `[order.status_*]`、`[account.points_type_*]`、`[account.coupon_value_*]`、`[admin.actor_*]`、`[admin.nav_*]`、`[common.lang_*]` 指本表中该前缀下的一组键；`[order.refund_requested|approved|rejected]` 指三选一。
-- 商品名称、分类、规格等商品数据的三语文案由管理员在后台维护，不在本表；缺少当前语言时回退英文，并显示「仅英文」标签 `detail.english_only`（DESIGN 1.8「数据模型」；Q8 已决）。
-- 金额一律以 MYR 显示为 `RM {amount}`，`{amount}` 由整数仙格式化为两位小数；积分一律称「积分 / points / mata」，不与金额混称（DESIGN 1.8「边界与原则」）。
+- 商品名称、分类、规格等商品数据的三语文案由管理员在后台维护，不在本表；缺少当前语言时回退英文，并显示「仅英文」标签 `detail.english_only`（DESIGN 1.9「数据模型」；Q8 已决）。
+- 金额一律以 MYR 显示为 `RM {amount}`，`{amount}` 由整数仙格式化为两位小数；积分一律称「积分 / points / mata」，不与金额混称（DESIGN 1.9「边界与原则」）。
 - 联系入口只有 WhatsApp，链接由私有配置 `{{WHATSAPP_CONTACT_LINK}}` 提供，未配置时隐藏按钮（Q10 已决）；本文件与仓库不写任何真实电话、WhatsApp 号码、邮箱或地址。
 - 「演示提示」列标 ★ 的是每页的演示提示；标 ◆ 的是下单、模拟支付、退款三处操作旁的专门演示提示。
-- 收货资料长期保存（DESIGN 1.8「资料保留」）：任何文案都不得写「30 天后删除/匿名化」，也不得提供或暗示访客删除收货资料的入口。
-- 马来文为草稿，须母语者审校（见「待决问题」Q14）。
+- 收货资料长期保存（DESIGN 1.9「资料保留」）：任何文案都不得写「30 天后删除/匿名化」，也不得提供或暗示访客删除收货资料的入口。
+- 马来文为草稿，先上线，上线后再由马来文母语者审校；审校不是页面实现的前置条件（Kelvin 2026-09-30 决定，见「待决问题」Q14）。
 
 ## 1. 全局
 
@@ -72,7 +81,7 @@
 | `home.hero_cta` | Start shopping | 开始逛逛 | Mula membeli-belah | — |
 | `home.how_title` | How this demo works | 演示怎么玩 | Cara demo ini berfungsi | — |
 | `home.how_1` | Pick products and options | 挑选商品和规格 | Pilih produk dan pilihan | — |
-| `home.how_2` | Check out as a guest or member | 以游客或会员身份结账 | Daftar keluar sebagai tetamu atau ahli | — |
+| `home.how_2` | Check out: Malaysian and Singapore mobile numbers are verified by SMS and continue as members; other numbers check out as guests | 结账：马来西亚、新加坡手机号经短信验证后以会员身份继续，其他号码以游客身份结账 | Daftar keluar: nombor telefon bimbit Malaysia dan Singapura disahkan melalui SMS dan diteruskan sebagai ahli; nombor lain mendaftar keluar sebagai tetamu | 不暗示马新号码可选择游客结账 |
 | `home.how_3` | Choose "success" or "failure" on the simulated payment | 在模拟支付中选择“成功”或“失败” | Pilih "berjaya" atau "gagal" pada pembayaran simulasi | — |
 | `home.how_4` | Track the order, confirm receipt or request a refund | 查询订单、确认收货或申请退款 | Semak pesanan, sahkan penerimaan atau mohon bayaran balik | — |
 | `home.categories` | Shop by category | 按分类浏览 | Beli mengikut kategori | — |
@@ -132,7 +141,7 @@
 | `checkout.title` | Checkout | 结账 | Daftar keluar | — |
 | `checkout.phone_step_title` | Your mobile number | 您的手机号 | Nombor telefon bimbit anda | 第 1 步标题 |
 | `checkout.phone_notice` | Malaysian (+60) and Singapore (+65) numbers will receive a verification SMS and be registered as a member automatically (or logged in if already registered). Your mobile number is kept until you delete your account, which you can do anytime in My account. Other numbers check out as a guest without SMS. | 马来西亚（+60）和新加坡（+65）号码会收到验证短信，并自动注册为会员（已注册则直接登录）。手机号保留至您注销账号，您可随时在会员中心注销。其他号码不发短信，以游客身份结账。 | Nombor Malaysia (+60) dan Singapura (+65) akan menerima SMS pengesahan dan didaftarkan sebagai ahli secara automatik (atau dilog masuk jika sudah berdaftar). Nombor telefon bimbit anda disimpan sehingga anda memadam akaun, yang boleh dibuat pada bila-bila masa di Akaun saya. Nombor lain mendaftar keluar sebagai tetamu tanpa SMS. | 手机号旁常显；无勾选框；DESIGN「权限与资料保护」「资料保留」 |
-| `checkout.phone_step_hint` | Choose the country code, or start with + to type it yourself. | 请选择国家码，或以 + 开头自行输入。 | Pilih kod negara, atau mulakan dengan + untuk menaipnya sendiri. | 默认区号待决 Q16 |
+| `checkout.phone_step_hint` | Choose the country code, or start with + to type it yourself. | 请选择国家码，或以 + 开头自行输入。 | Pilih kod negara, atau mulakan dengan + untuk menaipnya sendiri. | 国家码下拉列出所有国家、默认 +60；之后选的收货国家不改变已判定的号码（Q16 已决，DESIGN「权限与资料保护」） |
 | `checkout.phone_continue` | Continue | 继续 | Teruskan | — |
 | `checkout.phone_change` | Change | 更改 | Tukar | 回到第 1 步 |
 | `checkout.login_password` | Already set a password? Log in | 已设置密码？直接登录 | Sudah menetapkan kata laluan? Log masuk | 链到 P12 |
@@ -242,7 +251,7 @@
 | `order.status_cancelled` | Cancelled (demo) | 已取消（演示） | Dibatalkan (demo) | — |
 | `order.items` | Items | 商品 | Item | — |
 | `order.unit_price` | Unit price | 单价 | Harga seunit | — |
-| `order.cash_paid` | Paid in cash (demo) | 现金实付（演示） | Dibayar tunai (demo) | — |
+| `order.cash_paid` | Amount paid (excluding points discount) | 实付金额（不含积分抵扣） | Amaun dibayar (tidak termasuk diskaun mata) | 逐件实付；前台不用「现金 / cash / tunai」 |
 | `order.confirm_receipt` | Confirm receipt | 确认收货 | Sahkan penerimaan | 查单模式与会员模式 |
 | `order.confirm_receipt_hint` | Nothing was really delivered — confirming only moves the demo order to "Completed". If you do nothing, it completes automatically 7 days after shipping. | 并没有真实包裹——确认只会把演示订单改为“已完成”。若不操作，模拟发货 7 天后自动完成。 | Tiada penghantaran sebenar — pengesahan hanya menukar pesanan demo kepada "Selesai". Jika tiada tindakan, ia selesai secara automatik 7 hari selepas penghantaran. | — |
 | `order.request_refund` | Request a refund | 申请退款 | Mohon bayaran balik | 查单模式与会员模式 |
@@ -265,7 +274,7 @@
 | `refund.shipping_not_refunded` | Sample shipping fees are not refunded. | 示例运费不退。 | Kos penghantaran contoh tidak dibayar balik. | — |
 | `refund.coupon_not_restored` | Used coupons are not restored. | 已使用的优惠券不恢复。 | Kupon yang telah digunakan tidak dipulihkan. | — |
 | `refund.submit` | Submit refund request | 提交退款申请 | Hantar permohonan bayaran balik | — |
-| `refund.submit_hint` | This is a simulated refund: no real money will be returned. The amount is calculated by the system from what was paid in cash for each item. | 这是模拟退款：不会退还任何真实款项。金额由系统按每件商品的现金实付计算。 | Ini bayaran balik simulasi: tiada wang sebenar akan dikembalikan. Jumlah dikira oleh sistem berdasarkan bayaran tunai bagi setiap item. | ◆ 退款 |
+| `refund.submit_hint` | This is a simulated refund: no real money will be returned. The amount is calculated by the system from the amount paid for each item, excluding any points discount. | 这是模拟退款：不会退还任何真实款项。金额由系统按每件商品的实付金额（不含积分抵扣）计算。 | Ini bayaran balik simulasi: tiada wang sebenar akan dikembalikan. Jumlah dikira oleh sistem berdasarkan amaun dibayar bagi setiap item, tidak termasuk diskaun mata. | ◆ 退款；前台不用「现金 / cash / tunai」 |
 | `refund.submitted` | Refund request submitted. The result will appear on this order. | 退款申请已提交，结果会显示在此订单中。 | Permohonan dihantar. Keputusan akan dipaparkan pada pesanan ini. | — |
 | `refund.duplicate` | This quantity is already under review. | 该数量已在审核中。 | Kuantiti ini sudah dalam semakan. | — |
 | `refund.nothing_left` | Nothing is left to refund on this order. | 此订单已无可退商品。 | Tiada lagi item untuk dibayar balik pada pesanan ini. | — |
@@ -291,10 +300,12 @@
 | `auth.code_too_many` | Too many incorrect codes. Please wait and request a new code later. | 验证码错误次数过多，请稍后重新获取验证码。 | Terlalu banyak kod salah. Sila tunggu dan minta kod baharu kemudian. | V1；不降级为游客 |
 | `auth.verified_login` | Verified. You're logged in. | 验证成功，您已登录。 | Disahkan. Anda telah log masuk. | V1，号码已注册 |
 | `auth.verified_registered` | Verified. Your member account has been created and you're logged in. You can set a password in My account. | 验证成功，会员账号已创建并已登录。您可在会员中心设置密码。 | Disahkan. Akaun ahli anda telah dicipta dan anda telah log masuk. Anda boleh menetapkan kata laluan di Akaun saya. | V1，新建账号 |
-| `auth.not_supported_country` | We can't send SMS to this number yet. You can still check out as a guest. | 暂时无法向此号码发送短信。您仍可以游客身份下单。 | Kami belum dapat menghantar SMS ke nombor ini. Anda masih boleh membuat pesanan sebagai tetamu. | 注册、登录、重设、注销时 |
-| `auth.sms_failed` | The SMS could not be sent, so no account was created or changed. You can still check out as a guest. | 短信发送失败，账号未创建或更改。您仍可以游客身份下单。 | SMS tidak dapat dihantar, jadi tiada akaun dicipta atau diubah. Anda masih boleh membuat pesanan sebagai tetamu. | 结账以外的 V1 |
-| `auth.continue_guest` | Continue as guest | 以游客身份继续 | Teruskan sebagai tetamu | — |
-| `auth.claim_notice` | Once verified, guest orders placed with this number in the last 30 days are added to your account. Points are not added for past orders. | 验证通过后，近 30 天内用此号码下单的游客订单会自动归入您的账号；过去的订单不补发积分。 | Setelah disahkan, pesanan tetamu dengan nombor ini dalam 30 hari lalu akan ditambah ke akaun anda. Mata tidak ditambah untuk pesanan lalu. | 剩余风险见 Q11 |
+| `auth.not_supported_country` | We can't send SMS to this number yet. You can still check out as a guest. | 暂时无法向此号码发送短信。您仍可以游客身份下单。 | Kami belum dapat menghantar SMS ke nombor ini. Anda masih boleh membuat pesanan sebagai tetamu. | 仅注册、短信登录时；重设密码与注销确认改用 `auth.sms_not_sent_no_change` |
+| `auth.sms_failed` | The SMS could not be sent, so no account was created or changed. You can still check out as a guest. | 短信发送失败，账号未创建或更改。您仍可以游客身份下单。 | SMS tidak dapat dihantar, jadi tiada akaun dicipta atau diubah. Anda masih boleh membuat pesanan sebagai tetamu. | 仅注册、短信登录时；重设密码与注销确认改用 `auth.sms_not_sent_no_change` |
+| `auth.sms_not_sent_no_change` | The SMS was not sent, and nothing about your account has been changed. Please try again later. | 短信未发出，您的账号未作任何更改。请稍后再试。 | SMS tidak dihantar, dan tiada apa-apa pada akaun anda telah diubah. Sila cuba lagi kemudian. | V1 用于重设密码与注销确认时，短信发送失败或号码不在白名单；不显示游客文字或 `auth.continue_guest` |
+| `auth.reset_not_registered` | This number isn't registered yet, so no account was created and no password was set. You can register with this number instead. | 此号码尚未注册，因此未创建账号，也未设置密码。您可以用此号码注册。 | Nombor ini belum didaftarkan, jadi tiada akaun dicipta dan tiada kata laluan ditetapkan. Anda boleh mendaftar dengan nombor ini. | P12 忘记密码，未注册号码通过短信验证后；旁附 `common.nav_register` 链到 P11 |
+| `auth.continue_guest` | Continue as guest | 以游客身份继续 | Teruskan sebagai tetamu | 仅注册、短信登录时 |
+| `auth.claim_notice` | Once verified, guest orders placed with this number in the last 30 days are added to your account. Points are not added for past orders. | 验证通过后，近 30 天内用此号码下单的游客订单会自动归入您的账号；过去的订单不补发积分。 | Setelah disahkan, pesanan tetamu dengan nombor ini dalam 30 hari lalu akan ditambah ke akaun anda. Mata tidak ditambah untuk pesanan lalu. | 认领剩余风险 Kelvin 已接受（Q11 已决）；措辞不变 |
 | `auth.register_demo_hint` | Registration sends a real SMS to your phone. Everything else remains a demo. | 注册会向您的手机发送真实短信；其余一切仍是演示。 | Pendaftaran menghantar SMS sebenar ke telefon anda. Selain itu, semuanya kekal demo. | ★ P11 |
 | `auth.login_title` | Log in | 登录 | Log masuk | — |
 | `auth.login_method_password` | Password | 密码登录 | Kata laluan | 登录方式页签 |
@@ -313,7 +324,7 @@
 | `account.orders_hint` | Open an order to confirm receipt or request a refund. | 打开订单可确认收货或申请退款。 | Buka pesanan untuk mengesahkan penerimaan atau memohon bayaran balik. | — |
 | `account.orders_empty` | No orders yet. | 还没有订单。 | Tiada pesanan lagi. | — |
 | `account.order_view` | View | 查看 | Lihat | 链到 P09 会员模式 |
-| `account.order_pay` | Continue payment | 继续支付 | Teruskan pembayaran | 会员待支付订单，待决 Q17 |
+| `account.order_pay` | Continue payment | 继续支付 | Teruskan pembayaran | P09 会员模式待支付订单，回到 P06 继续支付或取消（Q17 已决） |
 | `account.settings` | Settings | 设置 | Tetapan | — |
 | `account.points_type_earned` | Earned | 获得 | Diperoleh | 积分明细类型 |
 | `account.points_type_redeemed` | Used at checkout | 结账抵扣 | Digunakan semasa daftar keluar | 积分明细类型 |
@@ -322,11 +333,11 @@
 | `account.points_type_reversed` | Taken back after refund | 退款追回 | Ditarik balik selepas bayaran balik | 积分明细类型 |
 | `account.points` | My points | 我的积分 | Mata saya | — |
 | `account.points_balance` | Balance: {points} points | 余额：{points} 积分 | Baki: {points} mata | — |
-| `account.points_pending` | Owed from refunds: {points} points (settled from future points) | 待抵扣：{points} 积分（以后获得的积分先偿还） | Tertunggak daripada bayaran balik: {points} mata (dijelaskan daripada mata akan datang) | — |
+| `account.points_pending` | Owed from refunds: {points} points (settled from future points) | 退款后尚欠积分：{points} 积分（以后获得的积分会先用于补足） | Tertunggak daripada bayaran balik: {points} mata (dijelaskan daripada mata akan datang) | — |
 | `account.points_expiry` | {points} points expire on {date} | {points} 积分将于 {date} 到期 | {points} mata tamat tempoh pada {date} | — |
 | `account.points_history` | Points history | 积分明细 | Sejarah mata | — |
 | `account.coupons` | My coupons | 我的优惠券 | Kupon saya | 可用券 + 使用记录（Q13 已决） |
-| `account.coupons_available` | Available coupons | 可用优惠券 | Kupon tersedia | 范围见待决 Q19 |
+| `account.coupons_available` | Available coupons | 可用优惠券 | Kupon tersedia | 列出所有启用中且在有效期内的券，对全部会员相同，不按每会员或总次数上限过滤（Q19 已决） |
 | `account.coupon_value_fixed` | RM {amount} off | 减 RM {amount} | Potongan RM {amount} | — |
 | `account.coupon_value_percent` | {percent}% off | 减 {percent}% | Potongan {percent}% | — |
 | `account.coupon_min_spend` | Minimum item spend: RM {amount} | 最低商品消费：RM {amount} | Perbelanjaan item minimum: RM {amount} | — |
@@ -365,8 +376,8 @@
 | `privacy.fictional` | You may use fictional shipping details. The exception is a Malaysian or Singapore mobile number entered at checkout, which must be able to receive our verification SMS. | 收货资料可以填写虚构内容。唯一例外是结账时填写的马来西亚或新加坡手机号，须能收到验证短信。 | Anda boleh menggunakan butiran penghantaran rekaan. Pengecualiannya ialah nombor telefon bimbit Malaysia atau Singapura yang dimasukkan semasa daftar keluar, yang mesti boleh menerima SMS pengesahan kami. | — |
 | `privacy.retention_recipient` | Shipping details are kept long-term together with the order's items, amounts and status. They are not deleted or anonymised, including after a member account is deleted. | 收货资料与订单商品、金额和状态一起长期保存，不删除、不匿名化；会员注销后也同样保留。 | Butiran penghantaran disimpan untuk jangka panjang bersama item, jumlah dan status pesanan. Ia tidak dipadam atau dianonimkan, termasuk selepas akaun ahli dipadam. | DESIGN「资料保留」；不提供删除入口 |
 | `privacy.member` | Member mobile numbers, including accounts created automatically at checkout, are kept until you delete your account; inactive accounts are not deleted automatically. SMS verification records are kept briefly to prevent abuse. | 会员手机号（含结账时自动注册的账号）保留至您注销账号，长期未登录也不会自动注销。短信验证记录短期保留，用于防滥用。 | Nombor telefon bimbit ahli, termasuk akaun yang dicipta secara automatik semasa daftar keluar, disimpan sehingga anda memadam akaun; akaun yang tidak aktif tidak dipadam secara automatik. Rekod pengesahan SMS disimpan untuk tempoh singkat bagi mencegah penyalahgunaan. | — |
-| `privacy.member_backup` | After you delete your account, copies of your mobile number and password made before deletion may remain in routine database backups until those backups are cleared. | 注销账号后，注销前产生的手机号和密码副本可能仍留在例行数据库备份中，直到这些备份被清除。 | Selepas anda memadam akaun, salinan nombor telefon bimbit dan kata laluan anda yang dibuat sebelum pemadaman mungkin kekal dalam sandaran pangkalan data rutin sehingga sandaran itu dikosongkan. | 草稿，待决 Q18；运营核实前不写天数 |
-| `privacy.browser_access` | After a guest order is placed, or an order is looked up, only that browser can open that one order, for 30 minutes. | 游客下单后或查询订单后，只有该浏览器能在 30 分钟内打开该张订单。 | Selepas pesanan tetamu dibuat, atau pesanan disemak, hanya pelayar itu boleh membuka pesanan tersebut, selama 30 minit. | DESIGN「权限与资料保护」 |
+| `privacy.member_backup` | After you delete your account, copies of your mobile number and password hash made before the deletion may remain in our database backups for a period that has not yet been determined. | 注销账号后，注销前产生的手机号与密码哈希副本可能在数据库备份中保留一段尚未确定的时间。 | Selepas anda memadam akaun, salinan nombor telefon bimbit dan hash kata laluan anda yang dibuat sebelum pemadaman mungkin kekal dalam sandaran pangkalan data untuk suatu tempoh yang belum ditentukan. | Q18 已决：对外披露；不写天数，不写或暗示备份一定会在某时被清除；DESIGN「资料保留」 |
+| `privacy.browser_access` | After you place a guest order or look up an order, this browser gets access to that order for 30 minutes. After 30 minutes, or in another browser, look the order up again with its order number and phone number. | 游客下单或查询订单后，本浏览器获得对该订单 30 分钟的访问。30 分钟后，或在其他浏览器上，请凭订单号和电话重新查询该订单。 | Selepas anda membuat pesanan tetamu atau menyemak pesanan, pelayar ini mendapat akses kepada pesanan itu selama 30 minit. Selepas 30 minit, atau dalam pelayar lain, semak pesanan itu semula dengan nombor pesanan dan nombor telefonnya. | DESIGN「权限与资料保护」；不表示该单以后只能在本浏览器打开 |
 | `privacy.lookup_risk` | Anyone who knows both the order number and the phone number can view the full shipping details. Because shipping details are kept long-term, this stays possible for as long as the order exists. | 同时知道订单号和电话的人可以查看完整收货资料。由于收货资料长期保存，只要订单存在，这一点就一直成立。 | Sesiapa yang tahu nombor pesanan dan nombor telefon boleh melihat butiran penghantaran penuh. Oleh sebab butiran penghantaran disimpan untuk jangka panjang, ini kekal boleh berlaku selagi pesanan wujud. | — |
 | `privacy.sms` | Checkout verification for Malaysian and Singapore numbers, registration, SMS login, password reset and account deletion send a real SMS through our SMS provider. | 马新号码结账验证、注册、短信登录、重设密码与注销确认会通过短信服务商发送真实短信。 | Pengesahan daftar keluar untuk nombor Malaysia dan Singapura, pendaftaran, log masuk SMS, tetapan semula kata laluan dan pemadaman akaun menghantar SMS sebenar melalui penyedia SMS kami. | — |
 | `privacy.logs` | Our logs are kept for up to 30 days and do not contain your name, full phone number, address or password. | 日志最多保留 30 天，不含您的姓名、完整电话、地址或密码。 | Log kami disimpan sehingga 30 hari dan tidak mengandungi nama, nombor telefon penuh, alamat atau kata laluan anda. | — |
@@ -437,7 +448,7 @@
 | `admin.active` | Published | 上架 | Diterbitkan | — |
 | `admin.translation_missing` | {language} text is missing and will fall back to English. English text is required to publish. | 缺少{language}文案，将回退英文；缺少英文则不能上架。 | Teks {language} tiada dan akan kembali kepada bahasa Inggeris. Teks bahasa Inggeris diperlukan untuk diterbitkan. | — |
 | `admin.rules_apply_new` | Changes apply to new orders only. Existing orders keep their original amounts. | 修改只影响新订单，已有订单保持原金额。 | Perubahan hanya terpakai untuk pesanan baharu. Pesanan sedia ada mengekalkan jumlah asal. | — |
-| `admin.coupon_listed_note` | Active coupons within their valid dates are listed to all members under "My coupons". | 启用中且在有效期内的优惠券会在会员中心「我的优惠券」中向所有会员列出。 | Kupon aktif dalam tempoh sah disenaraikan kepada semua ahli di bawah "Kupon saya". | 待决 Q19 |
+| `admin.coupon_listed_note` | All active coupons within their valid dates are listed under "My coupons", the same for every member, regardless of total or per-member usage limits. | 所有启用中且在有效期内的优惠券都会列在会员中心「我的优惠券」中，对全部会员相同，不因总次数或每会员次数上限而不列出。 | Semua kupon aktif dalam tempoh sah disenaraikan di bawah "Kupon saya", sama bagi setiap ahli, tanpa mengira had jumlah penggunaan atau had setiap ahli. | Q19 已决；不改数据模型 |
 | `admin.coupon_code` | Coupon code | 优惠券代码 | Kod kupon | — |
 | `admin.coupon_type` | Type | 类型 | Jenis | — |
 | `admin.coupon_value` | Value | 面额 | Nilai | RM 或 % |
@@ -472,24 +483,24 @@
 
 ## 待决问题
 
-与 [UX.md](UX.md)「待决问题」同一编号、同一内容，共 19 项（Q1–Q15 编号不变，Q16–Q19 为 0.2 新增）。本稿只列出，不自行改设计或需求。状态：已决 11 项（Q1、Q2、Q5–Q10、Q12、Q13、Q15）；不再适用 2 项（Q3、Q4）；部分已决 1 项（Q11）；待决 5 项（Q14、Q16–Q19）。
+与 [UX.md](UX.md)「待决问题」同一编号、同一内容，共 19 项（Q1–Q15 编号不变，Q16–Q19 为 0.2 新增，0.3 未新增）。本稿只列出，不自行改设计或需求。状态：已决 17 项（Q1、Q2、Q5–Q19）；不再适用 2 项（Q3、Q4）；待决 0 项。Q11、Q14、Q16–Q19 依据 Kelvin 2026-09-30 的决定（记录见 `docs/HANDOFF.md`）在 0.3 转为已决。
 
-- **Q1 下单后支付页与结果页的访问授权。** **已决**，依据 DESIGN 1.8「权限与资料保护」：每张游客订单创建后，服务端只给当前浏览器一个不可猜测、30 分钟有效、仅限该单的短期凭据，用于该单的模拟支付、失败重试、取消与结果页，这些页面可显示该单收货资料原文，凭据不能用于确认收货、退款或其他订单；查单通过后仅对该单在本浏览器保持 30 分钟，只能查看、确认收货和申请退款，不能支付或取消；两者均为服务端会话，经 HttpOnly、Secure、SameSite=Lax 的 cookie 交付，写操作另须 CSRF 令牌。线框见 P06、P07（`[G]`）与 P08–P10（`[L]`）；0.1 中「支付/结果页不显示收货资料原文」的假设随之取消。
-- **Q2 第 30 天退款截止与收货资料删除同日。** **已决**，依据 DESIGN 1.8「资料保留」（收货资料不再删除，游客凭订单号与电话可随时查单）与「订单与退款状态」（支付成功后 30 天内可申请退款）：查单不再在第 30 天失效，两者不再冲突；退款截止时间以服务端返回的 `order.refund_deadline` 为准。
-- **Q3 共享备份残留期的对外措辞。** **不再适用**：收货资料不再删除或匿名化（DESIGN 1.8「资料保留」），不存在收货资料在备份中残留的对外措辞问题；表单旁「30 天后匿名化」已删除，隐私页 `privacy.retention_recipient` 改写为长期保存，原 `privacy.retention_backup` 删除。会员注销后手机号与密码哈希在备份中残留的措辞另列为 Q18。
+- **Q1 下单后支付页与结果页的访问授权。** **已决**，依据 DESIGN 1.9「权限与资料保护」：每张游客订单创建后，服务端只给当前浏览器一个不可猜测、30 分钟有效、仅限该单的短期凭据，用于该单的模拟支付、失败重试、取消与结果页，这些页面可显示该单收货资料原文，凭据不能用于确认收货、退款或其他订单；查单通过后仅对该单在本浏览器保持 30 分钟，只能查看、确认收货和申请退款，不能支付或取消；两者均为服务端会话，经 HttpOnly、Secure、SameSite=Lax 的 cookie 交付，写操作另须 CSRF 令牌。线框见 P06、P07（`[G]`）与 P08–P10（`[L]`）；0.1 中「支付/结果页不显示收货资料原文」的假设随之取消。
+- **Q2 第 30 天退款截止与收货资料删除同日。** **已决**，依据 DESIGN 1.9「资料保留」（收货资料不再删除，游客凭订单号与电话可随时查单）与「订单与退款状态」（支付成功后 30 天内可申请退款）：查单不再在第 30 天失效，两者不再冲突；退款截止时间以服务端返回的 `order.refund_deadline` 为准。
+- **Q3 共享备份残留期的对外措辞。** **不再适用**：收货资料不再删除或匿名化（DESIGN 1.9「资料保留」），不存在收货资料在备份中残留的对外措辞问题；表单旁「30 天后匿名化」已删除，隐私页 `privacy.retention_recipient` 改写为长期保存，原 `privacy.retention_backup` 删除。会员注销后手机号与密码哈希在备份中残留的措辞另列为 Q18。
 - **Q4 「30 天」的起算点。** **不再适用**：收货资料不再按 30 天删除，已无起算点；相关文案已改写。
-- **Q5 会员能否在会员中心直接确认收货、申请退款。** **已决**，依据 DESIGN 1.8「订单与退款状态」「权限与资料保护」（会员在「我的订单」对自己认领或下单的订单确认收货、申请退款，规则与查单页相同）。线框以 P09、P10 的会员模式实现。
+- **Q5 会员能否在会员中心直接确认收货、申请退款。** **已决**，依据 DESIGN 1.9「订单与退款状态」「权限与资料保护」（会员在「我的订单」对自己认领或下单的订单确认收货、申请退款，规则与查单页相同）。线框以 P09、P10 的会员模式实现。
 - **Q6 模拟支付方式清单。** **已决**，依据 Kelvin 2026-09-29 的决定：「演示银行卡」改为「演示信用卡/借记卡（无需输入卡号）」（`pay.method_card`）；演示网上银行、演示电子钱包保留；三项均不输入任何资料。
-- **Q7 后台导出。** **已决**，依据 DESIGN 1.8「权限与资料保护」（首版不提供后台导出）：后台不设导出按钮。
+- **Q7 后台导出。** **已决**，依据 DESIGN 1.9「权限与资料保护」（首版不提供后台导出）：后台不设导出按钮。
 - **Q8 商品文案回退英文时是否标示。** **已决**，依据 Kelvin 2026-09-29 的决定：回退英文时保留「仅英文」标签 `detail.english_only`。
-- **Q9 参考币种的显示范围。** **已决**，依据 Kelvin 2026-09-29 的决定与 DESIGN 1.8「边界与原则」（按收货国家、不按 IP）：参考外币金额只在结账页选定收货国家后显示；首页、列表、详情、购物车只显示 MYR。
+- **Q9 参考币种的显示范围。** **已决**，依据 Kelvin 2026-09-29 的决定与 DESIGN 1.9「边界与原则」（按收货国家、不按 IP）：参考外币金额只在结账页选定收货国家后显示；首页、列表、详情、购物车只显示 MYR。
 - **Q10 WhatsApp 联系方式未配置时的行为。** **已决**，依据 Kelvin 2026-09-29 的决定：配置缺失时隐藏 WhatsApp 按钮（页脚、隐私页联系段），不显示占位文字或「即将开放」。
-- **Q11 虚构电话被真实号码持有人认领。** **部分已决**：1.7 起马来西亚、新加坡（短信白名单）号码结账须先短信验证并成为会员，不再用于游客订单（DESIGN 1.8「权限与资料保护」），一般情形下游客订单上不再出现可被他人注册认领的白名单号码。但**短信无法送达或停发时降级的游客下单**，以及**以后扩大白名单**时，这些游客订单仍可能被该号码的真实持有人注册后认领并看到收货资料（DESIGN 1.8 也写明认领主要在这两种情形下生效）。此剩余风险仍待 Kelvin 决定是否接受或另议。
-- **Q12 待支付订单的取消入口与操作者。** **已决**，依据 DESIGN 1.8「订单与退款状态」「权限与资料保护」：待支付订单由下单者在支付页取消，游客凭该单短期凭据，会员凭登录会话；P06 为两者都提供 `pay.cancel_order`；查单页不提供取消。
+- **Q11 虚构电话被真实号码持有人认领。** **已决**，依据 Kelvin 2026-09-30 的决定（见 `docs/HANDOFF.md`）：1.7 起马来西亚、新加坡（短信白名单）号码结账须先短信验证并成为会员，不再用于游客订单（DESIGN 1.9「权限与资料保护」），一般情形下游客订单上不再出现可被他人注册认领的白名单号码。**短信无法送达或停发时降级的游客下单**，以及**以后扩大白名单**时，这些游客订单仍可能被该号码的真实持有人注册后认领并看到收货资料（DESIGN 1.9 也写明认领主要在这两种情形下生效）；Kelvin 接受这一剩余风险。不新增或改动文案。
+- **Q12 待支付订单的取消入口与操作者。** **已决**，依据 DESIGN 1.9「订单与退款状态」「权限与资料保护」：待支付订单由下单者在支付页取消，游客凭该单短期凭据，会员凭登录会话；P06 为两者都提供 `pay.cancel_order`；查单页不提供取消。
 - **Q13 会员中心「优惠券」的含义。** **已决**，依据 Kelvin 2026-09-29 的决定：「我的优惠券」同时列出当前可用的公开券与本人使用记录（P13）。「公开券」的范围见 Q19。
-- **Q14 马来文文案审校。** **待决**：UX-COPY 的马来文为草稿，须母语者审校用词（如 troli、daftar keluar、bayaran balik）后再实现。
-- **Q15 密码规则与注销确认方式。** **已决**，依据 DESIGN 1.8「权限与资料保护」：密码至少 8 位、不强制复杂度（`auth.password_rule`）；注销须先以短信验证码确认（P13 嵌入 V1）。
-- **Q16 结账第一步手机号的默认区号。**（0.2 新增）**待决**：DESIGN 1.8「权限与资料保护」写「以收货国家作为默认区号解析自由文本电话」，但结账改为先填手机号后，第 1 步时尚未选收货国家。线框假设第 1 步另设国家码下拉（列出所有国家，默认 +60），以 `+` 开头输入时以输入为准；之后选的收货国家不改变已判定的号码。默认值与做法请 Kelvin 确认；若须改解析规则，可能触及设计闸门。
-- **Q17 会员待支付订单能否从会员中心回到支付页。**（0.2 新增）**待决**：DESIGN 1.8 写会员凭登录会话在支付页取消待支付订单，但「我的订单」只写确认收货与申请退款，未写能否继续支付。线框在 P09 会员模式为待支付订单放 `account.order_pay`（进入 P06），请确认；若不允许，则会员离开支付页后只能等 15 分钟超时。
-- **Q18 会员注销后手机号在共享备份中的残留期措辞。**（0.2 新增，承接原 Q3）**待决**：DESIGN 1.8「资料保留」写注销时在线删除的手机号与密码哈希，最迟在注销后第 max(binlog 残留期, N) 天才从共享备份与 binlog 中消失，运营核实前没有确定上限。隐私页草拟 `privacy.member_backup`，不写天数、不写「有限期」；是否对外披露及如何措辞需 Kelvin 决定。
-- **Q19 「可用的公开券」的范围。**（0.2 新增）**待决**：DESIGN 1.8「数据模型」的 `Coupon` 没有「公开/不公开」或「在会员中心列出」字段。线框按「启用中、在有效期内、该会员尚未达到每会员使用上限」的券全部列出，即所有启用中的券对全部会员可见，后台 A05 以 `admin.coupon_listed_note` 提示管理员。若需要只凭代码使用、不在会员中心列出的券，须改数据模型并重新批准设计。请 Kelvin 确认。
+- **Q14 马来文文案审校。** **已决**，依据 Kelvin 2026-09-30 的决定：先上线，上线后再由马来文母语者审校用词（如 troli、daftar keluar、bayaran balik）。UX-COPY 的马来文仍标为草稿；审校不再是页面实现的前置条件。
+- **Q15 密码规则与注销确认方式。** **已决**，依据 DESIGN 1.9「权限与资料保护」：密码至少 8 位、不强制复杂度（`auth.password_rule`）；注销须先以短信验证码确认（P13 嵌入 V1）。
+- **Q16 结账第一步手机号的默认区号。**（0.2 新增）**已决**，依据 Kelvin 2026-09-30 的决定与已批准的 DESIGN 1.9「权限与资料保护」：结账第 1 步国家码下拉列出所有国家、默认 +60；以 `+` 开头输入时以输入为准；服务端按所选或输入的国家码规范化为 E.164 并判定是否属于白名单，之后选的收货国家不改变已判定的号码。游客订单的收货电话即第 1 步号码（只读），下单时不按收货国家重新解析；以收货国家作为默认区号只用于会员改填的收货电话。线框见 P05；`checkout.phone_step_hint` 措辞不变。
+- **Q17 会员待支付订单能否从会员中心回到支付页。**（0.2 新增）**已决**，依据 Kelvin 2026-09-30 的决定（与 DESIGN 1.9「订单与退款状态」中会员凭登录会话在支付页取消一致）：会员可从 P09 会员模式的 `account.order_pay` 回到 P06，继续支付或取消自己的待支付订单。线框见 P06、P09、P13。
+- **Q18 会员注销后手机号在共享备份中的残留期措辞。**（0.2 新增，承接原 Q3）**已决**，依据 Kelvin 2026-09-30 的决定与 DESIGN 1.9「资料保留」（注销时在线删除的手机号与密码哈希，最迟在注销后第 max(binlog 残留期, N) 天才从共享备份与 binlog 中消失，运营核实前没有确定上限）：隐私页对外披露。`privacy.member_backup` 改写为：注销前产生的手机号与密码哈希副本可能在数据库备份中保留一段尚未确定的时间；不写天数，不写或暗示备份一定会在某时被清除，用「密码哈希」而不是「密码」；该键已定稿。
+- **Q19 「可用的公开券」的范围。**（0.2 新增）**已决**，依据 Kelvin 2026-09-30 的决定：「我的优惠券」的可用券列出所有启用中且在有效期内的券，对全部会员相同，不按每会员或总次数上限过滤；不改 DESIGN 1.9「数据模型」的 `Coupon`。P13 说明与后台 A05 的 `admin.coupon_listed_note` 按同一口径；已达上限的券在结账时由服务端拒绝。
