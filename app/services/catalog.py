@@ -110,7 +110,8 @@ def _has_text(value: str | None) -> bool:
     return value is not None and value.strip(" ") != ""
 
 
-def _localized(row: object, field: str, lang: Language) -> LocalizedText:
+def localized(row: object, field: str, lang: Language) -> LocalizedText:
+    """文案回退：请求语言缺少时给英文并标出。结账计价也用它。"""
     value = getattr(row, f"{field}_{lang}")
     if _has_text(value):
         return LocalizedText(text=value, english_fallback=False)
@@ -118,7 +119,7 @@ def _localized(row: object, field: str, lang: Language) -> LocalizedText:
 
 
 def _category_summary(category: Category, lang: Language) -> CategorySummary:
-    return CategorySummary(slug=category.slug, name=_localized(category, "name", lang))
+    return CategorySummary(slug=category.slug, name=localized(category, "name", lang))
 
 
 _in_category = Category.id == Product.category_id
@@ -146,9 +147,11 @@ _first_image = (
 )
 
 
-def _published() -> ColumnElement[bool]:
+def published() -> ColumnElement[bool]:
     """发布规则：商品与所属分类都启用；分类英文名称、商品英文名称与英文描述、
     该商品所有规格名与规格值的英文名称齐全；至少有一个启用的 SKU。调用方须已 join Category。
+    结账计价（app/services/checkout.py）也用它；外层查询若也选 ProductVariant，须用别名，
+    否则「至少有一个启用的 SKU」的子查询会与外层的 SKU 关联。
     """
     return and_(
         Product.is_active.is_(True),
@@ -211,7 +214,7 @@ def list_products(
     options 是规格名 code → 规格值 code 列表。价格排序按最低单价；
     平手一律按商品 id 升序，翻页不重复、不遗漏。
     """
-    conditions = [_published()]
+    conditions = [published()]
     if query:
         conditions.append(
             or_(
@@ -244,7 +247,7 @@ def list_products(
     items = [
         ProductSummary(
             slug=product.slug,
-            name=_localized(product, "name", lang),
+            name=localized(product, "name", lang),
             category=_category_summary(category, lang),
             image=image,
             min_price_sen=min_price_sen,
@@ -263,7 +266,7 @@ def _in_sort_order[T](session: Session, model: type[T], product_id: int) -> list
 def get_product(session: Session, slug: str, lang: Language) -> ProductDetail | None:
     """已发布商品的详情；不存在与未发布同样返回 None，调用方给同一个 404。"""
     stmt = select(Product, Category).join_from(Product, Category, _in_category)
-    row = session.execute(stmt.where(_published(), Product.slug == slug)).first()
+    row = session.execute(stmt.where(published(), Product.slug == slug)).first()
     if row is None:
         return None
     product, category = row
@@ -282,7 +285,7 @@ def get_product(session: Session, slug: str, lang: Language) -> ProductDetail | 
 
     values_by_option: dict[int, list[OptionValueDetail]] = {}
     for value in values:
-        detail = OptionValueDetail(code=value.code, name=_localized(value, "name", lang))
+        detail = OptionValueDetail(code=value.code, name=localized(value, "name", lang))
         values_by_option.setdefault(value.option_id, []).append(detail)
 
     value_code = {value.id: value.code for value in values}
@@ -304,14 +307,14 @@ def get_product(session: Session, slug: str, lang: Language) -> ProductDetail | 
 
     return ProductDetail(
         slug=product.slug,
-        name=_localized(product, "name", lang),
-        description=_localized(product, "description", lang),
+        name=localized(product, "name", lang),
+        description=localized(product, "description", lang),
         category=_category_summary(category, lang),
         images=[image.storage_ref for image in images],
         options=[
             OptionDetail(
                 code=option.code,
-                name=_localized(option, "name", lang),
+                name=localized(option, "name", lang),
                 values=values_by_option.get(option.id, []),
             )
             for option in options

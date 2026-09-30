@@ -192,3 +192,28 @@
 - 偏离：手机版结账底部固定栏与顶部折叠摘要同样改为选定收货国家前显示商品小计（验收标准只点名顶部摘要，为免同屏两处不一致一并改）；桌面摘要未改。未改设计、需求、交接单、`frontend/`、后端、CI 或部署配置；未写任何真实联系方式。
 - 待决问题变化：仍为 19 项，编号不变，未新增。Q11、Q14、Q16、Q17、Q18、Q19 依据 Kelvin 2026-09-30 的决定转为已决；现为已决 17 项（Q1、Q2、Q5–Q19）、不再适用 2 项（Q3、Q4）、待决 0 项。未发现与 DESIGN 1.9 或 REQUIREMENTS 1.8 冲突之处。
 - 验证到什么程度：人工逐条对照验收标准自查；用检索核对两份文档不再出现「待决 Q16」至「待决 Q19」字样与作为现行依据的「DESIGN 1.8」「REQUIREMENTS 1.7」，前台文案不再以「现金 / cash / tunai」指实付金额（后台 `admin.refund_amount` 与 `account.demo_hint` 的「现金价值」除外），两份文档的「待决问题」正文与状态统计一致；新增的 2 个键三列齐全、无变量，线框新引用的键均在 UX-COPY 中定义。马来文未经母语者审校（Q14，上线后补）；未做浏览器或视觉验证（本任务不实现页面）。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-009 购物车与结账计价 API（游客计价）
+
+- [x] 按 `docs/DESIGN.md` 1.8（提交 `2b68ad0`）「数据模型」的 Cart 与 ShippingRate / DemoFxRate 两行、「计价、优惠、积分与库存」第 1、2 条及「边界与原则」提供公开、只读的计价接口：`app/services/checkout.py`、`app/api/checkout.py`，`app/main.py` 挂上路由，`app/services/catalog.py` 导出发布条件与文案回退；测试见 `tests/test_checkout_quote.py`
+- 接口：只有 `POST /api/checkout/quote?lang=`（`lang` 与目录接口相同，只接受 `en`、`zh`、`ms`，默认 `en`，其他值 422）。不需登录，不读写 cookie；只读、不改状态，所以不要 CSRF 令牌。
+  - 请求体（JSON）只有 `lines`（1 到 20 行，每行 `sku`：1 到 64 个字符的字符串，`quantity`：1 到 10 的整数）、可选的 `country_code` 与可选的 `state_code`。多出的字段（含任何价格、金额、运费、汇率、折扣、优惠券字段）一律 422；同一 SKU 出现两次、只给州属不给国家 422；按严格模式校验，件数 `2.0`、`"2"`、`true` 与数字 SKU 都 422。国家与州属代码的合法性沿用 `app/services/shipping.py` 的 `quote_shipping`：国家须两位大写字母，`MY` 须给 `MY-01` 到 `MY-16`，其他国家不许给州属，不转换大小写，不合法 422。
+  - 请求体上限 8 KB（8192 字节）：在请求体依赖里用 `request.stream()` 逐块累计实际读到的字节，超过即停止读取并返回 413，不依赖 Content-Length；恰好 8192 字节照常处理。这个依赖写在会话依赖之前，FastAPI 按声明顺序解析，所以超限请求体先于请求模型校验、非法 `lang` 与未配置数据库的 503 得到 413。未超限的请求体再用 `QuoteRequest.model_validate_json` 校验，错误以 `RequestValidationError` 回 422，错误项只含 `type`、`loc`、`msg`，不回显输入。
+  - 响应：`lines` 按请求顺序逐行返回，`status` 只有 `ok`、`insufficient_stock`、`unavailable` 三种。
+    - `unavailable`：SKU 不存在（逐字比对）、SKU 停用，或所属商品按 SHOP-TASK-005 的发布规则未发布；这一行只有 `sku`、`quantity`、`status` 三个字段，不计入任何金额。
+    - `ok` 与 `insufficient_stock`：另有 `available_stock`（库存不足时是当日可用库存，可为 0；正常行为 null）、`product_slug`、`name`（`{text, english_fallback}`）、`options`（按规格名排列序号，每项 `code`、`name`、`value`（`code`、`name`））、`image`（排列序号最小的图片引用，没有为 null）、`unit_price_sen`、`line_subtotal_sen`（单价 × 件数）。当日可用库存小于件数即 `insufficient_stock`，该行照常计入小计。
+    - `subtotal_sen`：正常与库存不足各行的商品小计，由 `app/services/pricing.py` 的 `price_order`（不传券与积分）算出。
+    - `shipping`（`fee_sen`、`zone_code`、`version`）、`total_sen`（商品小计 + 运费）、`fx_reference`（`currency_code`、`currency_decimals`、`amount_minor`、`version`，按合计换算；该国无汇率或为马来西亚时为 null）：只在给了 `country_code` 时有值，否则三项都为 null，不猜测国家、不看 IP 或请求头。
+    - `can_place_order`：所有行均为 `ok` 且给了收货国家时为真，否则为假。
+    - 合法目的地因运费行缺失（马来西亚州属行或兜底行）取不到运费时返回 503，`detail` 固定为 `shipping is unavailable`，不含区域代码，不返回零运费；州属行缺失时不退回兜底行。
+  - 金额全部是 MYR 整数仙，全程不用浮点；响应不含每日初始库存、启用状态等后台字段，也不含优惠券、积分与会员字段或占位字段。只发 SELECT，不写库、不缓存价格与费率、不建订单、不预留或扣减库存，下单时由之后的任务重新计算与校验。
+  - `app/services/catalog.py` 只把 `_published` 改名为 `published`、`_localized` 改名为 `localized` 供结账计价导入，目录接口行为不变，`tests/test_catalog_api.py` 未改。计价查询的外层对 `ProductVariant` 用别名，发布规则里「至少有一个启用的 SKU」的子查询才只与商品关联。
+- 偏离：未改设计与审阅稿。说明几处取舍，请审阅：
+  - 设计闸门写的是 DESIGN 1.8（提交 `2b68ad0`），UX 审阅稿已改标 DESIGN 1.9；1.9 只改了「权限与资料保护」第 1、2 条与「上线依赖与设计闸门」末条，本任务用到的「数据模型」「计价、优惠、积分与库存」「边界与原则」两版相同，未发现冲突。
+  - 与 `docs/UX.md` P04、P05 的出入：P04 的 `[cart.item_changed]`「服务端校验有变化时」显示；浏览器不提交价格，所以接口不比对浏览器保存的价格，页面按各行 `status` 与返回的单价自行判断是否有变化。P05 的优惠券 M3、积分 M4 两行不在本任务，由之后的「优惠券与积分账本」任务扩展本接口。
+  - SKU 在 Python 里逐字比对：MySQL 默认排序规则不区分大小写、比较时忽略尾随空格，只靠 WHERE 会把 `tee-red-m` 当成 `TEE-RED-M`。
+  - 正常行的 `available_stock` 为 null，只在库存不足时给出可用数；验收标准只要求库存不足时给出。
+  - 目的地不合法的 422 响应是 `{"detail": "invalid country or state code"}`，与请求模型的 422 错误列表格式不同：目的地合法性按 `quote_shipping` 判断，不在请求模型里另写一套规则。
+  - 请求体由依赖手动读取，OpenAPI 文档里没有请求体的结构描述；请求与响应字段以本段为准。
+  - 限流不在本任务，留给之后统一处理公开接口限流的任务；本接口目前没有限流。
+- 验证到什么程度：人工逐条对照验收标准自查，并人工推算参考外币算例（7180 仙 × 0.31 = 2225.8 → SGD 2226 分；13180 仙 × 34 ÷ 100 = 4481.2 → JPY 4481）。`tests/test_checkout_quote.py` 用 TestClient 与 SQLite 内存库（StaticPool，覆盖 `get_session`）按模型建表并自建目录、运费与汇率数据，覆盖：正常行整体相等（规格按排列序号、首张图片、单价、行小计，多一个字段即失败）；商品小计等于各行之和且不计不可购买的行、行序与请求一致；SKU 停用与发布规则七个条件逐一使该行只含 SKU、件数与状态（每例先确认改动前是正常的）；SKU 不存在及大小写不同、带尾随空格的 SKU 为不可购买；库存不足标注与可用数（含 0）并计入小计、件数等于可用数仍正常；回退英文及逐字段标记；马来西亚州属、有国家行（有汇率与无汇率）、兜底国家的运费、合计、参考外币与版本号；不给国家时三项为空且不可下单（带来源头也不猜）；可下单标记的四种组合另加不可购买行；行数 0 与 21、件数 0、11、1.5、2.0、字符串与布尔、缺件数、SKU 空串、65 个字符与数字、重复 SKU、行上与顶层的价格金额运费汇率折扣优惠券字段、只给州属、非法国家与州属代码（含小写）、缺州属与非马来西亚带州属、非 JSON 请求体都 422；20 行、件数 10、64 个字符的 SKU 接受；非法语言参数（含 `EN` 与空串）422；恰好 8192 字节接受、8193 字节 413，带多余字段与非法语言参数的超限请求体 413，分块发送不带 Content-Length 的超限请求体 413，未配置数据库时超限请求体仍 413；兜底行缺失与合法马来西亚州属行缺失 503 且不含内部细节；计价只发 SELECT、不设 cookie、库存不变、GET 为 405。这些测试由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest；查询未在真 MySQL 上执行（CI 的 MySQL 只用于迁移检查）。检查命令结果由 Worker 另行记录。
