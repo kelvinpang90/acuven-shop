@@ -10,6 +10,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts index.html ./
 COPY src ./src
+COPY public ./public
 # build 同时跑类型检查（tsc --build && vite build）。
 RUN npm run build
 
