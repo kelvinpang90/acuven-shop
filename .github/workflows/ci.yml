@@ -63,6 +63,7 @@ jobs:
 
       # 对真 MySQL 在线跑迁移（部署脚本同样是在线 upgrade head），再降到底、升回来：
       # 建表语句在 MySQL 上不成立、或 downgrade 没写对，在合并前失败而不是在部署时。
+      # 最后 alembic check 把升到 head 的库与模型的 metadata 对比：模型改了、迁移漏写，同样在合并前失败。
       # 这个连接串只指向上面的 CI 服务容器。
       - name: Migrations round-trip on MySQL
         env:
@@ -71,6 +72,7 @@ jobs:
           alembic upgrade head
           alembic downgrade base
           alembic upgrade head
+          alembic check
 
       - name: Deploy script lint
         run: shellcheck deploy/deploy.sh
