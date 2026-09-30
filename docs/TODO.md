@@ -100,3 +100,29 @@
   - `app/db/session.py`：`get_session` 依赖在第一次请求时按 `SHOP_DATABASE_URL` 建引擎与会话工厂（同一连接串只建一次），每个请求一个会话、不提交；未配置数据库时应用照常启动、健康检查不受影响，目录接口返回 503。
 - 偏离：未改设计与审阅稿。与 `docs/UX.md` 0.2 的出入：P02 线框的规格筛选栏需要列出可选的规格名与规格值，验收标准的列表字段里没有这一项，本任务未提供，留给页面任务按需另行登记；P01 线框的分类卡片带图，`categories` 表没有图片列，分类列表不给图片。规格名属于单件商品，跨商品筛选按规格名与规格值的 code 匹配。「最新」的平手同样按商品 id 升序。「今日售罄」与当日可用库存直接读 `available_stock`，每日重置由之后的任务维护。`app/core/config.py` 中 `database_url` 的注释「只有 alembic 用到；应用本身还没有任何表」已过时，该文件不在本任务可改范围内，记为待清理项。
 - 验证到什么程度：人工逐条对照验收标准自查。`tests/test_catalog_api.py` 用 TestClient 与 SQLite 内存库（StaticPool，覆盖 `get_session`）覆盖：已发布商品的列表项与详情整体相等（多一个后台字段即失败，含默认英文）；发布规则的八个条件逐一使商品从列表消失、详情 404 且与不存在的 slug 响应相同（每例先确认改动前是发布的）；分类列表只含启用且有英文名称的分类；回退英文及逐字段标记（中文、马来文）；最低单价与售罄只算启用 SKU、停用 SKU 不出现在详情；搜索（当前语言名、英文名、大小写、英文界面不按中文名匹配、`%` 字面匹配）；分类筛选为或；规格筛选同名为或、异名为且，含反例（颜色只由 SKU-A 命中、尺寸只由 SKU-B 命中时不出现；唯一满足的 SKU 停用时不出现）；三种排序、按最低单价而非最高单价、稳定平手、非法排序值被拒；分页总数与每页条数上限；非法语言参数（含 `EN`）在三个接口都被拒；格式不对的规格筛选被拒；三个接口只发 SELECT、写方法 405；未配置数据库时健康检查 200、目录接口 503。这些测试由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest；未在真 MySQL 上跑这些查询（CI 的 MySQL 只用于迁移检查）。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-006 示例商品目录种子数据
+
+- [x] 按 `docs/DESIGN.md` 1.8（提交 `2b68ad0`）「数据模型」的 Product / Variant 一行，在 SHOP-TASK-004 的表上用数据迁移 `alembic/versions/20260930_0003_demo_catalog.py`（revision `0003`，down_revision `0002`）写入示例目录；占位图 `frontend/public/demo-images/*.svg`；`frontend/Dockerfile` 在 `COPY src ./src` 旁加 `COPY public ./public`；测试见 `tests/test_demo_catalog_seed.py`
+- 做了什么：数据全是迁移文件内的常量（`CATEGORIES`、`OPTIONS`、`OPTION_VALUES`、`PRODUCTS`），用 `sa.table` 轻量表定义与 `op.bulk_insert` 写入，不 import app 的模型；写完一层按 slug / SKU / 商品 id 查回 id 再写下一层。downgrade 按依赖倒序显式删除：先按 SKU 删规格关联行与 SKU，再按商品 slug 删规格值、规格名、图片、商品，最后按 slug 删分类，不依赖外键级联。
+  - 分类（按 id 顺序，全部启用）：`apparel`、`bags`、`home`、`kitchen`、`stationery`、`gadgets`，各 5 件商品，共 30 件，全部启用；76 个 SKU，全部启用。
+  - 规格名只有两个 code：`color`（Colour / 颜色 / Warna）与 `size`（Size / 尺寸 / Saiz）。SKU 为 `<商品 slug>-<各规格值 code>`，无规格商品为 `<商品 slug>-std`，全部小写。
+  - 商品清单（形态；单价；备注）：
+    - apparel：`crew-neck-tee`（颜色×尺寸；RM39–42；缺 navy/xl）、`pullover-hoodie`（颜色×尺寸；RM89–95；缺 grey/xl）、`cotton-cap`（颜色；RM25）、`knit-beanie`（颜色；RM29）、`ankle-socks-3-pack`（无规格；RM15）
+    - bags：`canvas-tote-bag`（颜色；RM35）、`everyday-backpack`（颜色×尺寸；RM129–149；缺 grey/large）、`zip-pouch`（无规格；RM18）、`drawstring-bag`（颜色；RM12）、`weekender-duffel`（无规格；RM189）
+    - home：`linen-cushion-cover`（颜色；RM45）、`cotton-bath-towel`（颜色×尺寸；RM29–49；缺 navy/medium）、`soy-wax-candle`（无规格；RM32）、`woven-storage-basket`（无规格；RM55；**仅英文**，中文与马来文名称和描述刻意留空）、`round-wall-clock`（颜色；RM69）
+    - kitchen：`ceramic-mug`（颜色；RM22–24）、`stainless-water-bottle`（颜色×尺寸；RM45–55；缺 white/large）、`bamboo-cutting-board`（无规格；RM39）、`cotton-apron`（颜色；RM28；**全部 SKU 库存为 0**，演示今日售罄）、`glass-food-container-set`（无规格；RM65）
+    - stationery：`dotted-notebook`（颜色；RM16）、`gel-pen-set`（无规格；RM9）、`desk-organiser`（无规格；RM35）、`sticky-notes-pack`（无规格；RM5）、`zip-pencil-case`（颜色；RM14）
+    - gadgets：`wireless-mouse`（颜色；RM59）、`braided-charging-cable`（颜色×尺寸，尺寸值为 1 m / 2 m；RM15–19；缺 white/2m）、`folding-phone-stand`（无规格；RM25）、`compact-power-bank`（无规格；RM89）、`portable-speaker`（颜色；RM299）
+  - 形态合计：无规格 12 件、单规格（颜色）12 件、双规格（颜色×尺寸）6 件；每件双规格商品都缺一个组合，缺的两个值各自仍有 SKU。单价范围 RM5–RM299（500–29900 仙），同一商品内部分 SKU 价格不同；每个 SKU 的 `available_stock` 等于 `daily_initial_stock`。
+  - `created_at`：不带时区的 UTC，第一件为 2026-09-01 01:00，之后每件晚 7 小时，互不相同；按最新排序时清单里越靠后的越靠前。
+  - 图片引用格式：每件商品一行 `product_images`，`sort_order` 为 0，`storage_ref` 为以斜杠开头的站点根路径 `/demo-images/<分类 slug>.svg`，指向所属分类的占位图；Vite 把 `frontend/public/` 原样拷到构建产物根目录，nginx 按路径发出，页面可原样用作图片地址。
+  - 六张 SVG：400×300 的纯几何图形（rect、circle、ellipse、line、polygon、path），不含文字、script、foreignObject、style、事件属性、href、`url()`、`@import`。
+- 偏离：无，未改设计、表结构、接口与前端代码。说明几处取舍，请审阅：
+  - 每张 SVG 根元素带 SVG 命名空间声明 `xmlns`，它是命名空间标识而不是链接，也不会被请求；独立的 SVG 文件作为图片加载时缺了它浏览器不渲染。测试禁止任何 `href` 属性，不禁止这个声明。
+  - 尺寸规格名的值因商品而异（服饰为 S/M/L/XL，包袋、毛巾、水瓶为 Small/Medium/Large，充电线为 1 m / 2 m 长度），都用 `size` 这一个 code，跨商品筛选 `size:<值>` 只命中用了该值 code 的商品。
+  - 刻意的「仅英文」商品选了无规格的 `woven-storage-basket`，因此没有缺中文或马来文的规格名与规格值。
+  - 马来文由非母语者撰写，未经母语者审校（同 SHOP-TASK-001 的 Q14）。商品与品牌名均为虚构的通用描述；「无真实品牌与商标」只能由人工审阅确认，测试只能检查不含网址、邮箱与长串数字。
+  - downgrade 只保证在写入后未经后台编辑、未被其他数据引用的库上成立（CI 与开发库）；部署只执行 upgrade。示例商品在生产库经后台编辑或被之后的订单引用后，不承诺可回退。
+  - 迁移写完一层要查回 id，不支持离线 `--sql` 模式生成脚本；部署只在线 upgrade，不受影响。
+- 验证到什么程度：人工逐条对照验收标准自查。`tests/test_demo_catalog_seed.py` 用 SQLite 内存库（每个连接打开外键检查，并断言已打开）按模型建表，经 Alembic 的 `Operations` 执行迁移文件的 upgrade，再查询实际写入的行，覆盖：分类数量、顺序与启用；商品数量、启用与每分类下限；slug 与 SKU 唯一、小写且与迁移常量一致；英文齐全；只有一件商品缺中文与马来文，其余分类、规格名、规格值齐全；文案不含网址、邮箱与电话样数字串；三种规格形态各至少 3 件、每个 SKU 在每个规格名下恰好一个值、组合不重复；每件双规格商品缺一个组合，且用 SHOP-TASK-005 的 `list_products` 验证缺的两个值分别能筛出、同时筛不出；单价是整数且在范围内、不全相同；可用库存等于每日初始库存；至少一件售罄；创建时间互不相同、不带时区且早于迁移日期；每件商品恰好一张图片、引用指向所属分类且文件存在；全部商品按发布规则可列出、中文界面恰好一件回退英文；downgrade 删净示例数据的七张表、另插入的非示例分类与商品原样保留；六张 SVG 不超过 4 KB、只有 SVG 命名空间下的几何元素、无文字内容、无禁用元素与属性。这些测试及迁移在真 MySQL 上的 upgrade head、downgrade base、再 upgrade head 与 `alembic check`、前端镜像构建，都只由 PR 的必需 CI 检查 backend 与 frontend 执行，Worker 沙箱不跑。未做浏览器或视觉验证。检查命令结果由 Worker 另行记录。
