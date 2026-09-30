@@ -414,7 +414,7 @@ tasks:
     creates_branch: true
     creates_pull_request: true
 
-  # 订单数据模型，碰钱也碰个人资料（收货资料），已过设计闸门：docs/DESIGN.md 1.9（提交 2b68ad0）「数据模型」的 Order / OrderItem、
+  # 订单数据模型，碰钱也碰个人资料（收货资料），已过设计闸门：docs/DESIGN.md 1.9（提交 361d8bf）「数据模型」的 Order / OrderItem、
   # OrderRecipient、PaymentAttempt / OrderEvent 三行，「订单与退款状态」「失败、并发与重试」「权限与资料保护」「资料保留」。
   # Kelvin 2026-09-30 决定：原「模拟支付与订单状态机」拆开，本任务只建表与纯函数；订单号为 16 位随机 Crockford Base32；
   # 会员 ID、券 ID 由会员与优惠券任务各自加列。本任务引用的条款在 1.9 中未改；1.9 只改了结账身份与游客电话解析，由之后的下单任务落实。
