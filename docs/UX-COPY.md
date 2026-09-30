@@ -1,7 +1,14 @@
 # Acuven Shop 三语文案与演示提示（审阅稿）
 
-> **审阅稿，Kelvin 已于 2026-09-30 审阅，0.3 合并后可开始页面实现。**
-> 版本 0.3（2026-09-30），任务 `SHOP-TASK-008`（按 Kelvin 2026-09-30 对 0.2 的审阅意见修订 `SHOP-TASK-003` 的 0.2）。页面结构与线框见 [UX.md](UX.md)；依据 `docs/REQUIREMENTS.md` 1.8 与 `docs/DESIGN.md` 1.9（均于 2026-09-30 获 Kelvin 批准，批准记录见 `docs/HANDOFF.md` 0.19；文件抬头的「候批」字样被该记录覆盖）；Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
+> **审阅稿。0.3 的内容 Kelvin 已于 2026-09-30 审阅；0.4 新增的文案键候审，审阅通过前以 0.3 为准。**
+> 版本 0.4（2026-09-30），运营者修订（Claude Code），在 `SHOP-TASK-008` 的 0.3 上增补店铺装修与视觉稿审阅所需的文案键。页面结构与线框见 [UX.md](UX.md)；依据 `docs/REQUIREMENTS.md` 1.9 候批稿（店铺装修、多规格起价显示、游客结账摘要；其余条款同 1.8）与 `docs/DESIGN.md` 1.9（2026-09-30 获 Kelvin 批准，批准记录见 `docs/HANDOFF.md` 0.19）；Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
+
+## 0.4 修订要点
+
+- 新增 `detail.a11y_image`（P03 缩略图与手机主图的读屏标签）。
+- 新增后台 A08 店铺装修的文案键：`admin.nav_store_design`、`admin.design_demo_note`、`admin.theme`、10 款主题名 `admin.theme_*`、`admin.theme_dark_note`、`admin.preview`、`admin.preview_light`、`admin.preview_dark`、`admin.accent`、`admin.accent_option`、`admin.accent_hint`、`admin.logo`、`admin.logo_hint`、`admin.logo_remove`、`admin.home_blocks`、`admin.block_hero`、`admin.block_show`、`admin.block_move_up`、`admin.block_move_down`、`admin.home_blocks_hint`、`admin.design_saved`。首页其余三个区块在 A08 中沿用 `home.how_title`、`home.categories`、`home.featured` 作名称。
+- `list.price_from` 提示列写明：商品有多于一个启用规格时一律使用，即使各规格同价（Kelvin 2026-09-30 决定）。
+- 未改动、未删除任何已有键的文案。
 
 ## 0.3 修订要点
 
@@ -103,7 +110,7 @@
 | `list.sort_price_asc` | Price: low to high | 价格从低到高 | Harga: rendah ke tinggi | — |
 | `list.sort_price_desc` | Price: high to low | 价格从高到低 | Harga: tinggi ke rendah | — |
 | `list.results_count` | {count} products | 共 {count} 件商品 | {count} produk | — |
-| `list.price_from` | From RM {amount} | RM {amount} 起 | Dari RM {amount} | — |
+| `list.price_from` | From RM {amount} | RM {amount} 起 | Dari RM {amount} | 商品有多于一个启用规格时一律使用，即使各规格同价（0.4，Kelvin 2026-09-30 决定）；只有一个规格时用 `common.price_myr` |
 | `list.out_of_stock` | Out of stock today | 今日已售罄 | Kehabisan stok hari ini | — |
 | `list.load_more` | Load more | 加载更多 | Muat lagi | 手机 |
 | `list.empty` | No products match your search. | 没有符合条件的商品。 | Tiada produk sepadan dengan carian anda. | — |
@@ -117,6 +124,7 @@
 | `detail.select_all_options` | Please choose all options first. | 请先选择全部规格。 | Sila pilih semua pilihan dahulu. | — |
 | `detail.description` | Description | 商品描述 | Penerangan | — |
 | `detail.english_only` | English only | 仅英文 | Bahasa Inggeris sahaja | 商品文案回退英文时的标签（Q8 已决） |
+| `detail.a11y_image` | Image {n} of {count} | 第 {n} 张图，共 {count} 张 | Imej {n} daripada {count} | 读屏标签：P03 缩略图与手机主图（0.4） |
 | `detail.demo_hint` | This is a sample product. Adding it to your cart does not reserve stock. | 这是示例商品；加入购物车不会预留库存。 | Ini produk contoh. Menambahnya ke troli tidak menempah stok. | ★ |
 
 ## 4. 购物车（P04）
@@ -480,10 +488,40 @@
 | `admin.stock_reset_ok` | Completed | 已完成 | Selesai | — |
 | `admin.stock_reset_failed` | Failed — the operator has been alerted | 失败——已告警运营者 | Gagal — pengendali telah dimaklumkan | — |
 | `admin.stock_reset_note` | Resets restore today's stock only. Past orders, refunds and points are not changed. | 重置只恢复当日库存，不改动历史订单、退款与积分。 | Tetapan semula hanya memulihkan stok hari ini. Pesanan, bayaran balik dan mata lalu tidak diubah. | — |
+| `admin.nav_store_design` | Store design | 店铺装修 | Reka bentuk kedai | A08 导航与页标题（0.4） |
+| `admin.design_demo_note` | The demo banner and demo hints always show on the storefront and can't be turned off here. | 前台的演示横幅与演示提示始终显示，这里不能关闭。 | Sepanduk demo dan petunjuk demo sentiasa dipaparkan di kedai dan tidak boleh dimatikan di sini. | A08（0.4） |
+| `admin.theme` | Theme | 主题 | Tema | A08（0.4） |
+| `admin.theme_pandan` | Pandan | 班兰 | Pandan | 主题名（0.4） |
+| `admin.theme_pasar` | Pasar Pagi | 早市 | Pasar Pagi | 主题名（0.4） |
+| `admin.theme_receipt` | Receipt | 小票 | Resit | 主题名（0.4） |
+| `admin.theme_kopitiam` | Kopitiam | 咖啡店 | Kopitiam | 主题名（0.4） |
+| `admin.theme_batik` | Batik | 蜡染 | Batik | 主题名（0.4） |
+| `admin.theme_malam` | Pasar Malam | 夜市 | Pasar Malam | 主题名（0.4） |
+| `admin.theme_gula` | Gula-Gula | 糖果 | Gula-Gula | 主题名（0.4） |
+| `admin.theme_galeri` | Galeri | 画廊 | Galeri | 主题名（0.4） |
+| `admin.theme_songket` | Songket | 金线 | Songket | 主题名（0.4） |
+| `admin.theme_litar` | Litar | 电路 | Litar | 主题名（0.4） |
+| `admin.theme_dark_note` | Every theme has a light and a dark version. Visitors see the one that matches their device setting. | 每款主题都有浅色与深色，访客看到哪一种取决于其设备设置。 | Setiap tema ada versi cerah dan gelap. Pelawat melihat versi yang sepadan dengan tetapan peranti mereka. | A08（0.4） |
+| `admin.preview` | Preview | 预览 | Pratonton | A08；只在本页显示未保存的选择（0.4） |
+| `admin.preview_light` | Light | 浅色 | Cerah | A08 预览切换（0.4） |
+| `admin.preview_dark` | Dark | 深色 | Gelap | A08 预览切换（0.4） |
+| `admin.accent` | Accent colour | 主色 | Warna utama | A08（0.4） |
+| `admin.accent_option` | Colour {n} | 颜色 {n} | Warna {n} | 读屏标签：主色色块（0.4） |
+| `admin.accent_hint` | Only colours that stay readable in both light and dark mode are offered. | 只提供在浅色与深色下都清楚可读的颜色。 | Hanya warna yang kekal jelas dalam mod cerah dan gelap ditawarkan. | A08（0.4） |
+| `admin.logo` | Logo | 店铺标志 | Logo | A08（0.4） |
+| `admin.logo_hint` | Shown instead of the ACUVEN SHOP text in the storefront header and footer. | 在前台页头与页脚代替文字 ACUVEN SHOP 显示。 | Dipaparkan menggantikan teks ACUVEN SHOP pada pengepala dan pengaki kedai. | A08；格式与大小限制沿用 `admin.image_rules`（0.4） |
+| `admin.logo_remove` | Remove logo | 移除标志 | Buang logo | A08（0.4） |
+| `admin.home_blocks` | Home page blocks | 首页区块 | Blok halaman utama | A08（0.4） |
+| `admin.block_hero` | Main banner | 主视觉 | Sepanduk utama | A08 区块名；其余三块用 `home.how_title`、`home.categories`、`home.featured`（0.4） |
+| `admin.block_show` | Show | 显示 | Papar | A08 区块显隐勾选框（0.4） |
+| `admin.block_move_up` | Move up | 上移 | Alih ke atas | 读屏标签（0.4） |
+| `admin.block_move_down` | Move down | 下移 | Alih ke bawah | 读屏标签（0.4） |
+| `admin.home_blocks_hint` | Block text comes from the store's translations and can't be edited here. The demo hint on the home page always shows above these blocks. | 区块文字来自店铺的三语文案，不能在这里修改。首页的演示提示始终显示在这些区块上方。 | Teks blok datang daripada terjemahan kedai dan tidak boleh disunting di sini. Petunjuk demo di halaman utama sentiasa dipaparkan di atas blok ini. | A08（0.4） |
+| `admin.design_saved` | Saved. The storefront now uses these settings. | 已保存，前台已改用这些设置。 | Disimpan. Kedai kini menggunakan tetapan ini. | A08 保存成功（0.4） |
 
 ## 待决问题
 
-与 [UX.md](UX.md)「待决问题」同一编号、同一内容，共 19 项（Q1–Q15 编号不变，Q16–Q19 为 0.2 新增，0.3 未新增）。本稿只列出，不自行改设计或需求。状态：已决 17 项（Q1、Q2、Q5–Q19）；不再适用 2 项（Q3、Q4）；待决 0 项。Q11、Q14、Q16–Q19 依据 Kelvin 2026-09-30 的决定（记录见 `docs/HANDOFF.md`）在 0.3 转为已决。
+与 [UX.md](UX.md)「待决问题」同一编号、同一内容，共 19 项（Q1–Q15 编号不变，Q16–Q19 为 0.2 新增，0.3、0.4 未新增）。本稿只列出，不自行改设计或需求。状态：已决 17 项（Q1、Q2、Q5–Q19）；不再适用 2 项（Q3、Q4）；待决 0 项。Q11、Q14、Q16–Q19 依据 Kelvin 2026-09-30 的决定（记录见 `docs/HANDOFF.md`）在 0.3 转为已决。
 
 - **Q1 下单后支付页与结果页的访问授权。** **已决**，依据 DESIGN 1.9「权限与资料保护」：每张游客订单创建后，服务端只给当前浏览器一个不可猜测、30 分钟有效、仅限该单的短期凭据，用于该单的模拟支付、失败重试、取消与结果页，这些页面可显示该单收货资料原文，凭据不能用于确认收货、退款或其他订单；查单通过后仅对该单在本浏览器保持 30 分钟，只能查看、确认收货和申请退款，不能支付或取消；两者均为服务端会话，经 HttpOnly、Secure、SameSite=Lax 的 cookie 交付，写操作另须 CSRF 令牌。线框见 P06、P07（`[G]`）与 P08–P10（`[L]`）；0.1 中「支付/结果页不显示收货资料原文」的假设随之取消。
 - **Q2 第 30 天退款截止与收货资料删除同日。** **已决**，依据 DESIGN 1.9「资料保留」（收货资料不再删除，游客凭订单号与电话可随时查单）与「订单与退款状态」（支付成功后 30 天内可申请退款）：查单不再在第 30 天失效，两者不再冲突；退款截止时间以服务端返回的 `order.refund_deadline` 为准。
