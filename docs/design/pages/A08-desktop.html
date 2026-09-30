@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>A08 Store design — desktop</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs-admin" data-mode="light" style="width: 1440px; height: 1250px; display: flex; flex-direction: column">
+<div class="acs-admin__banner"><span class="acs-tag acs-tag--demo">DEMO</span>Admin — demo store. Actions here never move real money or goods.</div>
+<div class="acs-admin__shell" style="flex-grow: 1">
+<nav class="acs-admin__nav" aria-label="Admin"><a href="#">Orders</a><a href="#">Refunds</a><a href="#">Products</a><a href="#">Coupons</a><a href="#">Shipping &amp; demo rates</a><a href="#">Stock resets</a><a href="#" aria-current="page">Store design</a></nav>
+<main class="acs-admin__main" style="grid-template-columns: minmax(0, 1fr) 460px; column-gap: 24px; align-items: start">
+<div style="display: grid; gap: 16px">
+<h1 class="acs-admin__h">Store design</h1>
+<div style="display: flex; gap: 8px; padding: 10px 12px; border-radius: 4px; background: var(--demo-soft); color: var(--on-demo-soft); font-size: 13px"><svg width="14" height="14" viewBox="0 0 24 24" style="flex-shrink: 0; margin-top: 2px; fill: var(--demo-mark)" aria-hidden="true"><path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"></path></svg>The demo banner and demo hints always show on the storefront and can't be turned off here.</div>
+
+<fieldset class="acs-admin__panel" style="margin: 0; display: grid; gap: 12px; padding: 18px">
+<legend style="font-weight: 600; padding: 0 4px">Theme</legend>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<label style="display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--a-line); border-radius: 4px"><input type="radio" name="t" style="width: 16px; height: 16px"><span class="acs" data-shop-theme="pandan" style="display: flex; gap: 0; border-radius: 4px; overflow: hidden; background: transparent"><span style="width: 18px; height: 22px; background: var(--surface-alt)"></span><span style="width: 18px; height: 22px; background: var(--accent)"></span><span style="width: 18px; height: 22px; background: var(--demo)"></span></span>Pandan</label>
+<label style="display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--a-line); border-radius: 4px"><input type="radio" name="t" style="width: 16px; height: 16px"><span class="acs" data-shop-theme="pasar" style="display: flex; border-radius: 4px; overflow: hidden; background: transparent"><span style="width: 18px; height: 22px; background: var(--surface-alt)"></span><span style="width: 18px; height: 22px; background: var(--accent)"></span><span style="width: 18px; height: 22px; background: var(--demo)"></span></span>Pasar Pagi</label>
+<label style="display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--a-line); border-radius: 4px"><input type="radio" name="t" style="width: 16px; height: 16px"><span class="acs" data-shop-theme="receipt" style="display: flex; border-radius: 4px; overflow: hidden; background: transparent"><span style="width: 18px; height: 22px; background: var(--surface-alt)"></span><span style="width: 18px; height: 22px; background: var(--accent)"></span><span style="width: 18px; height: 22px; background: var(--demo)"></span></span>Receipt</label>
+<label style="display: flex; gap: 10px; align-items: center; padding: 10px; border: 2px solid var(--a-accent); border-radius: 4px; background: var(--a-select)"><input type="radio" name="t" checked style="width: 16px; height: 16px"><span class="acs" data-shop-theme="kopitiam" style="display: flex; border-radius: 4px; overflow: hidden; background: transparent"><span style="width: 18px; height: 22px; background: var(--surface-alt)"></span><span style="width: 18px; height: 22px; background: var(--accent)"></span><span style="width: 18px; height: 22px; background: var(--demo)"></span></span><strong>Kopitiam</strong></label>
+<label style="display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--a-line); border-radius: 4px"><input type="radio" name="t" style="width: 16px; height: 16px"><span class="acs" data-shop-theme="batik" style="display: flex; border-radius: 4px; overflow: hidden; background: transparent"><span style="width: 18px; height: 22px; background: var(--surface-alt)"></span><span style="width: 18px; height: 22px; background: var(--accent)"></span><span style="width: 18px; height: 22px; background: var(--demo)"></span></span>Batik</label>
+<label style="display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--a-line); border-radius: 4px"><input type="radio" name="t" style="width: 16px; height: 16px"><span class="acs" data-shop-theme="malam" style="display: flex; border-radius: 4px; overflow: hidden; background: transparent"><span style="width: 18px; height: 22px; background: var(--surface-alt)"></span><span style="width: 18px; height: 22px; background: var(--accent)"></span><span style="width: 18px; height: 22px; background: var(--demo)"></span></span>Pasar Malam</label>
+<label style="display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--a-line); border-radius: 4px"><input type="radio" name="t" style="width: 16px; height: 16px"><span class="acs" data-shop-theme="gula" style="display: flex; border-radius: 4px; overflow: hidden; background: transparent"><span style="width: 18px; height: 22px; background: var(--surface-alt)"></span><span style="width: 18px; height: 22px; background: var(--accent)"></span><span style="width: 18px; height: 22px; background: var(--demo)"></span></span>Gula-Gula</label>
+<label style="display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--a-line); border-radius: 4px"><input type="radio" name="t" style="width: 16px; height: 16px"><span class="acs" data-shop-theme="galeri" style="display: flex; border-radius: 4px; overflow: hidden; background: transparent"><span style="width: 18px; height: 22px; background: var(--surface-alt)"></span><span style="width: 18px; height: 22px; background: var(--accent)"></span><span style="width: 18px; height: 22px; background: var(--demo)"></span></span>Galeri</label>
+<label style="display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--a-line); border-radius: 4px"><input type="radio" name="t" style="width: 16px; height: 16px"><span class="acs" data-shop-theme="songket" style="display: flex; border-radius: 4px; overflow: hidden; background: transparent"><span style="width: 18px; height: 22px; background: var(--surface-alt)"></span><span style="width: 18px; height: 22px; background: var(--accent)"></span><span style="width: 18px; height: 22px; background: var(--demo)"></span></span>Songket</label>
+<label style="display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--a-line); border-radius: 4px"><input type="radio" name="t" style="width: 16px; height: 16px"><span class="acs" data-shop-theme="litar" style="display: flex; border-radius: 4px; overflow: hidden; background: transparent"><span style="width: 18px; height: 22px; background: var(--surface-alt)"></span><span style="width: 18px; height: 22px; background: var(--accent)"></span><span style="width: 18px; height: 22px; background: var(--demo)"></span></span>Litar</label>
+</div>
+<span class="acs-admin__muted" style="font-size: 13px">Every theme has a light and a dark version. Visitors see the one that matches their device setting.</span>
+</fieldset>
+
+<fieldset class="acs-admin__panel" style="margin: 0; display: grid; gap: 12px; padding: 18px">
+<legend style="font-weight: 600; padding: 0 4px">Accent colour</legend>
+<div style="display: flex; gap: 12px">
+<label aria-label="Colour 1" style="display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--a-accent)"><input type="radio" name="a" checked style="position: absolute; opacity: 0"><span class="acs" data-shop-theme="kopitiam" style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent)"></span></label>
+<label aria-label="Colour 2" style="display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 2px solid transparent"><input type="radio" name="a" style="position: absolute; opacity: 0"><span class="acs" data-shop-theme="kopitiam" data-accent="teh" style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent)"></span></label>
+<label aria-label="Colour 3" style="display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 2px solid transparent"><input type="radio" name="a" style="position: absolute; opacity: 0"><span class="acs" data-shop-theme="kopitiam" data-accent="tile" style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent)"></span></label>
+<label aria-label="Colour 4" style="display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; border: 2px solid transparent"><input type="radio" name="a" style="position: absolute; opacity: 0"><span class="acs" data-shop-theme="kopitiam" data-accent="red" style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent)"></span></label>
+</div>
+<span class="acs-admin__muted" style="font-size: 13px">Only colours that stay readable in both light and dark mode are offered.</span>
+</fieldset>
+
+<fieldset class="acs-admin__panel" style="margin: 0; display: grid; gap: 12px; padding: 18px">
+<legend style="font-weight: 600; padding: 0 4px">Logo</legend>
+<div style="display: flex; gap: 12px; align-items: center"><span style="padding: 10px 14px; border: 1px dashed var(--a-border); border-radius: 4px; font-family: 'Young Serif', Georgia, serif; letter-spacing: 0.06em">ACUVEN SHOP</span><button class="acs-admin__btn acs-admin__btn--secondary" type="button">Upload</button><button class="acs-admin__btn acs-admin__btn--secondary" type="button" disabled>Remove logo</button></div>
+<span class="acs-admin__muted" style="font-size: 13px">Shown instead of the ACUVEN SHOP text in the storefront header and footer. Allowed types: [TYPES]. Max size: [SIZE] MB.</span>
+</fieldset>
+
+<fieldset class="acs-admin__panel" style="margin: 0; display: grid; gap: 4px; padding: 18px">
+<legend style="font-weight: 600; padding: 0 4px">Home page blocks</legend>
+<div style="display: grid; grid-template-columns: 24px 1fr auto auto; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--a-line)"><span class="acs-admin__muted">1</span><span>Main banner</span><label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" checked style="width: 16px; height: 16px">Show</label><span style="display: flex; gap: 4px"><button class="acs-admin__btn acs-admin__btn--secondary" type="button" aria-label="Move up" disabled>↑</button><button class="acs-admin__btn acs-admin__btn--secondary" type="button" aria-label="Move down">↓</button></span></div>
+<div style="display: grid; grid-template-columns: 24px 1fr auto auto; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--a-line)"><span class="acs-admin__muted">2</span><span>How this demo works</span><label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" checked style="width: 16px; height: 16px">Show</label><span style="display: flex; gap: 4px"><button class="acs-admin__btn acs-admin__btn--secondary" type="button" aria-label="Move up">↑</button><button class="acs-admin__btn acs-admin__btn--secondary" type="button" aria-label="Move down">↓</button></span></div>
+<div style="display: grid; grid-template-columns: 24px 1fr auto auto; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--a-line)"><span class="acs-admin__muted">3</span><span>Featured demo products</span><label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" checked style="width: 16px; height: 16px">Show</label><span style="display: flex; gap: 4px"><button class="acs-admin__btn acs-admin__btn--secondary" type="button" aria-label="Move up">↑</button><button class="acs-admin__btn acs-admin__btn--secondary" type="button" aria-label="Move down">↓</button></span></div>
+<div style="display: grid; grid-template-columns: 24px 1fr auto auto; gap: 12px; align-items: center; padding: 8px 0"><span class="acs-admin__muted">4</span><span class="acs-admin__muted">Shop by category</span><label style="display: flex; gap: 6px; align-items: center"><input type="checkbox" style="width: 16px; height: 16px">Show</label><span style="display: flex; gap: 4px"><button class="acs-admin__btn acs-admin__btn--secondary" type="button" aria-label="Move up">↑</button><button class="acs-admin__btn acs-admin__btn--secondary" type="button" aria-label="Move down" disabled>↓</button></span></div>
+<span class="acs-admin__muted" style="font-size: 13px; padding-top: 8px">Block text comes from the store's translations and can't be edited here. The demo hint on the home page always shows above these blocks.</span>
+</fieldset>
+
+<div style="display: flex; gap: 12px; align-items: center"><button class="acs-admin__btn" type="submit">Save</button></div>
+</div>
+
+<aside class="acs-admin__panel" style="display: grid; gap: 12px; padding: 16px">
+<div style="display: flex; justify-content: space-between; align-items: center"><span style="font-weight: 600">Preview</span><span style="display: flex; gap: 4px"><button class="acs-admin__btn" type="button">Light</button><button class="acs-admin__btn acs-admin__btn--secondary" type="button">Dark</button></span></div>
+<div class="acs" data-shop-theme="kopitiam" data-mode="light" style="border: 1px solid var(--a-line); border-radius: 4px; overflow: hidden; font-size: 13px">
+<div class="acs-banner" style="font-size: 12px; min-height: 32px"><span class="acs-tag acs-tag--demo">DEMO</span><span>Demo only — no real transactions</span></div>
+<div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--rule)"><span class="acs-brand" style="font-size: calc(16px * var(--display-scale))">ACUVEN SHOP</span><span style="font-weight: 600">Cart (0)</span></div>
+<div style="display: grid; gap: 12px; padding: 14px">
+<p class="acs-hint" style="margin: 0; font-size: 12px"><svg class="acs-hint__mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"></path></svg><span>Products, prices and stock are samples. Stock resets every day.</span></p>
+<div style="display: grid; gap: 10px; padding: 16px; border-radius: var(--radius-card); background: var(--surface-alt)"><span class="acs-display-s" style="font-size: calc(22px * var(--display-scale))">Try a complete online store, end to end</span><span class="acs-btn acs-btn--primary acs-btn--sm" style="justify-self: start">Start shopping</span></div>
+<span style="font-family: var(--font-display); font-size: 16px">How this demo works</span>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<span class="acs-pcard"><span class="acs-pcard__img" style="aspect-ratio: 1 / 1"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="ph-fill" d="M32 14 L14 26 L6 44 L22 50 L24 90 L76 90 L78 50 L94 44 L86 26 L68 14 Q50 28 32 14Z"></path></svg></span><span>Crew Neck Tee</span><span class="acs-pcard__price">From RM 39.00</span></span>
+<span class="acs-pcard"><span class="acs-pcard__img" style="aspect-ratio: 1 / 1; background: var(--tile-alt)"><svg viewBox="0 0 100 100" aria-hidden="true"><rect class="ph-fill" x="18" y="22" width="52" height="64" rx="9"></rect><path d="M70 36 h8 a10 10 0 0 1 10 10 v10 a10 10 0 0 1 -10 10 h-8" fill="none" stroke="currentColor" stroke-width="6"></path></svg></span><span>Ceramic Mug</span><span class="acs-pcard__price">From RM 22.00</span></span>
+</div>
+</div>
+</div>
+</aside>
+</main>
+</div>
+</div>
+</body>
+</html>

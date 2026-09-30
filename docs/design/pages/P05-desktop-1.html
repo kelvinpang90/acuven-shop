@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>P05 Checkout step 1 — desktop</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs" data-shop-theme="pandan" data-mode="light" style="width: 1440px; height: 1080px; display: flex; flex-direction: column; overflow: hidden">
+
+<div class="acs-banner" style="--gutter: 80px"><span class="acs-tag acs-tag--demo">DEMO</span><span>Demo store — no real payments, shipping or refunds.</span></div>
+<header class="acs-header" style="--gutter: 80px">
+<div class="acs-header__row"><a class="acs-brand" href="#">ACUVEN SHOP</a><form class="acs-search" role="search"><input class="acs-input" type="search" aria-label="Search products" placeholder="Search products"><button class="acs-btn acs-btn--secondary" type="submit">Search</button></form><nav class="acs-lang" aria-label="Language" style="margin-left: auto"><a href="#" aria-current="true">English</a><a href="#">中文</a><a href="#">Bahasa Melayu</a></nav></div>
+<div class="acs-header__row"><nav class="acs-nav"><a href="#">Shop</a><a href="#">Track order</a></nav><nav class="acs-nav" style="margin-left: auto"><a href="#">Log in</a><a href="#">Cart (3)</a></nav></div>
+</header>
+
+<div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 56px 80px 32px">
+<h1 class="acs-display-l">Checkout</h1>
+<p class="acs-hint" style="margin: 0"><svg class="acs-hint__mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"></path></svg><span>Everything on this page is a demo. Shipping fees are samples set per country.</span></p>
+</div>
+
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 64px; align-items: start; padding: 0 80px 96px">
+<section style="display: grid; gap: 22px; max-width: 640px">
+<h2 class="acs-display-s">Your mobile number</h2>
+<div class="acs-hint acs-hint--block"><span>Malaysian (+60) and Singapore (+65) numbers will receive a verification SMS and be registered as a member automatically (or logged in if already registered). Your mobile number is kept until you delete your account, which you can do anytime in My account. Other numbers check out as a guest without SMS.</span><a href="#">How we handle your details</a></div>
+<div class="acs-field"><label class="acs-field__label" for="ph">Mobile number</label><div class="acs-phone"><select class="acs-select" aria-label="Country code"><option>+60</option><option>+65</option><option>+44</option></select><input class="acs-input" id="ph" inputmode="tel" value="12 000 0001"></div><span class="acs-field__hint">Choose the country code, or start with + to type it yourself.</span></div>
+<button class="acs-btn acs-btn--primary" type="button" style="justify-self: start">Continue</button>
+<a href="#" style="justify-self: start">Already set a password? Log in</a>
+</section>
+
+<aside class="acs-summary">
+<h2 class="acs-display-s acs-summary__title">Order summary</h2>
+<div class="acs-row acs-body-s"><span>Crew Neck Tee / Black, M × 2</span><span>RM 78.00</span></div>
+<div class="acs-row acs-body-s"><span>Soy Wax Candle × 1</span><span>RM 32.00</span></div>
+<div class="acs-row" style="padding-top: 10px; border-top: 1px solid var(--rule)"><span>Item subtotal</span><span>RM 110.00</span></div>
+<p class="acs-body-s acs-muted" style="margin: 0">Shipping is calculated at checkout.</p>
+</aside>
+</div>
+
+<footer class="acs-footer" style="--gutter: 80px; margin-top: auto; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: center">
+<div style="display: grid; gap: 12px"><span class="acs-brand" style="color: var(--on-footer)">ACUVEN SHOP</span><p class="acs-body-s" style="margin: 0; max-width: 42em">Acuven demo store for showcasing online store solutions. All products, prices, stock, payments, shipping and refunds are simulated.</p><a href="#" style="font-weight: 600">Privacy</a></div>
+<a class="acs-btn acs-btn--secondary" href="#" style="justify-self: end"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M4 20l1.4-4A8 8 0 1 1 8 18.6z"></path></svg>Interested in a store like this? Chat with Acuven on WhatsApp</a>
+</footer>
+
+</div>
+</body>
+</html>

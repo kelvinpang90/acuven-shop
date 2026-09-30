@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>A02 Orders and simulated shipping — desktop</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs-admin" data-mode="light" style="width: 1440px; height: 900px; display: flex; flex-direction: column">
+<div class="acs-admin__banner"><span class="acs-tag acs-tag--demo">DEMO</span>Admin — demo store. Actions here never move real money or goods.</div>
+<div class="acs-admin__shell" style="flex-grow: 1">
+<nav class="acs-admin__nav" aria-label="Admin"><a href="#" aria-current="page">Orders</a><a href="#">Refunds</a><a href="#">Products</a><a href="#">Coupons</a><a href="#">Shipping &amp; demo rates</a><a href="#">Stock resets</a><a href="#">Store design</a>
+<span style="margin-top: auto; display: flex; gap: 10px; padding: 12px; font-size: 12px"><a href="#" style="padding: 0; color: var(--a-on-nav)">English</a><a href="#" style="padding: 0">中文</a><a href="#" style="padding: 0">Bahasa Melayu</a></span></nav>
+<main class="acs-admin__main" style="grid-template-columns: minmax(0, 1fr) 520px; column-gap: 24px; align-items: start">
+<div style="display: grid; gap: 16px">
+<h1 class="acs-admin__h">Orders</h1>
+<div style="display: flex; gap: 8px"><input class="acs-admin__input" type="search" aria-label="Search by order number" placeholder="Search by order number" style="width: 280px"><select class="acs-admin__select" aria-label="Status"><option>Status</option></select></div>
+<div class="acs-admin__panel" style="overflow-x: auto">
+<table class="acs-admin__table"><thead><tr><th>Order number</th><th>Date</th><th>Status</th><th style="text-align: right">Total (MYR)</th><th>Refunds</th></tr></thead>
+<tbody>
+<tr aria-selected="true"><td>K7Q2-9MXA</td><td>30 Sep 2026</td><td><span class="acs-tag acs-tag--neutral">Paid (demo)</span></td><td style="text-align: right">RM 103.00</td><td class="acs-admin__muted">—</td></tr>
+<tr><td>B6TN-2RJD</td><td>30 Sep 2026</td><td><span class="acs-tag acs-tag--neutral">Paid (demo)</span></td><td style="text-align: right">RM 135.00</td><td class="acs-admin__muted">—</td></tr>
+<tr><td>H3PZ-4W8C</td><td>12 Sep 2026</td><td><span class="acs-tag acs-tag--neutral">Completed (demo)</span></td><td style="text-align: right">RM 42.00</td><td>1 pending</td></tr>
+<tr><td>M8XR-7KQE</td><td>11 Sep 2026</td><td><span class="acs-tag acs-tag--outline">Cancelled (demo)</span></td><td style="text-align: right">RM 59.00</td><td class="acs-admin__muted">—</td></tr>
+</tbody></table>
+</div>
+</div>
+
+<section class="acs-admin__panel" style="display: grid; gap: 18px; padding: 20px">
+<h2 class="acs-admin__h" style="font-size: 17px">Order details · K7Q2-9MXA</h2>
+<div style="display: grid; gap: 8px"><span class="acs-admin__muted" style="font-size: 12px; font-weight: 600">Items</span>
+<div style="display: flex; justify-content: space-between"><span>Crew Neck Tee / Black, M × 2</span><span>RM 67.37</span></div>
+<div style="display: flex; justify-content: space-between"><span>Soy Wax Candle × 1</span><span>RM 27.63</span></div></div>
+<div style="display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--a-line)"><span class="acs-admin__muted" style="font-size: 12px; font-weight: 600">Amount details</span>
+<div style="display: flex; justify-content: space-between"><span>Item subtotal</span><span>RM 110.00</span></div>
+<div style="display: flex; justify-content: space-between"><span>Coupon discount</span><span>RM 10.00</span></div>
+<div style="display: flex; justify-content: space-between"><span>Points discount</span><span>RM 5.00</span></div>
+<div style="display: flex; justify-content: space-between"><span>Sample shipping</span><span>RM 8.00</span></div>
+<div style="display: flex; justify-content: space-between; font-weight: 700"><span>Total (MYR)</span><span>RM 103.00</span></div></div>
+<div style="display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--a-line)"><span class="acs-admin__muted" style="font-size: 12px; font-weight: 600">Shipping details (original)</span>
+<span>Aina Rahman · +60 12 000 0001</span><span>12 Jalan Contoh 3, Taman Demo, 47000, Selangor, Malaysia</span>
+<span class="acs-admin__muted" style="font-size: 12px">Viewing these details is recorded in the audit log.</span></div>
+<div style="display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--a-line)">
+<div style="display: flex; gap: 8px"><button class="acs-admin__btn" type="button">Mark as packed (demo)</button><button class="acs-admin__btn acs-admin__btn--secondary" type="button" disabled>Mark as shipped (demo)</button></div>
+<div style="display: flex; gap: 8px; padding: 8px 10px; border-radius: 4px; background: var(--demo-soft); color: var(--on-demo-soft); font-size: 13px"><svg width="14" height="14" viewBox="0 0 24 24" style="flex-shrink: 0; margin-top: 2px; fill: var(--demo-mark)" aria-hidden="true"><path d="M12 3l9 9-9 9-9-9z"></path></svg>No real parcel or courier booking is created.</div>
+</div>
+<div style="display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--a-line)"><span class="acs-admin__muted" style="font-size: 12px; font-weight: 600">Event log</span>
+<table class="acs-admin__table" style="font-size: 13px"><thead><tr><th>Time</th><th>Event</th><th>By</th></tr></thead><tbody>
+<tr><td>30 Sep 2026 14:02</td><td>Awaiting demo payment</td><td>Customer</td></tr>
+<tr><td>30 Sep 2026 14:05</td><td>Paid (demo)</td><td>Customer</td></tr>
+</tbody></table></div>
+</section>
+</main>
+</div>
+</div>
+</body>
+</html>

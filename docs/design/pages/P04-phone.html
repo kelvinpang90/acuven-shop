@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390">
+<title>P04 Cart — phone</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs acs--phone" data-shop-theme="pandan" data-mode="light" style="width: 390px; height: 890px; display: flex; flex-direction: column; overflow: hidden">
+
+<div class="acs-banner"><span class="acs-tag acs-tag--demo">DEMO</span><span>Demo only — no real transactions</span></div>
+<header class="acs-header" style="gap: 10px; padding-top: 6px">
+<div class="acs-header__row" style="gap: 4px; flex-wrap: nowrap"><button class="acs-btn acs-btn--quiet" type="button" aria-label="Menu" style="color: var(--ink); padding: 0; min-width: 44px; margin-left: -10px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></button><a class="acs-brand" href="#" style="font-size: calc(18px * var(--display-scale))">ACUVEN SHOP</a><button class="acs-btn acs-btn--quiet" type="button" style="margin-left: auto; color: var(--ink); text-decoration: none; font-weight: 500; font-size: 14px; padding: 0 6px">English ▾</button><a href="#" style="color: var(--ink); font-weight: 600; font-size: 14px; text-decoration: none">Cart (3)</a></div>
+<input class="acs-input" type="search" aria-label="Search products" placeholder="Search products">
+</header>
+
+<section style="display: grid; gap: 16px; padding: 28px 16px 24px">
+<h1 class="acs-display-l">Your cart</h1>
+<p class="acs-hint" style="margin: 0"><svg class="acs-hint__mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"></path></svg><span>Your cart is saved in this browser only. Nothing is charged.</span></p>
+<div style="display: grid">
+<div style="display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 14px; padding: 16px 0; border-top: 1px solid var(--rule)">
+<span style="display: grid; place-items: center; aspect-ratio: 1 / 1; border-radius: var(--radius-tile); background: var(--tile)"><svg viewBox="0 0 100 100" style="width: 60%" aria-hidden="true"><path class="ph-fill" d="M32 14 L14 26 L6 44 L22 50 L24 90 L76 90 L78 50 L94 44 L86 26 L68 14 Q50 28 32 14Z"></path></svg></span>
+<div style="display: grid; gap: 6px"><span style="font-weight: 600">Crew Neck Tee</span><span class="acs-body-s acs-muted">Black / M</span><div style="display: flex; justify-content: space-between; align-items: center"><div class="acs-stepper"><button type="button" aria-label="Decrease quantity">−</button><output>2</output><button type="button" aria-label="Increase quantity">+</button></div><span class="acs-price">RM 78.00</span></div><button class="acs-btn acs-btn--quiet" type="button" style="justify-self: start">Remove</button></div>
+</div>
+<div style="display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 14px; padding: 16px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule)">
+<span style="display: grid; place-items: center; aspect-ratio: 1 / 1; border-radius: var(--radius-tile); background: var(--tile-alt)"><svg viewBox="0 0 100 100" style="width: 60%" aria-hidden="true"><rect class="ph-fill" x="30" y="40" width="40" height="48" rx="7"></rect><path class="ph-ink" d="M50 16 C43 27 45 34 50 34 C55 34 57 27 50 16Z"></path></svg></span>
+<div style="display: grid; gap: 6px"><span style="font-weight: 600">Soy Wax Candle</span><div style="display: flex; justify-content: space-between; align-items: center"><div class="acs-stepper"><button type="button" aria-label="Decrease quantity" disabled>−</button><output>1</output><button type="button" aria-label="Increase quantity">+</button></div><span class="acs-price">RM 32.00</span></div><button class="acs-btn acs-btn--quiet" type="button" style="justify-self: start">Remove</button></div>
+</div>
+</div>
+<p class="acs-body-s acs-muted" style="margin: 0">Shipping is calculated at checkout.</p>
+<p class="acs-body-s acs-muted" style="margin: 0">Prices and stock are confirmed at checkout.</p>
+</section>
+
+<div style="margin-top: auto; display: grid; gap: 10px; padding: 14px 16px 20px; background: var(--surface-raised); border-top: 1px solid var(--rule); box-shadow: 0 -12px 32px -24px rgba(0, 0, 0, 0.5)">
+<div class="acs-row"><span>Item subtotal</span><span class="acs-price">RM 110.00</span></div>
+<a class="acs-btn acs-btn--primary acs-btn--block" href="#">Check out</a>
+</div>
+
+</div>
+</body>
+</html>

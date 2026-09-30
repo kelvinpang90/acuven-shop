@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>P03 Product detail — desktop</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs" data-shop-theme="pandan" data-mode="light" style="width: 1440px; height: 1620px; display: flex; flex-direction: column; overflow: hidden">
+
+<div class="acs-banner" style="--gutter: 80px"><span class="acs-tag acs-tag--demo">DEMO</span><span>Demo store — no real payments, shipping or refunds.</span></div>
+<header class="acs-header" style="--gutter: 80px">
+<div class="acs-header__row"><a class="acs-brand" href="#">ACUVEN SHOP</a><form class="acs-search" role="search"><input class="acs-input" type="search" aria-label="Search products" placeholder="Search products"><button class="acs-btn acs-btn--secondary" type="submit">Search</button></form><nav class="acs-lang" aria-label="Language" style="margin-left: auto"><a href="#" aria-current="true">English</a><a href="#">中文</a><a href="#">Bahasa Melayu</a></nav></div>
+<div class="acs-header__row"><nav class="acs-nav"><a href="#" aria-current="page">Shop</a><a href="#">Track order</a></nav><nav class="acs-nav" style="margin-left: auto"><a href="#">Log in</a><a href="#">Cart (0)</a></nav></div>
+</header>
+
+<nav aria-label="Breadcrumb" class="acs-body-s" style="display: flex; gap: 8px; padding: 28px 80px 0; color: var(--ink-muted)"><a href="#">Shop</a><span aria-hidden="true">/</span><a href="#">Apparel</a><span aria-hidden="true">/</span><span style="color: var(--ink)">Crew Neck Tee</span></nav>
+
+<section style="display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 32px; padding: 28px 80px 0">
+<div style="grid-column: span 7; display: grid; gap: 16px; align-content: start">
+<div style="display: grid; place-items: center; aspect-ratio: 1 / 1; border-radius: var(--radius-tile); background: var(--tile)"><svg viewBox="0 0 100 100" style="width: 60%" aria-hidden="true"><path class="ph-fill" d="M32 14 L14 26 L6 44 L22 50 L24 90 L76 90 L78 50 L94 44 L86 26 L68 14 Q50 28 32 14Z"></path></svg></div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+<span style="display: grid; place-items: center; aspect-ratio: 1 / 1; border: 2px solid var(--accent); border-radius: var(--radius-tile); background: var(--tile)"><svg viewBox="0 0 100 100" style="width: 56%" aria-hidden="true"><path class="ph-fill" d="M32 14 L14 26 L6 44 L22 50 L24 90 L76 90 L78 50 L94 44 L86 26 L68 14 Q50 28 32 14Z"></path></svg></span>
+<span style="display: grid; place-items: center; aspect-ratio: 1 / 1; border: 0; border-radius: var(--radius-tile); background: var(--tile-alt)"><svg viewBox="0 0 100 100" style="width: 56%" aria-hidden="true"><path class="ph-soft" d="M32 14 L14 26 L6 44 L22 50 L24 90 L76 90 L78 50 L94 44 L86 26 L68 14 Q50 28 32 14Z"></path></svg></span>
+<span style="display: grid; place-items: center; aspect-ratio: 1 / 1; border: 0; border-radius: var(--radius-tile); background: var(--tile)"><svg viewBox="0 0 100 100" style="width: 56%" aria-hidden="true"><path class="ph-ink" d="M32 14 L14 26 L6 44 L22 50 L24 90 L76 90 L78 50 L94 44 L86 26 L68 14 Q50 28 32 14Z"></path></svg></span>
+</div>
+</div>
+<div style="grid-column: 9 / span 4; display: grid; gap: 22px; align-content: start">
+<h1 class="acs-display-l">Crew Neck Tee</h1>
+<span class="acs-price acs-price--l">RM 39.00</span>
+<div style="display: grid; gap: 16px">
+<span class="acs-field__label">Choose options</span>
+<div class="acs-field"><span class="acs-body-s acs-muted">Colour</span><div class="acs-chips"><button class="acs-chip" type="button" aria-pressed="true">Black</button><button class="acs-chip" type="button" aria-pressed="false">White</button><button class="acs-chip" type="button" aria-pressed="false">Navy</button></div></div>
+<div class="acs-field"><span class="acs-body-s acs-muted">Size</span><div class="acs-chips"><button class="acs-chip" type="button" aria-pressed="false">S</button><button class="acs-chip" type="button" aria-pressed="true">M</button><button class="acs-chip" type="button" aria-pressed="false">L</button><button class="acs-chip" type="button" aria-pressed="false">XL</button></div></div>
+</div>
+<div style="display: flex; gap: 16px; align-items: center"><span class="acs-field__label">Quantity</span><div class="acs-stepper"><button type="button" aria-label="Decrease quantity" disabled>−</button><output>1</output><button type="button" aria-label="Increase quantity">+</button></div></div>
+<span class="acs-caption">20 left today (demo stock)</span>
+<button class="acs-btn acs-btn--primary acs-btn--lg acs-btn--block" type="button">Add to cart</button>
+<p class="acs-hint" style="margin: 0"><svg class="acs-hint__mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"></path></svg><span>This is a sample product. Adding it to your cart does not reserve stock.</span></p>
+</div>
+</section>
+
+<section style="display: grid; gap: 12px; padding: 64px 80px 96px; max-width: 960px">
+<h2 class="acs-display-s">Description</h2>
+<p style="margin: 0">A soft cotton tee with a relaxed fit for everyday wear.</p>
+</section>
+
+<footer class="acs-footer" style="--gutter: 80px; margin-top: auto; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: center">
+<div style="display: grid; gap: 12px"><span class="acs-brand" style="color: var(--on-footer)">ACUVEN SHOP</span><p class="acs-body-s" style="margin: 0; max-width: 42em">Acuven demo store for showcasing online store solutions. All products, prices, stock, payments, shipping and refunds are simulated.</p><a href="#" style="font-weight: 600">Privacy</a></div>
+<a class="acs-btn acs-btn--secondary" href="#" style="justify-self: end"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M4 20l1.4-4A8 8 0 1 1 8 18.6z"></path></svg>Interested in a store like this? Chat with Acuven on WhatsApp</a>
+</footer>
+
+</div>
+</body>
+</html>

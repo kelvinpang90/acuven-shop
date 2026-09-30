@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>P10 Refund request, lookup mode — desktop</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs" data-shop-theme="pandan" data-mode="light" style="width: 1440px; height: 1300px; display: flex; flex-direction: column; overflow: hidden">
+
+<div class="acs-banner" style="--gutter: 80px"><span class="acs-tag acs-tag--demo">DEMO</span><span>Demo store — no real payments, shipping or refunds.</span></div>
+<header class="acs-header" style="--gutter: 80px">
+<div class="acs-header__row"><a class="acs-brand" href="#">ACUVEN SHOP</a><form class="acs-search" role="search"><input class="acs-input" type="search" aria-label="Search products" placeholder="Search products"><button class="acs-btn acs-btn--secondary" type="submit">Search</button></form><nav class="acs-lang" aria-label="Language" style="margin-left: auto"><a href="#" aria-current="true">English</a><a href="#">中文</a><a href="#">Bahasa Melayu</a></nav></div>
+<div class="acs-header__row"><nav class="acs-nav"><a href="#">Shop</a><a href="#" aria-current="page">Track order</a></nav><nav class="acs-nav" style="margin-left: auto"><a href="#">Log in</a><a href="#">Cart (0)</a></nav></div>
+</header>
+
+<main style="width: 960px; margin: 0 auto; display: grid; gap: 24px; padding: 56px 0 96px">
+<div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap">
+<div style="display: grid; gap: 6px"><h1 class="acs-display-l">Request a demo refund</h1><span class="acs-num acs-muted">Order K7Q2-9MXA</span></div>
+<p class="acs-hint" style="margin: 0"><svg class="acs-hint__mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"></path></svg><span>Refunds are reviewed by the admin in the demo back office.</span></p>
+</div>
+<p class="acs-body-s acs-muted" style="margin: 0">You can view this order, confirm receipt and request a refund in this browser for 30 minutes after looking it up.</p>
+
+<section style="display: grid; gap: 4px">
+<h2 class="acs-display-s" style="margin-bottom: 12px">Choose items and quantities</h2>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 24px; align-items: center; padding: 16px 0; border-top: 1px solid var(--rule)">
+<span style="display: grid; gap: 4px"><span style="font-weight: 600">Crew Neck Tee / Black, M</span><span class="acs-body-s acs-muted">Amount paid (excluding points discount) <span class="acs-num">RM 67.37</span></span></span>
+<div style="display: flex; gap: 12px; align-items: center"><span class="acs-body-s">Quantity</span><div class="acs-stepper"><button type="button" aria-label="Decrease quantity" disabled>−</button><output>0</output><button type="button" aria-label="Increase quantity">+</button></div></div>
+<span class="acs-caption" style="width: 80px">Up to 2</span>
+</div>
+<div style="display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 24px; align-items: center; padding: 16px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule)">
+<span style="display: grid; gap: 4px"><span style="font-weight: 600">Soy Wax Candle</span><span class="acs-body-s acs-muted">Amount paid (excluding points discount) <span class="acs-num">RM 27.63</span></span></span>
+<div style="display: flex; gap: 12px; align-items: center"><span class="acs-body-s">Quantity</span><div class="acs-stepper"><button type="button" aria-label="Decrease quantity">−</button><output>1</output><button type="button" aria-label="Increase quantity" disabled>+</button></div></div>
+<span class="acs-caption" style="width: 80px">Up to 1</span>
+</div>
+</section>
+
+<section class="acs-summary" style="gap: 12px">
+<span class="acs-num" style="font-size: 20px; font-weight: 700">Estimated refund (demo): RM 27.63</span>
+<div style="display: flex; gap: 24px" class="acs-num"><span>Points returned: 146</span><span>Points taken back: 27</span></div>
+<p class="acs-body-s acs-muted" style="margin: 0">Points that have already expired are not returned.</p>
+<p class="acs-body-s acs-muted" style="margin: 0">Sample shipping fees are not refunded. Used coupons are not restored.</p>
+</section>
+
+<button class="acs-btn acs-btn--primary acs-btn--lg" type="button" style="justify-self: start">Submit refund request</button>
+<p class="acs-hint" style="margin: 0"><svg class="acs-hint__mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 9-9 9-9-9z"></path></svg><span>This is a simulated refund: no real money will be returned. The amount is calculated by the system from the amount paid for each item, excluding any points discount.</span></p>
+</main>
+
+<footer class="acs-footer" style="--gutter: 80px; margin-top: auto; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: center">
+<div style="display: grid; gap: 12px"><span class="acs-brand" style="color: var(--on-footer)">ACUVEN SHOP</span><p class="acs-body-s" style="margin: 0; max-width: 42em">Acuven demo store for showcasing online store solutions. All products, prices, stock, payments, shipping and refunds are simulated.</p><a href="#" style="font-weight: 600">Privacy</a></div>
+<a class="acs-btn acs-btn--secondary" href="#" style="justify-self: end"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M4 20l1.4-4A8 8 0 1 1 8 18.6z"></path></svg>Interested in a store like this? Chat with Acuven on WhatsApp</a>
+</footer>
+
+</div>
+</body>
+</html>

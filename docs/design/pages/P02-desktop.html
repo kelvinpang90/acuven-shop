@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>P02 Product list — desktop</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs" data-shop-theme="pandan" data-mode="light" style="width: 1440px; height: 2240px; display: flex; flex-direction: column; overflow: hidden">
+
+<div class="acs-banner" style="--gutter: 80px"><span class="acs-tag acs-tag--demo">DEMO</span><span>Demo store — no real payments, shipping or refunds.</span></div>
+<header class="acs-header" style="--gutter: 80px">
+<div class="acs-header__row"><a class="acs-brand" href="#">ACUVEN SHOP</a><form class="acs-search" role="search"><input class="acs-input" type="search" aria-label="Search products" placeholder="Search products"><button class="acs-btn acs-btn--secondary" type="submit">Search</button></form><nav class="acs-lang" aria-label="Language" style="margin-left: auto"><a href="#" aria-current="true">English</a><a href="#">中文</a><a href="#">Bahasa Melayu</a></nav></div>
+<div class="acs-header__row"><nav class="acs-nav"><a href="#" aria-current="page">Shop</a><a href="#">Track order</a></nav><nav class="acs-nav" style="margin-left: auto"><a href="#">Log in</a><a href="#">Cart (0)</a></nav></div>
+</header>
+
+<div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 56px 80px 32px">
+<h1 class="acs-display-l">All products</h1>
+<p class="acs-hint" style="margin: 0"><svg class="acs-hint__mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"></path></svg><span>Sample products for demonstration only; none are for real sale.</span></p>
+</div>
+
+<div style="display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 48px; padding: 0 80px 96px">
+<aside style="display: grid; gap: 28px; align-content: start">
+<h2 class="acs-display-s">Filter</h2>
+<fieldset style="margin: 0; padding: 0; border: 0; display: grid; gap: 10px"><legend class="acs-field__label" style="margin-bottom: 10px">Category</legend>
+<label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent)">Apparel</label>
+<label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent)">Bags</label>
+<label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent)">Home</label>
+<label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent)">Kitchen</label>
+<label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent)">Stationery</label>
+<label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent)">Gadgets</label>
+</fieldset>
+<fieldset style="margin: 0; padding: 0; border: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px"><legend class="acs-field__label" style="margin-bottom: 10px">Colour</legend>
+<label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent)">Black</label>
+<label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent)">White</label>
+<label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent)">Grey</label>
+<label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent)">Navy</label>
+<label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent)">Green</label>
+<label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent)">Natural</label>
+</fieldset>
+<fieldset style="margin: 0; padding: 0; border: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px"><legend class="acs-field__label" style="margin-bottom: 10px">Size</legend>
+<label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent)">S</label>
+<label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent)">M</label>
+<label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent)">L</label>
+<label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" style="width: 18px; height: 18px; accent-color: var(--accent)">XL</label>
+</fieldset>
+<button class="acs-btn acs-btn--quiet" type="button" style="justify-self: start">Clear filters</button>
+</aside>
+
+<div style="display: grid; gap: 24px; align-content: start">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 16px"><span class="acs-muted">30 products</span><div style="display: flex; gap: 10px; align-items: center"><label class="acs-field__label" for="sort">Sort</label><select class="acs-select" id="sort" style="width: 220px"><option>Newest</option><option>Price: low to high</option><option>Price: high to low</option></select></div></div>
+<div class="acs-pgrid" style="grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px 24px">
+<a class="acs-pcard" href="#"><span class="acs-pcard__img"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="ph-fill" d="M32 14 L14 26 L6 44 L22 50 L24 90 L76 90 L78 50 L94 44 L86 26 L68 14 Q50 28 32 14Z"></path></svg></span><span class="acs-pcard__name">Crew Neck Tee</span><span class="acs-pcard__price">From RM 39.00</span></a>
+<a class="acs-pcard" href="#"><span class="acs-pcard__img"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="ph-ink" d="M30 20 L12 32 L6 52 L20 56 L22 90 L78 90 L80 56 L94 52 L88 32 L70 20 Q66 6 50 6 Q34 6 30 20Z"></path><path class="ph-soft" d="M38 22 Q50 34 62 22 Q58 12 50 12 Q42 12 38 22Z"></path><rect class="ph-soft" x="36" y="62" width="28" height="12" rx="4"></rect></svg></span><span class="acs-pcard__name">Pullover Hoodie</span><span class="acs-pcard__price">From RM 89.00</span></a>
+<a class="acs-pcard" href="#"><span class="acs-pcard__img"><svg viewBox="0 0 100 100" aria-hidden="true"><path class="ph-fill" d="M36 10 h24 v44 l18 14 a12 12 0 0 1 -8 22 h-22 a12 12 0 0 1 -12 -12z"></path><rect class="ph-soft" x="36" y="16" width="24" height="6"></rect></svg></span><span class="acs-pcard__name">Ankle Socks, 3 Pairs</span><span class="acs-pcard__price">RM 15.00</span></a>
+<a class="acs-pcard" href="#"><span class="acs-pcard__img"><svg viewBox="0 0 100 100" aria-hidden="true"><rect class="ph-ink" x="24" y="28" width="52" height="62" rx="14"></rect><rect class="ph-soft" x="34" y="60" width="32" height="20" rx="6"></rect><path class="ph-ink" d="M38 30 q0-18 12-18 q12 0 12 18 h-5 q0-13 -7-13 q-7 0 -7 13z"></path></svg></span><span class="acs-pcard__name">Everyday Backpack</span><span class="acs-pcard__price">From RM 129.00</span></a>
+<a class="acs-pcard" href="#"><span class="acs-pcard__img"><svg viewBox="0 0 100 100" aria-hidden="true"><rect class="ph-fill" x="14" y="30" width="72" height="46" rx="10"></rect><path d="M20 38 h60" stroke="currentColor" stroke-width="4"></path><circle cx="78" cy="38" r="4" class="ph-ink"></circle></svg></span><span class="acs-pcard__name">Zip Pouch</span><span class="acs-pcard__price">RM 18.00</span></a>
+<a class="acs-pcard" href="#"><span class="acs-pcard__img"><svg viewBox="0 0 100 100" aria-hidden="true"><rect class="ph-fill" x="30" y="40" width="40" height="48" rx="7"></rect><path class="ph-ink" d="M50 16 C43 27 45 34 50 34 C55 34 57 27 50 16Z"></path></svg></span><span class="acs-pcard__name">Soy Wax Candle</span><span class="acs-pcard__price">RM 32.00</span></a>
+<a class="acs-pcard acs-pcard--oos" href="#"><span class="acs-pcard__img"><svg viewBox="0 0 100 100" aria-hidden="true"><rect class="ph-fill" x="22" y="18" width="56" height="70" rx="6"></rect><path d="M22 70 h56" stroke="currentColor" stroke-width="4"></path></svg></span><span class="acs-pcard__name">Cotton Bath Towel</span><span class="acs-pcard__price">From RM 29.00</span><span><span class="acs-tag acs-tag--neutral">Out of stock today</span></span></a>
+<a class="acs-pcard" href="#"><span class="acs-pcard__img"><svg viewBox="0 0 100 100" aria-hidden="true"><rect class="ph-fill" x="36" y="22" width="28" height="68" rx="10"></rect><rect class="ph-ink" x="40" y="10" width="20" height="14" rx="3"></rect></svg></span><span class="acs-pcard__name">Stainless Water Bottle</span><span class="acs-pcard__price">From RM 45.00</span></a>
+<a class="acs-pcard" href="#"><span class="acs-pcard__img"><svg viewBox="0 0 100 100" aria-hidden="true"><rect class="ph-fill" x="30" y="10" width="40" height="80" rx="9"></rect><rect class="ph-soft" x="42" y="74" width="16" height="4" rx="2"></rect></svg></span><span class="acs-pcard__name">Compact Power Bank</span><span class="acs-pcard__price">RM 89.00</span></a>
+</div>
+<div style="display: flex; justify-content: center; align-items: center; gap: 8px; padding-top: 24px">
+<button class="acs-btn acs-btn--secondary acs-btn--sm" type="button" aria-label="Previous page" disabled>‹</button>
+<button class="acs-btn acs-btn--primary acs-btn--sm" type="button" aria-current="page">1</button>
+<button class="acs-btn acs-btn--secondary acs-btn--sm" type="button">2</button>
+<button class="acs-btn acs-btn--secondary acs-btn--sm" type="button">3</button>
+<button class="acs-btn acs-btn--secondary acs-btn--sm" type="button">4</button>
+<button class="acs-btn acs-btn--secondary acs-btn--sm" type="button" aria-label="Next page">›</button>
+</div>
+</div>
+</div>
+
+<footer class="acs-footer" style="--gutter: 80px; margin-top: auto; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: center">
+<div style="display: grid; gap: 12px"><span class="acs-brand" style="color: var(--on-footer)">ACUVEN SHOP</span><p class="acs-body-s" style="margin: 0; max-width: 42em">Acuven demo store for showcasing online store solutions. All products, prices, stock, payments, shipping and refunds are simulated.</p><a href="#" style="font-weight: 600">Privacy</a></div>
+<a class="acs-btn acs-btn--secondary" href="#" style="justify-self: end"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M4 20l1.4-4A8 8 0 1 1 8 18.6z"></path></svg>Interested in a store like this? Chat with Acuven on WhatsApp</a>
+</footer>
+
+</div>
+</body>
+</html>

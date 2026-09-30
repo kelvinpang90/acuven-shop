@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390">
+<title>P09 Order detail, lookup mode — phone</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs acs--phone" data-shop-theme="pandan" data-mode="light" style="width: 390px; height: 1810px; display: flex; flex-direction: column; overflow: hidden">
+
+<div class="acs-banner"><span class="acs-tag acs-tag--demo">DEMO</span><span>Demo only — no real transactions</span></div>
+<header class="acs-header" style="gap: 10px; padding-top: 6px">
+<div class="acs-header__row" style="gap: 4px; flex-wrap: nowrap"><button class="acs-btn acs-btn--quiet" type="button" aria-label="Menu" style="color: var(--ink); padding: 0; min-width: 44px; margin-left: -10px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></button><a class="acs-brand" href="#" style="font-size: calc(18px * var(--display-scale))">ACUVEN SHOP</a><button class="acs-btn acs-btn--quiet" type="button" style="margin-left: auto; color: var(--ink); text-decoration: none; font-weight: 500; font-size: 14px; padding: 0 6px">English ▾</button><a href="#" style="color: var(--ink); font-weight: 600; font-size: 14px; text-decoration: none">Cart (0)</a></div>
+</header>
+
+<section style="display: grid; gap: 16px; padding: 28px 16px 40px">
+<h1 class="acs-display-l">Order K7Q2-9MXA</h1>
+<span style="display: flex; gap: 8px; align-items: center"><span class="acs-body-s">Status:</span><span class="acs-tag acs-tag--accent">Shipped (demo)</span></span>
+<p class="acs-hint" style="margin: 0"><svg class="acs-hint__mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"></path></svg><span>Status changes are simulated by the store admin.</span></p>
+<p class="acs-body-s" style="margin: 0">You can view this order, confirm receipt and request a refund in this browser for 30 minutes after looking it up.</p>
+<a href="#" style="font-weight: 600">Track another order</a>
+<div style="display: grid; gap: 6px"><span class="acs-field__label">Progress</span>
+<ol class="acs-progress"><li data-state="done">Awaiting demo payment</li><li data-state="done">Paid (demo)</li><li data-state="done">Packed (demo)</li><li data-state="current" aria-current="step">Shipped (demo)</li><li>Completed (demo)</li></ol></div>
+<h2 class="acs-display-s">Items</h2>
+<div style="display: grid; gap: 4px; padding: 12px 0; border-top: 1px solid var(--rule)"><span style="font-weight: 600">Crew Neck Tee / Black, M × 2</span><span class="acs-body-s acs-muted">Unit price <span class="acs-num">RM 39.00</span></span><span class="acs-body-s">Amount paid (excluding points discount) <span class="acs-price">RM 67.37</span></span></div>
+<div style="display: grid; gap: 4px; padding: 12px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule)"><span style="font-weight: 600">Soy Wax Candle × 1</span><span class="acs-body-s acs-muted">Unit price <span class="acs-num">RM 32.00</span></span><span class="acs-body-s">Amount paid (excluding points discount) <span class="acs-price">RM 27.63</span></span></div>
+<details style="border-radius: var(--radius-card); background: var(--surface-alt); padding: 12px 16px"><summary style="display: flex; justify-content: space-between; align-items: center; min-height: 32px; cursor: pointer; font-weight: 600"><span>Amount details</span><span class="acs-num">RM 103.00</span></summary></details>
+<details style="border-radius: var(--radius-card); background: var(--surface-alt); padding: 12px 16px" open><summary style="min-height: 32px; display: flex; align-items: center; font-weight: 600; cursor: pointer">Shipping details</summary><p style="margin: 8px 0 0" class="acs-body-s">Aina Rahman · +60 12 000 0001<br>12 Jalan Contoh 3, Taman Demo, 47000, Selangor, Malaysia</p></details>
+<button class="acs-btn acs-btn--primary acs-btn--block" type="button">Confirm receipt</button>
+<p class="acs-body-s acs-muted" style="margin: 0">Nothing was really delivered — confirming only moves the demo order to "Completed". If you do nothing, it completes automatically 7 days after shipping.</p>
+<a class="acs-btn acs-btn--secondary acs-btn--block" href="#">Request a refund</a>
+<p class="acs-body-s acs-muted" style="margin: 0">Refunds can be requested until 30 Oct 2026.</p>
+<span class="acs-num acs-body-s">Refunded so far (demo): RM 0.00</span>
+<span class="acs-num acs-body-s">Still refundable: RM 95.00</span>
+</section>
+
+<footer class="acs-footer" style="margin-top: auto">
+<span class="acs-brand" style="color: var(--on-footer)">ACUVEN SHOP</span>
+<p class="acs-body-s" style="margin: 0">Acuven demo store for showcasing online store solutions. All products, prices, stock, payments, shipping and refunds are simulated.</p>
+<a href="#" style="font-weight: 600">Privacy</a>
+<a class="acs-btn acs-btn--secondary acs-btn--block" href="#" style="justify-content: flex-start; text-align: left; padding: 12px 16px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M4 20l1.4-4A8 8 0 1 1 8 18.6z"></path></svg>Interested in a store like this? Chat with Acuven on WhatsApp</a>
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>A01 Admin log in — desktop</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs-admin" data-mode="light" style="width: 1440px; height: 720px; display: flex; flex-direction: column">
+<div class="acs-admin__banner"><span class="acs-tag acs-tag--demo">DEMO</span>Admin — demo store. Actions here never move real money or goods.</div>
+<main style="flex-grow: 1; display: grid; place-items: center">
+<form class="acs-admin__panel" style="width: 400px; display: grid; gap: 16px; padding: 32px">
+<div style="display: flex; justify-content: space-between; align-items: center"><h1 class="acs-admin__h">Admin log in</h1><span style="display: flex; gap: 10px; font-size: 13px"><a href="#" style="color: var(--a-ink); font-weight: 700; text-decoration: none">English</a><a href="#" style="color: var(--a-muted); text-decoration: none">中文</a><a href="#" style="color: var(--a-muted); text-decoration: none">Bahasa Melayu</a></span></div>
+<label style="display: grid; gap: 6px; font-weight: 600">Username<input class="acs-admin__input" autocomplete="username"></label>
+<label style="display: grid; gap: 6px; font-weight: 600">Password<input class="acs-admin__input" type="password" autocomplete="current-password"></label>
+<div style="display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 4px; background: var(--danger-soft); color: var(--on-danger-soft)"><span>Username or password is incorrect.</span></div>
+<button class="acs-admin__btn" type="submit" style="justify-content: center; min-height: 40px">Log in</button>
+</form>
+</main>
+</div>
+</body>
+</html>
