@@ -74,3 +74,18 @@
 - 偏离：无。未改设计、需求、交接单、`frontend/`、后端、CI 或部署配置；未写任何真实联系方式。
 - 待决问题变化：共 19 项，Q1–Q15 编号不变。已决 11 项（Q1、Q2、Q5、Q7、Q12、Q15 依据 DESIGN 1.8 小节；Q6、Q8、Q9、Q10、Q13 依据 Kelvin 2026-09-29 的决定）；Q3、Q4 因收货资料不再删除而不再适用；Q11 部分已决（1.7 起白名单号码不再用于游客订单，短信降级下单或扩大白名单时认领风险仍待 Kelvin 决定）；Q14 马来文审校仍待决。新增待决 Q16（结账第一步尚无收货国家，默认区号如何定）、Q17（会员待支付订单能否从会员中心回到支付页）、Q18（注销后手机号在备份中残留的对外措辞，承接原 Q3）、Q19（`Coupon` 无公开字段，「可用的公开券」范围）。
 - 验证到什么程度：人工逐条对照验收标准自查；用检索核对 UX.md 线框引用的文案键均在 UX-COPY 中定义（含本轮新增的 59 个键），已删除的键不再被引用；检索两份文档不再出现「DESIGN 1.6」、`://` 形式地址或邮箱，「匿名化」只出现在说明已删除或「不匿名化」的语境中。马来文未经母语者审校（Q14）；未做浏览器或视觉验证（本任务不实现页面）。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-004 商品目录数据模型与迁移
+
+- [x] 按 `docs/DESIGN.md` 1.8（提交 `2b68ad0`）「数据模型」的 Product / Variant 一行建立商品目录表：`app/db/base.py`、`app/models/catalog.py`、迁移 `alembic/versions/20260929_0002_catalog.py`（revision `0002`，down_revision `0001`），测试见 `tests/test_catalog_models.py`
+- 做了什么：`app/db/base.py` 定义声明式基类 `Base`，其 MetaData 带命名约定（`pk_<表>`、`fk_<表>_<首列>_<被引用表>`、`uq_<表>_<全部列>`、`ck_<表>_<名>`、`ix_<表>_<全部列>`，生成的名字都在 MySQL 64 字符以内），以及每张表共用的 `mysql_engine=InnoDB`、`mysql_charset=utf8mb4`；`alembic/env.py` 的 `target_metadata` 改为 `Base.metadata`。七张表如下，金额与库存一律 `Integer`，不用浮点或 Decimal：
+  - `categories`：slug（唯一 `uq_categories_slug`）、`name_en/zh/ms`（可空）、`is_active`。
+  - `products`：`category_id` → `categories.id`（ON DELETE RESTRICT，分类下有商品不能删）、slug（唯一 `uq_products_slug`）、`name_en/zh/ms`、`description_en/zh/ms`（均可空）、`is_active`、`created_at`（应用写入不带时区的 UTC）。
+  - `product_images`：`product_id` → `products.id`（CASCADE）、`storage_ref`、`sort_order`；`uq_product_images_product_id_sort_order`。不存图片内容。
+  - `product_options`（规格名）：`product_id` → `products.id`（CASCADE）、`code`、`sort_order`、`name_en/zh/ms`；`uq_product_options_product_id_code`，以及复合外键目标 `uq_product_options_id_product_id`。
+  - `product_option_values`（规格值）：`(option_id, product_id)` → `product_options(id, product_id)`（CASCADE）、`code`、`sort_order`、`name_en/zh/ms`；`uq_product_option_values_option_id_code`，以及复合外键目标 `uq_product_option_values_id_option_id_product_id`。
+  - `product_variants`（SKU 规格）：`product_id` → `products.id`（CASCADE）、`sku`（全局唯一 `uq_product_variants_sku`）、`price_sen`、`daily_initial_stock`、`available_stock`、`is_active`；检查约束 `ck_product_variants_price_sen_non_negative`、`ck_product_variants_daily_initial_stock_non_negative`、`ck_product_variants_available_stock_non_negative`（均 `>= 0`）；复合外键目标 `uq_product_variants_id_product_id`。
+  - `variant_option_values`（SKU 与规格值的关联）：主键 `(variant_id, option_value_id)`；`(variant_id, product_id)` → `product_variants(id, product_id)`（CASCADE）、`(option_value_id, option_id, product_id)` → `product_option_values(id, option_id, product_id)`（CASCADE），保证 SKU、规格名、规格值属于同一商品且规格值属于所填的规格名；`uq_variant_option_values_variant_id_option_id` 保证同一 SKU 在同一规格名下至多一个值。
+  - 所有外键的删除行为都显式写出；七张表都显式 InnoDB、utf8mb4。迁移按同样的名字逐个写出约束，downgrade 按依赖倒序删除七张表。
+- 偏离：无。未改设计。设计把「MYR 单价」与商品并列，验收标准把单价放在每个 SKU 规格上，按验收标准实现（同一商品内各 SKU 可不同价）。以下留给之后的任务：发布判断（缺少当前语言回退英文、再缺失不发布）由查询任务按三列文案判断，表里不另存；每个规格名都有值由后台维护任务校验；库存预留与每日重置、数据库会话、API 与种子数据都不在本任务。
+- 验证到什么程度：人工逐条对照验收标准与设计原句自查，并逐个核对迁移中的约束名、列类型、可空性、外键删除行为与表选项同模型按命名约定生成的一致（`alembic check` 不比较检查约束与表选项，这两项只经人工核对）。`tests/test_catalog_models.py` 用 SQLite 内存库（连接时打开外键检查）覆盖：合法关联可写入且零库存可写入（作对照）、负单价与负库存被对应的检查约束拒绝、重复 SKU、重复商品 slug、重复分类 slug、同一 SKU 在同一规格名下两个值被唯一约束拒绝、SKU 关联其他商品的规格值及规格值与规格名不匹配被外键拒绝；这些测试与迁移在真 MySQL 上的升降级与 `alembic check` 只在 PR 的必需 CI 检查 backend 中执行，Worker 沙箱不跑。检查命令结果由 Worker 另行记录。

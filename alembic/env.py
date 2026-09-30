@@ -1,19 +1,21 @@
 """Alembic environment.
 
 连接串只从 app.core.config 读（SHOP_DATABASE_URL），不写进 alembic.ini：配置只有一个入口，且不落盘。
-还没有任何模型，target_metadata 先接一个空 MetaData，好让 CI 的 `alembic check` 从现在起就能跑；
-第一个建表的编号任务把它换成模型的 metadata。
+target_metadata 是模型的 metadata，CI 的 `alembic check` 据此比对模型与迁移；
+`from app import models` 只为把全部模型登记到 Base.metadata。
 """
 
 from __future__ import annotations
 
-from sqlalchemy import MetaData, engine_from_config, pool
+from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+from app import models  # noqa: F401
 from app.core.config import get_settings
+from app.db.base import Base
 
 config = context.config
-target_metadata = MetaData()
+target_metadata = Base.metadata
 
 
 def _database_url() -> str:
