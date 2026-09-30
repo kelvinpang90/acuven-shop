@@ -116,7 +116,7 @@ DESIGN 1.9「权限与资料保护」：注册、短信登录与结账验证是�
 | 错误（不降级，留在本组件）：[auth.challenge_failed] / [auth.code_wrong] / |
 |   [auth.code_too_many] / [common.rate_limited]                        |
 | 号码不在白名单：                                                        |
-|   注册 / 短信登录 → [auth.not_supported_country] ([auth.continue_guest]) |
+|   注册 / 短信登录 → [auth.not_supported_country]                       |
 |   重设密码 / 注销确认 → [auth.sms_not_sent_no_change]（无游客文字与按钮） |
 | 短信无法送达或停发（服务端判定）：                                       |
 |   结账验证 → 见 P05 [checkout.sms_unavailable]                         |

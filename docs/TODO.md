@@ -176,7 +176,7 @@
   - Q18：`privacy.member_backup` 三语改写为注销前产生的手机号与密码哈希副本可能在数据库备份中保留一段尚未确定的时间，不写天数、不暗示一定清除；P14 线框去掉草稿标注，P13、P14 表格同步。
   - Q19：Q19 正文、P13 说明与 M3 行、A05 演示提示与 `admin.coupon_listed_note` 三语统一为所有启用中且在有效期内的券对全部会员相同列出，不按每会员或总次数上限过滤；不改数据模型。
   - Q11、Q14：标为已决；Q11 不改文案；Q14 在「约定」与正文写明马来文先上线、上线后由母语者审校，马来文仍标为草稿，不再是页面实现前置条件。
-  - V1 用于重设密码与注销确认时，短信发送失败或号码不在白名单改显示新键 `auth.sms_not_sent_no_change`，不显示游客文字或 `auth.continue_guest`；V1 线框、P12、P13 同步；结账、注册、短信登录不变（`auth.not_supported_country`、`auth.sms_failed`、`auth.continue_guest` 的提示列改为只用于注册与短信登录，措辞不变）。
+  - V1 用于重设密码与注销确认时，短信发送失败或号码不在白名单改显示新键 `auth.sms_not_sent_no_change`，不显示游客文字或 `auth.continue_guest`；V1 线框、P12、P13 同步；结账、注册、短信登录不变（`auth.not_supported_country`、`auth.sms_failed`、`auth.continue_guest` 的提示列改为只用于注册与短信登录，措辞不变）。修订第 1 轮：V1 线框「号码不在白名单」的注册 / 短信登录一行曾误加 `([auth.continue_guest])`，已恢复为 0.2 的只显示 `[auth.not_supported_country]`；P11 线框与说明中该按钮在号码不在白名单时出现的写法是 0.2 原有内容，本任务未改，V1 与 P11 在这一点上的差异沿用 0.2，留待后续统一。
   - P12 忘记密码：未注册号码通过短信验证后不创建账号，显示新键 `auth.reset_not_registered` 与去 P11 的 `common.nav_register`；V1 用途表、P12 桌面与手机线框、说明、去向同步。
   - 文案：`privacy.browser_access` 三语改写为本浏览器获得该单 30 分钟的访问，30 分钟后或在其他浏览器须凭订单号和电话重新查单；`order.cash_paid`、`refund.submit_hint` 三语改为「实付金额（不含积分抵扣）」一类说法；`account.points_pending` 中文改为「退款后尚欠积分」；`home.how_2` 三语改为马新号码经短信验证以会员继续、其他号码以游客结账。`admin.refund_amount` 保留；键名均不变，未删除任何键。
   - 小修：P11 入口改为 P12 `common.nav_register` 与 P07 `result.guest_register`，写明页头只有登录；P08 入口删去 P14；手机版结账顶部折叠摘要在选定收货国家前显示商品小计、之后显示合计；「阅读说明」写明倒计时是 P06 的 15 分钟支付时限，不是 30 分钟的凭据。
