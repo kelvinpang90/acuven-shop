@@ -414,23 +414,23 @@ tasks:
     creates_branch: true
     creates_pull_request: true
 
-  # 订单数据模型，碰钱也碰个人资料（收货资料），已过设计闸门：docs/DESIGN.md 1.8（提交 2b68ad0）「数据模型」的 Order / OrderItem、
+  # 订单数据模型，碰钱也碰个人资料（收货资料），已过设计闸门：docs/DESIGN.md 1.9（提交 2b68ad0）「数据模型」的 Order / OrderItem、
   # OrderRecipient、PaymentAttempt / OrderEvent 三行，「订单与退款状态」「失败、并发与重试」「权限与资料保护」「资料保留」。
   # Kelvin 2026-09-30 决定：原「模拟支付与订单状态机」拆开，本任务只建表与纯函数；订单号为 16 位随机 Crockford Base32；
-  # 会员 ID、券 ID 由会员与优惠券任务各自加列。下单接口涉及游客电话解析，等 DESIGN 1.9 批准（HANDOFF 0.17）。
+  # 会员 ID、券 ID 由会员与优惠券任务各自加列。本任务引用的条款在 1.9 中未改；1.9 只改了结账身份与游客电话解析，由之后的下单任务落实。
   - id: SHOP-TASK-010
     title: 订单数据模型、迁移与状态迁移规则
     purpose: >-
-      按 docs/DESIGN.md 1.8「数据模型」建立订单相关六张表：订单、订单行、逐件分摊快照、收货资料、模拟支付尝试、订单事件，
+      按 docs/DESIGN.md 1.9「数据模型」建立订单相关六张表：订单、订单行、逐件分摊快照、收货资料、模拟支付尝试、订单事件，
       并写对应的 Alembic 迁移；另提供两个纯函数：生成不可猜测的订单号，以及按设计判定订单状态迁移是否允许。
       不加接口、不写下单或支付逻辑、不设 cookie 或会话、不做页面；不加会员、优惠券、退款相关的表或列；不改设计。
-      设计闸门：DESIGN 1.8（提交 2b68ad0）。
+      设计闸门：DESIGN 1.9（提交 361d8bf）。
     status: ready
     depends_on:
       - SHOP-TASK-004
       - SHOP-TASK-007
     acceptance_criteria:
-      - 实现与 docs/DESIGN.md 1.8「数据模型」的 Order / OrderItem、OrderRecipient、PaymentAttempt / OrderEvent 三行及「订单与退款状态」「失败、并发与重试」「权限与资料保护」「资料保留」一致；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - 实现与 docs/DESIGN.md 1.9「数据模型」的 Order / OrderItem、OrderRecipient、PaymentAttempt / OrderEvent 三行及「订单与退款状态」「失败、并发与重试」「权限与资料保护」「资料保留」一致；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
       - app/models/order.py 定义六个模型，沿用 app/db/base.py 的基类、约束命名约定与 InnoDB、utf8mb4 表选项；app/models/__init__.py 导出它们；所有外键的删除行为写明，订单及其子表的外键一律 RESTRICT（订单与收货资料长期保存，不级联删除）；金额一律整数仙，积分一律整数积分，不用浮点或 Decimal；时间一律不带时区的 UTC
       - 订单表：订单号（16 位、全表唯一）、状态（只允许 awaiting_demo_payment、demo_paid、demo_packed、demo_shipped、demo_completed、demo_cancelled 六种）、商品小计、券折扣、积分抵扣（积分数，1 积分抵 1 仙）、运费、应付、获得积分、所用运费区代码与运费版本号、幂等键（1 到 64 个字符，非空，全表唯一）与请求指纹（非空，64 位十六进制的 SHA-256）、创建时间、支付到期时间（非空，由之后的下单任务按设计写为创建时间加 15 分钟，超时取消与支付页倒计时都以它为准）与支付时间；检查约束保证各金额与积分不小于零、券折扣加积分抵扣不超过商品小计、应付等于商品小计减券折扣减积分抵扣加运费、应付不低于运费、支付时间在 demo_paid、demo_packed、demo_shipped、demo_completed 时非空而在 awaiting_demo_payment、demo_cancelled 时为空；不加会员 ID、券 ID 或参考外币快照列（参考外币只在结账页显示，见 docs/UX.md Q9）
       - 订单行表：所属订单、行序（同一订单内唯一）、SKU 规格外键（可空，规格被删除时置空）与 SKU 快照、商品名称与所选规格说明的英文、中文、马来文快照（下单时已按回退英文的规则取好，非空）、单价、件数（不小于 1）与行小计；检查约束保证单价不小于零、行小计等于单价乘件数
@@ -446,7 +446,7 @@ tasks:
       - 迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，alembic check 在它比较的范围内无差异；以上测试与已有后端测试都由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
       - docs/TODO.md 新增 SHOP-TASK-010 记录段（六张表与关键约束、订单号格式、状态迁移表、偏离、验证到什么程度）；不改 planning-v1 块；复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加接口、不改 app/main.py、不改前端代码
-      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.8，提交 2b68ad0），不合并、不直推
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.9，提交 361d8bf），不合并、不直推
     allowed_change_paths:
       - app/models/order.py
       - app/models/__init__.py
