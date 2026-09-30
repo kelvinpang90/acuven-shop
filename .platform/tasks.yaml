@@ -240,7 +240,7 @@ tasks:
       覆盖无规格、单规格、双规格三种形态，价格与库存为整数，并为每个分类提供一张随仓库发布的 SVG 占位图。
       只写示例数据与占位图；不改表结构、不加接口、不做页面、不做图片上传，不碰订单、会员与个人资料，不改设计。
       设计闸门：DESIGN 1.8（提交 2b68ad0）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-004
     acceptance_criteria:
