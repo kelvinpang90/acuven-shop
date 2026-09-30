@@ -338,7 +338,7 @@ tasks:
       「现金实付」一类术语、优惠券列出条件前后不一、忘记密码遇到未注册号码的去向，以及几处小的不一致）。
       合并后即可登记用户可见页面的实现任务。只写文档，不碰 frontend/、后端代码、docs/DESIGN.md、docs/REQUIREMENTS.md、
       docs/HANDOFF.md、CI 与部署配置。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-003
     acceptance_criteria:
