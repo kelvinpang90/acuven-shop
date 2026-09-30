@@ -5,6 +5,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 
 from app.api.catalog import router as catalog_router
+from app.api.checkout import router as checkout_router
 from app.api.health import router as health_router
 from app.core.config import Settings, get_settings
 
@@ -16,6 +17,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.include_router(health_router)
     app.include_router(catalog_router)
+    app.include_router(checkout_router)
     return app
 
 
