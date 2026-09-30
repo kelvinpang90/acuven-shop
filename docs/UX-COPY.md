@@ -1,7 +1,7 @@
 # Acuven Shop 三语文案与演示提示（审阅稿）
 
 > **审阅稿。0.3 的内容 Kelvin 已于 2026-09-30 审阅；0.4 新增的文案键候审，审阅通过前以 0.3 为准。**
-> 版本 0.4（2026-09-30），运营者修订（Claude Code），在 `SHOP-TASK-008` 的 0.3 上增补店铺装修与视觉稿审阅所需的文案键。页面结构与线框见 [UX.md](UX.md)；依据 `docs/REQUIREMENTS.md` 1.9 候批稿（店铺装修；其余条款同 1.8）与 `docs/DESIGN.md` 1.9（2026-09-30 获 Kelvin 批准，批准记录见 `docs/HANDOFF.md` 0.19）；Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
+> 版本 0.4（2026-09-30），运营者修订（Claude Code），在 `SHOP-TASK-008` 的 0.3 上增补店铺装修与视觉稿审阅所需的文案键。页面结构与线框见 [UX.md](UX.md)；依据 `docs/REQUIREMENTS.md` 1.9 候批稿（店铺装修、多规格起价显示、游客结账摘要；其余条款同 1.8）与 `docs/DESIGN.md` 1.9（2026-09-30 获 Kelvin 批准，批准记录见 `docs/HANDOFF.md` 0.19）；Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
 
 ## 0.4 修订要点
 

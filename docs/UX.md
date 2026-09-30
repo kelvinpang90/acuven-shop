@@ -1,15 +1,15 @@
 # Acuven Shop 前端页面结构与线框（审阅稿）
 
 > **审阅稿。0.3 的内容 Kelvin 已于 2026-09-30 审阅；0.4 新增的店铺装修及随视觉稿审阅所作的修改候审，审阅通过前以 0.3 为准。**
-> 版本 0.4（2026-09-30），运营者修订（Claude Code），在 `SHOP-TASK-008` 的 0.3 上按 Kelvin 2026-09-30 在视觉稿阶段的决定修改。依据 `docs/REQUIREMENTS.md` 1.9 候批稿（店铺装修；其余条款同 1.8）与 `docs/DESIGN.md` 1.9（2026-09-30 获 Kelvin 批准，批准记录见 `docs/HANDOFF.md` 0.19）；Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。三语文案见 [UX-COPY.md](UX-COPY.md)。本稿不改设计，冲突之处列入文末「待决问题」。
+> 版本 0.4（2026-09-30），运营者修订（Claude Code），在 `SHOP-TASK-008` 的 0.3 上按 Kelvin 2026-09-30 在视觉稿阶段的决定修改。依据 `docs/REQUIREMENTS.md` 1.9 候批稿（店铺装修、多规格起价显示、游客结账摘要；其余条款同 1.8）与 `docs/DESIGN.md` 1.9（2026-09-30 获 Kelvin 批准，批准记录见 `docs/HANDOFF.md` 0.19）；Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。三语文案见 [UX-COPY.md](UX-COPY.md)。本稿不改设计，冲突之处列入文末「待决问题」。
 
 ## 0.4 修订要点
 
 - **店铺装修**（REQUIREMENTS 1.9「店铺装修」）：新增后台 A08；全局框架写明主题、深浅色与标志图；页面地图与后台导航加 A08；「演示提示汇总」写明装修不能隐藏或弱化任何演示提示。
 - **P01**：主视觉、演示怎么玩、按分类浏览、精选商品四个区块的顺序与显隐由 A08 决定；★ `[home.demo_hint]` 从「精选商品」旁移到页头下方、所有区块之前，不属于任何区块，不可隐藏。
-- **P01、P02 价格**：商品有多于一个启用规格时一律显示 `[list.price_from]`，即使各规格同价（Kelvin 2026-09-30 决定）。
+- **P01、P02 价格**：商品有多于一个启用规格时一律显示 `[list.price_from]`，即使各规格同价（Kelvin 2026-09-30 决定，REQUIREMENTS 1.9「访客与会员流程」第 1 条）。
 - **P03**：缩略图与手机版主图滑动的读屏标签用新键 `[detail.a11y_image]`。
-- **P05**：游客结账的摘要不显示 `[checkout.summary_coupon]`、`[checkout.summary_points]` 两行，会员照常显示（Kelvin 2026-09-30 决定）。
+- **P05**：游客结账的摘要不显示 `[checkout.summary_coupon]`、`[checkout.summary_points]` 两行，会员照常显示（Kelvin 2026-09-30 决定，REQUIREMENTS 1.9「访客与会员流程」第 3 条）。
 - 新增文案键见 UX-COPY 0.4「0.4 修订要点」。待决问题未新增；店铺装修的规则随 REQUIREMENTS 1.9 一并候批。
 
 ## 0.3 修订要点
