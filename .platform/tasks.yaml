@@ -229,3 +229,49 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 示例商品种子数据：数据迁移，部署时随 upgrade head 写入，不需要人登服务器。碰价格数据，
+  # 设计依据 docs/DESIGN.md 1.8（提交 2b68ad0）「数据模型」。占位图随仓库发布在前端静态目录，
+  # 后台上传的图片以后另定引用格式；前端镜像要为 public 目录加一行 COPY。
+  - id: SHOP-TASK-006
+    title: 示例商品目录种子数据
+    purpose: >-
+      用一个 Alembic 数据迁移写入约 30 件通用示例实物商品，让演示站上线即有商品可逛：6 个分类、三语文案、
+      覆盖无规格、单规格、双规格三种形态，价格与库存为整数，并为每个分类提供一张随仓库发布的 SVG 占位图。
+      只写示例数据与占位图；不改表结构、不加接口、不做页面、不做图片上传，不碰订单、会员与个人资料，不改设计。
+      设计闸门：DESIGN 1.8（提交 2b68ad0）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-004
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.8「数据模型」Product / Variant 一行及 SHOP-TASK-004 的表结构一致；发现设计或表结构本身有问题时停下并在 PR 里说明，不自行修改
+      - 新迁移文件 alembic/versions/20260930_0003_demo_catalog.py，revision 为 0003、down_revision 为 0002；数据写成迁移文件内的常量，用迁移内的轻量表定义写入，不 import app 的模型；upgrade 写入全部示例数据，downgrade 按 slug 与 SKU 删除这批数据及其图片、规格与关联行。部署只执行 upgrade、从不降级；downgrade 只保证在写入后未经后台编辑、未被其他数据引用的库上成立（CI 与开发库），不承诺生产库在后台编辑示例商品后仍可回退
+      - 6 个启用的分类，slug 依次为 apparel、bags、home、kitchen、stationery、gadgets；共 28 到 32 件启用的商品，每个分类至少 4 件；slug、SKU 全部唯一、确定、小写
+      - 全部为虚构的通用实物商品，不出现真实品牌、商标、真实人物、联系方式或任何网址
+      - 每件商品与分类都有英文名称，商品都有英文描述，所有规格名与规格值都有英文名称，满足发布规则；除刻意的一件外，中文与马来文文案齐全；刻意的那一件只有英文，用来演示「仅英文」标签；马来文未经母语审校，在 PR 里如实说明
+      - 规格形态三种都有：无规格（一个 SKU）、单规格（如颜色）、双规格（如颜色与尺寸），每种至少 3 件商品；双规格商品至少有一个颜色与尺寸组合没有 SKU，用来演示筛选须由同一个 SKU 同时满足
+      - 单价是整数仙，范围 RM5 到 RM300，不全相同；每个 SKU 的当日可用库存等于每日初始库存；至少一件商品所有 SKU 的库存都为 0，用来演示今日售罄；同一件商品内的 SKU 价格可以不同
+      - 商品创建时间各不相同、确定，且按 SHOP-TASK-004 的约定一律是 UTC，供按最新排序稳定演示
+      - frontend/public/demo-images/ 下新增 apparel.svg、bags.svg、home.svg、kitchen.svg、stationery.svg、gadgets.svg 六张占位图：纯静态几何图形、不含文字，不含 script、foreignObject、事件属性、外链 href、CSS 的 url() 或 @import，每张不超过 4 KB；每件商品有且只有一张图片，引用写成以斜杠开头的站点根路径（如 /demo-images/kitchen.svg，页面可原样用作图片地址），指向所属分类的占位图
+      - frontend/Dockerfile 只在复制 src 的那一行旁加一行复制 public 目录，使占位图进入前端镜像；前端镜像构建由 PR 的必需 CI 检查 frontend 执行并通过
+      - 迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，alembic check 在它比较的范围内无差异，由 PR 的必需 CI 检查 backend 执行
+      - tests/test_demo_catalog_seed.py 用 SQLite 内存库（开启外键检查）按模型建表，通过 Alembic 的 Operations 执行该迁移的 upgrade，再查询实际写入的行验证上面的数量、唯一性、英文齐全、只有一件缺中文与马来文、规格形态与缺失组合、价格范围与整数类型、库存相等、售罄商品、创建时间互不相同、每件商品恰好一张图片且引用指向存在的占位图文件；再执行 downgrade 验证这批数据及其关联行全部删除；另读取六张 SVG 验证大小上限与上面列出的禁用元素和属性都不存在；每条测试写明它守住的是哪一句规则；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-006 记录段（分类与商品清单、图片引用格式、偏离、验证到什么程度）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；除 frontend/Dockerfile 这一行外不改 .platform/、CI、部署配置；不装依赖；不改表结构、不加接口、不改前端代码
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.8，提交 2b68ad0），不合并、不直推
+    allowed_change_paths:
+      - alembic/versions/20260930_0003_demo_catalog.py
+      - frontend/public/demo-images/apparel.svg
+      - frontend/public/demo-images/bags.svg
+      - frontend/public/demo-images/home.svg
+      - frontend/public/demo-images/kitchen.svg
+      - frontend/public/demo-images/stationery.svg
+      - frontend/public/demo-images/gadgets.svg
+      - frontend/Dockerfile
+      - tests/test_demo_catalog_seed.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
