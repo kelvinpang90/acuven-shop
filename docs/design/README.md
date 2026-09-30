@@ -1,6 +1,6 @@
 # 视觉稿导出
 
-> 2026-09-30 导出。Kelvin 已认可视觉稿，审阅记录见 `docs/HANDOFF.md`。
+> 2026-09-30 导出。Kelvin 已于 2026-09-30 认可视觉稿；本导出合并后，由后续运营者 PR 在 `docs/HANDOFF.md` 记录审阅与提交号。
 
 页面的内容、流程、去向与文案以 [UX.md](../UX.md) 与 [UX-COPY.md](../UX-COPY.md) 为准；本目录只规定样式。二者冲突时以 UX 文档为准，并把冲突报给运营者。
 
@@ -36,8 +36,8 @@
 ## 画板示例数据
 
 - 商品、分类、规格与价格取自示例目录迁移 `0003`；运费与汇率为示例数值。
-- 会员订单 `K7Q2-9MXA`（小计 RM 110.00、券 RM 10.00、积分 500 抵 RM 5.00、运费 RM 8.00、合计 RM 103.00）的逐件实付、获得积分与退款预估，均按 `docs/DESIGN.md` 1.9「计价、优惠、积分与库存」第 2–5 条的最大余数分摊算出：两件 T 恤实付 RM 67.37、蜡烛 RM 27.63，获得 95 积分；退蜡烛预计 RM 27.63，返还 146 积分、追回 27 积分。
-- 订单号（如 `K7Q2-9MXA`）只是示意，真实格式尚未定义。人名、地址、手机号均为虚构；英国号码取自保留给虚构用途的号段。
+- 会员下单的订单 `K7Q2-9MXA`（小计 RM 110.00、券 RM 10.00、积分 500 抵 RM 5.00、运费 RM 8.00、合计 RM 103.00）的逐件实付、获得积分与退款预估，均按 `docs/DESIGN.md` 1.9「计价、优惠、积分与库存」第 2–5 条的最大余数分摊算出：两件 T 恤实付 RM 67.37、蜡烛 RM 27.63，获得 95 积分；退蜡烛预计 RM 27.63，返还 146 积分、追回 27 积分。P09、P10 画板用订单号与电话以查单模式查看这张会员订单，所以照常显示优惠与积分行；游客订单（如 `B6TN-2RJD`）的订单详情按 REQUIREMENTS 1.10 不显示这两行，退款页也没有积分行。
+- 订单号（如 `K7Q2-9MXA`）只是示意，真实格式尚未定义。人名与地址为虚构。马来西亚、新加坡没有保留给虚构用途的号段，这两国手机号一律用 X 占位（如 `+60 12-XXX XXXX`、遮盖后 `+60 12•••• XXX`）；英国号码取自保留给虚构用途的号段。
 - 商品图、分类图是占位图形；图片上传的格式与大小限制尚未确定，画板显示为 `[TYPES]`、`[SIZE]`，实现时再定。
 - 人机验证框是占位，实际由托管服务渲染。
 
@@ -86,12 +86,12 @@
 | P07 已取消（上：超时；下：本人取消，二选一） | [P07-cancelled.html](pages/P07-cancelled.html) | [P07-cancelled.png](reference/P07-cancelled.png) | 640 × 280 |
 | P08 订单查询 · 桌面 | [P08-desktop.html](pages/P08-desktop.html) | [P08-desktop.png](reference/P08-desktop.png) | 1440 × 1170 |
 | P08 查不到订单 · 手机 | [P08-phone.html](pages/P08-phone.html) | [P08-phone.png](reference/P08-phone.png) | 390 × 1210 |
-| P09 查单模式（已发货）· 桌面 | [P09-desktop.html](pages/P09-desktop.html) | [P09-desktop.png](reference/P09-desktop.png) | 1440 × 1450 |
-| P09 查单模式 · 手机 | [P09-phone.html](pages/P09-phone.html) | [P09-phone.png](reference/P09-phone.png) | 390 × 1810 |
+| P09 查单模式 · 会员下单的订单（已发货）· 桌面 | [P09-desktop.html](pages/P09-desktop.html) | [P09-desktop.png](reference/P09-desktop.png) | 1440 × 1450 |
+| P09 查单模式 · 会员下单的订单 · 手机 | [P09-phone.html](pages/P09-phone.html) | [P09-phone.png](reference/P09-phone.png) | 390 × 1810 |
 | P09 待支付（上：查单模式；下：会员模式） | [P09-pending.html](pages/P09-pending.html) | [P09-pending.png](reference/P09-pending.png) | 640 × 320 |
 | P09 / P10 查单授权过期 | [P09-expired.html](pages/P09-expired.html) | [P09-expired.png](reference/P09-expired.png) | 640 × 220 |
-| P10 退款申请（查单模式）· 桌面 | [P10-desktop.html](pages/P10-desktop.html) | [P10-desktop.png](reference/P10-desktop.png) | 1440 × 1300 |
-| P10 退款申请 · 手机 | [P10-phone.html](pages/P10-phone.html) | [P10-phone.png](reference/P10-phone.png) | 390 × 1110 |
+| P10 退款申请 · 查单模式 · 会员下单的订单（含积分行）· 桌面 | [P10-desktop.html](pages/P10-desktop.html) | [P10-desktop.png](reference/P10-desktop.png) | 1440 × 1300 |
+| P10 退款申请 · 会员下单的订单 · 手机 | [P10-phone.html](pages/P10-phone.html) | [P10-phone.png](reference/P10-phone.png) | 390 × 1110 |
 | P11 注册 · 桌面 | [P11-desktop.html](pages/P11-desktop.html) | [P11-desktop.png](reference/P11-desktop.png) | 1440 × 1320 |
 | P11 注册（已发送验证码）· 手机 | [P11-phone.html](pages/P11-phone.html) | [P11-phone.png](reference/P11-phone.png) | 390 × 1380 |
 | P12 登录 + 重设密码（已注册号码验证通过）· 桌面 | [P12-desktop.html](pages/P12-desktop.html) | [P12-desktop.png](reference/P12-desktop.png) | 1440 × 1210 |
