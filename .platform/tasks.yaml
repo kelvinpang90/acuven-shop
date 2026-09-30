@@ -201,7 +201,7 @@ tasks:
       在 SHOP-TASK-004 的表上提供公开只读的商品目录接口：分类列表、商品列表（搜索、按分类与规格值筛选、排序、分页）
       与商品详情，按请求语言返回文案并回退英文，价格只返回 MYR 整数仙。只读、不写库；不做参考外币、购物车、
       结账计价、库存预留、后台维护或任何页面，不碰订单、会员与个人资料，不改设计。设计闸门：DESIGN 1.8（提交 2b68ad0）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-004
     acceptance_criteria:
