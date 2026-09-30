@@ -533,3 +533,142 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 页面实现第一批。视觉稿已由 Kelvin 2026-09-30 认可并导出到 docs/design/（main 提交 df45481，HANDOFF 0.21 记录）；
+  # 页面内容、流程与文案以 docs/UX.md 0.5、docs/UX-COPY.md 0.4 为准，docs/design/ 只管样式。
+  # 本任务只给目录接口补首页与列表页要用的只读字段，不改金额计算、不碰个人资料，不走设计闸门。
+  - id: SHOP-TASK-013
+    title: 商品目录接口补充首页与列表页所需字段
+    purpose: >-
+      为首页 P01 与商品列表 P02 补三处只读数据：商品摘要标出是否有多于一个启用 SKU（决定显示「起」价）；
+      分类列表每项带一张代表图片（首页「按分类浏览」）；新增规格筛选项接口，列出列表页可筛选的规格名与规格值。
+      只读；不加表、不加迁移，不改发布规则、已有字段、筛选、排序与分页行为，不做页面，不改设计。
+      设计闸门：不适用（只增加商品展示用的只读字段，不改任何金额计算，不涉及个人资料）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-005
+    acceptance_criteria:
+      - 实现与 docs/REQUIREMENTS.md 1.10「访客与会员流程」第 1 条（商品有多于一个启用规格时一律显示最低单价加「起」，即使各规格同价）及 docs/UX.md 0.5 的 P01、P02 一致；发现与 docs/DESIGN.md 1.9 冲突时停下并在 PR 里说明，不自行改设计
+      - 商品列表接口每项新增布尔字段 has_multiple_variants：该商品启用的 SKU 多于一个时为真（即使各 SKU 同价），只有一个启用 SKU 时为假，停用的 SKU 不计入；商品列表的其余字段、筛选、排序与分页不变，商品详情接口不变
+      - 分类列表接口每项新增 image：该分类下按商品列表 newest 排序排在第一的已发布商品的首张图片引用（取法与商品摘要的 image 相同），该分类没有已发布商品或该商品没有图片时为空；只加在分类列表接口的响应里，嵌在商品摘要与商品详情里的分类不变；分类列表的过滤条件与顺序不变
+      - 新增 GET /api/catalog/options，语言参数与目录接口相同（只接受 en、zh、ms，默认 en）；只统计已发布商品（沿用发布规则）的启用 SKU 实际用到的规格值，按规格名 code 聚合，同一规格名下按规格值 code 去重；每个规格名与规格值返回 code 与按请求语言的名称（回退英文的规则与标记同 SHOP-TASK-005）；同一 code 在不同商品上名称不同时，取 id 最小的那件商品上的名称；规格名按它在各商品中最小的排列序号、再按 code 排序，规格值同理；返回的规格名与规格值 code 可以原样组成商品列表接口的 option 筛选参数；没有任何可筛选规格时返回空列表
+      - 三处都只发 SELECT、不写数据库，不需要登录，不读写 cookie；不返回库存、启用状态、排列序号等后台字段
+      - tests/test_catalog_api.py 只允许把已有的两处整体相等断言（商品列表项与分类列表）补上新字段，不改动、不删除其他测试，全部照常通过
+      - tests/test_catalog_page_fields.py 用 TestClient 与 SQLite 内存库（覆盖会话依赖）按模型建表并自建数据，验证：has_multiple_variants 在一个启用 SKU、两个同价启用 SKU、两个 SKU 其中一个停用三种情况下的取值；分类图片取该分类 newest 排序第一的已发布商品的首图，未发布商品不参与，没有已发布商品时为空，商品摘要与详情里的分类不带 image；规格筛选项只含已发布商品启用 SKU 用到的值（未发布商品、停用 SKU、没被任何启用 SKU 用到的规格值都不出现），跨商品按 code 聚合去重，名称取 id 最小的商品，排序规则，回退英文及其标记，非法语言参数 422，返回的 code 组成 option 参数能筛出对应商品；每条测试写明它守住的是哪一句规则；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-013 记录段（新增字段与接口、聚合与排序规则、偏离、验证到什么程度）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表、不加迁移、不改前端代码
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - app/services/catalog.py
+      - app/api/catalog.py
+      - tests/test_catalog_api.py
+      - tests/test_catalog_page_fields.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 前端基础：之后每个页面任务都在它上面加页面与文案键。纯前端展示，不碰金额与个人资料的处理，不走设计闸门。
+  # 浏览器验收契约尚未启用（project.yaml 没有 acceptance_hosts），故不带 acceptance 块。
+  - id: SHOP-TASK-014
+    title: 前端基础：设计变量、三语字典、路由、全站框架与隐私说明页 P14
+    purpose: >-
+      把已认可的视觉稿样式接进前端，并搭好所有前台页面共用的部分：设计变量与组件样式、英中马三语字典与语言切换、
+      不引入依赖的前端路由、演示横幅与页头页脚（docs/UX.md 0.5「全局框架」），以及第一张完整页面——隐私说明 P14。
+      首页此时只有固定位置的 ★ 演示提示（UX 允许的「四个区块都隐藏」状态），首页区块由之后的任务加。
+      不调用任何后端接口，不做店铺装修设置的读取（先固定默认主题班兰），不做 WhatsApp 联系链接的配置，不装依赖，不改设计。
+      设计闸门：不适用（纯前端展示与静态文案，不处理金额，不收集、存储或展示个人资料）。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 页面内容、流程与文案以 docs/UX.md 0.5 与 docs/UX-COPY.md 0.4 为准，样式以 docs/design/ 为准，二者冲突时以 UX 文档为准并在 PR 里说明；发现需要多显示或多收集个人资料、或需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计
+      - frontend/src/styles/acuven-shop.css 与 docs/design/tokens/acuven-shop.css 逐字节相同（不手改生成的文件，含其中的字体引入），由应用入口引入；frontend/src/styles/acuven-shop.test.ts 读取两份文件断言相同
+      - 前台根元素带 class acs、data-shop-theme 为 pandan、data-mode 为 auto，不设 data-accent；主题取值集中在 frontend/src/storeDesign.ts 一处，写明之后由店铺装修任务改为读取后台设置；页面结构与类名沿用 docs/design/pages/ 对应的静态页面与 docs/design/COMPONENTS.md，桌面与手机的差异靠样式文件的媒体查询，不使用只供视觉稿的 acs--phone，页面代码里不写死颜色、字体或圆角
+      - frontend/src/i18n/copy.ts 收录本任务用到的每个文案键的英、中、马三列，与 docs/UX-COPY.md 逐字相同；{变量} 由统一的格式化函数替换；frontend/src/i18n/copy.test.ts 读取 docs/UX-COPY.md 的表格，断言字典里每个键都在文档中且三列逐字相同，并验证变量替换；读取文档的方式不得给应用代码引入 Node 类型（沿用 tsconfig.app.json 的约定）；界面上不出现字典以外的文字（品牌字样 ACUVEN SHOP 等 UX「阅读说明」列出的不翻译字样除外）
+      - 默认语言英文；访客在页头切换中文或马来文后，选择只保存在本浏览器的 localStorage，读写失败时照常工作（只是不记住）；不按 IP 或浏览器语言自动切换，不写 cookie，不放进网址；html 元素的 lang 属性随当前语言变化
+      - frontend/src/router.tsx 用浏览器 History 接口实现路由，不引入依赖：站内链接不整页刷新，前进后退可用，切换页面后回到页面顶部；路由表是唯一来源，指向尚未实现页面的入口（导航项、按钮、链接）一律不渲染；未知路径替换为首页；本任务只有首页与 /privacy 两个路由；路径与查询参数里不出现订单号或电话
+      - 全站框架按 docs/UX.md「全局框架」：演示横幅常驻、不可关闭，桌面用 common.demo_banner、手机用 common.demo_banner_short；页头有品牌字样（链到首页）、按路由表可用的导航项与语言切换，手机为 ☰ 菜单（读屏标签 common.nav_menu）与当前语言下拉；页脚有 common.footer_demo 与链到 P14 的 common.nav_privacy；WhatsApp 联系链接的配置来源由之后单独登记的任务提供，本任务不渲染任何 WhatsApp 按钮与隐私页的联系段（等同 UX Q10 的「配置缺失时隐藏」）；不设站内联系表单
+      - 首页路由只渲染框架与固定位置的 ★ home.demo_hint；隐私说明 P14 按 docs/UX.md 的 P14 线框渲染标题、★ privacy.demo_hint、引言与四个段落（收集什么、保留多久、谁能看到、短信与日志）及其全部文案，手机上各段默认展开；不提供、不暗示访客删除收货资料的入口
+      - 用 vitest 与 react-dom/server（不加测试依赖）验证意图：演示横幅在每个路由都渲染且没有关闭控件；未实现页面的导航项不渲染；未知路径落到首页；语言选择的读取、保存、非法值回退英文与存储读写失败时的行为；P14 渲染全部段落文案且没有联系段、没有 WhatsApp 链接、没有删除资料的入口；页面文字全部来自字典；每条测试写明它守住的是 UX 哪一句；原外壳页的测试随外壳页一起替换；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-014 记录段（文件结构、路由与语言规则、字典校验方式、偏离、验证到什么程度，并写明未做浏览器验收）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/styles/acuven-shop.css
+      - frontend/src/styles/acuven-shop.test.ts
+      - frontend/src/storeDesign.ts
+      - frontend/src/i18n/copy.ts
+      - frontend/src/i18n/copy.test.ts
+      - frontend/src/i18n/language.tsx
+      - frontend/src/i18n/language.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - frontend/src/components/SiteFrame.tsx
+      - frontend/src/components/SiteFrame.test.tsx
+      - frontend/src/pages/HomePage.tsx
+      - frontend/src/pages/PrivacyPage.tsx
+      - frontend/src/pages/PrivacyPage.test.tsx
+      - frontend/src/vite-env.d.ts
+      - frontend/src/App.tsx
+      - frontend/src/App.test.tsx
+      - frontend/src/main.tsx
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 首页区块与商品列表。显示金额但不计算：价格一律来自目录接口的整数仙，前端只格式化（DESIGN 1.9「数据模型」「边界与原则」），
+  # 不碰个人资料。商品详情 P03 与购物车 P04 另行登记（P04 依赖 SHOP-TASK-009 的计价接口）。
+  - id: SHOP-TASK-015
+    title: 首页区块 P01 与商品列表 P02
+    purpose: >-
+      在 SHOP-TASK-014 的框架上实现首页的四个区块（主视觉、演示怎么玩、按分类浏览、精选商品）与商品列表页 P02
+      （搜索、分类与规格筛选、排序、分页，手机上的筛选抽屉与加载更多），数据来自已有目录接口与 SHOP-TASK-013 补充的字段。
+      首页区块顺序与显隐先用默认设置（四块按 UX 顺序全部显示），店铺装修任务再改为读取后台设置。
+      价格只格式化服务端返回的整数仙，不在浏览器计算任何金额；不做商品详情与购物车，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只展示目录接口返回的价格，不改金额计算，不涉及个人资料）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-013
+      - SHOP-TASK-014
+    acceptance_criteria:
+      - 页面内容、流程与文案以 docs/UX.md 0.5 的 P01、P02 与 docs/UX-COPY.md 0.4 为准，样式以 docs/design/pages/ 的 P01、P02 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；沿用 SHOP-TASK-014 的字典、路由、框架与样式约定
+      - 首页四个区块的顺序与显隐来自 frontend/src/storeDesign.ts 的默认设置（主视觉、演示怎么玩、按分类浏览、精选商品，全部显示）；隐藏的区块整块不渲染，★ home.demo_hint 始终在页头下方、所有区块之前；区块文案全部来自字典
+      - 主视觉的 home.hero_cta 链到商品列表；三个装饰图块取精选商品的前三张图片，不是链接、读屏忽略；「按分类浏览」用分类列表接口，每块显示分类图片（为空时显示视觉稿的占位形状）与名称，链到按该分类筛选的商品列表；「精选商品」取商品列表接口按 newest 排序的前 4 件
+      - 商品卡显示首张图片、名称与价格：has_multiple_variants 为真时一律用 list.price_from（即使各规格同价），否则用 common.price_myr；金额由整数仙格式化为两位小数（如 2190 显示为 RM 21.90），格式化只用整数运算、不用浮点；不显示参考外币；当日售罄的商品显示 list.out_of_stock；指向商品详情的链接按 SHOP-TASK-014 的路由规则在详情页实现前不渲染
+      - 商品列表 P02 路径为 /products，搜索词、分类、规格筛选、排序与页码放在查询参数里（可分享、前进后退可用），非法值回退默认；页头搜索框在本任务起显示并跳到带搜索词的列表；筛选项来自分类列表接口与 SHOP-TASK-013 的规格筛选项接口，筛选、排序与分页全部交给商品列表接口，前端不自行过滤或排序；显示 ★ list.demo_hint、结果数、排序、清除筛选与空结果 list.empty
+      - 桌面用侧栏筛选与页码翻页（上一页、下一页读屏标签用 common.a11y_page_prev、common.a11y_page_next）；767px 以下用全屏筛选抽屉（list.filter_apply 应用、list.filter_clear 清除）与 list.load_more 追加下一页；切换语言时按新语言重新请求，不丢失筛选
+      - 请求失败时在对应区块或列表位置显示 common.error_retry，不影响页头页脚与其他区块；请求只带语言与筛选参数，不带任何个人资料
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 以 vi.fn 替身）验证意图：金额格式化（0、5、100、2190、123456 仙）与起价规则（多规格同价仍为起价、单规格不带起）；首页区块按设置的顺序渲染、隐藏的不渲染、全部隐藏时只剩 ★ 提示；分类图片为空时的占位；查询参数的解析与生成往返一致、非法值回退；接口请求的路径与参数（语言、重复的 category 与 option）；售罄标签；空结果与请求失败的文案；每条测试写明它守住的是 UX 或 REQUIREMENTS 哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-015 记录段（页面结构、数据来源、查询参数、偏离、验证到什么程度，并写明未做浏览器验收）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/storeDesign.ts
+      - frontend/src/format.ts
+      - frontend/src/format.test.ts
+      - frontend/src/api/catalog.ts
+      - frontend/src/api/catalog.test.ts
+      - frontend/src/components/ProductCard.tsx
+      - frontend/src/components/ProductCard.test.tsx
+      - frontend/src/components/SiteFrame.tsx
+      - frontend/src/components/SiteFrame.test.tsx
+      - frontend/src/pages/HomePage.tsx
+      - frontend/src/pages/HomePage.test.tsx
+      - frontend/src/pages/ProductListPage.tsx
+      - frontend/src/pages/ProductListPage.test.tsx
+      - frontend/src/pages/productListQuery.ts
+      - frontend/src/pages/productListQuery.test.ts
+      - frontend/src/i18n/copy.ts
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
