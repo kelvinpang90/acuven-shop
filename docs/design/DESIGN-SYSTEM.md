@@ -1,6 +1,6 @@
 # Acuven Shop 设计系统
 
-> 视觉稿阶段在 claude.ai 设计系统中编写的规范原文（英文），2026-09-30 随视觉稿导出。页面内容与流程以 `docs/UX.md`、`docs/UX-COPY.md` 为准，本文件只管样式。
+> 视觉稿阶段在 Claude Design 设计系统中编写的规范原文（英文），2026-09-30 随视觉稿导出。页面内容与流程以 `docs/UX.md`、`docs/UX-COPY.md` 为准，本文件只管样式。
 
 Acuven Shop is a public demo online store: prospects walk through browsing, checkout, a simulated payment and a refund, and nothing real is ever charged or shipped. The storefront is **decoratable**: the store admin picks one of 10 themes, an accent colour from that theme's palette, a logo, and the order and visibility of home-page blocks. Every theme shares one layout and one component set; a theme only changes variables.
 
