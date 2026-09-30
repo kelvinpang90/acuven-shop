@@ -9,13 +9,16 @@ from app.models.catalog import (
     ProductVariant,
     VariantOptionValue,
 )
+from app.models.shipping import DemoFxRate, ShippingRate
 
 __all__ = [
     "Category",
+    "DemoFxRate",
     "Product",
     "ProductImage",
     "ProductOption",
     "ProductOptionValue",
     "ProductVariant",
+    "ShippingRate",
     "VariantOptionValue",
 ]
