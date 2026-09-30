@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390">
+<title>P05 Checkout step 3, member — phone</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs acs--phone" data-shop-theme="pandan" data-mode="light" style="width: 390px; height: 2100px; display: flex; flex-direction: column; overflow: hidden">
+
+<div class="acs-banner"><span class="acs-tag acs-tag--demo">DEMO</span><span>Demo only — no real transactions</span></div>
+<header class="acs-header" style="gap: 10px; padding-top: 6px">
+<div class="acs-header__row" style="gap: 4px; flex-wrap: nowrap"><button class="acs-btn acs-btn--quiet" type="button" aria-label="Menu" style="color: var(--ink); padding: 0; min-width: 44px; margin-left: -10px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></button><a class="acs-brand" href="#" style="font-size: calc(18px * var(--display-scale))">ACUVEN SHOP</a><button class="acs-btn acs-btn--quiet" type="button" style="margin-left: auto; color: var(--ink); text-decoration: none; font-weight: 500; font-size: 14px; padding: 0 6px">English ▾</button><a href="#" style="color: var(--ink); font-weight: 600; font-size: 14px; text-decoration: none">Cart (3)</a></div>
+</header>
+
+<section style="display: grid; gap: 18px; padding: 24px 16px 32px">
+<h1 class="acs-display-l">Checkout</h1>
+<p class="acs-hint" style="margin: 0"><svg class="acs-hint__mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"></path></svg><span>Everything on this page is a demo. Shipping fees are samples set per country.</span></p>
+<details style="border-radius: var(--radius-card); background: var(--surface-alt); padding: 12px 16px"><summary style="display: flex; justify-content: space-between; align-items: center; min-height: 32px; cursor: pointer; font-weight: 600"><span>Order summary</span><span class="acs-num">Total (MYR) RM 103.00</span></summary></details>
+<div class="acs-alert acs-alert--success" role="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M8 12.5l3 3 5-6"></path></svg><span>Verified. You're logged in as +60 12•••• XXX.</span></div>
+<h2 class="acs-display-s">Shipping details</h2>
+<div class="acs-hint acs-hint--block"><span>Demo only: you will not be charged and nothing will be shipped. You may use fictional shipping details. Shipping details are used only for this demo and are kept long-term with the order.</span><a href="#">How we handle your details</a></div>
+<div class="acs-field"><label class="acs-field__label" for="n">Recipient name</label><input class="acs-input" id="n" value="Aina Rahman"></div>
+<div class="acs-field"><label class="acs-field__label" for="c">Country</label><select class="acs-select" id="c"><option>Malaysia</option></select></div>
+<div class="acs-field"><label class="acs-field__label" for="s">State</label><select class="acs-select" id="s"><option>Selangor</option></select></div>
+<div class="acs-field"><label class="acs-field__label" for="a">Address</label><input class="acs-input" id="a" value="12 Jalan Contoh 3, Taman Demo"></div>
+<div class="acs-field"><label class="acs-field__label" for="pc">Postcode</label><input class="acs-input" id="pc" value="47000"></div>
+<div class="acs-field"><label class="acs-field__label" for="p">Phone number</label><input class="acs-input" id="p" value="+60 12-XXX XXXX"><span class="acs-field__hint">Defaults to your member mobile number. You can change it to another number, including a fictional one.</span><span class="acs-field__hint">The country above sets the default country code. Start with + to use a different one.</span></div>
+<div class="acs-field" style="padding-top: 16px; border-top: 1px solid var(--rule)"><label class="acs-field__label" for="cp">Coupon code</label><div style="display: flex; gap: 8px"><input class="acs-input" id="cp" value="DEMO10"><button class="acs-btn acs-btn--secondary" type="button">Apply</button></div></div>
+<div class="acs-field"><label class="acs-field__label" for="pt">Use points</label><input class="acs-input acs-num" id="pt" value="500"><span class="acs-field__hint">1250 points available (100 points = RM1)</span></div>
+<p class="acs-body-s acs-muted" style="margin: 0">Coupons and points reduce the item amount only, not shipping.</p>
+<div class="acs-summary" style="padding: 18px">
+<div class="acs-row"><span>Item subtotal</span><span>RM 110.00</span></div>
+<div class="acs-row"><span>Coupon discount</span><span>RM 10.00</span></div>
+<div class="acs-row"><span>Points discount</span><span>RM 5.00</span></div>
+<div class="acs-row"><span>Sample shipping</span><span>RM 8.00</span></div>
+<div class="acs-row acs-row--total"><span>Total (MYR)</span><span>RM 103.00</span></div>
+<p class="acs-caption" style="margin: 0">No reference currency for this country; amounts are shown in MYR only.</p>
+</div>
+</section>
+
+<div style="margin-top: auto; display: grid; gap: 10px; padding: 14px 16px 20px; background: var(--surface-raised); border-top: 1px solid var(--rule); box-shadow: 0 -12px 32px -24px rgba(0, 0, 0, 0.5)">
+<div class="acs-row" style="font-weight: 700"><span>Total (MYR)</span><span>RM 103.00</span></div>
+<button class="acs-btn acs-btn--primary acs-btn--block" type="button">Place demo order</button>
+<p class="acs-hint" style="margin: 0"><svg class="acs-hint__mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 9-9 9-9-9z"></path></svg><span>Placing the order holds stock for 15 minutes while you complete the simulated payment. No money is taken.</span></p>
+</div>
+
+</div>
+</body>
+</html>

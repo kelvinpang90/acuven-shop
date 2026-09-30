@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=640">
+<title>P05 Checkout — errors and submitting</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs" data-shop-theme="pandan" data-mode="light" style="width: 640px; height: 450px; box-sizing: border-box; padding: 40px; display: grid; gap: 20px; align-content: start">
+<div class="acs-field acs-field--invalid"><label class="acs-field__label" for="ph">Mobile number</label><div class="acs-phone" style="grid-template-columns: 96px minmax(0, 1fr)"><select class="acs-select" aria-label="Country code"><option>+60</option></select><input class="acs-input" id="ph" value="12 00" aria-invalid="true" aria-describedby="phe"></div><span class="acs-field__error" id="phe"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="flex-shrink: 0; margin-top: 2px"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 16.5v.5"></path></svg>This phone number doesn't look valid. Please check the country code and number.</span></div>
+<div class="acs-field acs-field--invalid"><label class="acs-field__label" for="cp">Coupon code</label><div style="display: flex; gap: 10px"><input class="acs-input" id="cp" value="SAVE5" aria-invalid="true" aria-describedby="cpe"><button class="acs-btn acs-btn--secondary" type="button">Apply</button></div><span class="acs-field__error" id="cpe"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" style="flex-shrink: 0; margin-top: 2px"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 16.5v.5"></path></svg>This coupon can't be used for this order.</span></div>
+<div class="acs-alert acs-alert--info" role="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6M12 7.5v.5"></path></svg><span>Connection lost. Checking whether your last action went through…</span></div>
+<button class="acs-btn acs-btn--primary acs-btn--lg" type="button" aria-busy="true" disabled style="justify-self: start">Placing your order…</button>
+</div>
+</body>
+</html>

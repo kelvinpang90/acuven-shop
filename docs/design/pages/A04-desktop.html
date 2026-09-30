@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>A04 Products, images, options and stock — desktop</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs-admin" data-mode="light" style="width: 1440px; height: 1080px; display: flex; flex-direction: column">
+<div class="acs-admin__banner"><span class="acs-tag acs-tag--demo">DEMO</span>Admin — demo store. Actions here never move real money or goods.</div>
+<div class="acs-admin__shell" style="flex-grow: 1">
+<nav class="acs-admin__nav" aria-label="Admin"><a href="#">Orders</a><a href="#">Refunds</a><a href="#" aria-current="page">Products</a><a href="#">Coupons</a><a href="#">Shipping &amp; demo rates</a><a href="#">Stock resets</a><a href="#">Store design</a></nav>
+<main class="acs-admin__main" style="grid-template-columns: 380px minmax(0, 1fr); column-gap: 24px; align-items: start">
+<div style="display: grid; gap: 12px">
+<div style="display: flex; justify-content: space-between; align-items: center"><h1 class="acs-admin__h">Products</h1><button class="acs-admin__btn" type="button">New</button></div>
+<div class="acs-admin__panel">
+<table class="acs-admin__table"><tbody>
+<tr aria-selected="true"><td>Crew Neck Tee<br><span class="acs-admin__muted" style="font-size: 12px">Apparel</span></td><td><span class="acs-tag acs-tag--neutral">Published</span></td><td><button class="acs-admin__btn acs-admin__btn--secondary" type="button">Edit</button></td></tr>
+<tr><td>Pullover Hoodie<br><span class="acs-admin__muted" style="font-size: 12px">Apparel</span></td><td><span class="acs-tag acs-tag--neutral">Published</span></td><td><button class="acs-admin__btn acs-admin__btn--secondary" type="button">Edit</button></td></tr>
+<tr><td>Woven Storage Basket<br><span class="acs-admin__muted" style="font-size: 12px">Home</span></td><td><span class="acs-tag acs-tag--neutral">Published</span></td><td><button class="acs-admin__btn acs-admin__btn--secondary" type="button">Edit</button></td></tr>
+</tbody></table>
+</div>
+</div>
+
+<form class="acs-admin__panel" style="display: grid; gap: 18px; padding: 20px">
+<h2 class="acs-admin__h" style="font-size: 17px">Edit product</h2>
+<div style="display: flex; gap: 8px; align-items: center"><span class="acs-admin__muted" style="font-size: 13px; font-weight: 600">Content language</span><button class="acs-admin__btn" type="button">English</button><button class="acs-admin__btn acs-admin__btn--secondary" type="button">中文</button><button class="acs-admin__btn acs-admin__btn--secondary" type="button">Bahasa Melayu</button></div>
+<label style="display: grid; gap: 6px; font-weight: 600">Product name<input class="acs-admin__input" value="Crew Neck Tee"></label>
+<label style="display: grid; gap: 6px; font-weight: 600">Description<textarea class="acs-admin__input" rows="2" style="padding: 8px 10px; font: inherit">A soft cotton tee with a relaxed fit for everyday wear.</textarea></label>
+<div style="display: flex; gap: 24px; align-items: end"><label style="display: grid; gap: 6px; font-weight: 600">Category<select class="acs-admin__select" style="width: 220px"><option>Apparel</option></select></label><label style="display: flex; gap: 8px; align-items: center; min-height: 36px"><input type="checkbox" checked style="width: 16px; height: 16px">Published</label></div>
+<div style="display: grid; gap: 8px"><span style="font-weight: 600">Images</span><div style="display: flex; gap: 10px; align-items: center"><span style="width: 64px; height: 64px; border-radius: 4px; background: var(--a-select)"></span><span style="width: 64px; height: 64px; border-radius: 4px; background: var(--a-select)"></span><button class="acs-admin__btn acs-admin__btn--secondary" type="button">Upload</button></div><span class="acs-admin__muted" style="font-size: 13px">Allowed types: [TYPES]. Max size: [SIZE] MB.</span></div>
+<div style="display: grid; gap: 6px"><span style="font-weight: 600">Options (e.g. colour, size)</span><span>Colour: Black, White, Navy · Size: S, M, L, XL</span></div>
+<table class="acs-admin__table" style="font-size: 13px"><thead><tr><th>SKU</th><th>Option values</th><th>Price (MYR)</th><th>Daily initial stock</th><th>Available today</th><th></th></tr></thead><tbody>
+<tr><td>crew-neck-tee-black-m</td><td>Black / M</td><td><input class="acs-admin__input" value="39.00" style="width: 90px"></td><td><input class="acs-admin__input" value="20" style="width: 70px"></td><td>20</td><td><button class="acs-admin__btn acs-admin__btn--secondary" type="button">Adjust today's stock</button></td></tr>
+<tr><td>crew-neck-tee-black-xl</td><td>Black / XL</td><td><input class="acs-admin__input" value="42.00" style="width: 90px"></td><td><input class="acs-admin__input" value="8" style="width: 70px"></td><td>8</td><td><button class="acs-admin__btn acs-admin__btn--secondary" type="button">Adjust today's stock</button></td></tr>
+<tr><td>crew-neck-tee-navy-l</td><td>Navy / L</td><td><input class="acs-admin__input" value="39.00" style="width: 90px"></td><td><input class="acs-admin__input" value="15" style="width: 70px"></td><td>15</td><td><button class="acs-admin__btn acs-admin__btn--secondary" type="button">Adjust today's stock</button></td></tr>
+</tbody></table>
+<div style="display: grid; gap: 6px; padding: 10px 12px; border-radius: 4px; background: var(--demo-soft); color: var(--on-demo-soft); font-size: 13px"><span>Changes to initial stock take effect from the next daily reset.</span><span>Changes apply to new orders only. Existing orders keep their original amounts.</span></div>
+<button class="acs-admin__btn" type="submit" style="justify-self: start">Save</button>
+</form>
+</main>
+</div>
+</div>
+</body>
+</html>

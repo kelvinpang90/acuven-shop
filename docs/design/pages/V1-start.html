@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=480">
+<title>V1 SMS verification — start (register / SMS login)</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs" data-shop-theme="pandan" data-mode="light" style="width: 480px; height: 450px; box-sizing: border-box; padding: 28px; display: grid; gap: 16px; align-content: start">
+<div class="acs-field"><label class="acs-field__label" for="ph">Mobile number</label><div class="acs-phone" style="grid-template-columns: 96px minmax(0, 1fr)"><select class="acs-select" aria-label="Country code"><option>+60</option><option>+65</option></select><input class="acs-input" id="ph" inputmode="tel" value="12-XXX XXXX"></div></div>
+<p class="acs-body-s acs-muted" style="margin: 0">SMS verification is currently available for Malaysia (+60) and Singapore (+65) mobile numbers only.</p>
+<p class="acs-body-s" style="margin: 0">Once verified, guest orders placed with this number in the last 30 days are added to your account. Points are not added for past orders.</p>
+<span class="acs-body-s">Please complete the check below first.</span>
+<div style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 0 16px; border: 1px dashed var(--border); border-radius: var(--radius-control); background: var(--surface-raised); color: var(--ink-muted)"><span style="width: 22px; height: 22px; border: 2px solid var(--border); border-radius: 4px"></span><span class="acs-caption">Hosted check (rendered by the provider)</span></div>
+<button class="acs-btn acs-btn--primary" type="button" style="justify-self: start">Send code</button>
+</div>
+</body>
+</html>

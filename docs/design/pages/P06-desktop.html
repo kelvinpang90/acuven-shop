@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>P06 Simulated payment, guest — desktop</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs" data-shop-theme="pandan" data-mode="light" style="width: 1440px; height: 1540px; display: flex; flex-direction: column; overflow: hidden">
+
+<div class="acs-banner" style="--gutter: 80px"><span class="acs-tag acs-tag--demo">DEMO</span><span>Demo store — no real payments, shipping or refunds.</span></div>
+<header class="acs-header" style="--gutter: 80px">
+<div class="acs-header__row"><a class="acs-brand" href="#">ACUVEN SHOP</a><form class="acs-search" role="search"><input class="acs-input" type="search" aria-label="Search products" placeholder="Search products"><button class="acs-btn acs-btn--secondary" type="submit">Search</button></form><nav class="acs-lang" aria-label="Language" style="margin-left: auto"><a href="#" aria-current="true">English</a><a href="#">中文</a><a href="#">Bahasa Melayu</a></nav></div>
+<div class="acs-header__row"><nav class="acs-nav"><a href="#">Shop</a><a href="#">Track order</a></nav><nav class="acs-nav" style="margin-left: auto"><a href="#">Log in</a><a href="#">Cart (0)</a></nav></div>
+</header>
+
+<main style="width: 880px; margin: 0 auto; display: grid; gap: 28px; padding: 56px 0 96px">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap">
+<div style="display: flex; gap: 14px; align-items: center"><h1 class="acs-display-l">Simulated payment</h1><span class="acs-tag acs-tag--demo">DEMO</span></div>
+<p class="acs-hint" style="margin: 0"><svg class="acs-hint__mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"></path></svg><span>This page stands in for a payment provider. It is not a real payment page.</span></p>
+</div>
+
+<section class="acs-card" style="display: grid; gap: 16px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 16px"><span class="acs-field__label">Order number</span><span style="display: flex; gap: 10px; align-items: center"><span class="acs-num" style="font-size: 20px; font-weight: 600">B6TN-2RJD</span><button class="acs-btn acs-btn--secondary acs-btn--sm" type="button">Copy</button></span></div>
+<p class="acs-body-s acs-muted" style="margin: 0">Save this order number. You'll need it with your phone number to track the order.</p>
+<div class="acs-row" style="padding-top: 14px; border-top: 1px solid var(--rule)"><span class="acs-field__label">Amount due (demo)</span><span class="acs-price acs-price--l">RM 135.00</span></div>
+<div style="display: flex; gap: 10px; align-items: center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l3 2M9 2h6"></path></svg><span class="acs-body-s">Complete within 14 min, or the demo order is cancelled and stock is released.</span></div>
+<div class="acs-alert acs-alert--info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg><span>For your privacy, only this browser can open this order's payment and result pages, for 30 minutes after the order was placed.</span></div>
+</section>
+
+<section style="display: grid; gap: 8px">
+<h2 class="acs-display-s">Shipping details</h2>
+<p style="margin: 0">Sam Taylor · +44 7700 900123<br>1 Example Street, AB1 2CD, Greater London, United Kingdom</p>
+</section>
+
+<section style="display: grid; gap: 16px; padding-top: 24px; border-top: 1px solid var(--rule)">
+<h2 class="acs-display-s">Choose a demo payment method</h2>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+<label style="display: flex; gap: 12px; align-items: center; padding: 16px; border: 2px solid var(--accent); border-radius: var(--radius-card); background: var(--surface-raised)"><input type="radio" name="m" checked style="width: 18px; height: 18px; accent-color: var(--accent)"><span>Demo credit/debit card (no card number needed)</span></label>
+<label style="display: flex; gap: 12px; align-items: center; padding: 16px; border: var(--border-w) solid var(--border); border-radius: var(--radius-card); background: var(--surface-raised)"><input type="radio" name="m" style="width: 18px; height: 18px; accent-color: var(--accent)"><span>Demo online banking</span></label>
+<label style="display: flex; gap: 12px; align-items: center; padding: 16px; border: var(--border-w) solid var(--border); border-radius: var(--radius-card); background: var(--surface-raised)"><input type="radio" name="m" style="width: 18px; height: 18px; accent-color: var(--accent)"><span>Demo e-wallet</span></label>
+</div>
+<div style="display: flex; gap: 12px"><button class="acs-btn acs-btn--primary acs-btn--lg" type="button">Simulate success</button><button class="acs-btn acs-btn--secondary acs-btn--lg" type="button">Simulate failure</button></div>
+<p class="acs-hint" style="margin: 0"><svg class="acs-hint__mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 9-9 9-9-9z"></path></svg><span>No card details are collected and no money moves. Pick an outcome to see what happens.</span></p>
+</section>
+
+<div style="padding-top: 20px; border-top: 1px solid var(--rule)"><button class="acs-btn acs-btn--danger" type="button">Cancel this order</button></div>
+</main>
+
+<footer class="acs-footer" style="--gutter: 80px; margin-top: auto; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: center">
+<div style="display: grid; gap: 12px"><span class="acs-brand" style="color: var(--on-footer)">ACUVEN SHOP</span><p class="acs-body-s" style="margin: 0; max-width: 42em">Acuven demo store for showcasing online store solutions. All products, prices, stock, payments, shipping and refunds are simulated.</p><a href="#" style="font-weight: 600">Privacy</a></div>
+<a class="acs-btn acs-btn--secondary" href="#" style="justify-self: end"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M4 20l1.4-4A8 8 0 1 1 8 18.6z"></path></svg>Interested in a store like this? Chat with Acuven on WhatsApp</a>
+</footer>
+
+</div>
+</body>
+</html>
