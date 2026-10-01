@@ -425,7 +425,7 @@ tasks:
       并写对应的 Alembic 迁移；另提供两个纯函数：生成不可猜测的订单号，以及按设计判定订单状态迁移是否允许。
       不加接口、不写下单或支付逻辑、不设 cookie 或会话、不做页面；不加会员、优惠券、退款相关的表或列；不改设计。
       设计闸门：DESIGN 1.9（提交 361d8bf）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-004
       - SHOP-TASK-007
