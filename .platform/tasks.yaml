@@ -1337,3 +1337,83 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 定时任务运行器与支付超时取消。超时取消函数由 SHOP-TASK-021 提供，目前只在有人打开支付页时顺带执行；本任务让它每分钟自动运行，
+  # 及时释放库存预留。走设计闸门：docs/DESIGN.md 1.11「计价、优惠、积分与库存」第 6 条（15 分钟未支付自动取消并释放）、
+  # 「订单与退款状态」第 3 条、「失败、并发与重试」第 6 条（定时任务可重复运行、只生效一次）。
+  # 生产栈因此多一个容器（复用 API 镜像，不发布端口），部署脚本按服务数等待健康，不用改。
+  - id: SHOP-TASK-031
+    title: 定时任务运行器与支付超时取消
+    purpose: >-
+      增加一个常驻的定时任务进程（生产栈里复用 API 镜像的独立容器），每分钟调用 SHOP-TASK-021 的超时取消函数，
+      把超过支付到期时间的待支付订单取消并释放库存；提供手动执行一次的命令。不做库存重置、自动确认收货与积分到期，
+      不加表或迁移，不加接口，不做页面，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-021
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.11 上述各条一致；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - app/jobs.py 可用 python -m app.jobs 运行，提供两个子命令：run 常驻循环，cancel-expired 执行一次超时取消后退出（运营者手动补跑用）；数据库连接沿用 SHOP_DATABASE_URL 与 app/db/session.py 的会话工厂，未配置时 run 每轮记一条不含连接信息的警告并继续，cancel-expired 以非零退出
+      - run 每轮先调用超时取消函数（当前时间取 UTC，每轮最多处理一个固定上限的订单数，剩余的下一轮继续）并在独立事务里提交，再写心跳文件（容器内固定的临时目录路径），然后睡到距本轮开始满 60 秒；任一轮任务失败（含数据库不可用）只回滚、记一条只含任务名与异常类名的日志，不退出、不影响下一轮，心跳照写；收到 SIGTERM 或 SIGINT 时不再开始新一轮，在 10 秒内退出
+      - 运行器以任务列表的形式组织每轮要执行的任务（本任务只有超时取消），docstring 写明之后的每日库存重置等任务按同样方式加入、每个任务必须可重复运行且只生效一次
+      - docker-compose.yml 新增 shop_jobs 服务：镜像与 shop_api 相同（SHOP_API_IMAGE），命令为运行 run 子命令，只挂 data_net，不发布端口，带与 shop_api 相同的日志设置与 SHOP_DATABASE_URL，内存上限 128m，restart unless-stopped；健康检查用 python 判断心跳文件存在且修改时间在 180 秒内，start_period 不短于 30 秒；服务名带 shop_ 前缀并写一行注释说明用途
+      - 日志只记录任务名、取消张数与异常类名，不记录订单号、个人资料、连接串或异常消息原文
+      - tests/test_jobs.py 用 SQLite 内存库（开启外键检查）按模型建表、自建订单，验证：一轮执行后已到期的待支付订单变为已取消、库存加回、未到期的不受影响；同一时刻连续执行两轮只生效一次；任务抛异常时本轮回滚、心跳照写、下一轮照常执行；收到停止信号后不再开始新一轮；cancel-expired 子命令的退出码；单轮上限生效；每条测试写明它守住的是设计里哪一句；循环的时间与睡眠以可注入的函数代替，测试不真实等待；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-031 记录段（进程与容器、每轮步骤、失败处理、手动补跑命令、偏离、验证到什么程度，并写明首次部署若回滚，旧镜像没有该模块，shop_jobs 会起不来、回滚会报不健康，需要运营者手动处理；库存重置、自动确认收货与积分到期留给之后的任务）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI 工作流、Dockerfile 与部署脚本；不装依赖；不改 SHOP-TASK-021 已有函数的行为；不加表、迁移或接口；不改前端代码
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - app/jobs.py
+      - docker-compose.yml
+      - tests/test_jobs.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 每日库存重置。走设计闸门：docs/DESIGN.md 1.11「计价、优惠、积分与库存」第 6 条（每天按马来西亚时间把当日可用库存重建为
+  # 初始库存减去仍有效的预留、记录重置事件、历史订单不变）、「失败、并发与重试」第 6 条（可重复运行、操作标识保证只生效一次、失败可人工补跑）。
+  # 「仍有效的预留」取全部待支付订单（含已到期但尚未取消的）：它们之后被取消时会把件数加回，只算未到期的会重复加回。
+  # 失败告警等运营告警邮件任务；后台查看结果 A07 等管理后台。当前计划已满 20 项，本任务先列在「后续计划」。
+  - id: SHOP-TASK-032
+    title: 每日库存重置
+    purpose: >-
+      建立库存重置记录与逐 SKU 明细两张表并写迁移；提供按马来西亚日期重置当日可用库存的函数（初始库存减去待支付订单的预留），
+      同一日期只生效一次；接入 SHOP-TASK-031 的运行器在马来西亚时间每天零点后自动执行，并提供手动补跑命令。
+      不做告警邮件、后台页面与当日库存调整，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-020
+      - SHOP-TASK-029
+      - SHOP-TASK-031
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.11 上述各条一致，字段供之后的后台 A07 按 docs/UX.md 0.7 显示（日期、结果、SKU 数，以及每个 SKU 的 admin.stock_reset_breakdown 三个数）；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - app/models/stock_reset.py 定义两个模型，沿用 app/db/base.py 的基类、约束命名约定与 InnoDB、utf8mb4 表选项，app/models/__init__.py 导出它们；时间一律不带时区的 UTC
+      - 重置记录表：马来西亚营业日期（日期，全表唯一，即操作标识）、结果（只允许 succeeded 与 failed）、尝试次数（不小于 1）、首次开始时间、完成时间（succeeded 时非空）、SKU 数（不小于零）、最近一次失败的异常类名（可空，不超过 100 个字符，不存异常消息原文）
+      - 逐 SKU 明细表：所属重置记录（外键 RESTRICT）、SKU 规格（外键可空，规格被删除时置空）与 SKU 快照、初始库存、有效预留、当日可用（均不小于零）；同一重置记录与 SKU 快照唯一；检查约束保证当日可用等于初始库存减有效预留与零中较大者
+      - 新迁移文件 alembic/versions/20261001_0013_stock_resets.py，revision 为 0013、down_revision 为 0012；upgrade 建两张表，downgrade 按依赖倒序删除；约束名按命名约定逐个写出；迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，alembic check 在它比较的范围内无差异，由 PR 的必需 CI 检查 backend 执行；PR 正文逐表列出检查约束与表选项
+      - app/services/stock_reset.py 的重置函数接收数据库会话与当前时间（UTC），按固定的 UTC+8 偏移（马来西亚不实行夏令时，不依赖时区数据库）算出营业日期；该日期已有 succeeded 记录时不做任何改动并返回已完成；否则在一个事务里：先执行 SHOP-TASK-021 的超时取消函数，再按 SKU 排序（与 SHOP-TASK-020 扣减库存的加锁顺序一致，避免死锁）对全部 SKU 规格逐行加锁读取，按每个规格统计所有 awaiting_demo_payment 订单（含已过支付到期时间但尚未取消的）订单行件数之和作为有效预留，把当日可用库存设为初始库存减有效预留与零中较大者，写入逐 SKU 明细，并把该日期的记录写为或改为 succeeded（尝试次数加一）；事务失败时回滚，再在独立事务里把该日期的记录写为或改为 failed、尝试次数加一、记下异常类名，然后把异常交给调用方
+      - 同一日期并发执行两次时只有一次生效：以营业日期的唯一约束与带条件的更新（只把非 succeeded 的记录改为 succeeded）保证，另一次回滚后返回已完成，不出现两份明细或库存被重复改写；已有订单、退款与积分记录不被改动；不改各规格的初始库存
+      - SHOP-TASK-031 的运行器每轮在超时取消之后加入库存重置任务：当前马来西亚营业日期没有 succeeded 记录时执行，失败按运行器规则只记日志、下一轮重试；app/jobs.py 新增 reset-stock 子命令执行一次当日重置后退出（已完成返回零，失败非零），供运营者人工补跑；只重置当日，不补过去的日期
+      - 日志只记录营业日期、SKU 数、结果与异常类名，不记录订单号或个人资料
+      - tests/test_stock_reset.py 用 SQLite 内存库（开启外键检查）按模型建表、自建商品规格与订单，验证：营业日期在 UTC 15:59:59 与 16:00:00 前后切换；当日可用 = 初始 − 有效预留，有效预留包括已到期但尚未取消的待支付订单且不含已支付、已取消订单；预留大于初始时当日可用为 0；同一日期第二次执行不改动任何东西；失败后记录为 failed 且库存未变，再次执行成功后改为 succeeded、尝试次数为 2、明细只有一份；先执行超时取消再统计，重置后再取消订单加回的件数不会重复；已删除规格的明细保留且外键为空；用两个数据库会话与可控的交错验证并发执行只生效一次；两张表的检查约束、唯一约束与外键各至少一个被拒的反例；运行器在当日已完成时不再调用重置、未完成时调用且失败后下一轮重试；reset-stock 子命令的退出码；tests/test_jobs.py 只允许为运行器新增的任务调整断言，不删减或放宽原有用例；每条测试写明它守住的是设计里哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - 失败告警由之后的运营告警邮件任务接入，后台查看重置结果 A07 与当日库存调整由之后的管理后台任务实现；本任务在 docs/TODO.md 记录段写明，并写明人工补跑命令
+      - docs/TODO.md 新增 SHOP-TASK-032 记录段（两张表与约束、营业日期与时刻、有效预留口径、加锁顺序、只生效一次的保证、补跑命令、偏离、验证到什么程度）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不改 SHOP-TASK-020、021 已有函数的行为；不加接口；不改前端代码
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - app/models/stock_reset.py
+      - app/models/__init__.py
+      - alembic/versions/20261001_0013_stock_resets.py
+      - app/services/stock_reset.py
+      - app/jobs.py
+      - tests/test_stock_reset.py
+      - tests/test_jobs.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
