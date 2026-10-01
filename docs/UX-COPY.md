@@ -5,7 +5,7 @@
 
 ## 0.6 修订要点
 
-- 新增短信验证开关的文案键（Kelvin 2026-10-01 决定）：`checkout.phone_notice_sms_off`、`checkout.guest_sms_off`（P05），`auth.sms_paused`（V1、P11、P12），`account.sms_paused_set_password`、`account.delete_verify_password`、`account.delete_password_wrong`、`account.delete_verify_session`、`account.delete_session_confirm`、`account.delete_keep`（P13），`privacy.sms_toggle`（P14），`admin.nav_settings`、`admin.sms_toggle`、`admin.sms_on`、`admin.sms_off`、`admin.sms_toggle_hint`、`admin.sms_toggle_cost`、`admin.settings_saved`（A09）。
+- 新增短信验证开关的文案键（Kelvin 2026-10-01 决定）：`checkout.phone_notice_sms_off`、`checkout.guest_sms_off`（P05），`auth.sms_paused`、`auth.login_failed_sms_off`（V1、P11、P12），`account.sms_paused_set_password`、`account.delete_verify_password`、`account.delete_password_wrong`、`account.delete_verify_session`、`account.delete_session_confirm`、`account.delete_keep`（P13），`privacy.sms_toggle`（P14），`admin.nav_settings`、`admin.sms_toggle`、`admin.sms_on`、`admin.sms_off`、`admin.sms_toggle_hint`、`admin.sms_toggle_cost`、`admin.settings_saved`（A09）。
 - 修改 `privacy.fictional`、`privacy.sms`：限定为「短信验证开启时」，三种语言同步改。其余已有键未改动、未删除。
 
 ## 0.5 修订要点
@@ -340,6 +340,7 @@
 | `auth.password_rule` | At least 8 characters. | 至少 8 位。 | Sekurang-kurangnya 8 aksara. | Q15 已决 |
 | `auth.login_submit` | Log in | 登录 | Log masuk | — |
 | `auth.login_failed` | Mobile number or password is incorrect. If you haven't set a password, log in with an SMS code. | 手机号或密码不正确。如未设置密码，请用短信验证码登录。 | Nombor telefon bimbit atau kata laluan salah. Jika anda belum menetapkan kata laluan, log masuk dengan kod SMS. | 未设密码与密码错误同一条 |
+| `auth.login_failed_sms_off` | Mobile number or password is incorrect. | 手机号或密码不正确。 | Nombor telefon bimbit atau kata laluan salah. | 短信验证关闭时代替 `auth.login_failed`（0.6） |
 | `auth.forgot` | Forgot password? | 忘记密码？ | Lupa kata laluan? | — |
 | `auth.reset_title` | Reset password | 重设密码 | Tetapkan semula kata laluan | — |
 | `auth.new_password` | New password | 新密码 | Kata laluan baharu | P12、P13 |
@@ -571,11 +572,11 @@
 - **Q8 商品文案回退英文时是否标示。** **已决**，依据 Kelvin 2026-09-29 的决定：回退英文时保留「仅英文」标签 `detail.english_only`。
 - **Q9 参考币种的显示范围。** **已决**，依据 Kelvin 2026-09-29 的决定与 DESIGN 1.9「边界与原则」（按收货国家、不按 IP）：参考外币金额只在结账页选定收货国家后显示；首页、列表、详情、购物车只显示 MYR。
 - **Q10 WhatsApp 联系方式未配置时的行为。** **已决**，依据 Kelvin 2026-09-29 的决定：配置缺失时隐藏 WhatsApp 按钮（页脚、隐私页联系段），不显示占位文字或「即将开放」。
-- **Q11 虚构电话被真实号码持有人认领。** **已决**，依据 Kelvin 2026-09-30 的决定（见 `docs/HANDOFF.md`）：1.7 起马来西亚、新加坡（短信白名单）号码结账须先短信验证并成为会员，不再用于游客订单（DESIGN 1.9「权限与资料保护」），一般情形下游客订单上不再出现可被他人注册认领的白名单号码。**短信无法送达或停发时降级的游客下单**，以及**以后扩大白名单**时，这些游客订单仍可能被该号码的真实持有人注册后认领并看到收货资料（DESIGN 1.9 也写明认领主要在这两种情形下生效）；Kelvin 接受这一剩余风险。不新增或改动文案。
+- **Q11 虚构电话被真实号码持有人认领。** **已决**，依据 Kelvin 2026-09-30 的决定（见 `docs/HANDOFF.md`）：1.7 起马来西亚、新加坡（短信白名单）号码结账须先短信验证并成为会员，不再用于游客订单（DESIGN 1.9「权限与资料保护」），一般情形下游客订单上不再出现可被他人注册认领的白名单号码。**短信无法送达或停发时降级的游客下单**，以及**以后扩大白名单**时，这些游客订单仍可能被该号码的真实持有人注册后认领并看到收货资料（DESIGN 1.9 也写明认领主要在这两种情形下生效）；Kelvin 接受这一剩余风险。不新增或改动文案。**2026-10-01 补充**（Kelvin 决定，DESIGN 1.11「权限与资料保护」）：短信验证开关默认关闭，关闭期间马新号码也以游客下单；之后开启并由该号码的真实持有人验证时，这些订单同样会被认领并看到其中的收货资料。Kelvin 接受这一风险，照常认领，仍不新增或改动文案。
 - **Q12 待支付订单的取消入口与操作者。** **已决**，依据 DESIGN 1.9「订单与退款状态」「权限与资料保护」：待支付订单由下单者在支付页取消，游客凭该单短期凭据，会员凭登录会话；P06 为两者都提供 `pay.cancel_order`；查单页不提供取消。
 - **Q13 会员中心「优惠券」的含义。** **已决**，依据 Kelvin 2026-09-29 的决定：「我的优惠券」同时列出当前可用的公开券与本人使用记录（P13）。「公开券」的范围见 Q19。
 - **Q14 马来文文案审校。** **已决**，依据 Kelvin 2026-09-30 的决定：先上线，上线后再由马来文母语者审校用词（如 troli、daftar keluar、bayaran balik）。UX-COPY 的马来文仍标为草稿；审校不再是页面实现的前置条件。
-- **Q15 密码规则与注销确认方式。** **已决**，依据 DESIGN 1.9「权限与资料保护」：密码至少 8 位、不强制复杂度（`auth.password_rule`）；注销须先以短信验证码确认（P13 嵌入 V1）。
+- **Q15 密码规则与注销确认方式。** **已决**，依据 DESIGN 1.9「权限与资料保护」：密码至少 8 位、不强制复杂度（`auth.password_rule`）；注销须先以短信验证码确认（P13 嵌入 V1）。**2026-10-01 补充**（Kelvin 决定，DESIGN 1.11「权限与资料保护」）：上述注销确认只在短信验证开关开启时适用；关闭时已设密码的会员以当前密码确认，未设密码的会员在已登录会话内二次确认（P13）。
 - **Q16 结账第一步手机号的默认区号。**（0.2 新增）**已决**，依据 Kelvin 2026-09-30 的决定与已批准的 DESIGN 1.9「权限与资料保护」：结账第 1 步国家码下拉列出所有国家、默认 +60；以 `+` 开头输入时以输入为准；服务端按所选或输入的国家码规范化为 E.164 并判定是否属于白名单，之后选的收货国家不改变已判定的号码。游客订单的收货电话即第 1 步号码（只读），下单时不按收货国家重新解析；以收货国家作为默认区号只用于会员改填的收货电话。线框见 P05；`checkout.phone_step_hint` 措辞不变。
 - **Q17 会员待支付订单能否从会员中心回到支付页。**（0.2 新增）**已决**，依据 Kelvin 2026-09-30 的决定（与 DESIGN 1.9「订单与退款状态」中会员凭登录会话在支付页取消一致）：会员可从 P09 会员模式的 `account.order_pay` 回到 P06，继续支付或取消自己的待支付订单。线框见 P06、P09、P13。
 - **Q18 会员注销后手机号在共享备份中的残留期措辞。**（0.2 新增，承接原 Q3）**已决**，依据 Kelvin 2026-09-30 的决定与 DESIGN 1.9「资料保留」（注销时在线删除的手机号与密码哈希，最迟在注销后第 max(binlog 残留期, N) 天才从共享备份与 binlog 中消失，运营核实前没有确定上限）：隐私页对外披露。`privacy.member_backup` 改写为：注销前产生的手机号与密码哈希副本可能在数据库备份中保留一段尚未确定的时间；不写天数，不写或暗示备份一定会在某时被清除，用「密码哈希」而不是「密码」；该键已定稿。
