@@ -9,11 +9,25 @@ from app.models.catalog import (
     ProductVariant,
     VariantOptionValue,
 )
+from app.models.order import (
+    Order,
+    OrderEvent,
+    OrderItem,
+    OrderItemUnit,
+    OrderRecipient,
+    PaymentAttempt,
+)
 from app.models.shipping import DemoFxRate, ShippingRate
 
 __all__ = [
     "Category",
     "DemoFxRate",
+    "Order",
+    "OrderEvent",
+    "OrderItem",
+    "OrderItemUnit",
+    "OrderRecipient",
+    "PaymentAttempt",
     "Product",
     "ProductImage",
     "ProductOption",
