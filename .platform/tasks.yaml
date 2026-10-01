@@ -730,7 +730,7 @@ tasks:
       20 行上限的提示和按钮禁用。购物车页 P04 由之后的任务做；在那之前「查看购物车」与页头购物车入口按路由规则不渲染。
       不在浏览器计算任何金额，不调用计价接口，不装依赖，不改后端，不改设计。设计闸门：不适用（只展示目录接口返回的单价与库存，
       购物车只存 SKU、商品 slug 与件数，不涉及个人资料；限购只是提示，校验在服务端）。
-      拆分：不拆（16 个允许路径、10 条验收标准，超过拆分阈值）——P03 与浏览器购物车模块同属前端一层，限购与 20 行上限的提示依赖购物车模块，路径多为实现与测试成对。
+      拆分：不拆（18 个允许路径、10 条验收标准，超过拆分阈值）——P03 与浏览器购物车模块同属前端一层，限购与 20 行上限的提示依赖购物车模块，路径多为实现与测试成对。
     status: ready
     depends_on:
       - SHOP-TASK-014
@@ -738,7 +738,7 @@ tasks:
       - SHOP-TASK-016
     acceptance_criteria:
       - 页面内容、流程与文案以 docs/UX.md 0.6 的 P03 与 docs/UX-COPY.md 0.5 为准，样式以 docs/design/pages/ 的 P03 静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；沿用 SHOP-TASK-014、015 的字典、路由、框架、金额格式化与接口模块；手机与桌面的布局差异写在 frontend/src/styles/site.css（只放布局与显隐规则，手机的差异写在 767px 及以下的媒体查询里；只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
-      - 路由 /products/<slug> 用商品详情接口取数（随当前语言）；商品不存在或未发布（接口 404）时替换为商品列表页，不另显示文字；本任务起商品卡与首页精选按路由规则链到详情页；面包屑为 common.nav_shop、分类（链到按该分类筛选的列表）与商品名称
+      - 路由 /products/<slug> 用商品详情接口取数（随当前语言）；商品不存在或未发布（接口 404）时替换为商品列表页，不另显示文字；本任务起商品卡与首页精选按路由规则链到详情页（frontend/src/pages/HomePage.test.tsx 与 frontend/src/pages/ProductListPage.test.tsx 只为此改动有关详情链接的断言）；面包屑为 common.nav_shop、分类（链到按该分类筛选的列表）与商品名称
       - 当前语言回退英文时名称旁显示 detail.english_only；桌面缩略图可点选切换主图，手机主图可左右滑动，每张图读屏标签用 detail.a11y_image；描述在手机上可折叠；手机上加入购物车按钮固定在底部；显示 ★ detail.demo_hint
       - 规格选择：初始不预选（只有一个启用 SKU 的商品直接选定）；与已选的其他规格值组不成任何启用 SKU 的值禁用；选全前价格按 SHOP-TASK-015 的起价规则显示，选全后显示所选 SKU 的单价与 detail.stock_left（当日可用库存）；未选全就点加入时显示 detail.select_all_options
       - 浏览器购物车存在 localStorage，每行只有 SKU、商品 slug 与件数（不存价格、名称或任何个人资料）；读取时丢弃格式不对、件数不在 1 到 99、重复 SKU 与超过 20 行的部分；读写失败时页面照常可用；同一 SKU 再次加入时合并件数；购物车模块供之后的购物车页复用
@@ -759,6 +759,8 @@ tasks:
       - frontend/src/components/ProductCard.tsx
       - frontend/src/components/ProductCard.test.tsx
       - frontend/src/pages/HomePage.tsx
+      - frontend/src/pages/HomePage.test.tsx
+      - frontend/src/pages/ProductListPage.test.tsx
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
@@ -1076,7 +1078,7 @@ tasks:
       实现结账页 P05 的游客路径：第 1 步填手机号（国家码下拉默认 +60），按短信验证开关与号码判定以游客继续；第 3 步填收货资料、
       按收货国家显示示例运费、合计与参考外币，提交游客订单后进入模拟支付页。不做会员路径、短信验证、优惠券与积分，不在浏览器计算任何金额，
       不装依赖，不改后端，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）。
-      拆分：不拆（19 个允许路径、13 条验收标准，超过拆分阈值）——P05 游客路径的第 1 步与第 3 步共用一个页面、一份内存状态与同一个下单请求，同属前端一层，路径多为实现与测试成对。
+      拆分：不拆（21 个允许路径、13 条验收标准，超过拆分阈值）——P05 游客路径的第 1 步与第 3 步共用一个页面、一份内存状态与同一个下单请求，同属前端一层，路径多为实现与测试成对。
     status: ready
     depends_on:
       - SHOP-TASK-018
@@ -1091,7 +1093,7 @@ tasks:
       - 第 1 步：开关开启时常显 checkout.phone_notice，关闭时常显 checkout.phone_notice_sms_off，二者旁都有链到 P14 的 checkout.form_notice_link，无勾选框；国家码下拉列出全部地区（显示本地化国家名与 +呼叫码，按名称排序），默认 MY；号码输入以加号开头时以输入为准；显示 checkout.phone_step_hint 与 checkout.phone_continue；checkout.login_password 按路由规则在登录页实现前不渲染；格式是否成立由服务端在下单时判定，浏览器只要求非空
       - 继续后的判定：开关关闭时任何号码都以游客继续，第 3 步顶部显示 checkout.guest_sms_off；开关开启时，号码属于马新（下拉选 MY 或 SG 且输入不以加号开头，或输入以 +60、+65 开头）在短信验证组件实现前停在第 1 步并显示 common.service_unavailable（Kelvin 2026-10-01 批准的过渡规则，记录见 docs/HANDOFF.md 0.25，由之后的 V1 与会员路径任务取消），其他号码以游客继续并在第 3 步顶部显示 checkout.guest_other_country；第 3 步另显示 checkout.guest_notice
       - 第 3 步：显示第 1 步的号码（只读）与 checkout.phone_change（回第 1 步）、checkout.phone_lookup_hint；收货表单旁常显 checkout.form_notice 与 checkout.form_notice_link，无勾选框；字段为 checkout.name、checkout.country（全部地区，初始未选）、选马来西亚时的 checkout.state_my 下拉或其他国家的 checkout.region 自由文本（可空）、checkout.address、checkout.postcode；不收集任何其他资料
-      - 摘要：用购物车各行 SKU 与件数（选了国家后加国家与州属）调用计价接口，显示每行与 cart.subtotal；未选国家时显示 cart.shipping_later 与小计，选定后显示 checkout.summary_shipping、checkout.summary_total 与参考外币（checkout.fx_note，或该国无汇率时 checkout.fx_none）；游客不显示 checkout.summary_coupon 与 checkout.summary_points；改国家或州属后重新计价，只采用最后一次请求的结果；有任何非正常行时显示 cart.item_changed、禁用下单并可回购物车；手机版顶部折叠摘要与底部固定栏在选国家前显示小计、选定后显示合计；★ checkout.demo_hint 常显
+      - 摘要：用购物车各行 SKU 与件数（选了国家后加国家与州属）调用计价接口，显示每行与 cart.subtotal；未选国家时显示 cart.shipping_later 与小计，选定后显示 checkout.summary_shipping、checkout.summary_total 与参考外币（checkout.fx_note，或该国无汇率时 checkout.fx_none），参考外币金额的格式化加在 frontend/src/format.ts（整数运算、不用浮点，测试写在 frontend/src/format.test.ts），不在页面代码里另写；游客不显示 checkout.summary_coupon 与 checkout.summary_points；改国家或州属后重新计价，只采用最后一次请求的结果；有任何非正常行时显示 cart.item_changed、禁用下单并可回购物车；手机版顶部折叠摘要与底部固定栏在选国家前显示小计、选定后显示合计；★ checkout.demo_hint 常显
       - 下单：checkout.place_order 旁显示 ◆ checkout.place_order_hint；调用 SHOP-TASK-020 的 POST /api/orders/guest，请求体只含购物车行（SKU 与件数）、第 1 步号码原文与所选地区代码、收货资料、国家、州属或地区（字段名以 SHOP-TASK-020 的请求模型为准），不带任何金额；Idempotency-Key 在提交时用 crypto.randomUUID 生成，表单或购物车改动后换新；提交期间按钮禁用并显示 checkout.submitting
       - 下单结果：201 或 200 时清空本浏览器购物车并以站内导航进入 /pay（不带订单号）；网络中断时显示 common.network_check，并以同一幂等键重试（重放即查询原订单，不会重复下单）；409 order_not_placeable 时重新计价并显示 cart.item_changed；403 sms_verification_required（开关在填表途中被打开）时回第 1 步按开启状态重新判定；422 phone_invalid 时回第 1 步显示 checkout.phone_invalid；409 idempotency_conflict 时换新幂等键并显示 common.error_retry；503 显示 common.service_unavailable；其他错误显示 common.error_retry，不清空已填内容
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch、Intl 与存储以替身代替）验证意图：开关两种状态下第 1 步的告知与继续后的判定（含马新号码在开关开启时停在第 1 步、加号输入以输入为准）；收货资料与电话不写进网址或任何浏览器存储；下单请求体不含金额且字段齐全；幂等键在网络重试时不变、改动后更换；各错误码的页面反应；成功后清空购物车并进入 /pay；摘要在选国家前后的显示与游客不显示券和积分行；国家名本地化与取不到时显示代码；页面文字全部来自字典；每条测试写明它守住的是 UX 或 DESIGN 哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
@@ -1109,6 +1111,8 @@ tasks:
       - frontend/src/pages/CheckoutPage.test.tsx
       - frontend/src/pages/checkoutPhone.ts
       - frontend/src/pages/checkoutPhone.test.ts
+      - frontend/src/format.ts
+      - frontend/src/format.test.ts
       - frontend/src/cart.ts
       - frontend/src/cart.test.ts
       - frontend/src/pages/CartPage.tsx
