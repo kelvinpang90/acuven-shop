@@ -1244,3 +1244,96 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 退款申请 API（游客查单模式）。按原单逐件现金实付快照计算模拟退款金额，走设计闸门：docs/DESIGN.md 1.11
+  # 「订单与退款状态」第 4、5 条、「数据模型」RefundRequest / RefundLine、「计价、优惠、积分与库存」第 4 条、「失败、并发与重试」第 1 条、
+  # 「权限与资料保护」第 6 条。Kelvin 2026-10-01 决定（记录见 docs/HANDOFF.md 0.27）：同一行部分退款按件序从前往后取未被占用的件；
+  # 退款截止为支付时刻加 30×24 小时；审核（批准、拒绝、全部退款后冻结履约）并入之后的管理后台业务接口。
+  # 为让「哪几件被占用」可查、并由数据库保证同一件不被两笔有效申请占用，本任务在 RefundLine 之下加一张逐件记录表，不含个人资料。
+  - id: SHOP-TASK-029
+    title: 退款申请 API（查单模式）
+    purpose: >-
+      建立退款申请、申请行与逐件记录三张表并写迁移；提供游客凭查单授权提交模拟退款申请的接口（只选商品与数量，金额由服务端按逐件现金实付快照计算，
+      运费不退），并在订单查看接口里补充退款截止时间、累计已退、剩余可退、各行可退数量与预计金额及申请记录。
+      不做审核、冻结履约、积分返还与追回、会员访问与页面，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-027
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.11 上述各条及 docs/HANDOFF.md 0.27 记录的 Kelvin 决定一致；接口字段参照 docs/UX.md 0.7 的 P09、P10（查单模式），与设计冲突时以设计为准并在 PR 里说明；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - app/models/refund.py 定义三个模型，沿用 app/db/base.py 的基类、约束命名约定与 InnoDB、utf8mb4 表选项，app/models/__init__.py 导出它们；外键一律 RESTRICT；金额一律整数仙；时间一律不带时区的 UTC；不存任何个人资料
+      - 退款申请表：所属订单（建索引）、状态（只允许 requested、approved、rejected）、申请方类别（只允许 guest 与 member）、幂等键（1 到 64 个字符，非空，全表唯一）与请求指纹（非空，64 位十六进制的 SHA-256）、申请金额合计（不小于零）、创建时间、审核时间（检查约束保证 requested 时为空、approved 与 rejected 时非空）；审核人与理由要等管理员账号表，由之后的管理后台任务加列，本任务不预留
+      - 申请行表：所属申请、所属订单行、件数（不小于 1）、该行金额（不小于零）；同一申请与订单行唯一
+      - 逐件记录表：所属申请行、所属逐件分摊快照（SHOP-TASK-010 的 order_item_units 表）、该件现金实付金额（不小于零，写入时取自快照）、占用标记（只允许 1 或空：申请为 requested 或 approved 时为 1，之后审核拒绝时由审核任务置空）；同一逐件分摊快照与占用标记组合唯一（MySQL 与 SQLite 的唯一约束都允许多个空值，故同一件同时最多被一笔有效申请占用，被拒申请释放后可再申请）；同一申请行与逐件分摊快照唯一
+      - 新迁移文件 alembic/versions/20261001_0012_refunds.py，revision 为 0012、down_revision 为 0011；upgrade 建三张表，downgrade 按依赖倒序删除；约束名按命名约定逐个写出；迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，alembic check 在它比较的范围内无差异，由 PR 的必需 CI 检查 backend 执行；PR 正文逐表列出检查约束与表选项
+      - app/services/refunds.py 提供纯计算与查询：退款截止时间为支付时间加 30×24 小时，当前时间不晚于它时退款期内；某订单行的可退件为该行逐件分摊快照中未被占用（占用标记为 1）的件，按件序从小到大排列；申请 k 件即取可退件中件序最小的 k 件，金额为它们的现金实付之和；累计已退为该单 approved 申请的金额之和；剩余可退为该单所有未被占用的件的现金实付之和；全部件都已被 approved 申请占用时为全部已退（供之后的审核任务冻结履约）；docstring 写明积分返还与追回、审核与冻结由之后的任务扩展
+      - POST /api/orders/refunds 请求体只有订单号与申请行列表（每项为订单行序，即 order_items 的 line_index，与件数；1 到 20 项，行序不重复，件数为 1 到 99 的整数），多出字段 422；须带 Idempotency-Key（规则同 SHOP-TASK-020）与 X-CSRF-Token 请求头；只接受 JSON（否则 415），请求体上限 8 KB 且先于其他校验（超出 413）；之后按以下顺序处理，每一步不通过即停止且不读写订单数据：按当前 cookie、订单号对应的订单 ID 与 lookup 范围调用 SHOP-TASK-019 的逐单校验函数（订单号不存在、授权过期、不属于该会话或范围不符一律同一个 401，错误码 access_expired），CSRF 校验（不通过 403，错误码 csrf_failed），然后才查幂等键与订单；guest_checkout 授权不能用于本接口；同一会话持有订单 A 的查单授权不能借请求体里的订单号操作订单 B
+      - 幂等：指纹是订单 ID 与按行序排序的申请行按固定规则序列化后的 SHA-256；先按幂等键查申请，指纹相同即返回 200 与原申请（状态、金额、各行件数），不同即 409（错误码 idempotency_conflict），都不再写入
+      - 订单未支付（待支付或已取消）时 409（错误码 order_not_refundable）；当前时间晚于退款截止时间时 409（错误码 refund_window_closed，对应 refund.window_closed）；请求里的行序不属于该订单时 422；该单已没有任何可退件时 409（错误码 refund_nothing_left，对应 refund.nothing_left）；任一行申请件数超过该行可退件数时 409（错误码 refund_duplicate，对应 refund.duplicate），整笔不受理、不部分受理；通过时在同一事务里写申请（状态 requested、申请方 guest）、各申请行与逐件记录（占用标记为 1），返回 201 与申请的状态、金额与各行件数；已发货、已完成的订单照常可申请；示例运费不计入任何金额
+      - 并发：两笔请求争用同一件时由逐件记录的唯一约束保证只有一笔成功；插入遇唯一约束冲突时回滚，再按幂等键重新查询，同键同指纹返回原结果、同键不同指纹 409 idempotency_conflict，否则按重新读取的可退件返回 409 refund_duplicate 或 refund_nothing_left；不出现同一件被两笔有效申请占用
+      - SHOP-TASK-027 的 GET /api/orders/lookup 每张订单增加：订单行序；退款截止时间（未支付为空）与是否在退款期内（服务端判定）；累计已退与剩余可退金额；是否全部已退；每行的可退件数与预计金额列表（第 i 项为申请 i 件时的金额，由服务端按上面的规则算出，供页面直接取用）；该单的退款申请记录（创建时间、状态、各行的名称与规格说明快照与件数、金额），按创建时间从新到旧；不返回积分相关字段（游客订单）；不改该接口已有字段的含义与授权规则
+      - 接口不读会员会话；所有响应带 Cache-Control 为 no-store；不写日志，或日志只记录不含个人资料、订单号、幂等键与令牌的事件；422 响应不回显请求内容；错误响应不含内部细节
+      - 审核（批准、拒绝及审核人与理由）、全部退款后冻结打包、发货与确认收货（含 SHOP-TASK-027 的确认收货路径）、积分返还与追回、会员模式由之后的任务扩展；本任务不预留参数，在 docs/TODO.md 记录段写明
+      - tests/test_refunds.py 用 TestClient 与 SQLite 内存库（开启外键检查，覆盖会话依赖与 SHOP-TASK-026 的取客户端依赖）按模型建表并自建订单（含逐件分摊快照，其中至少一行各件现金实付不相同，以验证取件顺序与金额），经 SHOP-TASK-027 的查单接口取得授权与 CSRF 令牌，验证：申请成功后申请、申请行、逐件记录各自的条数与金额，取的是件序最小的件；同一行第二次申请取接下来的件；把一笔申请改为 rejected 并把其逐件记录的占用标记置空后，这些件可再次申请；运费不计入；订单查看接口新增的各字段（截止时间为支付时间加 30×24 小时、退款期内判定在截止时刻前后各一秒、累计已退只计 approved、剩余可退、每行预计金额列表、申请记录按时间从新到旧）；待支付与已取消订单 409 order_not_refundable，截止后 409 refund_window_closed，无可退件 409 refund_nothing_left，超过可退件数 409 refund_duplicate 且不写任何行；同键同请求重放不重复写入、同键不同请求 409；缺或错 CSRF 403；无 cookie、授权过期、只有 guest_checkout 授权、其他浏览器的 cookie 都 401 且响应相同；同一会话已授权订单 A、未授权订单 B 时对 B 申请返回与无 cookie 相同的 401 且 B 无任何退款记录；用两个数据库会话与可控的交错验证两笔不同幂等键争用同一行最后几件时只有一笔成功，同一幂等键并发插入遇唯一约束冲突后回滚并按指纹重放；非 JSON 415、超过 8 KB 413（先于其他校验）、多余字段、行序重复、件数为 0 或超过 99、行数超过 20 都 422，这些错误响应都不回显请求内容；三张表的检查约束、唯一约束与外键各至少一个被拒的反例；每条测试写明它守住的是设计里哪一句或 HANDOFF 0.27 的哪项决定；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - tests/test_order_lookup.py 只允许为查看接口新增的字段调整断言，不删减或放宽原有用例
+      - docs/TODO.md 新增 SHOP-TASK-029 记录段（三张表与约束、取件与金额规则、接口与错误码、查看接口新增字段、偏离、验证到什么程度，并写明审核、冻结、积分与会员模式留给之后的任务）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不改 SHOP-TASK-019、021、026 已有函数的行为；不改前端代码
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - app/models/refund.py
+      - app/models/__init__.py
+      - alembic/versions/20261001_0012_refunds.py
+      - app/services/refunds.py
+      - app/api/refunds.py
+      - app/api/order_lookup.py
+      - app/services/order_lookup.py
+      - app/main.py
+      - tests/test_refunds.py
+      - tests/test_order_lookup.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 退款申请页 P10 与订单详情 P09 的退款部分（查单模式）。页面显示并提交模拟退款金额，走设计闸门：docs/DESIGN.md 1.11
+  # 「订单与退款状态」「失败、并发与重试」「权限与资料保护」。金额只显示接口返回的整数仙；页面只把接口给出的各行金额相加得到预计合计。
+  - id: SHOP-TASK-030
+    title: 退款申请 P10 与订单详情 P09 的退款部分（查单模式）
+    purpose: >-
+      实现退款申请页 P10 的查单模式，并在订单详情 P09 显示退款入口、退款截止时间、累计已退、剩余可退与退款申请记录：
+      选择商品与数量、显示服务端算出的预计模拟退款金额并提交申请。不做积分行、会员模式，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-028
+      - SHOP-TASK-029
+    acceptance_criteria:
+      - 页面内容、流程与文案以 docs/UX.md 0.7 的 P09、P10（查单模式）与 docs/UX-COPY.md 0.6 为准，样式以 docs/design/pages/ 的 P09、P10 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字，或发现需要多显示、多收集个人资料时停下并在 PR 里说明，不自行编写文案、不改设计；沿用之前前端任务的字典、路由、框架与金额格式化
+      - 路由 /track/order/refund（P10 查单模式）；订单号与 CSRF 令牌不进任何路径、查询参数、localStorage、sessionStorage 或 cookie，只在页面内存里
+      - P09 在接口判定退款期内且剩余可退大于零时显示 order.request_refund（链到 /track/order/refund）与 order.refund_deadline（截止时间按访客浏览器时区显示日期与时间）；订单已支付时显示 order.refunded_total、order.refundable_left 与 order.refund_requests 记录（日期、商品与件数、金额、order.refund_requested、order.refund_approved 或 order.refund_rejected）；接口判定全部已退时显示 order.fulfilment_frozen 且不显示确认收货按钮
+      - P10 打开时调用 GET /api/orders/lookup，取返回的第一张订单；401 时整页显示 order.session_expired 与 common.nav_track；按线框显示 refund.title、order.title（含订单号）、★ refund.demo_hint、order.lookup_access、refund.select_items、各行名称与规格、order.cash_paid（该行各件实付，原样来自接口）、detail.quantity 加减控件（0 到该行可退件数）与 refund.max_qty、refund.estimate、refund.shipping_not_refunded、refund.coupon_not_restored、refund.submit 与 ◆ refund.submit_hint；可退件数为 0 的行不可选；不显示积分三行（游客订单）；手机上合计与提交按钮固定在底部
+      - refund.estimate 的金额取各行预计金额列表中对应件数的那一项再相加（只做整数仙加法，不做乘除或分摊）；全部为 0 件时提交按钮禁用
+      - 提交调用 POST /api/orders/refunds，带每次提交新生成的 Idempotency-Key（crypto.randomUUID）与接口返回的 X-CSRF-Token，提交期间按钮禁用；201 或 200 时回到 /track/order 并显示 refund.submitted；409 refund_duplicate、refund_nothing_left、refund_window_closed 分别显示 refund.duplicate、refund.nothing_left、refund.window_closed 并重新读取订单；409 order_not_refundable 时回到 /track/order；409 idempotency_conflict 时重新读取订单并显示 common.error_retry，下次提交改用新的幂等键；403 csrf_failed 时重新读取订单取得新令牌并显示 common.error_retry；401 时整页显示 order.session_expired；网络中断时显示 common.network_check，允许以同一幂等键与同一请求内容重试
+      - 会员模式（account.orders 与积分行）在会员中心实现前不渲染
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与存储以替身代替）验证意图：订单号与令牌不写进网址或任何浏览器存储；P09 退款入口只在退款期内且有剩余可退时出现，截止时间显示日期与时间；全部已退时显示 order.fulfilment_frozen 且没有确认收货按钮；申请记录三种状态的文案；P10 的 401 整页提示；件数上限等于可退件数；预计金额来自接口给出的列表并只做加法；不显示积分行；提交带幂等键与 CSRF 令牌，网络中断后以同一幂等键重试；五种 409 各自的处理；金额原样来自接口；页面文字全部来自字典；每条测试写明它守住的是 UX 或 DESIGN 哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-030 记录段（页面结构、请求与重试规则、显示规则、偏离、验证到什么程度，并写明未做浏览器验收、积分行与会员模式留给之后的任务）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/orderLookup.ts
+      - frontend/src/api/orderLookup.test.ts
+      - frontend/src/pages/TrackOrderPage.tsx
+      - frontend/src/pages/TrackOrderPage.test.tsx
+      - frontend/src/pages/RefundPage.tsx
+      - frontend/src/pages/RefundPage.test.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
