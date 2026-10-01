@@ -5,7 +5,7 @@
 
 ## 0.7 修订要点
 
-- **短信验证开关**（Kelvin 2026-10-01 决定，REQUIREMENTS 1.12、DESIGN 1.11）：新增后台 A09 站点设置，`[admin.sms_toggle]` 开关全站短信，默认关闭。关闭时：V1 在注册、短信登录与重设密码处整个替换为 `[auth.sms_paused]`；P05 第 1 步以 `[checkout.phone_notice_sms_off]` 代替 `[checkout.phone_notice]`，任何号码（含马新号码）继续后显示 `[checkout.guest_sms_off]` 并以游客表单进入第 3 步；P13 注销改为已设密码者输入密码、未设密码者经确认框，未设密码时另显示 `[account.sms_paused_set_password]`；P14 增加 `[privacy.sms_toggle]`。开启时各页与 0.6 相同。
+- **短信验证开关**（Kelvin 2026-10-01 决定，REQUIREMENTS 1.12、DESIGN 1.11）：新增后台 A09 站点设置，`[admin.sms_toggle]` 开关全站短信，默认关闭。关闭时：V1 在注册、短信登录与重设密码处整个替换为 `[auth.sms_paused]`；P05 第 1 步以 `[checkout.phone_notice_sms_off]` 代替 `[checkout.phone_notice]`，未登录访客的任何号码（含马新号码）继续后显示 `[checkout.guest_sms_off]` 并以游客表单进入第 3 步；P13 注销改为已设密码者输入密码、未设密码者经确认框，未设密码时另显示 `[account.sms_paused_set_password]`；P14 增加 `[privacy.sms_toggle]`。开启时各页与 0.6 相同。
 - 前台按服务端提供的开关当前值决定显示哪一组；服务端在下单、发送短信与注销时自行按开关判定，前端显示不是依据。
 - A09 沿用后台中性样式，不另出视觉稿。
 - 新增与修改的文案键见 UX-COPY 0.6「0.6 修订要点」。待决问题未新增。
@@ -466,7 +466,7 @@ V1 金额与个人资料元素：
 | 未登录，马新号码，短信无法送达或停发（服务端判定） | 填手机号 | 显示 `[checkout.sms_unavailable]`，可点 `[checkout.continue_guest]` | 游客表单（降级） |
 | 未登录，马新号码，验证码错误或超过尝试次数 | 填手机号 | 留在 V1，显示 `[auth.code_wrong]` / `[auth.code_too_many]`，**不显示游客选项** | —（不降级） |
 | 未登录，白名单外号码 | 填手机号 | 不发短信，显示 `[checkout.guest_other_country]` | 游客表单 |
-| 短信验证开关关闭（任何号码，含马新号码；0.7） | 填手机号，旁边显示 `[checkout.phone_notice_sms_off]` | 不发短信，显示 `[checkout.guest_sms_off]` | 游客表单 |
+| 短信验证开关关闭（未登录访客的任何号码，含马新号码；0.7） | 填手机号，旁边显示 `[checkout.phone_notice_sms_off]` | 不发短信，显示 `[checkout.guest_sms_off]` | 游客表单 |
 | 已登录会员 | 跳过 | 跳过（不再验证） | 会员表单，收货电话默认会员手机号，可改 |
 
 桌面——第 1 步（未登录）：
