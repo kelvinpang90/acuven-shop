@@ -7,7 +7,8 @@ PaymentAttempt / OrderEvent 三行，以及「订单与退款状态」「失败�
 金额一律是 MYR 整数仙，积分一律是整数积分（1 积分抵 1 仙），不用浮点或 Decimal；
 时间一律是不带时区的 UTC。订单与收货资料长期保存，订单及其子表的外键一律 RESTRICT，
 不级联删除；只有订单行到 SKU 规格的外键在规格被删除时置空，订单行靠快照照常显示。
-会员 ID、优惠券、退款与参考外币都不在这些表里，由之后的任务另加。
+订单的可空会员 ID 与游客订单认领状态由 SHOP-TASK-012 加上（见 app/models/member.py）；
+优惠券、退款与参考外币都不在这些表里，由之后的任务另加。
 
 检查约束只用比较、算术、LENGTH、LIKE、IN 与 IS NULL，MySQL 与 SQLite 都能执行。
 MySQL 的 LENGTH 按字节计，所以幂等键只在库里保证非空，不超过 64 个字符由列长保证；
@@ -72,6 +73,15 @@ PAYMENT_FAILED = "failed"
 
 PAYMENT_RESULTS = (PAYMENT_SUCCEEDED, PAYMENT_FAILED)
 
+# 游客订单认领状态（「权限与资料保护」）：open 是可认领的游客订单；claimed 是已被认领、
+# 不可撤销的标记；not_claimable 是会员下单时即标的不可认领。标记不含手机号，
+# 注销清空会员 ID 后保留，所以 claimed 与 not_claimable 的订单会员 ID 可以为空。
+CLAIM_OPEN = "open"
+CLAIM_CLAIMED = "claimed"
+CLAIM_NOT_CLAIMABLE = "not_claimable"
+
+CLAIM_STATUSES = (CLAIM_OPEN, CLAIM_CLAIMED, CLAIM_NOT_CLAIMABLE)
+
 ORDER_NUMBER_LENGTH = 16
 REQUEST_FINGERPRINT_LENGTH = 64
 
@@ -90,6 +100,13 @@ class Order(Base):
 
     应付 = 商品小计 − 券折扣 − 积分抵扣 + 运费；券与积分都不抵运费，所以应付不低于运费。
     支付到期时间由下单写为创建时间加 15 分钟，超时取消与支付页倒计时都以它为准。
+
+    认领状态的两条检查约束挂在列上而不是 __table_args__：tests/test_order_models.py 只按
+    已有各列对 __table__.constraints 逐条求值，表级约束引用新列会让它报错。SQLite 允许列上
+    的检查约束引用其他列，按模型建表照常生效；MySQL 的表只由迁移建，迁移用表级的
+    ALTER TABLE 加这两条约束（MySQL 不允许列上的检查约束引用其他列，所以不能在 MySQL 上
+    按模型 create_all）。认领状态的 Python 默认值是 open（游客订单）；会员下单须写
+    not_claimable，忘写时 member_claim_not_open 拒绝。
     """
 
     __tablename__ = "orders"
@@ -153,6 +170,21 @@ class Order(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     payment_expires_at: Mapped[datetime] = mapped_column(DateTime)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # 会员不物理删除；注销时由注销流程把会员 ID 清空。
+    member_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("members.id", ondelete="RESTRICT"),
+        index=True,
+    )
+    claim_status: Mapped[str] = mapped_column(
+        String(16),
+        CheckConstraint(f"claim_status IN {_sql_in(CLAIM_STATUSES)}", name="claim_status_valid"),
+        CheckConstraint(
+            f"member_id IS NULL OR claim_status <> '{CLAIM_OPEN}'",
+            name="member_claim_not_open",
+        ),
+        default=CLAIM_OPEN,
+    )
 
 
 class OrderItem(Base):
