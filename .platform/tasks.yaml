@@ -583,14 +583,14 @@ tasks:
     status: ready
     depends_on: []
     acceptance_criteria:
-      - 页面内容、流程与文案以 docs/UX.md 0.5 与 docs/UX-COPY.md 0.4 为准，样式以 docs/design/ 为准，二者冲突时以 UX 文档为准并在 PR 里说明；发现需要多显示或多收集个人资料、或需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计
+      - 页面内容、流程与文案以 docs/UX.md 0.7 与 docs/UX-COPY.md 0.6 为准（P14 在 0.7 改了 privacy.fictional、privacy.sms 并新增 privacy.sms_toggle），样式以 docs/design/ 为准，二者冲突时以 UX 文档为准并在 PR 里说明；发现需要多显示或多收集个人资料、或需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计
       - frontend/src/styles/acuven-shop.css 与 docs/design/tokens/acuven-shop.css 逐字节相同（不手改生成的文件，含其中的字体引入），由应用入口引入；frontend/src/styles/acuven-shop.test.ts 读取两份文件断言相同
       - 前台根元素带 class acs、data-shop-theme 为 pandan、data-mode 为 auto，不设 data-accent；主题取值集中在 frontend/src/storeDesign.ts 一处，写明之后由店铺装修任务改为读取后台设置；页面结构与类名沿用 docs/design/pages/ 对应的静态页面与 docs/design/COMPONENTS.md，桌面与手机的差异靠样式文件的媒体查询，不使用只供视觉稿的 acs--phone，页面代码里不写死颜色、字体或圆角
       - frontend/src/i18n/copy.ts 收录本任务用到的每个文案键的英、中、马三列，与 docs/UX-COPY.md 逐字相同；{变量} 由统一的格式化函数替换；frontend/src/i18n/copy.test.ts 读取 docs/UX-COPY.md 的表格，断言字典里每个键都在文档中且三列逐字相同，并验证变量替换；读取文档的方式不得给应用代码引入 Node 类型（沿用 tsconfig.app.json 的约定）；界面上不出现字典以外的文字（品牌字样 ACUVEN SHOP 等 UX「阅读说明」列出的不翻译字样除外）
       - 默认语言英文；访客在页头切换中文或马来文后，选择只保存在本浏览器的 localStorage，读写失败时照常工作（只是不记住）；不按 IP 或浏览器语言自动切换，不写 cookie，不放进网址；html 元素的 lang 属性随当前语言变化
       - frontend/src/router.tsx 用浏览器 History 接口实现路由，不引入依赖：站内链接不整页刷新，前进后退可用，切换页面后回到页面顶部；路由表是唯一来源，指向尚未实现页面的入口（导航项、按钮、链接）一律不渲染；未知路径替换为首页；本任务只有首页与 /privacy 两个路由；路径与查询参数里不出现订单号或电话
       - 全站框架按 docs/UX.md「全局框架」：演示横幅常驻、不可关闭，桌面用 common.demo_banner、手机用 common.demo_banner_short；页头有品牌字样（链到首页）、按路由表可用的导航项与语言切换，手机为 ☰ 菜单（读屏标签 common.nav_menu）与当前语言下拉；页脚有 common.footer_demo 与链到 P14 的 common.nav_privacy；WhatsApp 联系链接的配置来源由之后单独登记的任务提供，本任务不渲染任何 WhatsApp 按钮与隐私页的联系段（等同 UX Q10 的「配置缺失时隐藏」）；不设站内联系表单
-      - 首页路由只渲染框架与固定位置的 ★ home.demo_hint；隐私说明 P14 按 docs/UX.md 的 P14 线框渲染标题、★ privacy.demo_hint、引言与四个段落（收集什么、保留多久、谁能看到、短信与日志）及其全部文案，手机上各段默认展开；不提供、不暗示访客删除收货资料的入口
+      - 首页路由只渲染框架与固定位置的 ★ home.demo_hint；隐私说明 P14 按 docs/UX.md 的 P14 线框渲染标题、★ privacy.demo_hint、引言与四个段落（收集什么、保留多久、谁能看到、短信与日志，后者含 privacy.sms_toggle）及其全部文案，手机上各段默认展开；不提供、不暗示访客删除收货资料的入口
       - 用 vitest 与 react-dom/server（不加测试依赖）验证意图：演示横幅在每个路由都渲染且没有关闭控件；未实现页面的导航项不渲染；未知路径落到首页；语言选择的读取、保存、非法值回退英文与存储读写失败时的行为；P14 渲染全部段落文案且没有联系段、没有 WhatsApp 链接、没有删除资料的入口；页面文字全部来自字典；每条测试写明它守住的是 UX 哪一句；原外壳页的测试随外壳页一起替换；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/TODO.md 新增 SHOP-TASK-014 记录段（文件结构、路由与语言规则、字典校验方式、偏离、验证到什么程度，并写明未做浏览器验收）；不改 planning-v1 块；复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端
@@ -974,6 +974,134 @@ tasks:
       - app/api/site_settings.py
       - app/main.py
       - tests/test_site_settings.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 结账页的参考数据：电话国家码下拉与收货国家下拉的地区列表、马来西亚州属列表。只读参考数据，不涉及金额与个人资料，不走设计闸门。
+  # Kelvin 2026-10-01 决定：国家名称由浏览器按界面语言本地化（不进文案表）；州属名称三语都用马来文官方名（记录见 docs/HANDOFF.md 0.25）。
+  - id: SHOP-TASK-023
+    title: 结账参考数据：地区与国家码列表、马来西亚州属列表
+    purpose: >-
+      提供结账页 P05 所需的只读参考数据接口：所有可选地区的两位代码与国家呼叫码（供电话国家码下拉与收货国家下拉），
+      以及马来西亚 16 个州属与直辖区的代码与马来文官方名称（供州属下拉）。不读写数据库，不改运费与手机号规则，不做页面，不改设计。
+      设计闸门：不适用（只读的地区参考数据，不涉及金额计算，不收集、存储或展示个人资料）。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 只有一个接口 GET /api/checkout/regions，不需要登录，不读写 cookie，不访问数据库；响应可按静态数据缓存
+      - 响应的 regions 列出 phonenumbers 支持的全部两位地区代码（不含非地理编码），每项为地区代码与国家呼叫码（整数），按地区代码排序；国家名称不由接口提供（前端按界面语言本地化）
+      - 响应的 my_states 按 MY-01 到 MY-16 的顺序列出马来西亚州属代码与马来文官方名称，三种界面语言都用这一名称（Kelvin 2026-10-01 决定）：Johor、Kedah、Kelantan、Melaka、Negeri Sembilan、Pahang、Pulau Pinang、Perak、Perlis、Selangor、Terengganu、Sabah、Sarawak、Wilayah Persekutuan Kuala Lumpur、Wilayah Persekutuan Labuan、Wilayah Persekutuan Putrajaya；代码集合与 app/services/shipping.py 的 MY_STATE_CODES 一致（从它取代码，名称表写在同一服务模块里，不另立一套代码）
+      - 响应的 default_phone_region 为 MY（结账第 1 步国家码默认 +60，DESIGN 1.11「权限与资料保护」）
+      - 代码放在 app/services/regions.py 与 app/api/regions.py，并在 app/main.py 注册；只 import 标准库、phonenumbers 与项目已有模块，不改 pyproject.toml
+      - tests/test_regions.py 用 TestClient 验证：MY 与 SG 在列表中且呼叫码分别为 60 与 65；每项代码都是两位大写字母且已排序、不重复；州属列表恰好 16 项、顺序与名称如上、代码集合等于 MY_STATE_CODES；默认地区为 MY；接口不访问数据库（覆盖会话依赖为会抛错的替身）；每条测试写明它守住的是哪一句规则；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-023 记录段（响应字段、数据来源、偏离、验证到什么程度）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表或迁移；不改前端代码
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - app/services/regions.py
+      - app/api/regions.py
+      - app/main.py
+      - tests/test_regions.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 模拟支付页 P06 与结果页 P07（游客）。页面显示该单收货资料原文，并触发支付状态变化，故走设计闸门：docs/DESIGN.md 1.11（提交 2d13250）
+  # 「权限与资料保护」（游客短期凭据、CSRF、订单号不进网址）、「订单与退款状态」「失败、并发与重试」。金额只显示接口返回的整数仙。
+  # 先于结账页 P05 做：P05 下单成功后要跳到这里。会员访问由之后的会员任务扩展。
+  - id: SHOP-TASK-024
+    title: 模拟支付 P06 与支付结果 P07（游客）
+    purpose: >-
+      实现游客的模拟支付页 P06 与结果页 P07：凭本浏览器的短期凭据读取订单，选择演示支付方式并提交模拟成功或失败，取消待支付订单，
+      按订单状态显示成功、失败或已取消。不在浏览器计算任何金额，不做会员访问与积分，不做结账页，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-018
+      - SHOP-TASK-021
+    acceptance_criteria:
+      - 页面内容、流程与文案以 docs/UX.md 0.7 的 P06、P07 与 docs/UX-COPY.md 0.6 为准，样式以 docs/design/pages/ 的 P06、P07 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字，或发现需要多显示、多收集个人资料时停下并在 PR 里说明，不自行编写文案、不改设计；沿用之前前端任务的字典、路由、框架与金额格式化
+      - 路由 /pay（P06）与 /pay/result（P07）；订单号、电话与 CSRF 令牌不进任何路径、查询参数、localStorage、sessionStorage 或 cookie，只在页面内存里；页面不显示任何凭据内容或凭据剩余时间
+      - 两页打开时都调用 SHOP-TASK-021 的 GET /api/pay/orders（随当前语言），取返回的第一张订单（最近签发的授权）；接口 401 时整页显示 pay.session_expired，common.nav_track 按路由规则在订单查询页实现前不渲染
+      - P06 在订单为 awaiting_demo_payment 时显示：订单号与 common.copy（复制到剪贴板）、pay.save_order_no、pay.amount_due（应付）、pay.expires 倒计时、pay.guest_access、该单收货资料（姓名、电话、地址、邮编、地区、国家）、pay.choose_method 与三种支付方式、pay.simulate_success、pay.simulate_failure、◆ pay.action_hint、pay.cancel_order、★ pay.demo_hint；不出现任何卡号、有效期或 CVV 输入框，不显示参考外币；未选支付方式时成功与失败按钮禁用
+      - 倒计时 {minutes} 用接口返回的支付到期时间与服务器当前时间之差计算（不依赖访客电脑的时钟），每分钟更新；到 0 时重新读取订单并转到结果页；订单不是待支付状态时直接转到结果页
+      - 成功、失败按钮调用 POST /api/pay/attempts，带每次点击新生成的 Idempotency-Key（crypto.randomUUID）与接口返回的 X-CSRF-Token；提交期间按钮禁用并显示 pay.processing；完成后转到结果页；网络中断时显示 common.network_check，先重新读取订单确认结果，订单仍待支付时才允许以同一幂等键重试；409 order_expired 或 order_not_payable 时转到结果页；403 csrf_failed 时重新读取订单取得新令牌并显示 common.error_retry；401 时显示 pay.session_expired
+      - 取消先弹出 pay.cancel_confirm 确认框（pay.cancel_confirm_yes、pay.cancel_confirm_no），确认后调用 POST /api/pay/cancel（带 X-CSRF-Token），完成后转到结果页；网络中断时同样先重新读取订单
+      - P07 按重新读取的订单显示：demo_paid 显示 result.success_title、result.success_body、订单号与 common.copy、pay.save_order_no、pay.amount_due、收货资料、result.guest_next、★ result.demo_hint 与 result.continue（去商品列表）；最近一次支付失败且仍待支付时显示 result.failure_title、result.failure_body、pay.expires 倒计时与 result.retry（回 P06）；demo_cancelled 按取消方显示 result.cancelled（超时）或 result.cancelled_by_you，以及 result.continue；result.guest_register 与 result.track 按路由规则在注册页、会员订单详情实现前不渲染，不显示获得积分
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch、剪贴板与存储以替身代替）验证意图：订单号与令牌不写进网址或任何浏览器存储；401 整页提示；倒计时按服务器时间差计算；未选支付方式时按钮禁用；支付请求带幂等键与 CSRF 令牌，网络中断后先查订单、以同一幂等键重试；取消须经确认框；结果页三种状态与取消方的文案选择；不显示卡号输入框与参考外币；金额原样来自接口；页面文字全部来自字典；每条测试写明它守住的是 UX 或 DESIGN 哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-024 记录段（页面结构、请求与重试规则、状态显示规则、偏离、验证到什么程度，并写明未做浏览器验收）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/pay.ts
+      - frontend/src/api/pay.test.ts
+      - frontend/src/pages/PayPage.tsx
+      - frontend/src/pages/PayPage.test.tsx
+      - frontend/src/pages/PayResultPage.tsx
+      - frontend/src/pages/PayResultPage.test.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 结账页 P05 的游客路径。收集收货资料与结账手机号，走设计闸门：docs/DESIGN.md 1.11（提交 2d13250）「边界与原则」（短信验证开关）、
+  # 「权限与资料保护」第 1、2 条（结账身份与游客电话）、「资料保留」（告知），金额只显示计价与下单接口返回的整数仙。
+  # 会员路径与短信验证组件 V1 由之后的任务做；在那之前开关开启且号码属于马新时页面停在第 1 步（过渡规则，见验收标准）。
+  - id: SHOP-TASK-025
+    title: 结账 P05 游客路径
+    purpose: >-
+      实现结账页 P05 的游客路径：第 1 步填手机号（国家码下拉默认 +60），按短信验证开关与号码判定以游客继续；第 3 步填收货资料、
+      按收货国家显示示例运费、合计与参考外币，提交游客订单后进入模拟支付页。不做会员路径、短信验证、优惠券与积分，不在浏览器计算任何金额，
+      不装依赖，不改后端，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-018
+      - SHOP-TASK-020
+      - SHOP-TASK-022
+      - SHOP-TASK-023
+      - SHOP-TASK-024
+    acceptance_criteria:
+      - 页面内容、流程与文案以 docs/UX.md 0.7 的 P05 与 docs/UX-COPY.md 0.6 为准，样式以 docs/design/pages/ 的 P05 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字，或发现需要多显示、多收集个人资料时停下并在 PR 里说明，不自行编写文案、不改设计；沿用之前前端任务的字典、路由、框架、金额格式化与购物车模块
+      - 路由 /checkout；本任务起 P04 的 cart.checkout 按路由规则渲染；购物车为空时显示 cart.empty 与 cart.continue；收货资料与电话只保存在页面内存，不写进网址、localStorage、sessionStorage 或 cookie（刷新后需重填可以接受）
+      - 打开时调用 SHOP-TASK-022 的 GET /api/site-settings 与 SHOP-TASK-023 的 GET /api/checkout/regions；读取完成前第 1 步不可提交，失败时显示 common.error_retry；国家名称用浏览器的 Intl.DisplayNames 按当前界面语言取得，取不到时显示两位代码（Kelvin 2026-10-01 决定）；州属下拉显示接口返回的马来文官方名称，三种语言相同
+      - 第 1 步：开关开启时常显 checkout.phone_notice，关闭时常显 checkout.phone_notice_sms_off，二者旁都有链到 P14 的 checkout.form_notice_link，无勾选框；国家码下拉列出全部地区（显示本地化国家名与 +呼叫码，按名称排序），默认 MY；号码输入以加号开头时以输入为准；显示 checkout.phone_step_hint 与 checkout.phone_continue；checkout.login_password 按路由规则在登录页实现前不渲染；格式是否成立由服务端在下单时判定，浏览器只要求非空
+      - 继续后的判定：开关关闭时任何号码都以游客继续，第 3 步顶部显示 checkout.guest_sms_off；开关开启时，号码属于马新（下拉选 MY 或 SG 且输入不以加号开头，或输入以 +60、+65 开头）在短信验证组件实现前停在第 1 步并显示 common.service_unavailable（过渡规则，PR 里说明），其他号码以游客继续并在第 3 步顶部显示 checkout.guest_other_country；第 3 步另显示 checkout.guest_notice
+      - 第 3 步：显示第 1 步的号码（只读）与 checkout.phone_change（回第 1 步）、checkout.phone_lookup_hint；收货表单旁常显 checkout.form_notice 与 checkout.form_notice_link，无勾选框；字段为 checkout.name、checkout.country（全部地区，初始未选）、选马来西亚时的 checkout.state_my 下拉或其他国家的 checkout.region 自由文本（可空）、checkout.address、checkout.postcode；不收集任何其他资料
+      - 摘要：用购物车各行 SKU 与件数（选了国家后加国家与州属）调用计价接口，显示每行与 cart.subtotal；未选国家时显示 cart.shipping_later 与小计，选定后显示 checkout.summary_shipping、checkout.summary_total 与参考外币（checkout.fx_note，或该国无汇率时 checkout.fx_none）；游客不显示 checkout.summary_coupon 与 checkout.summary_points；改国家或州属后重新计价，只采用最后一次请求的结果；有任何非正常行时显示 cart.item_changed、禁用下单并可回购物车；手机版顶部折叠摘要与底部固定栏在选国家前显示小计、选定后显示合计；★ checkout.demo_hint 常显
+      - 下单：checkout.place_order 旁显示 ◆ checkout.place_order_hint；调用 SHOP-TASK-020 的 POST /api/orders/guest，请求体只含购物车行（SKU 与件数）、第 1 步号码原文与所选地区代码、收货资料、国家、州属或地区（字段名以 SHOP-TASK-020 的请求模型为准），不带任何金额；Idempotency-Key 在提交时用 crypto.randomUUID 生成，表单或购物车改动后换新；提交期间按钮禁用并显示 checkout.submitting
+      - 下单结果：201 或 200 时清空本浏览器购物车并以站内导航进入 /pay（不带订单号）；网络中断时显示 common.network_check，并以同一幂等键重试（重放即查询原订单，不会重复下单）；409 order_not_placeable 时重新计价并显示 cart.item_changed；403 sms_verification_required（开关在填表途中被打开）时回第 1 步按开启状态重新判定；422 phone_invalid 时回第 1 步显示 checkout.phone_invalid；409 idempotency_conflict 时换新幂等键并显示 common.error_retry；503 显示 common.service_unavailable；其他错误显示 common.error_retry，不清空已填内容
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch、Intl 与存储以替身代替）验证意图：开关两种状态下第 1 步的告知与继续后的判定（含马新号码在开关开启时停在第 1 步、加号输入以输入为准）；收货资料与电话不写进网址或任何浏览器存储；下单请求体不含金额且字段齐全；幂等键在网络重试时不变、改动后更换；各错误码的页面反应；成功后清空购物车并进入 /pay；摘要在选国家前后的显示与游客不显示券和积分行；国家名本地化与取不到时显示代码；页面文字全部来自字典；每条测试写明它守住的是 UX 或 DESIGN 哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-025 记录段（页面结构、第 1 步判定与过渡规则、请求与重试规则、偏离、验证到什么程度，并写明未做浏览器验收、会员路径留给之后的任务）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/orders.ts
+      - frontend/src/api/orders.test.ts
+      - frontend/src/api/checkout.ts
+      - frontend/src/api/checkout.test.ts
+      - frontend/src/api/siteSettings.ts
+      - frontend/src/api/siteSettings.test.ts
+      - frontend/src/pages/CheckoutPage.tsx
+      - frontend/src/pages/CheckoutPage.test.tsx
+      - frontend/src/pages/checkoutPhone.ts
+      - frontend/src/pages/checkoutPhone.test.ts
+      - frontend/src/cart.ts
+      - frontend/src/cart.test.ts
+      - frontend/src/i18n/copy.ts
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
       - docs/TODO.md
     allowed_commands:
       - lint.check
