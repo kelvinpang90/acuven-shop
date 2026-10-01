@@ -188,6 +188,7 @@ def test_published_product_has_exactly_the_public_fields(db: Session, client: Te
         "category": category,
         "image": "img/tee-1.jpg",
         "min_price_sen": 2190,
+        "has_multiple_variants": True,
         "sold_out_today": False,
     }
     assert listing == {"total": 1, "page": 1, "page_size": 24, "items": [expected_item]}
@@ -276,8 +277,8 @@ def test_category_list_has_only_active_categories_with_an_english_name(
     response = client.get("/api/catalog/categories", params={"lang": "zh"})
 
     assert response.json() == [
-        {"slug": "kitchen", "name": _text("厨房")},
-        {"slug": "garden", "name": _text("Garden", fallback=True)},
+        {"slug": "kitchen", "name": _text("厨房"), "image": None},
+        {"slug": "garden", "name": _text("Garden", fallback=True), "image": None},
     ]
 
 

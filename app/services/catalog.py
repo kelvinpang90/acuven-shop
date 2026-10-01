@@ -4,6 +4,8 @@
 「文案缺少当前语言时回退英文，再缺失则商品不发布」；「边界与原则」：金额以 MYR 的仙为整数单位。
 只发 SELECT，不写库。返回值里没有参考外币、每日初始库存、启用状态等后台字段。
 文案为 NULL、空串或只有空格都算缺少。
+多规格标记、分类图片与规格筛选项依据 docs/REQUIREMENTS.md 1.10「访客与会员流程」第 1 条
+与 docs/UX.md 0.5 的 P01、P02（SHOP-TASK-013）。
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from sqlalchemy import ColumnElement, and_, exists, func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.models import (
     Category,
@@ -47,6 +49,16 @@ class CategorySummary:
 
 
 @dataclass(frozen=True)
+class CategoryListItem:
+    """分类列表接口的一项；嵌在商品摘要与详情里的分类仍是 CategorySummary，不带图片。"""
+
+    slug: str
+    name: LocalizedText
+    # 该分类下按 newest 排序第一的已发布商品的首张图片引用；没有时为 None。
+    image: str | None
+
+
+@dataclass(frozen=True)
 class ProductSummary:
     slug: str
     name: LocalizedText
@@ -55,6 +67,8 @@ class ProductSummary:
     image: str | None
     # 启用 SKU 中的最低单价（MYR 整数仙），供「RM x 起」与价格排序。
     min_price_sen: int
+    # 启用 SKU 多于一个：页面一律显示「起」，即使各 SKU 同价。
+    has_multiple_variants: bool
     # 所有启用 SKU 的当日可用库存都是 0。
     sold_out_today: bool
 
@@ -137,6 +151,12 @@ _max_stock = (
     .correlate(Product)
     .scalar_subquery()
 )
+_active_count = (
+    select(func.count(ProductVariant.id))
+    .where(_active_variant)
+    .correlate(Product)
+    .scalar_subquery()
+)
 _first_image = (
     select(ProductImage.storage_ref)
     .where(ProductImage.product_id == Product.id)
@@ -145,6 +165,8 @@ _first_image = (
     .correlate(Product)
     .scalar_subquery()
 )
+# 商品列表 newest 的排序；分类图片取同一排序下的第一件。
+_newest = (Product.created_at.desc(), Product.id)
 
 
 def published() -> ColumnElement[bool]:
@@ -187,14 +209,86 @@ def _has_matching_variant(filters: Mapping[str, Sequence[str]]) -> ColumnElement
     return exists().where(*conditions)
 
 
-def list_categories(session: Session, lang: Language) -> list[CategorySummary]:
-    """启用且有英文名称的分类，按 id 排序。"""
+def list_categories(session: Session, lang: Language) -> list[CategoryListItem]:
+    """启用且有英文名称的分类，按 id 排序。
+
+    每项带该分类下按 newest 排序第一的已发布商品的首张图片（取法同商品摘要的 image）；
+    该商品没有图片时为 None，不往后找下一件。
+    """
+    image = (
+        select(_first_image)
+        .where(Product.category_id == Category.id, published())
+        .order_by(*_newest)
+        .limit(1)
+        .correlate(Category)
+        .scalar_subquery()
+    )
     stmt = (
-        select(Category)
+        select(Category, image)
         .where(Category.is_active.is_(True), _present(Category.name_en))
         .order_by(Category.id)
     )
-    return [_category_summary(category, lang) for category in session.scalars(stmt)]
+    return [
+        CategoryListItem(
+            slug=category.slug,
+            name=localized(category, "name", lang),
+            image=category_image,
+        )
+        for category, category_image in session.execute(stmt)
+    ]
+
+
+def list_filter_options(session: Session, lang: Language) -> list[OptionDetail]:
+    """商品列表可筛选的规格名与规格值。
+
+    只取已发布商品的启用 SKU 实际用到的规格值；规格名按 code 聚合，同一规格名下按规格值
+    code 去重。同一 code 在不同商品上名称不同时取 id 最小的商品上的名称。规格名按它在
+    各商品中最小的排列序号、再按 code 排序，规格值同理。返回的 code 可原样组成
+    list_products 的 options 筛选。
+    """
+    # 外层用别名：published() 里「所有规格名与规格值的英文名称齐全」的子查询若与外层的
+    # 规格名、规格值关联，就只检查当前这一行，不再是该商品的全部规格。
+    option_row = aliased(ProductOption)
+    value_row = aliased(ProductOptionValue)
+    variant_row = aliased(ProductVariant)
+    used_by_active_variant = exists().where(
+        VariantOptionValue.option_value_id == value_row.id,
+        variant_row.id == VariantOptionValue.variant_id,
+        variant_row.is_active.is_(True),
+    )
+    stmt = (
+        select(option_row, value_row)
+        .join_from(Product, Category, _in_category)
+        .join(option_row, option_row.product_id == Product.id)
+        .join(value_row, value_row.option_id == option_row.id)
+        .where(published(), used_by_active_variant)
+        .order_by(Product.id, option_row.id, value_row.id)
+    )
+
+    # 按商品 id 升序遍历，先见到的名称即 id 最小的商品上的名称。
+    option_names: dict[str, LocalizedText] = {}
+    option_orders: dict[str, int] = {}
+    value_names: dict[str, dict[str, LocalizedText]] = {}
+    value_orders: dict[str, dict[str, int]] = {}
+    for option, value in session.execute(stmt).tuples():
+        option_names.setdefault(option.code, localized(option, "name", lang))
+        option_orders[option.code] = min(
+            option_orders.get(option.code, option.sort_order), option.sort_order
+        )
+        names = value_names.setdefault(option.code, {})
+        orders = value_orders.setdefault(option.code, {})
+        names.setdefault(value.code, localized(value, "name", lang))
+        orders[value.code] = min(orders.get(value.code, value.sort_order), value.sort_order)
+
+    result = []
+    for option_code in sorted(option_orders, key=lambda code: (option_orders[code], code)):
+        orders = value_orders[option_code]
+        names = value_names[option_code]
+        value_codes = sorted(orders, key=lambda code, orders=orders: (orders[code], code))
+        values = [OptionValueDetail(code=code, name=names[code]) for code in value_codes]
+        detail = OptionDetail(code=option_code, name=option_names[option_code], values=values)
+        result.append(detail)
+    return result
 
 
 def list_products(
@@ -232,18 +326,19 @@ def list_products(
 
     min_price = _min_price.label("min_price_sen")
     order_by = {
-        "newest": (Product.created_at.desc(), Product.id),
+        "newest": _newest,
         "price_asc": (min_price, Product.id),
         "price_desc": (min_price.desc(), Product.id),
     }[sort]
     stmt = (
-        select(Product, Category, min_price, _max_stock, _first_image)
+        select(Product, Category, min_price, _active_count, _max_stock, _first_image)
         .join_from(Product, Category, _in_category)
         .where(*conditions)
         .order_by(*order_by)
         .limit(page_size)
         .offset((page - 1) * page_size)
     )
+    rows = session.execute(stmt)
     items = [
         ProductSummary(
             slug=product.slug,
@@ -251,9 +346,10 @@ def list_products(
             category=_category_summary(category, lang),
             image=image,
             min_price_sen=min_price_sen,
+            has_multiple_variants=active_count > 1,
             sold_out_today=max_stock == 0,
         )
-        for product, category, min_price_sen, max_stock, image in session.execute(stmt)
+        for product, category, min_price_sen, active_count, max_stock, image in rows
     ]
     return ProductPage(total=total, page=page, page_size=page_size, items=items)
 
