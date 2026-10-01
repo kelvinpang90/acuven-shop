@@ -4,6 +4,9 @@
 
 FROM python:3.12-slim AS build
 WORKDIR /src
+# 从 PyPI 下载偶发读超时：放宽超时与重试（默认 15 秒、5 次）。用环境变量，`python -m build` 隔离环境里的 pip 也吃得到。
+ENV PIP_DEFAULT_TIMEOUT=60 \
+    PIP_RETRIES=10
 # 只 COPY 打包需要的东西：改一个 Markdown 不该让 wheel 重建。
 COPY pyproject.toml ./
 COPY app ./app
@@ -14,7 +17,9 @@ FROM python:3.12-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DEFAULT_TIMEOUT=60 \
+    PIP_RETRIES=10
 
 RUN useradd --uid 10001 --user-group --no-create-home --shell /usr/sbin/nologin app
 
