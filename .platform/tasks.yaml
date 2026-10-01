@@ -1111,3 +1111,136 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # Redis 连接与限流基础。查单「严格限流、防批量枚举」，Redis 不可用时拒绝（docs/DESIGN.md 1.11「失败、并发与重试」第 4 条、
+  # 「权限与资料保护」第 2 条）；之后的计价、下单、短信与管理员登录限流也复用它。只存按来源与标识的短时计数，键里不放原文。
+  # Kelvin 2026-10-01 决定：单独做基础任务；连接串未配置时照常部署，依赖限流的接口返回暂不可用（记录见 docs/HANDOFF.md 0.26）。
+  - id: SHOP-TASK-026
+    title: Redis 连接与限流基础
+    purpose: >-
+      接入共享 Redis 里分给本项目的独立库：加 Redis 客户端依赖与连接配置，提供按来源或标识计数的固定窗口限流函数，
+      以及取访客来源的函数；连接串未配置、连不上或超时一律视为不可用，由调用方拒绝请求（fail closed）。
+      不接入任何接口，不定具体阈值，不加表，不做页面，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.11「失败、并发与重试」第 4 条（短时限流计数存共享 Redis 为本项目分配的独立库编号、多进程共用、数据丢失后清零可接受、Redis 不可用时依赖限流的敏感接口拒绝请求）一致；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - pyproject.toml 的运行时依赖加 redis（官方 Python 客户端，下界 5.0），并写一行注释说明用途；不加其他依赖，不加测试依赖
+      - app/core/config.py 新增 redis_url 配置项（环境变量 SHOP_REDIS_URL，默认空串表示未配置；变量名与示例值已由登记 PR 写进 .env.example，本任务不改该文件）；docker-compose.yml 的 API 服务把它传进容器，未设置时为空串而不是报错（未配置时照常部署，依赖限流的接口返回暂不可用）
+      - app/services/rate_limit.py 提供：按配置惰性创建、进程内复用的 Redis 客户端（连接与读写超时各不超过 0.5 秒，不自动重试）；连接串为空、连接失败、超时或 Redis 返回错误时一律抛同一个模块内定义的不可用异常，消息不含连接串、主机或计数键；一个供 FastAPI 依赖注入的取客户端函数，测试可以覆盖它
+      - 同一文件提供固定窗口计数：计一次函数接收客户端、桶名（小写下划线）、标识、上限与窗口秒数，在一个 MULTI 事务里对键自增并只在键尚无过期时间时设置过期（EXPIRE 的 NX 选项，共享 Redis 是 7 版），返回自增后是否仍不超过上限；只读函数返回当前计数且不自增（键不存在为 0）；键为固定前缀加桶名加标识的 SHA-256 十六进制摘要，标识原文（来源地址、订单号等）不进 Redis；docstring 写明具体阈值由调用的任务按 Kelvin 的决定传入
+      - 同一文件提供取访客来源的函数：优先取反向代理设置的 X-Real-IP 请求头，值是合法的 IPv4 或 IPv6 地址时使用，否则（缺失、多个值或非法）退回连接的对端地址，再没有时用固定的占位值；docstring 写明为什么不用 X-Forwarded-For（访客自己能在前面追加伪造值），以及上线前须由运营者确认反向代理为本站设置 X-Real-IP，否则所有访客共享一个来源计数，只会更严格、不会放开
+      - 模块不写日志；来源地址、标识原文与连接串都不出现在异常消息或返回值里
+      - tests/test_rate_limit.py 用测试文件内自写的内存替身客户端（实现所用的命令与事务接口，不连真 Redis、不加依赖）验证：未超过上限时放行、超过时拒绝；只在首次自增时设置过期，之后的自增不延长窗口；只读函数不自增；键里不含标识原文且不同桶、不同标识互不影响；连接串为空时抛不可用异常；替身在自增或事务执行时抛 redis 的连接错误或超时错误时都抛不可用异常，消息不含连接串；X-Real-IP 合法、非法、缺失、含多个值四种情况的来源结果；每条测试写明它守住的是设计里哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-026 记录段（配置项、客户端与超时、计数与键规则、来源规则、偏离、验证到什么程度，并写明上线前运营者须分配 Redis 库编号、在服务器配置连接串并确认反向代理设置 X-Real-IP）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI 工作流、Dockerfile 与部署脚本；不加接口、不改 app/main.py、不加表或迁移、不改前端代码
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - pyproject.toml
+      - app/core/config.py
+      - docker-compose.yml
+      - app/services/rate_limit.py
+      - tests/test_rate_limit.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 订单查询与确认收货 API（游客查单模式）。凭订单号与电话查看完整收货资料、推进订单状态，走设计闸门：docs/DESIGN.md 1.11
+  # 「权限与资料保护」第 2、6、7 条（查单与查单授权）、「订单与退款状态」第 2 条（确认收货）、「失败、并发与重试」第 1、4 条（幂等、限流）。
+  # 限流阈值由 Kelvin 2026-10-01 决定：同一来源 10 分钟 30 次，同一订单号 1 小时内失败 10 次（记录见 docs/HANDOFF.md 0.26）。
+  # 设计要求确认收货用幂等键与数据库唯一约束，现有表里没有存放它的地方，故本任务加一张不含个人资料的确认收货记录表。
+  # 退款相关字段与全部退款后冻结、发货 7 天自动完成、会员模式由之后的任务扩展。
+  - id: SHOP-TASK-027
+    title: 订单查询与确认收货 API
+    purpose: >-
+      提供订单查询 P08 与订单详情 P09 查单模式所需的接口：凭订单号与下单电话查询，通过后给当前浏览器签发该单 30 分钟的查单授权；
+      凭查单授权查看订单与完整收货资料；对已模拟发货的订单确认收货。查询按 Kelvin 决定的阈值限流，Redis 不可用时拒绝。
+      不做退款、自动完成、会员访问与页面，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-010
+      - SHOP-TASK-011
+      - SHOP-TASK-019
+      - SHOP-TASK-021
+      - SHOP-TASK-022
+      - SHOP-TASK-026
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.11 上述各条一致；接口字段参照 docs/UX.md 0.7 的 P08、P09（查单模式），与设计冲突时以设计为准并在 PR 里说明；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - 订单号与电话只在请求体里，不进任何路径或查询参数；三个接口的所有响应（含错误）都带 Cache-Control 为 no-store；不读会员会话；不写日志，或日志只记录不含个人资料、订单号、电话、幂等键与令牌的事件；422 响应不回显请求内容；错误响应不含内部细节
+      - POST /api/orders/lookup 请求体只有订单号与电话两个字符串字段，多出字段 422；只接受 JSON（否则 415），请求体上限 8 KB 且先于其他校验（超出 413）；之后按以下顺序处理，每一步不通过即停止：用 SHOP-TASK-026 的计数函数按访客来源计一次（桶名 order_lookup_source，10 分钟窗口上限 30 次，成功失败都计），超过返回 429（错误码 rate_limited）；把订单号去掉空格与连字符、转大写，再把 I、L 换成 1、O 换成 0，用 SHOP-TASK-010 的格式校验函数检查；按规范化后的订单号读该号的失败计数（桶名 order_lookup_failures，1 小时窗口），已达 10 次即 429（电话正确也拒绝）；按订单号查订单，再用 SHOP-TASK-011 的规范化函数（默认地区 MY，以加号开头时以输入为准）规范化电话，以常量时间比较与该单收货资料里的电话比对
+      - 订单号格式不合法、订单不存在、电话无法规范化与电话不符一律返回同一个 404（错误码 not_found，对应 lookup.not_found），响应体与响应头相同，不泄露订单是否存在；后三种情形（订单号格式合法时）把该订单号的失败计数加一，窗口 1 小时；Redis 连接串未配置、连不上或超时时返回 503（错误码 service_unavailable，对应 common.service_unavailable）：发生在来源计数或读取失败计数时，不查订单；发生在比对失败后给失败计数加一时，返回同一个 503 而不是 404，不签发授权
+      - 查询通过时在同一事务里用 SHOP-TASK-019 的签发函数给该单签发 lookup 范围的授权并提交，设置它的 cookie，返回 204 且响应体为空（订单内容由下面的查看接口取）；查单不改订单状态，任何状态的订单（含待支付与已取消）都可查；lookup 授权不能用于 SHOP-TASK-021 的支付与取消接口，guest_checkout 授权也不能用于本任务的查看与确认收货
+      - GET /api/orders/lookup（语言参数与目录接口相同）返回本浏览器当前有效的 lookup 授权所对应的订单（列出函数沿用 SHOP-TASK-021 在 app/services/order_access.py 新增的只读函数），按授权到期时间从晚到早（刚查询的在前）；返回前先对其中待支付的订单执行 SHOP-TASK-021 的超时取消函数；每张订单含订单号、状态、创建时间、支付时间（未支付为空）、服务器当前时间、按请求语言取的订单行快照（名称、规格说明、件数、单价、行小计与逐件实付金额列表）、商品小计、运费、应付、收货资料原文（姓名、电话、国家、地区、地址、邮编）；不返回优惠券与积分两项（现有订单都是游客订单，按 docs/UX.md 0.7 的 P09 游客订单不显示这两行；会员任务扩展）；另返回由 cookie 重新算出的 CSRF 令牌；没有有效授权时 401（错误码 access_expired，对应 order.session_expired），不区分订单不存在、授权过期或不属于该浏览器
+      - POST /api/orders/confirm-receipt 请求体只有订单号，多出字段 422；须带 Idempotency-Key（规则同 SHOP-TASK-020）与 X-CSRF-Token 请求头；只接受 JSON，请求体上限 8 KB，规则同 SHOP-TASK-020；按以下顺序处理，每一步不通过即停止且不读写订单数据：请求体大小与格式，按当前 cookie、订单号对应的订单 ID 与 lookup 范围调用 SHOP-TASK-019 的逐单校验函数（订单号不存在、授权过期、不属于该会话或范围不符一律同一个 401，错误码 access_expired），CSRF 校验（不通过 403，错误码 csrf_failed），然后才查幂等键与订单状态；同一会话持有订单 A 的查单授权不能借请求体里的订单号操作订单 B
+      - app/models/order.py 新增确认收货记录模型：所属订单（外键 RESTRICT，全表唯一，一张订单只记一次手动确认）、幂等键（1 到 64 个字符，非空，全表唯一）与请求指纹（非空，64 位十六进制的 SHA-256，由订单 ID 按固定规则序列化后算出）、操作者类别（只允许 guest 与 member）、创建时间（不带时区的 UTC）；不存任何个人资料；沿用 app/db/base.py 的基类、约束命名约定与 InnoDB、utf8mb4 表选项，app/models/__init__.py 导出它；新迁移文件 alembic/versions/20261001_0011_receipt_confirmations.py，revision 为 0011、down_revision 为 0010，upgrade 建表、downgrade 删表，约束名按命名约定逐个写出；迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，alembic check 在它比较的范围内无差异，由 PR 的必需 CI 检查 backend 执行；PR 正文列出检查约束与表选项
+      - 确认收货的幂等：先按幂等键查确认收货记录，指纹相同即返回 200 与订单当前状态、不再改订单，指纹不同即 409（错误码 idempotency_conflict）；订单为 demo_shipped 时在同一事务里写确认收货记录、用带条件的 UPDATE（状态仍为 demo_shipped 才改）把订单改为 demo_completed、写一条操作者为 guest 的状态事件，返回 200 与新状态；状态迁移经 SHOP-TASK-010 的迁移判定函数检查；订单为其他任何状态（含已经 demo_completed）时返回 409（错误码 order_not_confirmable）与订单当前状态，不写记录与事件；条件 UPDATE 未命中或插入确认收货记录遇唯一约束冲突时回滚，再按幂等键重新查询，同键同指纹返回原结果、同键不同指纹 409 idempotency_conflict，否则返回 409 order_not_confirmable 与当前状态，不出现一单两次完成
+      - 全部退款后冻结确认收货由之后的退款任务扩展本任务的确认路径；模拟发货满 7 天自动完成由之后的定时任务负责（操作者为 system，不写确认收货记录）；会员凭会话访问与确认收货由之后的会员任务扩展；本任务都不预留参数，在 docs/TODO.md 记录段写明
+      - tests/test_order_lookup.py 用 TestClient 与 SQLite 内存库（开启外键检查，覆盖会话依赖与 SHOP-TASK-026 的取客户端依赖，限流用测试文件内的内存替身）按模型建表并自建订单，验证：电话正确时 204、设置 cookie、库里多一条 lookup 授权；订单号带空格、连字符、小写或 I、L、O 时规范化后照常查到；电话以本地写法与带加号写法都能查到马来西亚号码的订单；订单号不存在、格式不合法、电话不符、电话无法规范化四种情形的状态码、响应体与响应头完全相同；同一来源第 31 次 429；同一订单号失败 10 次后用正确电话也 429，而另一订单号不受影响；Redis 不可用（未配置与替身抛连接错误各一次）时 503 且没有查订单；替身只在失败计数加一时抛连接错误时，电话不符返回 503、不签发授权；查看接口的字段、收货资料原文、不含优惠券与积分、多张订单按授权到期时间从晚到早、待支付订单过期后显示已取消、no-store；无 cookie、授权过期、只有 guest_checkout 授权、其他浏览器的 cookie 都 401 且响应相同；确认收货成功后状态、事件与记录各一条；同键同请求重放不重复写入、同键不同订单 409；缺或错 CSRF 403；待支付、已支付、已打包、已完成、已取消的订单都 409 order_not_confirmable 且不写记录；同一会话已授权订单 A、未授权订单 B 时对 B 确认收货返回与无 cookie 相同的 401 且 B 不变；lookup 授权调用 SHOP-TASK-021 的支付与取消接口都 401；用两个数据库会话与可控的交错验证两笔不同幂等键并发确认同一订单时只有一笔成功、事件与记录各一条，同一幂等键并发插入遇唯一约束冲突后回滚并按指纹重放；非 JSON 415、超过 8 KB 413（先于其他校验）、多余字段 422，这些错误响应都不回显请求内容；模型的检查约束、唯一约束与外键各至少一个被拒的反例；每条测试写明它守住的是设计里哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-027 记录段（接口与字段、处理顺序、错误码、限流桶与阈值、确认收货记录表、偏离、验证到什么程度，并写明退款冻结、自动完成与会员访问留给之后的任务）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不改 SHOP-TASK-019、021、026 已有函数的行为，它们的测试文件不改动并照常通过；不改前端代码
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - app/models/order.py
+      - app/models/__init__.py
+      - alembic/versions/20261001_0011_receipt_confirmations.py
+      - app/services/order_lookup.py
+      - app/api/order_lookup.py
+      - app/main.py
+      - tests/test_order_lookup.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 订单查询 P08 与订单详情 P09 的查单模式。页面显示完整收货资料并可确认收货，走设计闸门：docs/DESIGN.md 1.11
+  # 「权限与资料保护」（查单授权、CSRF、订单号与电话不进网址）、「订单与退款状态」「失败、并发与重试」。金额只显示接口返回的整数仙。
+  # 退款入口与退款记录由 P10 任务加；会员模式由会员中心任务加。
+  - id: SHOP-TASK-028
+    title: 订单查询 P08 与订单详情 P09（查单模式）
+    purpose: >-
+      实现订单查询页 P08 与订单详情页 P09 的查单模式：以订单号和下单电话查询，通过后查看订单状态、商品与金额、完整收货资料，
+      对已模拟发货的订单确认收货。不在浏览器计算任何金额，不做退款入口、会员模式，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-024
+      - SHOP-TASK-027
+    acceptance_criteria:
+      - 页面内容、流程与文案以 docs/UX.md 0.7 的 P08、P09（查单模式）与 docs/UX-COPY.md 0.6 为准，样式以 docs/design/pages/ 的 P08、P09 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字，或发现需要多显示、多收集个人资料时停下并在 PR 里说明，不自行编写文案、不改设计；沿用之前前端任务的字典、路由、框架与金额格式化
+      - 路由 /track（P08）与 /track/order（P09 查单模式）；订单号、电话与 CSRF 令牌不进任何路径、查询参数、localStorage、sessionStorage 或 cookie，只在页面内存里；P08 每次打开输入框为空，不预填上一单；页面不显示任何凭据内容或授权剩余时间
+      - 加入 /track 后，页头导航、手机菜单与 P06、P07 授权过期提示里的 common.nav_track 按路由规则出现并链到 /track；若 SHOP-TASK-024 的实现不是由路由表自动决定，只为此改 PayPage.tsx、PayResultPage.tsx 中这一处并补测试
+      - P08 按线框显示 lookup.title、★ lookup.demo_hint、pay.order_no 与订单号输入、lookup.phone 与电话输入、lookup.phone_hint、lookup.submit、lookup.access_note、lookup.privacy_warning；提交调用 SHOP-TASK-027 的 POST /api/orders/lookup，提交期间按钮禁用；204 时转到 /track/order；404 显示 lookup.not_found，429 显示 common.rate_limited，503 显示 common.service_unavailable，网络中断显示 common.network_check，均留在本页且保留已输入内容；浏览器只要求两项非空，格式由服务端判定
+      - P09 打开时调用 GET /api/orders/lookup（随当前语言），取返回的第一张订单（最近查询的）；401 时整页替换为 order.session_expired 与 common.nav_track；显示 order.title（含订单号）、order.current_status 与对应的 order.status_*、★ order.demo_hint、order.lookup_access、order.lookup_another（回 /track）、order.progress 五步、order.items 各行（名称、规格、件数、order.unit_price、order.cash_paid）、cart.subtotal、checkout.summary_shipping、checkout.summary_total、checkout.recipient_title 与收货资料原文；手机上金额明细与收货资料按线框折叠在 order.amount_breakdown 与 checkout.recipient_title 下；不显示优惠券与积分两行（游客订单，UX 0.5 起的规则）；待支付订单显示 order.lookup_no_pay，没有支付与取消按钮
+      - 只有 demo_shipped 时显示 order.confirm_receipt 与 order.confirm_receipt_hint；点击调用 POST /api/orders/confirm-receipt，带每次点击新生成的 Idempotency-Key（crypto.randomUUID）与接口返回的 X-CSRF-Token，提交期间按钮禁用；200 或 409 order_not_confirmable 时重新读取订单并按新状态显示；403 csrf_failed 时重新读取订单取得新令牌并显示 common.error_retry；401 时整页显示 order.session_expired；网络中断时显示 common.network_check，先重新读取订单，仍为 demo_shipped 时才允许以同一幂等键重试
+      - 退款入口（order.request_refund、order.refund_deadline、退款金额与记录、order.fulfilment_frozen）按路由规则在退款申请页实现前不渲染；会员模式（account.orders、account.order_pay）在会员中心实现前不渲染
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与存储以替身代替）验证意图：订单号、电话与令牌不写进网址或任何浏览器存储；P08 输入框初始为空；四种错误各自的文案且查询失败后留在本页；查询成功转到 /track/order；P09 的 401 整页提示；不显示优惠券与积分两行；待支付订单没有支付与取消按钮；确认收货只在已发货时出现，请求带幂等键与 CSRF 令牌，网络中断后先查订单、以同一幂等键重试；退款入口不渲染；common.nav_track 在页头出现并链到 /track；金额原样来自接口；页面文字全部来自字典；每条测试写明它守住的是 UX 或 DESIGN 哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-028 记录段（页面结构、请求与重试规则、状态显示规则、偏离、验证到什么程度，并写明未做浏览器验收、退款入口与会员模式留给之后的任务）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/orderLookup.ts
+      - frontend/src/api/orderLookup.test.ts
+      - frontend/src/pages/TrackPage.tsx
+      - frontend/src/pages/TrackPage.test.tsx
+      - frontend/src/pages/TrackOrderPage.tsx
+      - frontend/src/pages/TrackOrderPage.test.tsx
+      - frontend/src/pages/PayPage.tsx
+      - frontend/src/pages/PayPage.test.tsx
+      - frontend/src/pages/PayResultPage.tsx
+      - frontend/src/pages/PayResultPage.test.tsx
+      - frontend/src/components/SiteFrame.tsx
+      - frontend/src/components/SiteFrame.test.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
