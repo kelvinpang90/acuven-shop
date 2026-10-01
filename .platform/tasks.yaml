@@ -894,3 +894,49 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 模拟支付、取消与支付超时。碰钱（订单状态、库存预留的消耗与释放、幂等）也碰个人资料（支付页显示收货资料原文），
+  # 已过设计闸门：docs/DESIGN.md 1.10（提交 e3b3505）「数据模型」Order / OrderItem、OrderRecipient、PaymentAttempt / OrderEvent 三行，
+  # 「计价、优惠、积分与库存」第 6 条，「订单与退款状态」第 1、3 条，「失败、并发与重试」第 1、2 条，「权限与资料保护」第 6、7 条。
+  # 本任务只做游客凭短期凭据的访问；会员凭会话访问、券与积分预占的释放由会员与优惠券积分任务扩展。
+  # 超时取消在本任务提供可重复运行的函数并在访问时就地执行；按分钟定时运行它属于之后的「定时任务」。
+  - id: SHOP-TASK-021
+    title: 模拟支付、取消与支付超时 API
+    purpose: >-
+      提供支付页 P06 与结果页 P07 所需的游客接口：凭该单短期凭据查看订单，提交模拟支付成功或失败，取消待支付订单；
+      并提供把超过 15 分钟未付的订单取消、释放库存的可重复运行函数。不做会员访问、券与积分、查单、确认收货、退款，
+      不加定时调度，不加表或迁移，不做页面，不改设计。设计闸门：DESIGN 1.10（提交 e3b3505）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-010
+      - SHOP-TASK-019
+      - SHOP-TASK-020
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.10 上述各条一致；接口字段参照 docs/UX.md 0.6 的 P06、P07，与设计冲突时以设计为准并在 PR 里说明；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - 订单号不进任何路径或查询参数（docs/UX.md「阅读说明」）；三个接口都只凭 SHOP-TASK-019 的 cookie 与 guest_checkout 授权访问，授权不通过时一律 401（错误码 access_expired，对应页面的 pay.session_expired），不区分订单不存在、授权过期或不属于该单；lookup 授权不能用于本任务的任何接口
+      - GET /api/pay/orders（语言参数与目录接口相同）返回本浏览器当前有效的 guest_checkout 授权所对应的订单，按授权到期时间从晚到早（即最近签发的在前）；每张订单含订单号、状态、创建时间、支付到期时间、服务器当前时间、按请求语言取的订单行快照（名称、规格说明、件数、单价、行小计）、商品小计、运费、应付、收货资料原文（姓名、电话、国家、地区、地址、邮编）、最近一次模拟支付的结果（没有为空）与已取消时的取消方（本人或超时）；另返回由 cookie 重新算出的 CSRF 令牌；没有有效授权时 401；响应带 Cache-Control 为 no-store；返回前先对这些订单执行下面的超时取消
+      - POST /api/pay/attempts 请求体只有订单号、支付方式（card、bank、ewallet 三种，对应 pay.method_card、pay.method_bank、pay.method_ewallet）与结果（success、failure），不接受任何卡号或账户资料，多出字段 422；须带 Idempotency-Key（规则同 SHOP-TASK-020）与 X-CSRF-Token 请求头，CSRF 不通过 403（错误码 csrf_failed）；只接受 JSON，请求体上限 8 KB，规则同 SHOP-TASK-020
+      - 支付尝试的幂等：指纹是订单 ID、支付方式与结果按固定规则序列化后的 SHA-256；先按幂等键查支付尝试，指纹相同即返回原结果、不同即 409（错误码 idempotency_conflict），都不再改订单；并发插入同键时以唯一约束为准，回滚后按同样规则处理
+      - 订单为 awaiting_demo_payment 且当前时间早于支付到期时间时：成功即在同一事务里写支付尝试、用带条件的 UPDATE（状态仍为 awaiting_demo_payment 且未到期才改）把订单改为 demo_paid 并写支付时间、写一条操作者为 guest 的状态事件，库存不再变动（预留即被消耗）；失败只写支付尝试，订单状态、库存与事件都不变，可再次提交；状态迁移经 SHOP-TASK-010 的迁移判定函数检查
+      - 订单已过支付到期时间时先按下面的超时取消处理，再返回 409（错误码 order_expired）且不写支付尝试；订单已是 demo_paid 或之后的状态、或已取消时返回 409（错误码 order_not_payable）且不写支付尝试；条件 UPDATE 未命中（并发的取消或另一笔成功先提交）时回滚并返回 409 与订单当前状态，不出现一单两次成功
+      - POST /api/pay/cancel 请求体只有订单号，须带 X-CSRF-Token（不要求幂等键：重复取消已取消的订单直接返回当前状态，不再写事件或释放库存）；订单为 awaiting_demo_payment 时在同一事务里用带条件的 UPDATE 改为 demo_cancelled、按订单行把件数加回对应 SKU 规格的当日可用库存（规格已删除的行跳过）、写一条操作者为 guest 的状态事件；已支付及之后的订单返回 409（错误码 order_not_cancellable），已支付订单按设计走退款
+      - app/services/payment.py 提供超时取消函数：接收数据库会话与当前时间（可选限定订单 ID 集合与单次上限），把状态为 awaiting_demo_payment 且支付到期时间不晚于当前时间的订单逐张用带条件的 UPDATE 改为 demo_cancelled、加回库存、写一条操作者为 system 的状态事件；同一订单只生效一次，重复运行或与取消、支付并发时不重复加回库存；返回取消的张数；docstring 写明按分钟定时运行由之后的定时任务负责
+      - 列出本浏览器有效授权所需的查询可在 app/services/order_access.py 新增一个函数（只读，按会话与范围列出未撤销、未到期的授权），不改 SHOP-TASK-019 已有函数的行为，tests/test_order_access.py 不改动并照常通过
+      - 券与积分预占的释放由之后的优惠券与积分任务扩展本任务的取消与超时路径，本任务不预留参数；会员凭会话访问 P06、P07 由之后的会员任务扩展
+      - 接口不读会员会话；不写日志，或日志只记录不含个人资料、订单号、幂等键与令牌的事件；422 响应不回显请求内容；错误响应不含内部细节；限流不在本任务，PR 里如实说明
+      - tests/test_demo_payment.py 用 TestClient 与 SQLite 内存库（开启外键检查，覆盖会话依赖）按模型建表，经 SHOP-TASK-020 的下单接口建单并取得 cookie 与 CSRF 令牌，验证：查看接口返回的字段、收货资料原文、多张订单按授权到期时间从晚到早、no-store；无 cookie、授权过期、lookup 授权、其他浏览器的 cookie 都 401 且响应相同；成功后状态、支付时间、事件与支付尝试各一条且库存不变；失败只多一条支付尝试且可再试后成功；同键同请求重放不重复写入，同键不同请求 409；缺或错 CSRF 403；已支付后再付与取消都 409；过期后付款返回 order_expired 且订单变为已取消、库存加回、事件操作者为 system；取消后库存加回、事件操作者为 guest，重复取消不再加回；超时取消函数重复运行只生效一次，未到期的订单不受影响；支付与取消并发（先取消后到的成功请求）只有一个生效；请求体带卡号等多余字段 422 且不回显；每条测试写明它守住的是设计里哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-021 记录段（接口与字段、错误码、状态与库存变动、超时取消函数、偏离、验证到什么程度，并写明定时运行、会员访问与券积分释放留给之后的任务）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表、不加迁移、不改前端代码
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.10，提交 e3b3505），不合并、不直推
+    allowed_change_paths:
+      - app/services/payment.py
+      - app/api/pay.py
+      - app/services/order_access.py
+      - app/main.py
+      - tests/test_demo_payment.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
