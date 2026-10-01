@@ -1058,7 +1058,8 @@ tasks:
 
   # 结账页 P05 的游客路径。收集收货资料与结账手机号，走设计闸门：docs/DESIGN.md 1.11（提交 2d13250）「边界与原则」（短信验证开关）、
   # 「权限与资料保护」第 1、2 条（结账身份与游客电话）、「资料保留」（告知），金额只显示计价与下单接口返回的整数仙。
-  # 会员路径与短信验证组件 V1 由之后的任务做；在那之前开关开启且号码属于马新时页面停在第 1 步（过渡规则，见验收标准）。
+  # 会员路径与短信验证组件 V1 由之后的任务做；在那之前开关开启且号码属于马新时页面停在第 1 步（过渡规则，Kelvin 2026-10-01 批准，
+  # 记录见 docs/HANDOFF.md 0.25；V1 与会员路径任务完成时取消）。
   - id: SHOP-TASK-025
     title: 结账 P05 游客路径
     purpose: >-
@@ -1074,10 +1075,10 @@ tasks:
       - SHOP-TASK-024
     acceptance_criteria:
       - 页面内容、流程与文案以 docs/UX.md 0.7 的 P05 与 docs/UX-COPY.md 0.6 为准，样式以 docs/design/pages/ 的 P05 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字，或发现需要多显示、多收集个人资料时停下并在 PR 里说明，不自行编写文案、不改设计；沿用之前前端任务的字典、路由、框架、金额格式化与购物车模块
-      - 路由 /checkout；本任务起 P04 的 cart.checkout 按路由规则渲染；购物车为空时显示 cart.empty 与 cart.continue；收货资料与电话只保存在页面内存，不写进网址、localStorage、sessionStorage 或 cookie（刷新后需重填可以接受）
+      - 路由 /checkout；本任务起 P04 的 cart.checkout 按路由规则渲染并链到 /checkout（CartPage 只为此改动，测试覆盖按钮出现与链接目标）；购物车为空时显示 cart.empty 与 cart.continue；收货资料与电话只保存在页面内存，不写进网址、localStorage、sessionStorage 或 cookie（刷新后需重填可以接受）
       - 打开时调用 SHOP-TASK-022 的 GET /api/site-settings 与 SHOP-TASK-023 的 GET /api/checkout/regions；读取完成前第 1 步不可提交，失败时显示 common.error_retry；国家名称用浏览器的 Intl.DisplayNames 按当前界面语言取得，取不到时显示两位代码（Kelvin 2026-10-01 决定）；州属下拉显示接口返回的马来文官方名称，三种语言相同
       - 第 1 步：开关开启时常显 checkout.phone_notice，关闭时常显 checkout.phone_notice_sms_off，二者旁都有链到 P14 的 checkout.form_notice_link，无勾选框；国家码下拉列出全部地区（显示本地化国家名与 +呼叫码，按名称排序），默认 MY；号码输入以加号开头时以输入为准；显示 checkout.phone_step_hint 与 checkout.phone_continue；checkout.login_password 按路由规则在登录页实现前不渲染；格式是否成立由服务端在下单时判定，浏览器只要求非空
-      - 继续后的判定：开关关闭时任何号码都以游客继续，第 3 步顶部显示 checkout.guest_sms_off；开关开启时，号码属于马新（下拉选 MY 或 SG 且输入不以加号开头，或输入以 +60、+65 开头）在短信验证组件实现前停在第 1 步并显示 common.service_unavailable（过渡规则，PR 里说明），其他号码以游客继续并在第 3 步顶部显示 checkout.guest_other_country；第 3 步另显示 checkout.guest_notice
+      - 继续后的判定：开关关闭时任何号码都以游客继续，第 3 步顶部显示 checkout.guest_sms_off；开关开启时，号码属于马新（下拉选 MY 或 SG 且输入不以加号开头，或输入以 +60、+65 开头）在短信验证组件实现前停在第 1 步并显示 common.service_unavailable（Kelvin 2026-10-01 批准的过渡规则，记录见 docs/HANDOFF.md 0.25，由之后的 V1 与会员路径任务取消），其他号码以游客继续并在第 3 步顶部显示 checkout.guest_other_country；第 3 步另显示 checkout.guest_notice
       - 第 3 步：显示第 1 步的号码（只读）与 checkout.phone_change（回第 1 步）、checkout.phone_lookup_hint；收货表单旁常显 checkout.form_notice 与 checkout.form_notice_link，无勾选框；字段为 checkout.name、checkout.country（全部地区，初始未选）、选马来西亚时的 checkout.state_my 下拉或其他国家的 checkout.region 自由文本（可空）、checkout.address、checkout.postcode；不收集任何其他资料
       - 摘要：用购物车各行 SKU 与件数（选了国家后加国家与州属）调用计价接口，显示每行与 cart.subtotal；未选国家时显示 cart.shipping_later 与小计，选定后显示 checkout.summary_shipping、checkout.summary_total 与参考外币（checkout.fx_note，或该国无汇率时 checkout.fx_none）；游客不显示 checkout.summary_coupon 与 checkout.summary_points；改国家或州属后重新计价，只采用最后一次请求的结果；有任何非正常行时显示 cart.item_changed、禁用下单并可回购物车；手机版顶部折叠摘要与底部固定栏在选国家前显示小计、选定后显示合计；★ checkout.demo_hint 常显
       - 下单：checkout.place_order 旁显示 ◆ checkout.place_order_hint；调用 SHOP-TASK-020 的 POST /api/orders/guest，请求体只含购物车行（SKU 与件数）、第 1 步号码原文与所选地区代码、收货资料、国家、州属或地区（字段名以 SHOP-TASK-020 的请求模型为准），不带任何金额；Idempotency-Key 在提交时用 crypto.randomUUID 生成，表单或购物车改动后换新；提交期间按钮禁用并显示 checkout.submitting
@@ -1099,6 +1100,8 @@ tasks:
       - frontend/src/pages/checkoutPhone.test.ts
       - frontend/src/cart.ts
       - frontend/src/cart.test.ts
+      - frontend/src/pages/CartPage.tsx
+      - frontend/src/pages/CartPage.test.tsx
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
