@@ -672,3 +672,135 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 每单限购的后端部分，碰计价与可下单资格，已过设计闸门：docs/DESIGN.md 1.10（提交 e3b3505）「数据模型」Product / Variant 一行、
+  # 「计价、优惠、积分与库存」第 7、8 条。下单时的整单校验属于之后的「游客下单 API」任务。
+  # 依赖 SHOP-TASK-012 只因迁移链：本任务的迁移接在 0007 之后。
+  - id: SHOP-TASK-016
+    title: 每单限购：商品限购字段、迁移与计价接口校验
+    purpose: >-
+      按 docs/DESIGN.md 1.10 给商品加每单限购件数（非空整数 1–99，默认 10），写对应迁移；计价接口改为每行件数上限 99、
+      按商品合计校验限购并新增「超出限购」行状态；商品详情接口返回限购件数，供商品详情页与购物车页使用。
+      不改发布规则、价格与运费计算，不建订单、不预留库存，不加后台接口，不做页面，不改设计。
+      设计闸门：DESIGN 1.10（提交 e3b3505）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-009
+      - SHOP-TASK-012
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.10「数据模型」Product / Variant 一行及「计价、优惠、积分与库存」第 7、8 条一致；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - app/models/catalog.py 的商品模型加每单限购件数：非空整数、服务端默认 10，检查约束保证 1 到 99（约束名按命名约定写出，表达式 SQLite 与 MySQL 都支持）；不按规格设置，不改其他列与约束
+      - 新迁移文件 alembic/versions/20261001_0008_purchase_limit.py，revision 为 0008、down_revision 为 0007；upgrade 加列（已有商品取默认 10）与检查约束，downgrade 撤销；迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，alembic check 在它比较的范围内无差异，由 PR 的必需 CI 检查 backend 执行
+      - 商品详情接口新增字段 max_per_order（该商品的每单限购件数）；商品列表与分类接口不变
+      - 计价接口每行件数上限由 10 改为 99（1 到 99 的整数），最多 20 行与其余请求校验不变；件数越界仍为 422
+      - 计价时把同一已发布商品的所有正常或库存不足的行按件数合计，合计超过该商品的每单限购件数时，这些行的状态改为超出限购（over_limit）；状态优先级为不可购买、超出限购、库存不足；不可购买的行不计入任何商品的合计
+      - 所有返回商品信息的行（正常、库存不足、超出限购）另返回该商品的 max_per_order；超出限购的行与库存不足的行一样返回商品信息、单价与行小计并计入商品小计；有任何超出限购的行时不可下单；不可购买的行仍只返回 SKU、件数与状态
+      - 接口仍只发 SELECT、不写数据库，不需要登录，不读写 cookie；不改运费、合计与参考外币的计算
+      - tests/test_checkout_quote.py 只允许把件数上限相关的用例（原 11 件被拒）改为 99 件可接受、100 件被拒，并在整体相等的期望值里补上 max_per_order，不删除、不放宽其他测试；tests/test_catalog_api.py 只允许在商品详情的整体相等断言里补上 max_per_order；两个文件的其余测试全部照常通过
+      - tests/test_purchase_limit.py 用 SQLite 内存库（开启外键检查）与 TestClient 验证：限购件数默认 10，0 与 100 被检查约束拒绝，1 与 99 可写入；同一商品两个 SKU 合计等于限购为正常、超过限购时两行都标为超出限购，另一商品的行不受影响；单行超过限购同样标出；超出限购同时库存不足时标为超出限购；不可购买的行不计入合计；超出限购的行计入商品小计且不可下单；各类行的 max_per_order；商品详情返回 max_per_order；99 件可接受、100 件 422；每条测试写明它守住的是设计里哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-016 记录段（新列与约束、行状态与优先级、接口字段、偏离、验证到什么程度，并写明下单时的整单校验留给游客下单任务）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不改前端代码
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.10，提交 e3b3505），不合并、不直推
+    allowed_change_paths:
+      - app/models/catalog.py
+      - alembic/versions/20261001_0008_purchase_limit.py
+      - app/services/catalog.py
+      - app/services/checkout.py
+      - app/api/checkout.py
+      - tests/test_checkout_quote.py
+      - tests/test_catalog_api.py
+      - tests/test_purchase_limit.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 商品详情页与浏览器购物车。只显示目录接口返回的价格，不计算金额；购物车只存 SKU、商品 slug 与件数（DESIGN 1.10「数据模型」Cart），
+  # 不碰个人资料。每单限购与 20 行上限在这里只做提示与禁用，下单时由服务端校验。
+  - id: SHOP-TASK-017
+    title: 商品详情 P03 与浏览器购物车
+    purpose: >-
+      实现商品详情页 P03（图片、规格选择、数量、加入购物车、描述）与只存在本浏览器的购物车存储，按 docs/UX.md 0.6 落实每单限购与
+      20 行上限的提示和按钮禁用。购物车页 P04 由之后的任务做；在那之前「查看购物车」与页头购物车入口按路由规则不渲染。
+      不在浏览器计算任何金额，不调用计价接口，不装依赖，不改后端，不改设计。设计闸门：不适用（只展示目录接口返回的单价与库存，
+      购物车只存 SKU、商品 slug 与件数，不涉及个人资料；限购只是提示，校验在服务端）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-014
+      - SHOP-TASK-015
+      - SHOP-TASK-016
+    acceptance_criteria:
+      - 页面内容、流程与文案以 docs/UX.md 0.6 的 P03 与 docs/UX-COPY.md 0.5 为准，样式以 docs/design/pages/ 的 P03 静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；沿用 SHOP-TASK-014、015 的字典、路由、框架、金额格式化与接口模块
+      - 路由 /products/<slug> 用商品详情接口取数（随当前语言）；商品不存在或未发布（接口 404）时替换为商品列表页，不另显示文字；本任务起商品卡与首页精选按路由规则链到详情页；面包屑为 common.nav_shop、分类（链到按该分类筛选的列表）与商品名称
+      - 当前语言回退英文时名称旁显示 detail.english_only；桌面缩略图可点选切换主图，手机主图可左右滑动，每张图读屏标签用 detail.a11y_image；描述在手机上可折叠；手机上加入购物车按钮固定在底部；显示 ★ detail.demo_hint
+      - 规格选择：初始不预选（只有一个启用 SKU 的商品直接选定）；与已选的其他规格值组不成任何启用 SKU 的值禁用；选全前价格按 SHOP-TASK-015 的起价规则显示，选全后显示所选 SKU 的单价与 detail.stock_left（当日可用库存）；未选全就点加入时显示 detail.select_all_options
+      - 浏览器购物车存在 localStorage，每行只有 SKU、商品 slug 与件数（不存价格、名称或任何个人资料）；读取时丢弃格式不对、件数不在 1 到 99、重复 SKU 与超过 20 行的部分；读写失败时页面照常可用；同一 SKU 再次加入时合并件数；购物车模块供之后的购物车页复用
+      - 每单限购：显示 detail.max_per_order；数量 (+) 的上限是 max_per_order 减去购物车中同一商品（按 slug）各行件数之和；剩余为 0 时加入按钮禁用并显示 detail.limit_reached；购物车已有 20 行且所选 SKU 不在其中时加入按钮禁用并显示 detail.cart_full；加入成功后显示 detail.added，detail.view_cart 按路由规则在购物车页实现前不渲染
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与 localStorage 以替身代替）验证意图：购物车读写与清洗规则、合并件数、20 行上限、读写失败；限购剩余件数按同一商品各 SKU 合计、为 0 时按钮禁用与提示、购物车满时的禁用与提示；规格可选性（组不成启用 SKU 的值禁用）与选全前后的价格显示；回退英文标签；404 时回到列表；页面文字全部来自字典；每条测试写明它守住的是 UX 或 DESIGN 哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-017 记录段（页面结构、购物车存储格式与清洗规则、限购提示规则、偏离、验证到什么程度，并写明未做浏览器验收）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/cart.ts
+      - frontend/src/cart.test.ts
+      - frontend/src/api/catalog.ts
+      - frontend/src/api/catalog.test.ts
+      - frontend/src/pages/ProductDetailPage.tsx
+      - frontend/src/pages/ProductDetailPage.test.tsx
+      - frontend/src/pages/productOptions.ts
+      - frontend/src/pages/productOptions.test.ts
+      - frontend/src/components/ProductCard.tsx
+      - frontend/src/components/ProductCard.test.tsx
+      - frontend/src/pages/HomePage.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 购物车页。金额全部来自计价接口（SHOP-TASK-009，经 SHOP-TASK-016 加上限购状态），前端只显示（DESIGN 1.10「数据模型」Cart、
+  # 「计价、优惠、积分与库存」第 1、8 条），不碰个人资料。结账 P05 尚未实现，去结账按钮按路由规则不渲染。
+  - id: SHOP-TASK-018
+    title: 购物车 P04
+    purpose: >-
+      实现购物车页 P04：读本浏览器购物车，调用计价接口显示每行与商品小计，修改件数、移除，按接口返回的状态提示变化与超出限购；
+      页头显示购物车入口与件数。不在浏览器计算任何金额，不给收货国家（运费在结账时算），不做结账，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只显示计价接口返回的金额，不改金额计算；购物车只存 SKU、商品 slug 与件数，不涉及个人资料）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-016
+      - SHOP-TASK-017
+    acceptance_criteria:
+      - 页面内容、流程与文案以 docs/UX.md 0.6 的 P04 与 docs/UX-COPY.md 0.5 为准，样式以 docs/design/pages/ 的 P04 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；沿用 SHOP-TASK-014、015、017 的字典、路由、框架、金额格式化与购物车模块
+      - 路由 /cart；本任务起页头显示 common.nav_cart，{count} 为购物车各行件数之和，P03 的 detail.view_cart 按路由规则开始渲染；cart.checkout 按路由规则在结账页实现前不渲染
+      - 页面打开、修改件数或移除后，用购物车各行的 SKU 与件数（不带收货国家、不带任何价格）调用计价接口并显示返回的每行图片、名称与规格、件数、行小计和商品小计；金额只格式化接口返回的整数仙，不在浏览器相加或相乘；连续修改时只采用最后一次请求的结果
+      - 任何一行不是正常状态时显示 cart.item_changed；超出限购的行下显示 cart.over_limit（{count} 为接口返回的 max_per_order）；不可购买的行只显示接口返回的内容并可移除；同一商品各行件数合计达到 max_per_order 时这些行的数量 (+) 禁用；件数不低于 1，移除用 cart.remove
+      - 购物车为空时显示 cart.empty 与 cart.continue；显示 ★ cart.demo_hint、cart.shipping_later 与 cart.price_recheck；计价请求失败时显示 common.error_retry，不清空购物车
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与 localStorage 以替身代替）验证意图：请求体只含 SKU 与件数；金额原样来自接口；item_changed 与 over_limit 的显示条件；达到限购时 (+) 禁用；移除与改件数写回购物车；空购物车；请求失败不清空购物车；页头件数为各行件数之和；页面文字全部来自字典；每条测试写明它守住的是 UX 或 DESIGN 哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-018 记录段（页面结构、计价调用时机、状态提示规则、偏离、验证到什么程度，并写明未做浏览器验收）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/checkout.ts
+      - frontend/src/api/checkout.test.ts
+      - frontend/src/pages/CartPage.tsx
+      - frontend/src/pages/CartPage.test.tsx
+      - frontend/src/cart.ts
+      - frontend/src/cart.test.ts
+      - frontend/src/components/SiteFrame.tsx
+      - frontend/src/components/SiteFrame.test.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
