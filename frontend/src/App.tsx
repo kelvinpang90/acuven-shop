@@ -1,9 +1,39 @@
-// 最小外壳页。页面结构、线框与三语文案要先经 Kelvin 审阅，审阅前这里只放品牌名与演示标注。
-export default function App() {
+import type { ComponentType } from "react";
+
+import SiteFrame from "./components/SiteFrame";
+import { LanguageProvider } from "./i18n/language";
+import type { LanguageStorage } from "./i18n/language";
+import HomePage from "./pages/HomePage";
+import PrivacyPage from "./pages/PrivacyPage";
+import { RouterProvider, useRouter } from "./router";
+import type { RoutePath } from "./router";
+
+// 按 router.tsx 的路由表穷举：表里每个路径恰好对应一个页面。
+const PAGES: Readonly<Record<RoutePath, ComponentType>> = {
+  "/": HomePage,
+  "/privacy": PrivacyPage,
+};
+
+function CurrentPage() {
+  const { path } = useRouter();
+  const Page = PAGES[path];
+  return <Page />;
+}
+
+interface AppProps {
+  // 测试用：给定初始路径与语言存储；浏览器里不传，分别读地址栏与 localStorage。
+  initialPath?: string | undefined;
+  storage?: LanguageStorage | null | undefined;
+}
+
+export default function App({ initialPath, storage }: AppProps) {
   return (
-    <main>
-      <h1>Acuven Shop</h1>
-      <p lang="zh">演示站</p>
-    </main>
+    <LanguageProvider storage={storage}>
+      <RouterProvider initialPath={initialPath}>
+        <SiteFrame>
+          <CurrentPage />
+        </SiteFrame>
+      </RouterProvider>
+    </LanguageProvider>
   );
 }

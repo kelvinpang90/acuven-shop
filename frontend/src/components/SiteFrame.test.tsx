@@ -1,0 +1,123 @@
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+
+import App from "../App";
+import { BRAND, COPY, LANGUAGES } from "../i18n/copy";
+import type { Language } from "../i18n/copy";
+import { LANGUAGE_STORAGE_KEY } from "../i18n/language";
+import { ROUTE_PATHS } from "../router";
+
+function render(path: string, language: Language = "en"): string {
+  const storage = {
+    getItem: (key: string) => (key === LANGUAGE_STORAGE_KEY ? language : null),
+    setItem: () => undefined,
+  };
+  return renderToStaticMarkup(<App initialPath={path} storage={storage} />);
+}
+
+function section(html: string, pattern: RegExp): string {
+  const found = pattern.exec(html)?.[0];
+  if (found === undefined) {
+    throw new Error(`not found: ${String(pattern)}`);
+  }
+  return found;
+}
+
+const banner = (html: string) => section(html, /<div class="acs-banner">[\s\S]*?<\/div>/);
+const header = (html: string) => section(html, /<header[\s\S]*<\/header>/);
+const footer = (html: string) => section(html, /<footer[\s\S]*<\/footer>/);
+
+const paths = [...ROUTE_PATHS];
+const languages = [...LANGUAGES];
+const languageLabel = { en: "common.lang_en", zh: "common.lang_zh", ms: "common.lang_ms" } as const;
+
+describe("demo banner", () => {
+  // UX「全局框架」：演示横幅在页头上方常驻，桌面 common.demo_banner、手机 common.demo_banner_short。
+  it.each(paths)("is rendered first on %s with both texts", (path) => {
+    for (const language of LANGUAGES) {
+      const html = render(path, language);
+      const content = banner(html);
+      expect(content).toContain(COPY["common.demo_badge"][language]);
+      expect(content).toContain(COPY["common.demo_banner"][language]);
+      expect(content).toContain(COPY["common.demo_banner_short"][language]);
+      expect(html.indexOf('class="acs-banner"')).toBeLessThan(html.indexOf("<header"));
+    }
+  });
+
+  // UX「全局框架」：横幅不可关闭——没有按钮、链接或任何可交互控件。
+  it.each(paths)("has no close control on %s", (path) => {
+    const content = banner(render(path));
+    expect(content).not.toMatch(/<(button|a|input)\b/);
+    expect(content).not.toMatch(/role="button"|aria-label|onclick|tabindex/i);
+  });
+});
+
+describe("root element", () => {
+  // 验收：根元素带 class acs、data-shop-theme 为 pandan、data-mode 为 auto，不设 data-accent。
+  it("uses the default theme from storeDesign.ts without an accent", () => {
+    const html = render("/");
+    expect(html).toMatch(/^<div class="acs site" data-shop-theme="pandan" data-mode="auto">/);
+    expect(html).not.toContain("data-accent");
+    expect(html).not.toContain("acs--phone");
+  });
+
+  // 验收：页面代码里不写死颜色、字体或圆角——没有任何行内样式。
+  it.each(paths)("has no inline styles on %s", (path) => {
+    expect(render(path)).not.toContain("style=");
+  });
+});
+
+describe("header", () => {
+  // UX「全局框架」：页头有品牌字样，链到首页。
+  it("links the brand to the home page", () => {
+    expect(header(render("/privacy"))).toMatch(new RegExp(`<a class="acs-brand" href="/">${BRAND}</a>`));
+  });
+
+  // 验收：指向尚未实现页面的导航项（商品、查询订单、登录）一律不渲染。
+  it.each(paths)("renders no navigation item for pages that do not exist yet on %s", (path) => {
+    for (const language of LANGUAGES) {
+      const html = render(path, language);
+      for (const key of ["common.nav_shop", "common.nav_track", "common.nav_login"] as const) {
+        expect(html).not.toContain(`>${COPY[key][language]}<`);
+      }
+      expect(html).not.toMatch(/href="\/(products|track|login|cart|account|register)/);
+      // 页头搜索框要去商品列表 P02，同样不渲染。
+      expect(html).not.toMatch(/<(form|input)\b/);
+    }
+  });
+
+  // UX「全局框架」：语言切换 EN | 中文 | BM，当前语言标出。
+  it.each(languages)("offers all three languages and marks %s as current", (language) => {
+    const html = header(render("/", language));
+    for (const option of LANGUAGES) {
+      expect(html).toContain(`>${COPY[languageLabel[option]][language]}</a>`);
+    }
+    const current = [...html.matchAll(/<a href="\/" lang="([^"]+)" aria-current="true">/g)].map((m) => m[1]);
+    expect(new Set(current)).toEqual(new Set([language === "zh" ? "zh-Hans" : language]));
+  });
+
+  // UX「全局框架」手机：☰ 菜单（读屏标签 common.nav_menu）与当前语言下拉；菜单含隐私说明与三种语言。
+  it.each(languages)("has the phone menu button and current-language button in %s", (language) => {
+    const html = header(render("/", language));
+    expect(html).toMatch(new RegExp(`<button[^>]*aria-label="${COPY["common.nav_menu"][language]}"[^>]*aria-expanded="false"`));
+    expect(html).toMatch(new RegExp(`aria-expanded="false"[^>]*><span>${COPY[languageLabel[language]][language]}</span>`));
+    expect(html).toContain(`href="/privacy">${COPY["common.nav_privacy"][language]}</a>`);
+  });
+});
+
+describe("footer", () => {
+  // UX「全局框架」：页脚有 common.footer_demo 与链到 P14 的 common.nav_privacy。
+  it.each(languages)("shows the demo note and the privacy link in %s", (language) => {
+    const html = footer(render("/", language));
+    expect(html).toContain(COPY["common.footer_demo"][language]);
+    expect(html).toContain(`href="/privacy">${COPY["common.nav_privacy"][language]}</a>`);
+  });
+
+  // UX Q10：WhatsApp 联系链接未配置时隐藏所有 WhatsApp 按钮，不显示占位文字；不设站内联系表单。
+  it.each(paths)("has no WhatsApp button, placeholder or contact form on %s", (path) => {
+    const html = render(path);
+    expect(html.toLowerCase()).not.toContain("whatsapp");
+    expect(html).not.toContain("{{");
+    expect(html).not.toMatch(/<(form|textarea)\b/);
+  });
+});

@@ -1,0 +1,54 @@
+/* 全站布局与显隐，在 acuven-shop.css 之后引入。
+   桌面为基础，手机的差异只写在 767px 及以下的媒体查询里（不用视觉稿专用的 acs--phone）。
+   只放布局与显隐规则；颜色、字体与圆角一律来自 acuven-shop.css 的设计变量与组件类，这里不写。
+   数值取自 docs/design/pages/ 对应静态页面的行内布局。 */
+
+body { margin: 0; }
+
+.site { --gutter: 80px; display: flex; flex-direction: column; min-height: 100vh; }
+.site .acs-hint { margin: 0; }
+
+/* 桌面只显示 site-desktop-only，手机只显示 site-phone-only */
+.site-phone-only { display: none; }
+
+/* 页头 */
+.site-header__end { margin-left: auto; }
+.site-header__stack { flex-direction: column; align-items: flex-start; gap: 16px; }
+
+/* 页脚 */
+.site-footer { margin-top: auto; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: center; }
+.site-footer__main { display: grid; gap: 12px; justify-items: start; }
+.site-footer__text { margin: 0; max-width: 42em; }
+
+/* 首页 P01：★ 提示在页头下方、所有区块之前 */
+.site-home { padding: 24px var(--gutter) 104px; }
+
+/* 隐私说明 P14 */
+.site-privacy { display: grid; grid-template-columns: 280px minmax(0, 720px); gap: 64px; padding: 56px var(--gutter) 96px; }
+.site-privacy__aside { display: grid; gap: 20px; align-content: start; }
+.site-privacy__body { display: grid; gap: 36px; }
+.site-privacy__section { display: grid; gap: 12px; }
+.site-privacy p { margin: 0; }
+
+@media (max-width: 767px) {
+  .site { --gutter: 16px; }
+
+  .site-desktop-only { display: none; }
+  span.site-phone-only { display: inline; }
+  .site-header__menu-button, .site-header__lang-button { display: inline-flex; }
+  .site-header__panel:not([hidden]) { display: grid; gap: 20px; padding: 8px 0 4px; }
+
+  .site .acs-header { gap: 10px; padding-top: 6px; }
+  .site-header__top { gap: 4px; flex-wrap: nowrap; }
+  .site-header__menu-button { min-width: 44px; padding: 0; margin-left: -10px; }
+  .site-header__lang-button { gap: 4px; padding: 0 6px; }
+
+  .site-footer { grid-template-columns: minmax(0, 1fr); }
+
+  .site-home { padding: 16px var(--gutter) 48px; }
+
+  .site-privacy { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 28px var(--gutter) 40px; }
+  .site-privacy__aside { gap: 24px; }
+  .site-privacy__body { gap: 24px; }
+  .site-privacy__section { gap: 10px; }
+}
