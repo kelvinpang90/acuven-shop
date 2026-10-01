@@ -1,6 +1,7 @@
 """商品目录的公开只读接口：全部在 /api/catalog/ 下，只有 GET。
 
 依据 docs/DESIGN.md 1.8（提交 2b68ad0）；字段参照 docs/UX.md 0.2 的 P01–P03 审阅稿。
+分类图片、多规格标记与规格筛选项按 docs/UX.md 0.5 的 P01、P02 补充（SHOP-TASK-013）。
 lang 只接受 en、zh、ms，默认 en，其他值由 FastAPI 校验拒绝（422）。
 未发布与不存在的 slug 返回同一个 404，不暴露未发布的商品是否存在。
 """
@@ -16,13 +17,15 @@ from app.db.session import get_session
 from app.services.catalog import (
     DEFAULT_PAGE_SIZE,
     MAX_PAGE_SIZE,
-    CategorySummary,
+    CategoryListItem,
     Language,
+    OptionDetail,
     ProductDetail,
     ProductPage,
     SortOrder,
     get_product,
     list_categories,
+    list_filter_options,
     list_products,
 )
 
@@ -42,9 +45,15 @@ def _option_filters(raw: list[str]) -> dict[str, list[str]]:
     return filters
 
 
-@router.get("/categories", response_model=list[CategorySummary])
-def categories(session: SessionDep, lang: Language = "en") -> list[CategorySummary]:
+@router.get("/categories", response_model=list[CategoryListItem])
+def categories(session: SessionDep, lang: Language = "en") -> list[CategoryListItem]:
     return list_categories(session, lang)
+
+
+@router.get("/options", response_model=list[OptionDetail])
+def options(session: SessionDep, lang: Language = "en") -> list[OptionDetail]:
+    """商品列表的规格筛选项；返回的 code 写成 option=<规格名 code>:<规格值 code>。"""
+    return list_filter_options(session, lang)
 
 
 @router.get("/products", response_model=ProductPage)
