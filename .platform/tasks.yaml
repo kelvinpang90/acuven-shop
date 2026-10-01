@@ -580,12 +580,13 @@ tasks:
       首页此时只有固定位置的 ★ 演示提示（UX 允许的「四个区块都隐藏」状态），首页区块由之后的任务加。
       不调用任何后端接口，不做店铺装修设置的读取（先固定默认主题班兰），不做 WhatsApp 联系链接的配置，不装依赖，不改设计。
       设计闸门：不适用（纯前端展示与静态文案，不处理金额，不收集、存储或展示个人资料）。
+      拆分：不拆（20 个允许路径、12 条验收标准，超过拆分阈值）——全站共用的样式、字典、语言、路由与框架互相依赖，要一起才能渲染出第一张可验证的页面，路径多为实现与测试成对；P14 只多两个路径，拆出去仍超过 12 个。
     status: ready
     depends_on: []
     acceptance_criteria:
       - 页面内容、流程与文案以 docs/UX.md 0.7 与 docs/UX-COPY.md 0.6 为准（P14 在 0.7 改了 privacy.fictional、privacy.sms 并新增 privacy.sms_toggle），样式以 docs/design/ 为准，二者冲突时以 UX 文档为准并在 PR 里说明；发现需要多显示或多收集个人资料、或需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计
       - frontend/src/styles/acuven-shop.css 与 docs/design/tokens/acuven-shop.css 逐字节相同（不手改生成的文件，含其中的字体引入），由应用入口引入；frontend/src/styles/acuven-shop.test.ts 读取两份文件断言相同
-      - 前台根元素带 class acs、data-shop-theme 为 pandan、data-mode 为 auto，不设 data-accent；主题取值集中在 frontend/src/storeDesign.ts 一处，写明之后由店铺装修任务改为读取后台设置；页面结构与类名沿用 docs/design/pages/ 对应的静态页面与 docs/design/COMPONENTS.md，桌面与手机的差异靠样式文件的媒体查询，不使用只供视觉稿的 acs--phone，页面代码里不写死颜色、字体或圆角
+      - 前台根元素带 class acs、data-shop-theme 为 pandan、data-mode 为 auto，不设 data-accent；主题取值集中在 frontend/src/storeDesign.ts 一处，写明之后由店铺装修任务改为读取后台设置；页面结构与类名沿用 docs/design/pages/ 对应的静态页面与 docs/design/COMPONENTS.md，桌面与手机的差异由 frontend/src/styles/site.css 承担（由 frontend/src/main.tsx 在 acuven-shop.css 之后引入；只放布局与显隐规则，手机的差异写在 max-width: 767px 的媒体查询里；只用设计变量，不写颜色、字体或圆角），不使用只供视觉稿的 acs--phone，页面代码里不写死颜色、字体或圆角
       - frontend/src/i18n/copy.ts 收录本任务用到的每个文案键的英、中、马三列，与 docs/UX-COPY.md 逐字相同；{变量} 由统一的格式化函数替换；frontend/src/i18n/copy.test.ts 读取 docs/UX-COPY.md 的表格，断言字典里每个键都在文档中且三列逐字相同，并验证变量替换；读取文档的方式不得给应用代码引入 Node 类型（沿用 tsconfig.app.json 的约定）；界面上不出现字典以外的文字（品牌字样 ACUVEN SHOP 等 UX「阅读说明」列出的不翻译字样除外）
       - 默认语言英文；访客在页头切换中文或马来文后，选择只保存在本浏览器的 localStorage，读写失败时照常工作（只是不记住）；不按 IP 或浏览器语言自动切换，不写 cookie，不放进网址；html 元素的 lang 属性随当前语言变化
       - frontend/src/router.tsx 用浏览器 History 接口实现路由，不引入依赖：站内链接不整页刷新，前进后退可用，切换页面后回到页面顶部；路由表是唯一来源，指向尚未实现页面的入口（导航项、按钮、链接）一律不渲染；未知路径替换为首页；本任务只有首页与 /privacy 两个路由；路径与查询参数里不出现订单号或电话
@@ -598,6 +599,7 @@ tasks:
     allowed_change_paths:
       - frontend/src/styles/acuven-shop.css
       - frontend/src/styles/acuven-shop.test.ts
+      - frontend/src/styles/site.css
       - frontend/src/storeDesign.ts
       - frontend/src/i18n/copy.ts
       - frontend/src/i18n/copy.test.ts
@@ -631,12 +633,13 @@ tasks:
       首页区块顺序与显隐先用默认设置（四块按 UX 顺序全部显示），店铺装修任务再改为读取后台设置。
       价格只格式化服务端返回的整数仙，不在浏览器计算任何金额；不做商品详情与购物车，不装依赖，不改后端，不改设计。
       设计闸门：不适用（只展示目录接口返回的价格，不改金额计算，不涉及个人资料）。
+      拆分：不拆（20 个允许路径、11 条验收标准，超过拆分阈值）——P01 与 P02 共用商品卡、金额格式化与目录接口模块，同属前端一层，路径多为实现与测试成对；分开登记会让共用模块在两个任务里来回改。
     status: ready
     depends_on:
       - SHOP-TASK-013
       - SHOP-TASK-014
     acceptance_criteria:
-      - 页面内容、流程与文案以 docs/UX.md 0.5 的 P01、P02 与 docs/UX-COPY.md 0.4 为准，样式以 docs/design/pages/ 的 P01、P02 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；沿用 SHOP-TASK-014 的字典、路由、框架与样式约定
+      - 页面内容、流程与文案以 docs/UX.md 0.5 的 P01、P02 与 docs/UX-COPY.md 0.4 为准，样式以 docs/design/pages/ 的 P01、P02 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；沿用 SHOP-TASK-014 的字典、路由、框架与样式约定；手机与桌面的布局差异写在 frontend/src/styles/site.css（只放布局与显隐规则，手机的差异写在 max-width: 767px 的媒体查询里；只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
       - 首页四个区块的顺序与显隐来自 frontend/src/storeDesign.ts 的默认设置（主视觉、演示怎么玩、按分类浏览、精选商品，全部显示）；隐藏的区块整块不渲染，★ home.demo_hint 始终在页头下方、所有区块之前；区块文案全部来自字典
       - 主视觉的 home.hero_cta 链到商品列表；三个装饰图块取精选商品的前三张图片，不是链接、读屏忽略；「按分类浏览」用分类列表接口，每块显示分类图片（为空时显示视觉稿的占位形状）与名称，链到按该分类筛选的商品列表；「精选商品」取商品列表接口按 newest 排序的前 4 件
       - 商品卡显示首张图片、名称与价格：has_multiple_variants 为真时一律用 list.price_from（即使各规格同价），否则用 common.price_myr；金额由整数仙格式化为两位小数（如 2190 显示为 RM 21.90），格式化只用整数运算、不用浮点；不显示参考外币；当日售罄的商品显示 list.out_of_stock；指向商品详情的链接按 SHOP-TASK-014 的路由规则在详情页实现前不渲染
@@ -666,6 +669,7 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
+      - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
       - lint.check
@@ -726,13 +730,14 @@ tasks:
       20 行上限的提示和按钮禁用。购物车页 P04 由之后的任务做；在那之前「查看购物车」与页头购物车入口按路由规则不渲染。
       不在浏览器计算任何金额，不调用计价接口，不装依赖，不改后端，不改设计。设计闸门：不适用（只展示目录接口返回的单价与库存，
       购物车只存 SKU、商品 slug 与件数，不涉及个人资料；限购只是提示，校验在服务端）。
+      拆分：不拆（16 个允许路径、10 条验收标准，超过拆分阈值）——P03 与浏览器购物车模块同属前端一层，限购与 20 行上限的提示依赖购物车模块，路径多为实现与测试成对。
     status: ready
     depends_on:
       - SHOP-TASK-014
       - SHOP-TASK-015
       - SHOP-TASK-016
     acceptance_criteria:
-      - 页面内容、流程与文案以 docs/UX.md 0.6 的 P03 与 docs/UX-COPY.md 0.5 为准，样式以 docs/design/pages/ 的 P03 静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；沿用 SHOP-TASK-014、015 的字典、路由、框架、金额格式化与接口模块
+      - 页面内容、流程与文案以 docs/UX.md 0.6 的 P03 与 docs/UX-COPY.md 0.5 为准，样式以 docs/design/pages/ 的 P03 静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；沿用 SHOP-TASK-014、015 的字典、路由、框架、金额格式化与接口模块；手机与桌面的布局差异写在 frontend/src/styles/site.css（只放布局与显隐规则，手机的差异写在 max-width: 767px 的媒体查询里；只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
       - 路由 /products/<slug> 用商品详情接口取数（随当前语言）；商品不存在或未发布（接口 404）时替换为商品列表页，不另显示文字；本任务起商品卡与首页精选按路由规则链到详情页；面包屑为 common.nav_shop、分类（链到按该分类筛选的列表）与商品名称
       - 当前语言回退英文时名称旁显示 detail.english_only；桌面缩略图可点选切换主图，手机主图可左右滑动，每张图读屏标签用 detail.a11y_image；描述在手机上可折叠；手机上加入购物车按钮固定在底部；显示 ★ detail.demo_hint
       - 规格选择：初始不预选（只有一个启用 SKU 的商品直接选定）；与已选的其他规格值组不成任何启用 SKU 的值禁用；选全前价格按 SHOP-TASK-015 的起价规则显示，选全后显示所选 SKU 的单价与 detail.stock_left（当日可用库存）；未选全就点加入时显示 detail.select_all_options
@@ -757,6 +762,7 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
+      - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
       - lint.check
@@ -772,12 +778,13 @@ tasks:
       实现购物车页 P04：读本浏览器购物车，调用计价接口显示每行与商品小计，修改件数、移除，按接口返回的状态提示变化与超出限购；
       页头显示购物车入口与件数。不在浏览器计算任何金额，不给收货国家（运费在结账时算），不做结账，不装依赖，不改后端，不改设计。
       设计闸门：不适用（只显示计价接口返回的金额，不改金额计算；购物车只存 SKU、商品 slug 与件数，不涉及个人资料）。
+      拆分：不拆（13 个允许路径、9 条验收标准，超过拆分阈值）——只有 P04 一张页面、前端一层，路径多为实现与测试成对，另加每个页面任务固定带的路由、字典、样式与记录文件。
     status: ready
     depends_on:
       - SHOP-TASK-016
       - SHOP-TASK-017
     acceptance_criteria:
-      - 页面内容、流程与文案以 docs/UX.md 0.6 的 P04 与 docs/UX-COPY.md 0.5 为准，样式以 docs/design/pages/ 的 P04 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；沿用 SHOP-TASK-014、015、017 的字典、路由、框架、金额格式化与购物车模块
+      - 页面内容、流程与文案以 docs/UX.md 0.6 的 P04 与 docs/UX-COPY.md 0.5 为准，样式以 docs/design/pages/ 的 P04 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；沿用 SHOP-TASK-014、015、017 的字典、路由、框架、金额格式化与购物车模块；手机与桌面的布局差异写在 frontend/src/styles/site.css（只放布局与显隐规则，手机的差异写在 max-width: 767px 的媒体查询里；只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
       - 路由 /cart；本任务起页头显示 common.nav_cart，{count} 为购物车各行件数之和，P03 的 detail.view_cart 按路由规则开始渲染；cart.checkout 按路由规则在结账页实现前不渲染
       - 页面打开、修改件数或移除后，用购物车各行的 SKU 与件数（不带收货国家、不带任何价格）调用计价接口并显示返回的每行图片、名称与规格、件数、行小计和商品小计；金额只格式化接口返回的整数仙，不在浏览器相加或相乘；连续修改时只采用最后一次请求的结果
       - 任何一行不是正常状态时显示 cart.item_changed；超出限购的行下显示 cart.over_limit（{count} 为接口返回的 max_per_order）；不可购买的行只显示接口返回的内容并可移除；同一商品各行件数合计达到 max_per_order 时这些行的数量 (+) 禁用；件数不低于 1，移除用 cart.remove
@@ -798,6 +805,7 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
+      - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
       - lint.check
@@ -1022,12 +1030,13 @@ tasks:
       实现游客的模拟支付页 P06 与结果页 P07：凭本浏览器的短期凭据读取订单，选择演示支付方式并提交模拟成功或失败，取消待支付订单，
       按订单状态显示成功、失败或已取消。不在浏览器计算任何金额，不做会员访问与积分，不做结账页，不装依赖，不改后端，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）。
+      拆分：不拆（12 条验收标准，超过拆分阈值）——P06 与 P07 是同一支付流程的两步，共用支付接口模块，同属前端一层；验收标准多为 UX 对两页状态与错误码的逐条要求。
     status: ready
     depends_on:
       - SHOP-TASK-018
       - SHOP-TASK-021
     acceptance_criteria:
-      - 页面内容、流程与文案以 docs/UX.md 0.7 的 P06、P07 与 docs/UX-COPY.md 0.6 为准，样式以 docs/design/pages/ 的 P06、P07 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字，或发现需要多显示、多收集个人资料时停下并在 PR 里说明，不自行编写文案、不改设计；沿用之前前端任务的字典、路由、框架与金额格式化
+      - 页面内容、流程与文案以 docs/UX.md 0.7 的 P06、P07 与 docs/UX-COPY.md 0.6 为准，样式以 docs/design/pages/ 的 P06、P07 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字，或发现需要多显示、多收集个人资料时停下并在 PR 里说明，不自行编写文案、不改设计；沿用之前前端任务的字典、路由、框架与金额格式化；手机与桌面的布局差异写在 frontend/src/styles/site.css（只放布局与显隐规则，手机的差异写在 max-width: 767px 的媒体查询里；只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
       - 路由 /pay（P06）与 /pay/result（P07）；订单号、电话与 CSRF 令牌不进任何路径、查询参数、localStorage、sessionStorage 或 cookie，只在页面内存里；页面不显示任何凭据内容或凭据剩余时间
       - 两页打开时都调用 SHOP-TASK-021 的 GET /api/pay/orders（随当前语言），取返回的第一张订单（最近签发的授权）；接口 401 时整页显示 pay.session_expired，common.nav_track 按路由规则在订单查询页实现前不渲染
       - P06 在订单为 awaiting_demo_payment 时显示：订单号与 common.copy（复制到剪贴板）、pay.save_order_no、pay.amount_due（应付）、pay.expires 倒计时、pay.guest_access、该单收货资料（姓名、电话、地址、邮编、地区、国家）、pay.choose_method 与三种支付方式、pay.simulate_success、pay.simulate_failure、◆ pay.action_hint、pay.cancel_order、★ pay.demo_hint；不出现任何卡号、有效期或 CVV 输入框，不显示参考外币；未选支付方式时成功与失败按钮禁用
@@ -1049,6 +1058,7 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
+      - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
       - lint.check
@@ -1066,6 +1076,7 @@ tasks:
       实现结账页 P05 的游客路径：第 1 步填手机号（国家码下拉默认 +60），按短信验证开关与号码判定以游客继续；第 3 步填收货资料、
       按收货国家显示示例运费、合计与参考外币，提交游客订单后进入模拟支付页。不做会员路径、短信验证、优惠券与积分，不在浏览器计算任何金额，
       不装依赖，不改后端，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）。
+      拆分：不拆（19 个允许路径、13 条验收标准，超过拆分阈值）——P05 游客路径的第 1 步与第 3 步共用一个页面、一份内存状态与同一个下单请求，同属前端一层，路径多为实现与测试成对。
     status: ready
     depends_on:
       - SHOP-TASK-018
@@ -1074,7 +1085,7 @@ tasks:
       - SHOP-TASK-023
       - SHOP-TASK-024
     acceptance_criteria:
-      - 页面内容、流程与文案以 docs/UX.md 0.7 的 P05 与 docs/UX-COPY.md 0.6 为准，样式以 docs/design/pages/ 的 P05 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字，或发现需要多显示、多收集个人资料时停下并在 PR 里说明，不自行编写文案、不改设计；沿用之前前端任务的字典、路由、框架、金额格式化与购物车模块
+      - 页面内容、流程与文案以 docs/UX.md 0.7 的 P05 与 docs/UX-COPY.md 0.6 为准，样式以 docs/design/pages/ 的 P05 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字，或发现需要多显示、多收集个人资料时停下并在 PR 里说明，不自行编写文案、不改设计；沿用之前前端任务的字典、路由、框架、金额格式化与购物车模块；手机与桌面的布局差异写在 frontend/src/styles/site.css（只放布局与显隐规则，手机的差异写在 max-width: 767px 的媒体查询里；只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
       - 路由 /checkout；本任务起 P04 的 cart.checkout 按路由规则渲染并链到 /checkout（CartPage 只为此改动，测试覆盖按钮出现与链接目标）；购物车为空时显示 cart.empty 与 cart.continue；收货资料与电话只保存在页面内存，不写进网址、localStorage、sessionStorage 或 cookie（刷新后需重填可以接受）
       - 打开时调用 SHOP-TASK-022 的 GET /api/site-settings 与 SHOP-TASK-023 的 GET /api/checkout/regions；读取完成前第 1 步不可提交，失败时显示 common.error_retry；国家名称用浏览器的 Intl.DisplayNames 按当前界面语言取得，取不到时显示两位代码（Kelvin 2026-10-01 决定）；州属下拉显示接口返回的马来文官方名称，三种语言相同
       - 第 1 步：开关开启时常显 checkout.phone_notice，关闭时常显 checkout.phone_notice_sms_off，二者旁都有链到 P14 的 checkout.form_notice_link，无勾选框；国家码下拉列出全部地区（显示本地化国家名与 +呼叫码，按名称排序），默认 MY；号码输入以加号开头时以输入为准；显示 checkout.phone_step_hint 与 checkout.phone_continue；checkout.login_password 按路由规则在登录页实现前不渲染；格式是否成立由服务端在下单时判定，浏览器只要求非空
@@ -1105,6 +1116,7 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
+      - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
       - lint.check
@@ -1206,12 +1218,13 @@ tasks:
       实现订单查询页 P08 与订单详情页 P09 的查单模式：以订单号和下单电话查询，通过后查看订单状态、商品与金额、完整收货资料，
       对已模拟发货的订单确认收货。不在浏览器计算任何金额，不做退款入口、会员模式，不装依赖，不改后端，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）。
+      拆分：不拆（17 个允许路径、11 条验收标准，超过拆分阈值）——P08 与 P09 查单模式是同一查单流程的两步，共用查单接口模块，同属前端一层，路径多为实现与测试成对。
     status: ready
     depends_on:
       - SHOP-TASK-024
       - SHOP-TASK-027
     acceptance_criteria:
-      - 页面内容、流程与文案以 docs/UX.md 0.7 的 P08、P09（查单模式）与 docs/UX-COPY.md 0.6 为准，样式以 docs/design/pages/ 的 P08、P09 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字，或发现需要多显示、多收集个人资料时停下并在 PR 里说明，不自行编写文案、不改设计；沿用之前前端任务的字典、路由、框架与金额格式化
+      - 页面内容、流程与文案以 docs/UX.md 0.7 的 P08、P09（查单模式）与 docs/UX-COPY.md 0.6 为准，样式以 docs/design/pages/ 的 P08、P09 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字，或发现需要多显示、多收集个人资料时停下并在 PR 里说明，不自行编写文案、不改设计；沿用之前前端任务的字典、路由、框架与金额格式化；手机与桌面的布局差异写在 frontend/src/styles/site.css（只放布局与显隐规则，手机的差异写在 max-width: 767px 的媒体查询里；只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
       - 路由 /track（P08）与 /track/order（P09 查单模式）；订单号、电话与 CSRF 令牌不进任何路径、查询参数、localStorage、sessionStorage 或 cookie，只在页面内存里；P08 每次打开输入框为空，不预填上一单；页面不显示任何凭据内容或授权剩余时间
       - 加入 /track 后，页头导航、手机菜单与 P06、P07 授权过期提示里的 common.nav_track 按路由规则出现并链到 /track；若 SHOP-TASK-024 的实现不是由路由表自动决定，只为此改 PayPage.tsx、PayResultPage.tsx 中这一处并补测试
       - P08 按线框显示 lookup.title、★ lookup.demo_hint、pay.order_no 与订单号输入、lookup.phone 与电话输入、lookup.phone_hint、lookup.submit、lookup.access_note、lookup.privacy_warning；提交调用 SHOP-TASK-027 的 POST /api/orders/lookup，提交期间按钮禁用；204 时转到 /track/order；404 显示 lookup.not_found，429 显示 common.rate_limited，503 显示 common.service_unavailable，网络中断显示 common.network_check，均留在本页且保留已输入内容；浏览器只要求两项非空，格式由服务端判定
@@ -1238,6 +1251,7 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
+      - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
       - lint.check
@@ -1305,12 +1319,13 @@ tasks:
       实现退款申请页 P10 的查单模式，并在订单详情 P09 显示退款入口、退款截止时间、累计已退、剩余可退与退款申请记录：
       选择商品与数量、显示服务端算出的预计模拟退款金额并提交申请。不做积分行、会员模式，不装依赖，不改后端，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）。
+      拆分：不拆（11 条验收标准，超过拆分阈值）——P10 与 P09 的退款部分是同一退款流程，共用查单接口模块，同属前端一层；验收标准多为 UX 对显示规则与错误码的逐条要求。
     status: ready
     depends_on:
       - SHOP-TASK-028
       - SHOP-TASK-029
     acceptance_criteria:
-      - 页面内容、流程与文案以 docs/UX.md 0.7 的 P09、P10（查单模式）与 docs/UX-COPY.md 0.6 为准，样式以 docs/design/pages/ 的 P09、P10 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字，或发现需要多显示、多收集个人资料时停下并在 PR 里说明，不自行编写文案、不改设计；沿用之前前端任务的字典、路由、框架与金额格式化
+      - 页面内容、流程与文案以 docs/UX.md 0.7 的 P09、P10（查单模式）与 docs/UX-COPY.md 0.6 为准，样式以 docs/design/pages/ 的 P09、P10 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字，或发现需要多显示、多收集个人资料时停下并在 PR 里说明，不自行编写文案、不改设计；沿用之前前端任务的字典、路由、框架与金额格式化；手机与桌面的布局差异写在 frontend/src/styles/site.css（只放布局与显隐规则，手机的差异写在 max-width: 767px 的媒体查询里；只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
       - 路由 /track/order/refund（P10 查单模式）；订单号与 CSRF 令牌不进任何路径、查询参数、localStorage、sessionStorage 或 cookie，只在页面内存里
       - P09 在接口判定退款期内且剩余可退大于零时显示 order.request_refund（链到 /track/order/refund）与 order.refund_deadline（截止时间按访客浏览器时区显示日期与时间）；订单已支付时显示 order.refunded_total、order.refundable_left 与 order.refund_requests 记录（日期、商品与件数、金额、order.refund_requested、order.refund_approved 或 order.refund_rejected）；接口判定全部已退时显示 order.fulfilment_frozen 且不显示确认收货按钮
       - P10 打开时调用 GET /api/orders/lookup，取返回的第一张订单；401 时整页显示 order.session_expired 与 common.nav_track；按线框显示 refund.title、order.title（含订单号）、★ refund.demo_hint、order.lookup_access、refund.select_items、各行名称与规格、order.cash_paid（该行各件实付，原样来自接口）、detail.quantity 加减控件（0 到该行可退件数）与 refund.max_qty、refund.estimate、refund.shipping_not_refunded、refund.coupon_not_restored、refund.submit 与 ◆ refund.submit_hint；可退件数为 0 的行不可选；不显示积分三行（游客订单）；手机上合计与提交按钮固定在底部
@@ -1331,6 +1346,7 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
+      - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
       - lint.check
