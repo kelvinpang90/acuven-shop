@@ -43,10 +43,15 @@ describe("design tokens stylesheet", () => {
   });
 });
 
+// 去掉注释后的 site.css：只检查规则本身，说明规则的注释不应触发规则。
+async function readSiteRules(): Promise<string> {
+  return new TextDecoder().decode(await readBytes("./site.css")).replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
 describe("site.css", () => {
   // 验收：site.css 只放布局与显隐规则，只用设计变量，不写颜色、字体或圆角。
   it("sets no colours, fonts or radii", async () => {
-    const css = new TextDecoder().decode(await readBytes("./site.css")).replace(/\/\*[\s\S]*?\*\//g, "");
+    const css = await readSiteRules();
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     expect(css).not.toMatch(/\b(rgba?|hsla?|oklch|color-mix)\(/i);
     expect(css).not.toMatch(/(^|[\s;{])(color|background|background-color|border-color|fill|stroke|font|font-family|font-size|font-weight|border-radius)\s*:/i);
@@ -54,7 +59,7 @@ describe("site.css", () => {
 
   // 验收：不使用只供视觉稿的 acs--phone；手机差异写在 767px 及以下的媒体查询里。
   it("does not use the mockup-only acs--phone class", async () => {
-    const css = new TextDecoder().decode(await readBytes("./site.css"));
+    const css = await readSiteRules();
     expect(css).not.toContain("acs--phone");
     expect(css).toContain("@media (max-width: 767px)");
     expect(css).not.toMatch(/min-width:\s*768px/);
