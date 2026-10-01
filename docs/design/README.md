@@ -10,12 +10,12 @@
 | --- | --- |
 | [DESIGN-SYSTEM.md](DESIGN-SYSTEM.md) | 设计系统规范：演示标记规则、颜色、字体、间距、形状、10 款主题 |
 | [COMPONENTS.md](COMPONENTS.md) | 各组件的用法与对应文案键 |
-| `tokens/acuven-shop.css` | 前端直接使用的样式：Google Fonts 引入、10 款主题 × 浅色 / 深色的 CSS 变量、全部组件类（`acs-*`）与后台样式（`acs-admin*`） |
+| `tokens/acuven-shop.css` | 前端直接使用的样式：拉丁字体的 `@font-face`（字体文件在 `frontend/public/fonts/`，由本站提供，见下文「字体」）、10 款主题 × 浅色 / 深色的 CSS 变量、全部组件类（`acs-*`）与后台样式（`acs-admin*`） |
 | `tokens/themes.json` | 10 款主题的完整取值（每种模式的全部颜色、字体、圆角、边框、横幅纹样、主视觉形状、可选主色），供后台 A08 列出主题与主色 |
 | `tokens/tokens.json` | 默认主题（班兰）的颜色、间距与字号 |
 | `src/components.css` | 组件样式的源文件 |
 | `tools/themes_src.py`、`tools/gen.py` | 主题源数据与生成脚本（仅标准库） |
-| `pages/*.html` | 每张画板的静态页面，默认主题、浅色，断网可直接用浏览器打开 |
+| `pages/*.html` | 每张画板的静态页面，默认主题、浅色，断网可直接用浏览器打开（直接打开文件时取不到 `/fonts/` 下的字体，显示系统字体；参考图是按原字体截的） |
 | `reference/*.png` | 每张画板的参考图（与 `pages/` 同名） |
 
 ## 在前端使用
@@ -26,6 +26,13 @@
 - 后台所有页面用 `class="acs-admin"`，不受店铺主题影响。
 - `acs--phone` 只供视觉稿在宽画布上强制手机样式；前端靠媒体查询（767px 以下）自动切换，不需要它。
 - 演示横幅、★ 页面提示、◆ 操作提示与结账两处告知的样式与规则见 DESIGN-SYSTEM.md「Demo markers」；装修不能隐藏或弱化它们。
+
+## 字体
+
+- Kelvin 2026-10-01 决定字体放在站里，不向第三方字体服务请求。10 款主题用到的 20 个拉丁字体族只取拉丁子集（英文与马来文够用），共 22 个 `woff2` 文件、约 0.7 MB，放在 `frontend/public/fonts/`，构建后由本站在 `/fonts/` 下提供；`tokens/acuven-shop.css` 开头的 `@font-face` 指向它们，按需下载、`font-display: swap`。
+- 文件取自 Fontsource 的 npm 包（有可变字重版本的用可变版本，Instrument Serif、IBM Plex Mono、Young Serif、DM Serif Display 用固定字重），均为 SIL Open Font License 1.1，许可证与字体同目录（`*-LICENSE.txt`）。
+- 中文不下载网页字体，用访客设备自带的字体（苹方、冬青黑体、微软雅黑、思源黑体等；衬线主题回退到宋体类），避免数 MB 的中文字库；中文字形因设备而异。
+- 增删字体时同时改 `tools/gen.py` 的 `FONT_FILES` 与 `frontend/public/fonts/` 下的文件和许可证。
 
 ## 修改主题
 

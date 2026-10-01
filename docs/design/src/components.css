@@ -174,7 +174,7 @@ html[data-theme$="-dark"] .acs-switcher { color: #bbb; }
 /* ===== Back office: one fixed neutral style, never themed by store decoration ===== */
 .acs-admin { --a-bg: #f5f6f8; --a-panel: #ffffff; --a-line: #dde0e5; --a-border: #8a919c; --a-ink: #1a1d23; --a-muted: #545b66; --a-accent: #2c3440; --a-on-accent: #ffffff; --a-nav: #1a1d23; --a-on-nav: #e7e9ee; --a-nav-muted: #a9afba; --a-select: #eceef2;
   --demo: #ffc629; --on-demo: #2a1f00; --demo-soft: #fff4d1; --on-demo-soft: #4d3900; --demo-mark: #9a6f00; --danger: #b3261e; --danger-soft: #fbe0dd; --on-danger-soft: #7a1a14; --success-soft: #dcf0e3; --on-success-soft: #145233; --focus: #2c3440;
-  background: var(--a-bg); color: var(--a-ink); font-family: 'IBM Plex Sans', 'Noto Sans SC', system-ui, sans-serif; font-size: 14px; line-height: 1.5; color-scheme: light; }
+  background: var(--a-bg); color: var(--a-ink); font-family: 'IBM Plex Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC', system-ui, sans-serif; font-size: 14px; line-height: 1.5; color-scheme: light; }
 html[data-theme$="-dark"] .acs-admin, .acs-admin[data-mode="dark"] { --a-bg: #15171b; --a-panel: #1d2025; --a-line: #2e323a; --a-border: #737b88; --a-ink: #e8eaee; --a-muted: #a3aab6; --a-accent: #dfe3ea; --a-on-accent: #15171b; --a-nav: #0e0f12; --a-on-nav: #e8eaee; --a-nav-muted: #9aa1ad; --a-select: #262a31;
   --demo-soft: #3a2f0e; --on-demo-soft: #ffe8a3; --demo-mark: #ffc629; --danger: #ff8f86; --danger-soft: #3d1a17; --on-danger-soft: #ffd2cd; --success-soft: #173524; --on-success-soft: #c3eed3; --focus: #dfe3ea; color-scheme: dark; }
 .acs-admin *, .acs-admin *::before, .acs-admin *::after { box-sizing: border-box; }
