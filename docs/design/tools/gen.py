@@ -35,6 +35,8 @@ FONT_FILES = [  # (family, file, weight or variable weight range)
     ("Bricolage Grotesque", "bricolage-grotesque-latin-opsz-normal.woff2", "200 800"),
     ("Onest", "onest-latin-wght-normal.woff2", "100 900"),
     ("IBM Plex Sans", "ibm-plex-sans-latin-wght-normal.woff2", "100 700"),
+    # IBM Plex Mono: 400-600 only, the same weights the approved design loaded; bold prices
+    # (700) render with the 600 face exactly as in the approved reference images.
     ("IBM Plex Mono", "ibm-plex-mono-latin-400-normal.woff2", "400"),
     ("IBM Plex Mono", "ibm-plex-mono-latin-500-normal.woff2", "500"),
     ("IBM Plex Mono", "ibm-plex-mono-latin-600-normal.woff2", "600"),
