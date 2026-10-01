@@ -9,6 +9,7 @@ from app.models.catalog import (
     ProductVariant,
     VariantOptionValue,
 )
+from app.models.member import Member, MemberSession, SmsDailyUsage, VerificationAttempt
 from app.models.order import (
     Order,
     OrderEvent,
@@ -22,6 +23,8 @@ from app.models.shipping import DemoFxRate, ShippingRate
 __all__ = [
     "Category",
     "DemoFxRate",
+    "Member",
+    "MemberSession",
     "Order",
     "OrderEvent",
     "OrderItem",
@@ -34,5 +37,7 @@ __all__ = [
     "ProductOptionValue",
     "ProductVariant",
     "ShippingRate",
+    "SmsDailyUsage",
     "VariantOptionValue",
+    "VerificationAttempt",
 ]
