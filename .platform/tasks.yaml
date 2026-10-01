@@ -846,9 +846,9 @@ tasks:
     creates_branch: true
     creates_pull_request: true
 
-  # 游客下单。碰钱（价格快照、逐件分摊、库存预留、幂等）也碰个人资料（收货资料），已过设计闸门：docs/DESIGN.md 1.10（提交 e3b3505）
+  # 游客下单。碰钱（价格快照、逐件分摊、库存预留、幂等）也碰个人资料（收货资料），已过设计闸门：docs/DESIGN.md 1.11（提交 2d13250）
   # 「数据模型」Order / OrderItem、OrderRecipient、PaymentAttempt / OrderEvent 三行，「计价、优惠、积分与库存」第 1、2、6、8 条，
-  # 「订单与退款状态」，「失败、并发与重试」第 1、2 条，「权限与资料保护」第 1、2、6、7 条。
+  # 「订单与退款状态」，「失败、并发与重试」第 1、2 条，「权限与资料保护」第 1、2、6、7 条；1.11 新增的短信验证开关（「边界与原则」第 4 条）决定白名单号码是否放行，开关由 SHOP-TASK-022 读取。
   # 「刚遇到短信无法送达或停发」的时间窗取 30 分钟，由 Kelvin 2026-10-01 决定（记录见 docs/HANDOFF.md 0.23）；会员下单、券与积分、
   # 支付超时取消、公开接口限流都是之后的任务。
   - id: SHOP-TASK-020
@@ -857,7 +857,7 @@ tasks:
       提供游客下单接口：服务端按当前价格重新计价并校验库存与每单限购，在一个事务里预留库存、写订单、订单行、逐件分摊快照、
       收货资料与下单事件，并给当前浏览器签发该单 30 分钟的短期凭据；同一幂等键的重复提交返回原订单。
       不做会员下单、优惠券与积分、模拟支付、取消与超时、查单，不加限流，不加表或迁移，不做页面，不改设计。
-      设计闸门：DESIGN 1.10（提交 e3b3505）。
+      设计闸门：DESIGN 1.11（提交 2d13250）。
     status: ready
     depends_on:
       - SHOP-TASK-010
@@ -865,22 +865,23 @@ tasks:
       - SHOP-TASK-012
       - SHOP-TASK-016
       - SHOP-TASK-019
+      - SHOP-TASK-022
     acceptance_criteria:
-      - 实现与 docs/DESIGN.md 1.10 上述各条一致；接口字段参照 docs/UX.md 0.6 的 P05，与设计冲突时以设计为准并在 PR 里说明；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - 实现与 docs/DESIGN.md 1.11 上述各条一致；接口字段参照 docs/UX.md 0.7 的 P05，与设计冲突时以设计为准并在 PR 里说明；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
       - 只有一个接口 POST /api/orders/guest；只接受 JSON（其他 Content-Type 返回 415）；请求体上限与计价接口相同（8 KB，按实际读到的字节逐块判断，超过即停止读取并返回 413，先于一切校验）；多出的字段一律 422；422 响应只指出出错的字段，不回显提交的姓名、电话、地址等内容
       - 请求头 Idempotency-Key 必填，16 到 64 个字符，只允许字母、数字、连字符与下划线，缺失或不合法 422
       - 请求体包含购物车行（规则与计价接口相同，经 SHOP-TASK-016 后每行 1 到 99 件、最多 20 行、SKU 不重复）、结账第 1 步的手机号原文与页面国家码选择对应的地区代码、收货人姓名、地址、邮编、收货国家；马来西亚时必填州属代码、其他国家时不给州属；其他国家时可选地区自由文本，马来西亚时不接受；国家与州属代码规则沿用 app/services/shipping.py；姓名、地址、邮编、地区去掉首尾空白后，姓名、地址、邮编不得为空，长度上限从 SHOP-TASK-010 订单收货资料模型的列长度读取，不另写数字
-      - 手机号用 SHOP-TASK-011 的规范化函数按请求里的地区代码规范化为 E.164（以加号开头时以输入为准），不按收货国家重新解析；不成立返回 422（错误码 phone_invalid）；规范化结果用 SHOP-TASK-011 的白名单函数判定，属于白名单（马来西亚、新加坡）时，只有 SHOP-TASK-012 的短信验证记录里该号码最近 30 分钟内有用途为 checkout、状态为 undeliverable 或 suspended 的记录才放行，否则返回 403（错误码 sms_verification_required）；这一判定只在服务端做，不信任请求里的任何标记
+      - 手机号用 SHOP-TASK-011 的规范化函数按请求里的地区代码规范化为 E.164（以加号开头时以输入为准），不按收货国家重新解析；不成立返回 422（错误码 phone_invalid）；随后在当次请求里用 SHOP-TASK-022 的读取函数读取短信验证开关：开关关闭时不论号码是否属于白名单都放行（马新号码也以游客下单）；开关开启时，规范化结果用 SHOP-TASK-011 的白名单函数判定，属于白名单（马来西亚、新加坡）时，只有 SHOP-TASK-012 的短信验证记录里该号码最近 30 分钟内有用途为 checkout、状态为 undeliverable 或 suspended 的记录才放行，否则返回 403（错误码 sms_verification_required）；这一判定只在服务端做，不信任请求里的任何标记
       - 幂等的请求指纹是经校验与规范化后的请求内容（行按请求顺序、规范化后的电话、去掉首尾空白后的收货资料、国家、州属、地区）按固定规则序列化后的 SHA-256；先按幂等键查订单，指纹相同即重放、不同即 409（错误码 idempotency_conflict），都不重新计价、不动库存；并发插入同一幂等键时以唯一约束为准，回滚后按同样规则重放或报冲突
       - 新订单用计价接口的同一套服务（app/services/checkout.py）按收货国家与州属重新计价；不可下单（有任何不可购买、超出限购或库存不足的行）时返回 409（错误码 order_not_placeable），不建订单；再按 SKU 规格 ID 从小到大逐行用带条件的 UPDATE 扣减当日可用库存（可用库存不小于件数才扣），任何一行扣不到即回滚整个事务，不部分下单；超出限购按 DESIGN 第 8 条拒绝整单；无论是计价判定不可下单还是扣库存失败，回滚后都先按幂等键重新查一次订单（同键的并发请求可能已经提交），有则按指纹重放或报 idempotency_conflict，没有才返回 order_not_placeable
       - 同一事务里写入订单（状态 awaiting_demo_payment、会员 ID 为空、认领状态 open、券折扣与积分抵扣与获得积分都为 0、运费与所用运费区代码和版本号、应付、幂等键与请求指纹、创建时间、支付到期时间为创建时间加 15 分钟、支付时间为空）；订单行（按请求顺序的行序、SKU 规格外键与 SKU 快照、按 SHOP-TASK-005 回退英文规则取好的英文、中文、马来文商品名称与规格说明、单价、件数、行小计）；用 app/services/pricing.py 的 price_order（不传券与积分）算出的逐件分摊快照；收货资料（姓名、规范化电话、国家、地区即马来西亚的州属代码或其他国家的地区自由文本或空、地址、邮编）；下单事件（迁移前状态为空、迁移后 awaiting_demo_payment、操作者 guest）；再用 SHOP-TASK-019 的签发函数签发该单的 guest_checkout 授权并设置 cookie；全部成功才提交
       - 新订单返回 201，重放返回 200；响应只含订单号、状态、商品小计、运费、应付、支付到期时间与 CSRF 令牌，不含收货资料、会话令牌或幂等键；重放时订单仍为 awaiting_demo_payment 且未过支付到期时间才签发新的 guest_checkout 授权与 cookie，否则只返回订单信息、不设 cookie
       - 接口不需要登录，不读会员会话；不写日志，或日志只记录不含个人资料、订单号、幂等键与令牌的事件；错误响应不含内部细节；运费行缺失时与计价接口一样返回 503；限流不在本任务，PR 里如实说明
       - 如需复用 app/services/catalog.py 或 app/services/checkout.py 里的函数，只可把它们改为可供其他模块导入（改名或导出），不改目录与计价接口的任何行为，tests/test_catalog_api.py、tests/test_checkout_quote.py 与 tests/test_purchase_limit.py 不改动并照常通过
-      - tests/test_guest_order.py 用 TestClient 与 SQLite 内存库（开启外键检查，覆盖会话依赖）按模型建表并自建目录、运费、汇率与短信验证记录数据，验证：成功下单后各表写入的值（含逐件分摊之和等于商品小计、应付等于小计加运费、支付到期时间为创建加 15 分钟、库存按件数扣减、事件一条）；收货电话按请求的地区代码规范化且不随收货国家改变；白名单号码无记录、记录超过 30 分钟、记录状态为 sent 或 approved、记录用途不是 checkout 时都 403，最近 30 分钟内有 undeliverable 或 suspended 的 checkout 记录时放行；不可购买、超出限购、库存不足都 409 且不建订单、不动库存；两行中第二行扣不到库存时第一行的库存也不变；同键同请求重放返回同一订单、不再扣库存，同键不同请求 409；插入订单时遇到同一幂等键的唯一约束冲突（用第二个数据库会话先写入同键订单，或可控地抛出 IntegrityError 模拟并发）时回滚、不重复扣库存、不多建订单，并按指纹返回重放结果或 idempotency_conflict；同键并发请求的另一交错（第一个请求已提交并用尽库存，第二个请求在计价或扣库存时失败）返回第一个请求的订单而不是 order_not_placeable；Set-Cookie 带 SHOP-TASK-019 规定的名称与属性，签发的授权可通过校验函数；重放已过支付到期时间的订单不设 cookie；415、413（含带多余字段的超限请求体）、422（缺幂等键、幂等键过短或含非法字符、多余字段、马来西亚缺州属、其他国家给州属、马来西亚给地区、姓名为空白、超过列长度、非法电话）且 422 响应不含提交的姓名、电话、地址；运费行缺失 503；每条测试写明它守住的是设计里哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - tests/test_guest_order.py 用 TestClient 与 SQLite 内存库（开启外键检查，覆盖会话依赖）按模型建表并自建目录、运费、汇率与短信验证记录数据，验证：成功下单后各表写入的值（含逐件分摊之和等于商品小计、应付等于小计加运费、支付到期时间为创建加 15 分钟、库存按件数扣减、事件一条）；收货电话按请求的地区代码规范化且不随收货国家改变；开关关闭（含站点设置表无行）时马新号码无短信验证记录也能下单；开关开启时，白名单号码无记录、记录超过 30 分钟、记录状态为 sent 或 approved、记录用途不是 checkout 时都 403，最近 30 分钟内有 undeliverable 或 suspended 的 checkout 记录时放行；不可购买、超出限购、库存不足都 409 且不建订单、不动库存；两行中第二行扣不到库存时第一行的库存也不变；同键同请求重放返回同一订单、不再扣库存，同键不同请求 409；插入订单时遇到同一幂等键的唯一约束冲突（用第二个数据库会话先写入同键订单，或可控地抛出 IntegrityError 模拟并发）时回滚、不重复扣库存、不多建订单，并按指纹返回重放结果或 idempotency_conflict；同键并发请求的另一交错（第一个请求已提交并用尽库存，第二个请求在计价或扣库存时失败）返回第一个请求的订单而不是 order_not_placeable；Set-Cookie 带 SHOP-TASK-019 规定的名称与属性，签发的授权可通过校验函数；重放已过支付到期时间的订单不设 cookie；415、413（含带多余字段的超限请求体）、422（缺幂等键、幂等键过短或含非法字符、多余字段、马来西亚缺州属、其他国家给州属、马来西亚给地区、姓名为空白、超过列长度、非法电话）且 422 响应不含提交的姓名、电话、地址；运费行缺失 503；每条测试写明它守住的是设计里哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
       - docs/TODO.md 新增 SHOP-TASK-020 记录段（请求与响应字段、错误码、事务内步骤、幂等规则、偏离、验证到什么程度，并写明支付超时取消、会员下单与限流留给之后的任务）；不改 planning-v1 块；复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表、不加迁移、不改前端代码
-      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.10，提交 e3b3505），不合并、不直推
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
     allowed_change_paths:
       - app/services/ordering.py
       - app/api/orders.py
@@ -934,6 +935,45 @@ tasks:
       - app/services/order_access.py
       - app/main.py
       - tests/test_demo_payment.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 站点设置：短信验证开关的存储与读取。开关决定结账身份、短信发送与注销确认方式，碰个人资料流程，
+  # 已过设计闸门：docs/DESIGN.md 1.11（提交 2d13250）「边界与原则」第 4 条、「数据模型」SiteSetting 一行。
+  # 后台修改开关要等管理后台登录与审计记录，属于之后的「管理后台业务接口」任务；本任务只建表、读取函数与公开只读接口。
+  # 依赖 SHOP-TASK-019 只因迁移链：本任务的迁移接在 0009 之后。
+  - id: SHOP-TASK-022
+    title: 站点设置：短信验证开关的存储与读取
+    purpose: >-
+      按 docs/DESIGN.md 1.11 建立站点设置表（首版只有短信验证开关，默认关闭）并写迁移；提供服务端每次从数据库读取开关当前值的函数，
+      供下单、短信发送、注册登录与注销任务判定；另提供公开只读接口，供前台决定显示哪一组短信相关界面。
+      不加修改开关的接口，不做后台页面或审计记录，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-019
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.11「边界与原则」第 4 条及「数据模型」SiteSetting 一行一致；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - app/models/site.py 定义站点设置模型，沿用 app/db/base.py 的基类、约束命名约定与 InnoDB、utf8mb4 表选项；app/models/__init__.py 导出它；表只有一行，主键固定为 1（检查约束保证），列为短信验证开关（布尔，非空，服务端默认关闭）与更新时间（非空，不带时区的 UTC）；不加其他设置项
+      - 新迁移文件 alembic/versions/20261001_0010_site_settings.py，revision 为 0010、down_revision 为 0009；upgrade 建表并写入主键为 1、开关关闭的一行，downgrade 删表；约束名按命名约定逐个写出；迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，alembic check 在它比较的范围内无差异，由 PR 的必需 CI 检查 backend 执行
+      - app/services/site_settings.py 提供读取函数：接收数据库会话，每次调用都查询数据库、不做任何进程内或 Redis 缓存，返回开关是否开启；表里没有这一行时视为关闭；docstring 写明下单、发送短信、提交验证码与确认注销时都必须在当次请求里调用它，按当时的值判定
+      - GET /api/site-settings 返回一个字段 sms_verification_enabled（布尔），响应带 Cache-Control 为 no-store；不需要登录，不读写 cookie；只发 SELECT；不返回其他内容；前台只用它决定显示，服务端判定不依赖前端
+      - 不加修改开关的接口；修改由之后的管理后台业务接口任务在管理员登录与审计记录就绪后实现，本任务在 docs/TODO.md 记录段写明
+      - tests/test_site_settings.py 用 SQLite 内存库与 TestClient 验证：主键不是 1 的行被检查约束拒绝；新建行的开关默认关闭；读取函数在有行与无行时的结果；连续两次读取之间改库，第二次读到新值（证明未缓存）；接口返回值随库中开关变化、响应只有这一个字段且带 no-store、不设 cookie；每条测试写明它守住的是设计里哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-022 记录段（表与约束、读取函数、接口、偏离、验证到什么程度，并写明修改开关留给管理后台业务接口任务）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不改前端代码
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - app/models/site.py
+      - app/models/__init__.py
+      - alembic/versions/20261001_0010_site_settings.py
+      - app/services/site_settings.py
+      - app/api/site_settings.py
+      - app/main.py
+      - tests/test_site_settings.py
       - docs/TODO.md
     allowed_commands:
       - lint.check
