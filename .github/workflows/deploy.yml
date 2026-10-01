@@ -2,6 +2,7 @@
 #
 # .platform/project.yaml 写了 `deploy_workflow: deploy.yml`，就是承诺本工作流满足：
 #   D1 触发：由 push 到默认分支触发，每次合并都产生一次以合并提交为 headSha 的 push 运行。
+#            例外：只改 .platform/tasks.yaml 与 docs/TODO.md 的提交（自动收尾）被 paths-ignore 排除，不部署。
 #            workflow_dispatch 保留给手工重部署 / 回滚，不计入观察。
 #   D2 对象：部署的正是触发它的那个提交（DEPLOY_SHA）：镜像以它为标签构建，服务器上
 #            `git checkout --detach` 到它再跑它自己的 deploy/deploy.sh，不 `git pull` 分支最新。
@@ -15,9 +16,16 @@
 # 健康检查地址放 repository variable HEALTHCHECK_URL。
 name: Deploy
 
+# paths-ignore：只改这两个文件的提交（OpenClaw 自动收尾 PR 的 ready → done 与移出当前计划）不部署。
+# Worker 合并收尾 PR 前逐项核对这里的形状，不符即拒绝合并（closeout_would_deploy）：
+# 只有 push（可另有 workflow_dispatch）；paths-ignore 逐字含这两项、无 ! 条目；无 paths、无 branches-ignore；
+# branches 含 main；不用锚点、别名、合并键、重复键。改这里之前先对照这条约束。
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - .platform/tasks.yaml
+      - docs/TODO.md
   workflow_dispatch:
     inputs:
       ref:
