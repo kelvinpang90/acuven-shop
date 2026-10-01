@@ -503,7 +503,7 @@ tasks:
       按 docs/DESIGN.md 1.9 建立会员相关的四张表：会员、会员会话、短信验证记录、短信每日用量与预算，并给订单表加可空的会员 ID
       与游客订单认领状态，写对应的 Alembic 迁移。只建表与约束；不写密码哈希、会话签发、短信发送、限流、认领或注销逻辑，
       不加接口、不做页面，不加优惠券与积分相关的表或列，不改设计。设计闸门：DESIGN 1.9（提交 361d8bf）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-010
     acceptance_criteria:
