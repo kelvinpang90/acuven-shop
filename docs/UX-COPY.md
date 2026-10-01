@@ -1,7 +1,13 @@
 # Acuven Shop 三语文案与演示提示（审阅稿）
 
-> **审阅稿。0.3 的内容 Kelvin 已于 2026-09-30 审阅；0.4 新增的文案键候审，审阅通过前以 0.3 为准。**
-> 版本 0.4（2026-09-30），运营者修订（Claude Code），在 `SHOP-TASK-008` 的 0.3 上增补店铺装修与视觉稿审阅所需的文案键。页面结构与线框见 [UX.md](UX.md)；依据 `docs/REQUIREMENTS.md` 1.9 候批稿（店铺装修、多规格起价显示、游客结账摘要；其余条款同 1.8）与 `docs/DESIGN.md` 1.9（2026-09-30 获 Kelvin 批准，批准记录见 `docs/HANDOFF.md` 0.19）；Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
+> **审阅稿。0.4 已于 2026-09-30 经 Kelvin 审阅通过（记录见 `docs/HANDOFF.md`）；0.5 新增的文案键候审，审阅通过前以 0.4 为准。**
+> 版本 0.5（2026-10-01），运营者修订（Claude Code），在 0.4（提交 `9b3e640`）上增补每单限购与精选商品挑选所需的文案键。页面结构与线框见 [UX.md](UX.md)（0.6）；依据 `docs/REQUIREMENTS.md` 1.11 候批稿与 `docs/DESIGN.md` 1.10 候批稿（在 1.9 上只增加每单限购）；「提示」列中依据 DESIGN 的小节除特别注明外仍指 1.9。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
+
+## 0.5 修订要点
+
+- 新增每单限购的文案键：`detail.max_per_order`、`detail.limit_reached`、`detail.cart_full`（P03），`cart.over_limit`（P04），`admin.max_per_order`、`admin.max_per_order_hint`（A04）（Kelvin 2026-10-01 决定）。
+- 新增精选商品挑选的文案键：`admin.featured_pick`、`admin.featured_add`、`admin.featured_remove`、`admin.featured_hint`（A08）（Kelvin 2026-10-01 决定）。
+- 未改动、未删除任何已有键的文案。
 
 ## 0.4 修订要点
 
@@ -122,6 +128,9 @@
 | `detail.added` | Added to cart | 已加入购物车 | Ditambah ke troli | — |
 | `detail.view_cart` | View cart | 查看购物车 | Lihat troli | — |
 | `detail.select_all_options` | Please choose all options first. | 请先选择全部规格。 | Sila pilih semua pilihan dahulu. | — |
+| `detail.max_per_order` | Limit {count} per order | 每单限购 {count} 件 | Had {count} unit bagi setiap pesanan | P03 数量旁；同一商品各规格合计（0.5） |
+| `detail.limit_reached` | You already have the maximum of {count} of this product in your cart. | 购物车中此商品已达每单限购 {count} 件。 | Troli anda sudah mempunyai jumlah maksimum {count} untuk produk ini. | P03 加入按钮禁用时（0.5） |
+| `detail.cart_full` | Your cart can hold up to {count} different items. Remove one to add another. | 购物车最多可放 {count} 种商品规格，请先移除一项再加入。 | Troli anda boleh memuatkan sehingga {count} item berbeza. Buang satu untuk menambah yang lain. | P03 加入按钮禁用时；{count} 为 20（0.5） |
 | `detail.description` | Description | 商品描述 | Penerangan | — |
 | `detail.english_only` | English only | 仅英文 | Bahasa Inggeris sahaja | 商品文案回退英文时的标签（Q8 已决） |
 | `detail.a11y_image` | Image {n} of {count} | 第 {n} 张图，共 {count} 张 | Imej {n} daripada {count} | 读屏标签：P03 缩略图与手机主图（0.4） |
@@ -138,6 +147,7 @@
 | `cart.shipping_later` | Shipping is calculated at checkout. | 运费在结账时计算。 | Kos penghantaran dikira semasa daftar keluar. | — |
 | `cart.price_recheck` | Prices and stock are confirmed at checkout. | 价格与库存以结账时为准。 | Harga dan stok disahkan semasa daftar keluar. | — |
 | `cart.item_changed` | Some items changed in price or availability. Please review. | 部分商品的价格或库存已变化，请核对。 | Sesetengah item telah berubah harga atau ketersediaan. Sila semak. | — |
+| `cart.over_limit` | This product is limited to {count} per order. Please reduce the quantity. | 此商品每单限购 {count} 件，请减少数量。 | Produk ini dihadkan kepada {count} unit bagi setiap pesanan. Sila kurangkan kuantiti. | P04 超出限购的行下（0.5） |
 | `cart.checkout` | Check out | 去结账 | Daftar keluar | — |
 | `cart.continue` | Continue shopping | 继续购物 | Teruskan membeli-belah | — |
 | `cart.demo_hint` | Your cart is saved in this browser only. Nothing is charged. | 购物车只保存在本浏览器，不会扣款。 | Troli anda disimpan dalam pelayar ini sahaja. Tiada caj dikenakan. | ★ |
@@ -450,6 +460,8 @@
 | `admin.sku` | SKU | SKU | SKU | — |
 | `admin.price` | Price (MYR) | 价格（MYR） | Harga (MYR) | — |
 | `admin.initial_stock` | Daily initial stock | 每日初始库存 | Stok awal harian | — |
+| `admin.max_per_order` | Limit per order | 每单限购 | Had setiap pesanan | A04（0.5） |
+| `admin.max_per_order_hint` | 1–99 items, counted across all options of this product. Changes apply to new orders only. | 1–99 件，按此商品所有规格合计。修改只影响新订单。 | 1–99 unit, dikira merentas semua pilihan produk ini. Perubahan hanya terpakai untuk pesanan baharu. | A04（0.5） |
 | `admin.available_today` | Available today | 今日可用 | Tersedia hari ini | — |
 | `admin.adjust_today` | Adjust today's stock | 调整当日库存 | Laraskan stok hari ini | — |
 | `admin.initial_stock_note` | Changes to initial stock take effect from the next daily reset. | 修改初始库存从次日重置起生效。 | Perubahan stok awal berkuat kuasa dari tetapan semula harian berikutnya. | — |
@@ -517,6 +529,10 @@
 | `admin.block_move_up` | Move up | 上移 | Alih ke atas | 读屏标签（0.4） |
 | `admin.block_move_down` | Move down | 下移 | Alih ke bawah | 读屏标签（0.4） |
 | `admin.home_blocks_hint` | Block text comes from the store's translations and can't be edited here. The demo hint on the home page always shows above these blocks. | 区块文字来自店铺的三语文案，不能在这里修改。首页的演示提示始终显示在这些区块上方。 | Teks blok datang daripada terjemahan kedai dan tidak boleh disunting di sini. Petunjuk demo di halaman utama sentiasa dipaparkan di atas blok ini. | A08（0.4） |
+| `admin.featured_pick` | Featured products (up to 4) | 精选商品（最多 4 件） | Produk pilihan (sehingga 4) | A08（0.5） |
+| `admin.featured_add` | Add product | 添加商品 | Tambah produk | A08（0.5） |
+| `admin.featured_remove` | Remove from featured | 移出精选 | Keluarkan daripada pilihan | A08 读屏标签，`(✗)`（0.5） |
+| `admin.featured_hint` | Only published products are shown on the home page, in this order. If none are chosen, or none of them are published, the 4 newest products are shown. | 首页按此顺序只显示仍上架的商品；未挑选或挑选的都已下架时，显示最新的 4 件。 | Hanya produk yang diterbitkan dipaparkan di halaman utama, mengikut susunan ini. Jika tiada yang dipilih atau tiada yang diterbitkan, 4 produk terbaharu dipaparkan. | A08（0.5） |
 | `admin.design_saved` | Saved. The storefront now uses these settings. | 已保存，前台已改用这些设置。 | Disimpan. Kedai kini menggunakan tetapan ini. | A08 保存成功（0.4） |
 
 ## 待决问题
