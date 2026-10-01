@@ -21,19 +21,42 @@ from themes_src import STATUS, THEMES  # noqa: E402
 OUT = os.path.join(HERE, "..", "tokens")
 SRC = os.path.join(HERE, "..", "src")
 
-FONTS = (
-    "https://fonts.googleapis.com/css2?family=Instrument+Serif"
-    "&family=Manrope:wght@400;500;600;700"
-    "&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Onest:wght@400;500;600;700"
-    "&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600"
-    "&family=Young+Serif&family=Figtree:wght@400;500;600;700&family=DM+Serif+Display"
-    "&family=Work+Sans:wght@400;500;600;700&family=Unbounded:wght@500;700"
-    "&family=Rubik:wght@400;500;600;700&family=Fredoka:wght@500;600;700"
-    "&family=Nunito:wght@400;600;700;800&family=Syne:wght@600;700;800"
-    "&family=Karla:wght@400;500;600;700&family=Cormorant:wght@500;600;700"
-    "&family=Mulish:wght@400;500;600;700&family=Geist:wght@400;500;600;700"
-    "&family=Geist+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;500;700"
-    "&family=Noto+Serif+SC:wght@500;700&display=swap"
+# Latin subsets served from the site itself (frontend/public/fonts/, Kelvin 2026-10-01): no
+# third-party font requests. Files and their OFL licences come from the Fontsource packages
+# (variable builds where the family has one). Chinese uses the visitor's system fonts.
+FONT_DIR = "/fonts/"
+LATIN = (
+    "U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,"
+    "U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD"
+)
+FONT_FILES = [  # (family, file, weight or variable weight range)
+    ("Instrument Serif", "instrument-serif-latin-400-normal.woff2", "400"),
+    ("Manrope", "manrope-latin-wght-normal.woff2", "200 800"),
+    ("Bricolage Grotesque", "bricolage-grotesque-latin-opsz-normal.woff2", "200 800"),
+    ("Onest", "onest-latin-wght-normal.woff2", "100 900"),
+    ("IBM Plex Sans", "ibm-plex-sans-latin-wght-normal.woff2", "100 700"),
+    ("IBM Plex Mono", "ibm-plex-mono-latin-400-normal.woff2", "400"),
+    ("IBM Plex Mono", "ibm-plex-mono-latin-500-normal.woff2", "500"),
+    ("IBM Plex Mono", "ibm-plex-mono-latin-600-normal.woff2", "600"),
+    ("Young Serif", "young-serif-latin-400-normal.woff2", "400"),
+    ("Figtree", "figtree-latin-wght-normal.woff2", "300 900"),
+    ("DM Serif Display", "dm-serif-display-latin-400-normal.woff2", "400"),
+    ("Work Sans", "work-sans-latin-wght-normal.woff2", "100 900"),
+    ("Unbounded", "unbounded-latin-wght-normal.woff2", "200 900"),
+    ("Rubik", "rubik-latin-wght-normal.woff2", "300 900"),
+    ("Fredoka", "fredoka-latin-wght-normal.woff2", "300 700"),
+    ("Nunito", "nunito-latin-wght-normal.woff2", "200 1000"),
+    ("Syne", "syne-latin-wght-normal.woff2", "400 800"),
+    ("Karla", "karla-latin-wght-normal.woff2", "200 800"),
+    ("Cormorant", "cormorant-latin-wght-normal.woff2", "300 700"),
+    ("Mulish", "mulish-latin-wght-normal.woff2", "200 1000"),
+    ("Geist", "geist-latin-wght-normal.woff2", "100 900"),
+    ("Geist Mono", "geist-mono-latin-wght-normal.woff2", "100 900"),
+]
+FONT_FACES = "\n".join(
+    f"@font-face {{ font-family: '{family}'; font-style: normal; font-weight: {weight}; "
+    f"font-display: swap; src: url('{FONT_DIR}{file}') format('woff2'); unicode-range: {LATIN}; }}"
+    for family, file, weight in FONT_FILES
 )
 
 
@@ -241,13 +264,19 @@ write("themes.json", json.dumps(themes_json, ensure_ascii=False, indent=1) + "\n
 SERIF = {"Instrument Serif", "Young Serif", "DM Serif Display", "Cormorant"}
 MONO = {"IBM Plex Mono", "Geist Mono"}
 
+# System CJK fonts after the Latin face, so Chinese text never waits for a download.
+CJK_SANS = (
+    "'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Source Han Sans SC'"
+)
+CJK_SERIF = "'Songti SC', 'STSong', 'Noto Serif CJK SC', 'Source Han Serif SC', 'SimSun'"
+
 
 def stack(f):
     if f in MONO:
         return f"'{f}', ui-monospace, 'SFMono-Regular', Menlo, monospace"
     if f in SERIF:
-        return f"'{f}', 'Noto Serif SC', Georgia, serif"
-    return f"'{f}', 'Noto Sans SC', system-ui, -apple-system, 'Segoe UI', sans-serif"
+        return f"'{f}', {CJK_SERIF}, Georgia, serif"
+    return f"'{f}', {CJK_SANS}, system-ui, -apple-system, 'Segoe UI', sans-serif"
 
 
 BANNER = {
@@ -314,7 +343,7 @@ for th in THEMES:
 
 with open(os.path.join(SRC, "components.css"), encoding="utf-8") as f:
     components = f.read()
-write("acuven-shop.css", f'@import url("{FONTS}");\n' + "\n".join(css) + "\n" + components)
+write("acuven-shop.css", FONT_FACES + "\n" + "\n".join(css) + "\n" + components)
 
 # ---------- tokens.json (default theme only, Design System format) ----------
 USAGE = {
