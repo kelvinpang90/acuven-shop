@@ -26,6 +26,8 @@ dev = [
     # starlette 的 TestClient 用的 HTTP 传输（与 ai_billing_hub 同一对下界）。
     "httpx2>=2.12",
     "pytest>=8.3",
+    # tests/test_platform_tasks.py 读 .platform/tasks.yaml；uvicorn[standard] 已间接带上，这里显式声明。
+    "pyyaml>=6.0",
     "ruff>=0.8",
 ]
 
