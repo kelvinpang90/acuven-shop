@@ -5,6 +5,7 @@ import type { ProductSummary } from "../api/catalog";
 import { COPY, LANGUAGES } from "../i18n/copy";
 import type { Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
+import { RouterProvider } from "../router";
 import ProductCard from "./ProductCard";
 
 function product(overrides: Partial<ProductSummary> = {}): ProductSummary {
@@ -27,7 +28,9 @@ function render(item: ProductSummary, language: Language = "en"): string {
   };
   return renderToStaticMarkup(
     <LanguageProvider storage={storage}>
-      <ProductCard product={item} />
+      <RouterProvider initialPath="/products">
+        <ProductCard product={item} />
+      </RouterProvider>
     </LanguageProvider>,
   );
 }
@@ -77,19 +80,26 @@ describe("product card content", () => {
   it.each(LANGUAGES)("marks a product sold out today in %s", (language) => {
     const html = render(product({ sold_out_today: true }), language);
     expect(html).toContain(`<span class="acs-tag acs-tag--neutral">${COPY["list.out_of_stock"][language]}</span>`);
-    expect(html).toMatch(/^<div class="acs-pcard acs-pcard--oos">/);
+    expect(html).toMatch(/^<a class="acs-pcard acs-pcard--oos" href="\/products\/crew-neck-tee">/);
   });
 
   // SHOP-TASK-015 验收第 4 条「当日售罄的商品显示 list.out_of_stock」与 UX P02「演示提示」的反面：有货的卡片不带该标签。
   it("has no sold-out label while in stock", () => {
     const html = render(product());
     expect(html).not.toContain(COPY["list.out_of_stock"].en);
-    expect(html).toMatch(/^<div class="acs-pcard">/);
+    expect(html).toMatch(/^<a class="acs-pcard" href=/);
   });
 
-  // SHOP-TASK-015 验收第 4 条「指向商品详情的链接按 SHOP-TASK-014 的路由规则在详情页实现前不渲染」。
-  it("is not a link while the detail page does not exist", () => {
-    expect(render(product())).not.toMatch(/<a\b|href=/);
+  // UX P02「去向：P03」与 SHOP-TASK-017 验收第 2 条「本任务起商品卡…按路由规则链到详情页」：整张卡片是指向 /products/<slug> 的链接。
+  it("links the whole card to the product detail page", () => {
+    const html = render(product());
+    expect(html).toMatch(/^<a class="acs-pcard" href="\/products\/crew-neck-tee">[\s\S]*<\/a>$/);
+    expect(html.match(/<a\b/g)).toHaveLength(1);
+  });
+
+  // 同一条：slug 编码成路径的一段，链接仍能匹配回详情页。
+  it("encodes the slug in the link", () => {
+    expect(render(product({ slug: "tee (new)" }))).toContain(`href="/products/tee%20%28new%29"`);
   });
 
   // UX-COPY「约定」：商品名称缺少当前语言时回退英文；回退的文字标明是英文，读屏按英文读。

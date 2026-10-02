@@ -419,3 +419,46 @@
   - 下单时的整单校验（「下单时服务端重新校验，超出限购即拒绝整单，不部分下单」）留给游客下单任务（SHOP-TASK-020）；本任务不建订单、不预留库存。修改限购件数的后台接口（第 7 条只影响之后的计价与下单）留给管理后台业务接口任务。
   - 示例种子数据未改：已有的 30 件示例商品经迁移都取默认值 10。
 - 验证到什么程度：人工逐条对照验收标准与设计原句自查，并人工核对迁移中的列类型、可空性、服务端默认值、约束名与表达式同模型按命名约定生成的一致。`tests/test_purchase_limit.py` 用 SQLite 内存库（每个连接打开外键检查，并断言已打开）与 TestClient，每条测试的文档字符串写明它守住的设计或验收原句，覆盖：不给限购件数时库里为 10；0、100、-1 被检查约束拒绝，1 与 99 可写入；同一商品两个 SKU 合计等于限购两行都正常、超过限购两行都标为超出限购，另一件限购 1 的商品不受影响；默认限购 10 在计价中生效；单行超过限购；超出限购同时库存不足标为超出限购（仍给出可用库存），只缺货为库存不足；缺货的行计入商品合计；同一商品停用 SKU 与不存在的 SKU 不计入合计且只回 SKU、件数与状态；超出限购的行带商品信息、单价、行小计并计入商品小计，合计仍为小计加运费，不可下单，减到限购之内即可下单；三类有商品信息的行各带自己商品的 `max_per_order`；99 件接受、100 件 422；商品详情返回 `max_per_order`，商品列表与分类项没有。`tests/test_checkout_quote.py` 只把原 11 件被拒的用例改为 100 件被拒、件数上限的对照改为 99 件可接受（含两处文档字符串里的上限），并在 `_red_line` 的整体相等期望里补上 `max_per_order`；`tests/test_catalog_api.py` 只在商品详情的整体相等断言里补上 `max_per_order`。这些测试与迁移在真 MySQL 上的 upgrade head、downgrade base、再 upgrade head 及 `alembic check` 只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest；计价查询未在真 MySQL 上执行。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-017 商品详情 P03 与浏览器购物车
+
+- [x] 按 `docs/UX.md` 0.6（P03 与「0.6 修订要点」的每单限购）、`docs/UX-COPY.md` 0.5 与 `docs/design/pages/P03-desktop.html`、`P03-phone.html` 实现商品详情页 P03，并加只存在本浏览器的购物车模块；沿用 SHOP-TASK-014、015 的字典、路由、框架、金额格式化与接口模块。不在浏览器计算金额，不调用计价接口，不装依赖（未改 `package.json`、锁文件），不改后端、CI、部署配置或设计。购物车页 P04 留给之后的任务。设计闸门：不适用（只展示目录接口返回的单价与库存；购物车只存 SKU、商品 slug 与件数，不涉及个人资料；限购只是提示，校验在服务端）。
+- 文件结构（全部在 `frontend/src/`）：
+  - `router.tsx`：路由表加模式 `/products/:slug`（仍是字符串常量表）。`matchRoute` 把实际路径匹配到表项并取出动态段的值；`useRouter()` 给出 `route`（表项，用来查页面表）、`path`（实际路径）、`params`（如 `slug`）与 `search`，另加 `replace`（替换当前位置，不新增历史）。`Link` 与 `navigate` 只接受由路由表推出的实际路径类型（`/products/${string}` 等），`productPath(slug)` 生成详情链接。
+  - `App.tsx`：页面表加 `"/products/:slug": ProductDetailPage`，按 `route` 查页面，并以实际路径作 `key`（换一件商品时规格、数量与提示不沿用）。
+  - `api/catalog.ts`：商品详情类型 `ProductDetail`、`ProductVariant` 与地址 `productUrl`；非 2xx 抛 `CatalogError`（带状态码），`catalogFailure` 只把 404 归为「不存在」；`useCatalogItem` 给单件资源，多一个 `not_found` 状态；`useCatalog` 对外不变（404 仍按失败显示 `common.error_retry`）。
+  - `cart.ts`：浏览器购物车（存储格式、清洗、读写、合并、限购与 20 行判断、`useCart` 钩子），供 P04 复用。
+  - `pages/productOptions.ts`：规格选择、可选性、选全后的 SKU、价格文案、限购与 20 行状态、点加入的结果，都是纯函数。
+  - `pages/ProductDetailPage.tsx`：`ProductDetailView`（展示）、`ProductDetailPending`（加载、离开或失败）、`leaveIfMissing`（404 时换成列表）与页面本身。
+  - `components/ProductCard.tsx`：整张卡片改为指向 `/products/<slug>` 的链接（首页精选与列表共用，`pages/HomePage.tsx` 不需改动）。
+  - `i18n/copy.ts`：从 UX-COPY 原样抄入 16 个键：`common.a11y_qty_decrease`、`common.a11y_qty_increase` 与 `detail.*` 14 个（`options`、`quantity`、`stock_left`、`add_to_cart`、`added`、`view_cart`、`select_all_options`、`max_per_order`、`limit_reached`、`cart_full`、`description`、`english_only`、`a11y_image`、`demo_hint`）。
+  - `styles/site.css`：P03 的桌面布局与 767px 以下的手机布局（只有布局与显隐）。
+- 页面结构：
+  - 桌面：面包屑（`common.nav_shop` 链到 `/products`、分类链到 `/products?category=<slug>`、商品名称标 `aria-current="page"`）；左侧主图与缩略图（多于一张时才有缩略图，点选切换主图，所选缩略图 `aria-pressed`）；右侧名称（回退英文时旁边 `acs-tag--outline` 的 `detail.english_only`）、价格、`detail.options` 与每个规格名一组 chips、`detail.quantity` 与步进器、`detail.max_per_order`、选全后的 `detail.stock_left`、加入购物车一栏、★ `detail.demo_hint`；下方 `detail.description` 与描述。
+  - 767px 以下：没有面包屑；所有图片排成一行通栏，左右滑动逐张停靠（CSS scroll-snap）；描述放在 `<details>` 里可折叠；加入购物车一栏排在页面主体最后并 `position: sticky; bottom: 0`，滚动时固定在屏幕底部。两套图片与两种描述都在页面里，由 `site.css` 按宽度只显示其一。
+  - 每张图的读屏标签是 `detail.a11y_image`（桌面主图与手机每张图的 `alt`、每个缩略图按钮的 `aria-label`；缩略图里的 `img` 本身 `alt` 为空）。没有图片时显示商品卡的占位形状。
+  - 规格：初始不预选；只有一个启用 SKU 时直接选定。点未选的值选上（替换同一规格名下原来的值），点已选的值取消。与其他规格名下已选的值组不成任何启用 SKU 的值禁用（同一规格名下的已选值不限制换成别的值；没有任何启用 SKU 的值始终禁用）。选全前价格按 SHOP-TASK-015 的起价规则（复用商品卡的 `priceCopy`：多于一个启用 SKU 一律 `list.price_from`，即使同价；只有一个时 `common.price_myr`，金额取启用 SKU 中的最低单价）；选全后显示所选 SKU 的单价（`common.price_myr`）与 `detail.stock_left`（当日可用库存）。切换语言重新取数时选择保留。
+  - 提示：加入成功后在加入按钮上方显示 `detail.added`（`acs-alert--success`、`role="status"`），直到再点规格或数量；`detail.view_cart` 只在 `/cart` 进了路由表后渲染，现在不渲染。未选全点加入显示 `detail.select_all_options`（`acs-alert--danger`、`role="alert"`）。`detail.limit_reached` 与 `detail.cart_full` 在按钮上方（`acs-alert--info`、`role="status"`），按钮 `disabled` 并以 `aria-describedby` 指向该提示。
+  - 加载中与即将换成列表时只渲染空的 `<main aria-busy="true">`，不显示文字；其他失败显示 `common.error_retry`。商品不存在或未发布（接口 404）时用 `history.replaceState` 换成 `/products`（不新增历史记录），不另显示文字。
+- 购物车存储格式与清洗规则（`cart.ts`）：
+  - localStorage 键 `acuven-shop.cart`，值是 JSON 数组，每行 `{"sku": "…", "slug": "…", "quantity": n}`，只有这三项，不存价格、名称或任何个人资料。
+  - 读取时按顺序清洗：值不是 JSON 或不是数组时为空购物车；`sku`、`slug` 不是非空且无首尾空白的字符串，或 `quantity` 不是 1 到 99 的整数的行丢弃（行里多出的字段不读，也不再写回）；同一 SKU 只留最先出现的一行；最后只留前 20 行。写入前同样清洗。
+  - 读写失败（取不到 localStorage、`getItem` 或 `setItem` 抛错）时页面照常可用：读不到当作空购物车，写不进返回失败、不往外抛；本页仍按加入后的内容显示与提示，只是下次打开不记得。其他标签页改了购物车时（`storage` 事件）重新读取。
+  - 加入：同一 SKU 已在购物车中时合并件数，否则追加到最后；新行会超过 20 行时拒绝（`cart_full`）；件数不合格或合并后超过 99 时拒绝（`invalid`，限购最多 99，正常操作不会出现）。
+- 限购提示规则（UX 0.6，只是提示，下单时服务端再校验）：
+  - 显示 `detail.max_per_order`（接口的 `max_per_order`）。剩余可加件数 = 限购件数 − 购物车中同一商品（按 slug）各行件数之和，最少 0。
+  - 数量从 1 起；(−) 在 1 时禁用，(+) 在达到剩余件数时禁用；购物车变化后，先前选的件数按新的剩余件数收窄（剩余为 0 时显示 1）。库存不限制 (+)（UX「库存剩余只作提示」）。
+  - 剩余为 0 时（与是否选全无关）加入按钮禁用并显示 `detail.limit_reached`（`{count}` 为限购件数）；否则在已选全、购物车已有 20 行且所选 SKU 不在其中时禁用并显示 `detail.cart_full`（`{count}` 为 20）。所选 SKU 已在 20 行里时仍可加入（合并件数）。
+  - 加入的一行用接口返回的商品 slug（不是网址里的那一段）、所选 SKU 与显示的件数。
+- 路由：动态段的实际值只认 RFC 3986 的非保留字符与百分号编码（解码后交给页面；空段、`.`、`..`、含 `:` 或空格的段与坏的百分号编码都不匹配，落到首页）；`productPath` 用 `encodeURIComponent` 并另编码 `!'()*`，生成的路径一定能匹配回同一个 slug。接口请求里 slug 再按路径段编码。
+- 偏离与取舍，请审阅：
+  - 路由表遍历的已有测试：`App.test.tsx` 与 `components/SiteFrame.test.tsx` 未改。它们把表里每一项当作地址渲染；模式 `/products/:slug` 本身含 `:`，按上面的规则不是合法的商品路径，因此这一项渲染的是首页（与其他未知路径相同）。这是有意的：真实详情页的语言链接指向当前实际路径（`/products/<slug>`），而 `SiteFrame.test.tsx` 断言页面上没有 `href="/products/…"`，若模式本身也渲染详情页，该测试必然不成立。真实详情路径的渲染由 `pages/ProductDetailPage.test.tsx` 与 `router.test.tsx` 覆盖。
+  - UX-COPY 里没有、因而没有渲染的界面文字（不自行编写）：视觉稿面包屑 `<nav>` 的读屏标签 `Breadcrumb`（面包屑不带读屏标签；分隔符 `/` 改为读屏忽略的图形，页面上不出现字典以外的文字）、手机滑动图片区的整体读屏标签、加载中的提示（只给 `aria-busy`）。步进器的 − 与 + 是读屏忽略的图形，读屏标签为 `common.a11y_qty_decrease`、`common.a11y_qty_increase`（COMPONENTS「Options」）。
+  - 视觉稿没有 `detail.max_per_order` 与限购、购物车满的提示（UX 0.6 新增）：按 UX「新增元素沿用相邻元素的样式」，限购件数与 `detail.stock_left` 同为 `acs-caption`，两种提示用 `acs-alert--info`。
+  - `site.css` 只放布局与显隐、不写颜色字体圆角，视觉稿里几处行内的非布局样式没有搬过来：手机主图下方表示第几张的圆点（需要 `--ink`、`--border` 底色，组件类里没有，未渲染；滑动本身可用）；手机主图是通栏无圆角，这里沿用 `acs-cat__img` 图块，带 `--radius-tile`；缩略图的 `tile` / `tile-alt` 交替底色与所选时的 `--accent` 边框，这里用 `acs-chip` 按钮（所选时 `aria-pressed` 给出 `--accent` 边框）套 `acs-cat__img` 图块；手机底部栏的 `--surface-raised` 底色、上边线与阴影（这里给该栏加根元素的 `acs` 类取 `--surface` 底色，与 SHOP-TASK-015 的筛选抽屉同样做法）；描述折叠标题的字重用 `acs-field__label`（14px）而不是视觉稿的 16px。加入按钮桌面与手机是同一个按钮，手机上也是 `acs-btn--lg`（视觉稿手机为默认尺寸）。
+  - 手机底部栏用 `position: sticky` 而不是 `fixed`：在页面主体范围内固定在屏幕底部，滚到页脚时停在主体末尾，不遮住页脚。
+  - `detail.english_only`：UX 说「当前语言缺少商品文案、回退英文时」显示，这里名称或描述任一回退即显示；规格名、规格值与分类回退时只给该文字加 `lang="en"`。
+  - 加入成功的判定只看本页购物车是否接受这一行；写入 localStorage 失败时仍显示 `detail.added`（本页内容已更新，下次打开不记得），与语言选择的写入失败处理一致。
+  - 商品卡（`components/ProductCard.tsx`）仍不显示 `detail.english_only`，沿用 SHOP-TASK-015 记录里待决定的那一条。页头的购物车数量 `common.nav_cart` 属于全站框架，随购物车页任务加入。
+  - 已有测试的改动：`router.test.tsx` 的路由表断言改为四项，未知路径样例去掉 `/products/tee`（它现在是详情页）并加入动态段的非法样例，`resolveHref` 的期望补上 `route` 与 `params`，「链接只指向路由表」改用 `matchRoute` 判断并多渲染一个实际的详情路径；`components/ProductCard.test.tsx` 外层加 `RouterProvider`（卡片现在是链接），根元素的断言由 `<div` 改为 `<a … href=…>`，「卡片不是链接」改为「整张卡片链到详情页」；`pages/HomePage.test.tsx` 与 `pages/ProductListPage.test.tsx` 只各加一条详情链接的断言。其余已有测试未删减、未放宽。
+- 验证到什么程度：人工逐条对照验收标准与 UX 原句自查，并人工核对新增的 16 个字典键与 UX-COPY 原文（逐字比较由已有的 `i18n/copy.test.ts` 覆盖新键）。新增与修改的测试用 vitest 与 `react-dom/server`（未加测试依赖，`fetch` 与 localStorage 以替身代替），每条注释写明它守住的 UX、DESIGN、COMPONENTS 或验收原句，覆盖：购物车只存三项（多余字段不写入）、读回写入的内容、非 JSON 与非数组为空、坏行与 0、100、小数、字符串件数丢弃、重复 SKU 只留第一行、超过 20 行只留前 20 行、读写抛错与无存储时照常；合并件数、新 SKU 追加、第 21 行被拒而 20 行里的 SKU 仍可合并、合并超过 99 被拒；限购按 slug 合计同一商品各 SKU、其他商品不计、剩余不为负；初始不预选、单 SKU（含没有规格名的商品）直接选定、组不成启用 SKU 的值禁用、无启用 SKU 的值禁用、同组已选值不限制换值、点选与取消；选全前为起价（含同价仍为「起」）、选全后为所选 SKU 单价；剩余件数收窄数量、达到限购与购物车满时的禁用与提示（三种语言）、差一件时仍可加入、所选 SKU 已在 20 行里时仍可加入、未选全时的提示、加入后的提示且没有 `detail.view_cart` 与 `/cart` 链接；面包屑、回退英文标签（名称与描述）与其反面、主图与缩略图及手机每张图的 `detail.a11y_image`、无图占位、描述的桌面与手机两种形态、★ 提示；页面文字除商品数据与数字外全部来自字典（三种语言、五种状态，含变量替换）且没有行内样式；404 时换成 `/products` 而其他状态不换、等待时主体为空、失败时只有 `common.error_retry`、`/products/<slug>` 渲染详情页；详情接口地址只带语言且 slug 编码成一段、404 与其他失败的区分；路由表四项、动态段的匹配与非法样例、slug 经 `productPath` 往返不变；商品卡、首页精选与列表的详情链接。浏览器相关的部分（实际请求与 effect、点选与加入、localStorage 的真实读写与 `storage` 事件、404 时的地址替换、滑动与 sticky、媒体查询下的显隐与布局）未在 DOM 中执行，只以纯函数与服务端渲染的各状态验证。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查；检查命令结果由 Worker 另行记录。未做浏览器验收（未在真实浏览器中打开页面，也未与参考图对比）。

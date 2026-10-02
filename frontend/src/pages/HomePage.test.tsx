@@ -213,6 +213,17 @@ describe("featured block", () => {
     expect(block).toContain("RM 15.00");
   });
 
+  // UX P01「去向：P03（精选商品）」与 SHOP-TASK-017 验收第 2 条「本任务起…首页精选按路由规则链到详情页」。
+  it("links each featured product to its detail page", () => {
+    const block = sectionOf(render({ featured: { status: "ready", data: featuredPage } }), "home.featured");
+    expect([...block.matchAll(/<a class="acs-pcard" href="([^"]*)">/g)].map((m) => m[1])).toEqual([
+      "/products/a",
+      "/products/b",
+      "/products/c",
+      "/products/d",
+    ]);
+  });
+
   // SHOP-TASK-015 验收第 7 条「请求失败时在对应区块…显示 common.error_retry，不影响…其他区块」：其他区块照常。
   it("shows the retry message in place when featured products fail", () => {
     const html = render({ featured: failed, categories: { status: "ready", data: categoryList } });

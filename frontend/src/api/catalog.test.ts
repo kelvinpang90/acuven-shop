@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  CatalogError,
+  catalogFailure,
   categoriesUrl,
   featuredProductsUrl,
   fetchCatalog,
   optionsUrl,
+  productUrl,
   productsUrl,
 } from "./catalog";
 
@@ -60,6 +63,14 @@ describe("catalog request addresses", () => {
     ]);
   });
 
+  // SHOP-TASK-017 验收第 2 条「路由 /products/<slug> 用商品详情接口取数（随当前语言）」：只带语言参数，slug 编码成路径的一段。
+  it("asks for the product detail in the current language", () => {
+    expect(pathOf(productUrl("zh", "crew-neck-tee"))).toBe("/api/catalog/products/crew-neck-tee");
+    expect(params(productUrl("zh", "crew-neck-tee"))).toEqual([["lang", "zh"]]);
+    expect(pathOf(productUrl("en", "a/b?c"))).toBe("/api/catalog/products/a%2Fb%3Fc");
+    expect(params(productUrl("en", "a/b?c"))).toEqual([["lang", "en"]]);
+  });
+
   // UX P01「精选商品」：未挑选时显示按最新排序的前 4 件。
   it("asks for the four newest products for the featured block", () => {
     expect(params(featuredProductsUrl("zh"))).toEqual([
@@ -96,6 +107,20 @@ describe("fetchCatalog", () => {
 
     vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("Failed to fetch"))));
     await expect(fetchCatalog(categoriesUrl("en"))).rejects.toThrow("Failed to fetch");
+  });
+
+  // SHOP-TASK-017 验收第 2 条「商品不存在或未发布（接口 404）时替换为商品列表页」：只有 404 归为「不存在」，
+  // 其他状态码与网络错误仍是 common.error_retry（SHOP-TASK-015 验收第 7 条）。
+  it("tells a 404 apart from other failures", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("{}", { status: 404 }))));
+    const missing: unknown = await fetchCatalog(productUrl("en", "gone")).catch((error: unknown) => error);
+    expect(missing).toBeInstanceOf(CatalogError);
+    expect(catalogFailure(missing)).toBe("not_found");
+
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("{}", { status: 500 }))));
+    const broken: unknown = await fetchCatalog(productUrl("en", "tee")).catch((error: unknown) => error);
+    expect(catalogFailure(broken)).toBe("error");
+    expect(catalogFailure(new TypeError("Failed to fetch"))).toBe("error");
   });
 
   // 派生实现约束（实现选择）：守住 SHOP-TASK-015 验收第 6 条「切换语言时按新语言重新请求」——取消信号传给 fetch，语言或条件变化时作废旧请求，防止晚到的旧请求结果覆盖新请求。

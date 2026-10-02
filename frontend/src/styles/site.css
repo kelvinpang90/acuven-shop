@@ -71,6 +71,27 @@ body { margin: 0; }
 .site-check { display: flex; gap: 10px; align-items: center; }
 .site-check input { flex-shrink: 0; width: 18px; height: 18px; margin: 0; }
 
+/* 商品详情 P03：桌面左 7 栏图片，右 4 栏信息、加入购物车与 ★ 提示，下方描述。
+   图片跨三行，多出的高度只给 ★ 提示那一行，信息与按钮之间不被拉开。 */
+.site-detail { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-template-rows: auto auto auto 1fr auto; gap: 22px 32px; align-content: start; padding: 28px var(--gutter) 96px; }
+.site-detail > .site-notice { grid-column: 1 / -1; }
+.site-detail__crumbs { grid-column: 1 / -1; grid-row: 1; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-bottom: 6px; }
+.site-detail__gallery { grid-column: 1 / span 7; grid-row: 2 / span 3; display: grid; gap: 16px; align-content: start; }
+.site-detail__tile { overflow: hidden; }
+.site-detail__tile svg { width: 60%; }
+.site-detail__thumbs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.site-detail__thumb { display: block; min-height: 0; padding: 0; overflow: hidden; }
+.site-detail__info { grid-column: 9 / span 4; grid-row: 2; display: grid; gap: 22px; align-content: start; }
+.site-detail__title { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.site-detail__options { display: grid; gap: 16px; }
+.site-detail__quantity { display: flex; align-items: center; gap: 16px; }
+.site-detail__buy { grid-column: 9 / span 4; grid-row: 3; display: grid; gap: 12px; }
+.site-detail__added { justify-content: space-between; align-items: center; }
+.site-detail__added-text { display: flex; align-items: center; gap: 8px; }
+.site-detail > .acs-hint { grid-column: 9 / span 4; grid-row: 4; align-self: start; }
+.site-detail__description { grid-column: 1 / span 10; grid-row: 5; display: grid; gap: 12px; max-width: 800px; padding-top: 42px; }
+.site-detail__description p, .site-detail__more p { margin: 0; white-space: pre-line; }
+
 /* 隐私说明 P14 */
 .site-privacy { display: grid; grid-template-columns: 280px minmax(0, 720px); gap: 64px; padding: 56px var(--gutter) 96px; }
 .site-privacy__aside { display: grid; gap: 20px; align-content: start; }
@@ -134,6 +155,18 @@ body { margin: 0; }
   .site-drawer .site-filter { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .site-drawer .site-check { min-height: 32px; }
   .site-drawer .site-check input { width: 20px; height: 20px; }
+
+  /* 商品详情 P03：单列；主图通栏、左右滑动逐张停靠；描述折叠；加入购物车一栏排在最后并固定在屏幕底部 */
+  .site-detail { display: flex; flex-direction: column; gap: 18px; padding: 0; }
+  .site-detail > .site-notice { margin: 16px var(--gutter) 0; }
+  .site-detail__slides { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; }
+  .site-detail__slide { flex: 0 0 100%; scroll-snap-align: start; }
+  .site-detail__info { gap: 18px; padding: 2px var(--gutter) 0; }
+  .site-detail > .acs-hint { margin: 0 var(--gutter); }
+  .site-detail__more { display: block; margin: 0 var(--gutter); padding: 12px 0; }
+  .site-detail__more summary { min-height: 32px; cursor: pointer; }
+  .site-detail__more p { margin-top: 8px; }
+  .site-detail__buy { order: 1; position: sticky; bottom: 0; z-index: 5; gap: 10px; margin-top: 14px; padding: 12px var(--gutter) 20px; }
 
   .site-privacy { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 28px var(--gutter) 40px; }
   .site-privacy__aside { gap: 24px; }
