@@ -4,6 +4,7 @@
 金额一律是 MYR 整数仙，不用浮点或 Decimal。
 三语文案（en / zh / ms）都可为空；是否发布由查询按「缺少当前语言回退英文，
 再缺失则不发布」判断，不在表里另存。库存预留与每日重置是之后的任务。
+商品级的每单限购件数依据 docs/DESIGN.md 1.10（提交 e3b3505）同一行（SHOP-TASK-016）。
 """
 
 from __future__ import annotations
@@ -45,7 +46,11 @@ class Category(Base):
 
 class Product(Base):
     __tablename__ = "products"
-    __table_args__ = (UniqueConstraint("slug"), MYSQL_TABLE_OPTIONS)
+    __table_args__ = (
+        UniqueConstraint("slug"),
+        CheckConstraint("max_per_order >= 1 AND max_per_order <= 99", name="max_per_order_range"),
+        MYSQL_TABLE_OPTIONS,
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # 分类下还有商品时不许删分类，不连带删商品。
@@ -61,6 +66,8 @@ class Product(Base):
     description_zh: Mapped[str | None] = mapped_column(Text)
     description_ms: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean)
+    # 每单限购件数（1–99）：同一商品所有 SKU 在一张订单中的件数合计上限，不按规格设置。
+    max_per_order: Mapped[int] = mapped_column(Integer, server_default="10")
     # UTC，供按最新排序。
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 

@@ -5,6 +5,11 @@
 第 1、2 条：服务端以规格价格计算商品小计，运费另计；「边界与原则」：金额以 MYR 的仙为整数单位，
 其他货币只按固定演示汇率显示参考数，按收货国家决定、不按 IP。
 
+每单限购依据 docs/DESIGN.md 1.10（提交 e3b3505）「计价、优惠、积分与库存」第 8 条
+（SHOP-TASK-016）：每行件数 1–99；同一商品各行件数合计超过该商品的每单限购件数时，
+这些行标为超出限购，不拒绝整个请求；标注优先级为不可购买、超出限购、库存不足。
+下单时的整单校验留给游客下单任务。
+
 只发 SELECT，不写库、不缓存价格与费率。
 SKU 不存在、停用或所属商品未发布的行只给 SKU、件数与状态。
 优惠券与积分不在这里，由之后的任务扩展。
@@ -39,7 +44,7 @@ from app.services.pricing import OrderLine, price_order
 from app.services.shipping import FxReference, ShippingQuote, quote_shipping, reference_amount
 
 MAX_CART_LINES = 20
-MAX_LINE_QUANTITY = 10
+MAX_LINE_QUANTITY = 99
 MAX_SKU_LENGTH = 64
 
 
@@ -73,9 +78,12 @@ class UnavailableLine:
 class PricedLine:
     sku: str
     quantity: int
-    status: Literal["ok", "insufficient_stock"]
-    # 库存不足时是当日可用库存（可为 0）；正常行为 None。
+    status: Literal["ok", "over_limit", "insufficient_stock"]
+    # 当日可用库存小于件数时给出（可为 0），否则为 None；
+    # 限购与库存各自独立，超出限购的行库存也不足时照给。
     available_stock: int | None
+    # 该商品的每单限购件数，按同一商品各行件数合计比较。
+    max_per_order: int
     product_slug: str
     name: LocalizedText
     # 按规格名的排列序号。
@@ -89,7 +97,7 @@ class PricedLine:
 @dataclass(frozen=True)
 class CheckoutQuote:
     lines: list[UnavailableLine | PricedLine]
-    # 正常与库存不足各行行小计之和。
+    # 正常、超出限购与库存不足各行行小计之和。
     subtotal_sen: int
     # 以下三项只在给了收货国家时有值。
     shipping: ShippingQuote | None
@@ -196,6 +204,13 @@ def quote_cart(
     images = _first_images(session, product_ids) if found else {}
     options = _selected_options(session, product_ids, variant_ids, lang) if found else {}
 
+    # 每单限购按商品合计；不可购买的行不在 found 里，不计入任何商品的合计。
+    product_quantities: dict[int, int] = {}
+    for item in items:
+        if item.sku in found:
+            product_id = found[item.sku][1].id
+            product_quantities[product_id] = product_quantities.get(product_id, 0) + item.quantity
+
     lines: list[UnavailableLine | PricedLine] = []
     priced: list[OrderLine] = []
     for item in items:
@@ -206,12 +221,21 @@ def quote_cart(
             continue
         variant, product = found[item.sku]
         short = variant.available_stock < item.quantity
+        over = product_quantities[product.id] > product.max_per_order
+        status: Literal["ok", "over_limit", "insufficient_stock"]
+        if over:
+            status = "over_limit"
+        elif short:
+            status = "insufficient_stock"
+        else:
+            status = "ok"
         lines.append(
             PricedLine(
                 sku=item.sku,
                 quantity=item.quantity,
-                status="insufficient_stock" if short else "ok",
+                status=status,
                 available_stock=variant.available_stock if short else None,
+                max_per_order=product.max_per_order,
                 product_slug=product.slug,
                 name=localized(product, "name", lang),
                 options=options[variant.id],
