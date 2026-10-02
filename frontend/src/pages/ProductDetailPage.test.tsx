@@ -428,9 +428,9 @@ describe("loading, failure and missing products", () => {
   // SHOP-TASK-017 验收第 2 条「路由 /products/<slug> 用商品详情接口取数」：路由给出详情页（服务端渲染不发请求，主体为空），不是首页或列表。
   it("renders the detail page for /products/<slug> inside the frame", () => {
     const html = renderToStaticMarkup(<App initialPath="/products/crew-neck-tee" storage={storage("en")} />);
-    expect(html).toContain(`<main class="site-detail" aria-busy="true"></main>`);
-    expect(html).not.toContain(COPY["home.demo_hint"].en);
-    expect(html).not.toContain(COPY["list.title"].en);
+    // 页框本身（导航、页脚）也可能含「All products」等文字，所以只看 <main> 的内容。
+    const mains = html.match(/<main\b[^>]*>[\s\S]*?<\/main>/g) ?? [];
+    expect(mains).toEqual([`<main class="site-detail" aria-busy="true"></main>`]);
     expect(html).toContain(COPY["common.demo_banner"].en);
   });
 });
