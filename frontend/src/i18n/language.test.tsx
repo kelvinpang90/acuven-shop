@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "../App";
+import { isRoutePath } from "../router";
 import { COPY } from "./copy";
 import {
   LANGUAGE_STORAGE_KEY,
@@ -118,15 +119,16 @@ describe("rendering in the chosen language", () => {
     expect(html).toContain(COPY["privacy.title"].en);
   });
 
-  // 验收：语言不放进网址——语言选项链接指向当前页面本身，不带查询参数或语言前缀。
+  // 验收：语言不放进网址——语言选项链接指向当前页面本身，每个链接都是路由表里的路径，不带查询参数或语言前缀。
   it("keeps the language out of links", () => {
     const html = renderToStaticMarkup(
       <App initialPath="/privacy" storage={memoryStorage({ [LANGUAGE_STORAGE_KEY]: "ms" })} />,
     );
-    const hrefs = [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
+    const hrefs = [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1] ?? "");
     expect(hrefs.length).toBeGreaterThan(0);
     for (const href of hrefs) {
-      expect(["/", "/privacy"]).toContain(href);
+      expect(isRoutePath(href), href).toBe(true);
+      expect(href).not.toContain("?");
     }
   });
 });

@@ -73,17 +73,41 @@ describe("header", () => {
     expect(header(render("/privacy"))).toMatch(new RegExp(`<a class="acs-brand" href="/">${BRAND}</a>`));
   });
 
-  // 验收：指向尚未实现页面的导航项（商品、查询订单、登录）一律不渲染。
+  // 验收：指向尚未实现页面的导航项（查询订单、登录）一律不渲染。
   it.each(paths)("renders no navigation item for pages that do not exist yet on %s", (path) => {
     for (const language of LANGUAGES) {
       const html = render(path, language);
-      for (const key of ["common.nav_shop", "common.nav_track", "common.nav_login"] as const) {
+      for (const key of ["common.nav_track", "common.nav_login"] as const) {
         expect(html).not.toContain(`>${COPY[key][language]}<`);
       }
-      expect(html).not.toMatch(/href="\/(products|track|login|cart|account|register)/);
-      // 页头搜索框要去商品列表 P02，同样不渲染。
-      expect(html).not.toMatch(/<(form|input)\b/);
+      expect(html).not.toMatch(/href="\/(products\/|track|login|cart|account|register)/);
     }
+  });
+
+  // 验收（SHOP-TASK-015）：商品列表进了路由表，页头 common.nav_shop 按路由规则开始渲染（桌面导航与手机菜单），在列表页标为当前。
+  it.each(languages)("links common.nav_shop to the product list in %s", (language) => {
+    const home = header(render("/", language));
+    expect(home.match(new RegExp(`<a href="/products">${COPY["common.nav_shop"][language]}</a>`, "g"))).toHaveLength(2);
+    const list = header(render("/products", language));
+    expect(list).toContain(`<a aria-current="page" href="/products">${COPY["common.nav_shop"][language]}</a>`);
+  });
+
+  // UX「全局框架」：页头搜索框（占位与读屏标签 list.search_placeholder，按钮 common.search），提交到商品列表的 q 参数。
+  it.each(languages)("has the header search form in %s", (language) => {
+    const html = header(render("/", language));
+    const form = section(html, /<form[\s\S]*?<\/form>/);
+    expect(form).toMatch(/^<form class="acs-search site-header__search" role="search" action="\/products" method="get">/);
+    expect(form).toContain(`name="q"`);
+    expect(form).toContain(`aria-label="${COPY["list.search_placeholder"][language]}"`);
+    expect(form).toContain(`placeholder="${COPY["list.search_placeholder"][language]}"`);
+    expect(form).toContain(`type="submit">${COPY["common.search"][language]}</button>`);
+    expect(html.match(/<form\b/g)).toHaveLength(1);
+  });
+
+  // 在商品列表上，搜索框预先填入当前的搜索词；其他页面为空。
+  it("prefills the search box with the current search term on the product list", () => {
+    expect(header(render("/products?q=tote+bag"))).toContain(`value="tote bag"`);
+    expect(header(render("/privacy"))).toContain(`value=""`);
   });
 
   // UX「全局框架」：语言切换 EN | 中文 | BM，当前语言标出。
@@ -114,10 +138,12 @@ describe("footer", () => {
   });
 
   // UX Q10：WhatsApp 联系链接未配置时隐藏所有 WhatsApp 按钮，不显示占位文字；不设站内联系表单。
+  // 页头的搜索表单（role="search"）不是联系表单，先去掉再检查。
   it.each(paths)("has no WhatsApp button, placeholder or contact form on %s", (path) => {
     const html = render(path);
     expect(html.toLowerCase()).not.toContain("whatsapp");
     expect(html).not.toContain("{{");
-    expect(html).not.toMatch(/<(form|textarea)\b/);
+    const withoutSearch = html.replace(/<form[^>]*role="search"[\s\S]*?<\/form>/g, "");
+    expect(withoutSearch).not.toMatch(/<(form|textarea)\b/);
   });
 });
