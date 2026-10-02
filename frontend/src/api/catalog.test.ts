@@ -73,7 +73,7 @@ describe("catalog request addresses", () => {
 describe("fetchCatalog", () => {
   // 验收：请求只带语言与筛选参数，不带任何个人资料——不发 cookie，只用 GET，没有请求体。
   it("sends a plain GET without credentials", async () => {
-    const fetchMock = vi.fn((_url: string, _init: RequestInit) =>
+    const fetchMock = vi.fn(() =>
       Promise.resolve(new Response(JSON.stringify([{ slug: "bags" }]), { status: 200 })),
     );
     vi.stubGlobal("fetch", fetchMock);
@@ -98,10 +98,11 @@ describe("fetchCatalog", () => {
   });
 
   it("passes the abort signal so a superseded request can be cancelled", async () => {
-    const fetchMock = vi.fn((_url: string, _init: RequestInit) => Promise.resolve(new Response("[]")));
+    const fetchMock = vi.fn(() => Promise.resolve(new Response("[]")));
     vi.stubGlobal("fetch", fetchMock);
     const controller = new AbortController();
-    await fetchCatalog(optionsUrl("en"), controller.signal);
-    expect(fetchMock.mock.calls[0]?.[1].signal).toBe(controller.signal);
+    const url = optionsUrl("en");
+    await fetchCatalog(url, controller.signal);
+    expect(fetchMock).toHaveBeenCalledWith(url, expect.objectContaining({ signal: controller.signal }));
   });
 });
