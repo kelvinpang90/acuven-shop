@@ -50,6 +50,11 @@
 - **前端样式文件（Kelvin 2026-10-01 决定）**：`frontend/src/styles/acuven-shop.css` 是生成文件，只读，必须和 `docs/design/tokens/acuven-shop.css` 逐字节相同；
   框架和页面的布局、显隐、媒体查询统一写在 `frontend/src/styles/site.css`，由 `frontend/src/main.tsx` 引入，只用设计变量，不写颜色、字体、圆角。
   每个有用户可见页面的前端任务，`allowed_change_paths` 固定带 `frontend/src/styles/site.css`，和 `frontend/src/router.tsx`、`frontend/src/i18n/copy.ts` 一样。
+- **新增路由的前端任务带上页面表**：`frontend/src/App.tsx` 的页面表按 `router.tsx` 的路由表穷举，路由表加了路径而页面表没加，类型检查不通过；
+  所以目的或验收标准里新增路由（「路由 /…」「路径为 /…」）或允许改 `frontend/src/router.tsx` 的任务，`allowed_change_paths` 必须带 `frontend/src/App.tsx`，
+  由 `tests/test_platform_tasks.py`（CI 的 backend）检查。会让 `frontend/src/App.test.tsx` 现有断言失效的任务（改首页内容、在每个页面的框架里加入带变量的文字等）另带它，
+  并在验收标准里写明只为此改；新路由被「只出现字典文字」这类按路由表遍历的测试自动覆盖，本身不是带它的理由。
+  起因：SHOP-TASK-015 的 run 因缺这两个路径以 `contract_scope_insufficient` 失败（2026-10-02），登记时的模型预审没有发现。
 - **按条件预审（Kelvin 2026-10-01 决定）**：任务属于设计闸门类（碰钱：钱包、账本、定价、支付、退款、幂等；碰个人数据；状态机；
   改数据库结构或迁移），或是有用户可见页面的前端任务（`--design` 指向 `docs/UX.md` 或对应的 `docs/design/pages/` 页面），或 `contract_check` 对它给出拆分 WARN、预计改动接近约 1500 行（运营者按设计粗估，拿不准就当作接近）时，登记为 `ready` 之前必须在控制面仓库运行
   `python -m worker.design_precheck --repo <本仓库干净检出或 git archive 导出> --project-id acuven_shop --task <任务 id> --design <设计文件相对路径> --claude <claude 程序绝对路径>`，

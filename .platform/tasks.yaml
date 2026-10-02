@@ -633,17 +633,17 @@ tasks:
       首页区块顺序与显隐先用默认设置（四块按 UX 顺序全部显示），店铺装修任务再改为读取后台设置。
       价格只格式化服务端返回的整数仙，不在浏览器计算任何金额；不做商品详情与购物车，不装依赖，不改后端，不改设计。
       设计闸门：不适用（只展示目录接口返回的价格，不改金额计算，不涉及个人资料）。
-      拆分：不拆（20 个允许路径、11 条验收标准，超过拆分阈值）——P01 与 P02 共用商品卡、金额格式化与目录接口模块，同属前端一层，路径多为实现与测试成对；分开登记会让共用模块在两个任务里来回改。
+      拆分：不拆（22 个允许路径、11 条验收标准，超过拆分阈值）——P01 与 P02 共用商品卡、金额格式化与目录接口模块，同属前端一层，路径多为实现与测试成对；分开登记会让共用模块在两个任务里来回改。
     status: ready
     depends_on:
       - SHOP-TASK-013
       - SHOP-TASK-014
     acceptance_criteria:
       - 页面内容、流程与文案以 docs/UX.md 0.5 的 P01、P02 与 docs/UX-COPY.md 0.4 为准，样式以 docs/design/pages/ 的 P01、P02 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；沿用 SHOP-TASK-014 的字典、路由、框架与样式约定；手机与桌面的布局差异写在 frontend/src/styles/site.css（只放布局与显隐规则，手机的差异写在 767px 及以下的媒体查询里；只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
-      - 首页四个区块的顺序与显隐来自 frontend/src/storeDesign.ts 的默认设置（主视觉、演示怎么玩、按分类浏览、精选商品，全部显示）；隐藏的区块整块不渲染，★ home.demo_hint 始终在页头下方、所有区块之前；区块文案全部来自字典
+      - 首页四个区块的顺序与显隐来自 frontend/src/storeDesign.ts 的默认设置（主视觉、演示怎么玩、按分类浏览、精选商品，全部显示）；隐藏的区块整块不渲染，★ home.demo_hint 始终在页头下方、所有区块之前；区块文案全部来自字典；frontend/src/App.test.tsx 里断言首页只有 ★ 提示的那条测试（SHOP-TASK-014 时四个区块都隐藏）改为验证默认设置下 ★ home.demo_hint 在页头之后、四个区块之前，只为此改动，其余测试不删减、不放宽
       - 主视觉的 home.hero_cta 链到商品列表；三个装饰图块取精选商品的前三张图片，不是链接、读屏忽略；「按分类浏览」用分类列表接口，每块显示分类图片（为空时显示视觉稿的占位形状）与名称，链到按该分类筛选的商品列表；「精选商品」取商品列表接口按 newest 排序的前 4 件
       - 商品卡显示首张图片、名称与价格：has_multiple_variants 为真时一律用 list.price_from（即使各规格同价），否则用 common.price_myr；金额由整数仙格式化为两位小数（如 2190 显示为 RM 21.90），格式化只用整数运算、不用浮点；不显示参考外币；当日售罄的商品显示 list.out_of_stock；指向商品详情的链接按 SHOP-TASK-014 的路由规则在详情页实现前不渲染
-      - 商品列表 P02 路径为 /products，搜索词、分类、规格筛选、排序与页码放在查询参数里（可分享、前进后退可用），非法值回退默认；页头搜索框在本任务起显示并跳到带搜索词的列表；筛选项来自分类列表接口与 SHOP-TASK-013 的规格筛选项接口，筛选、排序与分页全部交给商品列表接口，前端不自行过滤或排序；显示 ★ list.demo_hint、结果数、排序、清除筛选与空结果 list.empty
+      - 商品列表 P02 路径为 /products（加进 frontend/src/router.tsx 的路由表，frontend/src/App.tsx 的页面表同步加入商品列表页），搜索词、分类、规格筛选、排序与页码放在查询参数里（可分享、前进后退可用），非法值回退默认；页头搜索框在本任务起显示并跳到带搜索词的列表；筛选项来自分类列表接口与 SHOP-TASK-013 的规格筛选项接口，筛选、排序与分页全部交给商品列表接口，前端不自行过滤或排序；显示 ★ list.demo_hint、结果数、排序、清除筛选与空结果 list.empty
       - 桌面用侧栏筛选与页码翻页（上一页、下一页读屏标签用 common.a11y_page_prev、common.a11y_page_next）；767px 以下用全屏筛选抽屉（list.filter_apply 应用、list.filter_clear 清除）与 list.load_more 追加下一页；切换语言时按新语言重新请求，不丢失筛选
       - 请求失败时在对应区块或列表位置显示 common.error_retry，不影响页头页脚与其他区块；请求只带语言与筛选参数，不带任何个人资料
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch 以 vi.fn 替身）验证意图：金额格式化（0、5、100、2190、123456 仙）与起价规则（多规格同价仍为起价、单规格不带起）；首页区块按设置的顺序渲染、隐藏的不渲染、全部隐藏时只剩 ★ 提示；分类图片为空时的占位；查询参数的解析与生成往返一致、非法值回退；接口请求的路径与参数（语言、重复的 category 与 option）；售罄标签；空结果与请求失败的文案；每条测试写明它守住的是 UX 或 REQUIREMENTS 哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
@@ -669,6 +669,8 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
+      - frontend/src/App.test.tsx
       - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
@@ -730,7 +732,7 @@ tasks:
       20 行上限的提示和按钮禁用。购物车页 P04 由之后的任务做；在那之前「查看购物车」与页头购物车入口按路由规则不渲染。
       不在浏览器计算任何金额，不调用计价接口，不装依赖，不改后端，不改设计。设计闸门：不适用（只展示目录接口返回的单价与库存，
       购物车只存 SKU、商品 slug 与件数，不涉及个人资料；限购只是提示，校验在服务端）。
-      拆分：不拆（18 个允许路径、10 条验收标准，超过拆分阈值）——P03 与浏览器购物车模块同属前端一层，限购与 20 行上限的提示依赖购物车模块，路径多为实现与测试成对。
+      拆分：不拆（19 个允许路径、10 条验收标准，超过拆分阈值）——P03 与浏览器购物车模块同属前端一层，限购与 20 行上限的提示依赖购物车模块，路径多为实现与测试成对。
     status: ready
     depends_on:
       - SHOP-TASK-014
@@ -738,7 +740,7 @@ tasks:
       - SHOP-TASK-016
     acceptance_criteria:
       - 页面内容、流程与文案以 docs/UX.md 0.6 的 P03 与 docs/UX-COPY.md 0.5 为准，样式以 docs/design/pages/ 的 P03 静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；沿用 SHOP-TASK-014、015 的字典、路由、框架、金额格式化与接口模块；手机与桌面的布局差异写在 frontend/src/styles/site.css（只放布局与显隐规则，手机的差异写在 767px 及以下的媒体查询里；只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
-      - 路由 /products/<slug> 用商品详情接口取数（随当前语言）；商品不存在或未发布（接口 404）时替换为商品列表页，不另显示文字；本任务起商品卡与首页精选按路由规则链到详情页（frontend/src/pages/HomePage.test.tsx 与 frontend/src/pages/ProductListPage.test.tsx 只为此改动有关详情链接的断言）；面包屑为 common.nav_shop、分类（链到按该分类筛选的列表）与商品名称
+      - 路由 /products/<slug> 用商品详情接口取数（随当前语言）；frontend/src/router.tsx 的路由表仍是字符串常量表，动态段写成模式（如 /products/:slug），由 router.tsx 匹配并向页面提供 slug，站内链接与当前路径仍是实际路径；frontend/src/App.tsx 的页面表同步加入详情页；App.test.tsx 与 SiteFrame.test.tsx 按路由表遍历的测试原样可用，不改；商品不存在或未发布（接口 404）时替换为商品列表页，不另显示文字；本任务起商品卡与首页精选按路由规则链到详情页（frontend/src/pages/HomePage.test.tsx 与 frontend/src/pages/ProductListPage.test.tsx 只为此改动有关详情链接的断言）；面包屑为 common.nav_shop、分类（链到按该分类筛选的列表）与商品名称
       - 当前语言回退英文时名称旁显示 detail.english_only；桌面缩略图可点选切换主图，手机主图可左右滑动，每张图读屏标签用 detail.a11y_image；描述在手机上可折叠；手机上加入购物车按钮固定在底部；显示 ★ detail.demo_hint
       - 规格选择：初始不预选（只有一个启用 SKU 的商品直接选定）；与已选的其他规格值组不成任何启用 SKU 的值禁用；选全前价格按 SHOP-TASK-015 的起价规则显示，选全后显示所选 SKU 的单价与 detail.stock_left（当日可用库存）；未选全就点加入时显示 detail.select_all_options
       - 浏览器购物车存在 localStorage，每行只有 SKU、商品 slug 与件数（不存价格、名称或任何个人资料）；读取时丢弃格式不对、件数不在 1 到 99、重复 SKU 与超过 20 行的部分；读写失败时页面照常可用；同一 SKU 再次加入时合并件数；购物车模块供之后的购物车页复用
@@ -764,6 +766,7 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
       - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
@@ -780,14 +783,14 @@ tasks:
       实现购物车页 P04：读本浏览器购物车，调用计价接口显示每行与商品小计，修改件数、移除，按接口返回的状态提示变化与超出限购；
       页头显示购物车入口与件数。不在浏览器计算任何金额，不给收货国家（运费在结账时算），不做结账，不装依赖，不改后端，不改设计。
       设计闸门：不适用（只显示计价接口返回的金额，不改金额计算；购物车只存 SKU、商品 slug 与件数，不涉及个人资料）。
-      拆分：不拆（13 个允许路径、9 条验收标准，超过拆分阈值）——只有 P04 一张页面、前端一层，路径多为实现与测试成对，另加每个页面任务固定带的路由、字典、样式与记录文件。
+      拆分：不拆（15 个允许路径、9 条验收标准，超过拆分阈值）——只有 P04 一张页面、前端一层，路径多为实现与测试成对，另加每个页面任务固定带的路由、字典、样式与记录文件。
     status: ready
     depends_on:
       - SHOP-TASK-016
       - SHOP-TASK-017
     acceptance_criteria:
       - 页面内容、流程与文案以 docs/UX.md 0.6 的 P04 与 docs/UX-COPY.md 0.5 为准，样式以 docs/design/pages/ 的 P04 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；沿用 SHOP-TASK-014、015、017 的字典、路由、框架、金额格式化与购物车模块；手机与桌面的布局差异写在 frontend/src/styles/site.css（只放布局与显隐规则，手机的差异写在 767px 及以下的媒体查询里；只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
-      - 路由 /cart；本任务起页头显示 common.nav_cart，{count} 为购物车各行件数之和，P03 的 detail.view_cart 按路由规则开始渲染；cart.checkout 按路由规则在结账页实现前不渲染
+      - 路由 /cart（frontend/src/App.tsx 的页面表同步加入购物车页）；本任务起页头显示 common.nav_cart，{count} 为购物车各行件数之和（页头因此在每个页面出现由字典模板替换变量得到的文字，frontend/src/App.test.tsx 里只出现字典文字的那条测试只为接受这类文字而改，其余断言不删减、不放宽），P03 的 detail.view_cart 按路由规则开始渲染；cart.checkout 按路由规则在结账页实现前不渲染
       - 页面打开、修改件数或移除后，用购物车各行的 SKU 与件数（不带收货国家、不带任何价格）调用计价接口并显示返回的每行图片、名称与规格、件数、行小计和商品小计；金额只格式化接口返回的整数仙，不在浏览器相加或相乘；连续修改时只采用最后一次请求的结果
       - 任何一行不是正常状态时显示 cart.item_changed；超出限购的行下显示 cart.over_limit（{count} 为接口返回的 max_per_order）；不可购买的行只显示接口返回的内容并可移除；同一商品各行件数合计达到 max_per_order 时这些行的数量 (+) 禁用；件数不低于 1，移除用 cart.remove
       - 购物车为空时显示 cart.empty 与 cart.continue；显示 ★ cart.demo_hint、cart.shipping_later 与 cart.price_recheck；计价请求失败时显示 common.error_retry，不清空购物车
@@ -807,6 +810,8 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
+      - frontend/src/App.test.tsx
       - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
@@ -1060,6 +1065,7 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
       - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
@@ -1078,7 +1084,7 @@ tasks:
       实现结账页 P05 的游客路径：第 1 步填手机号（国家码下拉默认 +60），按短信验证开关与号码判定以游客继续；第 3 步填收货资料、
       按收货国家显示示例运费、合计与参考外币，提交游客订单后进入模拟支付页。不做会员路径、短信验证、优惠券与积分，不在浏览器计算任何金额，
       不装依赖，不改后端，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）。
-      拆分：不拆（21 个允许路径、13 条验收标准，超过拆分阈值）——P05 游客路径的第 1 步与第 3 步共用一个页面、一份内存状态与同一个下单请求，同属前端一层，路径多为实现与测试成对。
+      拆分：不拆（22 个允许路径、13 条验收标准，超过拆分阈值）——P05 游客路径的第 1 步与第 3 步共用一个页面、一份内存状态与同一个下单请求，同属前端一层，路径多为实现与测试成对。
     status: ready
     depends_on:
       - SHOP-TASK-018
@@ -1120,6 +1126,7 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
       - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
@@ -1222,7 +1229,7 @@ tasks:
       实现订单查询页 P08 与订单详情页 P09 的查单模式：以订单号和下单电话查询，通过后查看订单状态、商品与金额、完整收货资料，
       对已模拟发货的订单确认收货。不在浏览器计算任何金额，不做退款入口、会员模式，不装依赖，不改后端，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）。
-      拆分：不拆（17 个允许路径、11 条验收标准，超过拆分阈值）——P08 与 P09 查单模式是同一查单流程的两步，共用查单接口模块，同属前端一层，路径多为实现与测试成对。
+      拆分：不拆（18 个允许路径、11 条验收标准，超过拆分阈值）——P08 与 P09 查单模式是同一查单流程的两步，共用查单接口模块，同属前端一层，路径多为实现与测试成对。
     status: ready
     depends_on:
       - SHOP-TASK-024
@@ -1255,6 +1262,7 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
       - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
@@ -1350,6 +1358,7 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
       - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
