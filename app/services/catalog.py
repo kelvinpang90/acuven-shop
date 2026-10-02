@@ -6,6 +6,9 @@
 文案为 NULL、空串或只有空格都算缺少。
 多规格标记、分类图片与规格筛选项依据 docs/REQUIREMENTS.md 1.10「访客与会员流程」第 1 条
 与 docs/UX.md 0.5 的 P01、P02（SHOP-TASK-013）。
+商品详情的每单限购件数依据 docs/DESIGN.md 1.10（提交 e3b3505）
+「数据模型」的 Product / Variant 一行与「计价、优惠、积分与库存」第 8 条（SHOP-TASK-016）；
+商品列表与分类不带它。
 """
 
 from __future__ import annotations
@@ -112,6 +115,8 @@ class ProductDetail:
     images: list[str]
     options: list[OptionDetail]
     variants: list[VariantDetail]
+    # 每单限购件数：该商品所有 SKU 在一张购物车或订单中的件数合计上限。
+    max_per_order: int
 
 
 def _present(column: ColumnElement[str | None]) -> ColumnElement[bool]:
@@ -416,4 +421,5 @@ def get_product(session: Session, slug: str, lang: Language) -> ProductDetail | 
             for option in options
         ],
         variants=variant_details,
+        max_per_order=product.max_per_order,
     )

@@ -222,6 +222,7 @@ def test_published_product_has_exactly_the_public_fields(db: Session, client: Te
                 "available_stock": 0,
             },
         ],
+        "max_per_order": 10,
     }
 
 
