@@ -73,7 +73,7 @@ describe("header", () => {
     expect(header(render("/privacy"))).toMatch(new RegExp(`<a class="acs-brand" href="/">${BRAND}</a>`));
   });
 
-  // 验收：指向尚未实现页面的导航项（查询订单、登录）一律不渲染。
+  // SHOP-TASK-014 验收的「尚未实现页面的导航项不渲染」，经 SHOP-TASK-015 验收第 5 条「common.nav_shop 按路由规则开始渲染」后剩查询订单、登录：一律不渲染。
   it.each(paths)("renders no navigation item for pages that do not exist yet on %s", (path) => {
     for (const language of LANGUAGES) {
       const html = render(path, language);
@@ -84,7 +84,7 @@ describe("header", () => {
     }
   });
 
-  // 验收（SHOP-TASK-015）：商品列表进了路由表，页头 common.nav_shop 按路由规则开始渲染（桌面导航与手机菜单），在列表页标为当前。
+  // SHOP-TASK-015 验收第 5 条「页头 common.nav_shop 按路由规则开始渲染」：商品列表进了路由表，桌面导航与手机菜单都渲染，在列表页标为当前。
   it.each(languages)("links common.nav_shop to the product list in %s", (language) => {
     const home = header(render("/", language));
     expect(home.match(new RegExp(`<a href="/products">${COPY["common.nav_shop"][language]}</a>`, "g"))).toHaveLength(2);
@@ -92,7 +92,7 @@ describe("header", () => {
     expect(list).toContain(`<a aria-current="page" href="/products">${COPY["common.nav_shop"][language]}</a>`);
   });
 
-  // UX「全局框架」：页头搜索框（占位与读屏标签 list.search_placeholder，按钮 common.search），提交到商品列表的 q 参数。
+  // UX「全局框架」页头含「搜索框」与 SHOP-TASK-015 验收第 5 条「页头搜索框在本任务起显示并跳到带搜索词的列表」：占位与读屏标签 list.search_placeholder，按钮 common.search，提交到商品列表的 q 参数。
   it.each(languages)("has the header search form in %s", (language) => {
     const html = header(render("/", language));
     const form = section(html, /<form[\s\S]*?<\/form>/);
@@ -104,7 +104,7 @@ describe("header", () => {
     expect(html.match(/<form\b/g)).toHaveLength(1);
   });
 
-  // 在商品列表上，搜索框预先填入当前的搜索词；其他页面为空。
+  // 派生实现约束（实现选择）：守住 SHOP-TASK-015 验收第 5 条「页头搜索框…跳到带搜索词的列表」——在列表页预填当前搜索词，其他页面为空。
   it("prefills the search box with the current search term on the product list", () => {
     expect(header(render("/products?q=tote+bag"))).toContain(`value="tote bag"`);
     expect(header(render("/privacy"))).toContain(`value=""`);

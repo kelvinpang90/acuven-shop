@@ -79,7 +79,7 @@ function textNodes(html: string): string[] {
 }
 
 describe("home block settings", () => {
-  // 验收：默认设置为主视觉、演示怎么玩、按分类浏览、精选商品，全部显示（UX P01 A08 的默认顺序）。
+  // SHOP-TASK-015 验收第 2 条「主视觉、演示怎么玩、按分类浏览、精选商品，全部显示」（UX P01 A08 的默认顺序）。
   it("shows the four blocks in the UX order by default", () => {
     expect(storeDesign.homeBlocks).toEqual(HOME_BLOCKS.map((block) => ({ block, visible: true })));
   });
@@ -131,8 +131,8 @@ describe("hero block", () => {
     expect(hero).toContain(COPY["home.hero_body"].en);
   });
 
-  // UX P01：三个装饰图块是示例商品图，不是链接，读屏忽略；取精选商品的前三张图片，
-  // 前三件里无图的保留位置显示占位形状，不补取第四件的图片。
+  // UX P01「三个图块是装饰性的示例商品图，不是链接」与 SHOP-TASK-015 验收第 3 条「三个装饰图块取精选商品的前三张图片，不是链接、读屏忽略」。
+  // 派生实现约束（实现选择）：守住同一条的「前三张」——按前三件商品的位置取图，无图的保留位置显示占位形状，不补取第四件的图片。
   it("shows the first three featured products' images as decoration", () => {
     const hero = sectionOf(render({ featured: { status: "ready", data: featuredPage } }), "home.hero_title");
     const tiles = /<div class="site-hero__tiles" aria-hidden="true">([\s\S]*)<\/div>/.exec(hero)?.[1] ?? "";
@@ -148,7 +148,7 @@ describe("hero block", () => {
     expect(placeholder).toBeLessThan(tiles.indexOf("/img/c.svg"));
   });
 
-  // 精选商品还没取到或取不到时，图块显示视觉稿的占位形状，主视觉照常显示。
+  // 派生实现约束（实现选择）：守住 SHOP-TASK-015 验收第 3 条「三个装饰图块取精选商品的前三张图片」与 UX P01「装饰性的示例商品图」——还没取到或取不到时显示占位形状，不显示错误。
   it.each([loading, failed])("shows placeholder tiles while featured products are %j", (featured) => {
     const hero = sectionOf(render({ featured }), "home.hero_title");
     expect(hero).not.toContain("<img");
@@ -181,7 +181,7 @@ describe("categories block", () => {
     expect(block).toContain(`<img class="site-img" src="/demo-images/apparel.svg" alt=""`);
   });
 
-  // 验收：分类图片为空时显示视觉稿的占位形状。
+  // SHOP-TASK-015 验收第 3 条「分类图片（为空时显示视觉稿的占位形状）」。
   it("shows the placeholder shape when a category has no image", () => {
     const block = sectionOf(render({ categories: { status: "ready", data: categoryList } }), "home.categories");
     const bags = /<a class="acs-cat" href="\/products\?category=bags">([\s\S]*?)<\/a>/.exec(block)?.[1] ?? "";
@@ -190,7 +190,7 @@ describe("categories block", () => {
     expect(textNodes(bags)).toEqual(["Bags", "Bags"]);
   });
 
-  // 验收：请求失败时在该区块显示 common.error_retry，不影响其他区块。
+  // SHOP-TASK-015 验收第 7 条「请求失败时在对应区块…显示 common.error_retry，不影响…其他区块」。
   it("shows the retry message in place when categories fail", () => {
     const html = render({ categories: failed, featured: { status: "ready", data: featuredPage } });
     expect(sectionOf(html, "home.categories")).toContain(COPY["common.error_retry"].en);
@@ -213,7 +213,7 @@ describe("featured block", () => {
     expect(block).toContain("RM 15.00");
   });
 
-  // 验收：请求失败时在该区块显示 common.error_retry，其他区块照常。
+  // SHOP-TASK-015 验收第 7 条「请求失败时在对应区块…显示 common.error_retry，不影响…其他区块」：其他区块照常。
   it("shows the retry message in place when featured products fail", () => {
     const html = render({ featured: failed, categories: { status: "ready", data: categoryList } });
     expect(sectionOf(html, "home.featured")).toContain(COPY["common.error_retry"].en);

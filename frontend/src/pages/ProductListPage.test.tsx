@@ -129,7 +129,7 @@ describe("product list page", () => {
     expect(select).toMatch(/<option value="price_desc" selected="">/);
   });
 
-  // 验收：显示商品列表接口返回的这一页，按返回顺序，页面不自行过滤或排序。
+  // SHOP-TASK-015 验收第 5 条「前端不自行过滤或排序」：显示商品列表接口返回的这一页，按返回顺序。
   it("shows the products in the order returned", () => {
     const items = [item("c", { min_price_sen: 9900 }), item("a", { min_price_sen: 100 }), item("b")];
     const html = render({
@@ -163,7 +163,7 @@ describe("product list page", () => {
     expect(html).not.toContain(COPY["list.load_more"][language]);
   });
 
-  // 验收：请求失败时在列表位置显示 common.error_retry；标题、提示与筛选照常显示。
+  // SHOP-TASK-015 验收第 7 条「请求失败时在…列表位置显示 common.error_retry」：标题、提示与筛选照常显示。
   it.each(LANGUAGES)("shows the retry message in place of the list in %s", (language) => {
     const html = render({ products: failed, language });
     const main = part(html, /<div class="site-list__main">[\s\S]*$/);
@@ -173,7 +173,7 @@ describe("product list page", () => {
     expect(html).not.toContain(COPY["list.empty"][language]);
   });
 
-  // 验收：筛选项请求失败时在筛选的位置显示 common.error_retry，商品列表照常。
+  // SHOP-TASK-015 验收第 7 条「请求失败时在对应区块…显示 common.error_retry」：筛选项失败时显示在筛选的位置，商品列表照常。
   it("shows the retry message in the filters when filter options fail", () => {
     const html = render({ categories: failed, products: { status: "ready", data: page(1, 1, [item("a")]) } });
     expect(aside(html)).toContain(COPY["common.error_retry"].en);
@@ -220,7 +220,7 @@ describe("desktop filters and pages", () => {
     expect(html).toMatch(/aria-current="page" href="\/products\?category=bags&amp;page=2">2<\/a>/);
   });
 
-  // 第一页没有可用的上一页、最后一页没有可用的下一页。
+  // 派生实现约束（实现选择）：守住 UX P02 桌面页码翻页「(‹) 1 2 3 (›)」与 SHOP-TASK-015 验收第 6 条「上一页、下一页读屏标签用 common.a11y_page_prev、common.a11y_page_next」——第一页不给可用的上一页，最后一页不给可用的下一页。
   it("disables previous on the first page and next on the last", () => {
     const first = pagination(render({ products: { status: "ready", data: page(50, 1, [item("a")]) } }));
     expect(first).not.toContain(COPY["common.a11y_page_prev"].en);
@@ -232,6 +232,7 @@ describe("desktop filters and pages", () => {
     expect(last).not.toContain(COPY["common.a11y_page_next"].en);
   });
 
+  // 派生实现约束（实现选择）：守住 UX P02 桌面页码翻页「(‹) 1 2 3 (›)」与 SHOP-TASK-015 验收第 6 条「桌面用…页码翻页」——只有一页时无页可翻，不渲染页码。
   it("has no pages when everything fits on one page", () => {
     const html = render({ products: { status: "ready", data: page(24, 1, [item("a")]) } });
     expect(html).not.toContain("site-list__pages");
@@ -262,7 +263,8 @@ describe("phone filter drawer and load more", () => {
     expect(done).not.toContain(COPY["list.load_more"].en);
   });
 
-  // 追加的商品接在当前页之后；追加到最后一页后不再显示 list.load_more。
+  // SHOP-TASK-015 验收第 6 条「list.load_more 追加下一页」（UX P02 手机）：追加的商品接在当前页之后。
+  // 派生实现约束（实现选择）：守住同一条「追加下一页」——到最后一页后没有下一页可追加，不再显示 list.load_more。
   it("appends loaded pages after the current page", () => {
     const more: MoreResults = { items: [item("c"), item("d")], lastPage: 2, status: "idle" };
     const html = render({ products: { status: "ready", data: page(48, 1, [item("a"), item("b")]) }, more });
@@ -275,7 +277,7 @@ describe("phone filter drawer and load more", () => {
     expect(html).not.toContain(COPY["list.load_more"].en);
   });
 
-  // 验收：追加失败时在列表位置显示 common.error_retry，已显示的商品保留，可再按 list.load_more。
+  // SHOP-TASK-015 验收第 6 条「list.load_more 追加下一页」与第 7 条「在…列表位置显示 common.error_retry」：追加失败时已显示的商品保留，可再按 list.load_more。
   it("keeps the shown products and offers load more again when loading more fails", () => {
     const more: MoreResults = { items: [], lastPage: 1, status: "error" };
     const html = render({ products: { status: "ready", data: page(48, 1, [item("a")]) }, more });
@@ -286,7 +288,7 @@ describe("phone filter drawer and load more", () => {
 });
 
 describe("product list route", () => {
-  // 验收：商品列表在 /products；未取到数据时（服务端渲染不发请求）页头、标题与提示照常，没有错误文案。
+  // SHOP-TASK-015 验收第 5 条「商品列表 P02 路径为 /products」：未取到数据时（服务端渲染不发请求）页头、标题与提示照常，没有错误文案。
   it("renders the product list page inside the frame", () => {
     const html = renderToStaticMarkup(<App initialPath="/products?q=tee&sort=price_asc" storage={storage("zh")} />);
     expect(html).toContain(COPY["list.title"].zh);

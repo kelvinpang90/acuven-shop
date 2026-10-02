@@ -25,7 +25,7 @@ describe("formatSen", () => {
     expect(() => formatSen(sen)).toThrow(RangeError);
   });
 
-  // 只做整数与字符串运算，不经浮点除法：最大的安全整数也逐位保留，不出现尾差或科学计数法。
+  // 派生实现约束（实现选择）：守住 SHOP-TASK-015 验收第 4 条「格式化只用整数运算、不用浮点」与 DESIGN「边界与原则」——第 8 条只列 0、5、100、2190、123456 仙，另加最大安全整数，验证逐位保留、不出现尾差或科学计数法。
   it("keeps every digit of large amounts", () => {
     expect(formatSen(9007199254740991)).toBe("90071992547409.91");
     expect(formatSen(1999)).toBe("19.99");

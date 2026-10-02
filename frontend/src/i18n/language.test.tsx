@@ -119,7 +119,7 @@ describe("rendering in the chosen language", () => {
     expect(html).toContain(COPY["privacy.title"].en);
   });
 
-  // 验收：语言不放进网址——语言选项链接指向当前页面本身，每个链接都是路由表里的路径，不带查询参数或语言前缀。
+  // SHOP-TASK-015 验收第 5 条「每个链接都在路由表里且不带查询参数（语言不进网址的意图不变）」：语言选项链接指向当前页面本身，不带语言前缀。
   it("keeps the language out of links", () => {
     const html = renderToStaticMarkup(
       <App initialPath="/privacy" storage={memoryStorage({ [LANGUAGE_STORAGE_KEY]: "ms" })} />,

@@ -57,7 +57,7 @@ function render(path: string): string {
 }
 
 describe("route table", () => {
-  // 验收（SHOP-TASK-015）：商品列表 P02 的 /products 加进路由表；其余页面尚未实现，不在表里。
+  // SHOP-TASK-015 验收第 5 条「加进 frontend/src/router.tsx 的路由表」：/products 进表；其余页面尚未实现，不在表里。
   it("has the home page, the product list and the privacy page", () => {
     expect([...ROUTE_PATHS]).toEqual(["/", "/products", "/privacy"]);
     expect(isRoutePath("/privacy")).toBe(true);
@@ -73,7 +73,7 @@ describe("route table", () => {
     },
   );
 
-  // 验收：商品列表的条件放在查询参数里——已知路径保留查询串，未知路径连同查询串换成首页。
+  // SHOP-TASK-015 验收第 5 条「…放在查询参数里（可分享…）」：已知路径保留查询串，未知路径连同查询串换成首页。
   it("keeps the query string of known paths only", () => {
     expect(resolveHref("/products?q=tee&category=bags")).toEqual({ path: "/products", search: "?q=tee&category=bags" });
     expect(resolveHref("/products")).toEqual({ path: "/products", search: "" });
@@ -82,6 +82,7 @@ describe("route table", () => {
     expect(resolveHref("/nope?q=tee")).toEqual({ path: "/", search: "" });
   });
 
+  // SHOP-TASK-015 验收第 5 条「商品列表 P02 路径为 /products」「放在查询参数里」：带查询串时仍渲染列表页。
   it("renders the product list for /products with a query string", () => {
     const html = render("/products?category=bags");
     expect(html).toContain(COPY["list.title"].en);
@@ -137,7 +138,7 @@ describe("in-site navigation", () => {
     expect(list.calls).toEqual([]);
   });
 
-  // 验收（P02）：换筛选、排序或页码各记一条历史，前进后退可用。
+  // SHOP-TASK-015 验收第 5 条「前进后退可用」：换筛选、排序或页码各记一条历史。
   it("pushes a history entry when only the query string changes", () => {
     const { browser, calls } = fakeBrowser("/products", "?q=tee");
     expect(pushPath(browser, "/products", "?q=tee&sort=price_asc")).toBe(true);

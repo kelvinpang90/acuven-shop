@@ -66,7 +66,7 @@ describe("product card content", () => {
     expect(html).toContain(`<span class="acs-pcard__name">Crew Neck Tee</span>`);
   });
 
-  // 没有图片时显示占位形状，不渲染空的 img。
+  // 派生实现约束（实现选择）：守住 SHOP-TASK-015 验收第 4 条「商品卡显示首张图片」——没有图片时沿用第 3 条分类图片「为空时显示视觉稿的占位形状」的同一占位，不渲染空 img。
   it("shows a placeholder shape when there is no image", () => {
     const html = render(product({ image: null }));
     expect(html).not.toContain("<img");
@@ -80,13 +80,14 @@ describe("product card content", () => {
     expect(html).toMatch(/^<div class="acs-pcard acs-pcard--oos">/);
   });
 
+  // SHOP-TASK-015 验收第 4 条「当日售罄的商品显示 list.out_of_stock」与 UX P02「演示提示」的反面：有货的卡片不带该标签。
   it("has no sold-out label while in stock", () => {
     const html = render(product());
     expect(html).not.toContain(COPY["list.out_of_stock"].en);
     expect(html).toMatch(/^<div class="acs-pcard">/);
   });
 
-  // 验收：指向商品详情 P03 的链接按路由规则在详情页实现前不渲染。
+  // SHOP-TASK-015 验收第 4 条「指向商品详情的链接按 SHOP-TASK-014 的路由规则在详情页实现前不渲染」。
   it("is not a link while the detail page does not exist", () => {
     expect(render(product())).not.toMatch(/<a\b|href=/);
   });
