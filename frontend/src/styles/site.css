@@ -11,6 +11,12 @@ body { margin: 0; }
 /* 桌面只显示 site-desktop-only，手机只显示 site-phone-only */
 .site-phone-only { display: none; }
 
+/* 目录图片：填满所在的图块 */
+.site-img { display: block; width: 100%; height: 100%; object-fit: cover; }
+
+/* 请求失败的提示占据所在区块的位置 */
+.site-notice { margin: 0; }
+
 /* 页头 */
 .site-header__end { margin-left: auto; }
 .site-header__stack { flex-direction: column; align-items: flex-start; gap: 16px; }
@@ -22,6 +28,48 @@ body { margin: 0; }
 
 /* 首页 P01：★ 提示在页头下方、所有区块之前 */
 .site-home { padding: 24px var(--gutter) 104px; }
+.site-home__block { display: flex; flex-direction: column; gap: 28px; padding-top: 96px; }
+
+.site-hero { margin-top: 16px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 32px; align-items: end; padding: 80px 64px 0; overflow: hidden; }
+.site-hero__text { grid-column: span 6; display: flex; flex-direction: column; gap: 28px; align-items: flex-start; padding-bottom: 88px; }
+.site-hero__body { margin: 0; max-width: 30em; }
+.site-hero__tiles { grid-column: 8 / span 5; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; align-items: end; }
+.site-hero__tile { aspect-ratio: auto; overflow: hidden; }
+.site-hero__tile:nth-child(1) { height: 260px; }
+.site-hero__tile:nth-child(2) { height: 400px; }
+.site-hero__tile:nth-child(3) { height: 320px; }
+.site-hero__tile svg { width: 62%; }
+
+.site-how { gap: 32px; padding-left: 48px; padding-right: 48px; }
+.site-how__steps { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 40px; counter-reset: site-how-step; }
+.site-how__steps li { display: grid; gap: 12px; align-content: start; padding-top: 18px; counter-increment: site-how-step; }
+.site-how__number::before { content: counter(site-how-step); }
+
+.site-cats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.site-cats .acs-cat { flex-direction: row; align-items: center; gap: 24px; padding: 20px 0; }
+.site-cats .acs-cat__img { flex-shrink: 0; width: 112px; overflow: hidden; }
+
+.site-home .acs-pcard__img { aspect-ratio: 3 / 4; }
+
+/* 商品列表 P02 */
+.site-list__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 56px var(--gutter) 32px; }
+.site-list__body { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 48px; padding: 0 var(--gutter) 96px; }
+.site-list__aside { display: grid; gap: 28px; align-content: start; }
+.site-list__clear { justify-self: start; }
+.site-list__main { display: grid; gap: 24px; align-content: start; }
+.site-list__tools { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.site-list__sort { display: flex; gap: 10px; align-items: center; margin-left: auto; }
+.site-list__sort .acs-select { width: 220px; }
+.site-list__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px 24px; }
+.site-list__pages { display: flex; justify-content: center; align-items: center; gap: 8px; padding-top: 24px; }
+.site-list__empty { display: grid; gap: 16px; justify-items: start; }
+.site-list__empty p { margin: 0; }
+
+.site-filter { margin: 0; padding: 0; border: 0; display: grid; gap: 10px; }
+.site-filter legend { margin-bottom: 10px; padding: 0; }
+.site-filter--values { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.site-check { display: flex; gap: 10px; align-items: center; }
+.site-check input { flex-shrink: 0; width: 18px; height: 18px; margin: 0; }
 
 /* 隐私说明 P14 */
 .site-privacy { display: grid; grid-template-columns: 280px minmax(0, 720px); gap: 64px; padding: 56px var(--gutter) 96px; }
@@ -39,13 +87,53 @@ body { margin: 0; }
   .site-header__panel:not([hidden]) { display: grid; gap: 20px; padding: 8px 0 4px; }
 
   .site .acs-header { gap: 10px; padding-top: 6px; }
-  .site-header__top { gap: 4px; flex-wrap: nowrap; }
+  .site-header__top { gap: 10px 4px; flex-wrap: wrap; }
   .site-header__menu-button { min-width: 44px; padding: 0; margin-left: -10px; }
   .site-header__lang-button { gap: 4px; padding: 0 6px; }
+  .site-header__search { order: 1; flex: 1 1 100%; max-width: none; }
 
   .site-footer { grid-template-columns: minmax(0, 1fr); }
 
   .site-home { padding: 16px var(--gutter) 48px; }
+  .site-home__block { gap: 16px; padding-top: 48px; }
+
+  .site-hero { margin-top: 12px; display: flex; flex-direction: column; gap: 20px; padding: 32px 20px 0; }
+  .site-hero__text { gap: 20px; padding-bottom: 0; }
+  .site-hero__cta { align-self: stretch; }
+  .site-hero__tiles { gap: 10px; margin-top: 8px; }
+  .site-hero__tile:nth-child(1) { height: 110px; }
+  .site-hero__tile:nth-child(2) { height: 170px; }
+  .site-hero__tile:nth-child(3) { height: 136px; }
+
+  .site-how { padding-left: 0; padding-right: 0; }
+  .site-how__steps { display: flex; flex-direction: column; gap: 0; }
+  .site-how__steps li { grid-template-columns: 40px minmax(0, 1fr); gap: 8px; padding: 14px 0; }
+
+  /* 分类横向滑动，贴到屏幕右边 */
+  .site-cats { display: flex; gap: 12px; overflow-x: auto; margin-right: calc(-1 * var(--gutter)); padding-right: var(--gutter); }
+  .site-cats .acs-cat { flex-direction: column; align-items: stretch; flex-shrink: 0; width: 132px; gap: 10px; padding: 0; }
+  .site-cats .acs-cat__img { width: auto; }
+
+  .site-list__head { flex-direction: column; align-items: stretch; gap: 16px; padding: 28px var(--gutter) 16px; }
+  .site-list__body { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 0 var(--gutter) 40px; }
+  .site-list__main { gap: 16px; }
+  .site-list__tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .site-list__filter-button { display: inline-flex; }
+  .site-list__sort { margin-left: 0; }
+  .site-list__sort .acs-select { width: 100%; }
+  .site-list__count { order: 1; grid-column: 1 / -1; }
+  .site-list__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 12px; }
+  .site-list__more { display: flex; }
+  .site-list__more-error { display: block; }
+
+  /* 全屏筛选抽屉 */
+  .site-drawer:not([hidden]) { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; position: fixed; inset: 0; z-index: 10; }
+  .site-drawer__head { padding: 16px var(--gutter); }
+  .site-drawer__body { display: grid; gap: 24px; align-content: start; padding: 20px var(--gutter); overflow-y: auto; }
+  .site-drawer__actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 12px var(--gutter) 20px; }
+  .site-drawer .site-filter { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .site-drawer .site-check { min-height: 32px; }
+  .site-drawer .site-check input { width: 20px; height: 20px; }
 
   .site-privacy { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 28px var(--gutter) 40px; }
   .site-privacy__aside { gap: 24px; }

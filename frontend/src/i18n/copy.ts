@@ -75,10 +75,165 @@ export const COPY = {
     zh: "Acuven 网店方案演示站。所有商品、价格、库存、支付、运费、发货与退款均为模拟。",
     ms: "Kedai demo Acuven untuk mempamerkan penyelesaian kedai dalam talian. Semua produk, harga, stok, bayaran, penghantaran dan bayaran balik adalah simulasi.",
   },
+  "common.price_myr": {
+    en: "RM {amount}",
+    zh: "RM {amount}",
+    ms: "RM {amount}",
+  },
+  "common.error_retry": {
+    en: "Something went wrong. Please try again.",
+    zh: "出错了，请重试。",
+    ms: "Berlaku ralat. Sila cuba lagi.",
+  },
+  "common.search": {
+    en: "Search",
+    zh: "搜索",
+    ms: "Cari",
+  },
+  "common.a11y_page_prev": {
+    en: "Previous page",
+    zh: "上一页",
+    ms: "Halaman sebelumnya",
+  },
+  "common.a11y_page_next": {
+    en: "Next page",
+    zh: "下一页",
+    ms: "Halaman seterusnya",
+  },
+  "home.hero_title": {
+    en: "Try a complete online store, end to end",
+    zh: "完整体验一家网店的购物流程",
+    ms: "Cuba kedai dalam talian yang lengkap, dari mula hingga akhir",
+  },
+  "home.hero_body": {
+    en: "Browse, add to cart, check out and pay with a simulated payment. Everything here is a demo.",
+    zh: "浏览、加入购物车、结账并用模拟支付付款。这里的一切都是演示。",
+    ms: "Layari, tambah ke troli, daftar keluar dan bayar dengan pembayaran simulasi. Semua di sini adalah demo.",
+  },
+  "home.hero_cta": {
+    en: "Start shopping",
+    zh: "开始逛逛",
+    ms: "Mula membeli-belah",
+  },
+  "home.how_title": {
+    en: "How this demo works",
+    zh: "演示怎么玩",
+    ms: "Cara demo ini berfungsi",
+  },
+  "home.how_1": {
+    en: "Pick products and options",
+    zh: "挑选商品和规格",
+    ms: "Pilih produk dan pilihan",
+  },
+  "home.how_2": {
+    en: "Check out: Malaysian and Singapore mobile numbers are verified by SMS and continue as members; other numbers check out as guests",
+    zh: "结账：马来西亚、新加坡手机号经短信验证后以会员身份继续，其他号码以游客身份结账",
+    ms: "Daftar keluar: nombor telefon bimbit Malaysia dan Singapura disahkan melalui SMS dan diteruskan sebagai ahli; nombor lain mendaftar keluar sebagai tetamu",
+  },
+  "home.how_3": {
+    en: 'Choose "success" or "failure" on the simulated payment',
+    zh: "在模拟支付中选择“成功”或“失败”",
+    ms: 'Pilih "berjaya" atau "gagal" pada pembayaran simulasi',
+  },
+  "home.how_4": {
+    en: "Track the order, confirm receipt or request a refund",
+    zh: "查询订单、确认收货或申请退款",
+    ms: "Semak pesanan, sahkan penerimaan atau mohon bayaran balik",
+  },
+  "home.categories": {
+    en: "Shop by category",
+    zh: "按分类浏览",
+    ms: "Beli mengikut kategori",
+  },
+  "home.featured": {
+    en: "Featured demo products",
+    zh: "精选示例商品",
+    ms: "Produk demo pilihan",
+  },
   "home.demo_hint": {
     en: "Products, prices and stock are samples. Stock resets every day.",
     zh: "商品、价格与库存均为示例，库存每天重置。",
     ms: "Produk, harga dan stok adalah contoh. Stok ditetapkan semula setiap hari.",
+  },
+  "list.title": {
+    en: "All products",
+    zh: "全部商品",
+    ms: "Semua produk",
+  },
+  "list.search_placeholder": {
+    en: "Search products",
+    zh: "搜索商品",
+    ms: "Cari produk",
+  },
+  "list.filter_title": {
+    en: "Filter",
+    zh: "筛选",
+    ms: "Tapis",
+  },
+  "list.filter_category": {
+    en: "Category",
+    zh: "分类",
+    ms: "Kategori",
+  },
+  "list.filter_apply": {
+    en: "Show results",
+    zh: "查看结果",
+    ms: "Tunjuk hasil",
+  },
+  "list.filter_clear": {
+    en: "Clear filters",
+    zh: "清除筛选",
+    ms: "Kosongkan penapis",
+  },
+  "list.sort": {
+    en: "Sort",
+    zh: "排序",
+    ms: "Susun",
+  },
+  "list.sort_newest": {
+    en: "Newest",
+    zh: "最新",
+    ms: "Terbaru",
+  },
+  "list.sort_price_asc": {
+    en: "Price: low to high",
+    zh: "价格从低到高",
+    ms: "Harga: rendah ke tinggi",
+  },
+  "list.sort_price_desc": {
+    en: "Price: high to low",
+    zh: "价格从高到低",
+    ms: "Harga: tinggi ke rendah",
+  },
+  "list.results_count": {
+    en: "{count} products",
+    zh: "共 {count} 件商品",
+    ms: "{count} produk",
+  },
+  "list.price_from": {
+    en: "From RM {amount}",
+    zh: "RM {amount} 起",
+    ms: "Dari RM {amount}",
+  },
+  "list.out_of_stock": {
+    en: "Out of stock today",
+    zh: "今日已售罄",
+    ms: "Kehabisan stok hari ini",
+  },
+  "list.load_more": {
+    en: "Load more",
+    zh: "加载更多",
+    ms: "Muat lagi",
+  },
+  "list.empty": {
+    en: "No products match your search.",
+    zh: "没有符合条件的商品。",
+    ms: "Tiada produk sepadan dengan carian anda.",
+  },
+  "list.demo_hint": {
+    en: "Sample products for demonstration only; none are for real sale.",
+    zh: "示例商品仅供演示，均不真实出售。",
+    ms: "Produk contoh untuk demo sahaja; tiada yang dijual secara sebenar.",
   },
   "privacy.title": {
     en: "Privacy",

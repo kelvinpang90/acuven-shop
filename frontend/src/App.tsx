@@ -5,12 +5,14 @@ import { LanguageProvider } from "./i18n/language";
 import type { LanguageStorage } from "./i18n/language";
 import HomePage from "./pages/HomePage";
 import PrivacyPage from "./pages/PrivacyPage";
+import ProductListPage from "./pages/ProductListPage";
 import { RouterProvider, useRouter } from "./router";
 import type { RoutePath } from "./router";
 
 // 按 router.tsx 的路由表穷举：表里每个路径恰好对应一个页面。
 const PAGES: Readonly<Record<RoutePath, ComponentType>> = {
   "/": HomePage,
+  "/products": ProductListPage,
   "/privacy": PrivacyPage,
 };
 

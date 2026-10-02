@@ -58,12 +58,22 @@ describe("App", () => {
     }
   });
 
-  // UX P01：首页现在只有框架与页头下方固定位置的 ★ home.demo_hint（四个区块都隐藏时的状态）。
-  it("renders only the fixed demo hint on the home page", () => {
+  // UX P01：★ home.demo_hint 位于页头下方、所有区块之前；默认设置下四个区块按主视觉、演示怎么玩、按分类浏览、精选商品的顺序显示。
+  it("renders the fixed demo hint after the header and before the four default blocks", () => {
     const html = render("/", "en");
     const main = /<main class="site-home">([\s\S]*)<\/main>/.exec(html)?.[1] ?? "";
-    expect(main).toContain(`<p class="acs-hint">`);
-    expect(visibleTexts(main)).toEqual([COPY["home.demo_hint"].en]);
-    expect(html.indexOf("</header>")).toBeLessThan(html.indexOf(COPY["home.demo_hint"].en));
+    expect(main).toMatch(/^<p class="acs-hint">/);
+    const positions = [
+      html.indexOf("</header>"),
+      html.indexOf(COPY["home.demo_hint"].en),
+      html.indexOf(COPY["home.hero_title"].en),
+      html.indexOf(COPY["home.how_title"].en),
+      html.indexOf(COPY["home.categories"].en),
+      html.indexOf(COPY["home.featured"].en),
+    ];
+    for (const position of positions) {
+      expect(position).toBeGreaterThanOrEqual(0);
+    }
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
   });
 });

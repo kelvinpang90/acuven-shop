@@ -1,17 +1,18 @@
 import { useId, useState } from "react";
-import type { MouseEvent, ReactNode } from "react";
+import type { FormEvent, MouseEvent, ReactNode } from "react";
 
 import { BRAND, LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { htmlLang, useCopy, useLanguage } from "../i18n/language";
-import { HOME_PATH, isRoutePath, Link, useRouter } from "../router";
+import { keywordSearch, parseProductListQuery } from "../pages/productListQuery";
+import { HOME_PATH, isRoutePath, Link, PRODUCTS_PATH, useRouter } from "../router";
 import type { RoutePath } from "../router";
 import { storeDesign } from "../storeDesign";
 
 // 全站框架（docs/UX.md「全局框架」）：演示横幅、页头、页面主体、页脚。
 // 结构与类名沿用 docs/design/pages/ 的静态页面；桌面与手机的差异只由 styles/site.css 的媒体查询切换。
 //
-// 不在本任务的部分：页头搜索框（去 P02）与购物车（P04）随对应页面加入；WhatsApp 联系链接的配置来源
+// 页头搜索框跳到带搜索词的商品列表 P02。不在本任务的部分：购物车（P04）随对应页面加入；WhatsApp 联系链接的配置来源
 // 由之后单独登记的任务提供，在那之前页脚不渲染 WhatsApp 按钮（UX Q10：配置缺失时隐藏）。不设站内联系表单。
 
 interface NavItem {
@@ -50,6 +51,16 @@ export function DemoHint({ children }: { children: ReactNode }) {
         <path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z" />
       </svg>
       <span>{children}</span>
+    </p>
+  );
+}
+
+// 请求失败时在对应区块或列表的位置显示，不影响页头页脚与其他区块。
+export function ErrorNotice() {
+  const t = useCopy();
+  return (
+    <p className="acs-alert acs-alert--danger site-notice" role="alert">
+      {t("common.error_retry")}
     </p>
   );
 }
@@ -104,6 +115,37 @@ function MenuIcon() {
   );
 }
 
+// 页头搜索（UX「全局框架」）：提交后跳到只带该搜索词的商品列表。不用脚本时按普通表单以 GET 打开 /products?q=…。
+// 在商品列表上，框里预先填入当前的搜索词。
+function HeaderSearch({ onSearched }: { onSearched: () => void }) {
+  const t = useCopy();
+  const { path, search, navigate } = useRouter();
+  const current = path === PRODUCTS_PATH ? parseProductListQuery(search).q : "";
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const value = new FormData(event.currentTarget).get("q");
+    navigate(PRODUCTS_PATH, keywordSearch(typeof value === "string" ? value : ""));
+    onSearched();
+  };
+  return (
+    <form className="acs-search site-header__search" role="search" action={PRODUCTS_PATH} method="get" onSubmit={handleSubmit}>
+      <input
+        key={current}
+        className="acs-input"
+        type="search"
+        name="q"
+        maxLength={100}
+        defaultValue={current}
+        aria-label={t("list.search_placeholder")}
+        placeholder={t("list.search_placeholder")}
+      />
+      <button className="acs-btn acs-btn--secondary site-desktop-only" type="submit">
+        {t("common.search")}
+      </button>
+    </form>
+  );
+}
+
 type OpenPanel = "menu" | "language" | null;
 
 function SiteHeader() {
@@ -139,6 +181,7 @@ function SiteHeader() {
         <Link className="acs-brand" to={HOME_PATH} onClick={close}>
           {BRAND}
         </Link>
+        <HeaderSearch onSearched={close} />
         <nav className="acs-lang site-desktop-only site-header__end">
           <LanguageLinks />
         </nav>
