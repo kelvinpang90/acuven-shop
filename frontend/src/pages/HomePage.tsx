@@ -19,8 +19,9 @@ const HERO_TILES = 3;
 // 主视觉：右侧三个装饰图块取精选商品的前三张图片（没有时为占位形状），不是链接，读屏忽略。
 function HeroBlock({ featured }: { featured: Remote<ProductPage> }) {
   const t = useCopy();
-  const images = featured.status === "ready" ? featured.data.items.flatMap((item) => (item.image ? [item.image] : [])) : [];
-  const tiles = Array.from({ length: HERO_TILES }, (_, index) => images[index] ?? null);
+  // 前三件精选商品各占一块；无图的商品保留位置显示占位形状，不补取后续商品的图片。
+  const items = featured.status === "ready" ? featured.data.items : [];
+  const tiles = Array.from({ length: HERO_TILES }, (_, index) => items[index]?.image || null);
   return (
     <section className="acs-panel site-hero">
       <div className="site-hero__text">

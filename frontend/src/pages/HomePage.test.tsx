@@ -131,16 +131,21 @@ describe("hero block", () => {
     expect(hero).toContain(COPY["home.hero_body"].en);
   });
 
-  // UX P01：三个装饰图块是示例商品图，不是链接，读屏忽略；取精选商品的前三张图片。
-  it("shows the first three featured images as decoration", () => {
+  // UX P01：三个装饰图块是示例商品图，不是链接，读屏忽略；取精选商品的前三张图片，
+  // 前三件里无图的保留位置显示占位形状，不补取第四件的图片。
+  it("shows the first three featured products' images as decoration", () => {
     const hero = sectionOf(render({ featured: { status: "ready", data: featuredPage } }), "home.hero_title");
     const tiles = /<div class="site-hero__tiles" aria-hidden="true">([\s\S]*)<\/div>/.exec(hero)?.[1] ?? "";
     expect(tiles).not.toMatch(/<a\b/);
     expect([...tiles.matchAll(/<img[^>]*src="([^"]*)"[^>]*alt=""/g)].map((m) => m[1])).toEqual([
       "/img/a.svg",
       "/img/c.svg",
-      "/img/d.svg",
     ]);
+    expect(tiles).not.toContain("/img/d.svg");
+    expect(tiles.match(/<svg\b/g)).toHaveLength(1);
+    const placeholder = tiles.indexOf("<svg");
+    expect(tiles.indexOf("/img/a.svg")).toBeLessThan(placeholder);
+    expect(placeholder).toBeLessThan(tiles.indexOf("/img/c.svg"));
   });
 
   // 精选商品还没取到或取不到时，图块显示视觉稿的占位形状，主视觉照常显示。
