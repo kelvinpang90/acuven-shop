@@ -18,13 +18,15 @@ TASKS_FILE = Path(__file__).resolve().parent.parent / ".platform" / "tasks.yaml"
 ROUTER = "frontend/src/router.tsx"
 APP = "frontend/src/App.tsx"
 
-# 任务文本里新增前台路由的写法：「路由 /cart」「路径为 /products」；/api/ 是后端接口，不算。
+# 任务文本里新增前台路由的写法：「路由 /cart」「路径为 /products」；/api 开头的是后端接口，不算。
+# 文本里提到已有路由也会命中：宁可多要求一个 App.tsx 允许路径，也不漏掉新增路由。
 ROUTE_MENTION = re.compile(r"(?:路由|路径为)\s*(/[a-z0-9/<>_-]*)")
+BACKEND_PATH = re.compile(r"/api(?:/|$)")
 
 
 def _adds_route(task: dict) -> bool:
     text = "\n".join([task["purpose"], *task["acceptance_criteria"]])
-    mentioned = [path for path in ROUTE_MENTION.findall(text) if not path.startswith("/api/")]
+    mentioned = [path for path in ROUTE_MENTION.findall(text) if not BACKEND_PATH.match(path)]
     return bool(mentioned) or ROUTER in task["allowed_change_paths"]
 
 
@@ -68,6 +70,7 @@ def test_route_task_without_app_is_flagged(text: str, paths: list[str]) -> None:
     "text",
     [
         "调用 GET /api/orders/lookup 的路由 /api/orders",
+        "后端路由 /api 下的接口",
         "路由表是唯一来源；按路由规则不渲染",
         "不做页面",
     ],
