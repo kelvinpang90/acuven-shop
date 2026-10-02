@@ -1,4 +1,5 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import type { RefObject } from "react";
 
 import { productUrl, useCatalogItem } from "../api/catalog";
 import type { ProductDetail, RemoteItem } from "../api/catalog";
@@ -65,6 +66,30 @@ function CrumbSeparator() {
       <path d="M8 1L2 13" />
     </svg>
   );
+}
+
+// 手机上加入购物车一栏固定在屏幕底部，高度随提示增减：量出高度写到根元素的 --site-detail-buy-height，
+// site.css 据此在整页底部留出等高空白，免得栏盖住页面最后的内容。离开详情页时撤掉。
+const BUY_HEIGHT_VAR = "--site-detail-buy-height";
+
+function useBuyBarHeight(bar: RefObject<HTMLDivElement | null>): void {
+  useEffect(() => {
+    const element = bar.current;
+    if (element === null || typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+    const root = document.documentElement;
+    const update = () => {
+      root.style.setProperty(BUY_HEIGHT_VAR, `${String(Math.ceil(element.getBoundingClientRect().height))}px`);
+    };
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    update();
+    return () => {
+      observer.disconnect();
+      root.style.removeProperty(BUY_HEIGHT_VAR);
+    };
+  }, [bar]);
 }
 
 function fallbackLang(text: { english_fallback: boolean }): "en" | undefined {
@@ -150,6 +175,8 @@ export function ProductDetailView({
   const baseId = useId();
   const quantityId = `${baseId}-quantity`;
   const blockId = `${baseId}-block`;
+  const buyBar = useRef<HTMLDivElement>(null);
+  useBuyBarHeight(buyBar);
   const variant = selectedVariant(product, selection);
   const purchase = purchaseState(product, variant, cart, quantity);
   const price = priceCopy(product, variant);
@@ -249,7 +276,7 @@ export function ProductDetailView({
         {variant && <span className="acs-caption">{t("detail.stock_left", { count: variant.available_stock })}</span>}
       </div>
 
-      <div className="acs site-detail__buy">
+      <div ref={buyBar} className="acs site-detail__buy">
         {notice === "added" && (
           <div className="acs-alert acs-alert--success site-detail__added" role="status">
             <span className="site-detail__added-text">

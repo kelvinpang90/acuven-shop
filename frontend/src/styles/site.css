@@ -156,7 +156,7 @@ body { margin: 0; }
   .site-drawer .site-check { min-height: 32px; }
   .site-drawer .site-check input { width: 20px; height: 20px; }
 
-  /* 商品详情 P03：单列；主图通栏、左右滑动逐张停靠；描述折叠；加入购物车一栏排在最后并固定在屏幕底部 */
+  /* 商品详情 P03：单列；主图通栏、左右滑动逐张停靠；描述折叠；加入购物车一栏一打开页面就固定在屏幕底部 */
   .site-detail { display: flex; flex-direction: column; gap: 18px; padding: 0; }
   .site-detail > .site-notice { margin: 16px var(--gutter) 0; }
   .site-detail__slides { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; }
@@ -166,7 +166,9 @@ body { margin: 0; }
   .site-detail__more { display: block; margin: 0 var(--gutter); padding: 12px 0; }
   .site-detail__more summary { min-height: 32px; cursor: pointer; }
   .site-detail__more p { margin-top: 8px; }
-  .site-detail__buy { order: 1; position: sticky; bottom: 0; z-index: 5; gap: 10px; margin-top: 14px; padding: 12px var(--gutter) 20px; }
+  .site-detail__buy { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; gap: 10px; padding: 12px var(--gutter) calc(20px + env(safe-area-inset-bottom, 0px)); }
+  /* 固定栏盖在页面最底部：整页（含页脚）底部留出与该栏等高的空白；高度由详情页量出写入 --site-detail-buy-height，量到之前按只有按钮时的高度。 */
+  .site:has(.site-detail__buy) { box-sizing: border-box; padding-bottom: var(--site-detail-buy-height, calc(88px + env(safe-area-inset-bottom, 0px))); }
 
   .site-privacy { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 28px var(--gutter) 40px; }
   .site-privacy__aside { gap: 24px; }
