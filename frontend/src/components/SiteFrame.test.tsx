@@ -74,13 +74,14 @@ describe("header", () => {
   });
 
   // SHOP-TASK-014 验收的「尚未实现页面的导航项不渲染」，经 SHOP-TASK-015 验收第 5 条「common.nav_shop 按路由规则开始渲染」后剩查询订单、登录：一律不渲染。
+  // 商品详情自 SHOP-TASK-017 起已存在（语言切换链接指向当前路径，在详情页上即 /products/…）；查询订单、登录、购物车页仍未实现，页头购物车入口也继续不渲染。
   it.each(paths)("renders no navigation item for pages that do not exist yet on %s", (path) => {
     for (const language of LANGUAGES) {
       const html = render(path, language);
       for (const key of ["common.nav_track", "common.nav_login"] as const) {
         expect(html).not.toContain(`>${COPY[key][language]}<`);
       }
-      expect(html).not.toMatch(/href="\/(products\/|track|login|cart|account|register)/);
+      expect(html).not.toMatch(/href="\/(track|login|cart|account|register)/);
     }
   });
 

@@ -100,6 +100,16 @@ export const COPY = {
     zh: "下一页",
     ms: "Halaman seterusnya",
   },
+  "common.a11y_qty_decrease": {
+    en: "Decrease quantity",
+    zh: "减少数量",
+    ms: "Kurangkan kuantiti",
+  },
+  "common.a11y_qty_increase": {
+    en: "Increase quantity",
+    zh: "增加数量",
+    ms: "Tambah kuantiti",
+  },
   "home.hero_title": {
     en: "Try a complete online store, end to end",
     zh: "完整体验一家网店的购物流程",
@@ -234,6 +244,76 @@ export const COPY = {
     en: "Sample products for demonstration only; none are for real sale.",
     zh: "示例商品仅供演示，均不真实出售。",
     ms: "Produk contoh untuk demo sahaja; tiada yang dijual secara sebenar.",
+  },
+  "detail.options": {
+    en: "Choose options",
+    zh: "选择规格",
+    ms: "Pilih pilihan",
+  },
+  "detail.quantity": {
+    en: "Quantity",
+    zh: "数量",
+    ms: "Kuantiti",
+  },
+  "detail.stock_left": {
+    en: "{count} left today (demo stock)",
+    zh: "今日剩余 {count} 件（示例库存）",
+    ms: "Tinggal {count} hari ini (stok demo)",
+  },
+  "detail.add_to_cart": {
+    en: "Add to cart",
+    zh: "加入购物车",
+    ms: "Tambah ke troli",
+  },
+  "detail.added": {
+    en: "Added to cart",
+    zh: "已加入购物车",
+    ms: "Ditambah ke troli",
+  },
+  "detail.view_cart": {
+    en: "View cart",
+    zh: "查看购物车",
+    ms: "Lihat troli",
+  },
+  "detail.select_all_options": {
+    en: "Please choose all options first.",
+    zh: "请先选择全部规格。",
+    ms: "Sila pilih semua pilihan dahulu.",
+  },
+  "detail.max_per_order": {
+    en: "Limit {count} per order",
+    zh: "每单限购 {count} 件",
+    ms: "Had {count} unit bagi setiap pesanan",
+  },
+  "detail.limit_reached": {
+    en: "You already have the maximum of {count} of this product in your cart.",
+    zh: "购物车中此商品已达每单限购 {count} 件。",
+    ms: "Troli anda sudah mempunyai jumlah maksimum {count} untuk produk ini.",
+  },
+  "detail.cart_full": {
+    en: "Your cart can hold up to {count} different items. Remove one to add another.",
+    zh: "购物车最多可放 {count} 种商品规格，请先移除一项再加入。",
+    ms: "Troli anda boleh memuatkan sehingga {count} item berbeza. Buang satu untuk menambah yang lain.",
+  },
+  "detail.description": {
+    en: "Description",
+    zh: "商品描述",
+    ms: "Penerangan",
+  },
+  "detail.english_only": {
+    en: "English only",
+    zh: "仅英文",
+    ms: "Bahasa Inggeris sahaja",
+  },
+  "detail.a11y_image": {
+    en: "Image {n} of {count}",
+    zh: "第 {n} 张图，共 {count} 张",
+    ms: "Imej {n} daripada {count}",
+  },
+  "detail.demo_hint": {
+    en: "This is a sample product. Adding it to your cart does not reserve stock.",
+    zh: "这是示例商品；加入购物车不会预留库存。",
+    ms: "Ini produk contoh. Menambahnya ke troli tidak menempah stok.",
   },
   "privacy.title": {
     en: "Privacy",

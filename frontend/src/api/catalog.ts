@@ -60,6 +60,29 @@ export interface FilterOption {
   values: FilterOptionValue[];
 }
 
+// 商品详情的一个启用 SKU：options 为规格名 code → 规格值 code。
+export interface VariantDetail {
+  sku: string;
+  options: Readonly<Record<string, string>>;
+  // MYR 整数仙。
+  price_sen: number;
+  // 当日可用库存，只作提示。
+  available_stock: number;
+}
+
+export interface ProductDetail {
+  slug: string;
+  name: LocalizedText;
+  description: LocalizedText;
+  category: { slug: string; name: LocalizedText };
+  images: string[];
+  options: FilterOption[];
+  // 只有启用的 SKU。
+  variants: VariantDetail[];
+  // 每单限购：该商品所有 SKU 在一张购物车或订单中的件数合计上限。
+  max_per_order: number;
+}
+
 // 商品列表接口的参数；category 与 option 可重复，option 写成 <规格名 code>:<规格值 code>。
 export interface ProductListRequest {
   q?: string | undefined;
@@ -101,7 +124,23 @@ export function featuredProductsUrl(language: Language): string {
   return productsUrl(language, { sort: "newest", page: 1, pageSize: FEATURED_COUNT });
 }
 
-// 发一个目录请求；非 2xx 或网络错误时抛错，由页面显示 common.error_retry。
+// 商品详情：slug 是路由解码后的值，在请求路径里只编码一次。
+export function productDetailUrl(language: Language, slug: string): string {
+  return `${CATALOG_BASE}/products/${encodeURIComponent(slug)}?${new URLSearchParams({ lang: language }).toString()}`;
+}
+
+// 接口返回非 2xx 时的错误，带状态码（详情接口用 404 表示商品不存在或未发布）。
+export class CatalogError extends Error {
+  readonly status: number;
+
+  constructor(status: number) {
+    super(`catalog request failed with status ${String(status)}`);
+    this.name = "CatalogError";
+    this.status = status;
+  }
+}
+
+// 发一个目录请求；非 2xx 或网络错误时抛错，由页面显示 common.error_retry（详情 404 时回到商品列表）。
 export async function fetchCatalog<T>(url: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, {
     method: "GET",
@@ -110,14 +149,24 @@ export async function fetchCatalog<T>(url: string, signal?: AbortSignal): Promis
     signal: signal ?? null,
   });
   if (!response.ok) {
-    throw new Error(`catalog request failed with status ${String(response.status)}`);
+    throw new CatalogError(response.status);
   }
   return (await response.json()) as T;
 }
 
-export type Remote<T> = { status: "loading" } | { status: "error" } | { status: "ready"; data: T };
+// not_found 只在接口返回 404 时出现；其他失败都是 error。
+export type Remote<T> =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "not_found" }
+  | { status: "ready"; data: T };
 
 const LOADING: Remote<never> = { status: "loading" };
+
+// 请求失败时的状态：接口 404 为 not_found，其余（其他状态码、网络错误）为 error。
+export function failedRemote(error: unknown): Remote<never> {
+  return error instanceof CatalogError && error.status === 404 ? { status: "not_found" } : { status: "error" };
+}
 
 // 按地址取一次目录数据；地址变了（如切换语言、换筛选）就重新请求，旧请求作废。
 // url 为 null 时不请求（如首页隐藏的区块）。结果按地址记下，地址变了之前的结果不再显示。
@@ -133,9 +182,9 @@ export function useCatalog<T>(url: string | null): Remote<T> {
       (data) => {
         setSettled({ url, remote: { status: "ready", data } });
       },
-      () => {
+      (error: unknown) => {
         if (!controller.signal.aborted) {
-          setSettled({ url, remote: { status: "error" } });
+          setSettled({ url, remote: failedRemote(error) });
         }
       },
     );

@@ -143,6 +143,12 @@ describe("product list page", () => {
     ]);
   });
 
+  // UX P02「去向：P03」与 SHOP-TASK-017 验收第 2 条「本任务起商品卡…按路由规则链到详情页」：每张商品卡链到它的详情页。
+  it("links each product card to its detail page", () => {
+    const html = render({ products: { status: "ready", data: page(2, 1, [item("a"), item("b", { sold_out_today: true })]) } });
+    expect([...html.matchAll(/<a class="acs-pcard[^"]*" href="([^"]*)">/g)].map((m) => m[1])).toEqual(["/products/a", "/products/b"]);
+  });
+
   // UX P02「演示提示」：售罄显示 list.out_of_stock。
   it("labels products sold out today", () => {
     const html = render({ products: { status: "ready", data: page(2, 1, [item("a", { sold_out_today: true }), item("b")]) } });

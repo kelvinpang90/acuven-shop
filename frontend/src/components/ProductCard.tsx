@@ -2,9 +2,10 @@ import type { ProductSummary } from "../api/catalog";
 import type { CopyKey, CopyVars } from "../i18n/copy";
 import { useCopy } from "../i18n/language";
 import { formatSen } from "../format";
+import { Link, productPath } from "../router";
 
 // 商品卡（P01「精选商品」与 P02 共用）：首张图片、名称、价格，当日售罄时加 list.out_of_stock。
-// 价格只显示 MYR，不显示参考外币（UX Q9）。指向商品详情 P03 的链接按路由规则在详情页实现前不渲染，卡片不是链接。
+// 价格只显示 MYR，不显示参考外币（UX Q9）。整张卡片链到商品详情 P03（/products/<slug>）。
 
 // 图片为空时的占位形状：取自视觉稿 P01「按分类浏览」的图形，读屏忽略。
 export function PlaceholderShape() {
@@ -31,7 +32,7 @@ export default function ProductCard({ product }: { product: ProductSummary }) {
   const t = useCopy();
   const [priceKey, priceVars] = priceCopy(product);
   return (
-    <div className={product.sold_out_today ? "acs-pcard acs-pcard--oos" : "acs-pcard"}>
+    <Link className={product.sold_out_today ? "acs-pcard acs-pcard--oos" : "acs-pcard"} to={productPath(product.slug)}>
       <span className="acs-pcard__img">
         <CatalogImage src={product.image} />
       </span>
@@ -44,6 +45,6 @@ export default function ProductCard({ product }: { product: ProductSummary }) {
           <span className="acs-tag acs-tag--neutral">{t("list.out_of_stock")}</span>
         </span>
       )}
-    </div>
+    </Link>
   );
 }

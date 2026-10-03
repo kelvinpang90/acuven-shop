@@ -8,7 +8,10 @@ import {
   canonicalizeLocation,
   isPlainLeftClick,
   isRoutePath,
+  matchRoute,
+  productPath,
   pushPath,
+  replacePath,
   resolveHref,
   resolvePath,
   settleLocation,
@@ -57,16 +60,57 @@ function render(path: string): string {
 }
 
 describe("route table", () => {
-  // SHOP-TASK-015 验收第 5 条「加进 frontend/src/router.tsx 的路由表」：/products 进表；其余页面尚未实现，不在表里。
-  it("has the home page, the product list and the privacy page", () => {
-    expect([...ROUTE_PATHS]).toEqual(["/", "/products", "/privacy"]);
+  // SHOP-TASK-015 验收第 5 条「加进 frontend/src/router.tsx 的路由表」与 SHOP-TASK-017 验收第 2 条「路由表仍是字符串常量表，动态段写成模式（如 /products/:slug）」：
+  // 详情页以模式进表；其余页面尚未实现，不在表里。
+  it("has the home page, the product list, the product detail and the privacy page", () => {
+    expect([...ROUTE_PATHS]).toEqual(["/", "/products", "/products/:slug", "/privacy"]);
     expect(isRoutePath("/privacy")).toBe(true);
     expect(isRoutePath("/products")).toBe(true);
+    expect(isRoutePath("/products/crew-neck-tee")).toBe(true);
     expect(isRoutePath("/track")).toBe(false);
+    expect(isRoutePath("/cart")).toBe(false);
+  });
+
+  // SHOP-TASK-017 验收第 2 条「由 router.tsx 匹配并向页面提供 slug」：实际路径匹配到模式，段值交给页面。
+  it("matches an actual detail path and provides the slug", () => {
+    expect(matchRoute("/products/crew-neck-tee")).toEqual({ pattern: "/products/:slug", params: { slug: "crew-neck-tee" } });
+    expect(matchRoute("/products")).toEqual({ pattern: "/products", params: {} });
+    expect(matchRoute("/products/:slug")).toEqual({ pattern: "/products/:slug", params: { slug: ":slug" } });
+  });
+
+  // SHOP-TASK-017 验收第 2 条「动态段的值按路径段解码后交给页面…其余值不再按字符集校验」：%3A 得到「:」，a%20b 得到「a b」。
+  it.each([
+    ["/products/%3A", ":"],
+    ["/products/a%20b", "a b"],
+    ["/products/%E4%B8%AD", "中"],
+    ["/products/a%2520b", "a%20b"],
+  ])("decodes %s to the slug %j", (path, slug) => {
+    expect(matchRoute(path)?.params).toEqual({ slug });
+    expect(resolvePath(path)).toBe(path);
+  });
+
+  // SHOP-TASK-017 验收第 2 条「解码失败视为不匹配…解码后为空、为 . 或 ..、或含 / 的段不匹配、按未知路径落到首页」。
+  it.each(["/products/%2E", "/products/%2e", "/products/%2E%2E", "/products/.", "/products/..", "/products/%2F", "/products/a%2Fb", "/products/%", "/products/%E4%B8", "/products/%zz"])(
+    "does not match %s",
+    (path) => {
+      expect(matchRoute(path)).toBeNull();
+      expect(isRoutePath(path)).toBe(false);
+      expect(resolvePath(path)).toBe("/");
+    },
+  );
+
+  // SHOP-TASK-017 验收第 2 条「站内链接…仍是实际路径」与「请求路径里只编码一次」的链接一侧：商品链接把 slug 编码一次，再解码回原值。
+  it("builds detail links that decode back to the slug", () => {
+    for (const slug of ["crew-neck-tee", "a b", ":", "a%20b", "中"]) {
+      const path = productPath(slug);
+      expect(matchRoute(path)?.params).toEqual({ slug });
+    }
+    expect(productPath("a b")).toBe("/products/a%20b");
+    expect(productPath("a/b")).toBe("/products/a%2Fb");
   });
 
   // 验收：未知路径替换为首页。
-  it.each(["/nope", "/products/", "/products/tee", "/track", "/privacy/", "/PRIVACY", ""])(
+  it.each(["/nope", "/products/", "/products/tee/", "/products/a/b", "/track", "/privacy/", "/PRIVACY", ""])(
     "resolves %j to the home page",
     (path) => {
       expect(resolvePath(path)).toBe("/");
@@ -87,6 +131,22 @@ describe("route table", () => {
     const html = render("/products?category=bags");
     expect(html).toContain(COPY["list.title"].en);
     expect(html).not.toContain(COPY["home.hero_title"].en);
+  });
+
+  // SHOP-TASK-017 验收第 2 条「当前路径仍是实际路径」与「接口返回之前页面主体不出现…面包屑与购买区等数据返回后才渲染」：
+  // 详情路径渲染详情页的空主体，语言切换链接指向实际路径。
+  it("renders the detail page for a detail path and keeps the actual path", () => {
+    const html = render("/products/a%20b");
+    expect(html).toContain(`<main class="site-detail" aria-busy="true"></main>`);
+    expect(html).toContain(`href="/products/a%20b" lang="en"`);
+    expect(html).not.toContain(COPY["home.demo_hint"].en);
+  });
+
+  // SHOP-TASK-017 验收第 2 条「…不匹配、按未知路径落到首页」：渲染首页而不是详情页。
+  it("renders the home page for a detail path that does not match", () => {
+    const html = render("/products/%2F");
+    expect(html).toContain(COPY["home.demo_hint"].en);
+    expect(html).not.toContain("site-detail");
   });
 
   it("renders the home page for an unknown path", () => {
@@ -144,6 +204,14 @@ describe("in-site navigation", () => {
     expect(pushPath(browser, "/products", "?q=tee&sort=price_asc")).toBe(true);
     expect(pushPath(browser, "/products")).toBe(true);
     expect(calls).toEqual(["push /products?q=tee&sort=price_asc", "push /products"]);
+    expect(browser.location).toEqual({ pathname: "/products", search: "" });
+  });
+
+  // SHOP-TASK-017 验收第 2 条「商品不存在或未发布（接口 404）时替换为商品列表页」：替换当前历史记录，不新增一条。
+  it("replaces the current entry when a page is swapped for another", () => {
+    const { browser, calls } = fakeBrowser("/products/gone");
+    replacePath(browser, "/products");
+    expect(calls).toEqual(["replace /products"]);
     expect(browser.location).toEqual({ pathname: "/products", search: "" });
   });
 
