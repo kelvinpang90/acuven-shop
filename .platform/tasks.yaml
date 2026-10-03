@@ -746,7 +746,7 @@ tasks:
       - 规格选择：初始不预选（只有一个启用 SKU 的商品直接选定）；再次点击某组已选的值即取消该组的选择（Kelvin 2026-10-03 决定，UX 未写；只有一个启用 SKU 的商品不取消），访客因此总能退回去换选；与已选的其他规格值组不成任何启用 SKU 的值禁用；选全前价格按 SHOP-TASK-015 的起价规则显示，选全后显示所选 SKU 的单价与 detail.stock_left（当日可用库存）；未选全就点加入时显示 detail.select_all_options
       - 浏览器购物车存在 localStorage，每行只有 SKU、商品 slug 与件数（不存价格、名称或任何个人资料）；读取时丢弃格式不对、件数不在 1 到 99、重复 SKU 与超过 20 行的部分；读写失败时页面照常可用；同一 SKU 再次加入时合并件数；购物车模块供之后的购物车页复用
       - 每单限购：显示 detail.max_per_order；数量 (+) 的上限是 max_per_order 减去购物车中同一商品（按 slug）各行件数之和；剩余为 0 时加入按钮禁用并显示 detail.limit_reached；购物车已有 20 行且所选 SKU 不在其中时加入按钮禁用并显示 detail.cart_full；加入成功后显示 detail.added，detail.view_cart 按路由规则在购物车页实现前不渲染
-      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与 localStorage 以替身代替）验证意图：购物车读写与清洗规则、合并件数、20 行上限、读写失败；限购剩余件数按同一商品各 SKU 合计、为 0 时按钮禁用与提示、购物车满时的禁用与提示；规格可选性（组不成启用 SKU 的值禁用，再次点击已选的值取消选择后被禁用的值恢复可选）与选全前后的价格显示；回退英文标签；404 时回到列表；页面文字全部来自字典；每条测试写明它守住的是 UX 或 DESIGN 哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与 localStorage 以替身代替）验证意图：购物车读写与清洗规则、合并件数、20 行上限、读写失败；限购剩余件数按同一商品各 SKU 合计、为 0 时按钮禁用与提示、购物车满时的禁用与提示；规格可选性（组不成启用 SKU 的值禁用；只有红/S 与蓝/M 两个 SKU 时，选红与 S 后蓝和 M 都禁用，依次取消这两组的选择后蓝与 M 可选；只有一个启用 SKU 的商品再次点击不取消）与选全前后的价格显示；回退英文标签；404 时回到列表；页面文字全部来自字典；每条测试写明它守住的是 UX 或 DESIGN 哪一句（取消选择的测试写明守住本任务规格选择那条验收标准，即 Kelvin 2026-10-03 的决定）；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/TODO.md 新增 SHOP-TASK-017 记录段（页面结构、购物车存储格式与清洗规则、限购提示规则、偏离、验证到什么程度，并写明未做浏览器验收）；不改 planning-v1 块；复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端
       - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
