@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import SiteFrame from "./components/SiteFrame";
 import { LanguageProvider } from "./i18n/language";
 import type { LanguageStorage } from "./i18n/language";
+import CartPage from "./pages/CartPage";
 import HomePage from "./pages/HomePage";
 import PrivacyPage from "./pages/PrivacyPage";
 import ProductDetailPage from "./pages/ProductDetailPage";
@@ -15,6 +16,7 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   "/": HomePage,
   "/products": ProductListPage,
   "/products/:slug": ProductDetailPage,
+  "/cart": CartPage,
   "/privacy": PrivacyPage,
 };
 

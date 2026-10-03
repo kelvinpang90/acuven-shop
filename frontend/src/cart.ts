@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 
 // 浏览器购物车（docs/UX.md P03「每单限购」、P04）：只存在本浏览器的 localStorage，不发给服务端保存。
 // 每行只有 SKU、商品 slug 与件数，不存价格、名称或任何个人资料；价格与可否下单一律由服务端计价（P04 起）。
-// 商品详情 P03 与之后的购物车 P04 共用本模块。限购与 20 行上限在这里只用于提示与禁用按钮，下单时由服务端再次校验。
+// 商品详情 P03、购物车 P04 与页头的购物车件数共用本模块。限购与 20 行上限在这里只用于提示与禁用按钮，下单时由服务端再次校验。
 // 存储格式：键 acuven-shop.cart，值为 JSON 数组，每项 {"sku": …, "slug": …, "quantity": …}。
 
 export const CART_STORAGE_KEY = "acuven-shop.cart";
@@ -118,6 +118,24 @@ export function addToCart(lines: readonly CartLine[], added: CartLine): CartLine
     return null;
   }
   return [...lines, { sku: added.sku, slug: added.slug, quantity: added.quantity }];
+}
+
+// 页头 common.nav_cart 的 {count}：购物车各行件数之和（件数，不是金额）。
+export function cartItemCount(lines: readonly CartLine[]): number {
+  return lines.reduce((sum, line) => sum + line.quantity, 0);
+}
+
+// 购物车页改件数：只改该 SKU 的件数（位置不变）。件数不是 1 到 99 的整数或 SKU 不在购物车中时不改，返回 null。
+export function setLineQuantity(lines: readonly CartLine[], sku: string, quantity: number): CartLine[] | null {
+  if (!isLineQuantity(quantity) || !lines.some((line) => line.sku === sku)) {
+    return null;
+  }
+  return lines.map((line) => (line.sku === sku ? { ...line, quantity } : line));
+}
+
+// 购物车页移除一行；其余行与顺序不变。
+export function removeLine(lines: readonly CartLine[], sku: string): CartLine[] {
+  return lines.filter((line) => line.sku !== sku);
 }
 
 // 页面里的购物车：读 localStorage，写入后通知本页其他订阅者，别的标签页改动时经 storage 事件刷新。

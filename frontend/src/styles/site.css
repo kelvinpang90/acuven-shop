@@ -92,6 +92,28 @@ body { margin: 0; }
 .site-detail__added-text { display: flex; align-items: center; gap: 8px; }
 .site-detail__description { display: grid; gap: 12px; max-width: 800px; padding-top: 64px; }
 
+/* 购物车 P04：左侧各行，右侧 400px 小计栏；每行为 图片 | 名称与规格 | 数量 | 行小计 | 移除 */
+.site-cart { padding: 0 0 96px; }
+.site-cart p { margin: 0; }
+.site-cart__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 56px var(--gutter) 32px; }
+.site-cart__body { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 48px; align-items: start; padding: 0 var(--gutter); }
+.site-cart__main { display: grid; gap: 16px; }
+.site-cart__lines { display: grid; border-bottom: 1px solid var(--rule); }
+.site-cart__item { display: grid; gap: 8px; padding: 20px 0; border-top: 1px solid var(--rule); }
+.site-cart__line { display: grid; grid-template-columns: 112px minmax(0, 1fr) auto 120px auto; grid-template-areas: "img info qty price remove"; gap: 24px; align-items: center; }
+.site-cart__img { grid-area: img; overflow: hidden; }
+.site-cart__img svg { width: 60%; }
+.site-cart__info { grid-area: info; display: grid; gap: 4px; justify-items: start; }
+.site-cart__options { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.site-cart__option { display: inline-flex; align-items: center; gap: 4px; }
+.site-cart__qty { grid-area: qty; }
+.site-cart__price { grid-area: price; text-align: right; }
+.site-cart__remove { grid-area: remove; }
+.site-cart__note { margin-left: 136px; }
+.site-cart__summary .site-cart__checkout { margin-top: 8px; }
+.site-cart__continue { justify-self: center; }
+.site-cart__empty { display: grid; gap: 16px; justify-items: start; padding: 0 var(--gutter); }
+
 /* 隐私说明 P14 */
 .site-privacy { display: grid; grid-template-columns: 280px minmax(0, 720px); gap: 64px; padding: 56px var(--gutter) 96px; }
 .site-privacy__aside { display: grid; gap: 20px; align-content: start; }
@@ -112,6 +134,7 @@ body { margin: 0; }
   .site-header__menu-button { min-width: 44px; padding: 0; margin-left: -10px; }
   .site-header__lang-button { gap: 4px; padding: 0 6px; }
   .site-header__search { order: 1; flex: 1 1 100%; max-width: none; }
+  .site-header__cart { display: inline-flex; align-items: center; min-height: 44px; }
 
   .site-footer { grid-template-columns: minmax(0, 1fr); }
 
@@ -169,6 +192,20 @@ body { margin: 0; }
   .site-detail__toggle { display: block; margin: 18px var(--gutter) 0; padding: 12px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
   .site-detail__toggle summary { display: flex; align-items: center; min-height: 32px; cursor: pointer; }
   .site-detail__toggle p { margin-top: 8px; }
+
+  /* 购物车：单列；每行为 图片 | 名称、规格、数量与行小计、移除；运费与价格说明在各行之后；
+     商品小计（与结账按钮）固定在底部，页面底部留出它的高度 */
+  .site-cart { padding: 0 0 120px; }
+  .site-cart__head { flex-direction: column; align-items: stretch; gap: 16px; padding: 28px var(--gutter) 16px; }
+  .site-cart__body { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .site-cart__item { padding: 16px 0; }
+  .site-cart__line { grid-template-columns: 88px minmax(0, 1fr) auto; grid-template-areas: "img info info" "img qty price" "img remove remove"; gap: 6px 14px; align-items: start; }
+  .site-cart__qty { align-self: center; }
+  .site-cart__price { align-self: center; }
+  .site-cart__remove { justify-self: start; }
+  .site-cart__note { margin-left: 102px; }
+  .site-cart__notes { display: grid; gap: 16px; }
+  .site-cart__bar { display: grid; gap: 10px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 14px var(--gutter) 20px; border-top: 1px solid var(--rule); }
 
   .site-privacy { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 28px var(--gutter) 40px; }
   .site-privacy__aside { gap: 24px; }

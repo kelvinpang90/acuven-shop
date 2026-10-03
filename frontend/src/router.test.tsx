@@ -61,14 +61,23 @@ function render(path: string): string {
 
 describe("route table", () => {
   // SHOP-TASK-015 验收第 5 条「加进 frontend/src/router.tsx 的路由表」与 SHOP-TASK-017 验收第 2 条「路由表仍是字符串常量表，动态段写成模式（如 /products/:slug）」：
-  // 详情页以模式进表；其余页面尚未实现，不在表里。
-  it("has the home page, the product list, the product detail and the privacy page", () => {
-    expect([...ROUTE_PATHS]).toEqual(["/", "/products", "/products/:slug", "/privacy"]);
+  // 详情页以模式进表；SHOP-TASK-018 验收第 2 条「路由 /cart」：购物车页进表；其余页面尚未实现，不在表里。
+  it("has the home page, the product list, the product detail, the cart and the privacy page", () => {
+    expect([...ROUTE_PATHS]).toEqual(["/", "/products", "/products/:slug", "/cart", "/privacy"]);
     expect(isRoutePath("/privacy")).toBe(true);
     expect(isRoutePath("/products")).toBe(true);
     expect(isRoutePath("/products/crew-neck-tee")).toBe(true);
+    expect(isRoutePath("/cart")).toBe(true);
     expect(isRoutePath("/track")).toBe(false);
-    expect(isRoutePath("/cart")).toBe(false);
+    expect(isRoutePath("/checkout")).toBe(false);
+  });
+
+  // UX 页面地图「P04 购物车 /cart」：/cart 渲染购物车页（服务端渲染时没有本浏览器购物车，为空购物车）。
+  it("renders the cart page for /cart", () => {
+    const html = render("/cart");
+    expect(html).toContain(`<h1 class="acs-display-l">${COPY["cart.title"].en}</h1>`);
+    expect(html).toContain(COPY["cart.empty"].en);
+    expect(html).not.toContain(COPY["home.demo_hint"].en);
   });
 
   // SHOP-TASK-017 验收第 2 条「由 router.tsx 匹配并向页面提供 slug」：实际路径匹配到模式，段值交给页面。
@@ -110,7 +119,7 @@ describe("route table", () => {
   });
 
   // 验收：未知路径替换为首页。
-  it.each(["/nope", "/products/", "/products/tee/", "/products/a/b", "/track", "/privacy/", "/PRIVACY", ""])(
+  it.each(["/nope", "/products/", "/products/tee/", "/products/a/b", "/track", "/privacy/", "/PRIVACY", "/cart/", ""])(
     "resolves %j to the home page",
     (path) => {
       expect(resolvePath(path)).toBe("/");

@@ -60,6 +60,11 @@ export const COPY = {
     zh: "登录",
     ms: "Log masuk",
   },
+  "common.nav_cart": {
+    en: "Cart ({count})",
+    zh: "购物车（{count}）",
+    ms: "Troli ({count})",
+  },
   "common.nav_privacy": {
     en: "Privacy",
     zh: "隐私说明",
@@ -314,6 +319,61 @@ export const COPY = {
     en: "This is a sample product. Adding it to your cart does not reserve stock.",
     zh: "这是示例商品；加入购物车不会预留库存。",
     ms: "Ini produk contoh. Menambahnya ke troli tidak menempah stok.",
+  },
+  "cart.title": {
+    en: "Your cart",
+    zh: "购物车",
+    ms: "Troli anda",
+  },
+  "cart.empty": {
+    en: "Your cart is empty.",
+    zh: "购物车是空的。",
+    ms: "Troli anda kosong.",
+  },
+  "cart.remove": {
+    en: "Remove",
+    zh: "移除",
+    ms: "Buang",
+  },
+  "cart.subtotal": {
+    en: "Item subtotal",
+    zh: "商品小计",
+    ms: "Jumlah kecil item",
+  },
+  "cart.shipping_later": {
+    en: "Shipping is calculated at checkout.",
+    zh: "运费在结账时计算。",
+    ms: "Kos penghantaran dikira semasa daftar keluar.",
+  },
+  "cart.price_recheck": {
+    en: "Prices and stock are confirmed at checkout.",
+    zh: "价格与库存以结账时为准。",
+    ms: "Harga dan stok disahkan semasa daftar keluar.",
+  },
+  "cart.item_changed": {
+    en: "Some items changed in price or availability. Please review.",
+    zh: "部分商品的价格或库存已变化，请核对。",
+    ms: "Sesetengah item telah berubah harga atau ketersediaan. Sila semak.",
+  },
+  "cart.over_limit": {
+    en: "This product is limited to {count} per order. Please reduce the quantity.",
+    zh: "此商品每单限购 {count} 件，请减少数量。",
+    ms: "Produk ini dihadkan kepada {count} unit bagi setiap pesanan. Sila kurangkan kuantiti.",
+  },
+  "cart.checkout": {
+    en: "Check out",
+    zh: "去结账",
+    ms: "Daftar keluar",
+  },
+  "cart.continue": {
+    en: "Continue shopping",
+    zh: "继续购物",
+    ms: "Teruskan membeli-belah",
+  },
+  "cart.demo_hint": {
+    en: "Your cart is saved in this browser only. Nothing is charged.",
+    zh: "购物车只保存在本浏览器，不会扣款。",
+    ms: "Troli anda disimpan dalam pelayar ini sahaja. Tiada caj dikenakan.",
   },
   "privacy.title": {
     en: "Privacy",

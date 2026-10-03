@@ -356,14 +356,13 @@ describe("quantity and purchase limit", () => {
     expect(html).toContain(`<p class="acs-field__error" role="alert">${COPY["detail.select_all_options"][language]}</p>`);
   });
 
-  // UX P03「加入后提示条：[detail.added] ( [detail.view_cart] )」与 SHOP-TASK-017 验收第 5 条「detail.view_cart 按路由规则在购物车页实现前不渲染」。
-  it.each(LANGUAGES)("confirms the item was added without a cart link in %s", (language) => {
+  // UX P03「加入后提示条：[detail.added] ( [detail.view_cart] )」与 SHOP-TASK-018 验收第 2 条「P03 的 detail.view_cart 按路由规则开始渲染」：购物车页进了路由表，提示条含链到 /cart 的 detail.view_cart。
+  it.each(LANGUAGES)("confirms the item was added with a link to the cart in %s", (language) => {
     const html = buy(render({ selection: { color: "red", size: "s" }, notice: "added", language }));
     const alert = part(html, /<div class="acs-alert acs-alert--success site-detail__added" role="status">[\s\S]*?<\/div>/);
-    expect(alert).toMatch(new RegExp(`<span class="site-detail__added-text"><svg[^>]*aria-hidden="true">[\\s\\S]*</svg>${COPY["detail.added"][language]}</span></div>$`));
-    expect(visibleTexts(alert)).toEqual([COPY["detail.added"][language]]);
-    expect(html).not.toContain(COPY["detail.view_cart"][language]);
-    expect(html).not.toMatch(/href="\/cart/);
+    expect(alert).toMatch(new RegExp(`<span class="site-detail__added-text"><svg[^>]*aria-hidden="true">[\\s\\S]*</svg>${COPY["detail.added"][language]}</span>`));
+    expect(alert).toContain(`<a href="/cart">${COPY["detail.view_cart"][language]}</a></div>`);
+    expect(visibleTexts(alert)).toEqual([COPY["detail.added"][language], COPY["detail.view_cart"][language]]);
   });
 });
 
