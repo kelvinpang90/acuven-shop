@@ -64,6 +64,7 @@ describe("quote request", () => {
     await expect(fetchQuote("en", cart)).rejects.toEqual(new QuoteError(503));
   });
 
+  // UX P03 说明「当前语言缺少商品文案、回退英文时…」与 SHOP-TASK-018 验收第 3 条「显示返回的每行图片、名称与规格」：计价请求带当前语言，返回的名称与规格按当前语言（缺失时回退英文）。
   it("asks in the current language", () => {
     expect(quoteUrl("ms")).toBe("/api/checkout/quote?lang=ms");
   });

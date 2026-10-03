@@ -239,6 +239,14 @@ export function CartView({ lines, quote, writeFailed, onQuantity, onRemove }: Ca
     </div>
   );
 
+  // 购物车为空、计价返回之前或失败时没有小计栏，[cart.shipping_later] 与 [cart.price_recheck] 放在主体里。
+  const notes = (
+    <>
+      <p className="acs-body-s acs-muted">{t("cart.shipping_later")}</p>
+      <p className="acs-body-s acs-muted">{t("cart.price_recheck")}</p>
+    </>
+  );
+
   if (empty) {
     return (
       <main className="site-cart">
@@ -248,6 +256,7 @@ export function CartView({ lines, quote, writeFailed, onQuantity, onRemove }: Ca
           <Link className="acs-btn acs-btn--secondary" to={PRODUCTS_PATH}>
             {t("cart.continue")}
           </Link>
+          {notes}
         </div>
       </main>
     );
@@ -257,11 +266,10 @@ export function CartView({ lines, quote, writeFailed, onQuantity, onRemove }: Ca
     return (
       <main className="site-cart" aria-busy={busy}>
         {head}
-        {quote.status === "error" && (
-          <div className="site-cart__body">
-            <ErrorNotice />
-          </div>
-        )}
+        <div className="site-cart__empty">
+          {quote.status === "error" && <ErrorNotice />}
+          {notes}
+        </div>
       </main>
     );
   }

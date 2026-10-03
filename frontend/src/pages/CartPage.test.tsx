@@ -300,6 +300,20 @@ describe("empty cart, loading and errors", () => {
     expect(html).not.toContain("aria-busy");
   });
 
+  // UX P04「演示提示：★ [cart.demo_hint]；[cart.price_recheck]」与 SHOP-TASK-018 验收第 5 条「显示 ★ cart.demo_hint、cart.shipping_later 与 cart.price_recheck」：空购物车、计价返回之前与失败时也显示这两条说明。
+  it.each(LANGUAGES)("shows the shipping note and the price recheck note without a quote in %s", (language) => {
+    const states: RenderOptions[] = [
+      { language },
+      { lines: [{ sku: "a", slug: "tee", quantity: 1 }], language },
+      { lines: [{ sku: "a", slug: "tee", quantity: 1 }], quote: { status: "error" }, language },
+    ];
+    for (const state of states) {
+      const html = render(state);
+      expect(html).toContain(`<p class="acs-body-s acs-muted">${COPY["cart.shipping_later"][language]}</p>`);
+      expect(html).toContain(`<p class="acs-body-s acs-muted">${COPY["cart.price_recheck"][language]}</p>`);
+    }
+  });
+
   // 同一条，经全站框架与路由：服务端渲染 /cart 时没有本浏览器购物车，是空购物车。
   it("renders the empty cart through the app", () => {
     const html = renderToStaticMarkup(<App initialPath="/cart" storage={languageStorage("en")} />);
