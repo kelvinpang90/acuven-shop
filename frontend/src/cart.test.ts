@@ -4,12 +4,15 @@ import {
   CART_STORAGE_KEY,
   MAX_CART_LINES,
   addToCart,
+  cartItemCount,
   cartSnapshot,
   isCartFullFor,
   productQuantity,
   readCart,
+  removeLine,
   sanitizeCart,
   saveCart,
+  setLineQuantity,
   writeCart,
 } from "./cart";
 import type { CartLine, CartStorage } from "./cart";
@@ -149,5 +152,29 @@ describe("adding to the cart", () => {
     expect(productQuantity(cart, "tee")).toBe(5);
     expect(productQuantity(cart, "bag")).toBe(4);
     expect(productQuantity(cart, "mug")).toBe(0);
+  });
+});
+
+describe("changing the cart on the cart page", () => {
+  // SHOP-TASK-018 验收第 2 条「页头显示 common.nav_cart，{count} 为购物车各行件数之和」：是件数之和，不是行数。
+  it("counts the items of every line for the header", () => {
+    expect(cartItemCount([line("a", 2), line("b", 3), line("c", 1)])).toBe(6);
+    expect(cartItemCount([])).toBe(0);
+  });
+
+  // UX P04「查看、修改已选商品规格与数量」与 SHOP-TASK-018 验收第 4 条「件数不低于 1」：只改该行件数，位置不变；低于 1、高于 99 或不在购物车中的 SKU 不改。
+  it("sets the quantity of one line within 1 to 99", () => {
+    const cart = [line("a", 2), line("b", 1)];
+    expect(setLineQuantity(cart, "b", 4)).toEqual([line("a", 2), line("b", 4)]);
+    expect(setLineQuantity(cart, "a", 0)).toBeNull();
+    expect(setLineQuantity(cart, "a", 100)).toBeNull();
+    expect(setLineQuantity(cart, "a", 1.5)).toBeNull();
+    expect(setLineQuantity(cart, "missing", 1)).toBeNull();
+  });
+
+  // UX P04 线框「([cart.remove])」：移除一行，其余行与顺序不变。
+  it("removes one line and keeps the others in order", () => {
+    expect(removeLine([line("a"), line("b"), line("c")], "b")).toEqual([line("a"), line("c")]);
+    expect(removeLine([line("a")], "missing")).toEqual([line("a")]);
   });
 });

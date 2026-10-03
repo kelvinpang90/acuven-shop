@@ -1,9 +1,10 @@
 import { useId, useState } from "react";
 import type { FormEvent, MouseEvent, ReactNode } from "react";
 
+import { cartItemCount, useCartLines } from "../cart";
 import { BRAND, LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
-import { htmlLang, useCopy, useLanguage } from "../i18n/language";
+import { browserStorage, htmlLang, useCopy, useLanguage } from "../i18n/language";
 import { keywordSearch, parseProductListQuery } from "../pages/productListQuery";
 import { HOME_PATH, isRoutePath, Link, PRODUCTS_PATH, useRouter } from "../router";
 import type { RoutePath } from "../router";
@@ -12,7 +13,8 @@ import { storeDesign } from "../storeDesign";
 // 全站框架（docs/UX.md「全局框架」）：演示横幅、页头、页面主体、页脚。
 // 结构与类名沿用 docs/design/pages/ 的静态页面；桌面与手机的差异只由 styles/site.css 的媒体查询切换。
 //
-// 页头搜索框跳到带搜索词的商品列表 P02。不在本任务的部分：购物车（P04）随对应页面加入；WhatsApp 联系链接的配置来源
+// 页头搜索框跳到带搜索词的商品列表 P02。页头购物车入口 common.nav_cart（{count} 为本浏览器购物车各行件数之和）链到 P04，
+// 桌面在导航行右侧、手机在第一行语言按钮之后。WhatsApp 联系链接的配置来源
 // 由之后单独登记的任务提供，在那之前页脚不渲染 WhatsApp 按钮（UX Q10：配置缺失时隐藏）。不设站内联系表单。
 
 interface NavItem {
@@ -21,7 +23,7 @@ interface NavItem {
 }
 
 // 页头导航（UX「全局框架」的顺序）；只渲染路由表里已有的项，尚未实现的页面一律不出现。
-// 登录与会员中心二选一、购物车数量随会员与购物车任务加入。
+// 登录与会员中心二选一随会员任务加入。
 const HEADER_NAV: readonly NavItem[] = [
   { path: "/products", label: "common.nav_shop" },
   { path: "/track", label: "common.nav_track" },
@@ -42,6 +44,24 @@ function availableNav(): { path: RoutePath; label: CopyKey }[] {
     }
   }
   return items;
+}
+
+// 购物车页的路径；进了路由表才渲染页头的购物车入口。
+function cartPath(): RoutePath | null {
+  const path: string = "/cart";
+  return isRoutePath(path) ? path : null;
+}
+
+// 页头购物车入口：common.nav_cart，{count} 为购物车各行件数之和（服务端渲染与首次水合时为 0）。
+function CartLink({ to, className, onClick }: { to: RoutePath; className?: string; onClick?: () => void }) {
+  const t = useCopy();
+  const { path } = useRouter();
+  const lines = useCartLines(browserStorage());
+  return (
+    <Link className={className} to={to} aria-current={path === to ? "page" : undefined} onClick={onClick}>
+      {t("common.nav_cart", { count: cartItemCount(lines) })}
+    </Link>
+  );
 }
 
 export function DemoHint({ children }: { children: ReactNode }) {
@@ -156,6 +176,7 @@ function SiteHeader() {
   const menuId = useId();
   const languageId = useId();
   const nav = availableNav();
+  const cart = cartPath();
   const close = () => {
     setOpenPanel(null);
   };
@@ -197,8 +218,9 @@ function SiteHeader() {
           <span>{t(LANGUAGE_LABEL[language])}</span>
           <ChevronIcon />
         </button>
+        {cart && <CartLink to={cart} className="site-phone-only site-header__cart" onClick={close} />}
       </div>
-      {nav.length > 0 && (
+      {(nav.length > 0 || cart) && (
         <div className="acs-header__row site-desktop-only">
           <nav className="acs-nav">
             {nav.map((item) => (
@@ -207,6 +229,11 @@ function SiteHeader() {
               </Link>
             ))}
           </nav>
+          {cart && (
+            <nav className="acs-nav site-header__end">
+              <CartLink to={cart} />
+            </nav>
+          )}
         </div>
       )}
       <div id={menuId} className="site-phone-only site-header__panel" hidden={openPanel !== "menu"}>

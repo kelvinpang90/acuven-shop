@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import App from "../App";
-import { BRAND, COPY, LANGUAGES } from "../i18n/copy";
+import { BRAND, COPY, LANGUAGES, formatCopy } from "../i18n/copy";
 import type { Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY } from "../i18n/language";
 import { ROUTE_PATHS } from "../router";
@@ -74,14 +74,14 @@ describe("header", () => {
   });
 
   // SHOP-TASK-014 验收的「尚未实现页面的导航项不渲染」，经 SHOP-TASK-015 验收第 5 条「common.nav_shop 按路由规则开始渲染」后剩查询订单、登录：一律不渲染。
-  // 商品详情自 SHOP-TASK-017 起已存在（语言切换链接指向当前路径，在详情页上即 /products/…）；查询订单、登录、购物车页仍未实现，页头购物车入口也继续不渲染。
+  // 商品详情自 SHOP-TASK-017 起已存在（语言切换链接指向当前路径，在详情页上即 /products/…）；购物车页自 SHOP-TASK-018 起已存在（页头购物车入口链到 /cart）；查询订单、登录仍未实现。
   it.each(paths)("renders no navigation item for pages that do not exist yet on %s", (path) => {
     for (const language of LANGUAGES) {
       const html = render(path, language);
       for (const key of ["common.nav_track", "common.nav_login"] as const) {
         expect(html).not.toContain(`>${COPY[key][language]}<`);
       }
-      expect(html).not.toMatch(/href="\/(track|login|cart|account|register)/);
+      expect(html).not.toMatch(/href="\/(track|login|account|register)/);
     }
   });
 
@@ -91,6 +91,23 @@ describe("header", () => {
     expect(home.match(new RegExp(`<a href="/products">${COPY["common.nav_shop"][language]}</a>`, "g"))).toHaveLength(2);
     const list = header(render("/products", language));
     expect(list).toContain(`<a aria-current="page" href="/products">${COPY["common.nav_shop"][language]}</a>`);
+  });
+
+  // UX「全局框架」页头「购物车数量」（桌面在导航行、手机在第一行 [common.nav_cart]）与 SHOP-TASK-018 验收第 2 条「本任务起页头显示 common.nav_cart，{count} 为购物车各行件数之和」：
+  // 服务端渲染时没有本浏览器购物车，件数为 0；桌面与手机各一个链到 /cart 的入口，在购物车页标为当前。各行件数之和由 cart.test.ts 的 cartItemCount 守住。
+  it.each(languages)("links common.nav_cart with the item count to the cart in %s", (language) => {
+    const label = formatCopy(COPY["common.nav_cart"][language], { count: 0 });
+    const home = header(render("/", language));
+    expect(home).toContain(`<a class="site-phone-only site-header__cart" href="/cart">${label}</a>`);
+    expect(home).toContain(`<nav class="acs-nav site-header__end"><a href="/cart">${label}</a></nav>`);
+    const cart = header(render("/cart", language));
+    expect(cart.match(new RegExp(`aria-current="page" href="/cart">${label.replace(/[()]/g, "\\$&")}</a>`, "g"))).toHaveLength(2);
+  });
+
+  // UX「全局框架」手机线框：购物车入口在第一行，☰ 菜单里没有购物车。
+  it("keeps the cart entry out of the phone menu", () => {
+    const panel = section(header(render("/")), /<div id="[^"]*" class="site-phone-only site-header__panel"[\s\S]*?<\/div>/);
+    expect(panel).not.toContain("/cart");
   });
 
   // UX「全局框架」页头含「搜索框」与 SHOP-TASK-015 验收第 5 条「页头搜索框在本任务起显示并跳到带搜索词的列表」：占位与读屏标签 list.search_placeholder，按钮 common.search，提交到商品列表的 q 参数。

@@ -38,6 +38,12 @@ function visibleTexts(html: string): string[] {
   return [...textNodes, ...attributes];
 }
 
+// 字典里带变量的一条（变量换成任意非空文字）的匹配式。
+function copyPattern(template: string): RegExp {
+  const parts = template.split(/\{\w+\}/).map((piece) => piece.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(`^${parts.join(".+")}$`);
+}
+
 const cases = ROUTE_PATHS.flatMap((path) => LANGUAGES.map((language): [string, Language] => [path, language]));
 
 describe("App", () => {
@@ -49,12 +55,17 @@ describe("App", () => {
   });
 
   // 验收：界面上不出现字典以外的文字（品牌字样 ACUVEN SHOP 除外），且只出现当前语言那一列。
+  // SHOP-TASK-018 验收第 2 条：页头 common.nav_cart 在每个页面出现由字典模板替换变量得到的文字，带变量的条目按模板匹配（变量处为任意非空文字）。
   it.each(cases)("shows only dictionary text on %s in %s", (path, language) => {
     const allowed = new Set<string>([BRAND, ...Object.values(COPY).map((entry) => entry[language])]);
+    const templates = Object.values(COPY)
+      .map((entry) => entry[language])
+      .filter((template) => /\{\w+\}/.test(template))
+      .map(copyPattern);
     const texts = visibleTexts(render(path, language));
     expect(texts.length).toBeGreaterThan(5);
     for (const text of texts) {
-      expect(allowed.has(text), text).toBe(true);
+      expect(allowed.has(text) || templates.some((pattern) => pattern.test(text)), text).toBe(true);
     }
   });
 

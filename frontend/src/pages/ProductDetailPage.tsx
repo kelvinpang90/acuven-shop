@@ -26,7 +26,7 @@ import type { Selection } from "./productOptions";
 // 接口返回之前页面主体为空（没有文字、表单或链接）；接口 404（不存在或未发布）时替换为商品列表，不另显示文字。
 // 购物车只在本浏览器（cart.ts）；限购与 20 行上限只用于提示与禁用按钮，下单时由服务端再次校验。
 // 桌面缩略图点选切换主图；767px 以下主图横向滑动、描述可折叠、加入按钮固定在底部（site.css）。
-// 购物车页 P04 未实现：detail.view_cart 按路由规则不渲染。
+// 购物车页 P04 自 SHOP-TASK-018 起在路由表中：detail.view_cart 按路由规则渲染，链到 /cart。
 
 // 加入后的提示：已加入、未选全规格、写入本浏览器失败。
 export type AddNotice = "added" | "select_all_options" | "error" | null;
