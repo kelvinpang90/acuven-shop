@@ -1,10 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  CatalogError,
   categoriesUrl,
+  failedRemote,
   featuredProductsUrl,
   fetchCatalog,
   optionsUrl,
+  productDetailUrl,
   productsUrl,
 } from "./catalog";
 
@@ -60,6 +63,20 @@ describe("catalog request addresses", () => {
     ]);
   });
 
+  // SHOP-TASK-017 验收第 2 条「路由 /products/<slug> 用商品详情接口取数（随当前语言）」与「详情请求用解码后的 slug，请求路径里只编码一次」。
+  it.each([
+    ["crew-neck-tee", "/api/catalog/products/crew-neck-tee"],
+    ["a b", "/api/catalog/products/a%20b"],
+    [":", "/api/catalog/products/%3A"],
+    ["a%20b", "/api/catalog/products/a%2520b"],
+    ["中", "/api/catalog/products/%E4%B8%AD"],
+  ])("asks for the product %j with its path encoded once", (slug, path) => {
+    const url = productDetailUrl("zh", slug);
+    expect(url).toBe(`${path}?lang=zh`);
+    expect(params(url)).toEqual([["lang", "zh"]]);
+    expect(decodeURIComponent(pathOf(url).slice("/api/catalog/products/".length))).toBe(slug);
+  });
+
   // UX P01「精选商品」：未挑选时显示按最新排序的前 4 件。
   it("asks for the four newest products for the featured block", () => {
     expect(params(featuredProductsUrl("zh"))).toEqual([
@@ -96,6 +113,22 @@ describe("fetchCatalog", () => {
 
     vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new TypeError("Failed to fetch"))));
     await expect(fetchCatalog(categoriesUrl("en"))).rejects.toThrow("Failed to fetch");
+  });
+
+  // SHOP-TASK-017 验收第 2 条「商品不存在或未发布（接口 404）时替换为商品列表页」：失败带状态码，页面据此区分 404 与其他失败。
+  it("keeps the status of a failed request", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("{}", { status: 404 }))));
+    const notFound = await fetchCatalog(productDetailUrl("en", "gone")).catch((error: unknown) => error);
+    expect(notFound).toBeInstanceOf(CatalogError);
+    expect((notFound as CatalogError).status).toBe(404);
+    expect(failedRemote(notFound)).toEqual({ status: "not_found" });
+  });
+
+  // SHOP-TASK-015 验收第 7 条「请求失败时…显示 common.error_retry」：只有 404 是「不存在」，其他状态码与网络错误仍是一般失败。
+  it("treats every other failure as an error", () => {
+    expect(failedRemote(new CatalogError(500))).toEqual({ status: "error" });
+    expect(failedRemote(new CatalogError(422))).toEqual({ status: "error" });
+    expect(failedRemote(new TypeError("Failed to fetch"))).toEqual({ status: "error" });
   });
 
   // 派生实现约束（实现选择）：守住 SHOP-TASK-015 验收第 6 条「切换语言时按新语言重新请求」——取消信号传给 fetch，语言或条件变化时作废旧请求，防止晚到的旧请求结果覆盖新请求。
