@@ -785,14 +785,14 @@ tasks:
       实现购物车页 P04：读本浏览器购物车，调用计价接口显示每行与商品小计，修改件数、移除，按接口返回的状态提示变化与超出限购；
       页头显示购物车入口与件数。不在浏览器计算任何金额，不给收货国家（运费在结账时算），不做结账，不装依赖，不改后端，不改设计。
       设计闸门：不适用（只显示计价接口返回的金额，不改金额计算；购物车只存 SKU、商品 slug 与件数，不涉及个人资料）。
-      拆分：不拆（15 个允许路径、9 条验收标准，超过拆分阈值）——只有 P04 一张页面、前端一层，路径多为实现与测试成对，另加每个页面任务固定带的路由、字典、样式与记录文件。
+      拆分：不拆（17 个允许路径、9 条验收标准，超过拆分阈值）——只有 P04 一张页面、前端一层，路径多为实现与测试成对，另加每个页面任务固定带的路由、字典、样式与记录文件；ProductDetailPage 的两个文件只为 /cart 进路由表后查看购物车链接开始出现而改。
     status: ready
     depends_on:
       - SHOP-TASK-016
       - SHOP-TASK-017
     acceptance_criteria:
       - 页面内容、流程与文案以 docs/UX.md 0.6 的 P04 与 docs/UX-COPY.md 0.5 为准，样式以 docs/design/pages/ 的 P04 各静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；沿用 SHOP-TASK-014、015、017 的字典、路由、框架、金额格式化与购物车模块；手机与桌面的布局差异写在 frontend/src/styles/site.css（只放布局与显隐规则，手机的差异写在 767px 及以下的媒体查询里；只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
-      - 路由 /cart（frontend/src/App.tsx 的页面表同步加入购物车页）；本任务起页头显示 common.nav_cart，{count} 为购物车各行件数之和（页头因此在每个页面出现由字典模板替换变量得到的文字，frontend/src/App.test.tsx 里只出现字典文字的那条测试只为接受这类文字而改，其余断言不删减、不放宽），P03 的 detail.view_cart 按路由规则开始渲染；cart.checkout 按路由规则在结账页实现前不渲染
+      - 路由 /cart（frontend/src/App.tsx 的页面表同步加入购物车页）；本任务起页头显示 common.nav_cart，{count} 为购物车各行件数之和（页头因此在每个页面出现由字典模板替换变量得到的文字，frontend/src/App.test.tsx 里只出现字典文字的那条测试只为接受这类文字而改，其余断言不删减、不放宽），P03 的 detail.view_cart 按路由规则开始渲染；cart.checkout 按路由规则在结账页实现前不渲染；/cart 进路由表后下面三处现有内容随之失效，只许这样改、其余不动——frontend/src/components/SiteFrame.test.tsx「renders no navigation item for pages that do not exist yet」只许从 href 正则里去掉 cart 并更新它上方的注释（购物车页自本任务起已存在），track、login、account、register 保留；frontend/src/pages/ProductDetailPage.test.tsx「confirms the item was added without a cart link」只许改为断言加入后的提示条含 detail.view_cart 且链到 /cart（测试名与注释随之更新），这个文件其他断言不动；frontend/src/pages/ProductDetailPage.tsx 只许改写「购物车页 P04 未实现」那句注释，代码不改（detail.view_cart 是否渲染已由路由表决定）
       - 页面打开、修改件数或移除后，用购物车各行的 SKU 与件数（不带收货国家、不带任何价格）调用计价接口并显示返回的每行图片、名称与规格、件数、行小计和商品小计；金额只格式化接口返回的整数仙，不在浏览器相加或相乘；连续修改时只采用最后一次请求的结果
       - 任何一行不是正常状态时显示 cart.item_changed；超出限购的行下显示 cart.over_limit（{count} 为接口返回的 max_per_order）；不可购买的行只显示接口返回的内容并可移除；同一商品各行件数合计达到 max_per_order 时这些行的数量 (+) 禁用；件数不低于 1，移除用 cart.remove
       - 购物车为空时显示 cart.empty 与 cart.continue；显示 ★ cart.demo_hint、cart.shipping_later 与 cart.price_recheck；计价请求失败时显示 common.error_retry，不清空购物车
@@ -809,6 +809,8 @@ tasks:
       - frontend/src/cart.test.ts
       - frontend/src/components/SiteFrame.tsx
       - frontend/src/components/SiteFrame.test.tsx
+      - frontend/src/pages/ProductDetailPage.tsx
+      - frontend/src/pages/ProductDetailPage.test.tsx
       - frontend/src/i18n/copy.ts
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
