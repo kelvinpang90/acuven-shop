@@ -733,7 +733,7 @@ tasks:
       20 行上限的提示和按钮禁用。购物车页 P04 由之后的任务做；在那之前「查看购物车」与页头购物车入口按路由规则不渲染。
       不在浏览器计算任何金额，不调用计价接口，不装依赖，不改后端，不改设计。设计闸门：不适用（只展示目录接口返回的单价与库存，
       购物车只存 SKU、商品 slug 与件数，不涉及个人资料；限购只是提示，校验在服务端）。
-      拆分：不拆（19 个允许路径、10 条验收标准，超过拆分阈值）——P03 与浏览器购物车模块同属前端一层，限购与 20 行上限的提示依赖购物车模块，路径多为实现与测试成对。
+      拆分：不拆（20 个允许路径、10 条验收标准，超过拆分阈值）——P03 与浏览器购物车模块同属前端一层，限购与 20 行上限的提示依赖购物车模块，路径多为实现与测试成对，SiteFrame.test.tsx 只为详情页进路由表改一条正则。
     status: ready
     depends_on:
       - SHOP-TASK-014
@@ -741,7 +741,7 @@ tasks:
       - SHOP-TASK-016
     acceptance_criteria:
       - 页面内容、流程与文案以 docs/UX.md 0.6 的 P03 与 docs/UX-COPY.md 0.5 为准，样式以 docs/design/pages/ 的 P03 静态页面为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；沿用 SHOP-TASK-014、015 的字典、路由、框架、金额格式化与接口模块；手机与桌面的布局差异写在 frontend/src/styles/site.css（只放布局与显隐规则，手机的差异写在 767px 及以下的媒体查询里；只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
-      - 路由 /products/<slug> 用商品详情接口取数（随当前语言）；frontend/src/router.tsx 的路由表仍是字符串常量表，动态段写成模式（如 /products/:slug），由 router.tsx 匹配并向页面提供 slug，站内链接与当前路径仍是实际路径；动态段的值按路径段解码后交给页面（解码失败视为不匹配），解码后为空、为 . 或 ..、或含 / 的段不匹配、按未知路径落到首页，其余值不再按字符集校验，商品是否存在只由详情接口判断；详情请求用解码后的 slug，请求路径里只编码一次；frontend/src/router.test.tsx 覆盖 %2E、%2E%2E、%2F 与坏的百分号编码不匹配，以及 %3A、a%20b 匹配并分别得到 slug「:」「a b」，frontend/src/api/catalog.test.ts 覆盖请求路径只编码一次；frontend/src/App.tsx 的页面表同步加入详情页；App.test.tsx 与 SiteFrame.test.tsx 按路由表遍历的测试原样可用，不改；商品不存在或未发布（接口 404）时替换为商品列表页，不另显示文字；本任务起商品卡与首页精选按路由规则链到详情页（frontend/src/pages/HomePage.test.tsx 与 frontend/src/pages/ProductListPage.test.tsx 只为此改动有关详情链接的断言）；面包屑为 common.nav_shop、分类（链到按该分类筛选的列表）与商品名称
+      - 路由 /products/<slug> 用商品详情接口取数（随当前语言）；frontend/src/router.tsx 的路由表仍是字符串常量表，动态段写成模式（如 /products/:slug），由 router.tsx 匹配并向页面提供 slug，站内链接与当前路径仍是实际路径；动态段的值按路径段解码后交给页面（解码失败视为不匹配），解码后为空、为 . 或 ..、或含 / 的段不匹配、按未知路径落到首页，其余值不再按字符集校验，商品是否存在只由详情接口判断；详情请求用解码后的 slug，请求路径里只编码一次；frontend/src/router.test.tsx 覆盖 %2E、%2E%2E、%2F 与坏的百分号编码不匹配，以及 %3A、a%20b 匹配并分别得到 slug「:」「a b」，frontend/src/api/catalog.test.ts 覆盖请求路径只编码一次；frontend/src/App.tsx 的页面表同步加入详情页；frontend/src/App.test.tsx 不改；按路由表遍历的测试（App.test.tsx 与 SiteFrame.test.tsx）把 /products/:slug 本身当作实际路径服务端渲染，此时 slug 为「:slug」、详情接口尚未返回，所以详情页在接口返回之前页面主体不出现字典以外的文字（含读屏标签）、行内样式、表单或指向未实现页面的链接，面包屑与购买区等数据返回后才渲染；面包屑分隔符与数量 (+)(-) 用图形而不是文字节点（(+)(-) 的读屏标签用 common.a11y_qty_increase、common.a11y_qty_decrease），面包屑不加字典里没有的读屏标签；frontend/src/components/SiteFrame.test.tsx 只许从「renders no navigation item for pages that do not exist yet」那条的 href 正则里去掉 `products\/`，并把它上方的注释改为写明详情页自本任务起已存在（语言切换链接指向当前路径，在详情页上即 /products/…）；track、login、cart、account、register 保留——查询订单、登录、购物车页仍未实现，页头购物车入口也继续不渲染；这个文件其他断言一律不动；frontend/src/components/SiteFrame.tsx 不改，router.tsx 改动后它照常通过类型检查与测试；商品不存在或未发布（接口 404）时替换为商品列表页，不另显示文字；本任务起商品卡与首页精选按路由规则链到详情页（frontend/src/pages/HomePage.test.tsx 与 frontend/src/pages/ProductListPage.test.tsx 只为此改动有关详情链接的断言）；面包屑为 common.nav_shop、分类（链到按该分类筛选的列表）与商品名称
       - 当前语言回退英文时名称旁显示 detail.english_only；桌面缩略图可点选切换主图，手机主图可左右滑动，每张图读屏标签用 detail.a11y_image；描述在手机上可折叠；手机上加入购物车按钮固定在底部；显示 ★ detail.demo_hint
       - 规格选择：初始不预选（只有一个启用 SKU 的商品直接选定）；与已选的其他规格值组不成任何启用 SKU 的值禁用；选全前价格按 SHOP-TASK-015 的起价规则显示，选全后显示所选 SKU 的单价与 detail.stock_left（当日可用库存）；未选全就点加入时显示 detail.select_all_options
       - 浏览器购物车存在 localStorage，每行只有 SKU、商品 slug 与件数（不存价格、名称或任何个人资料）；读取时丢弃格式不对、件数不在 1 到 99、重复 SKU 与超过 20 行的部分；读写失败时页面照常可用；同一 SKU 再次加入时合并件数；购物车模块供之后的购物车页复用
@@ -768,6 +768,7 @@ tasks:
       - frontend/src/router.tsx
       - frontend/src/router.test.tsx
       - frontend/src/App.tsx
+      - frontend/src/components/SiteFrame.test.tsx
       - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
