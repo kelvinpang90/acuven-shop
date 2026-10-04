@@ -26,21 +26,16 @@
 
 <!-- openclaw:planning-v1:begin -->
 ### 当前计划
-1. `SHOP-TASK-019` 订单访问授权：服务端会话、授权记录、cookie 与 CSRF
-2. `SHOP-TASK-022` 站点设置：短信验证开关的存储与读取
-3. `SHOP-TASK-020` 游客下单 API
-4. `SHOP-TASK-021` 模拟支付、取消与支付超时 API
-5. `SHOP-TASK-023` 结账参考数据：地区与国家码列表、马来西亚州属列表
-6. `SHOP-TASK-033` 框架测试按路由表推算尚未实现的页面
-7. `SHOP-TASK-024` 模拟支付 P06 与支付结果 P07（游客）
-8. `SHOP-TASK-025` 结账 P05 游客路径
-9. `SHOP-TASK-026` Redis 连接与限流基础
-10. `SHOP-TASK-027` 订单查询与确认收货 API
-11. `SHOP-TASK-028` 订单查询 P08 与订单详情 P09（查单模式）
-12. `SHOP-TASK-029` 退款申请 API（查单模式）
-13. `SHOP-TASK-030` 退款申请 P10 与订单详情 P09 的退款部分（查单模式）
-14. `SHOP-TASK-031` 定时任务运行器与支付超时取消
-15. `SHOP-TASK-032` 每日库存重置
+1. `SHOP-TASK-033` 框架测试按路由表推算尚未实现的页面
+2. `SHOP-TASK-024` 模拟支付 P06 与支付结果 P07（游客）
+3. `SHOP-TASK-025` 结账 P05 游客路径
+4. `SHOP-TASK-026` Redis 连接与限流基础
+5. `SHOP-TASK-027` 订单查询与确认收货 API
+6. `SHOP-TASK-028` 订单查询 P08 与订单详情 P09（查单模式）
+7. `SHOP-TASK-029` 退款申请 API（查单模式）
+8. `SHOP-TASK-030` 退款申请 P10 与订单详情 P09 的退款部分（查单模式）
+9. `SHOP-TASK-031` 定时任务运行器与支付超时取消
+10. `SHOP-TASK-032` 每日库存重置
 
 ### 已阻塞
 - 待登记：短信验证组件 V1 与结账会员路径（马新号码验证、自动注册或登录、优惠券与积分；会员访问 P06、P07）｜阻塞：依赖短信验证服务、会员注册登录接口、优惠券与积分账本
@@ -469,3 +464,121 @@
   - UX-COPY 里没有、因而没有渲染的界面文字（不自行编写）：加载中的提示（只给 `<main>` 的 `aria-busy`）、列表与小计栏的整体读屏标签、计价失败后的重试按钮。
   - 已有测试的改动（只按验收允许的范围）：`components/SiteFrame.test.tsx`「renders no navigation item for pages that do not exist yet」只从 href 正则里去掉 `cart` 并改写其上方注释，另新增页头购物车入口的两条测试；`pages/ProductDetailPage.test.tsx`「confirms the item was added without a cart link」改为「confirms the item was added with a link to the cart」，断言提示条含链到 `/cart` 的 `detail.view_cart`，注释随之更新，该文件其他断言未动；`App.test.tsx`「shows only dictionary text」只为接受由字典模板替换变量得到的文字（页头 `common.nav_cart`）而改为同时按带变量条目的模板匹配，其余断言未删减、未放宽；`router.test.tsx` 的路由表断言改为五项、`/cart` 改为在表里（另断言 `/checkout` 不在表里），未知路径样例加 `/cart/`，另加 `/cart` 渲染购物车页的用例；`cart.test.ts` 只新增用例。
 - 验证到什么程度：人工逐条对照验收标准自查，并人工核对新增的 12 个字典键与 UX-COPY 原文（逐字比较由已有的 `i18n/copy.test.ts` 覆盖新键）。测试（vitest 与 `react-dom/server`，未加测试依赖，`fetch` 以 `vi.fn`/`vi.stubGlobal`、`localStorage` 以内存对象替身）每条注释写明它守住的 UX 或验收原句，没有直接原句的边界标为「派生实现约束（实现选择）」并写明上层条款，覆盖：请求体每行只有 `sku` 与 `quantity`、实际请求只有 `lines`、不带收货国家、价格或 slug、地址只带语言、不带 cookie；非 2xx 抛错；先发的请求先返回或后返回都不采用并被中止、只报告最新请求的失败、取消后不采用；请求标识与 slug 无关；当前请求、等待中（显示上一次结果）、加载中与失败各状态；每行图片、名称链接、规格值与图形分隔、件数、行小计与 `cart.remove`；行小计与单价×件数不符、商品小计与各行之和不符时照样显示接口的数；不显示参考外币；★ 提示、`cart.shipping_later`、`cart.price_recheck` 在桌面小计栏与手机说明，空购物车、加载中与失败时也显示这两条；线框顺序；`cart.continue` 链到列表、不渲染 `cart.checkout`；移除的行在新结果前不显示；三种非正常状态各自显示 `cart.item_changed`，全部正常时不显示；`cart.over_limit` 只在超出限购的行下且 `{count}` 为接口的限购件数；同一商品各行合计达到限购时这些行的 (+) 禁用、另一商品不受影响、按购物车件数合计、99 件上限；1 件时 (-) 禁用；不可购买行只有 SKU、件数与移除；空购物车（含经 `App` 渲染 `/cart`）；首次加载中不显示行与金额；请求失败显示 `common.error_retry` 且（网络错误与非 2xx 两种）本浏览器购物车不变；写入失败的提示；改件数与移除写回购物车、件数低于 1 不写、写入失败返回 false；`cartItemCount` 为各行件数之和、`setLineQuantity` 与 `removeLine`；多个状态下页面文字只来自字典（商品数据、SKU、件数与金额模板除外）；页头 `common.nav_cart` 桌面与手机各一个链到 `/cart` 的入口、在购物车页标为当前、不在 ☰ 菜单里；P03 加入后的提示条含链到 `/cart` 的 `detail.view_cart`；路由表五项、`/cart` 渲染购物车页。所有路由（现含 `/cart`）在三种语言下的页面文字仍只来自字典（含模板替换）、没有行内样式与表单（已有测试）。浏览器相关的部分（实际请求、effect 中的重新计价与中止、点击 (+)(-) 与移除、`localStorage` 的真实读写与 `storage` 事件、页头件数随购物车变化、固定底栏、媒体查询下的显隐与布局）未在 DOM 中执行，只以纯函数与服务端渲染的各状态验证；服务端渲染下页头件数恒为 0，各行件数之和只由 `cartItemCount` 的测试守住。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查。未做浏览器验收（未在真实浏览器中打开页面，也未与参考图对比）。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-019 订单访问授权：服务端会话、授权记录、cookie 与 CSRF
+
+- [x] 按 `docs/DESIGN.md` 1.10（提交 `e3b3505`）「权限与资料保护」第 6 条（游客短期凭据与查单授权）与第 7 条（日志）建立订单访问会话与按订单的授权两张表并写迁移，另提供签发授权、校验授权、设置 cookie 与算出、校验 CSRF 令牌的函数，供之后的游客下单、模拟支付与查单接口使用：`app/models/order_access.py`（`app/models/__init__.py` 导出 `OrderAccessSession`、`OrderAccessGrant`）、迁移 `alembic/versions/20261001_0009_order_access.py`（revision `0009`，down_revision `0008`）、`app/services/order_access.py`；测试见 `tests/test_order_access.py`。未加接口、未改 `app/main.py`、未建订单、未做查单或支付逻辑、未改前端、未改设计。设计闸门：DESIGN 1.10（提交 `e3b3505`）。
+- 两张表（都显式 InnoDB、utf8mb4，约束名按 `app/db/base.py` 的命名约定，迁移逐个写出同样的名字；时间一律不带时区的 UTC；外键一律 ON DELETE RESTRICT；除撤销时间外所有列非空）：
+  - `order_access_sessions`：`token_hash` String(64)（会话令牌的 SHA-256 小写十六进制摘要，唯一 `uq_order_access_sessions_token_hash`；令牌原文不入库）、`created_at`、`expires_at`、`revoked_at`（可空）；不存 IP、浏览器标识或任何个人资料。检查约束：
+    - `ck_order_access_sessions_token_hash_length`：`LENGTH(token_hash) = 64`
+    - `ck_order_access_sessions_expires_after_created`：`expires_at > created_at`
+  - `order_access_grants`：`session_id` → `order_access_sessions.id`（`fk_order_access_grants_session_id_order_access_sessions`，RESTRICT）、`order_id` → `orders.id`（`fk_order_access_grants_order_id_orders`，RESTRICT，普通索引 `ix_order_access_grants_order_id`）、`scope` String(16)、`created_at`、`expires_at`、`revoked_at`（可空）；唯一 `uq_order_access_grants_session_id_order_id_scope`（`session_id`, `order_id`, `scope`，以会话 ID 打头，MySQL 用它作会话外键的索引）。检查约束：
+    - `ck_order_access_grants_scope_valid`：`scope IN ('guest_checkout', 'lookup')`（`guest_checkout` 即游客短期凭据，`lookup` 即查单授权）
+    - `ck_order_access_grants_expires_after_created`：`expires_at > created_at`
+  - 0009 的 upgrade 依次建会话表、授权表与订单 ID 索引；downgrade 按依赖倒序先删授权表、再删会话表。订单 ID 索引不单独删：它是订单外键唯一可用的索引，MySQL 不许在外键仍在时删除，删表时一并删除。
+- 令牌与 CSRF 规则：
+  - 令牌：`secrets.token_urlsafe(32)`，32 字节（256 位）随机数的无填充 Base64url，恰好 43 个 `[A-Za-z0-9_-]` 字符。只有这种格式的 cookie 值才算格式合法；不合法的值校验时不查库直接不通过，签发时视同没有 cookie。
+  - 签发 `issue_order_access(db, cookie_value, order_id, scope, now)`：cookie 值格式合法且对应会话未撤销、未到期（`expires_at > now`）时沿用，否则新建会话（创建时间 `now`，到期 `now + 30 分钟`）。授权有效期固定 30 分钟：同一会话、订单与范围已有授权时把到期时间改为 `now + 30 分钟`、清空撤销时间（创建时间不变），否则新建；会话到期时间改为它与新授权到期时间中较晚者。返回 `IssuedAccess(new_token, csrf_token, expires_at)`，沿用会话时 `new_token` 为空；两个令牌字段不进 `repr`。只 flush、不提交。
+  - 校验 `check_order_access(db, cookie_value, order_id, scope, now)`：一条查询，只有会话存在、未撤销、未到期，且该会话对该订单、该范围的授权存在、未撤销、未到期时通过；范围互不替代，授权不跨订单。
+  - CSRF：令牌不入库，为 SHA-256(`acuven-shop/order-access/csrf` + `\x00` + 令牌原文) 的十六进制，与入库摘要（SHA-256(令牌原文)）不同。`csrf_token_for_cookie` 由 cookie 值重新算出（格式不合法为空），`check_csrf_token(cookie_value, header_value)` 以 `hmac.compare_digest` 常量时间比较；令牌缺失、为空、不一致，或 cookie 缺失、格式不合法都不通过。docstring 写明支付、取消、确认收货与退款申请等写操作必须同时通过 `check_order_access` 与 `check_csrf_token`。
+  - 未知范围与带时区的 `now` 抛 `ValueError`（编程错误，消息不含令牌）。模块不写日志；令牌、CSRF 令牌与 cookie 值不出现在异常消息里。
+- cookie 属性（`set_order_access_cookie(response, token)`）：只有一个 cookie `__Host-shop_order_access`，`HttpOnly`、`Secure`、`SameSite=Lax`、`Path=/`，不设 `Domain`、不设 `Expires`，`Max-Age=1800`（30 分钟）。一个浏览器的多张订单授权都挂在同一会话下、各自到期。格式不合法的令牌抛 `ValueError`。
+- 偏离：未改设计，未发现设计本身的问题。说明几处取舍，请审阅：
+  - 设计闸门是 DESIGN 1.10（提交 `e3b3505`）；仓库里现为 1.11 候批稿。1.11 只改「权限与资料保护」第 1、2、3 条等短信验证开关相关内容，第 6、7 条与 1.10 相同，未发现冲突。
+  - 沿用会话时按验收不返回新令牌，但浏览器里的 cookie 的 Max-Age 仍从上次设置算起：例如 10:00 首次签发（cookie 到 10:30），10:20 给第二张订单签发（授权与会话到 10:50），若不重设 cookie，浏览器 10:30 就丢掉它，第二张订单的授权实际只剩 10 分钟。故 `IssuedAccess` 与 `set_order_access_cookie` 的 docstring 要求调用方沿用会话时以请求带来的 cookie 值重新调用 `set_order_access_cookie`，刷新 Max-Age；之后的接口任务须照做。
+  - `check_csrf_token` 不查库，只判断请求头与由 cookie 值算出的值是否一致；会话是否有效、是否已撤销由 `check_order_access` 判定，写操作两者都要。CSRF 令牌经哪个请求头或表单字段传入，由之后的接口任务决定。
+  - 验收标准之外另加的约束：会话摘要长 64（`ck_order_access_sessions_token_hash_length`），由「SHA-256 十六进制摘要（64 个字符）」直接推出，与 `member_sessions` 相同。
+  - 本任务只提供签发与校验；撤销（写撤销时间，例如订单取消或支付后撤销该单的短期凭据）与到期行的清理由之后的任务按需要实现。表里不存个人资料，到期行暂不删除。
+  - 同一浏览器并发两次签发同一会话、订单与范围时，后一个可能被唯一约束拒绝；由调用方的事务处理（重试或按失败返回），本任务不加锁。
+- 验证到什么程度：人工逐条对照验收标准与设计原句自查，并逐个核对 0009 的列类型、可空性、约束名与表达式、外键删除行为、索引与表选项同模型按命名约定生成的一致（`alembic check` 不比较检查约束与表选项，这两项只经人工核对）。`tests/test_order_access.py` 用 SQLite 内存库（每个连接打开外键检查，并断言已打开）按模型建表、自建合法游客订单，每条测试的文档字符串写明它守住的设计原句或验收约定，覆盖：合法会话与授权的对照；两张表每个检查约束的反例（会话与授权到期等于或早于创建、摘要长 62、未知范围）；重复会话摘要、重复的会话 + 订单 + 范围被唯一约束拒绝；授权引用不存在的订单或会话、删除被授权引用的订单或会话被外键拒绝，外键都是 RESTRICT；除撤销时间外各列写入 NULL 被拒、只有撤销时间可空；两表列集合不含 IP、浏览器标识或个人资料；订单 ID 索引；首次签发新建会话、令牌为 43 个 URL 安全字符、库里只有其 SHA-256 摘要且任何一列都查不到令牌原文或 CSRF 令牌；两个无 cookie 的浏览器得到不同令牌；带有效 cookie 再签发沿用同一会话、不返回新令牌、CSRF 令牌不变；cookie 对应会话已到期、已撤销，或 cookie 格式不合法、库里没有、缺失时新建会话；同一会话两张订单的授权各自到期、会话到期延到较晚者且不被缩短；重复签发延长原授权（含已撤销的授权恢复）、不新增行、创建时间不变；签发不提交（回滚后不留行）；给不存在的订单签发被外键拒绝；授权在到期前通过、到期时刻起不通过，会话到期、授权或会话撤销、换订单、换范围（两个方向）、别的浏览器的 cookie 都不通过；格式不合法的 cookie（缺失、空、长度不对、含 `=`、`+` 或非 ASCII）不发出任何 SQL 且不通过；未知范围报错；cookie 的名称、各属性、没有 Domain 与 Expires、只有一个 Set-Cookie；格式不合法的令牌被拒且异常消息不含它；CSRF 令牌对同一会话稳定、与入库摘要和令牌原文不同；CSRF 令牌错误、属于别的会话、缺失、为空、非 ASCII，以及 cookie 缺失、格式不合法时都不通过；签发与校验不产生 `app.services` 的日志记录，签发结果的 repr 不含令牌。这些测试与已有后端测试，以及迁移在真 MySQL 上的 upgrade head、downgrade base、再 upgrade head 与 `alembic check`，都只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest；签发与校验的查询未在真 MySQL 上执行。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-022 站点设置：短信验证开关的存储与读取
+
+- [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`，批准见 `docs/HANDOFF.md`）「边界与原则」第 4 条与「数据模型」的 SiteSetting 一行，建立站点设置表并写迁移，提供每次都查库的读取函数与公开只读接口：`app/models/site.py`（`app/models/__init__.py` 导出 `SiteSetting`）、迁移 `alembic/versions/20261001_0010_site_settings.py`（revision `0010`，down_revision `0009`）、`app/services/site_settings.py`、`app/api/site_settings.py`（`app/main.py` 挂上路由）；测试见 `tests/test_site_settings.py`。未加修改开关的接口，未做后台页面或审计记录，未改前端、设计、CI 或部署配置。设计闸门：DESIGN 1.11（提交 `2d13250`）。
+- 表与约束：`site_settings`（显式 InnoDB、utf8mb4，约束名按 `app/db/base.py` 的命名约定，迁移逐个写出同样的名字）。列：`id` Integer 主键（`pk_site_settings`，不自增）、`sms_verification_enabled` Boolean 非空、服务端默认关闭（MySQL 上为 `DEFAULT false`）、`updated_at` DateTime 非空（不带时区的 UTC，模型写入与更新时自动取当前 UTC）。检查约束 `ck_site_settings_single_row`：`id = 1`，表因此至多一行。不加其他设置项。0010 的 upgrade 建表并写入 `id = 1`、开关关闭、更新时间为执行迁移时 UTC 的一行；downgrade 删表。
+- 读取函数 `is_sms_verification_enabled(db) -> bool`：每次调用发一条 `SELECT sms_verification_enabled FROM site_settings WHERE id = 1`，只查列值、不加载 ORM 对象，没有进程内或 Redis 缓存；没有那一行时返回关闭。docstring 写明下单、发送短信、提交验证码与确认注销时都必须在当次请求里调用它、按当时的值判定，前台接口的值只用于显示。
+- 接口 `GET /api/site-settings`：响应体恰好 `{"sms_verification_enabled": <布尔>}`，带 `Cache-Control: no-store`；不需登录，不读写 cookie，只发上述 SELECT；其他方法 405。未配置数据库时与其他接口一样回答 503。
+- 修改开关留给之后的「管理后台业务接口」任务（站点设置部分），须在管理员登录与审计记录就绪后实现，并按设计把操作者、时间、新旧值写入 `AuditEvent`；本任务没有任何写开关的代码路径，开关只能由迁移写成关闭。
+- 偏离：未改设计，未发现设计本身的问题。说明几处取舍，请审阅：
+  - 设计说「每次判定都从数据库读取当前值」。读取函数每次都查库，但在同一个数据库事务里，MySQL 默认的可重复读隔离级别可能让同一事务后几次读取看到第一次读取时的快照；docstring 要求在处理该请求的事务里读取，不跨请求复用事务。现有会话依赖每个请求一个会话，符合这一点。
+  - 验收标准之外另加的：主键列不自增（主键只能是 1，自增无意义）；未配置数据库时接口回答 503，不猜一个值。
+  - 迁移写入那一行的更新时间取执行迁移时的 UTC，不用数据库函数，与模型「不带时区的 UTC」一致。
+- 验证到什么程度：人工逐条对照验收标准与设计原句自查，并核对 0010 的列类型、可空性、服务端默认值、约束名与表达式、表选项同模型按命名约定生成的一致（`alembic check` 不比较检查约束、服务端默认值与表选项，这三项只经人工核对）。`tests/test_site_settings.py` 用 SQLite 内存库与 TestClient，每条测试的文档字符串写明它守住的设计原句或验收约定，覆盖：主键为 1 可写入、主键 0、2、-1 被检查约束拒绝；不给开关值时服务端默认关闭；两列写入 NULL 被拒；表只有主键、开关与更新时间三列；读取函数在开关开、关与没有那一行时的结果；连续读取之间改库（开、关、删行）每次读到新值且每次调用各发一条 SELECT；会话里已加载的对象是旧值时仍读到库里的新值；接口返回值随库中开关变化（含没有那一行）；响应只有这一个字段、带 `no-store`；带不带 cookie 结果相同、不设 cookie、只发 SELECT、写方法 405；未配置数据库时 503。这些测试与迁移在真 MySQL 上的 upgrade head、downgrade base、再 upgrade head 与 `alembic check` 只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest；读取查询未在真 MySQL 上执行。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-020 游客下单 API
+
+- [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「计价、优惠、积分与库存」第 1、2、3、6、8 条，「数据模型」的 Order / OrderItem、OrderRecipient、PaymentAttempt / OrderEvent 三行，「失败、并发与重试」第 1 条，「边界与原则」第 4 条与「权限与资料保护」第 1、2、6、7 条，提供游客下单接口：`app/services/ordering.py`（下单与重放）、`app/api/orders.py`（接口，`app/main.py` 挂上路由）；`app/services/checkout.py` 只把 `_purchasable`、`_selected_options` 改名为 `purchasable`、`selected_options` 供下单复用（并改写模块说明里「整单校验留给游客下单任务」那句），计价接口与目录接口的行为未改，`tests/test_catalog_api.py`、`tests/test_checkout_quote.py`、`tests/test_purchase_limit.py` 未改；`app/services/catalog.py` 未改。测试见 `tests/test_guest_order.py`。未加表或迁移，未改前端、CI、部署配置或设计。设计闸门：DESIGN 1.11（提交 `2d13250`）。
+- 请求（`POST /api/orders/guest`，不需登录，不读会员会话）：
+  - 请求头 `Idempotency-Key`：必填，16 到 64 个字母、数字、连字符或下划线；只能出现一次。
+  - 请求体（JSON，多出字段 422）：`lines`（每项 `sku`、`quantity`，规则与计价接口相同：1 到 20 行、每行 1 到 99 件、SKU 不重复，行模型直接复用计价接口的 `QuoteLineIn`）；`phone`（结账第 1 步的号码原文）与 `phone_region`（页面国家码选择对应的两位地区代码，如 `MY`）；`name`、`address`、`postal_code`（去掉首尾空白后非空）；`country_code`（两位大写字母，与 `app/services/shipping.py` 相同）；`state_code`（马来西亚必填且为 `MY-01` 到 `MY-16`，其他国家必须不给或为 null）；`region`（只有其他国家可给，去掉首尾空白后为空串时按没有地区保存；马来西亚给了即 422，含空串）。姓名、地址、邮编、地区的长度上限取自 `OrderRecipient` 的列长度（`OrderRecipient.__table__.c[...].type.length`），按去掉首尾空白后的字符数比较。请求里没有任何金额、会员或短信验证标记字段。
+- 响应：新订单 201，重放 200；字段恰好为 `order_number`、`status`、`subtotal_sen`、`shipping_fee_sen`、`total_sen`、`payment_expires_at`（UTC，带 `Z`）、`csrf_token`（本次签发了授权时为由该 cookie 算出的 CSRF 令牌，否则为 null）；带 `Cache-Control: no-store`。不含收货资料、会话令牌或幂等键。签发授权时以 SHOP-TASK-019 的 `set_order_access_cookie` 设置 `__Host-shop_order_access`；请求带来的 cookie 对应有效会话时沿用该会话，并以原值重设 cookie 刷新 Max-Age（按 SHOP-TASK-019 的说明）。
+- 处理顺序与错误码：
+  1. 逐块读请求体，超过 8 KB（取自计价接口的 `MAX_BODY_BYTES`）即停止读取并返回 413，先于一切校验（含 Content-Type 与幂等键）。
+  2. Content-Type 的媒体类型不是 `application/json`（允许带 `charset` 等参数）即 415。
+  3. 幂等键与请求体一并校验，有错即 422；手机号用 `normalize_phone(phone, phone_region)` 规范化（以加号开头时以输入为准，不按收货国家重新解析），不成立时 422 且该项 `type` 为 `phone_invalid`、`loc` 为 `["body", "phone"]`。422 的 `detail` 每项只有 `type`、`loc`、`msg`（固定消息），不回显提交的内容。
+  4. 按幂等键查订单：存在时指纹相同即重放（200），不同即 409 `{"detail": "idempotency_conflict"}`；都不重新计价、不动库存。
+  5. 当次请求里用 `is_sms_verification_enabled` 读开关：关闭时一律放行；开启时用 `is_sms_whitelisted` 判定，白名单号码只有在 `verification_attempts` 里该号码有创建时间在最近 30 分钟内、用途 `checkout`、状态 `undeliverable` 或 `suspended` 的记录时放行，否则 403 `{"detail": "sms_verification_required"}`。
+  6. 用 `quote_cart` 按收货国家与州属重新计价：运费行缺失 503 `{"detail": "shipping is unavailable"}`（与计价接口相同）；有任何不可购买、超出限购或库存不足的行即不可下单。
+  7. 按 SKU 规格 ID 从小到大逐行 `UPDATE product_variants SET available_stock = available_stock - n WHERE id = ? AND available_stock >= n`，影响行数不是 1 即失败。
+  8. 6 判定不可下单或 7 失败时回滚，再按幂等键查一次：有则按指纹重放或报冲突，没有才 409 `{"detail": "order_not_placeable"}`。
+- 事务内步骤（全部成功才提交）：扣库存；写订单（状态 `awaiting_demo_payment`、会员 ID 空、认领状态 `open`、券折扣与积分抵扣与获得积分 0、运费与所用运费区代码和版本号、应付 = 小计 + 运费、幂等键与请求指纹、创建时间、支付到期时间 = 创建时间 + 15 分钟、支付时间空；订单号用 `generate_order_number`）；写入订单时撞上幂等键唯一约束即回滚并按 4 的规则重放或报冲突；订单行（按请求顺序的行序、SKU 规格外键与 SKU 快照、三语商品名称与规格说明、单价、件数、行小计）；`price_order`（不传券与积分）的逐件分摊快照；收货资料（姓名、规范化电话、国家、地区：马来西亚为州属代码、其他国家为地区文本或空、地址、邮编）；下单事件（迁移前状态空、迁移后 `awaiting_demo_payment`、操作者 `guest`）；`issue_order_access(..., "guest_checkout", now)`；提交后才设置 cookie。
+- 幂等规则：请求指纹为下列内容的 JSON（键排序、无空白、非 ASCII 转义）的 SHA-256 十六进制：`lines`（按请求顺序的 `[sku, quantity]`）、规范化后的 `phone`、去掉首尾空白后的 `name`、`address`、`postal_code`、`country_code`、`state_code`、`region`（空串按 null）。手机号原文与 `phone_region` 不进指纹，所以同一号码换一种写法仍是同一请求。指纹用常量时间比较。重放时订单仍为 `awaiting_demo_payment` 且当前时间早于支付到期时间才签发新的 `guest_checkout` 授权并设 cookie；否则只返回订单信息，不设 cookie，`csrf_token` 为 null。
+- 偏离与取舍，请审阅（未改设计，未发现设计本身必须停下的问题）：
+  - 逐件分摊快照的「获得积分」写 0，没有照抄 `price_order` 算出的值：`price_order` 的 `points_earned` 是「模拟支付成功后应给的积分」，而第 3 条「游客不积累积分」，验收也要求订单的获得积分为 0；若逐件写非零值，逐件之和与订单的 0 不一致，之后的退款追回积分也会对游客订单误算。逐件的原价、券额、积分额与现金实付照 `price_order` 的结果写入。
+  - 先按幂等键查订单，再做短信开关判定：按「失败、并发与重试」「相同键相同请求返回原结果」与「网络中断时先查询原订单」，已创建的订单在开关后来被打开时仍能重放；新订单照常在当次请求里读开关判定。
+  - 「最近 30 分钟」按短信验证记录的创建时间判断（`created_at >= now - 30 分钟`，与表上的手机号 + 创建时间索引一致），不看更新时间。
+  - 规格说明格式为「规格名: 规格值」按规格名的排列序号以「 / 」连接（中文用全角冒号，如「颜色：红色 / 尺码：M」），各部分按目录的回退英文规则取文案；无规格商品为空串；超过列长度（300）时截断，不让订单因说明过长而失败。商品名称直接按回退规则取（列长与商品表相同，不截断）。
+  - 邮编按验收要求去掉首尾空白后不得为空；SHOP-TASK-010 模型说明里「没有邮编的国家存空串」的情形因此不会由本接口写入。
+  - 错误码以 `{"detail": "<错误码>"}` 返回；`phone_invalid` 与其他请求格式错误一起放在 422 的 `detail` 列表里（`type` 为 `phone_invalid`），幂等键缺失或不合法也在该列表里（`loc` 为 `["header", "Idempotency-Key"]`）。
+  - 413 先于 415：验收要求超限「先于一切校验」，所以先读完请求体（逐块判断）再看 Content-Type。
+  - 校验通过后计价仍抛 `InvalidDestination` 时（理论上不会发生）返回 422，与计价接口一致。
+  - UX P05 没有为字段定名；字段名按设计与模型取（`phone`、`phone_region`、`name`、`address`、`postal_code`、`country_code`、`state_code`、`region`），未发现与设计冲突之处。
+  - 限流不在本任务：本接口目前没有任何限流，留给已登记的「公开接口限流（计价、下单）」任务。支付超时取消与库存释放、模拟支付与取消留给 SHOP-TASK-021 与 SHOP-TASK-031；会员下单（含优惠券与积分、认领状态 `not_claimable`）留给会员与优惠券积分任务。
+  - 接口与服务都不写日志；异常与错误响应不含个人资料、订单号、幂等键或令牌。
+- 验证到什么程度：人工逐条对照验收标准与设计原句自查。`tests/test_guest_order.py` 用 TestClient 与 SQLite 内存库（StaticPool，每个连接打开外键检查并断言已打开，会话依赖换成每个请求一个会话）按模型建表，自建目录、运费、汇率、站点设置与短信验证记录，每条测试的文档字符串写明它守住的设计原句或验收约定，覆盖：新订单 201 且响应只有七个字段、不含姓名、地址、电话、幂等键与令牌；订单各列（含应付 = 小计 + 运费、支付到期 = 创建 + 15 分钟、指纹等于按规范化请求算出的值）；订单行三语名称与规格说明（含回退英文）、逐件分摊（原价与现金实付之和等于商品小计，券、积分、获得积分为 0）；收货资料去空白、库存按件数扣减、下单事件一条；其他国家的地区文本与兜底运费、空白地区存空；Set-Cookie 的名称与属性、授权通过 `check_order_access`、CSRF 令牌由 cookie 算出；收货电话按请求地区规范化且不随收货国家改变（含加号优先）；开关关闭（含没有站点设置行）时马来西亚号码无记录也能下单；开关开启时无记录、记录超过 30 分钟、状态 sent 或 approved、用途不是 checkout、别的号码的记录都 403，最近 30 分钟内 undeliverable 或 suspended 放行，白名单外号码放行；不可购买、超出限购、库存不足都 409 且不建订单、不动库存、不签发凭据；两行中规格 ID 较大的第二行在扣库存前被并发请求扣到不够时，第一行库存不变；运费行缺失 503；同键同请求（电话写法与空白不同）重放同一订单、不再扣库存与写事件并重新设 cookie；同键不同请求 409；重放已过支付到期时间的订单不设 cookie、不新增授权；用第二个数据库会话在计价前先提交同键订单，使插入撞上唯一约束时回滚、库存不变、不多建订单，指纹相同重放该单、不同报 idempotency_conflict；同键的第一个请求已提交并把库存扣到不够时，第二个请求在计价或扣库存时失败都返回第一个请求的订单；415（缺失、text/plain、表单）与带 charset 的 JSON 接受；413（合法 JSON 带多余字段、缺幂等键、非 JSON）；422（缺幂等键、过短、过长、含非法字符、多余字段、马来西亚缺州属或州属不合法、其他国家给州属、马来西亚给地区、小写国家码、姓名地址邮编为空白、姓名地址邮编地区超过列长度、非法电话与非法地区代码、缺电话、重复 SKU、100 件）且响应不含提交的姓名、电话、地址；下单不产生 `app` 日志记录。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest；下单的查询与带条件的 UPDATE 未在真 MySQL 上执行，真并发（两个连接、MySQL 的可重复读）只以上述 SQLite 交错模拟。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-021 模拟支付、取消与支付超时 API
+
+- [x] 按 `docs/DESIGN.md` 1.10（提交 `e3b3505`）「订单与退款状态」「计价、优惠、积分与库存」第 6 条、「失败、并发与重试」第 1、2 条、「数据模型」的 PaymentAttempt / OrderEvent 一行与「权限与资料保护」第 6、7 条，提供支付页 P06 与结果页 P07 所需的三个游客接口与可重复运行的超时取消函数：`app/services/payment.py`（支付、取消、超时取消与订单视图）、`app/api/pay.py`（接口，`app/main.py` 挂上路由）、`app/services/order_access.py` 新增只读的 `list_order_access`（已有函数行为未改，`tests/test_order_access.py` 未改）。测试见 `tests/test_demo_payment.py`。未加表或迁移，未加定时调度，未做页面，未改前端、CI、部署配置或设计。设计闸门：DESIGN 1.10（提交 `e3b3505`）。
+- 接口与字段（三个接口都只凭 SHOP-TASK-019 的 cookie `__Host-shop_order_access` 与 `guest_checkout` 授权访问，不读会员会话，`lookup` 授权不能用；订单号不进任何路径或查询参数）：
+  - `GET /api/pay/orders?lang=en|zh|ms`（默认 `en`，取值与目录接口相同）：`{"orders": [...], "csrf_token": "<由 cookie 重新算出>"}`，订单按授权到期时间从晚到早（同时到期按授权 ID 从大到小）。每张订单：`order_number`、`status`、`created_at`、`payment_expires_at`、`server_time`（时间都是带 `Z` 的 UTC）、`lines`（每行 `name`、`variant_label`、`quantity`、`unit_price_sen`、`line_subtotal_sen`，按请求语言取下单时的快照，按行序）、`subtotal_sen`、`shipping_fee_sen`、`total_sen`、`recipient`（`name`、`phone`、`country_code`、`region`、`address`、`postal_code` 原文；没有收货资料记录时为 null）、`last_payment`（最近一次模拟支付的 `method`、`result`、`created_at`，没有为 null）、`cancelled_by`（已取消时 `self` 为本人、`timeout` 为超时，否则 null）。返回前先对这些订单执行超时取消。带 `Cache-Control: no-store`。没有有效授权 401。
+  - `POST /api/pay/attempts`：请求头 `Idempotency-Key`（规则同 SHOP-TASK-020：16 到 64 个字母、数字、连字符或下划线，只能出现一次）与 `X-CSRF-Token`；请求体只有 `order_number`、`method`（`card`、`bank`、`ewallet`，对应 `pay.method_card`、`pay.method_bank`、`pay.method_ewallet`，库里存为 `demo_card`、`demo_bank`、`demo_ewallet`）、`result`（`success`、`failure`，库里存为 `succeeded`、`failed`）。新写支付尝试 201，按幂等键重放 200；响应 `{"method", "result", "status", "paid_at"}`（重放时方式与结果是原来那次的，状态与支付时间是订单当前的），带 `no-store`。
+  - `POST /api/pay/cancel`：请求头 `X-CSRF-Token`，不要求幂等键；请求体只有 `order_number`。200 `{"status": "demo_cancelled", "cancelled_by": "self" | "timeout"}`，带 `no-store`。
+- 写接口的处理顺序（每一步不通过即停止，之前不读写订单数据）：逐块读请求体，超过 8 KB 即 413（先于一切校验，含带多余字段或没有 cookie 的超限请求体）→ 不是 `application/json` 即 415 → 幂等键（只有支付要）与请求体一并校验，多出字段（含卡号、账户等）、非法支付方式或结果即 422（`detail` 每项只有 `type`、`loc`、`msg`，不回显提交内容）→ 按订单号查订单 ID，以当前 cookie 与 `guest_checkout` 调用 `check_order_access` → `check_csrf_token` → 才查幂等键与订单状态。
+- 错误码：401 `{"detail": "access_expired"}`（页面的 `pay.session_expired`；订单号格式不对或不存在、无 cookie、授权过期、不属于该会话、范围不符一律同一响应，带 `no-store`）；403 `{"detail": "csrf_failed"}`；409 `{"detail": "idempotency_conflict"}`，以及带订单当前状态的 `{"detail": "order_expired" | "order_not_payable" | "order_not_cancellable", "status": "<当前状态>"}`；415、413、422 同上。
+- 状态与库存变动：
+  - 支付幂等：指纹是 `{"method", "order_id", "result"}`（接口里的取值）的 JSON（键排序、无空白）的 SHA-256；先按幂等键查支付尝试，指纹相同（常量时间比较）返回原结果、不同 409，都不改订单。
+  - 订单已支付及之后或已取消：409 `order_not_payable`，不写支付尝试。已过支付到期时间（`now >= payment_expires_at`）：先对该单执行超时取消，再 409 `order_expired`，不写支付尝试。
+  - 失败：只写支付尝试，订单状态、库存与事件都不变，可再次提交。
+  - 成功：经 `is_transition_allowed(awaiting_demo_payment, demo_paid, guest)` 检查后，同一事务里 `UPDATE orders SET status = 'demo_paid', paid_at = now WHERE id = ? AND status = 'awaiting_demo_payment' AND payment_expires_at > now`，写支付尝试与一条操作者 `guest` 的事件；库存不动（预留即被消耗）。UPDATE 未命中时回滚：同键的并发请求已提交则按幂等规则重放或冲突，否则 409 `order_not_payable` 与当前状态。写支付尝试撞上幂等键唯一约束时回滚，按幂等规则处理。
+  - 取消：待支付且未到期时，经迁移判定后同一事务里带条件地改为 `demo_cancelled`（`status = 'awaiting_demo_payment' AND payment_expires_at > now`）、加回库存、写一条操作者 `guest` 的事件；未命中（并发先提交）时回滚后按当前状态回答。已取消直接返回当前状态，不再写事件或加回库存；已支付及之后 409 `order_not_cancellable`（按设计走退款）。
+  - 加回库存：按订单行把件数加回 SKU 规格的当日可用库存，规格已删除（规格 ID 为空）的行跳过；同一规格的多行先合并件数，再按 SKU 规格 ID 从小到大逐个 `UPDATE product_variants SET available_stock = available_stock + n WHERE id = ?`，与 SHOP-TASK-020 扣库存的顺序一致。
+- 超时取消函数 `expire_overdue_orders(db, now, *, order_ids=None, limit=None) -> int`：选出状态为 `awaiting_demo_payment` 且 `payment_expires_at <= now` 的订单（可限定订单 ID 集合与单次上限，按到期时间从早到晚），逐张在各自的事务里经迁移判定后带条件地改为 `demo_cancelled`（`status = 'awaiting_demo_payment' AND payment_expires_at <= now`）、加回库存、写一条操作者 `system` 的事件并提交；未命中即回滚跳过，所以同一订单只生效一次，重复运行或与取消、支付并发时不重复加回库存。返回本次取消的张数。docstring 写明按分钟定时运行由之后的定时任务负责；本任务只在查看、支付与取消接口里对涉及的订单调用它。
+- 留给之后的任务：按分钟定时运行超时取消（定时任务）；会员凭会话访问 P06、P07（会员任务）；券与积分预占的释放（优惠券与积分任务扩展本任务的取消与超时路径，本任务未预留参数）；限流（本接口目前没有任何限流，留给统一处理公开接口限流的任务）；支付或取消后撤销该单的短期凭据（本任务不撤销，结果页仍凭它查看）。
+- 偏离与取舍，请审阅（未改设计，未发现设计本身必须停下的问题）：
+  - 设计闸门是 DESIGN 1.10（提交 `e3b3505`）；仓库里现为 1.11 候批稿，本任务涉及的「订单与退款状态」「计价、优惠、积分与库存」第 6 条、「失败、并发与重试」第 1、2 条与「权限与资料保护」第 6、7 条与 1.10 相同。字段参照 `docs/UX.md` 的 P06、P07，未发现与设计冲突之处；UX 没有为字段定名，字段名按设计与模型取。
+  - 取消接口遇到已过支付到期时间的待支付订单时，先按超时取消（事件操作者 `system`），再返回 200 与 `cancelled_by: "timeout"`，而不是记为本人取消：验收只规定了支付与查看接口先做超时处理，这样三个接口对过期订单的处理一致，库存仍只加回一次。本人取消的带条件 UPDATE 也因此要求未到期。
+  - 409 `order_expired`、`order_not_payable`、`order_not_cancellable` 另带 `status` 字段（验收要求条件 UPDATE 未命中时「返回 409 与订单当前状态」，三者统一这样做）；`idempotency_conflict` 只有 `detail`。条件 UPDATE 未命中的错误码用 `order_not_payable`。
+  - 支付接口新写 201、重放 200，与下单接口一致。
+  - 请求体里的订单号按字符串校验（1 到 16 个字符，多于 16 个 422）；格式不是 16 位大写 Crockford Base32 的不查库，直接与订单号不存在一样 401。
+  - 查看接口的 `lang` 不用 FastAPI 的 `Literal` 查询参数校验，而是自己校验后 422：取值与默认值与目录接口相同，但 FastAPI 默认的 422 会回显所给的值，与「422 响应不回显请求内容」不符。目录接口本身未改。
+  - 查看接口是 GET，却会执行超时取消（写库）：按验收「返回前先对这些订单执行下面的超时取消」。
+  - 超时取消函数每取消一张就提交一次，未命中即回滚，一张失败不影响其他各张；调用方传入的会话因此会被提交或回滚。
+  - `cancelled_by` 按取消事件的操作者：`system` 为 `timeout`，`guest`（以后的 `member`）为 `self`，对应 UX 的 `result.cancelled` 与 `result.cancelled_by_you`。
+  - 支付与取消后不撤销 `guest_checkout` 授权：结果页 P07 仍凭它查看；撤销由之后的任务按需要实现。
+  - 接口与服务都不写日志；异常与错误响应不含个人资料、订单号、幂等键或令牌。
+- 验证到什么程度：人工逐条对照验收标准与设计原句自查。`tests/test_demo_payment.py` 用 TestClient 与 SQLite 内存库（StaticPool，每个连接打开外键检查并断言已打开，会话依赖换成每个请求一个会话）按模型建表，订单都经 SHOP-TASK-020 的下单接口建立并从下单响应取得 cookie 与 CSRF 令牌，每条测试的文档字符串写明它守住的设计原句或验收约定，覆盖：查看接口的字段、订单行快照（含按语言取与回退英文）、收货资料原文、CSRF 令牌由 cookie 算出、no-store；非法语言 422 不回显；多张订单按授权到期时间从晚到早（改授权到期时间后顺序随之改变）；另一个浏览器只看到自己的订单；最近一次模拟支付与取消方；查看时先对过期订单执行超时取消；无 cookie、格式不合法的 cookie、授权过期、只有 lookup 授权都 401 且响应相同；成功后状态、支付时间、事件与支付尝试各一条且库存不变；三种支付方式的存储值；失败只多一条支付尝试且可再试后成功；同键同请求重放 200 不重复写入，同键不同请求（结果或方式不同，或另一张订单）409；缺、错或属于别的浏览器的 CSRF 令牌 403；已支付后再付与取消 409；已取消后再付 409；过期后付款 409 `order_expired` 且订单变为已取消、库存加回、事件操作者 system；恰在到期时刻付款按过期处理；取消后库存加回、事件操作者 guest，重复取消不再加回；取消过期订单按超时取消；取消缺或错 CSRF 403；支付与取消在无 cookie、授权过期、lookup 授权、其他浏览器的 cookie、订单号不存在时都是同一个 401 且不改订单；同一会话已授权 A、未授权 B 时对 B 支付与取消都与无 cookie 的响应逐字节相同，B 的订单、库存、事件与支付尝试不变；订单行规格 ID 顺序与行序相反（另加同一规格的一行与规格为空的一行）时，以 SQL 执行事件钩子断言取消与超时取消加回库存的 UPDATE 按规格 ID 从小到大发出、同一规格合并件数、空规格跳过；超时取消函数重复运行只生效一次、未到期的订单不受影响、到期边界（前一刻不取消、恰在到期时刻取消）、订单 ID 集合与单次上限；并发以第二个数据库会话在条件 UPDATE 之前（或第一次按幂等键查询之后）提交另一操作模拟：先取消后到的成功请求、两笔不同幂等键的成功、超时取消与本人取消（两个先后）、超时取消与成功在到期时刻（两个先后）、两次超时取消同时运行，都断言最终状态唯一、库存恰好加回一次或不加回、支付尝试与状态事件条数；同一幂等键的失败请求插入撞上唯一约束后回滚并重放或返回 `idempotency_conflict`，同键的成功请求先提交时条件 UPDATE 未命中后重放；非 JSON 415（缺失、text/plain、表单）；超过 8 KB 先于其他校验 413（合法 JSON 带多余字段、缺幂等键、非 JSON、没有 cookie）；缺或非法 Idempotency-Key、非法支付方式或结果、缺字段、卡号、CVV、账户号码等多余字段 422 且请求体校验先于授权；取消缺订单号或带多余字段 422；这些错误响应都不回显请求内容；接口与超时取消函数不产生 `app` 日志记录。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest；查询与带条件的 UPDATE 未在真 MySQL 上执行，真并发（两个连接、MySQL 的可重复读与行锁）只以上述 SQLite 交错模拟。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-023 结账参考数据：地区与国家码列表、马来西亚州属列表
+
+- [x] 提供结账页 P05 所需的只读参考数据接口：`app/services/regions.py`（数据）、`app/api/regions.py`（接口，`app/main.py` 挂上路由）；测试见 `tests/test_regions.py`。不读写数据库，未加表或迁移，未改运费与手机号规则（`app/services/shipping.py`、`app/services/phone.py` 未改），未做页面，未改前端、设计、CI、部署配置或 `pyproject.toml`。设计闸门：不适用（只读的地区参考数据，不涉及金额计算，不收集、存储或展示个人资料）。
+- 接口 `GET /api/checkout/regions`：不需登录，不读写 cookie，不用会话依赖（未配置数据库时也照常 200）；其他方法 405。响应带 `Cache-Control: public, max-age=86400`，字段恰好为：
+  - `regions`：`[{"code": "AC", "calling_code": 247}, ...]`，phonenumbers 支持的全部两位地区代码（`phonenumbers.SUPPORTED_REGIONS`，非地理编码如 +800、+882 不在其中）与 `country_code_for_region` 给出的国家呼叫码（整数），按地区代码排序。不含国家名称，前端按界面语言本地化。
+  - `my_states`：`[{"code": "MY-01", "name": "Johor"}, ...]`，MY-01 到 MY-16 依次为 Johor、Kedah、Kelantan、Melaka、Negeri Sembilan、Pahang、Pulau Pinang、Perak、Perlis、Selangor、Terengganu、Sabah、Sarawak、Wilayah Persekutuan Kuala Lumpur、Wilayah Persekutuan Labuan、Wilayah Persekutuan Putrajaya；三种界面语言都用这一马来文官方名称（Kelvin 2026-10-01 决定），接口不看 `lang`。
+  - `default_phone_region`：`"MY"`（结账第 1 步国家码默认 +60，DESIGN 1.11「权限与资料保护」），取自 `app/services/shipping.py` 的 `MALAYSIA`。
+- 数据来源：地区与呼叫码来自已安装的 phonenumbers 元数据，随其版本变化；州属代码取自 `app/services/shipping.py` 的 `MY_STATE_CODES`（排序后与名称表按位置配对，不另立一套代码），名称表写在 `app/services/regions.py`；两者数目不一致时模块导入即失败。两份列表进程内各算一次。
+- 偏离与取舍，请审阅（未改设计，未发现设计本身的问题）：
+  - 验收标准只说「可按静态数据缓存」，缓存时长取一天（`public, max-age=86400`）；数据只在部署新代码或升级 phonenumbers 时变化。
+  - 州属名称表放在新的 `app/services/regions.py`，而不是 `app/services/shipping.py`：后者不在本任务的可改路径内；代码仍只从 `MY_STATE_CODES` 取。
+  - 接口路径在 `/api/checkout` 下，但用独立的路由模块，`app/api/checkout.py` 未改。
+- 验证到什么程度：人工逐条对照验收标准自查。`tests/test_regions.py` 用 TestClient（会话依赖换成一调用就抛错的替身），每条测试的文档字符串写明它守住的验收原句或设计约定，覆盖：响应只有三个字段、地区项不含名称；MY 与 SG 的呼叫码为整数 60 与 65；每项代码是两位大写字母、已排序、不重复，呼叫码都是整数；代码集合等于 `phonenumbers.SUPPORTED_REGIONS` 且呼叫码与 phonenumbers 相同；州属恰好 16 项、顺序与名称逐项相同；州属代码集合等于 `MY_STATE_CODES`；带 `lang=en|zh|ms` 时州属名称不变；默认地区为 MY 且在列表中、呼叫码 60；会话替身下与未配置数据库时都 200；带不带 cookie 结果相同、不设 cookie、写方法 405；`Cache-Control` 可公开缓存、不是 `no-store`。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
