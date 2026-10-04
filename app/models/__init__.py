@@ -18,6 +18,7 @@ from app.models.order import (
     OrderRecipient,
     PaymentAttempt,
 )
+from app.models.order_access import OrderAccessGrant, OrderAccessSession
 from app.models.shipping import DemoFxRate, ShippingRate
 
 __all__ = [
@@ -26,6 +27,8 @@ __all__ = [
     "Member",
     "MemberSession",
     "Order",
+    "OrderAccessGrant",
+    "OrderAccessSession",
     "OrderEvent",
     "OrderItem",
     "OrderItemUnit",
