@@ -8,7 +8,7 @@
 每单限购依据 docs/DESIGN.md 1.10（提交 e3b3505）「计价、优惠、积分与库存」第 8 条
 （SHOP-TASK-016）：每行件数 1–99；同一商品各行件数合计超过该商品的每单限购件数时，
 这些行标为超出限购，不拒绝整个请求；标注优先级为不可购买、超出限购、库存不足。
-下单时的整单校验留给游客下单任务。
+下单时的整单校验由游客下单（app/services/ordering.py，SHOP-TASK-020）用本模块重新计价后执行。
 
 只发 SELECT，不写库、不缓存价格与费率。
 SKU 不存在、停用或所属商品未发布的行只给 SKU、件数与状态。
@@ -108,11 +108,11 @@ class CheckoutQuote:
     can_place_order: bool
 
 
-def _purchasable(
+def purchasable(
     session: Session,
     skus: Sequence[str],
 ) -> dict[str, tuple[ProductVariant, Product]]:
-    """启用且所属商品已发布的 SKU，按 SKU 原文索引。
+    """启用且所属商品已发布的 SKU，按 SKU 原文索引。游客下单（app/services/ordering.py）也用它。
 
     SKU 在 Python 里逐字比对：MySQL 默认排序规则不区分大小写、比较时忽略尾随空格，
     只靠 WHERE 会把 tee-red 当成 TEE-RED。
@@ -140,13 +140,13 @@ def _first_images(session: Session, product_ids: set[int]) -> dict[int, str]:
     return images
 
 
-def _selected_options(
+def selected_options(
     session: Session,
     product_ids: set[int],
     variant_ids: set[int],
     lang: Language,
 ) -> dict[int, list[SelectedOption]]:
-    """每个 SKU 所选的规格，按规格名的排列序号。"""
+    """每个 SKU 所选的规格，按规格名的排列序号。游客下单也用它取三语规格说明。"""
     stmt = (
         select(ProductOption)
         .where(ProductOption.product_id.in_(product_ids))
@@ -198,11 +198,11 @@ def quote_cart(
     if country_code is not None:
         shipping = quote_shipping(session, country_code, state_code)
 
-    found = _purchasable(session, [item.sku for item in items])
+    found = purchasable(session, [item.sku for item in items])
     product_ids = {product.id for _, product in found.values()}
     variant_ids = {variant.id for variant, _ in found.values()}
     images = _first_images(session, product_ids) if found else {}
-    options = _selected_options(session, product_ids, variant_ids, lang) if found else {}
+    options = selected_options(session, product_ids, variant_ids, lang) if found else {}
 
     # 每单限购按商品合计；不可购买的行不在 found 里，不计入任何商品的合计。
     product_quantities: dict[int, int] = {}
