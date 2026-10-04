@@ -582,3 +582,19 @@
   - 州属名称表放在新的 `app/services/regions.py`，而不是 `app/services/shipping.py`：后者不在本任务的可改路径内；代码仍只从 `MY_STATE_CODES` 取。
   - 接口路径在 `/api/checkout` 下，但用独立的路由模块，`app/api/checkout.py` 未改。
 - 验证到什么程度：人工逐条对照验收标准自查。`tests/test_regions.py` 用 TestClient（会话依赖换成一调用就抛错的替身），每条测试的文档字符串写明它守住的验收原句或设计约定，覆盖：响应只有三个字段、地区项不含名称；MY 与 SG 的呼叫码为整数 60 与 65；每项代码是两位大写字母、已排序、不重复，呼叫码都是整数；代码集合等于 `phonenumbers.SUPPORTED_REGIONS` 且呼叫码与 phonenumbers 相同；州属恰好 16 项、顺序与名称逐项相同；州属代码集合等于 `MY_STATE_CODES`；带 `lang=en|zh|ms` 时州属名称不变；默认地区为 MY 且在列表中、呼叫码 60；会话替身下与未配置数据库时都 200；带不带 cookie 结果相同、不设 cookie、写方法 405；`Cache-Control` 可公开缓存、不是 `no-store`。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-033 框架测试按路由表推算尚未实现的页面
+
+- [x] 把 `frontend/src/components/SiteFrame.test.tsx` 里「renders no navigation item for pages that do not exist yet」与「has no WhatsApp button, placeholder or contact form」两条测试由写死「哪些页面还没做」改为按路由表推算，之后的页面任务（结账、模拟支付、订单查询、退款申请等）不必为这两条测试改这个文件。只改这一个测试文件与本记录，未改页面与源码、其他测试、`package.json` 与锁文件、CI 或部署配置。设计闸门：不适用（只改测试，不碰金额、个人资料与业务代码）。
+- 推算规则（辅助代码与两条测试同在该文件，测试上方注释写明规则、依据与改动原因）：
+  - 导航：表 `PENDING_PAGES` 列出尚未实现的页面——查询订单 `/track`（`common.nav_track`）、登录 `/login`（`common.nav_login`）、会员中心 `/account`、注册 `/register`。`pendingNavigationFindings(html, language, isImplemented)` 只对 `isImplemented` 为假的项检查：有导航文字的项不出现 `>导航文字<`，所有项都不出现 `href="<路径>` 开头的链接（与原正则一样按前缀匹配）。测试传入 `router.tsx` 的 `isRoutePath`，对路由表每个路径、每种语言断言结果为空；某路径一进路由表即自动不再断言。依据：SHOP-TASK-014 验收的「尚未实现页面的导航项不渲染」。
+  - 表单：表 `PAGE_FORM_PATHS` 列出线框里页面主体有填写或选择后提交的表单的页面——结账 `/checkout`、模拟支付 `/pay`、订单查询 `/track`、退款申请 `/track/order/refund`（查单模式）与 `/account/order/refund`（会员模式）、登录与忘记密码 `/login`、`/forgot-password`、注册 `/register`、会员中心 `/account`；这些页面主体的表单由各自页面的测试负责。商品列表 `/products` 的筛选控件不在表单里，不进表。`contactFormFindings(html, path)` 把页面切成框架（根元素开标签、演示横幅与页头即 `<header` 之前的部分，页头去掉 `role="search"` 的搜索表单，最后一个 `<footer` 起的页脚与收尾）与页面主体（`</header>` 与页脚之间）：框架对每页断言没有 `form` 或 `textarea`；主体只对路径不在表里的页面断言；不含 `whatsapp`（不区分大小写）与不含 `{{` 对整页、所有页面断言。依据：`docs/UX.md`「全局框架」页脚一条的「不设站内联系表单」；WhatsApp 两项依据 `docs/UX.md` Q10。
+  - 新增两条用例证明推算本身：导航用替身判断（全部未实现、把 `/track` 视为已实现、全部已实现），被判为已实现的项不再出现在结果里，其余项照常出现；表单用自建的页面片段，表里每个路径的主体表单不报、`/`、`/products`、`/privacy` 的主体表单报出，页脚里的表单与 whatsapp、`{{` 在表里的页面上也报出，并断言 `/products` 不在表里。
+- 改前与改后对照（当前路由表 `/`、`/products`、`/products/:slug`、`/cart`、`/privacy`）：
+  - 导航：改前每个路径、每种语言断言不含 `common.nav_track`、`common.nav_login` 的 `>文字<`，且不匹配 `href="/(track|login|account|register)`；改后四个路径都不在路由表，检查的是同样两个导航文字与同样四个 href 前缀。
+  - 表单：改前每个路径断言整页不含 whatsapp、`{{`，并在整页去掉 `role="search"` 表单后不含 `form`、`textarea`；改后整页的 whatsapp、`{{` 不变，五个路径都不在 `PAGE_FORM_PATHS`，所以框架与主体都要求没有 `form`、`textarea`，两部分合起来覆盖整页。
+- 偏离与取舍，请审阅：
+  - 搜索表单只在页头里去掉，不再在整页去掉：主体或页脚里若出现 `role="search"` 的表单，改后会被报出（改前不会）。当前页面没有这种表单，所以在当前路由表下检查内容不变；这只比改前更严，未放宽。
+  - 表单表按路由表里的路径逐字比较（不按前缀）：例如以后若用 `/pay/:id` 这样的模式，需要由那个任务在表里写入该模式；导航表按前缀匹配 href，所以 `/track` 进了路由表后，`/track/…` 开头的链接也不再由本测试断言。
+  - 主体的切分以最后一个 `</header>` 与最后一个 `<footer` 为界；找不到页头或页脚时抛错，测试失败而不是跳过。
+- 验证到什么程度：人工逐条对照验收标准自查，并人工核对当前路由表下改后两条测试检查的内容与改前相同（见上面的对照）。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查。检查命令结果由 Worker 另行记录。
