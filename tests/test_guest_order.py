@@ -363,7 +363,8 @@ def _post(client: TestClient, body: object, key: str | None = None) -> Any:
 def _stocks(db: Session, catalog: _Catalog) -> tuple[int, int, int]:
     """TEE-RED-M、TEE-BLUE-M、MUG 的当日可用库存。"""
     stmt = select(ProductVariant.id, ProductVariant.available_stock)
-    stock = dict(db.execute(stmt).tuples())
+    # Result 有 keys()，dict() 会把它当映射按键取值；先转成元组列表。
+    stock = dict(db.execute(stmt).tuples().all())
     return stock[catalog.red_m], stock[catalog.blue_m], stock[catalog.mug]
 
 
@@ -601,7 +602,7 @@ def test_other_country_region_and_fallback_rate(db: Session, client: TestClient)
     assert japan.total_sen == SUBTOTAL + 8000
     assert (singapore.shipping_zone_code, singapore.shipping_fee_sen) == ("SG", 2000)
     stmt = select(OrderRecipient.order_id, OrderRecipient.region)
-    assert dict(db.execute(stmt).tuples()) == {japan.id: "Tokyo", singapore.id: None}
+    assert dict(db.execute(stmt).tuples().all()) == {japan.id: "Tokyo", singapore.id: None}
 
 
 def test_set_cookie_and_grant_pass_the_check(db: Session, client: TestClient) -> None:
