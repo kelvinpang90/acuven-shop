@@ -23,6 +23,9 @@
   Claude Code 开的运营者 PR（登记、收尾、文档与规则）在必需 CI 全绿、Codex 最后一轮结论为「可合并」后由 Claude Code 合并，
   合并后确认 main 上该提交的 CI 与部署成功；OpenClaw Worker 的 PR 仍由 Kelvin 在 Telegram 发「批准」、由 Worker 合并
   （`.platform/project.yaml` 的 `merge_owner: kelvin` 指的就是这一类，不变）。控制面仓库的 PR 按控制面自己的规则。不直推默认分支。
+  Worker 的 PR 开着时不合并运营者 PR：main 的必需检查要求分支与 main 同步，main 一前进 Worker 的 PR 就变成 BEHIND，
+  而 Worker 合并只接受 CLEAN 并锁定 head SHA（更新分支也会被拒），批准后必然以 `merge_rejected` 结束。运营者 PR 可以先跑 CI 与审查，等 Worker 的 PR 合并后再合并
+  （起因：2026-10-04 #88 在 SHOP-TASK-019 的 PR #89 开出 42 秒后合并，#89 变为 BEHIND）。
 - 一个编号任务一个分支一个 PR，不夹带；以 Draft PR 交付，CI 全绿后再请求审查。
 - **碰钱、碰个人数据的任务先出设计、Kelvin 批准后才写代码**：钱包 / 账本 / 定价 / 支付 / 退款 / 幂等 / 状态机，
   以及收集、存储、展示、导出个人数据（姓名、电话、邮箱、地址、证件等）的改动。设计一变，之前的批准作废。
