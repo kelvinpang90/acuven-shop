@@ -20,6 +20,7 @@ from app.models.order import (
 )
 from app.models.order_access import OrderAccessGrant, OrderAccessSession
 from app.models.shipping import DemoFxRate, ShippingRate
+from app.models.site import SiteSetting
 
 __all__ = [
     "Category",
@@ -40,6 +41,7 @@ __all__ = [
     "ProductOptionValue",
     "ProductVariant",
     "ShippingRate",
+    "SiteSetting",
     "SmsDailyUsage",
     "VariantOptionValue",
     "VerificationAttempt",
