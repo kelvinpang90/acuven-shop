@@ -833,7 +833,7 @@ tasks:
       按 docs/DESIGN.md 1.10「权限与资料保护」建立订单访问会话与按订单的授权记录两张表并写迁移，另提供签发授权、
       校验授权、设置 cookie 与校验 CSRF 令牌的函数，供之后的游客下单、模拟支付与查单接口使用。
       不加接口、不建订单、不做查单或支付逻辑、不做页面，不改设计。设计闸门：DESIGN 1.10（提交 e3b3505）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-010
       - SHOP-TASK-016
