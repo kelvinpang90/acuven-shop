@@ -971,7 +971,7 @@ tasks:
       按 docs/DESIGN.md 1.11 建立站点设置表（首版只有短信验证开关，默认关闭）并写迁移；提供服务端每次从数据库读取开关当前值的函数，
       供下单、短信发送、注册登录与注销任务判定；另提供公开只读接口，供前台决定显示哪一组短信相关界面。
       不加修改开关的接口，不做后台页面或审计记录，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-019
     acceptance_criteria:
