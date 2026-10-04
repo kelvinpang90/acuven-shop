@@ -194,6 +194,40 @@ def check_order_access(
     return grant_id is not None
 
 
+def list_order_access(
+    db: Session,
+    cookie_value: str | None,
+    scope: str,
+    now: datetime,
+) -> list[int]:
+    """当前浏览器对哪些订单有这种范围的有效授权，返回订单 ID；只读。
+
+    有效的条件与 check_order_access 相同：会话存在、未撤销、未到期，授权未撤销、未到期。
+    按授权到期时间从晚到早（即最近签发的在前），同时到期按授权 ID 从大到小。
+    格式不合法的 cookie 值不查库，返回空列表。列出不代替逐单校验：
+    写操作仍须对请求里的订单调用 check_order_access 与 check_csrf_token。
+    """
+    _require_scope(scope)
+    _require_naive(now)
+    if not _is_well_formed(cookie_value):
+        return []
+
+    order_ids = db.scalars(
+        select(OrderAccessGrant.order_id)
+        .join(OrderAccessSession, OrderAccessGrant.session_id == OrderAccessSession.id)
+        .where(
+            OrderAccessSession.token_hash == _token_hash(cookie_value),
+            OrderAccessSession.revoked_at.is_(None),
+            OrderAccessSession.expires_at > now,
+            OrderAccessGrant.scope == scope,
+            OrderAccessGrant.revoked_at.is_(None),
+            OrderAccessGrant.expires_at > now,
+        )
+        .order_by(OrderAccessGrant.expires_at.desc(), OrderAccessGrant.id.desc())
+    )
+    return list(order_ids)
+
+
 def set_order_access_cookie(response: Response, token: str) -> None:
     """把会话令牌写进唯一的订单访问 cookie。
 
