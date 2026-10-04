@@ -1484,3 +1484,101 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 管理后台登录分三层（数据 / 规则 / 接口），依据 docs/DESIGN.md 1.11（提交 2d13250）「数据模型」AdminAccount / AuditEvent 一行
+  # 与「权限与资料保护」第 4–6 条，以及 docs/HANDOFF.md 记录的 Kelvin 2026-10-04 决定（账号由运营者在服务器上跑命令创建；
+  # 同一来源与用户名 1 小时内失败满 10 次锁定 1 小时；后台会话 30 天到期；锁定告警等运营告警邮件接入后补；
+  # 后台业务操作的审计记录由业务接口任务补）。本层只建表与约束。迁移接在 SHOP-TASK-032 的 0013 之后。
+  - id: SHOP-TASK-034
+    title: 管理员账号、后台会话与审计记录的数据模型
+    purpose: >-
+      按 docs/DESIGN.md 1.11「数据模型」AdminAccount / AuditEvent 一行建立管理员账号、后台会话与审计记录三张表，写对应的 Alembic 迁移。
+      只建表与约束；不写密码哈希、建账号命令、会话签发、锁定或登录逻辑，不加接口、不做页面，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）。拆分：数据层，规则与接口分别由 SHOP-TASK-035、036 交付。
+    status: ready
+    depends_on:
+      - SHOP-TASK-032
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.11「数据模型」AdminAccount / AuditEvent 一行、「权限与资料保护」第 4–6 条以及 docs/HANDOFF.md 记录的 Kelvin 2026-10-04 管理员登录决定一致；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - app/models/admin.py 定义三个模型，沿用 app/db/base.py 的基类、约束命名约定与 InnoDB、utf8mb4 表选项，时间一律不带时区的 UTC，外键一律 RESTRICT；app/models/__init__.py 导出它们；除后台会话撤销时间与审计记录的对象类别、对象 ID 外所有列一律非空；检查约束只用比较、LENGTH、LIKE、IN / NOT IN 与 IS NULL，SQLite 与 MySQL 都能执行
+      - 管理员账号表：用户名（3 到 32 个字符，全表唯一；只含小写字母、数字与下划线由写入方保证，库里检查长度）、密码哈希（非空，不超过 255 个字符）、创建时间、密码更新时间；不存姓名、电话、邮箱或其他个人资料；「单一管理员」由之后的建账号命令保证，表不加行数限制
+      - 后台会话表：所属管理员、会话令牌的 SHA-256 十六进制摘要（长 64，全表唯一，令牌原文从不入库）、创建时间、到期时间、撤销时间（可空）；检查约束保证到期时间晚于创建时间；会话时长（30 天）、令牌生成与 cookie 由 SHOP-TASK-035、036 实现
+      - 审计记录表：发生时间、操作的管理员（非空）、操作名（1 到 40 个字符；取值由写入方的常量决定，库里不按枚举约束，以便之后的业务接口任务增加操作而不改约束）、对象类别（可空，1 到 20 个字符）与对象 ID（可空整数），检查约束保证二者同时为空或同时非空；按发生时间建索引；不存来源地址、提交的用户名、密码或其他个人资料
+      - 新迁移文件 alembic/versions/20261004_0014_admin.py，revision 为 0014、down_revision 为 0013；upgrade 建三张表，downgrade 按依赖倒序删除；约束名按命名约定逐个写出；迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，alembic check 在它比较的范围内无差异，由 PR 的必需 CI 检查 backend 执行；PR 正文逐表列出检查约束与表选项
+      - tests/test_admin_models.py 用 SQLite 内存库（开启外键检查）按模型建表，先写入合法的账号、会话与审计记录作对照，再验证每个检查约束、唯一约束与外键各至少一个被拒的反例（含每个非空列写入空值被拒、用户名过短与过长、重复用户名、重复会话摘要、到期不晚于创建、对象类别与对象 ID 只有一个为空、删除被会话或审计记录引用的账号被拒）；每条测试写明它守住的是设计里哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）；docs/TODO.md 新增 SHOP-TASK-034 记录段（三张表的关键约束、偏离、验证到什么程度），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加接口、不改 app/main.py、不改其他模型与已有迁移、不改前端代码；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - app/models/admin.py
+      - app/models/__init__.py
+      - alembic/versions/20261004_0014_admin.py
+      - tests/test_admin_models.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 管理员登录的规则层：密码哈希、建账号与重设密码命令、后台会话、按来源与用户名的失败锁定、审计写入。不加接口。
+  - id: SHOP-TASK-035
+    title: 管理员密码、建账号命令、后台会话与登录锁定规则
+    purpose: >-
+      提供管理员登录所需的规则函数：密码哈希与校验、运营者在服务器上运行的建账号与重设密码命令、30 天后台会话的签发校验与撤销、
+      CSRF 令牌、同一来源与用户名 1 小时内失败满 10 次锁定 1 小时的判定，以及审计记录写入。不加接口、不做页面，不接告警，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 docs/HANDOFF.md 记录的 Kelvin 2026-10-04 决定。拆分：规则层，接口由 SHOP-TASK-036 交付。
+    status: ready
+    depends_on:
+      - SHOP-TASK-026
+      - SHOP-TASK-034
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.11「权限与资料保护」第 4 条（管理员登录按来源与账号组合限流，连续失败后短时锁定并告警；锁定解除不绕过密码校验；单一管理员也须服务端授权与会话到期）、第 6 条（应用日志不记录密码）以及 docs/HANDOFF.md 记录的 Kelvin 2026-10-04 决定一致；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - app/services/passwords.py 用标准库 hashlib.scrypt（N 为 2 的 14 次方、r 为 8、p 为 5，每个密码 16 字节随机盐）生成自描述的哈希字符串（含算法名与参数，不超过 255 个字符），校验以常量时间比较、对格式不合法的哈希返回不通过而不抛异常；提供一个固定的假哈希供用户名不存在时照样跑一次校验，使两种失败耗时相近；模块不写日志，密码不出现在异常消息或 repr 里；docstring 写明之后的会员密码复用本模块
+      - app/services/admin_auth.py 提供后台会话函数：签发（secrets 生成 32 字节随机令牌，库里只存 SHA-256 摘要，到期为签发时刻加 30 天，不随使用延长）、按 cookie 值校验（格式不合法不查库；会话不存在、已撤销或已到期都不通过，通过时返回所属账号）、撤销单个会话、撤销某账号全部会话；CSRF 令牌由令牌原文加不同于订单访问的用途前缀做 SHA-256 得到、不入库，校验用常量时间比较；签发与撤销只 flush 不提交，由调用方提交；写审计记录的函数接收操作名常量、账号与可选的对象类别和 ID，操作名至少有 admin_login_succeeded、admin_login_failed、admin_login_locked、admin_logout、admin_account_created、admin_password_reset
+      - 同一文件提供登录锁定函数，计数用 SHOP-TASK-026 的计数与只读函数：标识为访客来源与规范化用户名（去掉首尾空白、转小写）的组合；失败计数桶 admin_login_failures 窗口 1 小时，计到第 10 次时在锁定桶 admin_login_lock 计一次（窗口 1 小时，即从这一刻起锁 1 小时）并返回「刚锁定」；判定函数只读锁定桶，已锁定时即使密码正确也拒绝；锁定到期后照常校验密码；Redis 不可用时抛 SHOP-TASK-026 的不可用异常由调用方拒绝请求；docstring 写明按来源与用户名组合而不是只按账号锁定，是为了让攻击者无法把唯一的管理员锁在外面，以及成功登录不清零失败计数（SHOP-TASK-026 只提供自增与读取，1 小时窗口内累计满 10 次即锁）
+      - app/admin.py 可用 python -m app.admin 运行，两个子命令：create 接收用户名，库里已有任何管理员账号时拒绝（单一管理员）；reset-password 重设唯一账号的密码并撤销它的全部后台会话；两者都以不回显的方式读两次密码、不一致或少于 12 个字符或多于 256 个字符时拒绝，密码不从命令行参数或环境变量读取；用户名不合 3 到 32 个小写字母、数字或下划线时拒绝；成功时写对应的审计记录并提交；数据库连接沿用 SHOP_DATABASE_URL 与 app/db/session.py 的会话工厂，未配置时以非零退出；输出与退出码不含密码或哈希；docstring 写明运营者在服务器上于 API 容器内运行它
+      - tests/test_passwords.py 与 tests/test_admin_auth.py 用 SQLite 内存库（开启外键检查）与测试文件内自写的内存替身 Redis 客户端（不连真 Redis、不加依赖）验证：同一密码两次哈希不同且都能通过校验、错误密码与格式不合法的哈希不通过、假哈希对任何密码都不通过；会话签发后可校验、30 天后不通过、撤销后不通过、格式不合法的 cookie 不查库、库里没有令牌原文；CSRF 令牌不等于入库摘要且错误或缺失时不通过；同一来源与用户名第 10 次失败返回刚锁定、之后正确密码也被拒、锁定窗口过后恢复，另一来源或另一用户名不受影响，用户名大小写与首尾空白视为同一个；替身抛连接错误时抛不可用异常；每条测试写明它守住的是设计里哪一句或 Kelvin 的哪一项决定；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - tests/test_admin_cli.py 以替换读密码函数与会话工厂的方式验证：create 成功写账号与 admin_account_created 审计记录、已有账号时拒绝且不写入、两次密码不一致或过短时拒绝、非法用户名拒绝；reset-password 更新哈希与密码更新时间、撤销该账号全部会话并写 admin_password_reset；未配置数据库时非零退出；输出不含密码；docs/TODO.md 新增 SHOP-TASK-035 记录段（哈希参数、会话与 CSRF 规则、锁定桶与阈值、命令用法、偏离、验证到什么程度，并写明锁定告警等运营告警邮件接入后补、后台业务操作的审计由业务接口任务补），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加接口、不改 app/main.py、不加表或迁移；不改 SHOP-TASK-019、026 已有函数的行为，它们的测试照常通过；不改前端代码；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - app/services/passwords.py
+      - app/services/admin_auth.py
+      - app/admin.py
+      - tests/test_passwords.py
+      - tests/test_admin_auth.py
+      - tests/test_admin_cli.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 管理员登录的接口层：登录、退出、取当前会话，以及之后后台业务接口共用的「须为已登录管理员」依赖。
+  - id: SHOP-TASK-036
+    title: 管理员登录、退出与会话 API
+    purpose: >-
+      用 SHOP-TASK-035 的规则函数提供管理员登录、退出与取当前会话三个接口，以及之后后台业务接口共用的管理员会话依赖；
+      登录按来源与用户名锁定，Redis 不可用时拒绝。不做后台页面与业务接口，不接告警，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 docs/HANDOFF.md 记录的 Kelvin 2026-10-04 决定。拆分：接口层。
+    status: ready
+    depends_on:
+      - SHOP-TASK-035
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.11「权限与资料保护」第 4–6 条以及 docs/HANDOFF.md 记录的 Kelvin 2026-10-04 决定一致；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - 三个接口的所有响应（含错误）都带 Cache-Control 为 no-store；不写日志，或日志只记录不含用户名、密码、令牌与来源地址的事件；422 响应不回显请求内容；错误响应不含内部细节
+      - POST /api/admin/login 只接受 JSON（否则 415），请求体上限 8 KB 且先于其他校验（超出 413），请求体只有用户名与密码两个字符串字段（多出字段 422，密码超过 256 个字符 422）；按以下顺序处理，每一步不通过即停止：用 SHOP-TASK-026 的来源函数取访客来源，用 SHOP-TASK-035 的判定函数查锁定，已锁定返回 429（错误码 login_locked）且不查账号、不校验密码；按规范化用户名查账号并校验密码（账号不存在时用假哈希照样校验）；失败时用 SHOP-TASK-035 的函数计一次失败，账号存在时写 admin_login_failed、刚锁定时再写 admin_login_locked，返回 401（错误码 login_failed），用户名不存在与密码错误的状态码、响应体与响应头完全相同；Redis 不可用时返回 503（错误码 service_unavailable），发生在查锁定时不查账号，发生在计失败时返回同一个 503 而不是 401
+      - 登录成功时在同一事务里签发后台会话、写 admin_login_succeeded 并提交，设置 cookie __Host-shop_admin_session（HttpOnly、Secure、SameSite=Strict、Path=/、不设 Domain、Max-Age 为 30 天），返回 204 且响应体为空
+      - 提供 FastAPI 依赖 require_admin：按 cookie 用 SHOP-TASK-035 的校验函数取当前管理员，没有有效会话时 401（错误码 admin_session_required），不区分会话不存在、已撤销或已到期；docstring 写明之后所有后台接口都必须用它，写操作还须校验 X-CSRF-Token
+      - GET /api/admin/session 经 require_admin 返回用户名、会话到期时间与由 cookie 算出的 CSRF 令牌；POST /api/admin/logout 经 require_admin 并校验 X-CSRF-Token 请求头（缺失或不符 403，错误码 csrf_failed，不撤销会话），通过后撤销当前会话、写 admin_logout 并提交，清除 cookie，返回 204；app/main.py 挂上路由
+      - tests/test_admin_auth_api.py 用 TestClient 与 SQLite 内存库（开启外键检查，覆盖会话依赖与 SHOP-TASK-026 的取客户端依赖，Redis 用测试文件内的内存替身）验证：正确登录 204、cookie 属性、库里一条会话与一条成功审计；用户名不存在与密码错误响应完全相同、前者不写审计；同一来源与用户名第 10 次失败后正确密码也 429、另一来源不受影响；Redis 未配置与替身抛连接错误时 503 且没有查账号；替身只在计失败时抛错时返回 503；取会话与退出在无 cookie、会话过期、已撤销时都 401；退出缺或错 CSRF 403 且会话仍有效，通过后会话撤销、cookie 清除、再取会话 401；非 JSON 415、超过 8 KB 413（先于其他校验）、多余字段 422，错误响应都不回显请求内容；所有响应 no-store；每条测试写明它守住的是设计里哪一句或 Kelvin 的哪一项决定；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）；docs/TODO.md 新增 SHOP-TASK-036 记录段（接口与错误码、处理顺序、cookie 属性、偏离、验证到什么程度），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表或迁移；不改 SHOP-TASK-019、026、035 已有函数的行为，它们的测试照常通过；不改前端代码；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - app/api/admin_auth.py
+      - app/main.py
+      - tests/test_admin_auth_api.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
