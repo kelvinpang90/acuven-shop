@@ -1453,3 +1453,34 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 框架测试按路由表推算「尚未实现的页面」。SHOP-TASK-017、018 开启前都因 SiteFrame.test.tsx 写死的未实现页面
+  # （导航文字、链接前缀、整页不许有表单）与新路由冲突，先改了契约才能开启；改完后新页面任务不必再为此动这个文件。只改测试，不改页面。
+  - id: SHOP-TASK-033
+    title: 框架测试按路由表推算尚未实现的页面
+    purpose: >-
+      把 frontend/src/components/SiteFrame.test.tsx 里按路由表遍历、却写死了「哪些页面还没做」的两条测试改为按路由表推算：
+      尚未实现页面的导航文字与链接只在该路径不在路由表时才断言不出现；「不设站内联系表单」改为对每页框架检查，
+      页面主体只对线框里没有输入控件的页面检查。之后的页面任务（结账、模拟支付、订单查询、退款申请等）因此不必为这两条测试改这个文件。
+      只改这一个测试文件，不改页面与源码，不改其他测试，不装依赖。设计闸门：不适用（只改测试，不碰金额、个人资料与业务代码）。
+      拆分：不拆（2 个允许路径、8 条验收标准）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-018
+    acceptance_criteria:
+      - 只改 frontend/src/components/SiteFrame.test.tsx 里「renders no navigation item for pages that do not exist yet」与「has no WhatsApp button, placeholder or contact form」两条测试及其辅助代码，这个文件其他测试不动；两条测试上方的注释写明推算规则、依据（SHOP-TASK-014 验收的「尚未实现页面的导航项不渲染」、docs/UX.md Q10「不设站内联系表单」）与改动原因（避免每个新页面任务都要改这个文件）
+      - 导航那条：测试文件里列出尚未实现的页面——查询订单（/track，导航文字 common.nav_track）、登录（/login，common.nav_login）、会员中心（/account）、注册（/register）；每一项只在 router.tsx 的 isRoutePath 对该路径为假时断言每个页面、每种语言都不出现该导航文字（有导航文字的项），也不出现 href 以该路径开头的链接（与现在的正则一样按前缀匹配）；该路径一进路由表即自动不再断言
+      - 表单那条：每个页面的演示横幅、页头（去掉 role="search" 的搜索表单后）与页脚里都没有 form 或 textarea；页面主体没有 form 或 textarea 的断言只对不在下面这张表里的页面成立——测试文件里列出线框含输入控件的页面路径：结账（/checkout）、模拟支付（/pay）、订单查询（/track）、退款申请（/track/order/refund）、登录（/login）、注册（/register）、会员中心（/account），这些页面主体的表单由各自页面的测试负责；不含 whatsapp（不区分大小写）与不含 {{ 两项断言对所有页面不变
+      - 推算写成接收「路径是否已实现」判断的函数，测试实际使用 isRoutePath；另加用例用替身判断（例如把 /track 视为已实现）证明：被判为已实现的项不再断言，其余项照常断言，且检查表里的页面主体不做表单断言、表外页面照常断言
+      - 在当前路由表下，改后的两条测试与改前检查的内容相同（不删减、不放宽），PR 正文逐项对照列出改前与改后各检查什么；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-033 记录段（推算规则、两张表的内容与依据、偏离、验证到什么程度）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改 frontend/src 下 SiteFrame.test.tsx 以外的任何文件
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/components/SiteFrame.test.tsx
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
