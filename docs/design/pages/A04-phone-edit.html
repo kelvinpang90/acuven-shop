@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390">
+<title>A04 Edit product — phone</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}.acs-admin__input,.acs-admin__select{box-sizing:border-box;max-width:100%;min-width:0}.acs-admin main *{min-width:0;overflow-wrap:anywhere}</style>
+</head>
+<body>
+<div class="acs-admin" data-mode="light" style="width: 390px; height: 1700px; display: flex; flex-direction: column">
+<div class="acs-admin__banner" style="padding: 6px 16px"><span class="acs-tag acs-tag--demo">DEMO</span>Admin — demo store. Actions here never move real money or goods.</div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--a-nav); color: var(--a-on-nav)"><a href="#" aria-label="Back" style="display: grid; place-items: center; width: 44px; height: 44px; color: inherit"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></a><span style="font-weight: 600; min-width: 0">Edit product</span><button class="acs-admin__btn acs-admin__btn--secondary" type="button" style="margin-left: auto; flex-shrink: 0; color: var(--a-on-nav); border-color: var(--a-nav-muted)">Log out</button></div>
+<main style="display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; padding: 16px">
+
+<div style="display: grid; gap: 8px"><span class="acs-admin__muted" style="font-size: 12px; font-weight: 600">Content language</span><div style="display: flex; gap: 6px"><button class="acs-admin__btn" type="button" style="min-height: 44px">English</button><button class="acs-admin__btn acs-admin__btn--secondary" type="button" style="min-height: 44px">中文</button><button class="acs-admin__btn acs-admin__btn--secondary" type="button" style="min-height: 44px">Bahasa Melayu</button></div></div>
+<label style="display: grid; gap: 6px; font-weight: 600">Product name<input class="acs-admin__input" value="Crew Neck Tee" style="min-height: 44px"></label>
+<label style="display: grid; gap: 6px; font-weight: 600">Description<textarea class="acs-admin__input" rows="3" style="padding: 8px 10px; font: inherit">A soft cotton tee with a relaxed fit for everyday wear.</textarea></label>
+<label style="display: grid; gap: 6px; font-weight: 600">Category<select class="acs-admin__select" style="min-height: 44px"><option>Apparel</option></select></label>
+<label style="display: flex; gap: 10px; align-items: center; min-height: 44px"><input type="checkbox" checked style="width: 20px; height: 20px">Published</label>
+<div style="display: grid; gap: 8px"><span style="font-weight: 600">Images</span><div style="display: flex; gap: 10px; align-items: center"><span style="width: 64px; height: 64px; border-radius: 4px; background: var(--a-select)"></span><span style="width: 64px; height: 64px; border-radius: 4px; background: var(--a-select)"></span></div><button class="acs-admin__btn acs-admin__btn--secondary" type="button" style="justify-content: center; min-height: 44px">Upload</button><span class="acs-admin__muted" style="font-size: 13px">Allowed types: [TYPES]. Max size: [SIZE] MB.</span></div>
+<div style="display: grid; gap: 6px"><span style="font-weight: 600">Options (e.g. colour, size)</span><span>Colour: Black, White, Navy</span><span>Size: S, M, L, XL</span></div>
+<div style="display: grid; gap: 6px"><label style="display: grid; gap: 6px; font-weight: 600">Limit per order<input class="acs-admin__input" value="10" inputmode="numeric" style="width: 90px"></label><span class="acs-admin__muted" style="font-size: 13px">1–99 items, counted across all options of this product. Changes apply to new orders only.</span></div>
+<div class="acs-admin__panel" style="display: grid; gap: 8px; padding: 14px"><div style="display: flex; justify-content: space-between; gap: 12px"><span>SKU</span><span>crew-neck-tee-black-m</span></div><div style="display: flex; justify-content: space-between; gap: 12px"><span>Option values</span><span>Black / M</span></div><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px"><label style="display: grid; gap: 6px; font-weight: 600">Price (MYR)<input class="acs-admin__input" value="39.00" inputmode="decimal"></label><label style="display: grid; gap: 6px; font-weight: 600">Daily initial stock<input class="acs-admin__input" value="20" inputmode="numeric"></label></div><div style="display: flex; justify-content: space-between; gap: 12px"><span>Available today</span><span>20</span></div><button class="acs-admin__btn acs-admin__btn--secondary" type="button" style="justify-content: center; min-height: 44px">Adjust today's stock</button></div>
+<div class="acs-admin__panel" style="display: grid; gap: 8px; padding: 14px"><div style="display: flex; justify-content: space-between; gap: 12px"><span>SKU</span><span>crew-neck-tee-black-xl</span></div><div style="display: flex; justify-content: space-between; gap: 12px"><span>Option values</span><span>Black / XL</span></div><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px"><label style="display: grid; gap: 6px; font-weight: 600">Price (MYR)<input class="acs-admin__input" value="42.00" inputmode="decimal"></label><label style="display: grid; gap: 6px; font-weight: 600">Daily initial stock<input class="acs-admin__input" value="8" inputmode="numeric"></label></div><div style="display: flex; justify-content: space-between; gap: 12px"><span>Available today</span><span>8</span></div><button class="acs-admin__btn acs-admin__btn--secondary" type="button" style="justify-content: center; min-height: 44px">Adjust today's stock</button></div>
+<div style="padding: 10px 12px; border-radius: 4px; background: var(--demo-soft); color: var(--on-demo-soft); font-size: 13px">Changes to initial stock take effect from the next daily reset.</div>
+<button class="acs-admin__btn" type="submit" style="justify-content: center; min-height: 44px">Save</button>
+</main>
+</div>
+</body>
+</html>

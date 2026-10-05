@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390">
+<title>A05 New coupon — phone</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}.acs-admin__input,.acs-admin__select{box-sizing:border-box;max-width:100%;min-width:0}.acs-admin main *{min-width:0;overflow-wrap:anywhere}</style>
+</head>
+<body>
+<div class="acs-admin" data-mode="light" style="width: 390px; height: 1000px; display: flex; flex-direction: column">
+<div class="acs-admin__banner" style="padding: 6px 16px"><span class="acs-tag acs-tag--demo">DEMO</span>Admin — demo store. Actions here never move real money or goods.</div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--a-nav); color: var(--a-on-nav)"><a href="#" aria-label="Back" style="display: grid; place-items: center; width: 44px; height: 44px; color: inherit"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></a><span style="font-weight: 600; min-width: 0">New</span><button class="acs-admin__btn acs-admin__btn--secondary" type="button" style="margin-left: auto; flex-shrink: 0; color: var(--a-on-nav); border-color: var(--a-nav-muted)">Log out</button></div>
+<main style="display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; padding: 16px">
+<label style="display: grid; gap: 6px; font-weight: 600">Coupon code<input class="acs-admin__input"></label>
+<fieldset style="margin: 0; padding: 0; border: 0; display: grid; gap: 6px"><legend style="font-weight: 600; padding: 0 0 6px">Type</legend>
+<label style="display: flex; gap: 8px; align-items: center; min-height: 36px"><input type="radio" name="ctype" checked style="width: 18px; height: 18px">Fixed amount (RM)</label>
+<label style="display: flex; gap: 8px; align-items: center; min-height: 36px"><input type="radio" name="ctype" style="width: 18px; height: 18px">Percentage (%)</label></fieldset>
+<label style="display: grid; gap: 6px; font-weight: 600">Value<input class="acs-admin__input" inputmode="decimal"></label>
+<div style="display: grid; gap: 6px"><span style="font-weight: 600">Valid from / until</span><div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; align-items: center"><input class="acs-admin__input" type="date" aria-label="Valid from"><span>–</span><input class="acs-admin__input" type="date" aria-label="Valid until"></div></div>
+<label style="display: grid; gap: 6px; font-weight: 600">Minimum item spend (RM)<input class="acs-admin__input" inputmode="decimal"></label>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px"><label style="display: grid; gap: 6px; font-weight: 600">Total uses allowed<input class="acs-admin__input" inputmode="numeric"></label><label style="display: grid; gap: 6px; font-weight: 600">Uses per member<input class="acs-admin__input" inputmode="numeric"></label></div>
+<div style="padding: 10px 12px; border-radius: 4px; background: var(--demo-soft); color: var(--on-demo-soft); font-size: 13px">Changes apply to new orders only. Existing orders keep their original amounts.</div>
+<button class="acs-admin__btn" type="submit" style="justify-content: center; min-height: 44px">Save</button>
+</main>
+</div>
+</body>
+</html>

@@ -1,6 +1,7 @@
 # 视觉稿导出
 
 > 2026-09-30 导出。Kelvin 已于 2026-09-30 认可视觉稿；本导出合并后，由后续运营者 PR 在 `docs/HANDOFF.md` 记录审阅与提交号。
+> 2026-10-05 补充后台画板：全部后台页面的手机稿，A03、A05、A06、A07、A09 的桌面稿，后台 ☰ 菜单；各后台页面右上角加退出按钮（`admin.logout`），已画的 A02、A04、A08 桌面导航补上站点设置。Kelvin 已于 2026-10-05 认可，记录见 `docs/HANDOFF.md`。
 
 页面的内容、流程、去向与文案以 [UX.md](../UX.md) 与 [UX-COPY.md](../UX-COPY.md) 为准；本目录只规定样式。二者冲突时以 UX 文档为准，并把冲突报给运营者。
 
@@ -50,7 +51,6 @@
 
 ## 未画的内容
 
-- 后台 A03 退款审核、A05 优惠券、A06 运费与演示汇率、A07 库存重置：沿用 A02、A04 的后台样式与组件。
 - P09、P10 的完整会员模式（与查单模式同版式，差别见 UX.md）、手机版游客结账第 3 步、会员中心手机版的积分 / 优惠券 / 设置页签：按已画画板与 UX.md 推出。
 
 ## 页面索引
@@ -108,8 +108,25 @@
 | P13 我的订单 · 手机 | [P13-phone.html](pages/P13-phone.html) | [P13-phone.png](reference/P13-phone.png) | 390 × 950 |
 | P14 隐私说明 · 桌面 | [P14-desktop.html](pages/P14-desktop.html) | [P14-desktop.png](reference/P14-desktop.png) | 1440 × 1710 |
 | P14 隐私说明 · 手机 | [P14-phone.html](pages/P14-phone.html) | [P14-phone.png](reference/P14-phone.png) | 390 × 2220 |
-| A01 后台登录 | [A01-desktop.html](pages/A01-desktop.html) | [A01-desktop.png](reference/A01-desktop.png) | 1440 × 720 |
-| A02 订单与模拟发货 | [A02-desktop.html](pages/A02-desktop.html) | [A02-desktop.png](reference/A02-desktop.png) | 1440 × 900 |
-| A04 商品、规格与库存 | [A04-desktop.html](pages/A04-desktop.html) | [A04-desktop.png](reference/A04-desktop.png) | 1440 × 1080 |
+| 后台 ☰ 菜单展开 · 手机 | [A00-phone-menu.html](pages/A00-phone-menu.html) | [A00-phone-menu.png](reference/A00-phone-menu.png) | 390 × 844 |
+| A01 后台登录 · 桌面 | [A01-desktop.html](pages/A01-desktop.html) | [A01-desktop.png](reference/A01-desktop.png) | 1440 × 720 |
+| A01 后台登录 · 手机（锁定提示） | [A01-phone.html](pages/A01-phone.html) | [A01-phone.png](reference/A01-phone.png) | 390 × 844 |
+| A02 订单与模拟发货 · 桌面 | [A02-desktop.html](pages/A02-desktop.html) | [A02-desktop.png](reference/A02-desktop.png) | 1440 × 900 |
+| A02 订单列表 · 手机 | [A02-phone-list.html](pages/A02-phone-list.html) | [A02-phone-list.png](reference/A02-phone-list.png) | 390 × 844 |
+| A02 订单详情 · 手机（含全部已退冻结提示） | [A02-phone-detail.html](pages/A02-phone-detail.html) | [A02-phone-detail.png](reference/A02-phone-detail.png) | 390 × 1280 |
+| A03 退款审核 · 桌面 | [A03-desktop.html](pages/A03-desktop.html) | [A03-desktop.png](reference/A03-desktop.png) | 1440 × 900 |
+| A03 退款列表 · 手机 | [A03-phone-list.html](pages/A03-phone-list.html) | [A03-phone-list.png](reference/A03-phone-list.png) | 390 × 900 |
+| A03 退款详情 · 手机 | [A03-phone-detail.html](pages/A03-phone-detail.html) | [A03-phone-detail.png](reference/A03-phone-detail.png) | 390 × 900 |
+| A04 商品、规格与库存 · 桌面 | [A04-desktop.html](pages/A04-desktop.html) | [A04-desktop.png](reference/A04-desktop.png) | 1440 × 1080 |
+| A04 编辑商品 · 手机 | [A04-phone-edit.html](pages/A04-phone-edit.html) | [A04-phone-edit.png](reference/A04-phone-edit.png) | 390 × 1700 |
+| A05 优惠券 · 桌面 | [A05-desktop.html](pages/A05-desktop.html) | [A05-desktop.png](reference/A05-desktop.png) | 1440 × 900 |
+| A05 优惠券列表 · 手机 | [A05-phone-list.html](pages/A05-phone-list.html) | [A05-phone-list.png](reference/A05-phone-list.png) | 390 × 900 |
+| A05 新建优惠券 · 手机 | [A05-phone-new.html](pages/A05-phone-new.html) | [A05-phone-new.png](reference/A05-phone-new.png) | 390 × 1000 |
+| A06 运费区与演示汇率 · 桌面 | [A06-desktop.html](pages/A06-desktop.html) | [A06-desktop.png](reference/A06-desktop.png) | 1440 × 1180 |
+| A06 运费区与演示汇率 · 手机 | [A06-phone.html](pages/A06-phone.html) | [A06-phone.png](reference/A06-phone.png) | 390 × 1560 |
+| A07 库存重置结果 · 桌面（含失败展开） | [A07-desktop.html](pages/A07-desktop.html) | [A07-desktop.png](reference/A07-desktop.png) | 1440 × 760 |
+| A07 库存重置结果 · 手机 | [A07-phone.html](pages/A07-phone.html) | [A07-phone.png](reference/A07-phone.png) | 390 × 1000 |
 | A08 店铺装修 · 桌面 | [A08-desktop.html](pages/A08-desktop.html) | [A08-desktop.png](reference/A08-desktop.png) | 1440 × 1250 |
 | A08 店铺装修 · 手机 | [A08-phone.html](pages/A08-phone.html) | [A08-phone.png](reference/A08-phone.png) | 390 × 1640 |
+| A09 站点设置 · 桌面（含已保存提示） | [A09-desktop.html](pages/A09-desktop.html) | [A09-desktop.png](reference/A09-desktop.png) | 1440 × 640 |
+| A09 站点设置 · 手机 | [A09-phone.html](pages/A09-phone.html) | [A09-phone.png](reference/A09-phone.png) | 390 × 844 |
