@@ -20,6 +20,7 @@ from app.models.order import (
     ReceiptConfirmation,
 )
 from app.models.order_access import OrderAccessGrant, OrderAccessSession
+from app.models.refund import RefundLine, RefundLineUnit, RefundRequest
 from app.models.shipping import DemoFxRate, ShippingRate
 from app.models.site import SiteSetting
 
@@ -42,6 +43,9 @@ __all__ = [
     "ProductOptionValue",
     "ProductVariant",
     "ReceiptConfirmation",
+    "RefundLine",
+    "RefundLineUnit",
+    "RefundRequest",
     "ShippingRate",
     "SiteSetting",
     "SmsDailyUsage",

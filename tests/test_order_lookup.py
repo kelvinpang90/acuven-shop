@@ -98,6 +98,13 @@ ORDER_FIELDS = {
     "shipping_fee_sen",
     "total_sen",
     "recipient",
+    # SHOP-TASK-029 新增的退款部分（取值见 tests/test_refunds.py）。
+    "refund_deadline",
+    "refund_window_open",
+    "refunded_total_sen",
+    "refundable_left_sen",
+    "fully_refunded",
+    "refund_requests",
 }
 
 SOURCE_BUCKET = "order_lookup_source"
@@ -832,20 +839,26 @@ def test_view_returns_fields_and_recipient(db: Session, client: TestClient) -> N
     assert before <= datetime.fromisoformat(view["server_time"]) <= datetime.now(UTC)
     assert view["lines"] == [
         {
+            "line_index": 0,
             "name": "Tee",
             "variant_label": "Colour: Red",
             "quantity": 2,
             "unit_price_sen": 2590,
             "line_subtotal_sen": 5180,
             "unit_cash_paid_sen": [2590, 2590],
+            "refundable_quantity": 2,
+            "refund_estimates_sen": [2590, 5180],
         },
         {
+            "line_index": 1,
             "name": "Mug",
             "variant_label": "",
             "quantity": 1,
             "unit_price_sen": 1500,
             "line_subtotal_sen": 1500,
             "unit_cash_paid_sen": [1500],
+            "refundable_quantity": 1,
+            "refund_estimates_sen": [1500],
         },
     ]
     assert (view["subtotal_sen"], view["shipping_fee_sen"]) == (SUBTOTAL, SHIPPING)
