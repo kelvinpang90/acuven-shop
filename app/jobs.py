@@ -1,7 +1,8 @@
-"""定时任务运行器：常驻进程每分钟执行一轮任务；另有手动执行一次超时取消的命令。
+"""定时任务运行器：常驻进程每分钟执行一轮任务；另有手动执行一次超时取消或当日库存重置的命令。
 
 依据 docs/DESIGN.md 1.11（提交 2d13250）：
-- 「计价、优惠、积分与库存」第 6 条：15 分钟未支付自动取消并释放。
+- 「计价、优惠、积分与库存」第 6 条：15 分钟未支付自动取消并释放；每天按马来西亚时间重建当日
+  可用库存为“初始库存减去仍有效的预留”（SHOP-TASK-032，见 app/services/stock_reset.py）。
 - 「订单与退款状态」第 3 条：待支付订单超时为 demo_cancelled，释放库存（券与积分预占的释放
   由之后的优惠券与积分任务扩展 SHOP-TASK-021 的超时取消路径，这里不变）。
 - 「失败、并发与重试」第 6 条：定时任务可重复运行、只生效一次；失败有告警与人工补跑办法。
@@ -10,6 +11,8 @@
 用法（生产栈里的 shop_jobs 容器与 shop_api 同一镜像）：
     python -m app.jobs run              常驻循环，SIGTERM 或 SIGINT 时退出
     python -m app.jobs cancel-expired   执行一次超时取消后退出（运营者手动补跑用）
+    python -m app.jobs reset-stock      执行一次当日库存重置后退出（运营者手动补跑用；只重置当前
+                                        马来西亚营业日期，不补过去的日期；已完成也以 0 退出）
 
 数据库连接沿用 SHOP_DATABASE_URL 与 app/db/session.py 的会话工厂。
 
@@ -25,13 +28,17 @@
    正在执行，最多再等 SHUTDOWN_GRACE_SECONDS 让它做完，到时仍未退出即强制退出（未提交的
    事务随连接断开由数据库回滚），所以收到信号后 10 秒内一定退出。
 
-任务列表：本任务只有超时取消（每轮最多 CANCEL_BATCH_LIMIT 张，剩余的下一轮继续）。之后的
-每日库存重置等任务按同样方式加入 default_jobs()：写一个 Job（名称与执行函数）。每个任务必须
+任务列表：先超时取消（每轮最多 CANCEL_BATCH_LIMIT 张，剩余的下一轮继续），再每日库存重置
+（当前马来西亚营业日期已有 succeeded 记录时跳过，否则执行；失败只记日志、下一轮重试）。之后的
+任务按同样方式加入 default_jobs()：写一个 Job（名称与执行函数）。每个任务必须
 可重复运行且只生效一次（一轮执行到一半失败或运营者手动补跑都会再次运行它），判定本次无需
 执行而跳过也算成功、正常返回，只有真正出错才抛异常。
 
-日志只记录任务名、生效条数（超时取消即取消张数）与异常类名，不记录订单号、个人资料、
-连接串或异常消息原文。
+库存重置自己管理事务（Job.own_transactions）：它要在独立事务里记下失败，不能放进运行器的
+事务里随失败一起回滚。
+
+日志只记录任务名、生效条数（超时取消即取消张数，库存重置即 SKU 数）、营业日期、结果与
+异常类名，不记录订单号、个人资料、连接串或异常消息原文。
 """
 
 from __future__ import annotations
@@ -55,6 +62,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.db.session import _session_factory
 from app.services.payment import expire_overdue_orders
+from app.services.stock_reset import business_date, reset_completed, reset_daily_stock
 
 logger = logging.getLogger(__name__)
 
@@ -91,10 +99,13 @@ class Job:
     name 只用于日志与失败计时。run 拿到本次的会话与当前时间（不带时区的 UTC），返回本次
     生效的条数。会话处在运行器的事务里：run 里的 commit 与 rollback 只作用于一个保存点，
     run 返回后运行器提交整个事务，抛异常时整个事务回滚（含 run 里已经“提交”的部分）。
+    own_transactions 为真时例外：run 拿到的是不在事务中的新会话，自己提交与回滚，运行器
+    只在它返回或抛异常后关闭会话（未提交的部分随之回滚）。
     """
 
     name: str
     run: Callable[[Session, datetime], int]
+    own_transactions: bool = False
 
 
 def cancel_expired_job(limit: int = CANCEL_BATCH_LIMIT) -> Job:
@@ -106,9 +117,33 @@ def cancel_expired_job(limit: int = CANCEL_BATCH_LIMIT) -> Job:
     return Job(name="cancel_expired_orders", run=run)
 
 
+def reset_stock_job() -> Job:
+    """每日库存重置：SHOP-TASK-032 的 reset_daily_stock，只重置当前马来西亚营业日期。
+
+    该日期已有 succeeded 记录时不调用、返回 0（跳过算成功）。返回本次重置的 SKU 数；并发的
+    另一个执行者先完成时也返回 0。日志只含营业日期、SKU 数、结果与异常类名。
+    """
+
+    def run(db: Session, now: datetime) -> int:
+        day = business_date(now)
+        if reset_completed(db, now):
+            db.rollback()
+            return 0
+        try:
+            outcome = reset_daily_stock(db, now)
+        except Exception as exc:
+            logger.error("stock reset %s failed: %s", day.isoformat(), type(exc).__name__)
+            raise
+        if outcome.performed:
+            logger.info("stock reset %s succeeded: %d skus", day.isoformat(), outcome.sku_count)
+        return outcome.sku_count
+
+    return Job(name="reset_daily_stock", run=run, own_transactions=True)
+
+
 def default_jobs() -> list[Job]:
-    """run 每轮按顺序执行的任务。"""
-    return [cancel_expired_job()]
+    """run 每轮按顺序执行的任务：先超时取消，再每日库存重置。"""
+    return [cancel_expired_job(), reset_stock_job()]
 
 
 def utc_now() -> datetime:
@@ -121,7 +156,12 @@ def run_job(job: Job, session_factory: SessionFactory, now: datetime) -> int:
     外层会话开启事务并占住连接；任务拿到的是绑在这条连接上、以保存点加入事务的会话。
     expire_overdue_orders 逐张 commit（未命中时 rollback）在这里只释放（或回滚）各自的
     保存点，所以同一次运行里后面失败时，前面已取消的订单也一起回滚。
+
+    own_transactions 的任务直接拿新会话，自己提交与回滚。
     """
+    if job.own_transactions:
+        with session_factory() as db:
+            return job.run(db, now)
     with session_factory() as outer:
         try:
             connection = outer.connection()
@@ -280,6 +320,25 @@ def cancel_expired(
     return EXIT_OK
 
 
+def reset_stock(
+    session_factory: SessionFactory | None,
+    *,
+    now: Callable[[], datetime] = utc_now,
+) -> int:
+    """执行一次当前马来西亚营业日期的库存重置，返回退出码：完成（含此前已完成）为 0，失败非零。"""
+    if session_factory is None:
+        logger.error("database is not configured")
+        return EXIT_NOT_CONFIGURED
+    job = reset_stock_job()
+    try:
+        count = run_job(job, session_factory, now())
+    except Exception as exc:
+        logger.error("job %s failed: %s", job.name, type(exc).__name__)
+        return EXIT_FAILED
+    logger.info("job %s done: %d changed", job.name, count)
+    return EXIT_OK
+
+
 def configured_session_factory() -> SessionFactory | None:
     """按 SHOP_DATABASE_URL 取会话工厂；未配置为空。引擎在第一次开会话时才建。"""
     database_url = get_settings().database_url
@@ -293,12 +352,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("run", help="run the jobs every minute until SIGTERM or SIGINT")
     commands.add_parser("cancel-expired", help="cancel overdue unpaid orders once and exit")
+    commands.add_parser("reset-stock", help="reset today's stock (Malaysia date) once and exit")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     session_factory = configured_session_factory()
     if args.command == "cancel-expired":
         return cancel_expired(session_factory)
+    if args.command == "reset-stock":
+        return reset_stock(session_factory)
 
     runner = Runner(default_jobs(), session_factory, force_exit=force_exit)
     install_signal_handlers(runner)

@@ -6,6 +6,10 @@
 
 用 SQLite 内存库按模型建表，每个连接打开外键检查（并断言已打开），订单在测试里直接写库建立。
 运行器的当前时间、计时与睡眠都换成本文件的 FakeClock，测试不真实等待；心跳文件写在 tmp_path。
+
+SHOP-TASK-032 在默认任务列表的超时取消之后加入了每日库存重置，它会把当日可用库存重建为初始
+库存减有效预留。检查超时取消加回库存件数的用例因此只运行超时取消任务（_cancel_only），断言不变；
+库存重置在运行器里的行为见 tests/test_stock_reset.py。
 """
 
 from __future__ import annotations
@@ -36,6 +40,11 @@ SHIPPING = 800
 STOCK = 5
 # 代替连接信息与异常消息原文的标记串（不是真实的连接串），用来断言它们不进日志。
 SECRET = "sentinel-connection-detail"
+
+
+def _cancel_only() -> list[jobs.Job]:
+    """默认任务列表里的超时取消任务（不含之后的每日库存重置）。"""
+    return [job for job in jobs.default_jobs() if job.name == "cancel_expired_orders"]
 
 
 # ---------------------------------------------------------------------------
@@ -277,7 +286,7 @@ def test_round_cancels_overdue_orders_and_restores_stock(
     due_now = _order(db, variant_id, START, quantity=1)
     fresh = _order(db, variant_id, START + timedelta(seconds=1), quantity=3)
 
-    _runner(jobs.default_jobs(), factory, heartbeat, clock).run_round()
+    _runner(_cancel_only(), factory, heartbeat, clock).run_round()
 
     assert _status(db, overdue) == STATUS_CANCELLED
     assert _status(db, due_now) == STATUS_CANCELLED
@@ -294,7 +303,7 @@ def test_two_rounds_at_the_same_instant_take_effect_once(
     """「失败、并发与重试」第 6 条：定时任务可重复运行，保证只生效一次。"""
     variant_id = _variant(db)
     overdue = _order(db, variant_id, START - timedelta(minutes=1))
-    runner = _runner(jobs.default_jobs(), factory, heartbeat, clock)
+    runner = _runner(_cancel_only(), factory, heartbeat, clock)
 
     runner.run_round()
     runner.run_round()
@@ -332,7 +341,9 @@ def test_round_limit_leaves_the_rest_for_the_next_round(
 def test_default_jobs_use_the_fixed_round_limit(
     db: Session, factory: jobs.SessionFactory, heartbeat: Path, clock: FakeClock
 ) -> None:
-    """SHOP-TASK-031 验收约定：run 每轮最多处理一个固定上限的订单数（CANCEL_BATCH_LIMIT）。"""
+    """SHOP-TASK-031 验收约定：run 每轮最多处理一个固定上限的订单数（CANCEL_BATCH_LIMIT）。
+    SHOP-TASK-032 验收约定：每轮在超时取消之后执行每日库存重置（它本身会取消全部到期订单，
+    所以这里只运行默认列表里的超时取消任务）。"""
     variant_id = _variant(db, stock=0)
     limit = jobs.CANCEL_BATCH_LIMIT
     order_ids = [
@@ -340,12 +351,15 @@ def test_default_jobs_use_the_fixed_round_limit(
         for i in range(limit + 1)
     ]
 
-    _runner(jobs.default_jobs(), factory, heartbeat, clock).run_round()
+    _runner(_cancel_only(), factory, heartbeat, clock).run_round()
 
     statuses = [_status(db, i) for i in order_ids]
     assert statuses.count(STATUS_CANCELLED) == limit
     assert statuses[-1] == STATUS_AWAITING_PAYMENT
-    assert [job.name for job in jobs.default_jobs()] == ["cancel_expired_orders"]
+    assert [job.name for job in jobs.default_jobs()] == [
+        "cancel_expired_orders",
+        "reset_daily_stock",
+    ]
 
 
 def test_default_clock_is_naive_utc() -> None:
@@ -376,7 +390,7 @@ def test_failing_job_rolls_back_and_the_next_round_runs(
     variant_id = _variant(db)
     overdue = _order(db, variant_id, START - timedelta(minutes=1))
     flaky = FlakyJob(flaky_variant)
-    runner = _runner([flaky.job(), *jobs.default_jobs()], factory, heartbeat, clock)
+    runner = _runner([flaky.job(), *_cancel_only()], factory, heartbeat, clock)
 
     runner.run_round()
 
@@ -416,7 +430,7 @@ def test_failure_after_committed_cancellations_rolls_back_the_whole_run(
     assert _cancel_events(db, second) == []
 
     # 下一轮的超时取消照常生效，且只生效一次。
-    _runner(jobs.default_jobs(), factory, heartbeat, clock).run_round()
+    _runner(_cancel_only(), factory, heartbeat, clock).run_round()
     assert [_status(db, i) for i in (first, second)] == [STATUS_CANCELLED] * 2
     assert _stock(db, variant_id) == STOCK + 4
     assert _cancel_events(db, first) == [ACTOR_SYSTEM]
@@ -438,8 +452,13 @@ def test_database_unavailable_is_logged_by_class_name_only(
     clock.advance(60)
     runner.run_round()
 
-    assert len(calls) == 2
-    assert _job_messages(caplog) == ["job cancel_expired_orders failed: OperationalError"] * 2
+    # 每轮两个任务（超时取消与 SHOP-TASK-032 的每日库存重置）各开一次会话、各记一条失败。
+    assert len(calls) == 4
+    each_round = [
+        "job cancel_expired_orders failed: OperationalError",
+        "job reset_daily_stock failed: OperationalError",
+    ]
+    assert _job_messages(caplog) == each_round * 2
     assert all(SECRET not in message for message in caplog.messages)
 
 
@@ -793,10 +812,11 @@ def test_main_cancel_expired_uses_the_session_factory(
 
 
 def test_main_requires_a_subcommand() -> None:
-    """SHOP-TASK-031 验收约定：提供 run 与 cancel-expired 两个子命令。"""
+    """SHOP-TASK-031 验收约定：提供 run 与 cancel-expired 两个子命令；SHOP-TASK-032 加了
+    reset-stock（见 tests/test_stock_reset.py），未知子命令仍被拒绝。"""
     with pytest.raises(SystemExit) as raised:
         jobs.main([])
     assert raised.value.code != 0
     with pytest.raises(SystemExit) as raised:
-        jobs.main(["reset-stock"])
+        jobs.main(["reset-everything"])
     assert raised.value.code != 0
