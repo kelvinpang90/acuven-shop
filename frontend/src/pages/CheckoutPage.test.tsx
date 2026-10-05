@@ -353,12 +353,28 @@ describe("deciding after continue", () => {
 describe("step 3: shipping details", () => {
   // SHOP-TASK-025 验收第 6 条「显示第 1 步的号码（只读）与 checkout.phone_change（回第 1 步）、checkout.phone_lookup_hint」与 UX P05「游客：[P3] <第 1 步号码>（只读）」。
   it.each(LANGUAGES)("shows the step 1 number read-only with change and the lookup hint in %s", (language) => {
+    // react-dom/server 把 input 的 value 写在其他属性之后，所以逐个属性比较，不依赖属性顺序。
+    const phoneField = (html: string) => {
+      const found = new RegExp(`<label class="acs-field__label" for="([^"]+)">${copy("checkout.phone", language)}</label><div class="site-checkout__readonly"><input ([^>]*)/>`).exec(html);
+      if (found === null) {
+        throw new Error("phone field not found");
+      }
+      return { labelFor: found[1] ?? "", input: found[2] ?? "" };
+    };
     const html = render({ form: step3(), quote: readyQuote(TO_BRITAIN), language });
-    expect(html).toMatch(new RegExp(`<label class="acs-field__label" for="([^"]+)">${copy("checkout.phone", language)}</label><div class="site-checkout__readonly"><input class="acs-input" id="\\1" type="tel" readonly="" value="\\+44 7700 900123"`));
+    const { labelFor, input } = phoneField(html);
+    expect(input).toContain(`class="acs-input"`);
+    expect(input).toContain(`id="${labelFor}"`);
+    expect(input).toContain(`type="tel"`);
+    expect(input).toContain(`readonly=""`);
+    expect(input).toContain(`value="+44 7700 900123"`);
     expect(html).toContain(`<button class="acs-btn acs-btn--quiet" type="button">${copy("checkout.phone_change", language)}</button>`);
-    expect(html).toMatch(new RegExp(`<span class="acs-field__hint" id="[^"]+">${copy("checkout.phone_lookup_hint", language)}</span>`));
-    const typed = render({ form: step3({ phoneRegion: "MY", phoneInput: "+44 7700 900123" }), quote: readyQuote(TO_BRITAIN), language });
-    expect(typed).toContain(`readonly="" value="+44 7700 900123"`);
+    const hintId = /aria-describedby="([^"]+)"/.exec(input)?.[1] ?? "";
+    expect(hintId).not.toBe("");
+    expect(html).toContain(`<span class="acs-field__hint" id="${hintId}">${copy("checkout.phone_lookup_hint", language)}</span>`);
+    const typed = phoneField(render({ form: step3({ phoneRegion: "MY", phoneInput: "+44 7700 900123" }), quote: readyQuote(TO_BRITAIN), language }));
+    expect(typed.input).toContain(`readonly=""`);
+    expect(typed.input).toContain(`value="+44 7700 900123"`);
   });
 
   // UX P05「游客的收货电话就是第 1 步的号码…要改须点 [checkout.phone_change] 回到第 1 步重新判定」与 SHOP-TASK-025 验收第 2 条「刷新后需重填可以接受」的反面——不刷新时不丢：
