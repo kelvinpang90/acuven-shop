@@ -865,10 +865,120 @@ export const COPY = {
     zh: "并没有真实包裹——确认只会把演示订单改为“已完成”。若不操作，模拟发货 7 天后自动完成。",
     ms: 'Tiada penghantaran sebenar — pengesahan hanya menukar pesanan demo kepada "Selesai". Jika tiada tindakan, ia selesai secara automatik 7 hari selepas penghantaran.',
   },
+  "order.request_refund": {
+    en: "Request a refund",
+    zh: "申请退款",
+    ms: "Mohon bayaran balik",
+  },
+  "order.refund_deadline": {
+    en: "Refunds can be requested until {date}.",
+    zh: "可在 {date} 前申请退款。",
+    ms: "Bayaran balik boleh dimohon sehingga {date}.",
+  },
+  "order.refunded_total": {
+    en: "Refunded so far (demo): RM {amount}",
+    zh: "累计已退（演示）：RM {amount}",
+    ms: "Telah dibayar balik (demo): RM {amount}",
+  },
+  "order.refundable_left": {
+    en: "Still refundable: RM {amount}",
+    zh: "剩余可退：RM {amount}",
+    ms: "Baki boleh dibayar balik: RM {amount}",
+  },
+  "order.refund_requests": {
+    en: "Refund requests",
+    zh: "退款申请记录",
+    ms: "Permohonan bayaran balik",
+  },
+  "order.refund_requested": {
+    en: "Under review",
+    zh: "审核中",
+    ms: "Dalam semakan",
+  },
+  "order.refund_approved": {
+    en: "Approved (demo)",
+    zh: "已批准（演示）",
+    ms: "Diluluskan (demo)",
+  },
+  "order.refund_rejected": {
+    en: "Rejected",
+    zh: "已拒绝",
+    ms: "Ditolak",
+  },
+  "order.fulfilment_frozen": {
+    en: "All items have been refunded, so this order will not move further.",
+    zh: "所有商品均已退款，订单不再推进。",
+    ms: "Semua item telah dibayar balik, jadi pesanan ini tidak akan diteruskan.",
+  },
   "order.demo_hint": {
     en: "Status changes are simulated by the store admin.",
     zh: "状态变化由店铺管理员模拟推进。",
     ms: "Perubahan status disimulasikan oleh pentadbir kedai.",
+  },
+  "refund.title": {
+    en: "Request a demo refund",
+    zh: "申请模拟退款",
+    ms: "Mohon bayaran balik demo",
+  },
+  "refund.select_items": {
+    en: "Choose items and quantities",
+    zh: "选择商品与数量",
+    ms: "Pilih item dan kuantiti",
+  },
+  "refund.max_qty": {
+    en: "Up to {count}",
+    zh: "最多 {count} 件",
+    ms: "Sehingga {count}",
+  },
+  "refund.estimate": {
+    en: "Estimated refund (demo): RM {amount}",
+    zh: "预计退款（演示）：RM {amount}",
+    ms: "Anggaran bayaran balik (demo): RM {amount}",
+  },
+  "refund.shipping_not_refunded": {
+    en: "Sample shipping fees are not refunded.",
+    zh: "示例运费不退。",
+    ms: "Kos penghantaran contoh tidak dibayar balik.",
+  },
+  "refund.coupon_not_restored": {
+    en: "Used coupons are not restored.",
+    zh: "已使用的优惠券不恢复。",
+    ms: "Kupon yang telah digunakan tidak dipulihkan.",
+  },
+  "refund.submit": {
+    en: "Submit refund request",
+    zh: "提交退款申请",
+    ms: "Hantar permohonan bayaran balik",
+  },
+  "refund.submit_hint": {
+    en: "This is a simulated refund: no real money will be returned. The amount is calculated by the system from the amount paid for each item, excluding any points discount.",
+    zh: "这是模拟退款：不会退还任何真实款项。金额由系统按每件商品的实付金额（不含积分抵扣）计算。",
+    ms: "Ini bayaran balik simulasi: tiada wang sebenar akan dikembalikan. Jumlah dikira oleh sistem berdasarkan amaun dibayar bagi setiap item, tidak termasuk diskaun mata.",
+  },
+  "refund.submitted": {
+    en: "Refund request submitted. The result will appear on this order.",
+    zh: "退款申请已提交，结果会显示在此订单中。",
+    ms: "Permohonan dihantar. Keputusan akan dipaparkan pada pesanan ini.",
+  },
+  "refund.duplicate": {
+    en: "This quantity is already under review.",
+    zh: "该数量已在审核中。",
+    ms: "Kuantiti ini sudah dalam semakan.",
+  },
+  "refund.nothing_left": {
+    en: "Nothing is left to refund on this order.",
+    zh: "此订单已无可退商品。",
+    ms: "Tiada lagi item untuk dibayar balik pada pesanan ini.",
+  },
+  "refund.window_closed": {
+    en: "The 30-day refund period for this order has ended.",
+    zh: "此订单的 30 天退款期已过。",
+    ms: "Tempoh bayaran balik 30 hari untuk pesanan ini telah tamat.",
+  },
+  "refund.demo_hint": {
+    en: "Refunds are reviewed by the admin in the demo back office.",
+    zh: "退款由管理员在演示后台审核。",
+    ms: "Bayaran balik disemak oleh pentadbir dalam pejabat belakang demo.",
   },
   "privacy.title": {
     en: "Privacy",

@@ -11,6 +11,7 @@ import PayResultPage from "./pages/PayResultPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import ProductDetailPage from "./pages/ProductDetailPage";
 import ProductListPage from "./pages/ProductListPage";
+import RefundPage from "./pages/RefundPage";
 import TrackOrderPage from "./pages/TrackOrderPage";
 import TrackPage from "./pages/TrackPage";
 import { RouterProvider, useRouter } from "./router";
@@ -27,6 +28,7 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   "/pay/result": PayResultPage,
   "/track": TrackPage,
   "/track/order": TrackOrderPage,
+  "/track/order/refund": RefundPage,
   "/privacy": PrivacyPage,
 };
 
