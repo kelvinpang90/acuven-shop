@@ -64,8 +64,9 @@ describe("route table", () => {
   // 详情页以模式进表；SHOP-TASK-018 验收第 2 条「路由 /cart」：购物车页进表；
   // SHOP-TASK-024 验收第 2 条「路由 /pay（P06）与 /pay/result（P07）」：两页进表，路径里没有动态段；
   // SHOP-TASK-025 验收第 2 条「路由 /checkout」：结账页进表，在购物车之后；
-  // SHOP-TASK-028 验收第 2 条「路由 /track（P08）与 /track/order（P09 查单模式）」：两页进表，在支付页之后；其余页面尚未实现，不在表里。
-  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages and the privacy page", () => {
+  // SHOP-TASK-028 验收第 2 条「路由 /track（P08）与 /track/order（P09 查单模式）」：两页进表，在支付页之后；
+  // SHOP-TASK-030 验收第 2 条「路由 /track/order/refund（P10 查单模式）」：进表，在订单详情之后；其余页面尚未实现，不在表里。
+  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page and the privacy page", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
       "/products",
@@ -76,6 +77,7 @@ describe("route table", () => {
       "/pay/result",
       "/track",
       "/track/order",
+      "/track/order/refund",
       "/privacy",
     ]);
     expect(isRoutePath("/privacy")).toBe(true);
@@ -87,8 +89,26 @@ describe("route table", () => {
     expect(isRoutePath("/pay/result")).toBe(true);
     expect(isRoutePath("/track")).toBe(true);
     expect(isRoutePath("/track/order")).toBe(true);
-    expect(isRoutePath("/track/order/refund")).toBe(false);
+    expect(isRoutePath("/track/order/refund")).toBe(true);
+    expect(isRoutePath("/account/order/refund")).toBe(false);
     expect(isRoutePath("/login")).toBe(false);
+  });
+
+  // SHOP-TASK-030 验收第 2 条「订单号与 CSRF 令牌不进任何路径、查询参数」：退款申请页的路径不带任何段值，多出一段（如把订单号放进路径）不匹配、按未知路径落到首页。
+  it("gives the refund page no path parameters", () => {
+    expect(matchRoute("/track/order/refund")).toEqual({ pattern: "/track/order/refund", params: {} });
+    for (const path of ["/track/order/refund/", "/track/order/refund/B6TN2RJD8K4M0QXZ", "/track/refund"]) {
+      expect(isRoutePath(path), path).toBe(false);
+      expect(resolvePath(path)).toBe("/");
+    }
+  });
+
+  // UX 页面地图「P10 退款申请 /track/order/refund」：渲染退款申请页；接口返回之前（服务端渲染）主体为空并标 aria-busy，不出现订单内容或授权过期提示。
+  it("renders the refund page for /track/order/refund", () => {
+    const html = render("/track/order/refund");
+    expect(html).toContain(`<main class="site-refund" aria-busy="true"></main>`);
+    expect(html).not.toContain(COPY["order.session_expired"].en);
+    expect(html).not.toContain(COPY["home.demo_hint"].en);
   });
 
   // SHOP-TASK-028 验收第 2 条「订单号、电话与 CSRF 令牌不进任何路径、查询参数」：订单查询与订单详情的路径不带任何段值，
@@ -238,7 +258,7 @@ describe("route table", () => {
   });
 
   it("renders the home page for an unknown path", () => {
-    const html = render("/track/order/refund");
+    const html = render("/account/order/refund");
     expect(html).toContain(COPY["home.demo_hint"].en);
     expect(html).not.toContain(COPY["privacy.intro"].en);
   });

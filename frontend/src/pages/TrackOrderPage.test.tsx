@@ -3,17 +3,34 @@ import type { ReactElement, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import type { LookupOrder } from "../api/orderLookup";
+import type { LookupLine, LookupOrder, LookupRefund } from "../api/orderLookup";
+import { formatSen } from "../format";
 import { BRAND, COPY, formatCopy, LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { isRoutePath, RouterProvider } from "../router";
 import { countryName } from "./PayPage";
-import { stepState, TrackOrderView } from "./TrackOrderPage";
+import { formatDate, formatDateTime, stepState, TrackOrderView } from "./TrackOrderPage";
 import type { TrackOrderViewProps } from "./TrackOrderPage";
 
 const ORDER_NUMBER = "B6TN2RJD8K4M0QXZ";
 const STATES = new Map([["MY-10", "Selangor"]]);
+const DEADLINE = "2026-11-04T10:02:00Z";
+
+function orderLine(overrides: Partial<LookupLine> = {}): LookupLine {
+  return {
+    line_index: 0,
+    name: "Crew Neck Tee",
+    variant_label: "Black, M",
+    quantity: 2,
+    unit_price_sen: 3900,
+    line_subtotal_sen: 7800,
+    unit_cash_paid_sen: [3369, 3368],
+    refundable_quantity: 2,
+    refund_estimates_sen: [3369, 6737],
+    ...overrides,
+  };
+}
 
 function lookupOrder(overrides: Partial<LookupOrder> = {}): LookupOrder {
   return {
@@ -23,8 +40,8 @@ function lookupOrder(overrides: Partial<LookupOrder> = {}): LookupOrder {
     paid_at: "2026-10-05T10:02:00Z",
     server_time: "2026-10-05T11:00:00Z",
     lines: [
-      { name: "Crew Neck Tee", variant_label: "Black, M", quantity: 2, unit_price_sen: 3900, line_subtotal_sen: 7800, unit_cash_paid_sen: [3369, 3368] },
-      { name: "Soy Wax Candle", variant_label: "", quantity: 1, unit_price_sen: 3200, line_subtotal_sen: 3200, unit_cash_paid_sen: [2763] },
+      orderLine(),
+      orderLine({ line_index: 1, name: "Soy Wax Candle", variant_label: "", quantity: 1, unit_price_sen: 3200, line_subtotal_sen: 3200, unit_cash_paid_sen: [2763], refundable_quantity: 1, refund_estimates_sen: [2763] }),
     ],
     subtotal_sen: 11000,
     shipping_fee_sen: 800,
@@ -37,9 +54,30 @@ function lookupOrder(overrides: Partial<LookupOrder> = {}): LookupOrder {
       address: "12 Jalan Contoh 3",
       postal_code: "47000",
     },
+    refund_deadline: DEADLINE,
+    refund_window_open: true,
+    refunded_total_sen: 0,
+    refundable_left_sen: 9500,
+    fully_refunded: false,
+    refund_requests: [],
     ...overrides,
   };
 }
+
+// 三种状态的申请记录各一笔，按创建时间从新到旧；金额与行金额故意不是单价的倍数。
+const REQUESTS: LookupRefund[] = [
+  { created_at: "2026-10-09T03:00:00Z", status: "requested", amount_sen: 2763, lines: [{ name: "Soy Wax Candle", variant_label: "", quantity: 1, amount_sen: 2763 }] },
+  { created_at: "2026-10-08T03:00:00Z", status: "approved", amount_sen: 3369, lines: [{ name: "Crew Neck Tee", variant_label: "Black, M", quantity: 1, amount_sen: 3369 }] },
+  {
+    created_at: "2026-10-07T03:00:00Z",
+    status: "rejected",
+    amount_sen: 6105,
+    lines: [
+      { name: "Crew Neck Tee", variant_label: "Black, M", quantity: 1, amount_sen: 3342 },
+      { name: "Soy Wax Candle", variant_label: "", quantity: 1, amount_sen: 2763 },
+    ],
+  },
+];
 
 const STATUSES = ["awaiting_demo_payment", "demo_paid", "demo_packed", "demo_shipped", "demo_completed", "demo_cancelled"] as const;
 
@@ -62,7 +100,7 @@ function languageStorage(language: Language) {
 const noop = () => undefined;
 
 function props(overrides: Partial<TrackOrderViewProps> = {}): TrackOrderViewProps {
-  return { screen: { status: "ready", order: lookupOrder() }, states: STATES, busy: null, failed: false, onConfirm: noop, ...overrides };
+  return { screen: { status: "ready", order: lookupOrder() }, states: STATES, busy: null, failed: false, submitted: false, onConfirm: noop, ...overrides };
 }
 
 function ready(order: LookupOrder): Partial<TrackOrderViewProps> {
@@ -240,10 +278,11 @@ describe("order", () => {
     expect(html).toMatch(new RegExp(`<span class="acs-body-s">${COPY["order.current_status"].en}</span><span class="acs-tag acs-tag--(accent|outline)">${COPY[STATUS_KEY[status]].en.replace(/[()]/g, "\\$&")}</span>`));
   });
 
-  // SHOP-TASK-028 验收第 2 条「页面不显示任何凭据内容或授权剩余时间」与 UX「阅读说明」订单号不进路径：页面里的链接只去 /track，不带订单号。
-  it("links only to the lookup page and never with the order number", () => {
+  // SHOP-TASK-028 验收第 2 条「页面不显示任何凭据内容或授权剩余时间」、SHOP-TASK-030 验收第 2 条「订单号与 CSRF 令牌不进任何路径、查询参数」与 UX「阅读说明」订单号不进路径：
+  // 页面里的链接只去 /track 与退款申请页 /track/order/refund，都不带订单号或查询参数。
+  it("links only to the lookup and refund pages and never with the order number", () => {
     const hrefs = [...render().matchAll(/href="([^"]*)"/g)].map((m) => m[1]);
-    expect(new Set(hrefs)).toEqual(new Set(["/track"]));
+    expect(new Set(hrefs)).toEqual(new Set(["/track", "/track/order/refund"]));
   });
 });
 
@@ -274,7 +313,7 @@ describe("amounts", () => {
       subtotal_sen: 10000,
       shipping_fee_sen: 1000,
       total_sen: 12345,
-      lines: [{ name: "Crew Neck Tee", variant_label: "Black, M", quantity: 2, unit_price_sen: 3900, line_subtotal_sen: 9999, unit_cash_paid_sen: [3001, 2999] }],
+      lines: [orderLine({ line_subtotal_sen: 9999, unit_cash_paid_sen: [3001, 2999] })],
     });
     const html = render(ready(odd));
     for (const amounts of [desktopAmounts(html), phoneAmounts(html)]) {
@@ -366,7 +405,7 @@ describe("unpaid orders and missing entries", () => {
   // SHOP-TASK-028 验收第 5 条「待支付订单显示 order.lookup_no_pay，没有支付与取消按钮」与 UX P09「待支付订单——查单模式：[order.lookup_no_pay]（无支付、取消按钮）」：
   // 待支付订单只有说明，没有任何按钮，也没有去支付页的链接；其他状态不显示这条说明。
   it.each(LANGUAGES)("explains that an unpaid order cannot be paid or cancelled here in %s", (language) => {
-    const html = render(ready(lookupOrder({ status: "awaiting_demo_payment", paid_at: null, lines: [{ name: "Crew Neck Tee", variant_label: "Black, M", quantity: 2, unit_price_sen: 3900, line_subtotal_sen: 7800, unit_cash_paid_sen: [] }] })), language);
+    const html = render(ready(lookupOrder({ status: "awaiting_demo_payment", paid_at: null, refund_deadline: null, refund_window_open: false, lines: [orderLine({ unit_cash_paid_sen: [] })] })), language);
     expect(has(html, "order.lookup_no_pay", language)).toBe(true);
     expect(html).not.toContain("<button");
     expect(html).not.toContain(`href="/pay`);
@@ -378,28 +417,171 @@ describe("unpaid orders and missing entries", () => {
     }
   });
 
-  // SHOP-TASK-028 验收第 7 条「退款入口（order.request_refund、order.refund_deadline、退款金额与记录、order.fulfilment_frozen）按路由规则在退款申请页实现前不渲染；
-  // 会员模式（account.orders、account.order_pay）在会员中心实现前不渲染」：退款申请页与会员中心都不在路由表里，各状态下都不出现这些文案（UX-COPY 原文）或链接。
-  it("renders no refund entry and no member-mode links", () => {
-    expect(isRoutePath("/track/order/refund")).toBe(false);
+  // SHOP-TASK-030 验收第 6 条「会员模式（account.orders 与积分行）在会员中心实现前不渲染」：会员中心不在路由表里，各状态下都不出现会员模式的文案（UX-COPY 原文）或链接。
+  it("renders no member-mode links", () => {
     expect(isRoutePath("/account")).toBe(false);
-    const texts = [
-      "Request a refund",
-      "Refunds can be requested until",
-      "Refunded so far",
-      "Still refundable",
-      "Refund requests",
-      "All items have been refunded",
-      "My orders",
-      "Continue payment",
-    ];
     for (const status of STATUSES) {
-      const html = render(ready(lookupOrder({ status })));
-      for (const text of texts) {
+      const html = render(ready(lookupOrder({ status, refund_requests: REQUESTS })));
+      for (const text of ["My orders", "Continue payment"]) {
         expect(html).not.toContain(text);
       }
-      expect(html).not.toMatch(/href="\/(account|track\/order\/refund)/);
+      expect(html).not.toMatch(/href="\/account/);
     }
+  });
+});
+
+describe("refund entry", () => {
+  const entry = (html: string) => html.includes(`<a class="acs-btn acs-btn--secondary acs-btn--block" href="/track/order/refund">`);
+
+  // SHOP-TASK-030 验收第 3 条「P09 在接口判定退款期内且剩余可退大于零时显示 order.request_refund（链到 /track/order/refund）与 order.refund_deadline」与
+  // UX P09「已支付且在退款期内：( [order.request_refund] ) [order.refund_deadline]」：截止时间按 order.refund_deadline 的模板显示。
+  it.each(LANGUAGES)("links to the refund page with the deadline in %s", (language) => {
+    const html = render({}, language);
+    expect(html).toContain(`<a class="acs-btn acs-btn--secondary acs-btn--block" href="/track/order/refund">${escapeHtml(COPY["order.request_refund"][language])}</a>`);
+    const deadline = formatCopy(COPY["order.refund_deadline"][language], { date: formatDateTime(DEADLINE, language) });
+    expect(html).toContain(`<p class="acs-body-s acs-muted">${escapeHtml(deadline)}</p>`);
+  });
+
+  // 同一条「接口判定退款期内且剩余可退大于零」：退款期已过（接口判定）或剩余可退为零时都没有入口与截止时间；未支付时也没有。
+  it.each<[string, Partial<LookupOrder>]>([
+    ["window closed", { refund_window_open: false }],
+    ["nothing left", { refundable_left_sen: 0 }],
+    ["unpaid", { status: "awaiting_demo_payment", paid_at: null, refund_deadline: null, refund_window_open: false }],
+  ])("shows no refund entry when %s", (_name, overrides) => {
+    const html = render(ready(lookupOrder(overrides)));
+    expect(entry(html)).toBe(false);
+    expect(has(html, "order.request_refund")).toBe(false);
+    expect(html).not.toContain("Refunds can be requested until");
+    expect(html).not.toContain(`href="/track/order/refund"`);
+  });
+
+  // SHOP-TASK-030 验收第 3 条「截止时间按访客浏览器时区显示日期与时间」：同一时刻在不同时区显示为不同的日期或时间，且带时间（与只显示日期的写法不同）；
+  // 不给时区时用运行环境（浏览器）的时区。
+  it("formats the deadline with date and time in the visitor's time zone", () => {
+    expect(formatDateTime(DEADLINE, "en", "UTC")).toMatch(/Nov 4, 2026.*10:02/);
+    expect(formatDateTime(DEADLINE, "en", "Asia/Kuala_Lumpur")).toMatch(/Nov 4, 2026.*6:02/);
+    expect(formatDateTime("2026-11-04T20:30:00Z", "en", "Asia/Kuala_Lumpur")).toMatch(/Nov 5, 2026.*4:30/);
+    for (const language of LANGUAGES) {
+      expect(formatDateTime(DEADLINE, language, "UTC")).toContain("2026");
+      expect(formatDateTime(DEADLINE, language, "UTC")).toMatch(/10[.:]02/);
+      expect(formatDateTime(DEADLINE, language, "UTC")).not.toBe(formatDate(DEADLINE, language, "UTC"));
+    }
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(formatDateTime(DEADLINE, "en")).toBe(formatDateTime(DEADLINE, "en", zone));
+  });
+
+  // UX P09 桌面线框的顺序：确认收货与说明，之后 ( [order.request_refund] ) [order.refund_deadline]，[order.refunded_total] [order.refundable_left]，[order.refund_requests] 与各条记录。
+  it("follows the order of the wireframe", () => {
+    const html = render(ready(lookupOrder({ refund_requests: REQUESTS })));
+    const positions = [
+      html.indexOf(`>${COPY["order.confirm_receipt"].en}<`),
+      html.indexOf(escapeHtml(COPY["order.confirm_receipt_hint"].en)),
+      html.indexOf(`>${COPY["order.request_refund"].en}<`),
+      html.indexOf("Refunds can be requested until"),
+      html.indexOf("Refunded so far (demo)"),
+      html.indexOf("Still refundable"),
+      html.indexOf(`>${COPY["order.refund_requests"].en}<`),
+      html.indexOf(`>${COPY["order.refund_requested"].en}<`),
+    ];
+    for (const position of positions) {
+      expect(position).toBeGreaterThanOrEqual(0);
+    }
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+  });
+});
+
+describe("refund amounts and requests", () => {
+  // SHOP-TASK-030 验收第 3 条「订单已支付时显示 order.refunded_total、order.refundable_left」与第 7 条「金额原样来自接口」：两项金额照接口的数显示，
+  // 不由申请记录相加或由合计相减（这里故意给对不上的数）。
+  it.each(LANGUAGES)("shows the refunded and refundable amounts as returned in %s", (language) => {
+    const html = render(ready(lookupOrder({ refunded_total_sen: 1234, refundable_left_sen: 5, refund_requests: REQUESTS })), language);
+    expect(html).toContain(`<span class="acs-num">${escapeHtml(formatCopy(COPY["order.refunded_total"][language], { amount: "12.34" }))}</span>`);
+    expect(html).toContain(`<span class="acs-num">${escapeHtml(formatCopy(COPY["order.refundable_left"][language], { amount: "0.05" }))}</span>`);
+  });
+
+  // 同一条「订单已支付时」：未支付订单（paid_at 为空）没有累计已退、剩余可退与申请记录。
+  it("shows no refund amounts for unpaid orders", () => {
+    for (const status of ["awaiting_demo_payment", "demo_cancelled"]) {
+      const html = render(ready(lookupOrder({ status, paid_at: null, refund_deadline: null, refund_window_open: false })));
+      for (const key of ["order.refunded_total", "order.refundable_left"] as const) {
+        expect(html).not.toContain(COPY[key].en.split("{")[0] ?? "");
+      }
+      expect(has(html, "order.refund_requests")).toBe(false);
+    }
+  });
+
+  // SHOP-TASK-030 验收第 3 条「order.refund_requests 记录（日期、商品与件数、金额、order.refund_requested、order.refund_approved 或 order.refund_rejected）」与
+  // UX P09「<日期> <商品 x数量> [M4] [order.refund_requested|approved|rejected]」：三种状态各自的文案；日期、各行名称规格与件数、申请金额（原样）按此顺序。
+  it.each(LANGUAGES)("lists every request with its date, items, amount and status in %s", (language) => {
+    const html = render(ready(lookupOrder({ refund_requests: REQUESTS })), language);
+    const desktop = part(html, /<div class="site-desktop-only site-order__history">[\s\S]*?<\/ul><\/div>/);
+    expect(desktop).toContain(`<h2 class="acs-field__label">${escapeHtml(COPY["order.refund_requests"][language])}</h2>`);
+    const items = [...desktop.matchAll(/<li class="site-order__request">([\s\S]*?)<\/li>/g)].map((m) => m[1] ?? "");
+    expect(items).toHaveLength(3);
+    const statuses: [string, CopyKey][] = [
+      ["acs-tag acs-tag--demo", "order.refund_requested"],
+      ["acs-tag acs-tag--success", "order.refund_approved"],
+      ["acs-tag acs-tag--outline", "order.refund_rejected"],
+    ];
+    for (const [index, request] of REQUESTS.entries()) {
+      const item = items[index] ?? "";
+      const status = statuses[index];
+      if (status === undefined) {
+        throw new Error("missing status");
+      }
+      const [tag, key] = status;
+      expect(item.startsWith(`<span class="acs-num">${escapeHtml(formatDate(request.created_at, language))}</span>`)).toBe(true);
+      expect(item.endsWith(`<span class="acs-num">RM ${formatSen(request.amount_sen)}</span><span class="${tag}">${escapeHtml(COPY[key][language])}</span>`)).toBe(true);
+    }
+    expect(items[2]).toMatch(/<span>Crew Neck Tee<\/span><span class="site-order__option"><svg[^>]*>[\s\S]*?<\/svg><span>Black, M<\/span><\/span><span class="acs-num">× 1<\/span><\/span><span class="site-order__name"><span>Soy Wax Candle<\/span><span class="acs-num">× 1<\/span>/);
+    // 申请金额是接口的合计，不是各行金额的重算（RM 61.05 = 33.42 + 27.63 恰好相等，另以对不上的数验证）。
+    const odd = render(ready(lookupOrder({ refund_requests: [{ ...REQUESTS[0], amount_sen: 101 } as LookupRefund] })), language);
+    expect(odd).toContain(`<span class="acs-num">RM 1.01</span>`);
+  });
+
+  // UX P09 手机线框「▸ [order.refund_requests]」：手机为默认收起的折叠块，内容与桌面列表相同；没有记录时两处都不渲染。
+  it("folds the requests on phones", () => {
+    const html = render(ready(lookupOrder({ refund_requests: REQUESTS })));
+    const fold = part(html, /<details class="site-phone-only site-order__fold">[\s\S]*?<\/details>/);
+    expect(fold).toContain(`<summary class="site-order__fold-head">${COPY["order.refund_requests"].en}</summary>`);
+    expect(fold.match(/<li class="site-order__request">/g)).toHaveLength(3);
+    expect(html).not.toMatch(/<details[^>]*\sopen/);
+    const none = render();
+    expect(none).not.toContain(COPY["order.refund_requests"].en);
+    expect(none).not.toContain("site-order__history");
+  });
+
+  // 派生实现约束（实现选择）：守住第 3 条「order.refund_requested、order.refund_approved 或 order.refund_rejected」——未知状态不显示状态标签，其余照常。
+  it("shows no status label for an unknown status", () => {
+    const html = render(ready(lookupOrder({ refund_requests: [{ ...REQUESTS[1], status: "unknown" } as LookupRefund] })));
+    const desktop = part(html, /<div class="site-desktop-only site-order__history">[\s\S]*?<\/ul><\/div>/);
+    expect(desktop).not.toContain("acs-tag");
+    expect(desktop).toContain(`<span class="acs-num">RM 33.69</span>`);
+  });
+});
+
+describe("fully refunded and submitted", () => {
+  // SHOP-TASK-030 验收第 3 条「接口判定全部已退时显示 order.fulfilment_frozen 且不显示确认收货按钮」与 UX P09「全部已退时：[order.fulfilment_frozen]」：
+  // 已发货但全部已退时没有确认收货按钮与说明（HTML 与元素树两种方式），显示冻结说明；没有全部已退时不显示这句。
+  it.each(LANGUAGES)("freezes the order once everything is refunded in %s", (language) => {
+    const frozen = lookupOrder({ fully_refunded: true, refund_window_open: true, refundable_left_sen: 0, refunded_total_sen: 9500 });
+    const html = render(ready(frozen), language);
+    expect(has(html, "order.fulfilment_frozen", language)).toBe(true);
+    expect(has(html, "order.confirm_receipt", language)).toBe(false);
+    expect(html.includes(escapeHtml(COPY["order.confirm_receipt_hint"][language]))).toBe(false);
+    expect(confirmButton(tree(ready(frozen)))).toBeUndefined();
+    expect(has(html, "order.request_refund", language)).toBe(false);
+    for (const status of STATUSES) {
+      expect(has(render(ready(lookupOrder({ status })), language), "order.fulfilment_frozen", language)).toBe(false);
+    }
+  });
+
+  // SHOP-TASK-030 验收第 5 条「201 或 200 时回到 /track/order 并显示 refund.submitted」与 UX P10「去向：P09（提交后显示 [refund.submitted] 与记录）」：
+  // 刚提交回来时显示成功提示，平时不显示。
+  it.each(LANGUAGES)("shows refund.submitted after coming back from the refund page in %s", (language) => {
+    const html = render({ ...ready(lookupOrder({ refund_requests: REQUESTS })), submitted: true }, language);
+    expect(html).toContain(`<p class="acs-alert acs-alert--success" role="status">${escapeHtml(COPY["refund.submitted"][language])}</p>`);
+    expect(has(render({}, language), "refund.submitted", language)).toBe(false);
   });
 });
 
@@ -421,10 +603,14 @@ describe("session expired, loading and errors", () => {
 });
 
 describe("dictionary", () => {
-  // SHOP-TASK-028 验收第 8 条「页面文字全部来自字典」：各状态下，除订单数据（订单号、商品名与规格、件数、收货资料、州属与国家名、分隔符号）外，每段文字都是当前语言的某条字典文案。
+  // SHOP-TASK-028 验收第 8 条与 SHOP-TASK-030 验收第 7 条「页面文字全部来自字典」：各状态下（含退款入口、申请记录、全部已退与刚提交回来），
+  // 除订单数据（订单号、商品名与规格、件数、收货资料、州属与国家名、申请日期、分隔符号）外，每段文字都是当前语言的某条字典文案。
   it.each(LANGUAGES)("shows only dictionary text besides order data in %s", (language) => {
     const states: Partial<TrackOrderViewProps>[] = [
       ...STATUSES.map((status) => ready(lookupOrder({ status }))),
+      ready(lookupOrder({ refund_requests: REQUESTS })),
+      ready(lookupOrder({ fully_refunded: true, refundable_left_sen: 0, refund_requests: REQUESTS })),
+      { submitted: true },
       { busy: "checking" },
       { failed: true },
       { screen: { status: "expired" } },
@@ -440,6 +626,7 @@ describe("dictionary", () => {
       "47000",
       "Selangor",
       countryName("MY", language),
+      ...REQUESTS.map((request) => formatDate(request.created_at, language)),
       "·",
       ",",
     ]);

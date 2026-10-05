@@ -197,6 +197,28 @@ body { margin: 0; }
 .site-order__recipient h2 { margin-bottom: 6px; }
 .site-order__actions { display: grid; gap: 14px; }
 .site-order--expired { box-sizing: border-box; width: min(640px, calc(100% - 2 * var(--gutter))); margin: 0 auto; gap: 20px; justify-items: start; padding: 56px 0 96px; }
+/* P09 退款部分：在确认收货之后、同一张卡片里；累计已退与剩余可退以分隔线与上方隔开；申请记录每笔一行 */
+.site-order__refunded { display: grid; gap: 4px; padding-top: 12px; border-top: 1px solid var(--rule); }
+.site-order__history { display: grid; gap: 8px; }
+.site-order__requests { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.site-order__request { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.site-order__request-items { display: grid; gap: 2px; }
+
+/* 退款申请 P10：居中 960px 单列；标题与订单号在左、★ 提示在右；各行为 名称与实付 | 数量 | 最多件数；
+   合计与说明在汇总块里，提交按钮靠左，◆ 提示在其下 */
+.site-refund { box-sizing: border-box; width: min(960px, calc(100% - 2 * var(--gutter))); margin: 0 auto; display: grid; gap: 24px; align-content: start; padding: 56px 0 96px; }
+.site-refund p { margin: 0; }
+.site-refund__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.site-refund__title { display: grid; gap: 6px; }
+.site-refund__items { display: grid; gap: 12px; }
+.site-refund__lines { display: grid; margin: 0; padding: 0; list-style: none; border-bottom: 1px solid var(--rule); }
+.site-refund__line { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 24px; align-items: center; padding: 16px 0; border-top: 1px solid var(--rule); }
+.site-refund__info { display: grid; gap: 4px; }
+.site-refund__paid { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
+.site-refund__qty { display: flex; gap: 12px; align-items: center; }
+.site-refund__max { width: 80px; }
+.site-refund__summary { gap: 12px; }
+.site-refund__submit { display: grid; gap: 16px; justify-items: start; }
 
 /* 隐私说明 P14 */
 .site-privacy { display: grid; grid-template-columns: 280px minmax(0, 720px); gap: 64px; padding: 56px var(--gutter) 96px; }
@@ -354,6 +376,18 @@ body { margin: 0; }
   .site-order__fold[open] .site-order__fold-head { margin-bottom: 12px; }
   .site-order__actions { gap: 12px; }
   .site-order--expired { width: auto; margin: 0; padding: 28px var(--gutter) 40px; }
+
+  /* 退款申请：单列；标题、订单号与 ★ 提示分行；每行为 名称与实付，其下数量与最多件数同一行；
+     运费与优惠券说明在各行之后；合计、◆ 提示与提交按钮固定在底部，页面底部留出它的高度 */
+  .site-refund { width: auto; margin: 0; gap: 16px; padding: 28px var(--gutter) 260px; }
+  .site-refund__head { display: grid; gap: 16px; }
+  .site-refund__items { gap: 16px; }
+  .site-refund__line { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "info info" "qty max"; gap: 8px; padding: 12px 0; }
+  .site-refund__info { grid-area: info; }
+  .site-refund__qty { grid-area: qty; }
+  .site-refund__max { grid-area: max; width: auto; }
+  .site-refund__notes { display: grid; gap: 16px; }
+  .site-refund__bar { display: grid; gap: 10px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 14px var(--gutter) 20px; border-top: 1px solid var(--rule); }
 
   .site-privacy { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 28px var(--gutter) 40px; }
   .site-privacy__aside { gap: 24px; }

@@ -1,23 +1,53 @@
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
-import { readLookupOrder, receiptKey, runConfirmReceipt, SHIPPED } from "../api/orderLookup";
-import type { ConfirmOutcome, LookupFound, LookupLine, LookupOrder } from "../api/orderLookup";
+import {
+  canConfirmReceipt,
+  clearSubmittedRefund,
+  readLookupOrder,
+  receiptKey,
+  REFUND_APPROVED,
+  REFUND_REJECTED,
+  REFUND_REQUESTED,
+  runConfirmReceipt,
+  showsRefundEntry,
+  submittedRefundOrder,
+} from "../api/orderLookup";
+import type { ConfirmOutcome, LookupFound, LookupLine, LookupOrder, LookupRefund } from "../api/orderLookup";
 import { AWAITING_PAYMENT } from "../api/pay";
 import type { PayRecipient } from "../api/pay";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
 import { formatSen } from "../format";
-import type { CopyKey } from "../i18n/copy";
-import { useCopy, useLanguage } from "../i18n/language";
+import type { CopyKey, Language } from "../i18n/copy";
+import { htmlLang, useCopy, useLanguage } from "../i18n/language";
 import { Link } from "../router";
+import type { RoutePath } from "../router";
 import { InfoIcon, recipientParts, useMyStates } from "./PayPage";
 import { TRACK_PATH } from "./TrackPage";
 
 // 订单详情页 P09 的查单模式（docs/UX.md P09）：打开时以当前语言调用 GET /api/orders/lookup，取第一张订单（最近查询的）；
+// 刚从退款申请页 P10 提交成功回来时取那一单并显示 refund.submitted。
 // 之后重新读取（切换语言、确认收货之后）都按同一订单号取该单。401 或本浏览器对该单的授权已结束时整页显示 order.session_expired。
-// 显示状态、进度五步、各行商品、金额明细与完整收货资料；只有 demo_shipped 可确认收货；待支付订单只说明查单不能支付或取消。
-// 游客订单不显示优惠券与积分两行（UX 0.5）。退款入口与会员模式分别在退款申请页与会员中心实现前不渲染。
+// 显示状态、进度五步、各行商品、金额明细与完整收货资料；只有 demo_shipped 且不是全部已退时可确认收货；待支付订单只说明查单不能支付或取消。
+// 退款部分：接口判定在退款期内且剩余可退大于零时显示去 P10 的 order.request_refund 与截止时间；已支付时显示累计已退、剩余可退与申请记录；
+// 接口判定全部已退时显示 order.fulfilment_frozen。
+// 游客订单不显示优惠券与积分两行（UX 0.5）。会员模式在会员中心实现前不渲染。
 // 订单号与 CSRF 令牌只在页面内存（React 状态）里，不进网址或任何浏览器存储；页面不显示授权内容或其剩余时间。
 // 金额只格式化接口返回的整数仙。
+
+export const TRACK_ORDER_PATH: RoutePath = "/track/order";
+export const REFUND_PATH: RoutePath = "/track/order/refund";
+
+// 日期与时间按访客浏览器时区显示（UX P09 order.refund_deadline）；timeZone 只给测试固定时区用。
+export function formatDateTime(iso: string, language: Language, timeZone?: string): string {
+  const zone = timeZone === undefined ? {} : { timeZone };
+  return new Intl.DateTimeFormat(htmlLang(language), { dateStyle: "medium", timeStyle: "short", ...zone }).format(new Date(iso));
+}
+
+// 只显示日期（申请记录的日期），同样按访客浏览器时区。
+export function formatDate(iso: string, language: Language, timeZone?: string): string {
+  const zone = timeZone === undefined ? {} : { timeZone };
+  return new Intl.DateTimeFormat(htmlLang(language), { dateStyle: "medium", ...zone }).format(new Date(iso));
+}
 
 // 进度五步（UX P09 [order.progress]），按履约顺序。
 const STEPS = ["awaiting_demo_payment", "demo_paid", "demo_packed", "demo_shipped", "demo_completed"] as const;
@@ -65,9 +95,25 @@ function SlashIcon() {
   );
 }
 
-function usePrice(): (sen: number) => string {
+export function usePrice(): (sen: number) => string {
   const t = useCopy();
   return (sen) => t("common.price_myr", { amount: formatSen(sen) });
+}
+
+// 名称 / 规格（有的话）与 × 件数（给了的话）；P10 的各行与 P09 的申请记录共用。
+export function LineName({ name, variant, quantity }: { name: string; variant: string; quantity?: number }) {
+  return (
+    <span className="site-order__name">
+      <span>{name}</span>
+      {variant !== "" && (
+        <span className="site-order__option">
+          <SlashIcon />
+          <span>{variant}</span>
+        </span>
+      )}
+      {quantity !== undefined && <span className="acs-num">{`× ${String(quantity)}`}</span>}
+    </span>
+  );
 }
 
 // 以逗号分隔的几段收货资料；空段不显示。
@@ -88,16 +134,7 @@ function OrderLine({ line }: { line: LookupLine }) {
   return (
     <li className="site-order__line">
       <span className="site-order__info">
-        <span className="site-order__name">
-          <span>{line.name}</span>
-          {line.variant_label !== "" && (
-            <span className="site-order__option">
-              <SlashIcon />
-              <span>{line.variant_label}</span>
-            </span>
-          )}
-          <span className="acs-num">{`× ${String(line.quantity)}`}</span>
-        </span>
+        <LineName name={line.name} variant={line.variant_label} quantity={line.quantity} />
         <span className="acs-body-s acs-muted site-order__unit">
           <span>{t("order.unit_price")}</span>
           <span className="acs-num">{price(line.unit_price_sen)}</span>
@@ -174,6 +211,76 @@ function Recipient({ recipient, states }: { recipient: PayRecipient | null; stat
   );
 }
 
+// 申请记录的状态名与标签样式（取自视觉稿 A03：审核中为演示标签、已批准为成功标签、已拒绝为描边标签）。
+const REFUND_STATUS: Readonly<Record<string, { label: CopyKey; tag: string }>> = {
+  [REFUND_REQUESTED]: { label: "order.refund_requested", tag: "acs-tag acs-tag--demo" },
+  [REFUND_APPROVED]: { label: "order.refund_approved", tag: "acs-tag acs-tag--success" },
+  [REFUND_REJECTED]: { label: "order.refund_rejected", tag: "acs-tag acs-tag--outline" },
+};
+
+// 退款申请记录：每笔为日期、各行商品与件数、申请金额与状态名（UX P09「<日期> <商品 x数量> [M4] [order.refund_requested|approved|rejected]」）。
+function RefundRequestList({ requests }: { requests: readonly LookupRefund[] }) {
+  const t = useCopy();
+  const price = usePrice();
+  const { language } = useLanguage();
+  return (
+    <ul className="site-order__requests">
+      {requests.map((request, index) => {
+        const status = REFUND_STATUS[request.status];
+        return (
+          <li key={index} className="site-order__request">
+            <span className="acs-num">{formatDate(request.created_at, language)}</span>
+            <span className="site-order__request-items">
+              {request.lines.map((line, lineIndex) => (
+                <LineName key={lineIndex} name={line.name} variant={line.variant_label} quantity={line.quantity} />
+              ))}
+            </span>
+            <span className="acs-num">{price(request.amount_sen)}</span>
+            {status !== undefined && <span className={status.tag}>{t(status.label)}</span>}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+// 退款部分（只在已支付时渲染）：退款期内且有剩余可退时为 order.request_refund 与 order.refund_deadline；
+// 之后为 order.refunded_total、order.refundable_left；有申请记录时桌面为列表，手机折叠（▸ order.refund_requests）。
+function RefundPart({ order }: { order: LookupOrder }) {
+  const t = useCopy();
+  const { language } = useLanguage();
+  return (
+    <>
+      {showsRefundEntry(order) && (
+        <>
+          <Link className="acs-btn acs-btn--secondary acs-btn--block" to={REFUND_PATH}>
+            {t("order.request_refund")}
+          </Link>
+          {order.refund_deadline !== null && (
+            <p className="acs-body-s acs-muted">{t("order.refund_deadline", { date: formatDateTime(order.refund_deadline, language) })}</p>
+          )}
+        </>
+      )}
+      <div className="site-order__refunded">
+        <span className="acs-num">{t("order.refunded_total", { amount: formatSen(order.refunded_total_sen) })}</span>
+        <span className="acs-num">{t("order.refundable_left", { amount: formatSen(order.refundable_left_sen) })}</span>
+      </div>
+      {order.refund_requests.length > 0 && (
+        <>
+          <div className="site-desktop-only site-order__history">
+            <h2 className="acs-field__label">{t("order.refund_requests")}</h2>
+            <RefundRequestList requests={order.refund_requests} />
+          </div>
+          <details className="site-phone-only site-order__fold">
+            <summary className="site-order__fold-head">{t("order.refund_requests")}</summary>
+            <RefundRequestList requests={order.refund_requests} />
+          </details>
+        </>
+      )}
+    </>
+  );
+}
+
 // 页面看到的订单：读取中、授权过期、读取失败、已取到。
 export type OrderScreen = { status: "loading" } | { status: "expired" } | { status: "error" } | { status: "ready"; order: LookupOrder };
 
@@ -186,11 +293,13 @@ export interface TrackOrderViewProps {
   busy: ConfirmBusy;
   // 显示 common.error_retry。
   failed: boolean;
+  // 刚从 P10 提交退款申请回来：显示 refund.submitted。
+  submitted: boolean;
   onConfirm: () => void;
 }
 
-// 查单授权过期或不属于该单时替换整页：order.session_expired 与去 P08 的 common.nav_track。
-function SessionExpired() {
+// 查单授权过期或不属于该单时替换整页：order.session_expired 与去 P08 的 common.nav_track。P10 共用。
+export function SessionExpired() {
   const t = useCopy();
   return (
     <main className="site-order site-order--expired">
@@ -205,7 +314,7 @@ function SessionExpired() {
   );
 }
 
-export function TrackOrderView({ screen, states, busy, failed, onConfirm }: TrackOrderViewProps) {
+export function TrackOrderView({ screen, states, busy, failed, submitted, onConfirm }: TrackOrderViewProps) {
   const t = useCopy();
   const price = usePrice();
 
@@ -225,6 +334,8 @@ export function TrackOrderView({ screen, states, busy, failed, onConfirm }: Trac
 
   const { order } = screen;
   const label = STATUS_LABEL[order.status];
+  const confirmable = canConfirmReceipt(order);
+  const paid = order.paid_at !== null;
   return (
     <main className="site-order" aria-busy={busy !== null}>
       <div className="site-order__head">
@@ -239,6 +350,11 @@ export function TrackOrderView({ screen, states, busy, failed, onConfirm }: Trac
         </div>
         <DemoHint>{t("order.demo_hint")}</DemoHint>
       </div>
+      {submitted && (
+        <p className="acs-alert acs-alert--success" role="status">
+          {t("refund.submitted")}
+        </p>
+      )}
       <div className="acs-alert acs-alert--info site-desktop-only site-order__access">
         <span className="site-order__access-text">
           <LockIcon />
@@ -288,22 +404,33 @@ export function TrackOrderView({ screen, states, busy, failed, onConfirm }: Trac
         </section>
         <aside className="site-order__aside">
           <Recipient recipient={order.recipient} states={states} />
-          {order.status === SHIPPED && (
+          {(confirmable || paid) && (
             <section className="acs-card site-order__actions">
-              <button className="acs-btn acs-btn--primary acs-btn--block" type="button" disabled={busy !== null} onClick={onConfirm}>
-                {t("order.confirm_receipt")}
-              </button>
-              <p className="acs-body-s acs-muted">{t("order.confirm_receipt_hint")}</p>
-              {busy === "checking" && (
-                <div className="acs-alert acs-alert--info" role="status">
-                  <InfoIcon />
-                  <span>{t("common.network_check")}</span>
-                </div>
+              {confirmable && (
+                <>
+                  <button className="acs-btn acs-btn--primary acs-btn--block" type="button" disabled={busy !== null} onClick={onConfirm}>
+                    {t("order.confirm_receipt")}
+                  </button>
+                  <p className="acs-body-s acs-muted">{t("order.confirm_receipt_hint")}</p>
+                  {busy === "checking" && (
+                    <div className="acs-alert acs-alert--info" role="status">
+                      <InfoIcon />
+                      <span>{t("common.network_check")}</span>
+                    </div>
+                  )}
+                </>
               )}
+              {paid && <RefundPart order={order} />}
             </section>
           )}
           {/* 不放在确认收货卡片里：403 后重新读取到的订单可能已不是 demo_shipped，提示仍要显示。 */}
           {failed && busy === null && <ErrorNotice />}
+          {order.fully_refunded && (
+            <div className="acs-alert acs-alert--info">
+              <InfoIcon />
+              <span>{t("order.fulfilment_frozen")}</span>
+            </div>
+          )}
           {order.status === AWAITING_PAYMENT && (
             <div className="acs-alert acs-alert--info">
               <InfoIcon />
@@ -325,8 +452,10 @@ export default function TrackOrderPage() {
   const [failed, setFailed] = useState(false);
   // 网络中断后确认仍为 demo_shipped 的那次确认收货的幂等键：下一次点击沿用它。
   const [retryKey, setRetryKey] = useState<string | null>(null);
-  // 已显示的订单号：之后的重新读取取同一张订单。只在副作用与回调里读写。
-  const shownOrder = useRef<string | null>(null);
+  // 刚从 P10 提交成功回来时那张订单的订单号（只在页面内存里交接，打开后即清除）。
+  const [submittedFor] = useState(submittedRefundOrder);
+  // 已显示的订单号：之后的重新读取取同一张订单；从 P10 回来时一开始就取那一单。只在副作用与回调里读写。
+  const shownOrder = useRef<string | null>(submittedFor);
   // 离开页面时中止进行中的确认收货与确认。
   const lifetime = useRef<AbortController | null>(null);
 
@@ -342,6 +471,7 @@ export default function TrackOrderPage() {
   useEffect(() => {
     const controller = new AbortController();
     lifetime.current = controller;
+    clearSubmittedRefund();
     return () => {
       controller.abort();
     };
@@ -401,8 +531,9 @@ export default function TrackOrderPage() {
       states={states}
       busy={busy}
       failed={failed}
+      submitted={order !== null && order.order_number === submittedFor}
       onConfirm={() => {
-        if (order === null || csrfToken === null || busy !== null || order.status !== SHIPPED) {
+        if (order === null || csrfToken === null || busy !== null || !canConfirmReceipt(order)) {
           return;
         }
         const key = receiptKey(retryKey);

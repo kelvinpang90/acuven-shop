@@ -9,7 +9,7 @@ import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 // 路径与查询参数里不放订单号或电话（UX「阅读说明」）；需要它们的页面以请求体或服务端会话传递
 // （结账页 /checkout 的电话与收货资料只在页面内存与下单请求体里；支付页 /pay 与结果页 /pay/result 凭服务端会话读取订单，
 // 订单号只在页面内存与写接口的请求体里；订单查询页 /track 的订单号与电话只在页面内存与查单请求体里，
-// 订单详情 /track/order 凭服务端查单授权读取订单）。
+// 订单详情 /track/order 与退款申请 /track/order/refund 凭服务端查单授权读取订单，订单号只在页面内存与写接口的请求体里）。
 // 查询参数只用于商品列表的搜索、筛选、排序与页码（pages/productListQuery.ts），也不放语言。
 export const ROUTE_PATHS = [
   "/",
@@ -21,6 +21,7 @@ export const ROUTE_PATHS = [
   "/pay/result",
   "/track",
   "/track/order",
+  "/track/order/refund",
   "/privacy",
 ] as const;
 export type RoutePattern = (typeof ROUTE_PATHS)[number];
