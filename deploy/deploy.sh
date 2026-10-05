@@ -17,13 +17,17 @@ HEALTH_TIMEOUT_SECONDS="${SHOP_HEALTH_TIMEOUT_SECONDS:-180}"
 log() { printf '%s  %s\n' "$(date -u +%H:%M:%S)" "$*"; }
 die() { log "ERROR: $*"; exit 1; }
 
-# 两个服务都在、且都报 healthy 才算健康。
+# 参数里列出的服务（不给参数即 compose 文件里的全部服务）都在、且都报 healthy 才算健康。
 wait_for_health() {
     local deadline expected healthy status
     deadline=$(( $(date +%s) + HEALTH_TIMEOUT_SECONDS ))
-    expected="$(docker compose config --services | wc -l)"
+    if [ "$#" -gt 0 ]; then
+        expected="$#"
+    else
+        expected="$(docker compose config --services | wc -l)"
+    fi
     while [ "$(date +%s)" -lt "$deadline" ]; do
-        if status="$(docker compose ps --format '{{.Service}} {{.Health}}')"; then
+        if status="$(docker compose ps --format '{{.Service}} {{.Health}}' "$@")"; then
             healthy="$(printf '%s\n' "$status" | awk '$2 == "healthy"' | wc -l)"
             if [ "$healthy" -eq "$expected" ]; then
                 return 0
@@ -44,6 +48,9 @@ export SHOP_WEB_IMAGE="${SHOP_IMAGE_REPO}-web:${SHA}"
 PREVIOUS_API="$(docker compose ps --format '{{.Image}}' shop_api)"
 PREVIOUS_WEB="$(docker compose ps --format '{{.Image}}' shop_web)"
 log "currently running: ${PREVIOUS_API:-nothing} / ${PREVIOUS_WEB:-nothing}"
+# shop_jobs 与 shop_api 同一镜像（SHOP_API_IMAGE），这里只用来判断部署前它是否在跑。
+PREVIOUS_JOBS="$(docker compose ps --format '{{.Image}}' shop_jobs)"
+log "currently running jobs: ${PREVIOUS_JOBS:-nothing}"
 
 log "pulling $SHOP_API_IMAGE and $SHOP_WEB_IMAGE"
 docker compose pull --quiet || die "pull failed; nothing has been changed"
@@ -80,8 +87,24 @@ fi
 log "rolling back to $PREVIOUS_API / $PREVIOUS_WEB"
 export SHOP_API_IMAGE="$PREVIOUS_API"
 export SHOP_WEB_IMAGE="$PREVIOUS_WEB"
-docker compose up -d --no-build || die "rollback failed; manual intervention required"
-if wait_for_health; then
+ROLLED_BACK=0
+if [ -n "$PREVIOUS_JOBS" ]; then
+    docker compose up -d --no-build || die "rollback failed; manual intervention required"
+    if wait_for_health; then
+        ROLLED_BACK=1
+    fi
+else
+    # 部署前没有 shop_jobs（这次是首次上线它）：旧版本没有这个服务，回滚只以旧镜像重启
+    # shop_api 与 shop_web，停止并移除新起的 shop_jobs，健康只计这两个服务。
+    log "shop_jobs was not running before this deploy; stopping and removing it"
+    docker compose rm --stop --force shop_jobs || die "rollback failed; manual intervention required"
+    docker compose up -d --no-build shop_api shop_web \
+        || die "rollback failed; manual intervention required"
+    if wait_for_health shop_api shop_web; then
+        ROLLED_BACK=1
+    fi
+fi
+if [ "$ROLLED_BACK" = "1" ]; then
     # 回滚成功也以非零退出：这个提交没能上线，部署结论必须是失败。
     die "rolled back to $PREVIOUS_API; the deploy of $SHA failed"
 fi
