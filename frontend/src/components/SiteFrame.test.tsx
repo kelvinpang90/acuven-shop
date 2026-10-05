@@ -179,6 +179,17 @@ describe("header", () => {
     expect(list).toContain(`<a aria-current="page" href="/products">${COPY["common.nav_shop"][language]}</a>`);
   });
 
+  // SHOP-TASK-028 验收第 3 条「加入 /track 后，页头导航、手机菜单…里的 common.nav_track 按路由规则出现并链到 /track」与 UX「全局框架」导航顺序「商品、查询订单」：
+  // 桌面导航与手机菜单各一个，排在 common.nav_shop 之后，在订单查询页标为当前。
+  it.each(languages)("links common.nav_track to the order lookup page in %s", (language) => {
+    const home = header(render("/", language));
+    const link = `<a href="/track">${COPY["common.nav_track"][language]}</a>`;
+    expect(home.match(new RegExp(link.replace(/[()]/g, "\\$&"), "g"))).toHaveLength(2);
+    expect(home).toContain(`<a href="/products">${COPY["common.nav_shop"][language]}</a>${link}`);
+    const track = header(render("/track", language));
+    expect(track.match(new RegExp(`<a aria-current="page" href="/track">${COPY["common.nav_track"][language]}</a>`, "g"))).toHaveLength(2);
+  });
+
   // UX「全局框架」页头「购物车数量」（桌面在导航行、手机在第一行 [common.nav_cart]）与 SHOP-TASK-018 验收第 2 条「本任务起页头显示 common.nav_cart，{count} 为购物车各行件数之和」：
   // 服务端渲染时没有本浏览器购物车，件数为 0；桌面与手机各一个链到 /cart 的入口，在购物车页标为当前。各行件数之和由 cart.test.ts 的 cartItemCount 守住。
   it.each(languages)("links common.nav_cart with the item count to the cart in %s", (language) => {

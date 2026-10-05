@@ -165,6 +165,39 @@ body { margin: 0; }
 .site-result__icon { width: 56px; height: 56px; padding: 0; justify-content: center; }
 .site-result__continue, .site-result__retry { justify-self: start; }
 
+/* 订单查询 P08：居中 640px 单列；表单在卡片里，提交按钮靠左 */
+.site-track { box-sizing: border-box; width: min(640px, calc(100% - 2 * var(--gutter))); margin: 0 auto; display: grid; gap: 24px; align-content: start; padding: 64px 0 96px; }
+.site-track p { margin: 0; }
+.site-track__form { display: grid; gap: 20px; }
+.site-track__submit { justify-self: start; }
+
+/* 订单详情 P09：标题与状态在左、★ 提示在右；查单说明条右端为查其他订单；进度；
+   左侧商品各行与金额明细，右侧 380px 收货资料与确认收货 */
+.site-order { display: grid; gap: 28px; align-content: start; padding: 56px var(--gutter) 96px; }
+.site-order p { margin: 0; }
+.site-order__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.site-order__title { display: grid; gap: 10px; }
+.site-order__status { display: flex; gap: 8px; align-items: center; }
+.site-order__access { justify-content: space-between; align-items: center; }
+.site-order__access-text { display: flex; gap: 10px; align-items: flex-start; }
+.site-order__access-text svg { flex-shrink: 0; }
+.site-order__another { white-space: nowrap; }
+.site-order__progress { display: grid; gap: 10px; }
+.site-order__body { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 48px; align-items: start; }
+.site-order__main { display: grid; gap: 16px; }
+.site-order__lines { display: grid; margin: 0; padding: 0; list-style: none; }
+.site-order__line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; padding: 16px 0; }
+.site-order__info { display: grid; gap: 4px; }
+.site-order__name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.site-order__option { display: inline-flex; align-items: center; gap: 4px; }
+.site-order__unit { display: flex; flex-wrap: wrap; gap: 6px; }
+.site-order__paid { display: grid; gap: 2px; justify-items: end; text-align: right; }
+.site-order__aside { display: grid; gap: 20px; }
+.site-order__recipient { display: grid; gap: 6px; }
+.site-order__recipient h2 { margin-bottom: 6px; }
+.site-order__actions { display: grid; gap: 14px; }
+.site-order--expired { box-sizing: border-box; width: min(640px, calc(100% - 2 * var(--gutter))); margin: 0 auto; gap: 20px; justify-items: start; padding: 56px 0 96px; }
+
 /* 隐私说明 P14 */
 .site-privacy { display: grid; grid-template-columns: 280px minmax(0, 720px); gap: 64px; padding: 56px var(--gutter) 96px; }
 .site-privacy__aside { display: grid; gap: 20px; align-content: start; }
@@ -301,6 +334,26 @@ body { margin: 0; }
   .site-result { padding-top: 32px; }
   .site-result__icon { width: 48px; height: 48px; }
   .site-result__continue { justify-self: stretch; }
+
+  /* 订单查询：单列，错误提示在隐私提醒之后（UX P08 手机线框），提交按钮占满宽度 */
+  .site-track { width: auto; margin: 0; gap: 16px; padding: 28px var(--gutter) 40px; }
+  .site-track__submit { justify-self: stretch; }
+
+  /* 订单详情：单列；标题、状态与 ★ 提示分行；查单说明为文字与链接；进度纵向（acuven-shop.css）；
+     各行之后金额明细与收货资料折叠，确认收货在其后 */
+  .site-order { gap: 16px; padding: 28px var(--gutter) 40px; }
+  .site-order__head { display: grid; gap: 16px; }
+  .site-order__access-phone { display: grid; gap: 8px; justify-items: start; }
+  .site-order__progress { gap: 6px; }
+  .site-order__body { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .site-order__line { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 12px 0; }
+  .site-order__paid { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; text-align: left; }
+  .site-order__aside { gap: 16px; }
+  .site-order__fold { display: block; padding: 12px 16px; }
+  .site-order__fold-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 32px; }
+  .site-order__fold[open] .site-order__fold-head { margin-bottom: 12px; }
+  .site-order__actions { gap: 12px; }
+  .site-order--expired { width: auto; margin: 0; padding: 28px var(--gutter) 40px; }
 
   .site-privacy { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 28px var(--gutter) 40px; }
   .site-privacy__aside { gap: 24px; }
