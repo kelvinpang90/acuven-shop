@@ -51,6 +51,9 @@
   （backend、frontend）全绿才进入「等待批准」，测试照样被强制。任务的 `allowed_commands` 目前只写 `lint.check`、`format.check`；
   验收标准依赖测试通过时，写明由 PR 的必需 CI 检查 `backend`（或 `frontend`）执行。
 - **任务的标题、目的与验收标准里不写任何 `xxx://` 形式的地址、主机名、邮箱地址**（也不写 IP、绝对路径）：它们会原样进 PR 正文并过泄漏规则，被拒即 run 失败。
+- **接口任务写「所有响应带 no-store」时写明范围**：这些接口的处理函数与依赖产生的响应（含错误）；路径存在但方法不匹配时由框架返回的 405 不含请求内容与个人资料，不在此列。
+  同理，现有代码已有落实写法的要求写明照哪个写：422 不回显沿用 `app/api/pay.py` 的 `_body_errors`、`_language`；请求指纹沿用 `request_fingerprint_length`，只约束长度 64，数据库层不另加十六进制约束。
+  起因：SHOP-TASK-027 的 run babdccb4 以 `review_repair_exhausted` 失败（2026-10-05），三轮评审中的两轮都卡在这几处没写明的地方（405 缺 no-store、默认 422 带出 input、指纹未约束十六进制）。
 - **前端样式文件（Kelvin 2026-10-01 决定）**：`frontend/src/styles/acuven-shop.css` 是生成文件，只读，必须和 `docs/design/tokens/acuven-shop.css` 逐字节相同；
   框架和页面的布局、显隐、媒体查询统一写在 `frontend/src/styles/site.css`，由 `frontend/src/main.tsx` 引入，只用设计变量，不写颜色、字体、圆角。
   每个有用户可见页面的前端任务，`allowed_change_paths` 固定带 `frontend/src/styles/site.css`，和 `frontend/src/router.tsx`、`frontend/src/i18n/copy.ts` 一样。
