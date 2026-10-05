@@ -48,9 +48,10 @@ export SHOP_WEB_IMAGE="${SHOP_IMAGE_REPO}-web:${SHA}"
 PREVIOUS_API="$(docker compose ps --format '{{.Image}}' shop_api)"
 PREVIOUS_WEB="$(docker compose ps --format '{{.Image}}' shop_web)"
 log "currently running: ${PREVIOUS_API:-nothing} / ${PREVIOUS_WEB:-nothing}"
-# shop_jobs 与 shop_api 同一镜像（SHOP_API_IMAGE），这里只用来判断部署前它是否在跑。
-PREVIOUS_JOBS="$(docker compose ps --format '{{.Image}}' shop_jobs)"
-log "currently running jobs: ${PREVIOUS_JOBS:-nothing}"
+# shop_jobs 与 shop_api 同一镜像（SHOP_API_IMAGE），这里只用来判断部署前它的容器是否存在。
+# 用 -a：已停止的 shop_jobs 容器也算存在，不能当成首次上线把它移除。
+PREVIOUS_JOBS="$(docker compose ps -a --format '{{.Image}}' shop_jobs)"
+log "existing jobs container: ${PREVIOUS_JOBS:-nothing}"
 
 log "pulling $SHOP_API_IMAGE and $SHOP_WEB_IMAGE"
 docker compose pull --quiet || die "pull failed; nothing has been changed"
@@ -96,7 +97,7 @@ if [ -n "$PREVIOUS_JOBS" ]; then
 else
     # 部署前没有 shop_jobs（这次是首次上线它）：旧版本没有这个服务，回滚只以旧镜像重启
     # shop_api 与 shop_web，停止并移除新起的 shop_jobs，健康只计这两个服务。
-    log "shop_jobs was not running before this deploy; stopping and removing it"
+    log "shop_jobs did not exist before this deploy; stopping and removing it"
     docker compose rm --stop --force shop_jobs || die "rollback failed; manual intervention required"
     docker compose up -d --no-build shop_api shop_web \
         || die "rollback failed; manual intervention required"

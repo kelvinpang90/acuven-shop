@@ -821,9 +821,9 @@
   - 当前时间、计时、睡眠与看门狗都可注入（`Runner` 的 `now`、`monotonic`、`sleep`、`force_exit`、`timer`）。之后的每日库存重置等任务写成 `Job` 加入 `default_jobs()`；`app/jobs.py` 的 docstring 写明每个任务必须可重复运行且只生效一次、判定无需执行而跳过也算成功。
 - 失败处理：任务抛异常（含数据库不可用、会话工厂建引擎失败）时回滚，记一条 `job <任务名> failed: <异常类名>`，不退出，不影响同一轮的其他任务与下一轮。日志只有任务名、生效条数（超时取消即取消张数，有取消时才记）与异常类名，以及未配置数据库、心跳停写与恢复、心跳文件读写失败（只有异常类名）的提示；不记录订单号、个人资料、连接串或异常消息原文，不打印堆栈。运营告警邮件接入之前，以容器不健康代替告警（设计「失败有告警」）；接入后由运营告警邮件任务把任务失败接到告警。
 - 手动补跑：在服务器上本仓库检出的根目录里 `docker compose exec shop_jobs python -m app.jobs cancel-expired`（`shop_jobs` 不在时可用 `docker compose run --rm --no-deps shop_jobs python -m app.jobs cancel-expired`）。执行一次超时取消（同一上限 100 张）后退出：成功 0；任务失败 1；未配置 `SHOP_DATABASE_URL` 2。日志里的取消张数等于 100 时可能还有剩余，可再执行一次；重复执行不重复生效。
-- 部署与回滚（`deploy/deploy.sh`）：部署前与 `shop_api`、`shop_web` 一样记下 `shop_jobs` 当前的镜像（另记一行 `currently running jobs: …`）。`wait_for_health` 可传入服务名，只计这些服务；不传时仍为 compose 文件里的全部服务（现在是三个）。部署成功的流程不变，三个服务都要健康。回滚的两种情形：
-  - 部署前没有 `shop_jobs` 容器（这次首次上线它）：记一行 `shop_jobs was not running before this deploy; stopping and removing it`，`docker compose rm --stop --force shop_jobs`，再以旧镜像 `docker compose up -d --no-build shop_api shop_web`，等待健康只计这两个服务；健康则照旧以非零退出并记 `rolled back to …`，不健康以非零退出并记需要人工处理。停止或重启失败也以非零退出并记 `rollback failed`。
-  - 部署前已有 `shop_jobs`：照常 `docker compose up -d --no-build` 一起回滚（`shop_jobs` 随 `SHOP_API_IMAGE` 换回旧镜像），三个服务都要健康；结果与退出码同上。
+- 部署与回滚（`deploy/deploy.sh`）：部署前与 `shop_api`、`shop_web` 一样记下 `shop_jobs` 当前的镜像（用 `docker compose ps -a`，已停止的 `shop_jobs` 容器也算存在；另记一行 `existing jobs container: …`）。`wait_for_health` 可传入服务名，只计这些服务；不传时仍为 compose 文件里的全部服务（现在是三个）。部署成功的流程不变，三个服务都要健康。回滚的两种情形：
+  - 部署前没有 `shop_jobs` 容器（这次首次上线它）：记一行 `shop_jobs did not exist before this deploy; stopping and removing it`，`docker compose rm --stop --force shop_jobs`，再以旧镜像 `docker compose up -d --no-build shop_api shop_web`，等待健康只计这两个服务；健康则照旧以非零退出并记 `rolled back to …`，不健康以非零退出并记需要人工处理。停止或重启失败也以非零退出并记 `rollback failed`。
+  - 部署前已有 `shop_jobs` 容器（运行中或已停止）：照常 `docker compose up -d --no-build` 一起回滚（`shop_jobs` 随 `SHOP_API_IMAGE` 换回旧镜像），三个服务都要健康；结果与退出码同上。
   - 部署前没有 `shop_api` 或 `shop_web`：仍按原样不回滚、保留现场、非零退出。其余流程、退出码与原有日志不变。
 - 留给之后的任务：每日库存重置（SHOP-TASK-032）、发货满 7 天自动确认收货、积分到期，都按同样方式加入任务列表；运营告警邮件接入任务失败告警；券与积分预占的释放由优惠券与积分任务扩展 SHOP-TASK-021 的超时取消路径。
 - 偏离与取舍，请审阅（未改设计，未发现设计本身必须停下的问题）：
