@@ -14,13 +14,16 @@
 数据库连接沿用 SHOP_DATABASE_URL 与 app/db/session.py 的会话工厂。
 
 每一轮：
-1. 按任务列表逐个执行任务，每个任务一个新会话、一个独立事务，成功即提交。时间取当前 UTC
-   （与库里一样不带时区）。任务抛异常（含数据库不可用）时回滚，只记一条含任务名与异常类名
-   的日志，不退出，也不影响同一轮的其他任务与下一轮。
+1. 按任务列表逐个执行任务，每个任务一个新会话、一个独立事务，任务返回后提交，任务里的提交
+   只结束一个保存点（见 run_job）。时间取当前 UTC（与库里一样不带时区）。任务抛异常（含数据库
+   不可用）时整个事务回滚，只记一条含任务名与异常类名的日志，不退出，也不影响同一轮的其他
+   任务与下一轮。
 2. 写心跳文件 HEARTBEAT_PATH（容器的健康检查看它的修改时间）。任一任务已连续失败、且距它
    最近一次成功（从未成功过则距进程启动）满 UNHEALTHY_AFTER_SECONDS 时不写，容器因此变为
    不健康；该任务再次成功后恢复写心跳。
-3. 睡到距本轮开始满 ROUND_SECONDS；收到停止信号即醒来，不再开始新一轮。
+3. 睡到距本轮开始满 ROUND_SECONDS；收到停止信号即醒来，不再开始新一轮。信号到来时若一轮
+   正在执行，最多再等 SHUTDOWN_GRACE_SECONDS 让它做完，到时仍未退出即强制退出（未提交的
+   事务随连接断开由数据库回滚），所以收到信号后 10 秒内一定退出。
 
 任务列表：本任务只有超时取消（每轮最多 CANCEL_BATCH_LIMIT 张，剩余的下一轮继续）。之后的
 每日库存重置等任务按同样方式加入 default_jobs()：写一个 Job（名称与执行函数）。每个任务必须
@@ -35,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import signal
 import sys
 import threading
@@ -44,6 +48,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import FrameType
+from typing import Protocol
 
 from sqlalchemy.orm import Session
 
@@ -61,8 +66,10 @@ UNHEALTHY_AFTER_SECONDS = 600.0
 CANCEL_BATCH_LIMIT = 100
 # 容器内固定的临时目录路径；docker-compose.yml 里 shop_jobs 的健康检查用同一路径。
 HEARTBEAT_PATH = Path("/tmp/acuven_shop_jobs_heartbeat")
+# 收到停止信号时一轮仍在执行，最多再等这么久；须短于验收的 10 秒。
+SHUTDOWN_GRACE_SECONDS = 8.0
 
-# cancel-expired 的退出码：成功 0，任务失败 1，未配置数据库 2。
+# 退出码：成功 0，任务失败（或停止时被强制退出）1，未配置数据库 2。
 EXIT_OK = 0
 EXIT_FAILED = 1
 EXIT_NOT_CONFIGURED = 2
@@ -70,12 +77,20 @@ EXIT_NOT_CONFIGURED = 2
 SessionFactory = Callable[[], Session]
 
 
+class Cancellable(Protocol):
+    def cancel(self) -> None: ...
+
+
+TimerStarter = Callable[[float, Callable[[], None]], Cancellable]
+
+
 @dataclass(frozen=True)
 class Job:
     """一个定时任务。
 
     name 只用于日志与失败计时。run 拿到本次的会话与当前时间（不带时区的 UTC），返回本次
-    生效的条数；可以自己提交，返回后运行器再提交一次，抛异常时运行器回滚。
+    生效的条数。会话处在运行器的事务里：run 里的 commit 与 rollback 只作用于一个保存点，
+    run 返回后运行器提交整个事务，抛异常时整个事务回滚（含 run 里已经“提交”的部分）。
     """
 
     name: str
@@ -101,15 +116,37 @@ def utc_now() -> datetime:
 
 
 def run_job(job: Job, session_factory: SessionFactory, now: datetime) -> int:
-    """在新会话的独立事务里执行一个任务并提交，返回生效条数；出错时回滚后原样抛出。"""
-    with session_factory() as db:
+    """在新会话的独立事务里执行一个任务并提交，返回生效条数；出错时整个事务回滚后原样抛出。
+
+    外层会话开启事务并占住连接；任务拿到的是绑在这条连接上、以保存点加入事务的会话。
+    expire_overdue_orders 逐张 commit（未命中时 rollback）在这里只释放（或回滚）各自的
+    保存点，所以同一次运行里后面失败时，前面已取消的订单也一起回滚。
+    """
+    with session_factory() as outer:
         try:
-            count = job.run(db, now)
-            db.commit()
+            connection = outer.connection()
+            with Session(bind=connection, join_transaction_mode="create_savepoint") as db:
+                count = job.run(db, now)
+                db.commit()
+            outer.commit()
         except BaseException:
-            db.rollback()
+            outer.rollback()
             raise
     return count
+
+
+def start_timer(seconds: float, callback: Callable[[], None]) -> Cancellable:
+    """seconds 秒后在后台线程调用 callback；守护线程，不阻止进程退出。"""
+    timer = threading.Timer(seconds, callback)
+    timer.daemon = True
+    timer.start()
+    return timer
+
+
+def force_exit() -> None:
+    """停止宽限期已到而一轮仍未做完：立即结束进程。未提交的事务随连接断开由数据库回滚。"""
+    logger.error("round did not finish within %d seconds of stop; exiting", SHUTDOWN_GRACE_SECONDS)
+    os._exit(EXIT_FAILED)
 
 
 class Runner:
@@ -117,6 +154,8 @@ class Runner:
 
     session_factory 为空表示未配置数据库：每轮记一条警告，所有任务按失败计时。
     sleep 默认是停止事件的 wait：收到停止信号时立即醒来。
+    force_exit 不为空时，请求停止即用 timer 起一个 SHUTDOWN_GRACE_SECONDS 的看门狗，
+    到时 run_forever 仍未返回就调用 force_exit；run_forever 返回时取消看门狗。
     """
 
     def __init__(
@@ -128,6 +167,8 @@ class Runner:
         now: Callable[[], datetime] = utc_now,
         monotonic: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], object] | None = None,
+        force_exit: Callable[[], None] | None = None,
+        timer: TimerStarter = start_timer,
     ) -> None:
         self._jobs = list(jobs)
         self._session_factory = session_factory
@@ -141,10 +182,16 @@ class Runner:
         self.last_success: dict[str, float] = {}
         self._failing: set[str] = set()
         self._beating = True
+        self._force_exit = force_exit
+        self._timer = timer
+        self._watchdog: Cancellable | None = None
 
     def request_stop(self, signum: int | None = None, frame: FrameType | None = None) -> None:
-        """停止：当前这一轮照常做完，不再开始新一轮。可直接用作信号处理函数。"""
+        """停止：不再开始新一轮；正在执行的一轮最多再等 SHUTDOWN_GRACE_SECONDS。
+        可直接用作信号处理函数。"""
         self.stop_event.set()
+        if self._force_exit is not None and self._watchdog is None:
+            self._watchdog = self._timer(SHUTDOWN_GRACE_SECONDS, self._force_exit)
 
     def run_forever(self) -> None:
         # 上一次运行留下的心跳不代表这个进程。
@@ -152,12 +199,16 @@ class Runner:
             self._heartbeat_path.unlink(missing_ok=True)
         except OSError as exc:
             logger.warning("could not remove old heartbeat: %s", type(exc).__name__)
-        while not self.stop_event.is_set():
-            started = self._monotonic()
-            self.run_round()
-            remaining = ROUND_SECONDS - (self._monotonic() - started)
-            if remaining > 0 and not self.stop_event.is_set():
-                self._sleep(remaining)
+        try:
+            while not self.stop_event.is_set():
+                started = self._monotonic()
+                self.run_round()
+                remaining = ROUND_SECONDS - (self._monotonic() - started)
+                if remaining > 0 and not self.stop_event.is_set():
+                    self._sleep(remaining)
+        finally:
+            if self._watchdog is not None:
+                self._watchdog.cancel()
 
     def run_round(self) -> None:
         if self._session_factory is None:
@@ -249,7 +300,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "cancel-expired":
         return cancel_expired(session_factory)
 
-    runner = Runner(default_jobs(), session_factory)
+    runner = Runner(default_jobs(), session_factory, force_exit=force_exit)
     install_signal_handlers(runner)
     runner.run_forever()
     return EXIT_OK

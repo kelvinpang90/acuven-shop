@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import logging
 import signal
-from collections.abc import Iterator
+import threading
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -33,7 +34,8 @@ START = datetime(2026, 10, 5, 3, 0, 0)
 PRICE = 1500
 SHIPPING = 800
 STOCK = 5
-SECRET = "mysql+pymysql://user:hunter2@db.internal/shop"
+# 代替连接信息与异常消息原文的标记串（不是真实的连接串），用来断言它们不进日志。
+SECRET = "sentinel-connection-detail"
 
 
 # ---------------------------------------------------------------------------
@@ -45,11 +47,18 @@ SECRET = "mysql+pymysql://user:hunter2@db.internal/shop"
 def engine() -> Iterator[Engine]:
     engine = create_engine("sqlite://", poolclass=StaticPool)
 
+    # pysqlite 默认推迟 BEGIN，使最外层的 SAVEPOINT 自己开启事务、RELEASE 即提交；按
+    # SQLAlchemy 文档的做法关掉驱动的事务处理、由引擎发 BEGIN，保存点才和 MySQL 上一样。
     @event.listens_for(engine, "connect")
-    def _enable_foreign_keys(dbapi_connection, _connection_record) -> None:
+    def _connect(dbapi_connection, _connection_record) -> None:
+        dbapi_connection.isolation_level = None
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys = ON")
         cursor.close()
+
+    @event.listens_for(engine, "begin")
+    def _begin(connection) -> None:
+        connection.exec_driver_sql("BEGIN")
 
     Base.metadata.create_all(engine)
     yield engine
@@ -58,8 +67,11 @@ def engine() -> Iterator[Engine]:
 
 @pytest.fixture
 def db(engine: Engine) -> Iterator[Session]:
+    """测试自己的会话。内存库只有一条共享连接，这个会话每次读写后都结束事务，
+    不在任务运行时占着事务。"""
     with Session(engine) as session:
         assert session.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
+        session.rollback()
         yield session
 
 
@@ -139,8 +151,10 @@ def _variant(db: Session, stock: int = STOCK) -> int:
         is_active=True,
     )
     db.add(variant)
+    db.flush()
+    variant_id = variant.id
     db.commit()
-    return variant.id
+    return variant_id
 
 
 def _order(db: Session, variant_id: int, expires_at: datetime, quantity: int = 2) -> int:
@@ -182,25 +196,38 @@ def _order(db: Session, variant_id: int, expires_at: datetime, quantity: int = 2
             line_subtotal_sen=subtotal,
         )
     )
+    order_id = order.id
     db.commit()
-    return order.id
+    return order_id
 
 
 def _status(db: Session, order_id: int) -> str:
     db.expire_all()
-    return db.get(Order, order_id).status
+    status = db.get(Order, order_id).status
+    db.rollback()
+    return status
 
 
 def _stock(db: Session, variant_id: int) -> int:
     db.expire_all()
-    return db.get(ProductVariant, variant_id).available_stock
+    stock = db.get(ProductVariant, variant_id).available_stock
+    db.rollback()
+    return stock
+
+
+def _order_number(db: Session, order_id: int) -> str:
+    number = db.get(Order, order_id).order_number
+    db.rollback()
+    return number
 
 
 def _cancel_events(db: Session, order_id: int) -> list[str]:
     stmt = select(OrderEvent.actor_type).where(
         OrderEvent.order_id == order_id, OrderEvent.to_status == STATUS_CANCELLED
     )
-    return list(db.scalars(stmt))
+    actors = list(db.scalars(stmt))
+    db.rollback()
+    return actors
 
 
 def _job_messages(caplog: pytest.LogCaptureFixture) -> list[str]:
@@ -367,6 +394,34 @@ def test_failing_job_rolls_back_and_the_next_round_runs(
     assert _stock(db, flaky_variant) == STOCK + 100
 
 
+def test_failure_after_committed_cancellations_rolls_back_the_whole_run(
+    db: Session, factory: jobs.SessionFactory, heartbeat: Path, clock: FakeClock
+) -> None:
+    """SHOP-TASK-031 验收约定：每轮的任务在独立事务里提交，任务失败只回滚——
+    expire_overdue_orders 逐张提交，同一次运行里之后失败时，已取消的订单也一起回滚。"""
+    variant_id = _variant(db)
+    first = _order(db, variant_id, START - timedelta(minutes=2))
+    second = _order(db, variant_id, START - timedelta(minutes=1))
+
+    def cancel_then_fail(session: Session, now: datetime) -> int:
+        assert jobs.cancel_expired_job().run(session, now) == 2
+        raise RuntimeError("after cancelling")
+
+    failing = jobs.Job(name="cancel_then_fail", run=cancel_then_fail)
+    _runner([failing], factory, heartbeat, clock).run_round()
+
+    assert [_status(db, i) for i in (first, second)] == [STATUS_AWAITING_PAYMENT] * 2
+    assert _stock(db, variant_id) == STOCK
+    assert _cancel_events(db, first) == []
+    assert _cancel_events(db, second) == []
+
+    # 下一轮的超时取消照常生效，且只生效一次。
+    _runner(jobs.default_jobs(), factory, heartbeat, clock).run_round()
+    assert [_status(db, i) for i in (first, second)] == [STATUS_CANCELLED] * 2
+    assert _stock(db, variant_id) == STOCK + 4
+    assert _cancel_events(db, first) == [ACTOR_SYSTEM]
+
+
 def test_database_unavailable_is_logged_by_class_name_only(
     heartbeat: Path, clock: FakeClock, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -385,7 +440,7 @@ def test_database_unavailable_is_logged_by_class_name_only(
 
     assert len(calls) == 2
     assert _job_messages(caplog) == ["job cancel_expired_orders failed: OperationalError"] * 2
-    assert all("hunter2" not in m and "db.internal" not in m for m in caplog.messages)
+    assert all(SECRET not in message for message in caplog.messages)
 
 
 def test_unconfigured_database_warns_every_round_and_continues(
@@ -556,6 +611,117 @@ def test_signals_request_stop(
     assert rounds == [1]
 
 
+class FakeTimer:
+    """代替看门狗定时器：记下时长与回调，由测试决定何时“到时”。"""
+
+    def __init__(self) -> None:
+        self.started: list[tuple[float, Callable[[], None]]] = []
+        self.cancelled = False
+
+    def __call__(self, seconds: float, callback: Callable[[], None]) -> FakeTimer:
+        self.started.append((seconds, callback))
+        return self
+
+    def cancel(self) -> None:
+        self.cancelled = True
+
+
+class ForcedExit(BaseException):
+    pass
+
+
+def test_stop_during_a_blocked_round_forces_exit_within_ten_seconds(
+    heartbeat: Path, factory: jobs.SessionFactory, clock: FakeClock
+) -> None:
+    """SHOP-TASK-031 验收约定：收到 SIGTERM 或 SIGINT 时在 10 秒内退出——一轮卡住（例如数据库
+    调用不返回）时，停止宽限期到即强制退出，不等这一轮做完。"""
+    timer = FakeTimer()
+    exits: list[int] = []
+
+    def force_exit() -> None:
+        exits.append(1)
+        raise ForcedExit
+
+    def blocked(_db: Session, _now: datetime) -> int:
+        runner.request_stop(signal.SIGTERM, None)
+        # 任务仍未返回时宽限期到。
+        callback = timer.started[0][1]
+        callback()
+        raise AssertionError("not reached")
+
+    runner = jobs.Runner(
+        [jobs.Job(name="blocked", run=blocked)],
+        factory,
+        heartbeat,
+        now=clock.now,
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+        force_exit=force_exit,
+        timer=timer,
+    )
+    with pytest.raises(ForcedExit):
+        runner.run_forever()
+
+    assert len(timer.started) == 1
+    assert timer.started[0][0] == jobs.SHUTDOWN_GRACE_SECONDS < 10
+    assert exits == [1]
+
+
+def test_watchdog_is_cancelled_when_the_round_finishes_in_time(
+    heartbeat: Path, factory: jobs.SessionFactory, clock: FakeClock
+) -> None:
+    """SHOP-TASK-031 验收约定：收到停止信号后不再开始新一轮；这一轮在宽限期内做完时正常退出，
+    看门狗取消，不强制退出。重复的信号不另起看门狗。"""
+    timer = FakeTimer()
+    exits: list[int] = []
+
+    def stopping(_db: Session, _now: datetime) -> int:
+        runner.request_stop(signal.SIGTERM, None)
+        runner.request_stop(signal.SIGINT, None)
+        return 0
+
+    runner = jobs.Runner(
+        [jobs.Job(name="stopping", run=stopping)],
+        factory,
+        heartbeat,
+        now=clock.now,
+        monotonic=clock.monotonic,
+        sleep=clock.sleep,
+        force_exit=lambda: exits.append(1),
+        timer=timer,
+    )
+    runner.run_forever()
+
+    assert len(timer.started) == 1
+    assert timer.cancelled
+    assert exits == []
+    assert clock.sleeps == []
+
+
+def test_force_exit_ends_the_process_with_a_nonzero_code(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """SHOP-TASK-031 验收约定：停止宽限期到时立即退出；日志不含异常消息或连接信息。"""
+    caplog.set_level(logging.INFO, logger="app.jobs")
+    codes: list[int] = []
+    monkeypatch.setattr(jobs.os, "_exit", codes.append)
+
+    jobs.force_exit()
+
+    assert codes == [jobs.EXIT_FAILED]
+    assert _job_messages(caplog) == ["round did not finish within 8 seconds of stop; exiting"]
+
+
+def test_default_timer_is_a_daemon_thread() -> None:
+    """SHOP-TASK-031 验收约定：看门狗不阻止进程在正常停止时退出。"""
+    timer = jobs.start_timer(60.0, lambda: None)
+    try:
+        assert isinstance(timer, threading.Timer)
+        assert timer.daemon
+    finally:
+        timer.cancel()
+
+
 def test_run_forever_removes_a_stale_heartbeat(heartbeat: Path, clock: FakeClock) -> None:
     """「失败、并发与重试」第 6 条：失败有告警——上一次运行留下的心跳不代表这个进程。"""
     heartbeat.write_text("old\n", encoding="ascii")
@@ -578,7 +744,7 @@ def test_cancel_expired_command_succeeds(
     caplog.set_level(logging.INFO, logger="app.jobs")
     variant_id = _variant(db)
     overdue = _order(db, variant_id, START - timedelta(minutes=1))
-    number = db.get(Order, overdue).order_number
+    number = _order_number(db, overdue)
 
     assert jobs.cancel_expired(factory, now=lambda: START) == jobs.EXIT_OK
     assert _status(db, overdue) == STATUS_CANCELLED
