@@ -126,3 +126,4 @@ The back-office frame: demo banner, side navigation, content.
 - Always the fixed neutral `acs-admin` style; store themes never apply here. Light and dark follow the page.
 - `admin.demo_banner` sits at the top of every admin page. Tables use `.acs-admin__table`; the selected row sets `aria-selected`.
 - No export buttons anywhere in the back office.
+- Form fields use `.acs-admin__field` (label above the control), errors use `.acs-admin__alert`, and the desktop language links use `.acs-admin__lang` with `aria-current="true"` on the current language (added 2026-10-05 for A01).
