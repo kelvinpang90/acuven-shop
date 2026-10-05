@@ -1,7 +1,11 @@
 # Acuven Shop 三语文案与演示提示（审阅稿）
 
-> **审阅稿。0.6 已于 2026-10-01 经 Kelvin 审阅通过（记录见 `docs/HANDOFF.md`）；0.7 只新增后台退出按钮的文案键 `admin.logout`，其余各键与 0.6 相同，Kelvin 已于 2026-10-05 认可（记录见 `docs/HANDOFF.md`）。**
-> 版本 0.7（2026-10-05），运营者修订（Claude Code），在 0.6（提交 `2d13250`）上新增 `admin.logout`；0.6（2026-10-01）在 0.5（提交 `e3b3505`）上增补短信验证开关所需的文案键，并修改 `privacy.fictional`、`privacy.sms` 两键。页面结构与线框见 [UX.md](UX.md)（0.8）；依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；「提示」列中依据 DESIGN 的小节除特别注明外仍指 1.9。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
+> **审阅稿。0.7 已于 2026-10-05 经 Kelvin 认可（记录见 `docs/HANDOFF.md`）；0.8 只新增后台登录页过渡状态的文案键 `admin.logged_in`，其余各键与 0.7 相同，Kelvin 已于 2026-10-05 认可（记录见 `docs/HANDOFF.md`）。**
+> 版本 0.8（2026-10-05），运营者修订（Claude Code），在 0.7（提交 `61f7b8a`）上新增 `admin.logged_in`；0.7 在 0.6（提交 `2d13250`）上新增 `admin.logout`；0.6（2026-10-01）在 0.5（提交 `e3b3505`）上增补短信验证开关所需的文案键，并修改 `privacy.fictional`、`privacy.sms` 两键。页面结构与线框见 [UX.md](UX.md)（0.8）；依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；「提示」列中依据 DESIGN 的小节除特别注明外仍指 1.9。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
+
+## 0.8 修订要点
+
+- 新增 `admin.logged_in`（Kelvin 2026-10-05 决定的过渡规则：A02 订单页上线前，A01 登录成功后留在本页显示它与 `admin.logout`；A02 上线后随过渡规则一并取消）。其余已有键未改动、未删除。
 
 ## 0.7 修订要点
 
@@ -556,6 +560,7 @@
 | `admin.design_saved` | Saved. The storefront now uses these settings. | 已保存，前台已改用这些设置。 | Disimpan. Kedai kini menggunakan tetapan ini. | A08 保存成功（0.4） |
 | `admin.nav_settings` | Site settings | 站点设置 | Tetapan laman | A09 导航与页标题（0.6） |
 | `admin.logout` | Log out | 退出登录 | Log keluar | 后台除 A01 外每页右上角（0.7） |
+| `admin.logged_in` | You're logged in as {username}. The other admin pages are not available yet. | 已以 {username} 登录。后台其他页面尚未上线。 | Anda telah log masuk sebagai {username}. Halaman pentadbir lain belum tersedia. | A01 登录成功后（过渡，A02 上线前；0.8） |
 | `admin.sms_toggle` | SMS verification | 短信验证 | Pengesahan SMS | A09（0.6） |
 | `admin.sms_on` | On | 开启 | Hidup | A09（0.6） |
 | `admin.sms_off` | Off (default) | 关闭（默认） | Mati (lalai) | A09（0.6） |
