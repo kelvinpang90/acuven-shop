@@ -95,6 +95,11 @@ export const COPY = {
     zh: "网络中断，正在确认上一步是否已完成…",
     ms: "Sambungan terputus. Menyemak sama ada tindakan terakhir anda berjaya…",
   },
+  "common.rate_limited": {
+    en: "Too many attempts. Please wait and try again later.",
+    zh: "尝试次数过多，请稍后再试。",
+    ms: "Terlalu banyak cubaan. Sila tunggu dan cuba lagi kemudian.",
+  },
   "common.service_unavailable": {
     en: "This feature is temporarily unavailable. You can keep browsing products.",
     zh: "此功能暂不可用，您仍可继续浏览商品。",
@@ -724,6 +729,146 @@ export const COPY = {
     en: 'Next, the store admin will "ship" the order in the demo back office — nothing is actually sent.',
     zh: "接下来管理员会在后台模拟发货——不会真的寄出。",
     ms: 'Seterusnya, pentadbir kedai akan "menghantar" pesanan dalam pejabat belakang demo — tiada apa yang benar-benar dihantar.',
+  },
+  "lookup.title": {
+    en: "Track your order",
+    zh: "查询订单",
+    ms: "Semak pesanan anda",
+  },
+  "lookup.phone": {
+    en: "Phone number used for the order",
+    zh: "下单时填写的电话",
+    ms: "Nombor telefon yang digunakan untuk pesanan",
+  },
+  "lookup.phone_hint": {
+    en: "Enter the number with its country code, starting with +.",
+    zh: "请输入带国家码的号码，以 + 开头。",
+    ms: "Masukkan nombor bersama kod negara, bermula dengan +.",
+  },
+  "lookup.submit": {
+    en: "Find order",
+    zh: "查询",
+    ms: "Cari pesanan",
+  },
+  "lookup.not_found": {
+    en: "We couldn't find an order with these details. Please check the order number and phone number.",
+    zh: "找不到与此资料相符的订单，请检查订单号和电话。",
+    ms: "Kami tidak menemui pesanan dengan butiran ini. Sila semak nombor pesanan dan nombor telefon.",
+  },
+  "lookup.access_note": {
+    en: "After a successful lookup, this browser can view this order, confirm receipt and request a refund for 30 minutes. Payment and cancellation are not available here. Each other order needs its own order number and phone number.",
+    zh: "查询成功后，本浏览器可在 30 分钟内查看此订单、确认收货和申请退款；此处不能支付或取消。查询其他订单须另行输入该单的订单号和电话。",
+    ms: "Selepas semakan berjaya, pelayar ini boleh melihat pesanan ini, mengesahkan penerimaan dan memohon bayaran balik selama 30 minit. Pembayaran dan pembatalan tidak tersedia di sini. Setiap pesanan lain memerlukan nombor pesanan dan nombor telefonnya sendiri.",
+  },
+  "lookup.privacy_warning": {
+    en: "Anyone who knows both the order number and the phone number can see the full shipping details. Keep them private.",
+    zh: "同时知道订单号和电话的人都能看到完整收货资料，请妥善保管。",
+    ms: "Sesiapa yang tahu nombor pesanan dan nombor telefon boleh melihat butiran penghantaran penuh. Simpan dengan selamat.",
+  },
+  "lookup.demo_hint": {
+    en: "Demo orders have no real parcel or tracking number.",
+    zh: "演示订单没有真实包裹或物流单号。",
+    ms: "Pesanan demo tiada bungkusan atau nombor penjejakan sebenar.",
+  },
+  "order.title": {
+    en: "Order {orderNo}",
+    zh: "订单 {orderNo}",
+    ms: "Pesanan {orderNo}",
+  },
+  "order.current_status": {
+    en: "Status:",
+    zh: "状态：",
+    ms: "Status:",
+  },
+  "order.progress": {
+    en: "Progress",
+    zh: "进度",
+    ms: "Kemajuan",
+  },
+  "order.amount_breakdown": {
+    en: "Amount details",
+    zh: "金额明细",
+    ms: "Butiran jumlah",
+  },
+  "order.lookup_access": {
+    en: "You can view this order, confirm receipt and request a refund in this browser for 30 minutes after looking it up.",
+    zh: "查询后 30 分钟内，您可在本浏览器查看此订单、确认收货和申请退款。",
+    ms: "Anda boleh melihat pesanan ini, mengesahkan penerimaan dan memohon bayaran balik dalam pelayar ini selama 30 minit selepas menyemaknya.",
+  },
+  "order.lookup_another": {
+    en: "Track another order",
+    zh: "查询其他订单",
+    ms: "Semak pesanan lain",
+  },
+  "order.session_expired": {
+    en: "Access to this order has ended in this browser. Please look it up again with the order number and phone number.",
+    zh: "本浏览器对此订单的访问已结束，请凭订单号和电话重新查询。",
+    ms: "Akses kepada pesanan ini telah tamat dalam pelayar ini. Sila semak semula dengan nombor pesanan dan nombor telefon.",
+  },
+  "order.lookup_no_pay": {
+    en: "Payment and cancellation are not available from order tracking. Unpaid demo orders are cancelled automatically after 15 minutes.",
+    zh: "查询订单页不提供支付或取消。未支付的演示订单会在 15 分钟后自动取消。",
+    ms: "Pembayaran dan pembatalan tidak tersedia melalui semakan pesanan. Pesanan demo yang belum dibayar dibatalkan secara automatik selepas 15 minit.",
+  },
+  "order.status_awaiting": {
+    en: "Awaiting demo payment",
+    zh: "待模拟支付",
+    ms: "Menunggu bayaran demo",
+  },
+  "order.status_paid": {
+    en: "Paid (demo)",
+    zh: "已支付（演示）",
+    ms: "Dibayar (demo)",
+  },
+  "order.status_packed": {
+    en: "Packed (demo)",
+    zh: "已打包（演示）",
+    ms: "Dibungkus (demo)",
+  },
+  "order.status_shipped": {
+    en: "Shipped (demo)",
+    zh: "已发货（演示）",
+    ms: "Dihantar (demo)",
+  },
+  "order.status_completed": {
+    en: "Completed (demo)",
+    zh: "已完成（演示）",
+    ms: "Selesai (demo)",
+  },
+  "order.status_cancelled": {
+    en: "Cancelled (demo)",
+    zh: "已取消（演示）",
+    ms: "Dibatalkan (demo)",
+  },
+  "order.items": {
+    en: "Items",
+    zh: "商品",
+    ms: "Item",
+  },
+  "order.unit_price": {
+    en: "Unit price",
+    zh: "单价",
+    ms: "Harga seunit",
+  },
+  "order.cash_paid": {
+    en: "Amount paid (excluding points discount)",
+    zh: "实付金额（不含积分抵扣）",
+    ms: "Amaun dibayar (tidak termasuk diskaun mata)",
+  },
+  "order.confirm_receipt": {
+    en: "Confirm receipt",
+    zh: "确认收货",
+    ms: "Sahkan penerimaan",
+  },
+  "order.confirm_receipt_hint": {
+    en: 'Nothing was really delivered — confirming only moves the demo order to "Completed". If you do nothing, it completes automatically 7 days after shipping.',
+    zh: "并没有真实包裹——确认只会把演示订单改为“已完成”。若不操作，模拟发货 7 天后自动完成。",
+    ms: 'Tiada penghantaran sebenar — pengesahan hanya menukar pesanan demo kepada "Selesai". Jika tiada tindakan, ia selesai secara automatik 7 hari selepas penghantaran.',
+  },
+  "order.demo_hint": {
+    en: "Status changes are simulated by the store admin.",
+    zh: "状态变化由店铺管理员模拟推进。",
+    ms: "Perubahan status disimulasikan oleh pentadbir kedai.",
   },
   "privacy.title": {
     en: "Privacy",

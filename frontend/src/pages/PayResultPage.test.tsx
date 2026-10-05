@@ -201,11 +201,14 @@ describe("cancelled", () => {
 });
 
 describe("session expired and loading", () => {
-  // SHOP-TASK-024 验收第 3 条「接口 401 时整页显示 pay.session_expired，common.nav_track 按路由规则在订单查询页实现前不渲染」：结果页同样只有这一句。
+  // SHOP-TASK-024 验收第 3 条「接口 401 时整页显示 pay.session_expired，common.nav_track 按路由规则在订单查询页实现前不渲染」与
+  // SHOP-TASK-028 验收第 3 条「加入 /track 后…P06、P07 授权过期提示里的 common.nav_track 按路由规则出现并链到 /track」、UX P07「游客凭据过期 [pay.session_expired] ( [common.nav_track] ) → P08」：
+  // 结果页同样只有这一句与链到 /track 的 common.nav_track。
   it.each(LANGUAGES)("replaces the whole page with pay.session_expired in %s", (language) => {
     const html = render({ status: "expired" }, language);
-    expect(visibleTexts(html)).toEqual([COPY["pay.session_expired"][language]]);
-    expect(html).not.toContain("<a ");
+    expect(isRoutePath("/track")).toBe(true);
+    expect(visibleTexts(html)).toEqual([COPY["pay.session_expired"][language], COPY["common.nav_track"][language]]);
+    expect([...html.matchAll(/<a [^>]*href="([^"]*)"/g)].map((m) => m[1])).toEqual(["/track"]);
   });
 
   // 派生实现约束（实现选择）：接口返回之前主体为空并标 aria-busy；读取失败时只显示 common.error_retry；仍待支付而最近一次不是失败（页面正换成 P06）时不显示任何结果。

@@ -63,9 +63,21 @@ describe("route table", () => {
   // SHOP-TASK-015 验收第 5 条「加进 frontend/src/router.tsx 的路由表」与 SHOP-TASK-017 验收第 2 条「路由表仍是字符串常量表，动态段写成模式（如 /products/:slug）」：
   // 详情页以模式进表；SHOP-TASK-018 验收第 2 条「路由 /cart」：购物车页进表；
   // SHOP-TASK-024 验收第 2 条「路由 /pay（P06）与 /pay/result（P07）」：两页进表，路径里没有动态段；
-  // SHOP-TASK-025 验收第 2 条「路由 /checkout」：结账页进表，在购物车之后；其余页面尚未实现，不在表里。
-  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages and the privacy page", () => {
-    expect([...ROUTE_PATHS]).toEqual(["/", "/products", "/products/:slug", "/cart", "/checkout", "/pay", "/pay/result", "/privacy"]);
+  // SHOP-TASK-025 验收第 2 条「路由 /checkout」：结账页进表，在购物车之后；
+  // SHOP-TASK-028 验收第 2 条「路由 /track（P08）与 /track/order（P09 查单模式）」：两页进表，在支付页之后；其余页面尚未实现，不在表里。
+  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages and the privacy page", () => {
+    expect([...ROUTE_PATHS]).toEqual([
+      "/",
+      "/products",
+      "/products/:slug",
+      "/cart",
+      "/checkout",
+      "/pay",
+      "/pay/result",
+      "/track",
+      "/track/order",
+      "/privacy",
+    ]);
     expect(isRoutePath("/privacy")).toBe(true);
     expect(isRoutePath("/products")).toBe(true);
     expect(isRoutePath("/products/crew-neck-tee")).toBe(true);
@@ -73,8 +85,33 @@ describe("route table", () => {
     expect(isRoutePath("/checkout")).toBe(true);
     expect(isRoutePath("/pay")).toBe(true);
     expect(isRoutePath("/pay/result")).toBe(true);
-    expect(isRoutePath("/track")).toBe(false);
+    expect(isRoutePath("/track")).toBe(true);
+    expect(isRoutePath("/track/order")).toBe(true);
+    expect(isRoutePath("/track/order/refund")).toBe(false);
     expect(isRoutePath("/login")).toBe(false);
+  });
+
+  // SHOP-TASK-028 验收第 2 条「订单号、电话与 CSRF 令牌不进任何路径、查询参数」：订单查询与订单详情的路径不带任何段值，
+  // 多出一段（如把订单号或电话放进路径）不匹配、按未知路径落到首页。
+  it("gives the order lookup pages no path parameters", () => {
+    expect(matchRoute("/track")).toEqual({ pattern: "/track", params: {} });
+    expect(matchRoute("/track/order")).toEqual({ pattern: "/track/order", params: {} });
+    for (const path of ["/track/B6TN2RJD8K4M0QXZ", "/track/order/B6TN2RJD8K4M0QXZ", "/track/+60123456789", "/track/", "/track/order/"]) {
+      expect(isRoutePath(path), path).toBe(false);
+      expect(resolvePath(path)).toBe("/");
+    }
+  });
+
+  // UX 页面地图「P08 订单查询」「P09 订单详情」：/track 渲染查单表单，输入框为空；/track/order 在接口返回之前（服务端渲染）主体为空并标 aria-busy，
+  // 不出现订单内容或授权过期提示。
+  it("renders the order lookup pages for /track and /track/order", () => {
+    const track = render("/track");
+    expect(track).toContain(`<h1 class="acs-display-l">${COPY["lookup.title"].en}</h1>`);
+    expect(track).not.toContain(COPY["home.demo_hint"].en);
+    const order = render("/track/order");
+    expect(order).toContain(`<main class="site-order" aria-busy="true"></main>`);
+    expect(order).not.toContain(COPY["order.session_expired"].en);
+    expect(order).not.toContain(COPY["home.demo_hint"].en);
   });
 
   // SHOP-TASK-025 验收第 2 条「收货资料与电话只保存在页面内存，不写进网址」：结账页路径没有段值，多出一段（如把电话放进路径）不匹配、按未知路径落到首页。
@@ -161,7 +198,7 @@ describe("route table", () => {
   });
 
   // 验收：未知路径替换为首页。
-  it.each(["/nope", "/products/", "/products/tee/", "/products/a/b", "/track", "/privacy/", "/PRIVACY", "/cart/", "/pay/", "/pay/results", ""])(
+  it.each(["/nope", "/products/", "/products/tee/", "/products/a/b", "/track/", "/track/orders", "/privacy/", "/PRIVACY", "/cart/", "/pay/", "/pay/results", ""])(
     "resolves %j to the home page",
     (path) => {
       expect(resolvePath(path)).toBe("/");
@@ -201,7 +238,7 @@ describe("route table", () => {
   });
 
   it("renders the home page for an unknown path", () => {
-    const html = render("/track/order");
+    const html = render("/track/order/refund");
     expect(html).toContain(COPY["home.demo_hint"].en);
     expect(html).not.toContain(COPY["privacy.intro"].en);
   });

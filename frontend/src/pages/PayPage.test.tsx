@@ -351,15 +351,15 @@ describe("cancel confirmation", () => {
 });
 
 describe("session expired, loading and errors", () => {
-  // SHOP-TASK-024 验收第 3 条「接口 401 时整页显示 pay.session_expired，common.nav_track 按路由规则在订单查询页实现前不渲染」与 UX P06「游客凭据过期…时替换整页」：
-  // 只有提示，没有订单内容、按钮或查询订单链接。
+  // SHOP-TASK-024 验收第 3 条「接口 401 时整页显示 pay.session_expired，common.nav_track 按路由规则在订单查询页实现前不渲染」与 UX P06「游客凭据过期…时替换整页
+  // [pay.session_expired] ( [common.nav_track] ) → P08」，SHOP-TASK-028 验收第 3 条「加入 /track 后…P06、P07 授权过期提示里的 common.nav_track 按路由规则出现并链到 /track」：
+  // 只有提示与链到 /track 的 common.nav_track，没有订单内容或按钮。
   it.each(LANGUAGES)("replaces the whole page with pay.session_expired in %s", (language) => {
     const html = render({ screen: { status: "expired" } }, language);
-    expect(visibleTexts(html)).toEqual([COPY["pay.session_expired"][language]]);
-    expect(html).not.toContain("<a ");
+    expect(visibleTexts(html)).toEqual([COPY["pay.session_expired"][language], COPY["common.nav_track"][language]]);
+    expect(html).toContain(`<a class="acs-btn acs-btn--primary site-pay__track" href="/track">${COPY["common.nav_track"][language]}</a>`);
+    expect([...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1])).toEqual(["/track"]);
     expect(html).not.toContain("<button");
-    expect(html).not.toContain("site-pay__track");
-    expect(html).not.toContain("href=");
   });
 
   // 派生实现约束（实现选择）：守住第 3 条「两页打开时都调用…GET /api/pay/orders」——接口返回之前主体为空并标 aria-busy；读取失败时显示 common.error_retry，不显示订单内容。
