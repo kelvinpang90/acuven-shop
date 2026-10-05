@@ -19,6 +19,8 @@ dependencies = [
     # 手机号规范化为 E.164 与「区号和长度是否可能成立」的判断（DESIGN 1.9「权限与资料保护」），
     # Google libphonenumber 的 Python 版，纯 Python、无网络访问。Kelvin 2026-09-30 选定。
     "phonenumbers>=9.0",
+    # 共享 Redis 的官方客户端：短时限流计数（DESIGN 1.11「失败、并发与重试」第 4 条）。
+    "redis>=5.0",
 ]
 
 [project.optional-dependencies]
