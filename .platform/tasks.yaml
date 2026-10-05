@@ -1384,7 +1384,7 @@ tasks:
       增加一个常驻的定时任务进程（生产栈里复用 API 镜像的独立容器），每分钟调用 SHOP-TASK-021 的超时取消函数，
       把超过支付到期时间的待支付订单取消并释放库存；提供手动执行一次的命令。不做库存重置、自动确认收货与积分到期，
       不加表或迁移，不加接口，不做页面，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-021
     acceptance_criteria:
