@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from app.api.catalog import router as catalog_router
 from app.api.checkout import router as checkout_router
 from app.api.health import router as health_router
+from app.api.order_lookup import router as order_lookup_router
 from app.api.orders import router as orders_router
 from app.api.pay import router as pay_router
 from app.api.regions import router as regions_router
@@ -26,6 +27,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(site_settings_router)
     app.include_router(orders_router)
     app.include_router(pay_router)
+    app.include_router(order_lookup_router)
     return app
 
 

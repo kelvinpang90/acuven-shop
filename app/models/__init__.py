@@ -17,6 +17,7 @@ from app.models.order import (
     OrderItemUnit,
     OrderRecipient,
     PaymentAttempt,
+    ReceiptConfirmation,
 )
 from app.models.order_access import OrderAccessGrant, OrderAccessSession
 from app.models.shipping import DemoFxRate, ShippingRate
@@ -40,6 +41,7 @@ __all__ = [
     "ProductOption",
     "ProductOptionValue",
     "ProductVariant",
+    "ReceiptConfirmation",
     "ShippingRate",
     "SiteSetting",
     "SmsDailyUsage",
