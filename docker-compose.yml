@@ -25,6 +25,8 @@ services:
     mem_limit: 256m
     environment:
       SHOP_DATABASE_URL: ${SHOP_DATABASE_URL:?set SHOP_DATABASE_URL in .env (see .env.example)}
+      # 可以不设：未设置时为空串，照常部署，依赖限流的接口回答暂不可用。
+      SHOP_REDIS_URL: ${SHOP_REDIS_URL:-}
     networks: [proxy_net, data_net]
     healthcheck:
       test:

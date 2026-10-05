@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     # 空串 = 未配置。只有 alembic 用到；应用本身还没有任何表。
     database_url: str = ""
 
+    # 空串 = 未配置。共享 Redis 里分给本项目的独立库（末尾数字是库编号），存短时限流计数；
+    # 未配置或连不上时依赖限流的接口拒绝请求（app/services/rate_limit.py）。
+    redis_url: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
