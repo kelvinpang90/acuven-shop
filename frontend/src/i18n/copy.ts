@@ -95,6 +95,16 @@ export const COPY = {
     zh: "网络中断，正在确认上一步是否已完成…",
     ms: "Sambungan terputus. Menyemak sama ada tindakan terakhir anda berjaya…",
   },
+  "common.service_unavailable": {
+    en: "This feature is temporarily unavailable. You can keep browsing products.",
+    zh: "此功能暂不可用，您仍可继续浏览商品。",
+    ms: "Ciri ini tidak tersedia buat sementara. Anda masih boleh melayari produk.",
+  },
+  "common.fx_reference": {
+    en: "≈ {currency} {amount} (demo rate, for reference only)",
+    zh: "≈ {currency} {amount}（演示汇率，仅供参考）",
+    ms: "≈ {currency} {amount} (kadar demo, untuk rujukan sahaja)",
+  },
   "common.copy": {
     en: "Copy",
     zh: "复制",
@@ -390,10 +400,180 @@ export const COPY = {
     zh: "购物车只保存在本浏览器，不会扣款。",
     ms: "Troli anda disimpan dalam pelayar ini sahaja. Tiada caj dikenakan.",
   },
+  "checkout.title": {
+    en: "Checkout",
+    zh: "结账",
+    ms: "Daftar keluar",
+  },
+  "checkout.phone_step_title": {
+    en: "Your mobile number",
+    zh: "您的手机号",
+    ms: "Nombor telefon bimbit anda",
+  },
+  "checkout.phone_notice": {
+    en: "Malaysian (+60) and Singapore (+65) numbers will receive a verification SMS and be registered as a member automatically (or logged in if already registered). Your mobile number is kept until you delete your account, which you can do anytime in My account. Other numbers check out as a guest without SMS.",
+    zh: "马来西亚（+60）和新加坡（+65）号码会收到验证短信，并自动注册为会员（已注册则直接登录）。手机号保留至您注销账号，您可随时在会员中心注销。其他号码不发短信，以游客身份结账。",
+    ms: "Nombor Malaysia (+60) dan Singapura (+65) akan menerima SMS pengesahan dan didaftarkan sebagai ahli secara automatik (atau dilog masuk jika sudah berdaftar). Nombor telefon bimbit anda disimpan sehingga anda memadam akaun, yang boleh dibuat pada bila-bila masa di Akaun saya. Nombor lain mendaftar keluar sebagai tetamu tanpa SMS.",
+  },
+  "checkout.phone_step_hint": {
+    en: "Choose the country code, or start with + to type it yourself.",
+    zh: "请选择国家码，或以 + 开头自行输入。",
+    ms: "Pilih kod negara, atau mulakan dengan + untuk menaipnya sendiri.",
+  },
+  "checkout.phone_continue": {
+    en: "Continue",
+    zh: "继续",
+    ms: "Teruskan",
+  },
+  "checkout.phone_change": {
+    en: "Change",
+    zh: "更改",
+    ms: "Tukar",
+  },
+  "checkout.login_password": {
+    en: "Already set a password? Log in",
+    zh: "已设置密码？直接登录",
+    ms: "Sudah menetapkan kata laluan? Log masuk",
+  },
+  "checkout.guest_other_country": {
+    en: "This number is outside Malaysia and Singapore, so no SMS is sent and you'll check out as a guest.",
+    zh: "此号码不属于马来西亚或新加坡，不会发送短信，将以游客身份结账。",
+    ms: "Nombor ini di luar Malaysia dan Singapura, jadi tiada SMS dihantar dan anda akan mendaftar keluar sebagai tetamu.",
+  },
+  "checkout.phone_notice_sms_off": {
+    en: "SMS verification is currently switched off, so if you continue without logging in, you'll check out as a guest whatever your number, and no SMS is sent. Your number becomes this order's phone number and, with the order number, lets you track the order.",
+    zh: "短信验证目前已关闭，不登录继续结账时，无论哪个号码都将以游客身份结账，不会发送短信。您的号码即本订单的电话，与订单号一起用于查询订单。",
+    ms: "Pengesahan SMS kini dimatikan, jadi jika anda meneruskan tanpa log masuk, anda akan mendaftar keluar sebagai tetamu tanpa mengira nombor anda, dan tiada SMS dihantar. Nombor anda menjadi nombor telefon pesanan ini dan, bersama nombor pesanan, membolehkan anda menjejak pesanan.",
+  },
+  "checkout.guest_sms_off": {
+    en: "SMS verification is switched off, so you'll check out as a guest.",
+    zh: "短信验证已关闭，将以游客身份结账。",
+    ms: "Pengesahan SMS dimatikan, jadi anda akan mendaftar keluar sebagai tetamu.",
+  },
+  "checkout.guest_notice": {
+    en: "You are checking out as a guest. Coupons and points are for members, who register with a Malaysian or Singapore mobile number.",
+    zh: "您正以游客身份结账。优惠券与积分仅限会员使用；会员须以马来西亚或新加坡手机号注册。",
+    ms: "Anda mendaftar keluar sebagai tetamu. Kupon dan mata untuk ahli, yang mendaftar dengan nombor telefon bimbit Malaysia atau Singapura.",
+  },
   "checkout.recipient_title": {
     en: "Shipping details",
     zh: "收货资料",
     ms: "Butiran penghantaran",
+  },
+  "checkout.name": {
+    en: "Recipient name",
+    zh: "收货人姓名",
+    ms: "Nama penerima",
+  },
+  "checkout.phone": {
+    en: "Phone number",
+    zh: "电话",
+    ms: "Nombor telefon",
+  },
+  "checkout.phone_invalid": {
+    en: "This phone number doesn't look valid. Please check the country code and number.",
+    zh: "该电话号码格式不符，请检查国家码和号码。",
+    ms: "Nombor telefon ini tidak kelihatan sah. Sila semak kod negara dan nombor.",
+  },
+  "checkout.phone_lookup_hint": {
+    en: "You'll need this phone number and your order number to track the order.",
+    zh: "查询订单需要此电话号码和订单号。",
+    ms: "Anda perlukan nombor telefon ini dan nombor pesanan untuk menyemak pesanan.",
+  },
+  "checkout.country": {
+    en: "Country",
+    zh: "国家/地区",
+    ms: "Negara",
+  },
+  "checkout.state_my": {
+    en: "State",
+    zh: "州属",
+    ms: "Negeri",
+  },
+  "checkout.region": {
+    en: "State / province / region",
+    zh: "州/省/地区",
+    ms: "Negeri / wilayah",
+  },
+  "checkout.address": {
+    en: "Address",
+    zh: "地址",
+    ms: "Alamat",
+  },
+  "checkout.postcode": {
+    en: "Postcode",
+    zh: "邮编",
+    ms: "Poskod",
+  },
+  "checkout.form_notice": {
+    en: "Demo only: you will not be charged and nothing will be shipped. You may use fictional shipping details. Shipping details are used only for this demo and are kept long-term with the order.",
+    zh: "仅为演示：不会真实扣款，也不会真实发货。收货资料可填写虚构内容，仅用于本次演示，并会随订单长期保存。",
+    ms: "Demo sahaja: anda tidak akan dicaj dan tiada barang akan dihantar. Anda boleh guna butiran penghantaran rekaan. Butiran penghantaran digunakan untuk demo ini sahaja dan disimpan untuk jangka panjang bersama pesanan.",
+  },
+  "checkout.form_notice_link": {
+    en: "How we handle your details",
+    zh: "我们如何处理您的资料",
+    ms: "Cara kami mengendalikan butiran anda",
+  },
+  "checkout.coupon_members_only": {
+    en: "Coupons are for members only.",
+    zh: "优惠券仅限会员使用。",
+    ms: "Kupon untuk ahli sahaja.",
+  },
+  "checkout.points_guest": {
+    en: "Guests don't earn points. Members with a Malaysian or Singapore mobile number earn 1 point for every RM1 paid.",
+    zh: "游客不累积积分。以马来西亚或新加坡手机号注册的会员每实付 RM1 得 1 积分。",
+    ms: "Tetamu tidak mengumpul mata. Ahli dengan nombor telefon bimbit Malaysia atau Singapura mendapat 1 mata bagi setiap RM1 dibayar.",
+  },
+  "checkout.summary_title": {
+    en: "Order summary",
+    zh: "订单摘要",
+    ms: "Ringkasan pesanan",
+  },
+  "checkout.summary_shipping": {
+    en: "Sample shipping",
+    zh: "示例运费",
+    ms: "Kos penghantaran contoh",
+  },
+  "checkout.summary_total": {
+    en: "Total (MYR)",
+    zh: "合计（MYR）",
+    ms: "Jumlah (MYR)",
+  },
+  "checkout.fx_note": {
+    en: "Reference amounts use a fixed demo rate and are never charged.",
+    zh: "参考金额按固定演示汇率换算，不会收取。",
+    ms: "Jumlah rujukan menggunakan kadar demo tetap dan tidak pernah dicaj.",
+  },
+  "checkout.fx_none": {
+    en: "No reference currency for this country; amounts are shown in MYR only.",
+    zh: "该国家暂无参考币种，仅显示 MYR。",
+    ms: "Tiada mata wang rujukan untuk negara ini; jumlah dipaparkan dalam MYR sahaja.",
+  },
+  "checkout.place_order": {
+    en: "Place demo order",
+    zh: "提交演示订单",
+    ms: "Buat pesanan demo",
+  },
+  "checkout.place_order_hint": {
+    en: "Placing the order holds stock for 15 minutes while you complete the simulated payment. No money is taken.",
+    zh: "提交后为您保留库存 15 分钟以完成模拟支付，不会扣任何钱。",
+    ms: "Membuat pesanan menahan stok selama 15 minit sementara anda melengkapkan pembayaran simulasi. Tiada wang diambil.",
+  },
+  "checkout.submitting": {
+    en: "Placing your order…",
+    zh: "正在提交订单…",
+    ms: "Sedang membuat pesanan…",
+  },
+  "checkout.demo_hint": {
+    en: "Everything on this page is a demo. Shipping fees are samples set per country.",
+    zh: "本页均为演示；运费为按国家设定的示例。",
+    ms: "Semua di halaman ini adalah demo. Kos penghantaran adalah contoh mengikut negara.",
+  },
+  "auth.phone": {
+    en: "Mobile number",
+    zh: "手机号",
+    ms: "Nombor telefon bimbit",
   },
   "pay.title": {
     en: "Simulated payment",

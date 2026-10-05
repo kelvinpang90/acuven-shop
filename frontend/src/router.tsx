@@ -7,9 +7,10 @@ import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 // App.tsx 的页面表按表里的模式穷举，表里加模式而不加页面（或反之）类型检查不通过。
 // 动态段写成 :名称（如 /products/:slug）；站内链接与当前路径都是实际路径，由这里匹配并把解码后的段值交给页面。
 // 路径与查询参数里不放订单号或电话（UX「阅读说明」）；需要它们的页面以请求体或服务端会话传递
-// （支付页 /pay 与结果页 /pay/result 凭服务端会话读取订单，订单号只在页面内存与写接口的请求体里）。
+// （结账页 /checkout 的电话与收货资料只在页面内存与下单请求体里；支付页 /pay 与结果页 /pay/result 凭服务端会话读取订单，
+// 订单号只在页面内存与写接口的请求体里）。
 // 查询参数只用于商品列表的搜索、筛选、排序与页码（pages/productListQuery.ts），也不放语言。
-export const ROUTE_PATHS = ["/", "/products", "/products/:slug", "/cart", "/pay", "/pay/result", "/privacy"] as const;
+export const ROUTE_PATHS = ["/", "/products", "/products/:slug", "/cart", "/checkout", "/pay", "/pay/result", "/privacy"] as const;
 export type RoutePattern = (typeof ROUTE_PATHS)[number];
 
 // 模式对应的实际路径：/products/:slug → /products/<任意段>。

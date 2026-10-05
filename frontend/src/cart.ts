@@ -192,3 +192,8 @@ export function saveCart(storage: CartStorage | null, lines: readonly CartLine[]
   }
   return saved;
 }
+
+// 结账页 P05 下单成功后清空本浏览器购物车并通知订阅者（页头件数随之归零）；返回是否写成。
+export function clearCart(storage: CartStorage | null): boolean {
+  return saveCart(storage, []);
+}

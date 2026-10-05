@@ -6,6 +6,7 @@ import {
   addToCart,
   cartItemCount,
   cartSnapshot,
+  clearCart,
   isCartFullFor,
   productQuantity,
   readCart,
@@ -176,5 +177,21 @@ describe("changing the cart on the cart page", () => {
   it("removes one line and keeps the others in order", () => {
     expect(removeLine([line("a"), line("b"), line("c")], "b")).toEqual([line("a"), line("c")]);
     expect(removeLine([line("a")], "missing")).toEqual([line("a")]);
+  });
+});
+
+describe("clearing the cart after an order", () => {
+  // SHOP-TASK-025 验收第 9 条「201 或 200 时清空本浏览器购物车」：写成空数组，读回为空购物车；只写购物车这一个键。
+  it("empties the browser cart", () => {
+    const storage = memoryStorage({ [CART_STORAGE_KEY]: JSON.stringify([line("a", 2), line("b")]) });
+    expect(clearCart(storage)).toBe(true);
+    expect(readCart(storage)).toEqual([]);
+    expect(storage.data).toEqual({ [CART_STORAGE_KEY]: "[]" });
+  });
+
+  // 派生实现约束（实现选择）：守住 SHOP-TASK-017 验收「读写失败时页面照常可用」——没有存储或写入失败时返回 false，不抛错。
+  it("reports a failed write", () => {
+    expect(clearCart(null)).toBe(false);
+    expect(clearCart(failing)).toBe(false);
   });
 });

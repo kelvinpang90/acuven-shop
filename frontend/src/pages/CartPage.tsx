@@ -17,7 +17,7 @@ import type { RoutePath } from "../router";
 // 不在浏览器相加或相乘；不给收货国家（运费在结账时算）。
 // 页面打开、改件数、移除与切换语言后重新计价，连续修改时只采用最后一次请求的结果；
 // 新结果返回之前仍显示上一次的结果（件数显示购物车里的值），主体标 aria-busy。
-// 结账页 P05 未实现：cart.checkout 按路由规则不渲染。
+// 结账页 P05 已进路由表（/checkout，SHOP-TASK-025）：cart.checkout 按路由规则渲染并链到 /checkout；是否渲染仍只由路由表决定。
 
 function checkoutPath(): RoutePath | null {
   const path: string = "/checkout";
