@@ -366,14 +366,15 @@ describe("step 3: shipping details", () => {
     expect(input).toContain(`class="acs-input"`);
     expect(input).toContain(`id="${labelFor}"`);
     expect(input).toContain(`type="tel"`);
-    expect(input).toContain(`readonly=""`);
+    // react-dom/server 输出 readOnly=""；HTML 属性名不分大小写，按语义匹配。
+    expect(input).toMatch(/(^|\s)readonly=""/i);
     expect(input).toContain(`value="+44 7700 900123"`);
     expect(html).toContain(`<button class="acs-btn acs-btn--quiet" type="button">${copy("checkout.phone_change", language)}</button>`);
     const hintId = /aria-describedby="([^"]+)"/.exec(input)?.[1] ?? "";
     expect(hintId).not.toBe("");
     expect(html).toContain(`<span class="acs-field__hint" id="${hintId}">${copy("checkout.phone_lookup_hint", language)}</span>`);
     const typed = phoneField(render({ form: step3({ phoneRegion: "MY", phoneInput: "+44 7700 900123" }), quote: readyQuote(TO_BRITAIN), language }));
-    expect(typed.input).toContain(`readonly=""`);
+    expect(typed.input).toMatch(/(^|\s)readonly=""/i);
     expect(typed.input).toContain(`value="+44 7700 900123"`);
   });
 
