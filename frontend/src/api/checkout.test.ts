@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CartLine } from "../cart";
 import type { Language } from "../i18n/copy";
-import { QuoteError, fetchQuote, latestQuoter, quoteRequestBody, quoteUrl } from "./checkout";
-import type { CheckoutQuote } from "./checkout";
+import { QuoteError, checkoutQuoteBody, fetchCheckoutQuote, fetchQuote, fetchRegions, latestQuoter, latestRuns, quoteRequestBody, quoteUrl } from "./checkout";
+import type { CheckoutQuote, CheckoutRegions, DestinationQuote } from "./checkout";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -132,5 +132,88 @@ describe("only the latest quote is used", () => {
     expect(pending[0]?.signal?.aborted).toBe(true);
     pending[0]?.resolve(quote(100));
     await expect(run).resolves.toBeNull();
+  });
+
+  // SHOP-TASK-025 验收第 6 条「改国家或州属后重新计价，只采用最后一次请求的结果」：结账页用同一套规则，先发的请求无论先后返回都作废。
+  it("keeps only the latest checkout quote", async () => {
+    const runs = latestRuns<number>();
+    const resolvers: ((value: number) => void)[] = [];
+    const signals: AbortSignal[] = [];
+    const request = (signal: AbortSignal) =>
+      new Promise<number>((resolve) => {
+        signals.push(signal);
+        resolvers.push(resolve);
+      });
+    const first = runs.run(request);
+    const second = runs.run(request);
+    expect(signals[0]?.aborted).toBe(true);
+    resolvers[1]?.(2);
+    resolvers[0]?.(1);
+    await expect(first).resolves.toBeNull();
+    await expect(second).resolves.toEqual({ status: "ready", quote: 2 });
+  });
+});
+
+function destinationQuote(overrides: Partial<DestinationQuote> = {}): DestinationQuote {
+  return { lines: [], subtotal_sen: 11000, shipping: null, total_sen: null, fx_reference: null, can_place_order: false, ...overrides };
+}
+
+describe("checkout quote with a destination", () => {
+  // SHOP-TASK-025 验收第 6 条「用购物车各行 SKU 与件数（选了国家后加国家与州属）调用计价接口」：未选国家时与购物车页相同只有 lines；
+  // 马来西亚加国家与州属代码，其他国家只加国家代码；任何时候都不带价格或金额。
+  it("adds the country, and the state for Malaysia only", () => {
+    expect(checkoutQuoteBody(cart, null)).toEqual(quoteRequestBody(cart));
+    expect(checkoutQuoteBody(cart, { country_code: "MY", state_code: "MY-10" })).toEqual({ ...quoteRequestBody(cart), country_code: "MY", state_code: "MY-10" });
+    const other = checkoutQuoteBody(cart, { country_code: "GB", state_code: null });
+    expect(other).toEqual({ ...quoteRequestBody(cart), country_code: "GB" });
+    expect(Object.keys(other)).toEqual(["lines", "country_code"]);
+    expect(JSON.stringify(other)).not.toMatch(/price|sen|total|shipping|fx|amount/);
+  });
+
+  // 同一条：实际发出的请求地址只带语言，不带 cookie；接口给的运费、合计与参考外币原样交给页面。
+  it("posts the destination and returns the server amounts", async () => {
+    const answer = destinationQuote({
+      shipping: { fee_sen: 2500, zone_code: "GB", version: 1 },
+      total_sen: 13500,
+      fx_reference: { currency_code: "GBP", currency_decimals: 2, amount_minor: 2295, version: 1 },
+      can_place_order: true,
+    });
+    const fetchMock = vi.fn<(url: string, init: RequestInit) => Promise<ReturnType<typeof okResponse>>>(() => Promise.resolve(okResponse(answer)));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchCheckoutQuote("ms", cart, { country_code: "GB", state_code: null })).resolves.toEqual(answer);
+    const [url, init]: [string, RequestInit] = fetchMock.mock.calls[0] ?? ["", {}];
+    expect(url).toBe("/api/checkout/quote?lang=ms");
+    expect(init.credentials).toBe("omit");
+    expect(JSON.parse(init.body as string)).toEqual({ ...quoteRequestBody(cart), country_code: "GB" });
+  });
+});
+
+describe("checkout regions", () => {
+  const regions: CheckoutRegions = {
+    regions: [
+      { code: "GB", calling_code: 44 },
+      { code: "MY", calling_code: 60 },
+    ],
+    my_states: [{ code: "MY-01", name: "Johor" }],
+    default_phone_region: "MY",
+  };
+
+  // SHOP-TASK-025 验收第 3 条「打开时调用…SHOP-TASK-023 的 GET /api/checkout/regions」：固定地址、GET、不带 cookie，三项原样交给页面。
+  it("reads the regions without cookies", async () => {
+    const fetchMock = vi.fn<(url: string, init: RequestInit) => Promise<ReturnType<typeof okResponse>>>(() => Promise.resolve(okResponse(regions)));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchRegions()).resolves.toEqual(regions);
+    const [url, init]: [string, RequestInit] = fetchMock.mock.calls[0] ?? ["", {}];
+    expect(url).toBe("/api/checkout/regions");
+    expect(init.method).toBe("GET");
+    expect(init.credentials).toBe("omit");
+  });
+
+  // SHOP-TASK-025 验收第 3 条「失败时显示 common.error_retry」：非 2xx 与缺少列表的回答都抛错。
+  it("throws when the regions cannot be read", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) })));
+    await expect(fetchRegions()).rejects.toEqual(new QuoteError(500));
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(okResponse({ regions: [] }))));
+    await expect(fetchRegions()).rejects.toBeInstanceOf(QuoteError);
   });
 });

@@ -154,7 +154,7 @@ describe("lines and amounts", () => {
     expect(html).not.toContain("RM 109.99");
     const summary = part(html, /<aside class="acs-summary site-desktop-only site-cart__summary">[\s\S]*?<\/aside>/);
     expect(summary).toContain(`<div class="acs-row"><span>${COPY["cart.subtotal"].en}</span><span class="acs-price">RM 123.45</span></div>`);
-    const bar = part(html, /<div class="acs site-phone-only site-cart__bar">[\s\S]*?<\/div><\/div>/);
+    const bar = part(html, /<div class="acs site-phone-only site-cart__bar"><div class="acs-row">[\s\S]*?<\/div>/);
     expect(bar).toContain(`<span class="acs-price">RM 123.45</span>`);
   });
 
@@ -198,12 +198,13 @@ describe("lines and amounts", () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
   });
 
-  // UX P04「去向：P05；P02（继续购物）」与 SHOP-TASK-018 验收第 2 条「cart.checkout 按路由规则在结账页实现前不渲染」：只有链到商品列表的 cart.continue。
-  it.each(LANGUAGES)("links cart.continue to the product list and has no checkout button in %s", (language) => {
+  // UX P04「去向：P05；P02（继续购物）」与 SHOP-TASK-025 验收第 2 条「本任务起 P04 的 cart.checkout 按路由规则渲染并链到 /checkout」：
+  // 小计栏（桌面）与底部固定栏（手机）各有链到 /checkout 的 cart.checkout，另有链到商品列表的 cart.continue。
+  it.each(LANGUAGES)("links cart.continue to the product list and cart.checkout to the checkout in %s", (language) => {
     const html = renderRows([priced("tee-black-m")], { language });
     expect(html).toContain(`<a class="acs-btn acs-btn--quiet site-cart__continue" href="/products">${COPY["cart.continue"][language]}</a>`);
-    expect(html).not.toContain(COPY["cart.checkout"][language]);
-    expect(html).not.toContain("/checkout");
+    expect(html).toContain(`<a class="acs-btn acs-btn--primary acs-btn--block site-cart__checkout" href="/checkout">${COPY["cart.checkout"][language]}</a>`);
+    expect(html).toContain(`<a class="acs-btn acs-btn--primary acs-btn--block" href="/checkout">${COPY["cart.checkout"][language]}</a>`);
   });
 
   // UX P04 金额元素 M1「不信任浏览器保存的价格」与 SHOP-TASK-018 验收第 3 条：从购物车移除的行在新结果返回前就不再显示（用上一次的结果时只显示仍在购物车里的行）。

@@ -114,6 +114,29 @@ body { margin: 0; }
 .site-cart__continue { justify-self: center; }
 .site-cart__empty { display: grid; gap: 16px; justify-items: start; padding: 0 var(--gutter); }
 
+/* 结账 P05：左侧步骤内容（最宽 680px），右侧 420px 摘要与下单；收货资料两列，姓名、地址与电话占满两列 */
+.site-checkout { padding: 0 0 96px; }
+.site-checkout p { margin: 0; }
+.site-checkout__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 56px var(--gutter) 32px; }
+.site-checkout__body { display: grid; grid-template-columns: minmax(0, 1fr) 420px; gap: 64px; align-items: start; padding: 0 var(--gutter); }
+.site-checkout__main { display: grid; gap: 28px; align-content: start; max-width: 680px; }
+.site-checkout__step, .site-checkout__form { display: grid; gap: 22px; }
+.site-checkout__phone { grid-template-columns: minmax(0, 240px) minmax(0, 1fr); }
+.site-checkout__continue, .site-checkout__login { justify-self: start; }
+.site-checkout__changed { display: grid; gap: 12px; justify-items: start; }
+.site-checkout__guest { display: grid; gap: 12px; }
+.site-checkout__fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 24px; }
+.site-checkout__wide { grid-column: span 2; }
+.site-checkout__readonly { display: flex; gap: 8px; align-items: center; }
+.site-checkout__readonly .acs-input { max-width: 320px; }
+.site-checkout__members { display: grid; gap: 8px; padding-top: 28px; border-top: 1px solid var(--rule); }
+.site-checkout__aside { display: grid; gap: 16px; }
+.site-checkout__item { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.site-checkout__option { display: inline-flex; align-items: center; gap: 4px; }
+.site-checkout__subtotal { padding-top: 10px; border-top: 1px solid var(--rule); }
+.site-checkout__place { display: grid; gap: 16px; }
+.site-checkout__empty { display: grid; gap: 16px; justify-items: start; padding: 0 var(--gutter); }
+
 /* 模拟支付 P06 与结果 P07：居中 880px 单列 */
 .site-pay { box-sizing: border-box; width: min(880px, calc(100% - 2 * var(--gutter))); margin: 0 auto; display: grid; gap: 28px; align-content: start; padding: 56px 0 96px; }
 .site-pay p { margin: 0; }
@@ -234,6 +257,28 @@ body { margin: 0; }
   .site-cart__note { margin-left: 102px; }
   .site-cart__notes { display: grid; gap: 16px; }
   .site-cart__bar { display: grid; gap: 10px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 14px var(--gutter) 20px; border-top: 1px solid var(--rule); }
+
+  /* 结账：单列；摘要折叠在顶部（未选定收货国家时显示商品小计，选定后显示合计）；收货资料一列；
+     第 3 步的金额在表单之后，合计与下单按钮、◆ 提示固定在底部，页面底部留出它的高度 */
+  .site-checkout { padding: 0 0 240px; }
+  .site-checkout__head { flex-direction: column; align-items: stretch; gap: 18px; padding: 24px var(--gutter) 18px; }
+  .site-checkout__fold { display: block; margin: 0 var(--gutter) 18px; padding: 12px 16px; }
+  .site-checkout__fold-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 32px; cursor: pointer; }
+  .site-checkout__fold-amount { display: inline-flex; gap: 6px; }
+  .site-checkout__fold[open] .site-checkout__fold-head { margin-bottom: 12px; }
+  .site-checkout__body { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .site-checkout__main { gap: 18px; max-width: none; }
+  .site-checkout__step, .site-checkout__form { gap: 18px; }
+  .site-checkout__phone { grid-template-columns: minmax(0, 140px) minmax(0, 1fr); }
+  .site-checkout__continue { justify-self: stretch; }
+  .site-checkout__login { justify-self: center; }
+  .site-checkout__fields { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  .site-checkout__wide { grid-column: auto; }
+  .site-checkout__readonly .acs-input { max-width: none; }
+  .site-checkout__members { padding-top: 16px; }
+  .site-checkout__amounts { display: grid; padding: 18px; }
+  .site-checkout__bar { display: grid; gap: 10px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 14px var(--gutter) 20px; border-top: 1px solid var(--rule); }
+  .site-checkout__place { gap: 10px; }
 
   /* 模拟支付与结果：单列；订单号标签与号码分行、应付金额标签与金额分行；收货资料折叠；
      支付方式竖排，◆ 提示在成功、失败按钮之前，按钮与取消占满宽度 */

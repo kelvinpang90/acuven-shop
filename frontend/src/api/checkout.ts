@@ -4,9 +4,12 @@ import type { LocalizedText } from "./catalog";
 
 // 购物车计价接口 POST /api/checkout/quote（app/api/checkout.py，SHOP-TASK-009 与 SHOP-TASK-016）。
 // 购物车页 P04 只送每行的 SKU 与件数：不带收货国家（运费在结账时算）、不带任何价格，不带 cookie。
-// 金额全部是服务端按当前价格算好的整数仙，页面只格式化，不相加或相乘（UX P04 的 M1、M2）。
+// 结账页 P05 选定收货国家（马来西亚另须选定州属）后再加国家与州属代码，接口另给示例运费、合计与参考外币。
+// 金额全部是服务端按当前价格算好的整数仙，页面只格式化，不相加或相乘（UX P04 的 M1、M2，P05 的 M1–M7）。
+// 另有结账参考数据 GET /api/checkout/regions（SHOP-TASK-023）：地区代码与国家呼叫码、马来西亚州属。
 
 const QUOTE_URL = "/api/checkout/quote";
+const REGIONS_URL = "/api/checkout/regions";
 
 // 不可购买（SKU 不存在、停用或商品未发布）：接口只给 SKU、件数与状态。
 export interface UnavailableQuoteLine {
@@ -47,13 +50,62 @@ export interface CheckoutQuote {
   subtotal_sen: number;
 }
 
+// 示例运费（MYR 整数仙）与所用运费区。
+export interface ShippingQuote {
+  fee_sen: number;
+  zone_code: string;
+  version: number;
+}
+
+// 合计的参考外币：该币种最小单位的整数与小数位数（由 format.ts 的 formatMinorUnits 格式化）。
+export interface FxReference {
+  currency_code: string;
+  currency_decimals: number;
+  amount_minor: number;
+  version: number;
+}
+
+// 结账页给了收货国家的计价：shipping、total_sen 有值；该国无演示汇率（含马来西亚）时 fx_reference 为 null。
+// can_place_order 为所有行正常且给了收货国家；下单时服务端另行重算与校验。
+export interface DestinationQuote extends CheckoutQuote {
+  shipping: ShippingQuote | null;
+  total_sen: number | null;
+  fx_reference: FxReference | null;
+  can_place_order: boolean;
+}
+
+// 收货目的地：两位国家代码；州属代码只有马来西亚有（MY-01 到 MY-16），其他国家为 null。
+export interface CheckoutDestination {
+  country_code: string;
+  state_code: string | null;
+}
+
+export interface QuoteLineBody {
+  sku: string;
+  quantity: number;
+}
+
 export function quoteUrl(language: Language): string {
   return `${QUOTE_URL}?${new URLSearchParams({ lang: language }).toString()}`;
 }
 
 // 请求体：每行只有 sku 与 quantity，顺序同购物车；slug 与其他字段不送。
-export function quoteRequestBody(lines: readonly CartLine[]): { lines: { sku: string; quantity: number }[] } {
+export function quoteRequestBody(lines: readonly CartLine[]): { lines: QuoteLineBody[] } {
   return { lines: lines.map((line) => ({ sku: line.sku, quantity: line.quantity })) };
+}
+
+// 结账页的请求体：未选定目的地时与购物车页相同；选定后加 country_code，马来西亚另加 state_code。仍不带任何价格。
+export function checkoutQuoteBody(
+  lines: readonly CartLine[],
+  destination: CheckoutDestination | null,
+): { lines: QuoteLineBody[]; country_code?: string; state_code?: string } {
+  const body = quoteRequestBody(lines);
+  if (destination === null) {
+    return body;
+  }
+  return destination.state_code === null
+    ? { ...body, country_code: destination.country_code }
+    : { ...body, country_code: destination.country_code, state_code: destination.state_code };
 }
 
 export class QuoteError extends Error {
@@ -66,22 +118,65 @@ export class QuoteError extends Error {
   }
 }
 
-// 发一次计价请求；非 2xx 或网络错误时抛错，由页面显示 common.error_retry。
-export async function fetchQuote(language: Language, lines: readonly CartLine[], signal?: AbortSignal): Promise<CheckoutQuote> {
+async function postQuote<T>(language: Language, body: unknown, signal: AbortSignal | undefined): Promise<T> {
   const response = await fetch(quoteUrl(language), {
     method: "POST",
     credentials: "omit",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
-    body: JSON.stringify(quoteRequestBody(lines)),
+    body: JSON.stringify(body),
     signal: signal ?? null,
   });
   if (!response.ok) {
     throw new QuoteError(response.status);
   }
-  return (await response.json()) as CheckoutQuote;
+  return (await response.json()) as T;
 }
 
-export type QuoteOutcome = { status: "ready"; quote: CheckoutQuote } | { status: "error" };
+// 发一次计价请求；非 2xx 或网络错误时抛错，由页面显示 common.error_retry。
+export function fetchQuote(language: Language, lines: readonly CartLine[], signal?: AbortSignal): Promise<CheckoutQuote> {
+  return postQuote<CheckoutQuote>(language, quoteRequestBody(lines), signal);
+}
+
+// 结账页的计价：选定目的地后带国家与州属；失败同上。
+export function fetchCheckoutQuote(
+  language: Language,
+  lines: readonly CartLine[],
+  destination: CheckoutDestination | null,
+  signal?: AbortSignal,
+): Promise<DestinationQuote> {
+  return postQuote<DestinationQuote>(language, checkoutQuoteBody(lines, destination), signal);
+}
+
+export type Outcome<T> = { status: "ready"; quote: T } | { status: "error" };
+export type QuoteOutcome = Outcome<CheckoutQuote>;
+
+export interface LatestRuns<T> {
+  // 发一次请求；之后又发了新的请求（或已 cancel）时，这次的结果作废，返回 null。
+  run: (request: (signal: AbortSignal) => Promise<T>) => Promise<Outcome<T> | null>;
+  cancel: () => void;
+}
+
+// 只采用最后一次请求的结果：新请求发出时中止上一个，上一个无论先后返回都不再采用。
+export function latestRuns<T>(): LatestRuns<T> {
+  let current: AbortController | null = null;
+  const cancel = () => {
+    current?.abort();
+    current = null;
+  };
+  const run = async (request: (signal: AbortSignal) => Promise<T>): Promise<Outcome<T> | null> => {
+    cancel();
+    const controller = new AbortController();
+    current = controller;
+    let outcome: Outcome<T>;
+    try {
+      outcome = { status: "ready", quote: await request(controller.signal) };
+    } catch {
+      outcome = { status: "error" };
+    }
+    return current === controller ? outcome : null;
+  };
+  return { run, cancel };
+}
 
 export interface LatestQuoter {
   // 发一次计价；之后又发了新的请求（或已 cancel）时，这次的结果作废，返回 null。
@@ -89,24 +184,47 @@ export interface LatestQuoter {
   cancel: () => void;
 }
 
-// 连续修改件数时只采用最后一次请求的结果：新请求发出时中止上一个，上一个无论先后返回都不再采用。
+// 连续修改件数时只采用最后一次请求的结果。
 export function latestQuoter(request: typeof fetchQuote = fetchQuote): LatestQuoter {
-  let current: AbortController | null = null;
-  const cancel = () => {
-    current?.abort();
-    current = null;
+  const runs = latestRuns<CheckoutQuote>();
+  return {
+    run: (language, lines) => runs.run((signal) => request(language, lines, signal)),
+    cancel: runs.cancel,
   };
-  const run = async (language: Language, lines: readonly CartLine[]): Promise<QuoteOutcome | null> => {
-    cancel();
-    const controller = new AbortController();
-    current = controller;
-    let outcome: QuoteOutcome;
-    try {
-      outcome = { status: "ready", quote: await request(language, lines, controller.signal) };
-    } catch {
-      outcome = { status: "error" };
-    }
-    return current === controller ? outcome : null;
-  };
-  return { run, cancel };
+}
+
+// 结账参考数据：phonenumbers 支持的全部地区（两位代码与国家呼叫码，按代码排序，不含名称）、
+// 马来西亚州属（代码与马来文官方名称，三种界面语言相同）与第 1 步国家码的默认地区（MY）。
+export interface PhoneRegion {
+  code: string;
+  calling_code: number;
+}
+
+export interface MyState {
+  code: string;
+  name: string;
+}
+
+export interface CheckoutRegions {
+  regions: PhoneRegion[];
+  my_states: MyState[];
+  default_phone_region: string;
+}
+
+// 读一次参考数据，不带 cookie；非 2xx、网络错误或回答缺少列表时抛错，由页面显示 common.error_retry。
+export async function fetchRegions(signal?: AbortSignal): Promise<CheckoutRegions> {
+  const response = await fetch(REGIONS_URL, {
+    method: "GET",
+    credentials: "omit",
+    headers: { Accept: "application/json" },
+    signal: signal ?? null,
+  });
+  if (!response.ok) {
+    throw new QuoteError(response.status);
+  }
+  const body = (await response.json()) as Partial<CheckoutRegions>;
+  if (!Array.isArray(body.regions) || !Array.isArray(body.my_states) || typeof body.default_phone_region !== "string") {
+    throw new QuoteError(response.status);
+  }
+  return { regions: body.regions, my_states: body.my_states, default_phone_region: body.default_phone_region };
 }

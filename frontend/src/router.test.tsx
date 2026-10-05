@@ -62,17 +62,37 @@ function render(path: string): string {
 describe("route table", () => {
   // SHOP-TASK-015 验收第 5 条「加进 frontend/src/router.tsx 的路由表」与 SHOP-TASK-017 验收第 2 条「路由表仍是字符串常量表，动态段写成模式（如 /products/:slug）」：
   // 详情页以模式进表；SHOP-TASK-018 验收第 2 条「路由 /cart」：购物车页进表；
-  // SHOP-TASK-024 验收第 2 条「路由 /pay（P06）与 /pay/result（P07）」：两页进表，路径里没有动态段；其余页面尚未实现，不在表里。
-  it("has the home page, the product list, the product detail, the cart, the payment pages and the privacy page", () => {
-    expect([...ROUTE_PATHS]).toEqual(["/", "/products", "/products/:slug", "/cart", "/pay", "/pay/result", "/privacy"]);
+  // SHOP-TASK-024 验收第 2 条「路由 /pay（P06）与 /pay/result（P07）」：两页进表，路径里没有动态段；
+  // SHOP-TASK-025 验收第 2 条「路由 /checkout」：结账页进表，在购物车之后；其余页面尚未实现，不在表里。
+  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages and the privacy page", () => {
+    expect([...ROUTE_PATHS]).toEqual(["/", "/products", "/products/:slug", "/cart", "/checkout", "/pay", "/pay/result", "/privacy"]);
     expect(isRoutePath("/privacy")).toBe(true);
     expect(isRoutePath("/products")).toBe(true);
     expect(isRoutePath("/products/crew-neck-tee")).toBe(true);
     expect(isRoutePath("/cart")).toBe(true);
+    expect(isRoutePath("/checkout")).toBe(true);
     expect(isRoutePath("/pay")).toBe(true);
     expect(isRoutePath("/pay/result")).toBe(true);
     expect(isRoutePath("/track")).toBe(false);
-    expect(isRoutePath("/checkout")).toBe(false);
+    expect(isRoutePath("/login")).toBe(false);
+  });
+
+  // SHOP-TASK-025 验收第 2 条「收货资料与电话只保存在页面内存，不写进网址」：结账页路径没有段值，多出一段（如把电话放进路径）不匹配、按未知路径落到首页。
+  it("gives the checkout page no path parameters", () => {
+    expect(matchRoute("/checkout")).toEqual({ pattern: "/checkout", params: {} });
+    for (const path of ["/checkout/", "/checkout/60123456789", "/checkout/step-3"]) {
+      expect(isRoutePath(path), path).toBe(false);
+      expect(resolvePath(path)).toBe("/");
+    }
+  });
+
+  // UX 页面地图「P05 结账 /checkout」：/checkout 渲染结账页；服务端渲染时没有本浏览器购物车，为空购物车（cart.empty 与 cart.continue），没有表单。
+  it("renders the checkout page for /checkout", () => {
+    const html = render("/checkout");
+    expect(html).toContain(`<h1 class="acs-display-l">${COPY["checkout.title"].en}</h1>`);
+    expect(html).toContain(COPY["cart.empty"].en);
+    expect(html).toContain(`href="/products">${COPY["cart.continue"].en}</a>`);
+    expect(html).not.toContain(COPY["home.demo_hint"].en);
   });
 
   // SHOP-TASK-024 验收第 2 条「订单号、电话与 CSRF 令牌不进任何路径、查询参数」：支付页与结果页的路径不带任何段值，

@@ -4,6 +4,7 @@ import SiteFrame from "./components/SiteFrame";
 import { LanguageProvider } from "./i18n/language";
 import type { LanguageStorage } from "./i18n/language";
 import CartPage from "./pages/CartPage";
+import CheckoutPage from "./pages/CheckoutPage";
 import HomePage from "./pages/HomePage";
 import PayPage from "./pages/PayPage";
 import PayResultPage from "./pages/PayResultPage";
@@ -19,6 +20,7 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   "/products": ProductListPage,
   "/products/:slug": ProductDetailPage,
   "/cart": CartPage,
+  "/checkout": CheckoutPage,
   "/pay": PayPage,
   "/pay/result": PayResultPage,
   "/privacy": PrivacyPage,
