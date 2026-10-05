@@ -39,10 +39,7 @@ from typing import Annotated, Any
 
 import redis
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.exception_handlers import (
-    http_exception_handler,
-    request_validation_exception_handler,
-)
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
@@ -50,6 +47,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import Receive, Scope, Send
 
 from app.api.orders import IDEMPOTENCY_HEADER, _key_errors
 from app.api.pay import (
@@ -87,13 +85,35 @@ from app.services.payment import expire_overdue_orders
 from app.services.rate_limit import RateLimitUnavailable, client_source, get_redis_client
 
 
+def _validation_response(exc: RequestValidationError) -> JSONResponse:
+    # 每条错误只留位置、类型与消息，不带 input、ctx 等可能含提交内容的字段。
+    detail = [
+        {"type": error.get("type"), "loc": list(error.get("loc", ())), "msg": error.get("msg")}
+        for error in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": detail})
+
+
 class _NoStoreRoute(APIRoute):
     """本路由的每个响应（含错误）都带 Cache-Control: no-store。
 
-    请求体、语言参数与会话依赖抛出的 HTTPException、RequestValidationError 在这里按 FastAPI
-    默认的处理器转成响应再加上这个头；Redis 不可用（取客户端的依赖或计数时抛出的
-    RateLimitUnavailable）转成 503 service_unavailable。
+    请求体、语言参数与会话依赖抛出的 HTTPException、RequestValidationError 在这里转成响应
+    再加上这个头（422 不回显提交的内容）；Redis 不可用（取客户端的依赖或计数时抛出的
+    RateLimitUnavailable）转成 503 service_unavailable。路径相同而方法不符（含 OPTIONS、
+    HEAD）的 405 由路由自己在 handle 里回答，同样带这个头。
     """
+
+    async def handle(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if self.methods and scope["method"] not in self.methods:
+            # Starlette 默认把 405 交给应用级的异常处理器，那里不加 no-store。
+            # 同一路径的其他方法由另一条路由声明，这里列出该路径上全部允许的方法。
+            allowed = sorted(_PATH_METHODS.get(self.path, self.methods))
+            headers = {"Allow": ", ".join(allowed), "Cache-Control": "no-store"}
+            content = {"detail": "Method Not Allowed"}
+            response = JSONResponse(status_code=405, content=content, headers=headers)
+            await response(scope, receive, send)
+            return
+        await super().handle(scope, receive, send)
 
     def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
         handler = super().get_route_handler()
@@ -105,13 +125,17 @@ class _NoStoreRoute(APIRoute):
                 content = {"detail": "service_unavailable"}
                 response = JSONResponse(status_code=503, content=content)
             except RequestValidationError as exc:
-                response = await request_validation_exception_handler(request, exc)
+                response = _validation_response(exc)
             except StarletteHTTPException as exc:
                 response = await http_exception_handler(request, exc)
             response.headers["Cache-Control"] = "no-store"
             return response
 
         return no_store_handler
+
+
+# 本路由各路径（含前缀）上允许的方法，供 405 的 Allow 头使用；见文件末尾。
+_PATH_METHODS: dict[str, set[str]] = {}
 
 
 router = APIRouter(prefix="/api/orders", tags=["order-lookup"], route_class=_NoStoreRoute)
@@ -267,3 +291,8 @@ def confirm(
         return _conflict("idempotency_conflict")
     except OrderNotConfirmable as exc:
         return _conflict("order_not_confirmable", exc.status)
+
+
+for _route in router.routes:
+    if isinstance(_route, APIRoute):
+        _PATH_METHODS.setdefault(_route.path, set()).update(_route.methods)

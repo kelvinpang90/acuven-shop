@@ -921,6 +921,32 @@ def test_view_rejects_unknown_language_without_echo(db: Session, client: TestCli
 
     assert response.status_code == 422, response.text
     assert "klingon" not in response.text
+    for error in response.json()["detail"]:
+        assert set(error) == {"type", "loc", "msg"}
+    _assert_no_store(response)
+
+
+@pytest.mark.parametrize(
+    ("method", "url", "allow"),
+    [
+        pytest.param("PUT", LOOKUP_URL, "GET, POST", id="put-lookup"),
+        pytest.param("DELETE", LOOKUP_URL, "GET, POST", id="delete-lookup"),
+        pytest.param("OPTIONS", LOOKUP_URL, "GET, POST", id="options-lookup"),
+        pytest.param("GET", CONFIRM_URL, "POST", id="get-confirm"),
+        pytest.param("OPTIONS", CONFIRM_URL, "POST", id="options-confirm"),
+    ],
+)
+def test_method_not_allowed_is_no_store(
+    client: TestClient, method: str, url: str, allow: str
+) -> None:
+    """SHOP-TASK-027 验收：三个接口的所有响应（含错误）都带 Cache-Control 为 no-store；
+    错误响应不含内部细节。
+    """
+    response = client.request(method, url)
+
+    assert response.status_code == 405, response.text
+    assert response.headers["allow"] == allow
+    assert response.json() == {"detail": "Method Not Allowed"}
     _assert_no_store(response)
 
 

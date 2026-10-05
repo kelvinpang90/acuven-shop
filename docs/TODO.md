@@ -715,7 +715,7 @@
   - 表选项：`mysql_engine=InnoDB`、`mysql_charset=utf8mb4`。alembic check 不比较检查约束与表选项，迁移与模型已人工逐项对照。
 - 留给之后的任务（本任务都不预留参数）：全部退款后冻结确认收货（之后的退款任务扩展本任务的确认路径）；模拟发货满 7 天自动完成（之后的定时任务，操作者为 `system`，不写确认收货记录）；会员凭会话访问与确认收货（之后的会员任务扩展）；查看接口的退款相关字段（SHOP-TASK-029）。
 - 偏离与取舍，请审阅（未改设计，未发现设计本身必须停下的问题；字段参照 `docs/UX.md` 0.7 的 P08、P09，未发现与设计冲突之处）：
-  - 「所有响应（含错误）都带 no-store」由路由类 `_NoStoreRoute` 统一实现：它把请求体、语言参数与会话依赖抛出的 `HTTPException`、`RequestValidationError` 按 FastAPI 默认处理器转成响应后加上这个头，并把 `RateLimitUnavailable`（取客户端的依赖在连接串为空时抛出，或计数时抛出）转成 503。没有在 `app/main.py` 加全局异常处理器，其他接口的行为不变。
+  - 「所有响应（含错误）都带 no-store」由路由类 `_NoStoreRoute` 统一实现：它把请求体、语言参数与会话依赖抛出的 `HTTPException`（按 FastAPI 默认处理器）、`RequestValidationError`（自己转成 422，每项只留 `type`、`loc`、`msg`，丢掉 `input`、`ctx` 等可能含提交内容的字段）转成响应后加上这个头，并把 `RateLimitUnavailable`（取客户端的依赖在连接串为空时抛出，或计数时抛出）转成 503。路径相同而方法不符（含 `OPTIONS`、`HEAD`）时，路由类在 `handle` 里自己回答 405 `{"detail": "Method Not Allowed"}`，带列出该路径全部允许方法的 `Allow` 头与 no-store，不交给应用级的异常处理器。没有在 `app/main.py` 加全局异常处理器，其他接口的行为不变。
   - 查单请求体的两个字段只校验为字符串、不设长度上限（请求体已有 8 KB 上限）：订单号过长与格式不合法一样回答 404，不另回 422。确认收货的订单号沿用 SHOP-TASK-021 的规则（1 到 16 个字符、不做规范化）：页面提交的是查看接口返回的订单号原文。
   - 订单号转大写只转 ASCII 小写字母：`str.upper` 会把少数非 ASCII 字母（如 `ı`、`ſ`）变成 ASCII 字母，这样的输入按格式不合法处理。
   - 订单存在但没有收货资料记录时按电话不符处理。
