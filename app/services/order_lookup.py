@@ -17,6 +17,11 @@
 访问授权、CSRF 与请求格式由调用方（app/api/order_lookup.py）先行校验；确认收货只按订单 ID 操作。
 全部退款后冻结确认收货、模拟发货满 7 天自动完成与会员访问都由之后的任务扩展，这里不预留参数。
 
+查单视图另带退款部分（SHOP-TASK-029，依据「订单与退款状态」与 docs/HANDOFF.md 0.27 的 Kelvin
+退款决定）：订单行序、退款截止时间与是否在退款期内、累计已退、剩余可退、是否全部已退、每行可退
+件数与预计金额列表、该单的退款申请记录；都由 app/services/refunds.py 按服务端规则算出，
+不含积分相关字段（游客订单）。
+
 本模块不写日志；异常消息不含个人资料、订单号、电话、幂等键或令牌。库里的时间一律是不带时区的
 UTC，返回的视图里换成带 UTC 时区的时间。
 """
@@ -51,6 +56,14 @@ from app.services.order_rules import is_transition_allowed, is_valid_order_numbe
 from app.services.payment import PayRecipient
 from app.services.phone import InvalidPhoneNumber, normalize_phone
 from app.services.rate_limit import current_count, hit
+from app.services.refunds import (
+    RefundRecord,
+    in_refund_window,
+    refund_deadline,
+    refund_estimates,
+    refund_records,
+    refund_state,
+)
 
 # 按访客来源：10 分钟窗口 30 次，成功失败都计。
 SOURCE_BUCKET = "order_lookup_source"
@@ -91,21 +104,46 @@ class OrderNotConfirmable(Exception):
 
 
 class LookupLine(BaseModel):
-    """订单行快照：按请求语言取的名称与规格说明、件数、单价、行小计；逐件实付按件序。"""
+    """订单行快照：行序、按请求语言取的名称与规格说明、件数、单价、行小计；逐件实付按件序。
 
+    另带该行的可退件数与预计金额列表：第 i 项（从 1 数起）为申请 i 件时的金额，即可退件中
+    件序最小的 i 件的现金实付之和；列表长度等于可退件数。
+    """
+
+    line_index: int
     name: str
     variant_label: str
     quantity: int
     unit_price_sen: int
     line_subtotal_sen: int
     unit_cash_paid_sen: list[int]
+    refundable_quantity: int
+    refund_estimates_sen: list[int]
+
+
+class LookupRefundLine(BaseModel):
+    """退款申请的一行：订单行的名称与规格说明快照（按请求语言）、件数与该行金额。"""
+
+    name: str
+    variant_label: str
+    quantity: int
+    amount_sen: int
+
+
+class LookupRefund(BaseModel):
+    """一笔退款申请：创建时间（带 UTC 时区）、状态、申请金额合计与各行（按行序）。"""
+
+    created_at: datetime
+    status: str
+    amount_sen: int
+    lines: list[LookupRefundLine]
 
 
 class LookupOrder(BaseModel):
     """查单模式订单详情所需的一张订单。时间都带 UTC 时区。
 
     不含优惠券与积分两项：现有订单都是游客订单，docs/UX.md 0.7 的 P09 对游客订单不显示这两行；
-    会员订单由之后的会员任务扩展。
+    会员订单由之后的会员任务扩展。退款部分同样不含积分返还与追回。
     """
 
     order_number: str
@@ -120,6 +158,18 @@ class LookupOrder(BaseModel):
     total_sen: int
     # 订单摘要不依赖收货资料记录存在：没有那一条时为空。
     recipient: PayRecipient | None
+    # 支付时间加 30×24 小时；未支付为空。
+    refund_deadline: datetime | None
+    # 服务端判定：当前时间不晚于退款截止时间；未支付为假。
+    refund_window_open: bool
+    # 累计已退：approved 申请的金额之和。
+    refunded_total_sen: int
+    # 剩余可退：所有未被审核中或已批准的申请占用的件的现金实付之和。
+    refundable_left_sen: int
+    # 全部件都已被 approved 申请占用。
+    fully_refunded: bool
+    # 按创建时间从新到旧。
+    refund_requests: list[LookupRefund]
 
 
 class ConfirmOutcome(BaseModel):
@@ -212,15 +262,22 @@ def lookup_orders(
         for item_id, cash_paid in db.execute(unit_stmt).tuples():
             unit_paid[item_id].append(cash_paid)
 
+    states = {order_id: refund_state(db, order_id) for order_id in orders}
+
     lines: dict[int, list[LookupLine]] = {order_id: [] for order_id in order_ids}
     for item in items:
+        line_state = states[item.order_id].line(item.line_index)
+        refundable = () if line_state is None else line_state.refundable
         line = LookupLine(
+            line_index=item.line_index,
             name=getattr(item, f"product_name_{lang}"),
             variant_label=getattr(item, f"variant_label_{lang}"),
             quantity=item.quantity,
             unit_price_sen=item.unit_price_sen,
             line_subtotal_sen=item.line_subtotal_sen,
             unit_cash_paid_sen=unit_paid[item.id],
+            refundable_quantity=len(refundable),
+            refund_estimates_sen=refund_estimates(refundable),
         )
         lines[item.order_id].append(line)
 
@@ -233,6 +290,8 @@ def lookup_orders(
         if order is None:
             continue
         recipient = recipients.get(order_id)
+        state = states[order_id]
+        deadline = refund_deadline(order.paid_at)
         view = LookupOrder(
             order_number=order.order_number,
             status=order.status,
@@ -244,6 +303,12 @@ def lookup_orders(
             shipping_fee_sen=order.shipping_fee_sen,
             total_sen=order.total_sen,
             recipient=None if recipient is None else _recipient(recipient),
+            refund_deadline=None if deadline is None else _utc(deadline),
+            refund_window_open=in_refund_window(order.paid_at, now),
+            refunded_total_sen=state.refunded_sen,
+            refundable_left_sen=state.refundable_left_sen,
+            fully_refunded=state.fully_refunded,
+            refund_requests=[_refund_view(record, lang) for record in refund_records(db, order_id)],
         )
         views.append(view)
     return views
@@ -355,6 +420,24 @@ def _after_lost_race(
     if existing is not None:
         return _replay(db, existing, fingerprint)
     raise OrderNotConfirmable(_load_order(db, order_id).status)
+
+
+def _refund_view(record: RefundRecord, lang: Language) -> LookupRefund:
+    request = record.request
+    return LookupRefund(
+        created_at=_utc(request.created_at),
+        status=request.status,
+        amount_sen=request.amount_sen,
+        lines=[
+            LookupRefundLine(
+                name=getattr(item, f"product_name_{lang}"),
+                variant_label=getattr(item, f"variant_label_{lang}"),
+                quantity=line.quantity,
+                amount_sen=line.amount_sen,
+            )
+            for item, line in record.lines
+        ],
+    )
 
 
 def _recipient(recipient: OrderRecipient) -> PayRecipient:
