@@ -113,7 +113,7 @@
 | A01 后台登录 · 手机（锁定提示） | [A01-phone.html](pages/A01-phone.html) | [A01-phone.png](reference/A01-phone.png) | 390 × 844 |
 | A02 订单与模拟发货 · 桌面 | [A02-desktop.html](pages/A02-desktop.html) | [A02-desktop.png](reference/A02-desktop.png) | 1440 × 900 |
 | A02 订单列表 · 手机 | [A02-phone-list.html](pages/A02-phone-list.html) | [A02-phone-list.png](reference/A02-phone-list.png) | 390 × 844 |
-| A02 订单详情 · 手机（含全部已退冻结提示） | [A02-phone-detail.html](pages/A02-phone-detail.html) | [A02-phone-detail.png](reference/A02-phone-detail.png) | 390 × 1280 |
+| A02 订单详情 · 手机 | [A02-phone-detail.html](pages/A02-phone-detail.html) | [A02-phone-detail.png](reference/A02-phone-detail.png) | 390 × 1280 |
 | A03 退款审核 · 桌面 | [A03-desktop.html](pages/A03-desktop.html) | [A03-desktop.png](reference/A03-desktop.png) | 1440 × 900 |
 | A03 退款列表 · 手机 | [A03-phone-list.html](pages/A03-phone-list.html) | [A03-phone-list.png](reference/A03-phone-list.png) | 390 × 900 |
 | A03 退款详情 · 手机 | [A03-phone-detail.html](pages/A03-phone-detail.html) | [A03-phone-detail.png](reference/A03-phone-detail.png) | 390 × 900 |
