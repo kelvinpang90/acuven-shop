@@ -114,6 +114,34 @@ body { margin: 0; }
 .site-cart__continue { justify-self: center; }
 .site-cart__empty { display: grid; gap: 16px; justify-items: start; padding: 0 var(--gutter); }
 
+/* 模拟支付 P06 与结果 P07：居中 880px 单列 */
+.site-pay { box-sizing: border-box; width: min(880px, calc(100% - 2 * var(--gutter))); margin: 0 auto; display: grid; gap: 28px; align-content: start; padding: 56px 0 96px; }
+.site-pay p { margin: 0; }
+.site-pay__head { display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+.site-pay__title { display: flex; gap: 14px; align-items: center; }
+.site-pay__card { display: grid; gap: 16px; }
+.site-pay__order-no { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.site-pay__copy { display: flex; gap: 10px; align-items: center; }
+.site-pay__due { padding-top: 14px; border-top: 1px solid var(--rule); }
+.site-pay__expires { display: flex; gap: 10px; align-items: center; }
+.site-pay__expires svg { flex-shrink: 0; }
+.site-pay__recipient { display: grid; gap: 8px; }
+.site-pay__recipient-toggle summary { display: flex; align-items: center; min-height: 32px; cursor: pointer; }
+.site-pay__recipient-toggle p { margin-top: 8px; }
+.site-pay__choose { display: grid; gap: 16px; padding-top: 24px; border-top: 1px solid var(--rule); }
+.site-pay__methods { margin: 0; padding: 0; border: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.site-pay__methods legend { margin-bottom: 16px; padding: 0; }
+.site-pay__method { display: flex; gap: 12px; align-items: center; padding: 16px; cursor: pointer; }
+.site-pay__method input { flex-shrink: 0; width: 18px; height: 18px; margin: 0; }
+.site-pay__actions { display: flex; gap: 12px; flex-wrap: wrap; }
+.site-pay__cancel { padding-top: 20px; border-top: 1px solid var(--rule); }
+.site-pay__overlay { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; }
+.site-pay--expired { gap: 20px; justify-items: start; }
+.site-result { padding-top: 64px; }
+.site-result__head { display: grid; gap: 14px; justify-items: start; }
+.site-result__icon { width: 56px; height: 56px; padding: 0; justify-content: center; }
+.site-result__continue, .site-result__retry { justify-self: start; }
+
 /* 隐私说明 P14 */
 .site-privacy { display: grid; grid-template-columns: 280px minmax(0, 720px); gap: 64px; padding: 56px var(--gutter) 96px; }
 .site-privacy__aside { display: grid; gap: 20px; align-content: start; }
@@ -206,6 +234,28 @@ body { margin: 0; }
   .site-cart__note { margin-left: 102px; }
   .site-cart__notes { display: grid; gap: 16px; }
   .site-cart__bar { display: grid; gap: 10px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 14px var(--gutter) 20px; border-top: 1px solid var(--rule); }
+
+  /* 模拟支付与结果：单列；订单号标签与号码分行、应付金额标签与金额分行；收货资料折叠；
+     支付方式竖排，◆ 提示在成功、失败按钮之前，按钮与取消占满宽度 */
+  .site-pay { width: auto; margin: 0; gap: 16px; padding: 24px var(--gutter) 32px; }
+  .site-pay__head { flex-direction: column; align-items: stretch; gap: 16px; }
+  .site-pay__title { gap: 10px; }
+  .site-pay__card { gap: 12px; padding: 18px; }
+  .site-pay__order-no { display: grid; gap: 12px; }
+  .site-pay__copy { justify-content: space-between; }
+  .site-pay__due { display: grid; justify-content: start; gap: 12px; padding-top: 10px; }
+  .site-pay__due > :last-child { text-align: left; }
+  .site-pay__recipient-toggle { display: block; padding: 12px 16px; }
+  .site-pay__choose { gap: 12px; padding-top: 8px; border-top: 0; }
+  .site-pay__methods { grid-template-columns: minmax(0, 1fr); }
+  .site-pay__method { padding: 14px; }
+  .site-pay__actions, .site-pay__status { order: 1; }
+  .site-pay__actions { flex-direction: column; }
+  .site-pay__actions .acs-btn, .site-pay__cancel .acs-btn { width: 100%; }
+  .site-pay__cancel { padding-top: 12px; border-top: 0; }
+  .site-result { padding-top: 32px; }
+  .site-result__icon { width: 48px; height: 48px; }
+  .site-result__continue { justify-self: stretch; }
 
   .site-privacy { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 28px var(--gutter) 40px; }
   .site-privacy__aside { gap: 24px; }

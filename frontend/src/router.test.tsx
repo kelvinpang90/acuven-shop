@@ -61,15 +61,37 @@ function render(path: string): string {
 
 describe("route table", () => {
   // SHOP-TASK-015 验收第 5 条「加进 frontend/src/router.tsx 的路由表」与 SHOP-TASK-017 验收第 2 条「路由表仍是字符串常量表，动态段写成模式（如 /products/:slug）」：
-  // 详情页以模式进表；SHOP-TASK-018 验收第 2 条「路由 /cart」：购物车页进表；其余页面尚未实现，不在表里。
-  it("has the home page, the product list, the product detail, the cart and the privacy page", () => {
-    expect([...ROUTE_PATHS]).toEqual(["/", "/products", "/products/:slug", "/cart", "/privacy"]);
+  // 详情页以模式进表；SHOP-TASK-018 验收第 2 条「路由 /cart」：购物车页进表；
+  // SHOP-TASK-024 验收第 2 条「路由 /pay（P06）与 /pay/result（P07）」：两页进表，路径里没有动态段；其余页面尚未实现，不在表里。
+  it("has the home page, the product list, the product detail, the cart, the payment pages and the privacy page", () => {
+    expect([...ROUTE_PATHS]).toEqual(["/", "/products", "/products/:slug", "/cart", "/pay", "/pay/result", "/privacy"]);
     expect(isRoutePath("/privacy")).toBe(true);
     expect(isRoutePath("/products")).toBe(true);
     expect(isRoutePath("/products/crew-neck-tee")).toBe(true);
     expect(isRoutePath("/cart")).toBe(true);
+    expect(isRoutePath("/pay")).toBe(true);
+    expect(isRoutePath("/pay/result")).toBe(true);
     expect(isRoutePath("/track")).toBe(false);
     expect(isRoutePath("/checkout")).toBe(false);
+  });
+
+  // SHOP-TASK-024 验收第 2 条「订单号、电话与 CSRF 令牌不进任何路径、查询参数」：支付页与结果页的路径不带任何段值，
+  // 多出一段（如把订单号放进路径）不匹配、按未知路径落到首页。
+  it("gives the payment pages no path parameters", () => {
+    expect(matchRoute("/pay")).toEqual({ pattern: "/pay", params: {} });
+    expect(matchRoute("/pay/result")).toEqual({ pattern: "/pay/result", params: {} });
+    for (const path of ["/pay/B6TN2RJD00000000", "/pay/result/B6TN2RJD00000000", "/pay/", "/pay/result/"]) {
+      expect(isRoutePath(path), path).toBe(false);
+    }
+  });
+
+  // UX 页面地图「P06 模拟支付 /pay」「P07 模拟支付结果 /pay/result」：两条路径分别渲染两页；接口返回之前（服务端渲染）主体为空并标 aria-busy，
+  // 不出现订单内容或凭据过期提示。
+  it.each(["/pay", "/pay/result"])("renders the payment page for %s", (path) => {
+    const html = render(path);
+    expect(html).toContain(`<main class="site-pay" aria-busy="true"></main>`);
+    expect(html).not.toContain(COPY["pay.session_expired"].en);
+    expect(html).not.toContain(COPY["home.demo_hint"].en);
   });
 
   // UX 页面地图「P04 购物车 /cart」：/cart 渲染购物车页（服务端渲染时没有本浏览器购物车，为空购物车）。
@@ -119,7 +141,7 @@ describe("route table", () => {
   });
 
   // 验收：未知路径替换为首页。
-  it.each(["/nope", "/products/", "/products/tee/", "/products/a/b", "/track", "/privacy/", "/PRIVACY", "/cart/", ""])(
+  it.each(["/nope", "/products/", "/products/tee/", "/products/a/b", "/track", "/privacy/", "/PRIVACY", "/cart/", "/pay/", "/pay/results", ""])(
     "resolves %j to the home page",
     (path) => {
       expect(resolvePath(path)).toBe("/");

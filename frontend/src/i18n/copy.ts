@@ -90,6 +90,21 @@ export const COPY = {
     zh: "出错了，请重试。",
     ms: "Berlaku ralat. Sila cuba lagi.",
   },
+  "common.network_check": {
+    en: "Connection lost. Checking whether your last action went through…",
+    zh: "网络中断，正在确认上一步是否已完成…",
+    ms: "Sambungan terputus. Menyemak sama ada tindakan terakhir anda berjaya…",
+  },
+  "common.copy": {
+    en: "Copy",
+    zh: "复制",
+    ms: "Salin",
+  },
+  "common.copied": {
+    en: "Copied",
+    zh: "已复制",
+    ms: "Disalin",
+  },
   "common.search": {
     en: "Search",
     zh: "搜索",
@@ -374,6 +389,161 @@ export const COPY = {
     en: "Your cart is saved in this browser only. Nothing is charged.",
     zh: "购物车只保存在本浏览器，不会扣款。",
     ms: "Troli anda disimpan dalam pelayar ini sahaja. Tiada caj dikenakan.",
+  },
+  "checkout.recipient_title": {
+    en: "Shipping details",
+    zh: "收货资料",
+    ms: "Butiran penghantaran",
+  },
+  "pay.title": {
+    en: "Simulated payment",
+    zh: "模拟支付",
+    ms: "Pembayaran simulasi",
+  },
+  "pay.order_no": {
+    en: "Order number",
+    zh: "订单号",
+    ms: "Nombor pesanan",
+  },
+  "pay.save_order_no": {
+    en: "Save this order number. You'll need it with your phone number to track the order.",
+    zh: "请保存订单号，查询订单时需要它和您的电话号码。",
+    ms: "Simpan nombor pesanan ini. Anda perlukannya bersama nombor telefon untuk menyemak pesanan.",
+  },
+  "pay.amount_due": {
+    en: "Amount due (demo)",
+    zh: "应付金额（演示）",
+    ms: "Jumlah perlu dibayar (demo)",
+  },
+  "pay.guest_access": {
+    en: "For your privacy, only this browser can open this order's payment and result pages, for 30 minutes after the order was placed.",
+    zh: "为保护您的资料，只有本浏览器能在下单后 30 分钟内打开此订单的支付与结果页。",
+    ms: "Demi privasi anda, hanya pelayar ini boleh membuka halaman pembayaran dan keputusan pesanan ini, selama 30 minit selepas pesanan dibuat.",
+  },
+  "pay.session_expired": {
+    en: "This page is no longer available in this browser. To view the order, confirm receipt or request a refund, track it with your order number and phone number.",
+    zh: "本浏览器已无法打开此页面。如需查看订单、确认收货或申请退款，请凭订单号和电话查询订单。",
+    ms: "Halaman ini tidak lagi tersedia dalam pelayar ini. Untuk melihat pesanan, mengesahkan penerimaan atau memohon bayaran balik, semak pesanan dengan nombor pesanan dan nombor telefon anda.",
+  },
+  "pay.choose_method": {
+    en: "Choose a demo payment method",
+    zh: "选择演示支付方式",
+    ms: "Pilih kaedah pembayaran demo",
+  },
+  "pay.method_card": {
+    en: "Demo credit/debit card (no card number needed)",
+    zh: "演示信用卡/借记卡（无需输入卡号）",
+    ms: "Kad kredit/debit demo (tiada nombor kad diperlukan)",
+  },
+  "pay.method_bank": {
+    en: "Demo online banking",
+    zh: "演示网上银行",
+    ms: "Perbankan dalam talian demo",
+  },
+  "pay.method_ewallet": {
+    en: "Demo e-wallet",
+    zh: "演示电子钱包",
+    ms: "E-dompet demo",
+  },
+  "pay.simulate_success": {
+    en: "Simulate success",
+    zh: "模拟支付成功",
+    ms: "Simulasi berjaya",
+  },
+  "pay.simulate_failure": {
+    en: "Simulate failure",
+    zh: "模拟支付失败",
+    ms: "Simulasi gagal",
+  },
+  "pay.action_hint": {
+    en: "No card details are collected and no money moves. Pick an outcome to see what happens.",
+    zh: "不收集任何银行卡资料，也不会有资金流动。选择一个结果看看会发生什么。",
+    ms: "Tiada butiran kad dikumpul dan tiada wang berpindah. Pilih keputusan untuk melihat apa yang berlaku.",
+  },
+  "pay.expires": {
+    en: "Complete within {minutes} min, or the demo order is cancelled and stock is released.",
+    zh: "请在 {minutes} 分钟内完成，否则演示订单将取消并释放库存。",
+    ms: "Lengkapkan dalam {minutes} minit, atau pesanan demo dibatalkan dan stok dilepaskan.",
+  },
+  "pay.cancel_order": {
+    en: "Cancel this order",
+    zh: "取消此订单",
+    ms: "Batalkan pesanan ini",
+  },
+  "pay.cancel_confirm": {
+    en: "Cancel this demo order? The held stock, coupon and points will be released. This cannot be undone.",
+    zh: "确定取消此演示订单？保留的库存、优惠券与积分将被释放，此操作不可撤销。",
+    ms: "Batalkan pesanan demo ini? Stok, kupon dan mata yang ditahan akan dilepaskan. Tindakan ini tidak boleh dibatalkan.",
+  },
+  "pay.cancel_confirm_yes": {
+    en: "Yes, cancel order",
+    zh: "确认取消",
+    ms: "Ya, batalkan pesanan",
+  },
+  "pay.cancel_confirm_no": {
+    en: "Keep order",
+    zh: "保留订单",
+    ms: "Kekalkan pesanan",
+  },
+  "pay.processing": {
+    en: "Recording your simulated result…",
+    zh: "正在记录模拟结果…",
+    ms: "Sedang merekod keputusan simulasi…",
+  },
+  "pay.demo_hint": {
+    en: "This page stands in for a payment provider. It is not a real payment page.",
+    zh: "本页模拟支付服务商，并非真实支付页面。",
+    ms: "Halaman ini menggantikan penyedia pembayaran. Ia bukan halaman pembayaran sebenar.",
+  },
+  "result.success_title": {
+    en: "Demo payment successful",
+    zh: "模拟支付成功",
+    ms: "Pembayaran demo berjaya",
+  },
+  "result.success_body": {
+    en: 'No real money was taken. Your order is now "Paid (demo)".',
+    zh: "未扣任何真实款项。订单状态为“已支付（演示）”。",
+    ms: 'Tiada wang sebenar diambil. Pesanan anda kini "Dibayar (demo)".',
+  },
+  "result.guest_next": {
+    en: 'To view this order later, confirm receipt or request a refund, use "Track order" with your order number and phone number.',
+    zh: "之后如需查看此订单、确认收货或申请退款，请在“查询订单”中输入订单号和电话。",
+    ms: 'Untuk melihat pesanan ini kemudian, mengesahkan penerimaan atau memohon bayaran balik, gunakan "Semak pesanan" dengan nombor pesanan dan nombor telefon anda.',
+  },
+  "result.failure_title": {
+    en: "Demo payment failed",
+    zh: "模拟支付失败",
+    ms: "Pembayaran demo gagal",
+  },
+  "result.failure_body": {
+    en: "You chose to simulate a failure. Your order is kept, and you can try again without creating a new order.",
+    zh: "您选择了模拟失败。订单已保留，可直接重试，不会重复下单。",
+    ms: "Anda memilih simulasi gagal. Pesanan anda disimpan dan anda boleh cuba lagi tanpa membuat pesanan baharu.",
+  },
+  "result.retry": {
+    en: "Try payment again",
+    zh: "重新支付",
+    ms: "Cuba bayar semula",
+  },
+  "result.cancelled": {
+    en: "This order was cancelled because payment was not completed in time.",
+    zh: "订单因未按时完成支付已取消。",
+    ms: "Pesanan ini dibatalkan kerana pembayaran tidak dilengkapkan tepat pada masanya.",
+  },
+  "result.cancelled_by_you": {
+    en: "You cancelled this demo order. The held stock, coupon and points have been released.",
+    zh: "您已取消此演示订单，保留的库存、优惠券与积分已释放。",
+    ms: "Anda telah membatalkan pesanan demo ini. Stok, kupon dan mata yang ditahan telah dilepaskan.",
+  },
+  "result.continue": {
+    en: "Continue shopping",
+    zh: "继续购物",
+    ms: "Teruskan membeli-belah",
+  },
+  "result.demo_hint": {
+    en: 'Next, the store admin will "ship" the order in the demo back office — nothing is actually sent.',
+    zh: "接下来管理员会在后台模拟发货——不会真的寄出。",
+    ms: 'Seterusnya, pentadbir kedai akan "menghantar" pesanan dalam pejabat belakang demo — tiada apa yang benar-benar dihantar.',
   },
   "privacy.title": {
     en: "Privacy",

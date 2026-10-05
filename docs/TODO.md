@@ -1,6 +1,6 @@
 # TODO — 开发任务清单
 
-> 最后更新：2026-10-04
+> 最后更新：2026-10-05
 
 ---
 
@@ -599,3 +599,35 @@
   - 表单表按路由表里的路径逐字比较（不按前缀）：例如以后若用 `/pay/:id` 这样的模式，需要由那个任务在表里写入该模式；导航表按前缀匹配 href，所以 `/track` 进了路由表后，`/track/…` 开头的链接也不再由本测试断言。
   - 主体的切分以最后一个 `</header>` 与最后一个 `<footer` 为界；找不到页头或页脚时抛错，测试失败而不是跳过。
 - 验证到什么程度：人工逐条对照验收标准自查，并人工核对当前路由表下改后两条测试检查的内容与改前相同（见上面的对照）。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-024 模拟支付 P06 与支付结果 P07（游客）
+
+- [x] 在 SHOP-TASK-014、015、017、018 的字典、路由、框架与金额格式化上，按 `docs/UX.md` 0.7 的 P06、P07、`docs/UX-COPY.md` 0.6 与 `docs/design/pages/P06-*.html`、`P07-*.html` 实现游客的模拟支付页与结果页，调用 SHOP-TASK-021 的三个接口。不在浏览器计算任何金额，不做会员访问与积分，不做结账页，不装依赖（未改 `package.json`、锁文件），不改后端、CI、部署配置、`.platform/` 或设计。设计闸门：DESIGN 1.11（提交 `2d13250`）。
+- 文件结构（全部在 `frontend/src/`）：
+  - `router.tsx`：路由表改为 `["/", "/products", "/products/:slug", "/cart", "/pay", "/pay/result", "/privacy"]`（两条新路径没有动态段），注释写明订单号只在页面内存与写接口的请求体里；`App.tsx` 的页面表加入 `PayPage`、`PayResultPage`。
+  - `api/pay.ts`：接口类型；`readPayOrder`（GET，取第一张订单与 CSRF 令牌，401 或没有订单为 `expired`，其他非 2xx 为 `failed`，fetch 抛错为 `network`）；`submitPayment`、`submitCancel`（回答归为 `done`、`closed`、`expired`、`csrf`、`failed`、`network`）；`attemptFor`（幂等键规则）；`confirmOrder`（网络中断后重新读取直到得到回答）；`runPayment`、`runCancel`（一次写操作的去向：结果页、整页过期、`common.error_retry`、确认仍待支付后可重试）；倒计时纯函数 `remainingAtRead`、`minutesLeft`、`nextTickDelay`；结果页状态 `resultKind`；马来西亚州属名称 `fetchMyStates`。
+  - `pages/PayPage.tsx`：P06（`PayView` 为可单独渲染的展示部分，`PayPage` 接上请求、倒计时与状态），另导出 P07 共用的订单卡片、收货资料、`pay.expires` 行、凭据过期整页、`useCountdown`、`useMyStates`、`copyText`、`countryName`、`recipientParts`。`pages/PayResultPage.tsx`：P07（`PayResultView` 与 `PayResultPage`）。
+  - `i18n/copy.ts` 从 UX-COPY 原样抄入 34 个键：`common.network_check`、`common.copy`、`common.copied`、`checkout.recipient_title`、`pay.*` 20 个（`title`、`order_no`、`save_order_no`、`amount_due`、`guest_access`、`session_expired`、`choose_method`、`method_card`、`method_bank`、`method_ewallet`、`simulate_success`、`simulate_failure`、`action_hint`、`expires`、`cancel_order`、`cancel_confirm`、`cancel_confirm_yes`、`cancel_confirm_no`、`processing`、`demo_hint`）与 `result.*` 10 个（`success_title`、`success_body`、`guest_next`、`failure_title`、`failure_body`、`retry`、`cancelled`、`cancelled_by_you`、`continue`、`demo_hint`）。`styles/site.css` 加两页的布局与显隐。
+- 页面结构：
+  - P06（订单为 `awaiting_demo_payment`）：`pay.title`、`common.demo_badge` 与 ★ `pay.demo_hint`；卡片里 `pay.order_no`、订单号与 `common.copy`（写入剪贴板，成功后按钮文字换成 `common.copied`）、`pay.save_order_no`、`pay.amount_due` 与 `common.price_myr`（接口的 `total_sen`）、`pay.expires`（时钟图形）、`pay.guest_access`（锁图形的提示条）；收货资料（桌面为 `checkout.recipient_title` 标题与正文，手机为折叠的 `<details>`，按宽度只显示其一）：姓名 · 电话，换行后 地址, 邮编, 地区, 国家；`pay.choose_method` 与三个单选框（`pay.method_card`、`pay.method_bank`、`pay.method_ewallet`）；`pay.simulate_success`、`pay.simulate_failure`；◆ `pay.action_hint`（菱形标记，桌面在按钮之后，手机按线框在按钮之前）；`pay.cancel_order`。没有卡号、有效期或 CVV 输入框，页面上唯一的输入控件是三个单选框；不显示参考外币、小计或运费。
+  - P07：成功（状态为 `demo_paid` 及之后）为对勾图形、`result.success_title`、`result.success_body`、同上的订单卡片（无倒计时与 `pay.guest_access`）、收货资料、`result.guest_next` 提示条、★ `result.demo_hint`、链到 `/products` 的 `result.continue`；失败（仍待支付且最近一次支付为 `failure`）为叉图形、`result.failure_title`、`result.failure_body`、`pay.expires` 倒计时与链到 `/pay` 的 `result.retry`；已取消为 `cancelled_by` 是 `self` 时 `result.cancelled_by_you`，否则（`timeout` 或未知）`result.cancelled`，以及 `result.continue`。仍待支付而最近一次不是失败时换成 P06。`result.guest_register`、`result.track` 按路由规则在注册页、会员订单详情实现前不渲染；不显示获得积分。
+  - 两页接口返回之前主体为空并标 `aria-busy`；读取失败显示 `common.error_retry`；401（或接口没有订单）时整页只有 `pay.session_expired`（锁图形提示条），`common.nav_track` 按路由规则在 `/track` 进路由表前不渲染。
+- 请求与重试规则：
+  - 两页打开、切换语言与倒计时到 0 时调用 `GET /api/pay/orders?lang=<当前语言>`（同源 cookie、`cache: "no-store"`），取 `orders[0]`。订单号、电话与 CSRF 令牌只在 React 状态里，不写 localStorage、sessionStorage、cookie 或历史记录，不进任何路径或查询参数；写接口的地址固定为 `/api/pay/attempts`、`/api/pay/cancel`，订单号只在请求体，令牌只在 `X-CSRF-Token` 请求头。页面不显示凭据内容或凭据剩余时间。
+  - 支付：未选支付方式或有操作进行中时成功、失败按钮禁用。点击时 `POST /api/pay/attempts`，请求体只有 `order_number`、`method`、`result`，请求头 `Idempotency-Key` 每次点击由 `crypto.randomUUID()` 新生成；提交期间成功、失败、取消按钮与单选框都禁用并显示 `pay.processing`。2xx、409 `order_expired`、409 `order_not_payable` 转到 P07；401 整页 `pay.session_expired`；403 先重新读取订单取得新令牌（读到已不待支付则转到 P07、401 则整页过期），再显示 `common.error_retry`；其他失败（含 409 `idempotency_conflict`、5xx）显示 `common.error_retry`。
+  - 网络中断（fetch 抛错）：显示 `common.network_check`，按钮保持禁用，重新读取订单（读取也中断或失败时每 5 秒再读，直到得到回答）；订单已不待支付时转到 P07，401 整页过期；仍待支付时显示 `common.error_retry` 并允许重试——同一方式与结果的下一次点击沿用中断那次的幂等键（改了方式或结果则新生成），之后的任何其他回答都清除这个待重试的键。
+  - 取消：`pay.cancel_order` 只打开确认框（`acs-dialog`，`role="dialog"`、`aria-modal`、以 `pay.cancel_confirm` 为标签；`pay.cancel_confirm_no` 自动获得焦点，Esc 与它都关闭确认框）；`pay.cancel_confirm_yes` 才 `POST /api/pay/cancel`（请求体只有订单号，带 `X-CSRF-Token`，不带幂等键），期间按钮禁用；200 与 409 `order_not_cancellable` 转到 P07，其余同支付（网络中断同样先重新读取订单，仍待支付时允许再次取消）。
+  - 转到 P07 一律替换当前历史记录（后退不回到已结束的支付页）；`result.retry` 是普通站内链接。离开页面时中止进行中的读取与确认。
+  - 收货地址为马来西亚时另调用 `GET /api/checkout/regions`（不带 cookie）把州属代码换成名称，失败时显示代码；国家名称用浏览器的 `Intl.DisplayNames` 按界面语言本地化（SHOP-TASK-023「国家名称…前端按界面语言本地化」），取不到时显示代码。
+- 倒计时规则：读取时的剩余毫秒为 `payment_expires_at − server_time`（不读访客电脑的时钟；时间带微秒或时区偏移都能解析，过期为 0）；之后的流逝以单调时钟 `performance.now()` 计。`{minutes}` 为剩余毫秒按分钟向上取整（不足一分钟显示 1），在分钟数变化的时刻更新（即每分钟一次）；到 0 时 P06 重新读取订单（已超时取消则转到 P07），P07 失败页重新读取订单（显示为已取消）。
+- 偏离与取舍，请审阅（未改设计，未发现需要停下的问题，未新增 UX-COPY 以外的界面文字，未多显示或多收集个人资料）：
+  - `site.css` 不写颜色、字体与圆角（已有测试禁止 `border-color` 等）：视觉稿选中支付方式时的强调色边框没有搬，选中状态只由原生单选框显示；订单号的 20px/600 字号字重没有搬；结果图标的圆形底色改用组件类 `acs-tag--success`、`acs-tag--danger`（圆角为该组件的圆角，不是正圆）；确认框没有半透明遮罩，只以固定定位居中显示。支付方式的卡片底用 `acs-card`，手机收货资料的折叠底用 `acs-summary`。
+  - 手机视觉稿的 `pay.guest_access` 是灰色正文，桌面是提示条；两者同一份标记，都用提示条。P07 的收货资料在桌面视觉稿（会员）里放在订单卡片内，手机视觉稿（游客）在卡片外；本页按游客视觉稿放在卡片外，桌面与手机相同；成功页金额沿用 P06 的大号价格样式。失败页标题用页面一级标题（视觉稿的片段为二级标题）。
+  - `common.copied`：线框只写了 `common.copy`，复制成功后的反馈用 UX-COPY 已有的 `common.copied`（不是自行编写的文案）。
+  - 网络中断后确认订单仍待支付时，UX-COPY 没有专门的文案；`common.network_check` 只在确认期间显示（它的意思是「正在确认」），确认后改显示 `common.error_retry` 并允许重试。取消进行中不显示 `pay.processing`（该句是「正在记录模拟结果」），只禁用按钮。
+  - ★ `result.demo_hint` 只在成功页显示（验收第 8 条把它列在 demo_paid 之下，文案讲的是之后的模拟发货）。
+  - 状态在已模拟支付之后（打包、发货、完成）时 P07 按成功显示；取消方为空时按超时的 `result.cancelled`；P07 遇到仍待支付而最近一次不是失败（如直接打开 `/pay/result`）时换成 P06；取消被拒为 409 `order_not_cancellable`（已支付）时转到 P07 按当前状态显示。这些验收与 UX 没有写明，按「按订单状态显示」取舍。
+  - 切换语言时重新读取订单（「随当前语言」），已选的支付方式不变。
+  - UX-COPY 里没有、因而没有渲染的界面文字（不自行编写）：加载中的提示（只给 `<main>` 的 `aria-busy`）、读取失败后的重试按钮、确认框的关闭按钮。
+- 已有测试的改动（只按验收允许的范围）：`router.test.tsx` 的路由表断言改为七项（另断言 `/pay`、`/pay/result` 在表里），未知路径样例加 `/pay/`、`/pay/results`，新增「支付页路径没有段值、多出一段不匹配」与「两条路径分别渲染两页的空主体」两条；其余断言未动。`App.test.tsx`、`components/SiteFrame.test.tsx` 未改，它们按路由表对新路径照常检查（全部文字来自字典、演示横幅、无行内样式、无未实现页面的导航、`/pay/result` 主体无表单）。
+- 验证到什么程度：人工逐条对照验收标准自查，并人工核对新增的 34 个字典键与 UX-COPY 原文（逐字比较由已有的 `i18n/copy.test.ts` 覆盖新键）。新增测试 `api/pay.test.ts`、`pages/PayPage.test.tsx`、`pages/PayResultPage.test.tsx`（vitest 与 `react-dom/server`，未加测试依赖；`fetch` 以按顺序回答、可模拟网络中断的 `vi.fn` 替身，剪贴板以对象替身，localStorage、sessionStorage、document.cookie 与 history 以 `vi.stubGlobal` 替身），每条注释写明它守住的 UX、DESIGN 或验收原句，没有直接原句的边界标为「派生实现约束（实现选择）」并写明上层条款，覆盖：GET 只带语言、同源、不缓存，取第一张订单与令牌；401 与空列表为过期，其他失败与网络中断分开；支付请求的地址、方法、请求体只有三个字段、幂等键与 CSRF 请求头、地址里没有订单号与令牌；每次点击新生成 UUID 幂等键，只有同一方式与结果的待重试支付沿用原键；2xx、409 两种已结束、401 的去向；其他失败显示重试提示；403 后先 GET 取得新令牌；网络中断后先通知页面显示 `common.network_check`、再 GET 确认、仍待支付时以同一幂等键与同一请求体重试（请求顺序 POST、GET、POST），已完成时转结果页、过期时整页提示，读取也失败时按间隔重读，中止后停止；取消只带订单号与 CSRF 令牌、不带幂等键，409 已支付与 401 的去向，网络中断后先 GET；整个读取、支付（含中断与重试）与取消过程不写 localStorage、sessionStorage、cookie 或历史记录，请求地址不含订单号、电话或令牌；访客电脑时钟快慢不影响剩余时间，微秒、时区偏移与已过期，分钟向上取整与下一次更新时刻；结果页四种状态与取消方的选择、取消方未知、仍待支付无失败、发货后按成功；州属名称读取与失败；P06 各元素三种语言都出现且按线框顺序，金额与小计加运费不符时照样显示 `total_sen`，唯一的输入是三个单选框、没有卡号类字段与参考外币，唯一的倒计时是 `pay.expires`、链接不含订单号；收货资料六项（桌面与手机各一份）、马来西亚州属名称与代码回退、国家名随语言、没有收货资料时不渲染；未选方式时两个按钮禁用、选后可用（按 `PayView` 返回的元素树取 `disabled`）、进行中所有控件禁用且只在提交时显示 `pay.processing`；确认期间显示 `common.network_check`、失败显示 `common.error_retry`；两个按钮分别交出 `success` 与 `failure`；点 `pay.cancel_order` 只打开确认框而不取消，确认框的是/否分别接到确认取消与保留订单，确认框只在打开时渲染且三种语言文案正确；P06、P07 过期整页只有 `pay.session_expired`、没有链接或按钮；加载中与读取失败；复制写入订单号、被拒或无剪贴板时不抛错；P07 成功页各元素（三种语言）、唯一链接是 `/products`、没有注册、订单详情或积分、按线框顺序、金额原样；失败页的倒计时与链到 `/pay` 的重试、没有订单内容与继续购物；已取消两种文案互斥并有继续购物；两页各状态下页面文字只来自字典（订单数据与分隔符号除外）；路由表七项、两页路径无段值、两条路径渲染各自的空主体。浏览器相关的部分（容器组件里的 effect、计时器与单调时钟、真实点击与状态切换、确认框的焦点与 Esc、替换历史记录、真实剪贴板、`Intl.DisplayNames` 在各浏览器的名称、媒体查询下的显隐与布局）未在 DOM 中执行，只以纯函数、以替身驱动的请求流程与服务端渲染的各状态验证。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查。未做浏览器验收（未在真实浏览器中打开页面，未连真实后端走一遍下单到支付，也未与参考图对比）。检查命令结果由 Worker 另行记录。
