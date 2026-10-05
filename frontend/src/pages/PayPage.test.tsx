@@ -279,7 +279,9 @@ describe("buttons", () => {
     expect(button(chosen, "pay.simulate_success").props.disabled).toBe(false);
     expect(button(chosen, "pay.simulate_failure").props.disabled).toBe(false);
     const html = render({ method: "bank" });
-    expect(html).toMatch(/<input type="radio"[^>]*value="bank" checked=""/);
+    const checkedRadios = (html.match(/<input[^>]*type="radio"[^>]*>/g) ?? []).filter((tag) => tag.includes(`checked=""`));
+    expect(checkedRadios).toHaveLength(1);
+    expect(checkedRadios[0]).toContain(`value="bank"`);
     expect(render()).not.toContain(`checked=""`);
     expect(canSubmit(null, null)).toBe(false);
     expect(canSubmit("ewallet", null)).toBe(true);
@@ -356,7 +358,8 @@ describe("session expired, loading and errors", () => {
     expect(visibleTexts(html)).toEqual([COPY["pay.session_expired"][language]]);
     expect(html).not.toContain("<a ");
     expect(html).not.toContain("<button");
-    expect(html).not.toContain(COPY["common.nav_track"][language]);
+    expect(html).not.toContain("site-pay__track");
+    expect(html).not.toContain("href=");
   });
 
   // 派生实现约束（实现选择）：守住第 3 条「两页打开时都调用…GET /api/pay/orders」——接口返回之前主体为空并标 aria-busy；读取失败时显示 common.error_retry，不显示订单内容。
