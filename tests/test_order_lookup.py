@@ -706,7 +706,7 @@ def test_redis_unavailable_before_order_query(
     Redis 连接串未配置、或来源计数与读取失败计数时连不上，返回 503
     service_unavailable，不查订单、不签发授权。
     """
-    order = _make_order(db)
+    order_number = _make_order(db).order_number
     if case == "unconfigured":
         del app.dependency_overrides[get_redis_client]
     elif case == "source-count-error":
@@ -715,7 +715,7 @@ def test_redis_unavailable_before_order_query(
         fake_redis.fail_get_prefix = FAILURE_PREFIX
     statements.clear()
 
-    response = _lookup(client, order.order_number)
+    response = _lookup(client, order_number)
 
     assert response.status_code == 503, response.text
     assert response.json() == {"detail": "service_unavailable"}
