@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390">
+<title>A09 Site settings — phone</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}.acs-admin__input,.acs-admin__select{box-sizing:border-box;max-width:100%;min-width:0}.acs-admin main *{min-width:0;overflow-wrap:anywhere}</style>
+</head>
+<body>
+<div class="acs-admin" data-mode="light" style="width: 390px; height: 844px; display: flex; flex-direction: column">
+<div class="acs-admin__banner" style="padding: 6px 16px"><span class="acs-tag acs-tag--demo">DEMO</span>Admin — demo store. Actions here never move real money or goods.</div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--a-nav); color: var(--a-on-nav)"><button type="button" aria-label="Menu" aria-expanded="false" style="display: grid; place-items: center; width: 44px; height: 44px; border: 0; background: transparent; color: inherit"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></button><span style="font-weight: 600; min-width: 0">Site settings</span><button class="acs-admin__btn acs-admin__btn--secondary" type="button" style="margin-left: auto; flex-shrink: 0; color: var(--a-on-nav); border-color: var(--a-nav-muted)">Log out</button></div>
+<main style="display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; padding: 16px">
+
+<fieldset class="acs-admin__panel" style="margin: 0; display: grid; gap: 10px; padding: 20px">
+<legend style="font-weight: 600; padding: 0 4px">SMS verification</legend>
+<label style="display: flex; gap: 10px; align-items: center; min-height: 44px"><input type="radio" name="sms" style="width: 18px; height: 18px">On</label>
+<label style="display: flex; gap: 10px; align-items: center; min-height: 44px; font-weight: 700"><input type="radio" name="sms" checked style="width: 18px; height: 18px">Off (default)</label>
+<span class="acs-admin__muted" style="font-size: 13px">When on, Malaysian and Singapore numbers verify by SMS at checkout and become members, and registration, SMS login, password reset and account deletion use SMS. When off, no SMS is sent: visitors who are not logged in check out as guests whatever their number, registration, SMS login and password reset are paused, and members confirm account deletion with their password or, without one, while logged in.</span>
+<div style="display: flex; gap: 8px; padding: 8px 10px; border-radius: 4px; background: var(--demo-soft); color: var(--on-demo-soft); font-size: 13px; "><svg width="14" height="14" viewBox="0 0 24 24" style="flex-shrink: 0; margin-top: 2px; fill: var(--demo-mark)" aria-hidden="true"><path d="M12 3l9 9-9 9-9-9z"></path></svg><span>Turning this on sends real SMS messages, which cost money. Turn it on only after the SMS service has been set up and checked.</span></div>
+</fieldset>
+<button class="acs-admin__btn" type="submit" style="justify-content: center; min-height: 44px">Save</button>
+<div role="status" style="padding: 10px 12px; border-radius: 4px; background: var(--a-select); font-size: 13px">Saved. New requests use this setting.</div>
+</main>
+</div>
+</body>
+</html>

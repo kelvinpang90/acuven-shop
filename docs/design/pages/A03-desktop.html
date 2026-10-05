@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>A03 Refund review — desktop</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}.acs-admin__input,.acs-admin__select{box-sizing:border-box;max-width:100%;min-width:0}.acs-admin main *{min-width:0;overflow-wrap:anywhere}</style>
+</head>
+<body>
+<div class="acs-admin" data-mode="light" style="width: 1440px; height: 900px; display: flex; flex-direction: column">
+<div style="display: flex; align-items: stretch"><div class="acs-admin__banner" style="flex-grow: 1"><span class="acs-tag acs-tag--demo">DEMO</span>Admin — demo store. Actions here never move real money or goods.</div><div style="display: flex; align-items: center; padding: 0 16px; background: var(--a-nav)"><button class="acs-admin__btn acs-admin__btn--secondary" type="button" style="color: var(--a-on-nav); border-color: var(--a-nav-muted)">Log out</button></div></div>
+<div class="acs-admin__shell" style="flex-grow: 1">
+<nav class="acs-admin__nav" aria-label="Admin"><a href="#">Orders</a><a href="#" aria-current="page">Refunds</a><a href="#">Products</a><a href="#">Coupons</a><a href="#">Shipping &amp; demo rates</a><a href="#">Stock resets</a><a href="#">Store design</a><a href="#">Site settings</a>
+<span style="margin-top: auto; display: flex; gap: 10px; padding: 12px; font-size: 12px"><a href="#" style="padding: 0; color: var(--a-on-nav)">English</a><a href="#" style="padding: 0">中文</a><a href="#" style="padding: 0">Bahasa Melayu</a></span></nav>
+<main class="acs-admin__main" style="grid-template-columns: minmax(0, 1fr) 480px; column-gap: 24px; align-items: start">
+<div style="display: grid; gap: 16px">
+<h1 class="acs-admin__h">Refunds</h1>
+<div style="display: flex; gap: 8px"><select class="acs-admin__select" aria-label="Status"><option>Status</option><option>Under review</option><option>Approved (demo)</option><option>Rejected</option></select></div>
+<div class="acs-admin__panel" style="overflow-x: auto">
+<table class="acs-admin__table"><thead><tr><th>Requested at</th><th>Order number</th><th>Items</th><th style="text-align: right">Amount (MYR)</th><th>Status</th></tr></thead>
+<tbody>
+<tr aria-selected="true"><td>2 Oct 2026 10:15</td><td>K7Q2-9MXA</td><td>Soy Wax Candle × 1</td><td style="text-align: right">RM 27.63</td><td><span class="acs-tag acs-tag--demo">Under review</span></td></tr>
+<tr><td>1 Oct 2026 18:40</td><td>H3PZ-4W8C</td><td>Crew Neck Tee / White, L × 1</td><td style="text-align: right">RM 34.00</td><td><span class="acs-tag acs-tag--demo">Under review</span></td></tr>
+<tr><td>28 Sep 2026 09:02</td><td>C2WF-8NTD</td><td>Woven Storage Basket × 1</td><td style="text-align: right">RM 49.00</td><td><span class="acs-tag acs-tag--success">Approved (demo)</span></td></tr>
+<tr><td>27 Sep 2026 16:20</td><td>R5JK-3PLV</td><td>Pullover Hoodie / Navy, M × 1</td><td style="text-align: right">RM 89.00</td><td><span class="acs-tag acs-tag--outline">Rejected</span></td></tr>
+</tbody></table>
+</div>
+</div>
+<section class="acs-admin__panel" style="display: grid; gap: 18px; padding: 20px">
+<h2 class="acs-admin__h" style="font-size: 17px">Refund request details · K7Q2-9MXA</h2>
+<div style="display: grid; gap: 6px"><span class="acs-admin__muted" style="font-size: 12px; font-weight: 600">Items</span><div style="display: flex; justify-content: space-between; gap: 12px"><span>Soy Wax Candle</span><span>Requested 1 / bought 1 / approved 0</span></div></div>
+<div style="display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--a-line)"><span style="font-weight: 600">Cash refund (demo): RM 27.63</span><span>Points returned 146 / taken back 27</span><span>Refunded so far (demo): RM 0.00</span><span>Still refundable: RM 95.00</span><span class="acs-admin__muted" style="font-size: 13px">Sample shipping fees are not refunded.</span></div>
+<div style="display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--a-line)"><label style="display: grid; gap: 6px; font-weight: 600">Reason<textarea class="acs-admin__input" rows="2" style="padding: 8px 10px; font: inherit"></textarea></label></div>
+<div style="display: grid; gap: 8px">
+<div style="display: flex; gap: 8px"><button class="acs-admin__btn" type="button">Approve (demo)</button><button class="acs-admin__btn acs-admin__btn--secondary" type="button">Reject</button></div>
+<div style="display: flex; gap: 8px; padding: 8px 10px; border-radius: 4px; background: var(--demo-soft); color: var(--on-demo-soft); font-size: 13px; "><svg width="14" height="14" viewBox="0 0 24 24" style="flex-shrink: 0; margin-top: 2px; fill: var(--demo-mark)" aria-hidden="true"><path d="M12 3l9 9-9 9-9-9z"></path></svg><span>Approving never sends real money.</span></div>
+</div>
+</section>
+</main>
+</div>
+</div>
+</body>
+</html>
