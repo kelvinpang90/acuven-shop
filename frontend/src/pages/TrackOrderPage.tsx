@@ -300,9 +300,10 @@ export function TrackOrderView({ screen, states, busy, failed, onConfirm }: Trac
                   <span>{t("common.network_check")}</span>
                 </div>
               )}
-              {failed && busy === null && <ErrorNotice />}
             </section>
           )}
+          {/* 不放在确认收货卡片里：403 后重新读取到的订单可能已不是 demo_shipped，提示仍要显示。 */}
+          {failed && busy === null && <ErrorNotice />}
           {order.status === AWAITING_PAYMENT && (
             <div className="acs-alert acs-alert--info">
               <InfoIcon />

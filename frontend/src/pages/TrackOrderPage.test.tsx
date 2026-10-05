@@ -353,6 +353,13 @@ describe("confirm receipt", () => {
     expect(has(failed, "common.network_check")).toBe(false);
     expect(has(render(), "common.error_retry")).toBe(false);
   });
+
+  // SHOP-TASK-028 验收第 6 条「403 csrf_failed 时重新读取订单取得新令牌并显示 common.error_retry」：重新读取到的订单已不是 demo_shipped
+  // （例如已被确认为 demo_completed）时，确认收货按钮消失，但 common.error_retry 仍显示。
+  it.each(STATUSES)("keeps common.error_retry after a failure when the re-read order is %s", (status) => {
+    const html = render({ ...ready(lookupOrder({ status })), failed: true });
+    expect(has(html, "common.error_retry")).toBe(true);
+  });
 });
 
 describe("unpaid orders and missing entries", () => {
