@@ -1,4 +1,4 @@
-"""订单、订单行、逐件分摊快照、收货资料、模拟支付尝试、订单事件。
+"""订单、订单行、逐件分摊快照、收货资料、模拟支付尝试、订单事件、确认收货记录。
 
 依据 docs/DESIGN.md 1.9（提交 361d8bf）「数据模型」的 Order / OrderItem、OrderRecipient、
 PaymentAttempt / OrderEvent 三行，以及「订单与退款状态」「失败、并发与重试」
@@ -60,6 +60,8 @@ ACTOR_ADMIN = "admin"
 ACTOR_SYSTEM = "system"
 
 ACTOR_TYPES = (ACTOR_GUEST, ACTOR_MEMBER, ACTOR_ADMIN, ACTOR_SYSTEM)
+# 手动确认收货的操作者：查单页的访客与「我的订单」的会员；系统自动完成不写确认收货记录。
+RECEIPT_ACTOR_TYPES = (ACTOR_GUEST, ACTOR_MEMBER)
 
 # 模拟支付方式，对应 docs/UX-COPY.md 的 pay.method_card、pay.method_bank、pay.method_ewallet。
 PAYMENT_METHOD_CARD = "demo_card"
@@ -366,5 +368,41 @@ class OrderEvent(Base):
     )
     from_status: Mapped[str | None] = mapped_column(String(32))
     to_status: Mapped[str] = mapped_column(String(32))
+    actor_type: Mapped[str] = mapped_column(String(10))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class ReceiptConfirmation(Base):
+    """一次手动确认收货：所属订单、幂等键、请求指纹、操作者类别与时间。
+
+    依据 docs/DESIGN.md 1.11（提交 2d13250）「失败、并发与重试」第 1 条：确认收货使用幂等键和
+    数据库唯一约束。每张订单至多一条（一张订单只记一次手动确认），幂等键全表唯一。
+    模拟发货满 7 天的自动完成不写这里。不存任何个人资料。
+    请求指纹由 app/services/order_lookup.py 按订单 ID 算出；库里只保证长 64。
+    """
+
+    __tablename__ = "receipt_confirmations"
+    __table_args__ = (
+        UniqueConstraint("order_id"),
+        UniqueConstraint("idempotency_key"),
+        CheckConstraint("LENGTH(idempotency_key) >= 1", name="idempotency_key_not_empty"),
+        CheckConstraint(
+            f"LENGTH(request_fingerprint) = {REQUEST_FINGERPRINT_LENGTH}",
+            name="request_fingerprint_length",
+        ),
+        CheckConstraint(
+            f"actor_type IN {_sql_in(RECEIPT_ACTOR_TYPES)}",
+            name="actor_type_valid",
+        ),
+        MYSQL_TABLE_OPTIONS,
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("orders.id", ondelete="RESTRICT"),
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(64))
+    request_fingerprint: Mapped[str] = mapped_column(String(REQUEST_FINGERPRINT_LENGTH))
     actor_type: Mapped[str] = mapped_column(String(10))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
