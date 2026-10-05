@@ -124,6 +124,12 @@ describe("looking up an order", () => {
     stubFetch(reply);
     await expect(submitLookup(ORDER_NUMBER, PHONE)).resolves.toBe(kind);
   });
+
+  // SHOP-TASK-028 验收第 4 条「204 时转到 /track/order」：只有 204 算查到；其他 2xx 不是约定的回答，按 failed 留在本页。
+  it.each([json(200, {}), empty(201), empty(202)])("treats only 204 as found (%#)", async (reply) => {
+    stubFetch(reply);
+    await expect(submitLookup(ORDER_NUMBER, PHONE)).resolves.toBe("failed");
+  });
 });
 
 describe("reading the order", () => {
@@ -207,6 +213,16 @@ describe("confirm receipt requests", () => {
       expect(calls[1]?.url).toBe("/api/orders/lookup?lang=en");
     },
   );
+
+  // SHOP-TASK-028 验收第 6 条「200 或 409 order_not_confirmable 时重新读取订单」：只有 200 算确认成功；其他 2xx 不是约定的回答，
+  // 按其他失败显示 common.error_retry，不当作已确认。
+  it.each([json(201, { status: "demo_completed" }), empty(204)])("treats only 200 as confirmed (%#)", async (reply) => {
+    const again = reply.clone();
+    stubFetch(reply);
+    await expect(submitConfirmReceipt(ORDER_NUMBER, TOKEN, KEY)).resolves.toBe("failed");
+    stubFetch(again);
+    await expect(runConfirmReceipt("en", ORDER_NUMBER, TOKEN, KEY)).resolves.toEqual({ kind: "error", read: null });
+  });
 
   // SHOP-TASK-028 验收第 6 条「403 csrf_failed 时重新读取订单取得新令牌并显示 common.error_retry」：POST 之后紧接着 GET，结果带新令牌并要求提示重试。
   it("reads the order again for a new token after csrf_failed", async () => {

@@ -185,8 +185,8 @@ body { margin: 0; }
 .site-order__progress { display: grid; gap: 10px; }
 .site-order__body { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 48px; align-items: start; }
 .site-order__main { display: grid; gap: 16px; }
-.site-order__lines { display: grid; margin: 0; padding: 0; list-style: none; border-bottom: 1px solid var(--rule); }
-.site-order__line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; padding: 16px 0; border-top: 1px solid var(--rule); }
+.site-order__lines { display: grid; margin: 0; padding: 0; list-style: none; }
+.site-order__line { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; align-items: center; padding: 16px 0; }
 .site-order__info { display: grid; gap: 4px; }
 .site-order__name { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .site-order__option { display: inline-flex; align-items: center; gap: 4px; }
@@ -350,7 +350,7 @@ body { margin: 0; }
   .site-order__paid { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; text-align: left; }
   .site-order__aside { gap: 16px; }
   .site-order__fold { display: block; padding: 12px 16px; }
-  .site-order__fold-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 32px; cursor: pointer; }
+  .site-order__fold-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 32px; }
   .site-order__fold[open] .site-order__fold-head { margin-bottom: 12px; }
   .site-order__actions { gap: 12px; }
   .site-order--expired { width: auto; margin: 0; padding: 28px var(--gutter) 40px; }

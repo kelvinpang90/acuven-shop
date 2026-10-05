@@ -143,7 +143,7 @@ describe("form", () => {
     expect(html).toMatch(/<form class="acs-card site-track__form" method="post">/);
     for (const field of inputs(html)) {
       expect(field).not.toContain("name=");
-      expect(field).toContain(`autocomplete="off"`);
+      expect(field).toMatch(/\sautocomplete="off"/i);
     }
     for (const href of html.matchAll(/(?:href|action)="([^"]*)"/g)) {
       expect(href[1]).not.toContain(ORDER_NUMBER);

@@ -249,16 +249,21 @@ describe("order", () => {
 
 describe("amounts", () => {
   // SHOP-TASK-028 验收第 5 条「不显示优惠券与积分两行（游客订单，UX 0.5 起的规则）」与 UX 0.5 修订要点「游客订单…不显示 [checkout.summary_coupon]、[checkout.summary_points] 两行」：
-  // 桌面金额明细与手机折叠里都只有商品小计、示例运费、合计三行，没有优惠券或积分抵扣（UX-COPY 的三语原文）。
+  // 桌面金额明细与手机折叠里都只有商品小计、示例运费、合计三行，没有优惠券或积分抵扣行（行名为 UX-COPY 的三语原文）。
+  // order.cash_paid 的说明文字本身含「积分抵扣」，所以只检查金额明细的行与独立成段的行名，不禁止整页出现这个词。
   it.each(LANGUAGES)("has no coupon or points rows in %s", (language) => {
     const html = render({}, language);
     const labels = [COPY["cart.subtotal"][language], COPY["checkout.summary_shipping"][language], COPY["checkout.summary_total"][language]];
+    const rowNames = ["Coupon discount", "优惠券抵扣", "Diskaun kupon", "Points discount", "积分抵扣", "Diskaun mata"];
     for (const amounts of [desktopAmounts(html), phoneAmounts(html)]) {
       const rows = [...amounts.matchAll(/<div class="acs-row[^"]*"><span>([^<]*)<\/span>/g)].map((m) => unescapeHtml(m[1] ?? ""));
       expect(rows).toEqual(labels);
+      for (const text of rowNames) {
+        expect(amounts).not.toContain(text);
+      }
     }
-    for (const text of ["Coupon discount", "优惠券抵扣", "Diskaun kupon", "Points discount", "积分抵扣", "Diskaun mata"]) {
-      expect(html).not.toContain(text);
+    for (const text of visibleTexts(html)) {
+      expect(rowNames).not.toContain(text);
     }
   });
 

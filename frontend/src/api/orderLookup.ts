@@ -43,7 +43,7 @@ interface LookupOrdersResponse {
 }
 
 // 查单的回答：found 为 204（已签发查单授权）；not_found 为 404（不存在与电话不符不加区分）；rate_limited 为 429；
-// unavailable 为 503；failed 为其他；network 为网络中断。
+// unavailable 为 503；failed 为其他（含 204 以外的 2xx）；network 为网络中断。
 export type LookupReply = "found" | "not_found" | "rate_limited" | "unavailable" | "failed" | "network";
 
 // POST /api/orders/lookup：请求体只有订单号与电话，原样提交，格式由服务端判定。
@@ -71,7 +71,7 @@ export async function submitLookup(orderNumber: string, phone: string, signal?: 
     case 503:
       return "unavailable";
     default:
-      return response.ok ? "found" : "failed";
+      return "failed";
   }
 }
 
@@ -125,7 +125,7 @@ export function receiptKey(retry: string | null, newKey: () => string = () => cr
 }
 
 // 确认收货的回答：done 为 200；closed 为 409 order_not_confirmable；expired 为 401；csrf 为 403；
-// failed 为其他（含 409 idempotency_conflict）；network 为网络中断。
+// failed 为其他（含 200 以外的 2xx 与 409 idempotency_conflict）；network 为网络中断。
 export type ConfirmReply = "done" | "closed" | "expired" | "csrf" | "failed" | "network";
 
 async function conflictDetail(response: Response): Promise<string | null> {
@@ -156,7 +156,7 @@ export async function submitConfirmReceipt(orderNumber: string, csrfToken: strin
   } catch {
     return "network";
   }
-  if (response.ok) {
+  if (response.status === 200) {
     return "done";
   }
   if (response.status === 401) {
