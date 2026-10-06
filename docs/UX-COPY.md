@@ -1,7 +1,11 @@
 # Acuven Shop 三语文案与演示提示（审阅稿）
 
-> **审阅稿。0.7 已于 2026-10-05 经 Kelvin 认可（记录见 `docs/HANDOFF.md`）；0.8 只新增后台登录页过渡状态的文案键 `admin.logged_in`，其余各键与 0.7 相同，Kelvin 已于 2026-10-05 认可（记录见 `docs/HANDOFF.md`）。**
-> 版本 0.8（2026-10-05），运营者修订（Claude Code），在 0.7（提交 `61f7b8a`）上新增 `admin.logged_in`；0.7 在 0.6（提交 `2d13250`）上新增 `admin.logout`；0.6（2026-10-01）在 0.5（提交 `e3b3505`）上增补短信验证开关所需的文案键，并修改 `privacy.fictional`、`privacy.sms` 两键。页面结构与线框见 [UX.md](UX.md)（0.8）；依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；「提示」列中依据 DESIGN 的小节除特别注明外仍指 1.9。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
+> **审阅稿。0.7 已于 2026-10-05 经 Kelvin 认可（记录见 `docs/HANDOFF.md`）；0.8 只新增后台登录页过渡状态的文案键 `admin.logged_in`，其余各键与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只新增 `admin.reviewed_by`，其余各键与 0.8 相同，Kelvin 已于 2026-10-06 认可（记录见 `docs/HANDOFF.md`）。**
+> 版本 0.9（2026-10-06），运营者修订（Claude Code），在 0.8（提交 `f333b19`）上新增 `admin.reviewed_by`；0.8（2026-10-05）在 0.7（提交 `61f7b8a`）上新增 `admin.logged_in`；0.7 在 0.6（提交 `2d13250`）上新增 `admin.logout`；0.6（2026-10-01）在 0.5（提交 `e3b3505`）上增补短信验证开关所需的文案键，并修改 `privacy.fictional`、`privacy.sms` 两键。页面结构与线框见 [UX.md](UX.md)（0.9）；依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；「提示」列中依据 DESIGN 的小节除特别注明外仍指 1.9。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
+
+## 0.9 修订要点
+
+- 新增 `admin.reviewed_by`（A03 已批准或已拒绝的申请显示审核人与审核时间，Kelvin 2026-10-06 认可）。其余已有键未改动、未删除。
 
 ## 0.8 修订要点
 
@@ -471,6 +475,7 @@
 | `admin.refund_reject` | Reject | 拒绝 | Tolak | — |
 | `admin.refund_reason` | Reason | 理由 | Sebab | — |
 | `admin.refund_hint` | Approving never sends real money. | 批准不会退还任何真实款项。 | Kelulusan tidak pernah menghantar wang sebenar. | — |
+| `admin.reviewed_by` | Reviewed by {username} on {time} | 由 {username} 于 {time} 审核 | Disemak oleh {username} pada {time} | A03 已审核的申请；{username} 为审核人，{time} 为审核时间（0.9） |
 | `admin.product_edit` | Edit product | 编辑商品 | Sunting produk | — |
 | `admin.content_language` | Content language | 内容语言 | Bahasa kandungan | 商品三语文案页签 |
 | `admin.product_name` | Product name | 商品名称 | Nama produk | — |

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>A02 Orders, no matching order — desktop</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}.acs-admin__input,.acs-admin__select{box-sizing:border-box;max-width:100%;min-width:0}.acs-admin main *{min-width:0;overflow-wrap:anywhere}</style>
+</head>
+<body>
+<div class="acs-admin" data-mode="light" style="width: 1440px; height: 600px; display: flex; flex-direction: column">
+<div style="display: flex; align-items: stretch"><div class="acs-admin__banner" style="flex-grow: 1"><span class="acs-tag acs-tag--demo">DEMO</span>Admin — demo store. Actions here never move real money or goods.</div><div style="display: flex; align-items: center; padding: 0 16px; background: var(--a-nav)"><button class="acs-admin__btn acs-admin__btn--secondary" type="button" style="color: var(--a-on-nav); border-color: var(--a-nav-muted)">Log out</button></div></div>
+<div class="acs-admin__shell" style="flex-grow: 1">
+<nav class="acs-admin__nav" aria-label="Admin"><a href="#" aria-current="page">Orders</a><a href="#">Refunds</a><a href="#">Products</a><a href="#">Coupons</a><a href="#">Shipping &amp; demo rates</a><a href="#">Stock resets</a><a href="#">Store design</a><a href="#">Site settings</a>
+<span style="margin-top: auto; display: flex; gap: 10px; padding: 12px; font-size: 12px"><a href="#" style="padding: 0; color: var(--a-on-nav)">English</a><a href="#" style="padding: 0">中文</a><a href="#" style="padding: 0">Bahasa Melayu</a></span></nav>
+<main class="acs-admin__main" style="align-items: start">
+<div style="display: grid; gap: 16px">
+<h1 class="acs-admin__h">Orders</h1>
+<div style="display: flex; gap: 8px"><input class="acs-admin__input" type="search" aria-label="Search by order number" placeholder="Search by order number" value="ZZ99-0000" style="width: 280px"><select class="acs-admin__select" aria-label="Status"><option>Status</option></select></div>
+<div class="acs-admin__panel" style="overflow-x: auto">
+<table class="acs-admin__table"><thead><tr><th>Order number</th><th>Date</th><th>Status</th><th style="text-align: right">Total (MYR)</th><th>Refunds</th></tr></thead>
+<tbody></tbody></table>
+</div>
+</div>
+</main>
+</div>
+</div>
+</body>
+</html>
