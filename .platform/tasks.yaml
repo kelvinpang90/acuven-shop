@@ -1562,7 +1562,7 @@ tasks:
       用 SHOP-TASK-035 的规则函数提供管理员登录、退出与取当前会话三个接口，以及之后后台业务接口共用的管理员会话依赖；
       登录按来源与用户名锁定，Redis 不可用时拒绝。不做后台页面与业务接口，不接告警，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）与 docs/HANDOFF.md 记录的 Kelvin 2026-10-04 决定。拆分：接口层。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-035
     acceptance_criteria:
