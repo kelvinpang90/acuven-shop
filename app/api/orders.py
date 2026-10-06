@@ -10,13 +10,18 @@
 1. 请求体按实际读到的字节逐块判断，超过 8 KB（与计价接口相同）
    即停止读取并返回 413，先于一切校验。
 2. 只接受 JSON，否则 415。
-3. 校验 Idempotency-Key 请求头与请求体，多出的字段一律 422；
+3. 按访客来源计一次（SHOP-TASK-043，按 docs/HANDOFF.md 记录的 Kelvin
+   2026-10-06 决定）：桶名 guest_order_source，1 小时 60 次，幂等重放与
+   之后校验不通过的请求也计；超过即 429 rate_limited，不读写订单、库存
+   与授权，不回显请求内容。Redis 未配置、连不上、超时或出错时放行，
+   见 app/api/checkout.py 的 enforce_source_limit。
+4. 校验 Idempotency-Key 请求头与请求体，多出的字段一律 422；
    手机号按请求里的地区代码规范化，不成立 422（类型 phone_invalid）。
    422 响应只给出错字段的位置、类型与固定消息，不回显提交的内容。
 
 错误码：403 sms_verification_required；409 idempotency_conflict 与
-order_not_placeable；运费行缺失与计价接口一样 503。
-新订单 201，重放 200。不写日志。限流留给之后统一处理公开接口限流的任务。
+order_not_placeable；429 rate_limited；运费行缺失与计价接口一样 503。
+新订单 201，重放 200。除 Redis 出错时限流的一条警告（只有桶名）外不写日志。
 """
 
 from __future__ import annotations
@@ -31,7 +36,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 from sqlalchemy.orm import Session
 
-from app.api.checkout import MAX_BODY_BYTES, QuoteLineIn
+from app.api.checkout import MAX_BODY_BYTES, OptionalRedisDep, QuoteLineIn, enforce_source_limit
 from app.db.session import get_session
 from app.models import OrderRecipient
 from app.services.checkout import MAX_CART_LINES, CartItem
@@ -55,6 +60,10 @@ router = APIRouter(prefix="/api/orders", tags=["orders"])
 
 IDEMPOTENCY_HEADER = "Idempotency-Key"
 _IDEMPOTENCY_KEY = re.compile(r"[A-Za-z0-9_-]{16,64}")
+
+GUEST_ORDER_SOURCE_BUCKET = "guest_order_source"
+GUEST_ORDER_SOURCE_LIMIT = 60
+GUEST_ORDER_SOURCE_WINDOW_SECONDS = 60 * 60
 # 与 app/services/shipping.py 相同：两位大写字母，不转换大小写。
 _COUNTRY_CODE = r"^[A-Z]{2}$"
 
@@ -164,10 +173,10 @@ def _destination_errors(body: GuestOrderIn) -> list[dict[str, Any]]:
     return errors
 
 
-async def _guest_order_input(request: Request) -> GuestOrderInput:
+async def _guest_order_input(request: Request, client: OptionalRedisDep) -> GuestOrderInput:
     """逐块读请求体，超过上限就停下返回 413，不看 Content-Length 是否如实。
 
-    读完之后才判断 Content-Type、幂等键与请求体。
+    读完之后才判断 Content-Type，再按来源计数（超过 429），最后校验幂等键与请求体。
     """
     chunks: list[bytes] = []
     size = 0
@@ -178,6 +187,13 @@ async def _guest_order_input(request: Request) -> GuestOrderInput:
         chunks.append(chunk)
     if not _is_json(request.headers.get("content-type")):
         raise HTTPException(status_code=415, detail="request body must be JSON")
+    await enforce_source_limit(
+        request,
+        client,
+        GUEST_ORDER_SOURCE_BUCKET,
+        GUEST_ORDER_SOURCE_LIMIT,
+        GUEST_ORDER_SOURCE_WINDOW_SECONDS,
+    )
 
     errors = _key_errors(request)
     body: GuestOrderIn | None = None
