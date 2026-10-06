@@ -3,6 +3,7 @@ import type { ComponentType } from "react";
 import SiteFrame from "./components/SiteFrame";
 import { LanguageProvider } from "./i18n/language";
 import type { LanguageStorage } from "./i18n/language";
+import AdminLoginPage from "./pages/AdminLoginPage";
 import CartPage from "./pages/CartPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import HomePage from "./pages/HomePage";
@@ -30,13 +31,20 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   "/track/order": TrackOrderPage,
   "/track/order/refund": RefundPage,
   "/privacy": PrivacyPage,
+  "/admin/login": AdminLoginPage,
 };
+
+// 后台页（以 /admin 开头的路由）不套前台的站点框架，直接渲染页面；其余页面照旧放在 SiteFrame 里。
+function isAdminPattern(pattern: RoutePattern): boolean {
+  return pattern.startsWith("/admin");
+}
 
 // 以实际路径为 key：从一件商品换到另一件时页面重新开始（规格、数量与提示不带过去）。
 function CurrentPage() {
   const { path, pattern } = useRouter();
   const Page = PAGES[pattern];
-  return <Page key={path} />;
+  const page = <Page key={path} />;
+  return isAdminPattern(pattern) ? page : <SiteFrame>{page}</SiteFrame>;
 }
 
 interface AppProps {
@@ -49,9 +57,7 @@ export default function App({ initialPath, storage }: AppProps) {
   return (
     <LanguageProvider storage={storage}>
       <RouterProvider initialPath={initialPath}>
-        <SiteFrame>
-          <CurrentPage />
-        </SiteFrame>
+        <CurrentPage />
       </RouterProvider>
     </LanguageProvider>
   );

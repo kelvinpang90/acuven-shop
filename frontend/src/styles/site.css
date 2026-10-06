@@ -227,6 +227,18 @@ body { margin: 0; }
 .site-privacy__section { display: grid; gap: 12px; }
 .site-privacy p { margin: 0; }
 
+/* 后台登录 A01：不套前台框架；横幅之下居中 400px 面板，标题与语言链接同一行，表单各项、提交按钮与错误提示依次排列；
+   手机的语言按钮与展开的语言列表在桌面不显示 */
+.site-admin-login { display: flex; flex-direction: column; min-height: 100vh; }
+.site-admin-login__main { flex-grow: 1; display: grid; place-items: center; }
+.site-admin-login__panel { width: 400px; display: grid; gap: 16px; padding: 32px; }
+.site-admin-login__head { display: flex; justify-content: space-between; align-items: center; }
+.site-admin-login__lang-button, .site-admin-login__lang-menu { display: none; }
+.site-admin-login__body { display: grid; gap: 16px; }
+.site-admin-login__body p { margin: 0; }
+.site-admin-login__submit { justify-content: center; min-height: 40px; }
+.site-admin-login__logout { justify-self: start; }
+
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
 
@@ -393,4 +405,16 @@ body { margin: 0; }
   .site-privacy__aside { gap: 24px; }
   .site-privacy__body { gap: 24px; }
   .site-privacy__section { gap: 10px; }
+
+  /* 后台登录：没有面板框（面板以 display: contents 不绘制），内容在横幅下单列靠上；语言切换为当前语言按钮，
+     展开后在标题行之下列出三种语言；输入框与提交按钮加高 */
+  .site-admin-login .acs-admin__banner { padding: 6px 16px; }
+  .site-admin-login__main { place-items: normal; align-content: start; gap: 16px; padding: 24px 16px; }
+  .site-admin-login__panel { display: contents; }
+  .site-admin-login__head { gap: 8px; }
+  .site-admin-login__lang-links { display: none; }
+  .site-admin-login__lang-button { display: inline-flex; gap: 4px; }
+  .site-admin-login__lang-menu:not([hidden]) { display: flex; flex-direction: column; align-items: flex-start; }
+  .site-admin-login .acs-admin__input { min-height: 44px; }
+  .site-admin-login__submit { min-height: 44px; }
 }

@@ -11,6 +11,8 @@ import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 // 订单号只在页面内存与写接口的请求体里；订单查询页 /track 的订单号与电话只在页面内存与查单请求体里，
 // 订单详情 /track/order 与退款申请 /track/order/refund 凭服务端查单授权读取订单，订单号只在页面内存与写接口的请求体里）。
 // 查询参数只用于商品列表的搜索、筛选、排序与页码（pages/productListQuery.ts），也不放语言。
+// 以 /admin 开头的是后台页（后台登录 /admin/login 的用户名、密码与 CSRF 令牌只在页面内存与请求体或请求头里）：
+// App.tsx 不给它们套前台框架，前台页头、菜单与页脚也没有指向它们的入口（UX A01「前台不放入口链接」）。
 export const ROUTE_PATHS = [
   "/",
   "/products",
@@ -23,6 +25,7 @@ export const ROUTE_PATHS = [
   "/track/order",
   "/track/order/refund",
   "/privacy",
+  "/admin/login",
 ] as const;
 export type RoutePattern = (typeof ROUTE_PATHS)[number];
 

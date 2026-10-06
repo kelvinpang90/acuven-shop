@@ -65,8 +65,9 @@ describe("route table", () => {
   // SHOP-TASK-024 验收第 2 条「路由 /pay（P06）与 /pay/result（P07）」：两页进表，路径里没有动态段；
   // SHOP-TASK-025 验收第 2 条「路由 /checkout」：结账页进表，在购物车之后；
   // SHOP-TASK-028 验收第 2 条「路由 /track（P08）与 /track/order（P09 查单模式）」：两页进表，在支付页之后；
-  // SHOP-TASK-030 验收第 2 条「路由 /track/order/refund（P10 查单模式）」：进表，在订单详情之后；其余页面尚未实现，不在表里。
-  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page and the privacy page", () => {
+  // SHOP-TASK-030 验收第 2 条「路由 /track/order/refund（P10 查单模式）」：进表，在订单详情之后；
+  // SHOP-TASK-038 验收第 2 条「路由 /admin/login」：后台登录页进表，在隐私说明之后；其余页面尚未实现，不在表里。
+  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page and the admin login page", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
       "/products",
@@ -79,7 +80,9 @@ describe("route table", () => {
       "/track/order",
       "/track/order/refund",
       "/privacy",
+      "/admin/login",
     ]);
+    expect(isRoutePath("/admin/login")).toBe(true);
     expect(isRoutePath("/privacy")).toBe(true);
     expect(isRoutePath("/products")).toBe(true);
     expect(isRoutePath("/products/crew-neck-tee")).toBe(true);
