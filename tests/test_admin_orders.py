@@ -740,6 +740,8 @@ def test_detail_fields_recipient_and_events(db: Session, client: TestClient, tok
             },
         ],
         "subtotal_sen": SUBTOTAL,
+        "coupon_discount_sen": COUPON,
+        "points_discount_sen": 0,
         "shipping_fee_sen": SHIPPING,
         "total_sen": TOTAL,
         "recipient": {
@@ -767,6 +769,35 @@ def test_detail_fields_recipient_and_events(db: Session, client: TestClient, tok
         "csrf_token": _csrf_for(token),
     }
     _assert_no_recipient(json.dumps(body["events"]))
+
+
+def test_detail_amount_breakdown_includes_coupon_and_points(
+    db: Session, client: TestClient, token: str
+) -> None:
+    """docs/UX.md A02「金额明细」[M1]（订单金额快照，DESIGN「数据模型」Order）：后台照常
+    给出券折扣与积分抵扣两项（UX 0.5「后台 A02 不变」），取自订单快照，1 积分抵 1 仙。
+    """
+    placed = _make_order(db, STATUS_PAID)
+    order = db.get(Order, placed.id)
+    assert order is not None
+    order.points_redeemed = 250
+    order.total_sen = TOTAL - 250
+    db.commit()
+
+    body = _ok(_detail(client, token, placed.id, "en"))
+
+    assert body["subtotal_sen"] == SUBTOTAL
+    assert body["coupon_discount_sen"] == COUPON
+    assert body["points_discount_sen"] == 250
+    assert body["shipping_fee_sen"] == SHIPPING
+    assert body["total_sen"] == TOTAL - 250
+    assert (
+        body["subtotal_sen"]
+        - body["coupon_discount_sen"]
+        - body["points_discount_sen"]
+        + body["shipping_fee_sen"]
+        == body["total_sen"]
+    )
 
 
 def test_detail_uses_requested_language(db: Session, client: TestClient, token: str) -> None:

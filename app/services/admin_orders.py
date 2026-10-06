@@ -142,6 +142,10 @@ class AdminOrderDetail(BaseModel):
     # 按行序。
     lines: list[AdminOrderLine]
     subtotal_sen: int
+    # UX A02「金额明细」的券折扣与积分抵扣两行（后台对游客订单也照常显示）；
+    # 积分抵扣为订单的 points_redeemed，1 积分抵 1 仙。
+    coupon_discount_sen: int
+    points_discount_sen: int
     shipping_fee_sen: int
     total_sen: int
     # 收货资料原文；订单摘要不依赖收货资料记录存在，没有那一条时为空。
@@ -226,12 +230,17 @@ def order_detail(
 ) -> AdminOrderDetail | None:
     """一张订单的后台详情；订单不存在时为空。只读，不写审计。
 
-    订单行、金额、收货资料与全部已退取自 lookup_orders 的查单视图，不另行组装。
+    订单行、金额、收货资料与全部已退取自 lookup_orders 的查单视图，不另行组装；
+    查单视图不含的券折扣与积分抵扣直接取订单上的快照列。
     """
     views = lookup_orders(db, [order_id], lang, now)
     if not views:
         return None
     view = views[0]
+    discount_stmt = select(Order.coupon_discount_sen, Order.points_redeemed).where(
+        Order.id == order_id
+    )
+    coupon_discount_sen, points_redeemed = db.execute(discount_stmt).tuples().one()
 
     event_stmt = (
         select(OrderEvent.created_at, OrderEvent.to_status, OrderEvent.actor_type)
@@ -260,6 +269,8 @@ def order_detail(
             for line in view.lines
         ],
         subtotal_sen=view.subtotal_sen,
+        coupon_discount_sen=coupon_discount_sen,
+        points_discount_sen=points_redeemed,
         shipping_fee_sen=view.shipping_fee_sen,
         total_sen=view.total_sen,
         recipient=view.recipient,
