@@ -547,11 +547,13 @@ def test_routes_use_internal_id_only_and_offer_no_export(app: FastAPI) -> None:
     """「首版不提供后台导出」。SHOP-TASK-037 验收：订单号与收货资料不进任何路径或查询
     参数，路径只用订单的内部整数 ID；只有三个接口。
     """
+    # 用 OpenAPI 文档列出路由：它由应用实际注册的全部路由生成，不依赖 app.routes 里
+    # 被包含的路由器以何种形式出现。
     routes = {
-        (method, route.path)
-        for route in app.routes
-        if getattr(route, "path", "").startswith(ORDERS_URL)
-        for method in getattr(route, "methods", set())
+        (method.upper(), path)
+        for path, operations in app.openapi()["paths"].items()
+        if path.startswith(ORDERS_URL)
+        for method in operations
     }
 
     assert routes == {
