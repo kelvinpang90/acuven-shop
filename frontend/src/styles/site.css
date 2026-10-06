@@ -228,13 +228,18 @@ body { margin: 0; }
 .site-privacy p { margin: 0; }
 
 /* 后台登录 A01（不套前台框架）：演示横幅在上，其下 400px 面板居中；面板首行为标题与语言切换，
-   其下为表单（或已登录状态），错误提示在提交按钮之后（UX A01 线框） */
-.site-admin { display: flex; flex-direction: column; min-height: 100vh; }
-.site-admin__main { flex-grow: 1; display: grid; place-items: center; padding: 24px; }
-.site-admin__panel { width: min(400px, 100%); display: grid; gap: 16px; padding: 32px; }
-.site-admin__head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-.site-admin__form, .site-admin__signed-in { display: grid; gap: 16px; }
-.site-admin__submit { justify-content: center; min-height: 40px; }
+   其下为表单（或已登录状态），错误提示在提交按钮之后（UX A01 线框）。
+   间距与尺寸只经下面的变量取用，数值取自 A01-desktop、A01-phone 的行内布局，手机在媒体查询里改写变量 */
+.site-admin {
+  --admin-panel-width: 400px; --admin-pad: 32px; --admin-gutter: 16px; --admin-gap: 16px;
+  --admin-head-gap: 8px; --admin-icon-gap: 4px; --admin-control: 40px;
+  display: flex; flex-direction: column; min-height: 100vh;
+}
+.site-admin__main { flex-grow: 1; display: grid; place-items: center; padding: var(--admin-gutter); }
+.site-admin__panel { width: min(var(--admin-panel-width), 100%); display: grid; gap: var(--admin-gap); padding: var(--admin-pad); }
+.site-admin__head { display: flex; justify-content: space-between; align-items: center; gap: var(--admin-head-gap); }
+.site-admin__form, .site-admin__signed-in { display: grid; gap: var(--admin-gap); }
+.site-admin__submit { justify-content: center; min-height: var(--admin-control); }
 .site-admin__text { margin: 0; }
 .site-admin__logout { justify-self: start; }
 
@@ -405,13 +410,15 @@ body { margin: 0; }
   .site-privacy__body { gap: 24px; }
   .site-privacy__section { gap: 10px; }
 
-  /* 后台登录：面板占满宽度、靠上；语言切换为当前语言按钮，展开后三种语言竖排；输入框与按钮加高到 44px */
-  .site-admin .acs-admin__banner { padding-left: 16px; padding-right: 16px; }
-  .site-admin__main { place-items: start stretch; padding: 24px 16px; }
-  .site-admin__panel { width: auto; padding: 20px 16px; }
-  .site-admin__lang-button { display: inline-flex; gap: 4px; flex-shrink: 0; }
+  /* 后台登录：没有面板外框（A01-phone），面板不生成盒子，标题行与表单直接排在页面上、靠上；
+     语言切换为当前语言按钮，展开后三种语言竖排；输入框与按钮加高 */
+  .site-admin { --admin-pad: 24px; --admin-control: 44px; }
+  .site-admin .acs-admin__banner { padding-left: var(--admin-gutter); padding-right: var(--admin-gutter); }
+  .site-admin__main { place-items: stretch; align-content: start; gap: var(--admin-gap); padding: var(--admin-pad) var(--admin-gutter); }
+  .site-admin__panel { display: contents; }
+  .site-admin__lang-button { display: inline-flex; gap: var(--admin-icon-gap); flex-shrink: 0; }
   .site-admin__lang-panel:not([hidden]) { display: block; }
   .site-admin__lang-panel .acs-admin__lang { flex-direction: column; align-items: flex-start; gap: 0; }
-  .site-admin__lang-panel a { display: inline-flex; align-items: center; min-height: 44px; }
-  .site-admin .acs-admin__input, .site-admin__submit { min-height: 44px; }
+  .site-admin__lang-panel a { display: inline-flex; align-items: center; min-height: var(--admin-control); }
+  .site-admin .acs-admin__input, .site-admin__submit { min-height: var(--admin-control); }
 }

@@ -966,7 +966,7 @@
   - `api/admin.ts`（新）：`readAdminSession`（结果 `ok` 带 `username`、`expires_at`、`csrf_token`，`signed_out` 为 401，`failed` 为其他，含网络中断与不合约定的响应体）、`submitAdminLogin`（`ok` 204、`failed` 401、`locked` 429、`unavailable` 503、`network`、`error` 其他）、`submitAdminLogout`（`done` 204、`signed_out` 401、`csrf` 403、`network`、`failed` 其他）。请求都是同源 cookie、`cache: "no-store"`；`X-CSRF-Token` 沿用 `api/pay.ts` 的 `CSRF_HEADER`。
   - `pages/AdminLoginPage.tsx`（新）：`AdminLoginView` 为可单独渲染的展示部分，`AdminLoginPage` 接上状态与请求；导出纯函数 `canSubmitLogin`、`afterSubmit`、`screenForSession`、`loginAndRead`、`logoutAndSettle` 与深浅色的 `adminMode`、`watchAdminMode`、`useAdminMode`。
   - `i18n/copy.ts` 从 UX-COPY 原样抄入 9 个键：`auth.password`、`auth.login_submit`、`admin.demo_banner`、`admin.login_title`、`admin.username`、`admin.login_failed`、`admin.locked`、`admin.logout`、`admin.logged_in`。
-  - `styles/site.css`：A01 的布局与显隐（手机差异在 767px 及以下的媒体查询里，不写颜色、字体或圆角）。
+  - `styles/site.css`：A01 的布局与显隐（手机差异在 767px 及以下的媒体查询里，不写颜色、字体或圆角；间距与尺寸经 `.site-admin` 上的布局变量取用）。
 - 页面状态：
   - 根元素 `<div class="acs-admin site-admin" data-mode=…>`；其下为演示横幅 `acs-admin__banner`（`common.demo_badge` 标签与 `admin.demo_banner`），再下为居中的 `acs-admin__panel` 面板（桌面 400px）。面板首行为 `admin.login_title` 与语言切换：桌面为 `acs-admin__lang` 里三种语言的链接（`href` 为本页，点击只切换界面语言并照 LanguageProvider 保存在本浏览器，当前语言 `aria-current="true"`）；手机为 `acs-admin__btn acs-admin__btn--secondary` 按钮，按钮上只有当前语言名与 ▾ 图形（可访问名称即语言名，`aria-expanded`、`aria-controls`），展开后在首行下方列出 `acs-admin__lang` 里的三种语言，选定后收起。两者都渲染，由 site.css 按宽度显隐。
   - 加载中（会话请求返回前，含服务端渲染）：只有横幅、标题与语言切换，主体标 `aria-busy`，没有表单与已登录内容。
@@ -981,7 +981,8 @@
 - 过渡规则（Kelvin 2026-10-05）：A02 订单页上线前，登录成功后留在本页显示已登录状态与退出按钮。后台框架（导航、☰ 菜单）与「登录后进入 A02」留给 A02 页面任务，届时取消本规则与 `admin.logged_in`。
 - 偏离与取舍，请审阅（未改设计，未新增 UX-COPY 以外的界面文字）：
   - UX 与视觉稿不一致处按 UX：视觉稿把错误提示放在提交按钮之前，UX A01 两个线框都在按钮之后，本页放在按钮之后。视觉稿手机版语言切换画的是下拉框，按 Kelvin 2026-10-05 的说明与验收改为当前语言按钮加展开列表。
-  - 视觉稿手机版没有面板外框（表单直接在页面上）；site.css 不能写颜色或边框颜色，手机仍沿用 `acs-admin__panel` 面板，只改为占满宽度、内边距 20px 16px。横幅文字另包一层 `<span>`，样式不变。
+  - 视觉稿手机版没有面板外框（表单直接在页面上）：手机上 `acs-admin__panel` 面板以 `display: contents` 不生成盒子（不写底色或边框），标题行、语言列表与表单直接作为 `<main>` 的网格项，按 A01-phone 的 `gap: 16px; padding: 24px 16px` 靠上排列。横幅文字另包一层 `<span>`，样式不变。
+  - `acuven-shop.css` 没有间距或尺寸变量，site.css 的 A01 规则不直接写间距与尺寸数值，改为在 `.site-admin` 上声明布局变量（`--admin-panel-width`、`--admin-pad`、`--admin-gutter`、`--admin-gap`、`--admin-head-gap`、`--admin-icon-gap`、`--admin-control`，数值取自两份视觉稿的行内布局），手机在媒体查询里改写 `--admin-pad` 与 `--admin-control`。桌面 `<main>` 另有 `--admin-gutter` 的内边距（视觉稿没有），只为窄桌面窗口时面板不贴边。
   - `common.network_check` 的文字是「正在确认上一步是否已完成…」，但验收只要求显示它，页面不自动重查：登录中断后管理员重新输入密码再提交；退出中断后保持已登录，可再点退出。
   - 验收没写到的情形（派生实现约束）：登录 204 后取会话失败时留在表单并显示 `common.error_retry`；退出 403 后重取会话得到 401 时回到表单、取不到时保持已登录，都显示 `common.error_retry`。用户名与密码按原值判空，不去首尾空白（规范化由服务端做）。用户名输入框另设 `autocapitalize="none"`、`spellcheck="false"`（不是界面文字）。
   - UX-COPY 里没有、因而没有渲染的界面文字（不自行编写）：加载中与提交中的文字（只给 `aria-busy` 与禁用按钮）、手机语言列表的标题。
