@@ -1891,3 +1891,109 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 退款申请列表按订单筛选（A02 订单的待审退款数链接到只含该单申请的 A03 列表）。Kelvin 2026-10-06 决定（docs/HANDOFF.md 0.35）。
+  - id: SHOP-TASK-046
+    title: 后台退款申请列表按订单筛选
+    purpose: >-
+      给 SHOP-TASK-041 的退款申请列表接口加可选的订单内部 ID 筛选，供 A02 订单的待审退款数链接到只含该单申请的 A03 列表（Kelvin 2026-10-06 决定）。
+      不改详情、批准与拒绝接口，不加表或迁移，不做页面，不改设计。
+      设计闸门：不适用（只读筛选，不改退款、金额与审核规则，列表仍不含收货资料与理由）。拆分：不拆（4 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-041
+    acceptance_criteria:
+      - 按 docs/HANDOFF.md 0.35 记录的 Kelvin 2026-10-06 决定实现；POST /api/admin/refunds/query 的请求体在可选的状态与页码之外新增可选的 order_id（订单的内部整数 ID，1 到 2147483647，或 null；沿用请求模型的严格类型，布尔值、字符串与小数都 422），多出字段仍 422；订单内部 ID 只在请求体里，不进路径或查询参数
+      - 给出 order_id 时只返回该订单的申请，可与状态筛选同时用，排序、每页 20 条、总数与每行字段不变；订单不存在或没有申请时返回 total 为 0 的空列表而不是 404；不给或为 null 时与现在完全相同
+      - app/services/admin_refunds.py 的 query_refunds 以带默认值 None 的关键字参数接收订单 ID，现有调用方式与行为不变；接口仍只读、不要求 CSRF、不写审计，响应仍带 no-store，检查顺序与错误码不变（不合法的 order_id 与其他请求体错误一样是不回显请求内容的 422）
+      - 不改详情、批准与拒绝接口；tests/test_admin_refunds.py 不改并照常通过
+      - tests/test_admin_refund_order_filter.py 用 TestClient 与 SQLite 内存库（开启外键检查，覆盖会话依赖；自建管理员、后台会话、两张订单与各自的申请，可从 tests/test_admin_refunds.py 导入建数据的辅助函数，不改该文件）验证：按订单筛选只返回该单申请且总数正确、与状态筛选组合、订单不存在时空列表、null 与不给时返回全部、order_id 为 0、负数、超过上限、字符串、布尔值或小数时 422 且不回显所给的值、无后台会话时 401、响应带 no-store；每条测试写明它守住的是 Kelvin 的哪一项决定；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-046 记录段（字段、筛选规则、偏离、验证到什么程度，并写明 A03 页面按订单打开列表留给之后的页面任务）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表或迁移；不改前端代码；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - app/services/admin_refunds.py
+      - app/api/admin_refunds.py
+      - tests/test_admin_refund_order_filter.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 后台框架与登录后进入 A02（取消 docs/HANDOFF.md 0.32 的 A01 过渡规则）。Kelvin 2026-10-06 决定导航只显示已上线页面的项（docs/HANDOFF.md 0.35）。
+  # A02 的订单列表由 SHOP-TASK-048 接上；详情、发货与 A03 另行登记。
+  - id: SHOP-TASK-047
+    title: 后台框架与登录后进入 A02
+    purpose: >-
+      实现后台页面共用的框架（演示横幅、右上角退出、桌面左侧导航与语言切换、手机顶栏 ☰ 菜单），新增路由 /admin/orders 用框架渲染 A02 的标题，
+      并让 A01 登录后进入 A02、取消 A01 的过渡规则。导航只显示已上线页面的项（Kelvin 2026-10-06 决定，目前只有订单）。
+      不做订单列表、详情与发货，不做其他后台页面，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只调用已登记的会话与退出接口，不碰金额，不收集或显示个人资料）。
+      拆分：框架与 A02 订单列表分开（列表由 SHOP-TASK-048 接上），本任务 11 个允许路径。
+    status: ready
+    depends_on:
+      - SHOP-TASK-038
+    acceptance_criteria:
+      - 页面内容、流程与文案以 docs/UX.md 0.8「管理后台总体」、A01、A02 与 docs/UX-COPY.md 为准，样式以 docs/design/pages/ 的 A02-desktop、A02-phone-list 与 A00-phone-menu 的框架部分（横幅、退出按钮、导航、顶栏与菜单）为准，二者冲突时以 UX 文档为准并在 PR 里说明；导航按 docs/HANDOFF.md 0.35 只显示已上线页面的项，本任务只有 admin.nav_orders，不渲染其他 admin.nav_* 项（与视觉稿只差项目多少，在 PR 里写明）；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
+      - 新文件 frontend/src/components/AdminFrame.tsx 导出后台框架组件，接收当前导航项与页面内容；根元素 class acs-admin，data-mode 首次渲染为 light，挂载后按 SHOP-TASK-038 的 watchColorScheme 随设备深浅色变化；顶部演示横幅（common.demo_badge 与 admin.demo_banner），admin.logout 按钮桌面在横幅右侧、手机在顶栏右端；桌面左侧导航（nav 元素不加 aria-label，视觉稿的 Admin 不是 UX-COPY 文字），当前项标 aria-current="page"，导航底部为三种语言的站内链接（沿用 A01 的语言切换，点击只切换界面语言）；手机顶栏为 ☰ 按钮（图形为 aria-hidden 的 SVG，按钮里没有字典以外的文字，可访问名称 common.nav_menu，带 aria-expanded）与当前导航项名称，点开后按 A00-phone-menu 显示导航项、语言链接与退出按钮，选择导航项或再点按钮收起
+      - 框架打开时调用 GET /api/admin/session（沿用 frontend/src/api/admin.ts 的 readAdminSession）；请求返回前即显示横幅、导航与语言切换，内容区标 aria-busy，退出按钮禁用；200 显示页面内容；401 用路由的 replace 进入 /admin/login；其他结果在内容区显示 common.error_retry；离开页面时中止请求，之后不再更新
+      - 退出调用 POST /api/admin/logout 并带会话接口返回的 X-CSRF-Token（沿用 submitAdminLogout），进行中按钮禁用；204 或 401 用 replace 进入 /admin/login；403 重新取会话并显示 common.error_retry（取到 401 时进入 /admin/login）；网络中断显示 common.network_check，其他显示 common.error_retry；CSRF 令牌只在 React 状态与退出请求头里，不写网址、localStorage、sessionStorage 或 cookie
+      - 路由 /admin/orders（frontend/src/router.tsx 路由表与 frontend/src/App.tsx 页面表各加一项，App.tsx 对以 /admin 开头的路由不套 SiteFrame 的现有规则不变）；新文件 frontend/src/pages/AdminOrdersPage.tsx 用框架渲染，当前导航项为订单，内容区只有标题 admin.nav_orders（h1），列表、搜索、筛选与详情留给 SHOP-TASK-048 与之后的任务；frontend/src/router.test.tsx 的路由表断言加上 /admin/orders
+      - A01 改为登录后进入 A02（取消 docs/HANDOFF.md 0.32 的过渡规则）；打开时会话 200 即用 replace 进入 /admin/orders，登录 204 后用 navigate 进入 /admin/orders；删除已登录状态、A01 上的退出按钮及其逻辑，并删除 frontend/src/i18n/copy.ts 里不再使用的 admin.logged_in；登录表单、错误处理、语言切换、深浅色以及凭据不进网址或浏览器存储等其余行为不变；frontend/src/pages/AdminLoginPage.test.tsx 只改与已登录状态和退出相关的测试（改为断言进入 /admin/orders），其余断言不动
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch、matchMedia、存储与路由以替身代替）在 frontend/src/components/AdminFrame.test.tsx 验证意图：首次渲染即有横幅、只含订单一项的导航（不含其他 admin.nav_*）、语言切换与禁用的退出按钮；会话 200 显示内容，401 进入 /admin/login，其他显示 common.error_retry；退出带 CSRF 令牌，204 与 401 进入 /admin/login，403 重取会话，网络中断有提示；手机 ☰ 的 aria-expanded 与菜单内容；data-mode 随 prefers-color-scheme；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-047 记录段（框架结构、会话与退出处理、导航只含已上线页面、A01 去向的变化、偏离、验证到什么程度，并写明未做浏览器验收、A02 订单列表留给 SHOP-TASK-048），不改 planning-v1 块，复选框只允许 [ ] / [x]；改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/components/AdminFrame.tsx
+      - frontend/src/components/AdminFrame.test.tsx
+      - frontend/src/pages/AdminOrdersPage.tsx
+      - frontend/src/pages/AdminLoginPage.tsx
+      - frontend/src/pages/AdminLoginPage.test.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
+      - frontend/src/styles/site.css
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 后台订单列表 A02（搜索、状态筛选、分页）。订单详情、收货资料与模拟发货另行登记；待审退款数链接到 A03 随 A03 页面任务加上。
+  - id: SHOP-TASK-048
+    title: 后台订单列表 A02
+    purpose: >-
+      在 SHOP-TASK-047 的 /admin/orders 上实现 A02 的订单列表：按订单号搜索、按状态筛选与翻页，桌面为表格、手机为卡片列表，调用 SHOP-TASK-037 的订单列表接口。
+      不做订单详情、收货资料与模拟发货，待审退款数暂不链接到 A03（随 A03 页面任务加上），不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只调用已登记的列表接口显示订单号、日期、状态与金额快照，不计算金额，不显示收货资料）。
+      拆分：列表与详情、发货分开，本任务 9 个允许路径。
+    status: ready
+    depends_on:
+      - SHOP-TASK-037
+      - SHOP-TASK-047
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.8 的 A02 与 docs/UX-COPY.md 为准，样式以 docs/design/pages/ 的 A02-desktop 的列表部分与 A02-phone-list 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
+      - 新文件 frontend/src/api/adminOrders.ts 调用 POST /api/admin/orders/query（JSON 请求体只有 order_number、status 与 page；同源 cookie，cache 为 no-store），结果归为 ok（只取 total、page、page_size 与每行的 id、order_number、created_at、status、total_sen、refunds_pending，响应体不合格算失败）、none（401）、failed 与 network；订单号只在请求体里，不进网址、查询参数或浏览器存储
+      - 列表上方为搜索框（admin.search_order，提交时把输入原样作为 order_number，去掉首尾空白后为空则不筛选）与状态筛选下拉（第一项为 admin.filter_status 表示全部，其余依次为六种 order.status_*）；提交搜索或改变筛选回到第 1 页；搜索与筛选只在页面内存里，不进网址
+      - 桌面表格列头依次为 pay.order_no、admin.col_date、admin.filter_status、admin.col_total、admin.col_refunds；手机为卡片列表（订单号与状态、日期、合计与待审数），由 site.css 按宽度显隐；日期用 frontend/src/pages/TrackOrderPage.tsx 的 formatDate 按界面语言显示，合计用 common.price_myr 与 frontend/src/format.ts 的 formatSen（桌面与手机都显示为 RM 加金额）；状态显示对应的 order.status_*；待审数大于 0 时显示 admin.refunds_pending（{count} 为该数），为 0 时桌面表格显示 —、手机卡片不显示（照 A02-phone-list）；行不可点（订单详情留给之后的任务）；没有符合条件的订单时只显示列头，不显示行，也不另写空状态文字（UX-COPY 没有后台空列表文案）
+      - 翻页（UX A02 未画，在 PR 里写明）：总数超过每页条数时在列表下方显示上一页与下一页两个按钮，可见文字为 ‹ 与 ›，可访问名称为 common.a11y_page_prev 与 common.a11y_page_next，第一页禁用上一页、最后一页禁用下一页，桌面与手机相同；不显示页码文字
+      - 请求进行中列表区标 aria-busy；401 用路由的 replace 进入 /admin/login；网络中断显示 common.network_check，其他失败显示 common.error_retry；离开页面或发出新查询时中止旧请求，旧请求的结果不再更新页面；SHOP-TASK-047 的框架、标题与导航行为不变；不新增路由（frontend/src/router.tsx 与 frontend/src/App.tsx 按页面任务的惯例列入允许路径，本任务预计不改）
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/api/adminOrders.test.ts 与 frontend/src/pages/AdminOrdersPage.test.tsx 验证意图：请求体只有订单号、状态与页码且订单号不进网址或浏览器存储；响应体不合格算失败；表格列头与卡片内容；日期、合计、状态与待审数（为 0 时桌面显示 —、手机不显示）；搜索与筛选回到第 1 页；翻页按钮的禁用与页码；401 进入 /admin/login，网络中断与其他失败的提示；旧请求结果不覆盖新查询；页面文字全部来自字典；每条测试写明它守住的是 UX、DESIGN 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-048 记录段（请求与字段、搜索与筛选、翻页、错误处理、偏离、验证到什么程度，并写明未做浏览器验收、订单详情与发货、待审退款数链接留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]；改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/adminOrders.ts
+      - frontend/src/api/adminOrders.test.ts
+      - frontend/src/pages/AdminOrdersPage.tsx
+      - frontend/src/pages/AdminOrdersPage.test.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/styles/site.css
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
