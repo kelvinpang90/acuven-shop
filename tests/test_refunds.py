@@ -49,6 +49,7 @@ from app.db.base import Base
 from app.db.session import get_session
 from app.main import create_app
 from app.models import (
+    AdminAccount,
     Order,
     OrderAccessGrant,
     OrderEvent,
@@ -393,11 +394,27 @@ def _request_by_key(db: Session, key: str) -> RefundRequest:
 
 
 def _review(db: Session, key: str, status: str) -> None:
-    """模拟之后的审核任务：改状态并写审核时间；拒绝时把该申请的逐件记录占用标记置空。"""
+    """模拟之后的审核任务：改状态并写审核时间、审核人、审核幂等键与审核请求指纹（SHOP-TASK-039
+    的检查约束要求），拒绝时另写理由；拒绝时把该申请的逐件记录占用标记置空。
+
+    库里至多一个管理员账号，已有就沿用。
+    """
     request = _request_by_key(db, key)
+    admin_id = db.scalar(select(AdminAccount.id))
+    if admin_id is None:
+        admin = AdminAccount(
+            username="shop_admin",
+            password_hash="not-a-real-hash",
+            password_updated_at=_now(),
+        )
+        admin_id = _add(db, admin).id
     request.status = status
     request.reviewed_at = _now()
+    request.reviewer_admin_id = admin_id
+    request.review_idempotency_key = _key()
+    request.review_fingerprint = "b" * 64
     if status == REFUND_REJECTED:
+        request.review_reason = "Demo rejection"
         line_ids = select(RefundLine.id).where(RefundLine.refund_request_id == request.id)
         stmt = update(RefundLineUnit).where(RefundLineUnit.refund_line_id.in_(line_ids))
         db.execute(stmt.values(occupied=None))
@@ -1351,12 +1368,27 @@ def test_model_check_constraints(
 def test_model_accepts_reviewed_member_and_released_rows(db: Session) -> None:
     """「requested → 管理员 approved 或 rejected」；会员「在「我的订单」…申请退款」；HANDOFF 0.27
     「被拒绝的申请释放所占的件」。SHOP-TASK-029 验收：带审核时间的 approved 与 rejected、申请方
-    member、占用标记为空的逐件记录都被接受。
+    member、占用标记为空的逐件记录都被接受。审核人、审核幂等键、审核请求指纹与拒绝理由是
+    SHOP-TASK-039 的检查约束要求补上的。
     """
     placed = _make_order(db)
     item_id, unit_ids = _item_and_units(db, placed)
+    admin = _add(
+        db,
+        AdminAccount(
+            username="shop_admin",
+            password_hash="not-a-real-hash",
+            password_updated_at=REVIEWED_AT,
+        ),
+    )
     for status in (REFUND_APPROVED, REFUND_REJECTED):
-        _add(db, _request_row(placed.id, status=status, reviewed_at=REVIEWED_AT))
+        review = {
+            "reviewer_admin_id": admin.id,
+            "review_idempotency_key": _key(),
+            "review_fingerprint": "b" * 64,
+            "review_reason": "Demo rejection" if status == REFUND_REJECTED else None,
+        }
+        _add(db, _request_row(placed.id, status=status, reviewed_at=REVIEWED_AT, **review))
     request = _add(db, _request_row(placed.id, actor_type=ACTOR_MEMBER))
     line = _add(db, _line_row(request.id, item_id))
     _add(db, _unit_row(line.id, unit_ids[0], occupied=None))

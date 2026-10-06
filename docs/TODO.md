@@ -985,3 +985,27 @@
   - UX-COPY 里没有、因而没有渲染的界面文字（不自行编写）：读取中与提交中的文字（只标 `aria-busy` 或禁用按钮）、语言列表与语言按钮的读屏标签。
 - 已有测试的改动（只按验收允许的范围）：`components/SiteFrame.test.tsx` 遍历的 `paths` 改为路由表里不以 `/admin` 开头的路由，注释写明后台页不套前台框架；`App.test.tsx`「labels every page as a demo」对以 `/admin` 开头的路由改为断言 `admin.demo_banner`，其余路由仍断言 `common.demo_banner`；`router.test.tsx` 路由表断言加上 `/admin/login`（并断言它在表里）。其余断言未动；`App.test.tsx` 的「只有字典文字」与 `router.test.tsx` 的「链接只指向表里的路径」按路由表对 `/admin/login` 照常检查。
 - 验证到什么程度：人工逐条对照验收标准自查，并人工核对新增的 9 个字典键与 UX-COPY 原文（逐字比较由已有的 `i18n/copy.test.ts` 覆盖新键）。新增测试 `api/admin.test.ts`、`pages/AdminLoginPage.test.tsx`（vitest 与 `react-dom/server`，未加测试依赖；`fetch` 以按顺序回答、可模拟网络中断的替身，`matchMedia` 以可改变设置的替身，localStorage、sessionStorage、`document.cookie` 与 history 以 `vi.stubGlobal` 替身记录写入；属性断言不分大小写、与顺序无关），每条注释写明它守住的 UX、验收或 Kelvin 决定的原句，没有直接原句的边界标为「派生实现约束（实现选择）」。覆盖：首次渲染即有横幅、标题、桌面三种语言链接（指向本页、当前语言标出）与手机当前语言按钮（三种语言、类名、没有 `aria-label`、收起的列表），没有表单与已登录内容；`/admin/login` 没有前台横幅、页头、页脚与品牌字样，根元素 `acs-admin`、`data-mode` 为 `light`、没有行内样式；前台每个页面没有指向 `/admin` 的链接；`data-mode` 随 `prefers-color-scheme` 与其变化、取消订阅、没有 `matchMedia` 时不变；表单字段、`autocomplete`、`noValidate`、没有 `name` 与 `required`、元素顺序；任一为空或提交中时按钮禁用；各提示在提交按钮之后且不含用户名或密码；会话 200、401 与其他结果；已登录状态的用户名、退出按钮类名与禁用；会话、登录与退出接口的地址、方法、请求体（登录恰好两个字段）、CSRF 请求头与各状态码的归类；提交时先清空密码框、204 后取会话；401、429、503、网络中断与其他错误各自的提示且不取会话；204 后会话取不到时的提示；退出 204、401 回到表单，403 重取会话（取到、401、失败三种），网络中断与其他结果保持已登录；整个过程不写任何浏览器存储、cookie 或历史记录，请求地址不含用户名、密码或令牌；各状态下页面文字只来自字典。浏览器相关的部分（容器组件里 effect 与请求的实际接线、真实输入与点击、语言列表的展开、媒体查询下的显隐与布局、深浅色的实际切换）未在 DOM 中执行，只以纯函数、以替身驱动的请求流程与服务端渲染的各状态验证。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查。未做浏览器验收（未在真实浏览器中打开页面，未连真实后端走一遍登录与退出，也未与参考图对比）。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-039 退款申请的审核人与审核理由（数据模型）
+
+- [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「数据模型」RefundRequest / RefundLine 一行（「申请状态……审核人及理由」）、「订单与退款状态」（`requested` → 管理员 `approved` 或 `rejected`）、「失败、并发与重试」第 1 条（退款申请/审核均使用幂等键和数据库唯一约束）与 `docs/HANDOFF.md` 0.33 记录的 Kelvin 2026-10-06 退款审核决定，给退款申请表加审核人、审核理由、审核幂等键与审核请求指纹四列并写迁移：`app/models/refund.py`、迁移 `alembic/versions/20261006_0015_refund_review.py`（revision `0015`，down_revision `0014`）；测试见 `tests/test_refund_review_models.py`。只加列与约束：未写批准、拒绝、冻结或接口逻辑，未做页面，未改 `app/main.py`、其他模型、已有迁移、前端、`.platform/`、CI、部署配置或设计，未装依赖。设计闸门：DESIGN 1.11（提交 `2d13250`）。拆分：规则与确认收货冻结由 SHOP-TASK-040、接口由 SHOP-TASK-041 交付。
+- 新列（都可空，沿用 `app/db/base.py` 的基类、命名约定与 InnoDB、utf8mb4；`RefundRequest` 已有的列与约束未改）：
+  - `reviewer_admin_id` Integer → `admin_accounts.id`（SHOP-TASK-034 的管理员账号表；`fk_refund_requests_reviewer_admin_id_admin_accounts`，ON DELETE RESTRICT），普通索引 `ix_refund_requests_reviewer_admin_id`。
+  - `review_reason` String(500)：只给管理员看；拒绝时必填，批准时没有理由存空值。
+  - `review_idempotency_key` String(64)：非空时全表唯一 `uq_refund_requests_review_idempotency_key`（MySQL 与 SQLite 的唯一约束都允许多个空值）。
+  - `review_fingerprint` String(64)：审核请求内容的 SHA-256 十六进制，十六进制由写入方的 `hexdigest` 保证，库里只约束长度（沿用 `request_fingerprint_length` 的写法）。
+- 新增的检查约束（只用比较、LENGTH、IN 与 IS NULL，SQLite 与 MySQL 都能执行）：
+  - `ck_refund_requests_requested_has_no_review`：`status <> 'requested' OR (reviewer_admin_id IS NULL AND review_reason IS NULL AND review_idempotency_key IS NULL AND review_fingerprint IS NULL)`
+  - `ck_refund_requests_reviewed_status_has_review`：`status NOT IN ('approved', 'rejected') OR (reviewer_admin_id IS NOT NULL AND review_idempotency_key IS NOT NULL AND review_fingerprint IS NOT NULL)`
+  - `ck_refund_requests_rejected_has_review_reason`：`status <> 'rejected' OR review_reason IS NOT NULL`
+  - `ck_refund_requests_review_reason_not_empty`：`review_reason IS NULL OR LENGTH(review_reason) >= 1`
+  - `ck_refund_requests_review_idempotency_key_not_empty`：`review_idempotency_key IS NULL OR LENGTH(review_idempotency_key) >= 1`
+  - `ck_refund_requests_review_fingerprint_length`：`review_fingerprint IS NULL OR LENGTH(review_fingerprint) = 64`
+  - 审核理由与审核幂等键的上限只由列长保证（MySQL 的 LENGTH 按字节计，沿用 `app/models/order.py` 的做法）。
+- 迁移 0015：upgrade 依次加四列、建索引、建外键（外键直接用先建的索引，与 0007 的 `orders.member_id` 相同）、建唯一约束与六条检查约束，约束名按命名约定逐个写出；对已有行直接加列（迁移前没有 `approved` 或 `rejected` 的申请，审核接口尚未存在；已有的 `requested` 申请四列都为空，满足新约束）。downgrade 按依赖倒序：先删六条检查约束（MySQL 不许删除仍被多列检查约束引用的列）与唯一约束，再删外键与索引，最后删四列。`alembic check` 不比较检查约束与表选项，模型与迁移两边已人工核对一致。
+- 偏离与取舍，请审阅（未改设计，未发现须停下的设计问题；Kelvin 2026-10-06 的决定与 DESIGN 1.11 的这几条一致）：
+  - 理由「去掉首尾空白后 1 到 500 个字符」：库里只保证不是空串，去空白与字符数上限由 SHOP-TASK-040 的写入方保证（MySQL 的 LENGTH 按字节计，不能在库里按字符数检查上限）；只含空白的理由库里不拒绝。
+  - 新检查约束在模型里排在已有的 `reviewed_status_has_reviewed_at` 之后：SQLite 按定义顺序报第一条不成立的约束，`tests/test_refunds.py` 里缺审核时间的 `approved` / `rejected` 反例仍报原约束名，断言不必改。
+  - 审核时间仍由已有的两条约束管，未与审核人合并成一条约束。
+- 已有测试的改动（只按验收允许的范围，断言不动）：`tests/test_refunds.py` 的 `_review` 改状态时一并写审核人（库里没有管理员账号时先建一个）、审核幂等键、审核请求指纹，拒绝时写理由；`test_model_accepts_reviewed_member_and_released_rows` 先建管理员账号，再给 `approved` 与 `rejected` 两行补上这几列；两处都为此加了 `AdminAccount` 的导入。`tests/test_admin_orders.py` 的 `_add_refund` 对 `approved` 与 `rejected` 补上同样几列（审核人用库里唯一的管理员账号，没有时先建一个）。
+- 验证到什么程度：人工逐条对照验收标准与设计原句自查，人工核对模型与迁移的列、约束名、约束表达式与索引一致。`tests/test_refund_review_models.py` 用 SQLite 内存库（每个连接打开外键检查并断言已打开）按模型建表，每条测试（参数化的是每个用例）写明它守住的设计原句或 Kelvin 2026-10-06 的哪一项决定，覆盖：合法的两笔 `requested`（审核幂等键都为空）、理由为空与非空的 `approved`、有理由的 `rejected` 都写得进去且求值辅助函数不报任何约束不成立；列长 500 / 64 / 64 与四列可空；`requested` 有审核人、理由、审核幂等键或审核请求指纹各一个反例；`approved` 与 `rejected` 各自缺审核人、审核幂等键或审核请求指纹的反例；`rejected` 无理由；`approved` 与 `rejected` 理由为空串；审核幂等键为空串；指纹长 63 与 65；重复的审核幂等键被唯一约束拒绝；审核人指向不存在的管理员被外键拒绝；删除被申请引用为审核人的管理员被 RESTRICT 拒绝。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest；迁移的 upgrade head、downgrade base、再 upgrade head 与 `alembic check` 也由该检查在真 MySQL 上执行。检查命令结果由 Worker 另行记录。
