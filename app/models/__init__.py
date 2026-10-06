@@ -23,6 +23,7 @@ from app.models.order_access import OrderAccessGrant, OrderAccessSession
 from app.models.refund import RefundLine, RefundLineUnit, RefundRequest
 from app.models.shipping import DemoFxRate, ShippingRate
 from app.models.site import SiteSetting
+from app.models.stock_reset import StockReset, StockResetLine
 
 __all__ = [
     "Category",
@@ -49,6 +50,8 @@ __all__ = [
     "ShippingRate",
     "SiteSetting",
     "SmsDailyUsage",
+    "StockReset",
+    "StockResetLine",
     "VariantOptionValue",
     "VerificationAttempt",
 ]
