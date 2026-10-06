@@ -21,7 +21,8 @@ order.session_expired），不区分订单不存在、授权过期、不属于�
 
 确认收货的处理顺序与 app/api/pay.py 的支付相同：请求体与幂等键 → 按订单号对应的订单 ID 与
 lookup 范围逐单校验授权（401）→ CSRF（403 csrf_failed）→ 才查幂等键与订单状态。
-409 的 detail：idempotency_conflict，以及另带订单当前状态 status 的 order_not_confirmable。
+409 的 detail：idempotency_conflict，以及另带订单当前状态 status 的 order_not_confirmable 与
+fulfilment_frozen（订单是 demo_shipped 但全部件都已批准退款，SHOP-TASK-040）。
 
 三个接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control: no-store，由本模块的
 路由类统一加上；422 每条错误只给位置、类型与固定消息，不回显请求内容。不写日志；错误响应
@@ -69,6 +70,7 @@ from app.services.order_access import (
 )
 from app.services.order_lookup import (
     ConfirmOutcome,
+    FulfilmentFrozen,
     IdempotencyConflict,
     LookupNotFound,
     LookupOrder,
@@ -270,4 +272,6 @@ def confirm(
         return _conflict("idempotency_conflict")
     except OrderNotConfirmable as exc:
         return _conflict("order_not_confirmable", exc.status)
+    except FulfilmentFrozen as exc:
+        return _conflict("fulfilment_frozen", exc.status)
     return outcome

@@ -15,7 +15,22 @@
 原样向上抛，由接口回答暂不可用。
 
 访问授权、CSRF 与请求格式由调用方（app/api/order_lookup.py）先行校验；确认收货只按订单 ID 操作。
-全部退款后冻结确认收货、模拟发货满 7 天自动完成与会员访问都由之后的任务扩展，这里不预留参数。
+模拟发货满 7 天自动完成与会员访问都由之后的任务扩展，这里不预留参数。
+
+全部退款后冻结确认收货（SHOP-TASK-040）：依据「订单与退款状态」
+「所有购买件数均已批准退款时，冻结后续打包/发货/确认收货的推进，保留退款前履约状态」
+与 docs/HANDOFF.md 0.33 记录的 Kelvin 2026-10-06 决定。
+订单是 demo_shipped 时再按 SHOP-TASK-029 的 refund_state 判断，
+全部已退抛 FulfilmentFrozen，订单状态不变、不写确认收货记录与事件。
+
+锁定协议（与 app/services/admin_orders.py 的推进发货、
+app/services/refund_review.py 的退款审核相同）：
+确认收货锁定订单行之前先结束本请求此前的数据库事务（此前只有读取，回滚即可），
+使 SELECT … FOR UPDATE（lock_order_statement，即 with_for_update）
+成为新事务的第一条语句。MySQL 默认的 REPEATABLE READ 下，
+读取快照在事务第一条非锁定读时建立，这样锁定之后的读取（含 refund_state）
+才能看到等锁期间别人提交的审核、发货或确认。确认收货与退款批准因此串行化：
+不会出现确认读到「未全部已退」、并发的批准同时把最后几件批准、两边都提交的情形。
 
 查单视图另带退款部分（SHOP-TASK-029，依据「订单与退款状态」与 docs/HANDOFF.md 0.27 的 Kelvin
 退款决定）：订单行序、退款截止时间与是否在退款期内、累计已退、剩余可退、是否全部已退、每行可退
@@ -36,7 +51,7 @@ from datetime import UTC, datetime
 
 import redis
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import Select, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -97,6 +112,14 @@ class IdempotencyConflict(Exception):
 
 class OrderNotConfirmable(Exception):
     """订单不是 demo_shipped，或并发的确认先提交；status 为订单当前状态。"""
+
+    def __init__(self, status: str) -> None:
+        super().__init__(status)
+        self.status = status
+
+
+class FulfilmentFrozen(Exception):
+    """订单是 demo_shipped，但全部件都已批准退款，确认收货冻结；status 为订单当前状态。"""
 
     def __init__(self, status: str) -> None:
         super().__init__(status)
@@ -314,6 +337,17 @@ def lookup_orders(
     return views
 
 
+def lock_order_statement(order_id: int) -> Select[tuple[Order]]:
+    """锁定订单行的查询（SELECT … FOR UPDATE）。确认收货与推进发货都用它锁定订单行。"""
+    return (
+        select(Order)
+        .where(Order.id == order_id)
+        .with_for_update()
+        # 会话里可能留着并发提交之前读到的旧值。
+        .execution_options(populate_existing=True)
+    )
+
+
 def receipt_fingerprint(order_id: int) -> str:
     """确认收货请求指纹：{"order_id": 订单 ID} 的 JSON（键排序、无空白）的 SHA-256 十六进制。"""
     content = {"order_id": order_id}
@@ -329,22 +363,28 @@ def confirm_receipt(
 ) -> tuple[ConfirmOutcome, bool]:
     """访客确认收货，返回订单状态与是否新写了确认收货记录（重放为假）。
 
+    0. 结束此前的事务（此前只有读取，回滚即可），锁定订单行，作为新事务的第一条语句。
     1. 按幂等键查确认收货记录：指纹相同返回订单当前状态，不同抛 IdempotencyConflict；都不改订单。
     2. 订单不是 demo_shipped（含已经 demo_completed）：抛 OrderNotConfirmable，不写记录与事件。
-    3. 经迁移判定后，同一事务里写确认收货记录（操作者 guest）、用带条件的 UPDATE（状态仍为
+    3. 读取退款占用，全部已退抛 FulfilmentFrozen，不写记录与事件、不改订单。
+    4. 经迁移判定后，同一事务里写确认收货记录（操作者 guest）、用带条件的 UPDATE（状态仍为
        demo_shipped 才改）改为 demo_completed、写一条操作者为 guest 的事件，然后提交。
     写记录撞上唯一约束（同键或同一订单已有记录）或 UPDATE 未命中时回滚，再按幂等键重新查询：
     同键同指纹重放，同键不同指纹抛 IdempotencyConflict，否则抛 OrderNotConfirmable 与当前状态。
     所以一张订单至多完成一次。
     """
     fingerprint = receipt_fingerprint(order_id)
+    db.rollback()
+    order = db.scalars(lock_order_statement(order_id)).one()
+
     existing = _confirmation_by_key(db, idempotency_key)
     if existing is not None:
         return _replay(db, existing, fingerprint), False
 
-    order = _load_order(db, order_id)
     if order.status != STATUS_SHIPPED:
         raise OrderNotConfirmable(order.status)
+    if refund_state(db, order_id).fully_refunded:
+        raise FulfilmentFrozen(order.status)
 
     # 经 SHOP-TASK-010 的迁移判定函数检查；这条迁移在表里，不通过即编程错误。
     if not is_transition_allowed(STATUS_SHIPPED, STATUS_COMPLETED, ACTOR_GUEST):

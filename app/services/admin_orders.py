@@ -17,13 +17,17 @@ normalize_order_number 与 lookup_orders（全部已退由它调用 SHOP-TASK-02
 refund_state 算出）；迁移判定用 SHOP-TASK-010 的 is_transition_allowed；推进前的
 全部已退判定直接用 refund_state；审计用 SHOP-TASK-035 的 record_audit。
 
-锁定协议（推进与之后的退款审核共用）：推进在同一事务里先以 SELECT … FOR UPDATE
-（lock_order_statement，即 SQLAlchemy 的 with_for_update）锁定该订单行，之后才读取
-当前状态与退款占用并判断；通过时用带条件的 UPDATE（状态仍为检查时的状态才改）改状态、
-写事件与审计并提交。之后的退款审核任务在批准退款前必须以同一查询锁定同一订单行，
-再读取退款占用并写入批准。两者因此串行化：不会出现推进读到「未全部已退」、并发的
-批准同时把最后几件批准、两边都提交的情形。条件 UPDATE 另作兜底：未命中时回滚、
-重新读取订单，不出现一单两次推进。
+锁定协议（推进、访客确认收货与退款审核共用，SHOP-TASK-040 补上第一步；见
+docs/HANDOFF.md 0.33 记录的 Kelvin 2026-10-06 决定）：推进先结束本请求此前的数据库事务
+（此前只有读取，回滚即可），再以 SELECT … FOR UPDATE（lock_order_statement，即
+SQLAlchemy 的 with_for_update，定义在 app/services/order_lookup.py）锁定该订单行，使锁定
+成为新事务的第一条语句——MySQL 默认的 REPEATABLE READ 下读取快照在事务第一条非锁定读时
+建立，这样锁定之后才读取的当前状态与退款占用（refund_state）能看到等锁期间别人提交的
+审核、发货或确认。通过时用带条件的 UPDATE（状态仍为检查时的状态才改）改状态、写事件与
+审计并提交。退款审核（app/services/refund_review.py）在批准前同样锁定同一订单行，再读取
+退款占用并写入批准。两者因此串行化：不会出现推进读到「未全部已退」、并发的批准同时把
+最后几件批准、两边都提交的情形。条件 UPDATE 另作兜底：未命中时回滚、重新读取订单，
+不出现一单两次推进。
 
 访问授权、CSRF 与请求格式由调用方（app/api/admin_orders.py）先行校验；这里只按订单
 内部 ID 操作，操作者固定为 admin。本模块不写日志；异常消息不含订单号、收货资料、
@@ -36,7 +40,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel
-from sqlalchemy import Select, func, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.models import Order, OrderEvent, RefundRequest
@@ -44,7 +48,11 @@ from app.models.order import ACTOR_ADMIN
 from app.models.refund import REFUND_REQUESTED
 from app.services.admin_auth import record_audit
 from app.services.catalog import Language
-from app.services.order_lookup import lookup_orders, normalize_order_number
+from app.services.order_lookup import (
+    lock_order_statement,
+    lookup_orders,
+    normalize_order_number,
+)
 from app.services.order_rules import is_transition_allowed, is_valid_order_number
 from app.services.payment import PayRecipient
 from app.services.refunds import refund_state
@@ -307,17 +315,6 @@ def view_order(
     return detail
 
 
-def lock_order_statement(order_id: int) -> Select[tuple[Order]]:
-    """锁定订单行的查询（SELECT … FOR UPDATE）。退款审核批准前须用它锁定同一行。"""
-    return (
-        select(Order)
-        .where(Order.id == order_id)
-        .with_for_update()
-        # 会话里可能留着并发提交之前读到的旧值。
-        .execution_options(populate_existing=True)
-    )
-
-
 def _lock_order(db: Session, order_id: int) -> Order | None:
     return db.scalars(lock_order_statement(order_id)).one_or_none()
 
@@ -336,7 +333,8 @@ def advance_order(
 ) -> tuple[AdvanceOutcome, bool]:
     """管理员推进订单状态，返回订单状态与是否实际推进（已是目标状态为假）。
 
-    同一事务里先锁定订单行，再按以下顺序判断，每一步不通过即回滚（释放锁）并停止：
+    先结束此前的事务（此前只有读取，回滚即可），再锁定订单行（新事务的第一条语句），
+    然后按以下顺序判断，每一步不通过即回滚（释放锁）并停止：
     1. 订单不存在抛 OrderNotFound。
     2. 已是目标状态：返回当前状态，不写事件与审计（重复点击安全）。
     3. 迁移判定以操作者 admin 不允许（含跳过打包、待支付、已完成、已取消）时抛
@@ -347,6 +345,7 @@ def advance_order(
     UPDATE 未命中时回滚、重新读取订单：已是目标状态返回它（不算推进），否则抛
     OrderNotAdvanceable 与当前状态。所以同一步至多推进一次。
     """
+    db.rollback()
     order = _lock_order(db, order_id)
     if order is None:
         db.rollback()
