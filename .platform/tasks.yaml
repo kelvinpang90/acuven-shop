@@ -1809,11 +1809,11 @@ tasks:
       - SHOP-TASK-026
     acceptance_criteria:
       - 按 docs/HANDOFF.md 0.34 记录的 Kelvin 2026-10-06 决定实现；用 SHOP-TASK-026 的取访客来源函数、计数函数与取客户端依赖，不改 app/services/rate_limit.py
-      - POST /api/checkout/quote 在请求体大小与格式检查之后、其他校验之前按来源计一次（桶名 checkout_quote_source，窗口 10 分钟，上限 300 次，成功失败都计），超过返回 429（错误码 rate_limited）；POST /api/orders/guest 同样在请求体大小与格式检查之后、读取幂等键与其他校验之前计一次（桶名 guest_order_source，窗口 1 小时，上限 60 次，幂等重放也计），超过返回 429（错误码 rate_limited），不读写订单、库存与授权
-      - 429 响应体为 {"detail":"rate_limited"}，下单接口的 429 与该接口其他错误一样带原有的 Cache-Control 设置，计价接口沿用它原有的响应头；不回显请求内容
+      - POST /api/checkout/quote 在请求体大小（413）与 Content-Type（415）检查之后、JSON 解析与字段校验之前按来源计一次（桶名 checkout_quote_source，窗口 10 分钟，上限 300 次，成功失败都计），超过返回 429（错误码 rate_limited）；POST /api/orders/guest 同样在 413 与 415 检查之后、JSON 解析、幂等键与其他校验之前计一次（桶名 guest_order_source，窗口 1 小时，上限 60 次，幂等重放也计），超过返回 429（错误码 rate_limited），不读写订单、库存与授权；JSON 不合法、字段或幂等键不合法时仍在计数之后返回与现在相同的 422
+      - 429 响应体为 {"detail":"rate_limited"}，响应头与该接口现有的错误响应相同（下单接口现有错误不带 no-store，429 也不另加），不回显请求内容
       - Redis 连接串未配置、连不上、超时或返回错误时这两个接口不限流、照常处理请求，并记一条只含桶名与异常类名的警告日志（不含来源地址、请求内容或连接串）；docstring 写明这是 Kelvin 2026-10-06 的决定，与查单的拒绝不同，原因是演示站没有真实交易、不能让结账因 Redis 停摆
       - 现有接口的其他行为、状态码与字段不变；tests/test_checkout_quote.py、tests/test_guest_order.py 等已有测试不改并照常通过（它们不覆盖取客户端依赖时 Redis 未配置，即放行）
-      - tests/test_public_rate_limits.py 用 TestClient 与测试文件内自写的内存替身 Redis 客户端（覆盖取客户端依赖，不连真 Redis、不加依赖）验证：计价第 300 次放行、第 301 次 429、另一来源不受影响、窗口过后恢复；下单第 60 次放行、第 61 次 429 且没有创建订单或授权、幂等重放也计入；413 与非 JSON 的错误先于计数且不计数；替身抛连接错误或超时时两个接口都照常处理并记一条不含来源地址的警告；连接串未配置时照常处理；429 不回显请求内容；每条测试写明它守住的是 Kelvin 的哪一项决定；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - tests/test_public_rate_limits.py 用 TestClient 与测试文件内自写的内存替身 Redis 客户端（覆盖取客户端依赖，不连真 Redis、不加依赖）验证：计价第 300 次放行、第 301 次 429、另一来源不受影响、窗口过后恢复；下单第 60 次放行、第 61 次 429 且没有创建订单或授权、幂等重放也计入；413 与 415 先于计数且不计数，JSON 不合法的请求计数后返回与现在相同的 422；替身抛连接错误或超时时两个接口都照常处理并记一条不含来源地址的警告；连接串未配置时照常处理；429 不回显请求内容；每条测试写明它守住的是 Kelvin 的哪一项决定；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
       - docs/TODO.md 新增 SHOP-TASK-043 记录段（桶名、阈值、计数位置、Redis 不可用时放行、偏离、验证到什么程度，并写明前台对 429 的提示沿用各页已有的错误处理、未改前端）；不改 planning-v1 块；复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表或迁移；不改前端代码；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
     allowed_change_paths:
@@ -1827,30 +1827,59 @@ tasks:
     creates_branch: true
     creates_pull_request: true
 
-  # 店铺装修设置的存储与公开读取（REQUIREMENTS 1.12「店铺装修」，docs/UX.md 0.8 的 A08 与 P01）。Kelvin 2026-10-06 决定首版先不含标志图，
-  # 等图片的格式、大小与存放规则定下后与商品图一起做。后台修改接口属于管理后台业务接口；前台按设置显示与 A08 页面另行登记。迁移接在 SHOP-TASK-039 的 0015 之后。
+  # 店铺装修设置的数据模型与默认值（REQUIREMENTS 1.12「店铺装修」，docs/UX.md 0.8 的 A08 与 P01）。Kelvin 2026-10-06 决定首版先不含标志图，
+  # 等图片的格式、大小与存放规则定下后与商品图一起做。读取与公开接口由 SHOP-TASK-045 交付；后台修改接口属于管理后台业务接口；前台按设置显示与 A08 页面另行登记。
+  # 迁移接在 SHOP-TASK-039 的 0015 之后。
   - id: SHOP-TASK-044
-    title: 店铺装修设置的存储与公开读取（不含标志图）
+    title: 店铺装修设置的数据模型与默认值（不含标志图）
     purpose: >-
-      建立店铺装修设置的表（主题、主色、首页四个区块的顺序与显隐、最多 4 件精选商品及顺序）与迁移，写入默认值，并提供前台读取的公开接口。
-      不含标志图（Kelvin 2026-10-06 决定），不做后台修改接口、不改前台显示、不做页面，不改设计。
-      设计闸门：不适用（店铺装修只改变前台外观，不涉及金额计算与个人资料，见 docs/HANDOFF.md 2026-09-30 关于 REQUIREMENTS 1.9 的记录）。拆分：不拆（存储与只读接口同属一处设置，8 个允许路径，照 SHOP-TASK-022 站点设置的做法）。
+      建立店铺装修设置的三张表（主题与主色、首页四个区块的顺序与显隐、最多 4 件精选商品及顺序）与迁移，写入默认值。
+      不含标志图（Kelvin 2026-10-06 决定），不做读取、接口与页面，不改设计。
+      设计闸门：不适用（店铺装修只改变前台外观，不涉及金额计算与个人资料，见 docs/HANDOFF.md 2026-09-30 关于 REQUIREMENTS 1.9 的记录）。拆分：数据层，读取与公开接口由 SHOP-TASK-045 交付。
     status: ready
     depends_on:
       - SHOP-TASK-039
     acceptance_criteria:
       - 实现与 docs/REQUIREMENTS.md「店铺装修」、docs/UX.md 0.8 的 A08 与 P01 以及 docs/HANDOFF.md 0.34 记录的 Kelvin 2026-10-06 决定一致；主题与主色的取值以 docs/design/tokens/themes.json 为准（10 款主题的 id 与各自 accentOptions 的 id）；发现需求或设计本身有问题时停下并在 PR 里说明，不自行改
-      - app/models/store_design.py 定义三张表，沿用 app/db/base.py 的基类、约束命名约定与表选项，时间一律不带时区的 UTC，外键一律 RESTRICT，app/models/__init__.py 导出它们：装修设置表只有一行（单例槽，非空整数，检查约束只允许 1，全表唯一），列为主题（检查约束只允许 10 款主题的 id）、主色（可空，空即该主题的默认主色；是否属于该主题的可选主色由写入方校验，库里只检查长度 1 到 20）与更新时间；首页区块表四行，列为区块（只允许 hero、how、categories、featured，全表唯一）、位置（1 到 4，全表唯一）与是否显示；精选商品表最多四行，列为位置（1 到 4，全表唯一）与商品（外键指向商品表，全表唯一）
+      - app/models/store_design.py 定义三张表，沿用 app/db/base.py 的基类、约束命名约定与表选项，时间一律不带时区的 UTC，外键一律 RESTRICT，app/models/__init__.py 导出它们；检查约束只用比较、LENGTH、IN 与 IS NULL，SQLite 与 MySQL 都能执行
+      - 装修设置表只有一行（单例槽，非空整数，检查约束只允许 1，全表唯一），列为主题（检查约束只允许 10 款主题的 id）、主色（可空，空即该主题的默认主色；是否属于该主题的可选主色由写入方校验，库里只检查长度 1 到 20）与更新时间；首页区块表列为区块（只允许 hero、how、categories、featured，全表唯一）、位置（1 到 4，全表唯一）与是否显示，四行齐全由迁移初始化、由之后的写入在同一事务里保持（模型 docstring 写明），库里不另加行数约束；精选商品表最多四行，列为位置（1 到 4，全表唯一）与商品（外键指向商品表，全表唯一）
       - 新迁移文件 alembic/versions/20261006_0016_store_design.py，revision 为 0016、down_revision 为 0015；upgrade 建三张表并写入默认值（主题 pandan、主色为空，四个区块按 hero、how、categories、featured 的顺序全部显示，没有精选商品），downgrade 删表；约束名按命名约定逐个写出；迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，alembic check 在它比较的范围内无差异，由 PR 的必需 CI 检查 backend 执行；PR 正文列出检查约束
-      - app/services/store_design.py 提供读取函数与主题、主色的常量表（每款主题的可选主色），常量表与 docs/design/tokens/themes.json 一致由测试守住；读取返回主题、主色、按位置排序的四个区块（区块名与是否显示）与按位置排序的精选商品 slug——只含仍上架的商品；设置行不存在时返回默认值（与迁移写入的相同）而不报错；docstring 写明写入与校验（主色须属于所选主题、精选最多 4 件且须已上架）由之后的管理后台业务接口任务实现，未挑选或挑选的都已下架时显示最新 4 件的规则由前台按设置显示的任务实现
-      - GET /api/store-design 返回 {theme, accent, home_blocks, featured_slugs}（home_blocks 为 {block, visible} 的数组，按位置排序；accent 为空时返回 null），响应带 Cache-Control 为 no-store（修改对之后的请求立即生效），不读写会话、不要求 CSRF；数据库未配置时与其他公开接口相同返回 503；app/main.py 挂上路由
-      - tests/test_store_design.py 用 SQLite 内存库（开启外键检查）与 TestClient 验证：模型的单例槽、主题与区块取值、位置与商品唯一、外键各至少一个被拒的反例；默认值与迁移写入的相同；读取按位置排序、已下架的精选商品被略去、设置行不存在时返回默认值；常量表的主题与主色和 themes.json 一致；接口字段与 no-store；每条测试写明它守住的是需求里哪一句或 Kelvin 的哪一项决定；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
-      - docs/TODO.md 新增 SHOP-TASK-044 记录段（三张表与约束、默认值、读取规则、接口、偏离、验证到什么程度，并写明标志图、后台修改接口与前台按设置显示留给之后的任务）；不改 planning-v1 块；复选框只允许 [ ] / [x]
-      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不改已有迁移；不改前端代码（frontend/src/storeDesign.ts 由前台按设置显示的任务改）；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+      - app/models/store_design.py 同时定义主题与主色的常量表（每款主题的可选主色 id）与默认值常量，供迁移、之后的读取与写入共用；常量表与 docs/design/tokens/themes.json 一致由测试守住
+      - tests/test_store_design_models.py 用 SQLite 内存库（开启外键检查）按模型建表，先写入合法的设置、四个区块与精选商品作对照，再验证每个检查约束、唯一约束与外键各至少一个被拒的反例（第二行设置、未知主题、主色为空串或过长、未知区块、重复区块或位置、位置越界、重复的精选商品或位置、精选指向不存在的商品、删除被精选引用的商品被拒）；常量表的主题与主色和 themes.json 一致；默认值常量与迁移写入的相同；每条测试写明它守住的是需求里哪一句或 Kelvin 的哪一项决定；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）；docs/TODO.md 新增 SHOP-TASK-044 记录段（三张表与约束、默认值、偏离、验证到什么程度，并写明标志图、读取与接口、后台修改与前台显示留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不改已有迁移；不加接口、不改 app/main.py、不改前端代码
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
     allowed_change_paths:
       - app/models/store_design.py
       - app/models/__init__.py
       - alembic/versions/20261006_0016_store_design.py
+      - tests/test_store_design_models.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 店铺装修设置的读取与公开接口：前台按设置显示（主题、主色、首页区块、精选商品）的数据来源。
+  - id: SHOP-TASK-045
+    title: 店铺装修设置的公开读取接口
+    purpose: >-
+      提供店铺装修设置的读取函数与前台读取的公开接口：主题、主色、按位置排序的首页区块、按位置排序且仍在前台目录可见的精选商品。
+      不做后台修改接口、不改前台显示、不做页面，不改设计。设计闸门：不适用（理由同 SHOP-TASK-044）。
+      拆分：读取规则只有两条（排序与略去前台不可见的商品、缺行补默认），与只读接口一起交付，照 SHOP-TASK-037 的做法；共 5 个允许路径。
+    status: ready
+    depends_on:
+      - SHOP-TASK-044
+    acceptance_criteria:
+      - 实现与 docs/REQUIREMENTS.md「店铺装修」、docs/UX.md 0.8 的 A08 与 P01 以及 docs/HANDOFF.md 0.34 记录的 Kelvin 2026-10-06 决定一致；发现需求或设计本身有问题时停下并在 PR 里说明，不自行改
+      - app/services/store_design.py 提供读取函数，返回主题、主色、按位置排序的四个区块（区块名与是否显示）与按位置排序的精选商品 slug；精选商品只含满足 app/services/catalog.py 的 published() 判定（即前台目录可见：商品启用、分类启用、英文资料齐全、至少一件启用规格）的商品，复用该判定、不另写一套
+      - 设置行不存在时主题与主色返回 SHOP-TASK-044 的默认值常量；区块表缺少某些区块时，缺少的区块按默认顺序补在已有区块之后并显示，结果总是四个区块；读取不写库；docstring 写明写入与校验（主色须属于所选主题、精选最多 4 件且须满足 published()、四个区块在同一事务里保持齐全）由之后的管理后台业务接口任务实现，未挑选或挑选的都不可见时显示最新 4 件的规则由前台按设置显示的任务实现
+      - GET /api/store-design 返回 {theme, accent, home_blocks, featured_slugs}（home_blocks 为 {block, visible} 的数组；accent 为空时返回 null）；该接口处理函数与依赖产生的所有响应（含 503 等错误）都带 Cache-Control 为 no-store，路径存在但方法不匹配时由框架返回的 405 不在此列；不读写会话、不要求 CSRF、不写日志；数据库未配置时与其他公开接口相同返回 503；app/main.py 挂上路由
+      - 不改 app/services/catalog.py 与 SHOP-TASK-044 的模型；已有测试照常通过
+      - tests/test_store_design.py 用 SQLite 内存库（开启外键检查）与 TestClient 验证：读取按位置排序；精选里停用的商品、所属分类停用的商品、没有启用规格的商品都被略去且顺序保持；设置行不存在时返回默认值；缺少区块时按默认顺序补齐为四个；接口字段与 accent 为 null 的情形；所有响应 no-store（含数据库未配置的 503）；每条测试写明它守住的是需求里哪一句或 Kelvin 的哪一项决定；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）；docs/TODO.md 新增 SHOP-TASK-045 记录段（读取规则、接口、偏离、验证到什么程度，并写明后台修改与前台显示留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表或迁移；不改前端代码（frontend/src/storeDesign.ts 由前台按设置显示的任务改）
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
       - app/services/store_design.py
       - app/api/store_design.py
       - app/main.py
