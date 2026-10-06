@@ -1,8 +1,9 @@
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 import SiteFrame from "./components/SiteFrame";
 import { LanguageProvider } from "./i18n/language";
 import type { LanguageStorage } from "./i18n/language";
+import AdminLoginPage from "./pages/AdminLoginPage";
 import CartPage from "./pages/CartPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import HomePage from "./pages/HomePage";
@@ -14,7 +15,7 @@ import ProductListPage from "./pages/ProductListPage";
 import RefundPage from "./pages/RefundPage";
 import TrackOrderPage from "./pages/TrackOrderPage";
 import TrackPage from "./pages/TrackPage";
-import { RouterProvider, useRouter } from "./router";
+import { isAdminPath, RouterProvider, useRouter } from "./router";
 import type { RoutePattern } from "./router";
 
 // 按 router.tsx 的路由表穷举：表里每个模式恰好对应一个页面。
@@ -30,6 +31,7 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   "/track/order": TrackOrderPage,
   "/track/order/refund": RefundPage,
   "/privacy": PrivacyPage,
+  "/admin/login": AdminLoginPage,
 };
 
 // 以实际路径为 key：从一件商品换到另一件时页面重新开始（规格、数量与提示不带过去）。
@@ -37,6 +39,12 @@ function CurrentPage() {
   const { path, pattern } = useRouter();
   const Page = PAGES[pattern];
   return <Page key={path} />;
+}
+
+// 后台页（以 /admin 开头）不套前台框架，页面自己渲染后台的根元素与演示横幅；其余页面照旧套 SiteFrame。
+function Frame({ children }: { children: ReactNode }) {
+  const { path } = useRouter();
+  return isAdminPath(path) ? children : <SiteFrame>{children}</SiteFrame>;
 }
 
 interface AppProps {
@@ -49,9 +57,9 @@ export default function App({ initialPath, storage }: AppProps) {
   return (
     <LanguageProvider storage={storage}>
       <RouterProvider initialPath={initialPath}>
-        <SiteFrame>
+        <Frame>
           <CurrentPage />
-        </SiteFrame>
+        </Frame>
       </RouterProvider>
     </LanguageProvider>
   );

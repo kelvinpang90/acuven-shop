@@ -27,7 +27,8 @@ const banner = (html: string) => section(html, /<div class="acs-banner">[\s\S]*?
 const header = (html: string) => section(html, /<header[\s\S]*<\/header>/);
 const footer = (html: string) => section(html, /<footer[\s\S]*<\/footer>/);
 
-const paths = [...ROUTE_PATHS];
+// 只遍历前台页：以 /admin 开头的后台页不套前台框架（SHOP-TASK-038），没有前台横幅、页头与页脚，由 pages/AdminLoginPage.test.tsx 检查。
+const paths = ROUTE_PATHS.filter((path) => !path.startsWith("/admin"));
 const languages = [...LANGUAGES];
 const languageLabel = { en: "common.lang_en", zh: "common.lang_zh", ms: "common.lang_ms" } as const;
 

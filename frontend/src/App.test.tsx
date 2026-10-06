@@ -48,9 +48,11 @@ const cases = ROUTE_PATHS.flatMap((path) => LANGUAGES.map((language): [string, L
 
 describe("App", () => {
   // 需求：所有商品、金额、支付与发货都是演示，页面须持续、清楚地标注这一点（原外壳页测试的意图，改由全站框架守住）。
+  // 以 /admin 开头的后台页不套前台框架，按 UX「管理后台总体」每页顶部常驻 admin.demo_banner（SHOP-TASK-038）。
   it("labels every page as a demo", () => {
     for (const [path, language] of cases) {
-      expect(render(path, language)).toContain(COPY["common.demo_banner"][language]);
+      const banner = path.startsWith("/admin") ? COPY["admin.demo_banner"][language] : COPY["common.demo_banner"][language];
+      expect(render(path, language)).toContain(banner);
     }
   });
 

@@ -580,6 +580,16 @@ export const COPY = {
     zh: "手机号",
     ms: "Nombor telefon bimbit",
   },
+  "auth.password": {
+    en: "Password",
+    zh: "密码",
+    ms: "Kata laluan",
+  },
+  "auth.login_submit": {
+    en: "Log in",
+    zh: "登录",
+    ms: "Log masuk",
+  },
   "pay.title": {
     en: "Simulated payment",
     zh: "模拟支付",
@@ -1064,6 +1074,41 @@ export const COPY = {
     en: "This whole site is a demonstration; no real orders are fulfilled.",
     zh: "整个网站都是演示，不履行任何真实订单。",
     ms: "Seluruh laman ini adalah demonstrasi; tiada pesanan sebenar dipenuhi.",
+  },
+  "admin.demo_banner": {
+    en: "Admin — demo store. Actions here never move real money or goods.",
+    zh: "管理后台——演示网店。这里的操作不会产生真实资金或货物流动。",
+    ms: "Pentadbir — kedai demo. Tindakan di sini tidak pernah memindahkan wang atau barang sebenar.",
+  },
+  "admin.login_title": {
+    en: "Admin log in",
+    zh: "管理员登录",
+    ms: "Log masuk pentadbir",
+  },
+  "admin.username": {
+    en: "Username",
+    zh: "用户名",
+    ms: "Nama pengguna",
+  },
+  "admin.login_failed": {
+    en: "Username or password is incorrect.",
+    zh: "用户名或密码不正确。",
+    ms: "Nama pengguna atau kata laluan salah.",
+  },
+  "admin.locked": {
+    en: "Too many failed attempts. This sign-in is locked for a short time.",
+    zh: "失败次数过多，登录已短时锁定。",
+    ms: "Terlalu banyak cubaan gagal. Log masuk ini dikunci untuk seketika.",
+  },
+  "admin.logout": {
+    en: "Log out",
+    zh: "退出登录",
+    ms: "Log keluar",
+  },
+  "admin.logged_in": {
+    en: "You're logged in as {username}. The other admin pages are not available yet.",
+    zh: "已以 {username} 登录。后台其他页面尚未上线。",
+    ms: "Anda telah log masuk sebagai {username}. Halaman pentadbir lain belum tersedia.",
   },
 } as const satisfies Record<string, CopyEntry>;
 
