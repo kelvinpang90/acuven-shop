@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, useSyncExternalStore } from "react";
+import { useEffect, useId, useState } from "react";
 import type { FormEvent, MouseEvent } from "react";
 
 import { readAdminSession, submitAdminLogin, submitAdminLogout } from "../api/admin";
@@ -18,7 +18,7 @@ import type { RoutePath } from "../router";
 
 export const ADMIN_LOGIN_PATH: RoutePath = "/admin/login";
 
-// 深浅色：首次渲染（服务端渲染与水合前的快照）为 light，在浏览器里按 prefers-color-scheme 取值并随设备设置变化。
+// 深浅色：首次渲染为 light，挂载后在浏览器里按 prefers-color-scheme 取值并随设备设置变化。
 export type AdminMode = "light" | "dark";
 
 export const DARK_SCHEME_QUERY = "(prefers-color-scheme: dark)";
@@ -51,20 +51,25 @@ function browserMatchMedia(): MatchMedia | null {
   return typeof window !== "undefined" && typeof window.matchMedia === "function" ? (query) => window.matchMedia(query) : null;
 }
 
-function subscribeMode(onChange: () => void): () => void {
-  return watchAdminMode(browserMatchMedia(), onChange);
-}
-
-function modeSnapshot(): AdminMode {
-  return adminMode(browserMatchMedia());
-}
-
-function serverMode(): AdminMode {
-  return "light";
-}
-
+// 首次渲染（服务端与浏览器都一样）为 light；挂载后按设备设置取值，并订阅之后的变化。
 export function useAdminMode(): AdminMode {
-  return useSyncExternalStore(subscribeMode, modeSnapshot, serverMode);
+  const [mode, setMode] = useState<AdminMode>("light");
+  useEffect(() => {
+    const matchMedia = browserMatchMedia();
+    let live = true;
+    const update = () => {
+      if (live) {
+        setMode(adminMode(matchMedia));
+      }
+    };
+    const stop = watchAdminMode(matchMedia, update);
+    queueMicrotask(update);
+    return () => {
+      live = false;
+      stop();
+    };
+  }, []);
+  return mode;
 }
 
 export interface LoginFields {

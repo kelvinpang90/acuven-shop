@@ -116,6 +116,15 @@ function inputs(html: string): string[] {
   return [...html.matchAll(/<input\b[^>]*>/g)].map((m) => m[0]);
 }
 
+// 一个开始标签的属性：名称一律小写（React 静态渲染可能输出 autoComplete、noValidate），与属性顺序无关。
+function attributes(tag: string): Map<string, string> {
+  const found = new Map<string, string>();
+  for (const m of tag.replace(/^<\w+/, "").matchAll(/([^\s=/>]+)(?:="([^"]*)")?/g)) {
+    found.set((m[1] ?? "").toLowerCase(), m[2] ?? "");
+  }
+  return found;
+}
+
 const submitButton = (html: string) => part(html, /<button class="acs-admin__btn site-admin__submit"[^>]*>/);
 const alertBox = (html: string) => part(html, /<div class="acs-admin__alert" role="alert">[\s\S]*?<\/div>/);
 
@@ -262,20 +271,27 @@ describe("login form", () => {
       expect(position).toBeGreaterThanOrEqual(0);
     }
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
-    const [username, password] = inputs(html);
-    expect(username).toContain(`autocomplete="username"`);
-    expect(username).not.toContain("type=");
-    expect(password).toContain(`type="password"`);
-    expect(password).toContain(`autocomplete="current-password"`);
+    const [username, password] = inputs(html).map(attributes);
+    expect(username?.get("autocomplete")).toBe("username");
+    expect(username?.has("type")).toBe(false);
+    expect(password?.get("type")).toBe("password");
+    expect(password?.get("autocomplete")).toBe("current-password");
   });
 
   // SHOP-TASK-038 验收第 4 条「不用浏览器自带的必填校验提示（那不是 UX-COPY 文字）」与「用户名与密码不写进网址」：
   // 输入框不标 required、不设 name，表单 novalidate 且以 POST 提交（不用脚本时也不把二者放进查询参数）。
   it("uses no browser validation and never puts the fields into an address", () => {
     const html = render({ fields: FILLED });
-    expect(html).toMatch(/<form class="site-admin__form" method="post" novalidate="">/);
-    for (const field of inputs(html)) {
-      expect(field).not.toMatch(/\s(required|name|pattern|minlength|maxlength)=/);
+    const forms = [...html.matchAll(/<form\b[^>]*>/g)].map((m) => attributes(m[0]));
+    expect(forms).toHaveLength(1);
+    expect(forms[0]?.get("class")).toBe("site-admin__form");
+    expect(forms[0]?.get("method")).toBe("post");
+    expect(forms[0]?.has("novalidate")).toBe(true);
+    expect(forms[0]?.has("action")).toBe(false);
+    for (const field of inputs(html).map(attributes)) {
+      for (const name of ["required", "name", "pattern", "minlength", "maxlength"]) {
+        expect(field.has(name)).toBe(false);
+      }
     }
     for (const href of html.matchAll(/(?:href|action)="([^"]*)"/g)) {
       expect(href[1]).not.toContain(USERNAME);
