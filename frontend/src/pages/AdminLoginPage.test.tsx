@@ -435,7 +435,8 @@ describe("session", () => {
     expect(html.indexOf(logout)).toBeGreaterThan(html.indexOf(text));
     expect(html).toContain(`>${escapeHtml(COPY["admin.logout"][language])}</button>`);
     expect(html).not.toMatch(/<(form|input)\b/);
-    expect(html).not.toContain(escapeHtml(COPY["auth.login_submit"][language]) + "</button>");
+    // 只按 type 找提交按钮：zh 的 admin.logout「退出登录」以 auth.login_submit「登录」结尾，不能按文字子串判断。
+    expect(tags(html, "button").filter((tag) => attributes(tag).get("type") === "submit")).toHaveLength(0);
     expect(attributes(tags(html, "main")[0] ?? "").get("aria-busy")).toBe("false");
     // 退出请求进行中按钮禁用（派生实现约束：不重复提交）。
     expect(attributes(logoutButton(render({ state: { screen: SIGNED_IN, error: null }, busy: true }, language))).has("disabled")).toBe(true);
