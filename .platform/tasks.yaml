@@ -1803,20 +1803,21 @@ tasks:
     purpose: >-
       给计价接口与游客下单接口加按访客来源的固定窗口限流，超过时返回 429；Redis 未配置或不可用时放行并记一条不含个人资料的日志。
       不改其他接口与查单限流，不改前端，不加表或迁移，不改设计。
-      设计闸门：不适用（只在已有接口前计数与拒绝，不改计价、下单、库存与个人资料的规则）。拆分：不拆（4 个允许路径）。
+      设计闸门：不适用（只在已有接口前计数与拒绝，不改计价、下单、库存与个人资料的规则）。拆分：不拆（5 个允许路径）。
     status: ready
     depends_on:
       - SHOP-TASK-026
     acceptance_criteria:
-      - 按 docs/HANDOFF.md 0.34 记录的 Kelvin 2026-10-06 决定实现；用 SHOP-TASK-026 的取访客来源函数、计数函数与取客户端依赖，不改 app/services/rate_limit.py
+      - 按 docs/HANDOFF.md 0.34 记录的 Kelvin 2026-10-06 决定实现；用 SHOP-TASK-026 的取访客来源函数与计数函数；SHOP-TASK-026 的取客户端依赖在未配置或创建失败时抛 RateLimitUnavailable、接口内接不住，所以 app/services/rate_limit.py 只许新增一个供这两个放行接口用的可选取客户端依赖（内部调用原来的取客户端依赖，遇 RateLimitUnavailable 返回空，测试可用 dependency_overrides 覆盖它），已有函数的行为与测试不变
       - POST /api/checkout/quote 在请求体大小检查（413）之后、JSON 解析与字段校验之前按来源计一次（该接口现有没有 415，非 JSON 仍返回现有的 422，不新增 415）（桶名 checkout_quote_source，窗口 10 分钟，上限 300 次，成功失败都计），超过返回 429（错误码 rate_limited）；POST /api/orders/guest 同样在 413 与 415 检查之后、JSON 解析、幂等键与其他校验之前计一次（桶名 guest_order_source，窗口 1 小时，上限 60 次，幂等重放也计），超过返回 429（错误码 rate_limited），不读写订单、库存与授权；JSON 不合法、字段或幂等键不合法时仍在计数之后返回与现在相同的 422
       - 429 响应体为 {"detail":"rate_limited"}，响应头与该接口现有的错误响应相同（下单接口现有错误不带 no-store，429 也不另加），不回显请求内容
-      - Redis 连接串未配置、连不上、超时或返回错误时这两个接口不限流、照常处理请求，并记一条只含桶名与异常类名的警告日志（不含来源地址、请求内容或连接串）；docstring 写明这是 Kelvin 2026-10-06 的决定，与查单的拒绝不同，原因是演示站没有真实交易、不能让结账因 Redis 停摆
+      - Redis 连接串未配置、连不上、超时或返回错误时这两个接口不限流、照常处理请求：可选依赖返回空时直接放行，计数函数抛 RateLimitUnavailable 时也放行，并记一条只含桶名与固定说明的警告日志（不含来源地址、请求内容、连接串或异常消息）；docstring 写明这是 Kelvin 2026-10-06 的决定，与查单的拒绝不同，原因是演示站没有真实交易、不能让结账因 Redis 停摆
       - 现有接口的其他行为、状态码与字段不变；tests/test_checkout_quote.py、tests/test_guest_order.py 等已有测试不改并照常通过（它们不覆盖取客户端依赖时 Redis 未配置，即放行）
-      - tests/test_public_rate_limits.py 用 TestClient 与测试文件内自写的内存替身 Redis 客户端（覆盖取客户端依赖，不连真 Redis、不加依赖）验证：计价第 300 次放行、第 301 次 429、另一来源不受影响、窗口过后恢复；下单第 60 次放行、第 61 次 429 且没有创建订单或授权、幂等重放也计入；两个接口的 413 与下单接口的 415 先于计数且不计数，JSON 不合法（计价接口含非 JSON）的请求计数后返回与现在相同的 422；替身抛连接错误或超时时两个接口都照常处理并记一条不含来源地址的警告；连接串未配置时照常处理；429 不回显请求内容；每条测试写明它守住的是 Kelvin 的哪一项决定；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - tests/test_public_rate_limits.py 用 TestClient 与测试文件内自写的内存替身 Redis 客户端（覆盖新增的可选取客户端依赖，不连真 Redis、不加依赖）验证：计价第 300 次放行、第 301 次 429、另一来源不受影响、窗口过后恢复；下单第 60 次放行、第 61 次 429 且没有创建订单或授权、幂等重放也计入；两个接口的 413 与下单接口的 415 先于计数且不计数，JSON 不合法（计价接口含非 JSON）的请求计数后返回与现在相同的 422；替身抛 redis 库的 ConnectionError 或 TimeoutError（redis.exceptions 里的，不是内置异常）时两个接口都照常处理并记一条不含来源地址的警告；可选依赖返回空（连接串未配置）时照常处理且不记计数；429 不回显请求内容；每条测试写明它守住的是 Kelvin 的哪一项决定；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
       - docs/TODO.md 新增 SHOP-TASK-043 记录段（桶名、阈值、计数位置、Redis 不可用时放行、偏离、验证到什么程度，并写明前台对 429 的提示沿用各页已有的错误处理、未改前端）；不改 planning-v1 块；复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表或迁移；不改前端代码；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
     allowed_change_paths:
+      - app/services/rate_limit.py
       - app/api/checkout.py
       - app/api/orders.py
       - tests/test_public_rate_limits.py
