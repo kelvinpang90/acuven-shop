@@ -1568,10 +1568,10 @@ tasks:
     acceptance_criteria:
       - 实现与 docs/DESIGN.md 1.11「权限与资料保护」第 4–6 条以及 docs/HANDOFF.md 记录的 Kelvin 2026-10-04 决定一致；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
       - 三个接口的所有响应（含错误）都带 Cache-Control 为 no-store，范围是这些接口的处理函数与依赖产生的响应（含错误），路径存在但方法不匹配时由框架返回的 405 不含请求内容与个人资料，不在此列；不写日志，或日志只记录不含用户名、密码、令牌与来源地址的事件；422 响应不回显请求内容，沿用 app/api/pay.py 的 _body_errors 写法，每条错误只给位置、类型与固定消息，不让框架默认的 422 带出 input 或 ctx；错误响应不含内部细节
-      - POST /api/admin/login 只接受 JSON（否则 415），请求体上限 8 KB 且先于其他校验（超出 413），请求体只有用户名与密码两个字符串字段（多出字段 422；用户名须 1 到 64 个字符、密码须 1 到 256 个字符，否则 422，这类 422 不计失败、不查账号）；按以下顺序处理，每一步不通过即停止：用 SHOP-TASK-026 的来源函数取访客来源，用 SHOP-TASK-035 的判定函数查锁定，已锁定返回 429（错误码 login_locked）且不查账号、不校验密码；按规范化用户名查账号并校验密码（账号不存在时用假哈希照样校验）；失败时用 SHOP-TASK-035 的函数计一次失败，账号存在时写 admin_login_failed、刚锁定时再写 admin_login_locked，并在返回前提交（会话依赖在请求结束时回滚未提交的改动，不提交审计会丢），返回 401（错误码 login_failed），用户名不存在与密码错误的状态码、响应体与响应头完全相同（耗时上账号存在时多一次审计提交，是 Kelvin 2026-10-05 接受的用户名计时侧信道，不另做时序对齐，在 docs/TODO.md 记录段写明）；Redis 不可用时返回 503（错误码 service_unavailable），发生在查锁定时不查账号，发生在计失败时返回同一个 503 而不是 401
+      - POST /api/admin/login 只接受 JSON（否则 415），请求体上限 8 KB 且先于其他校验（超出 413），请求体只有用户名与密码两个字符串字段，JSON 字段名为 username 与 password（多出字段 422；用户名须 1 到 64 个字符、密码须 1 到 256 个字符，否则 422，这类 422 不计失败、不查账号）；按以下顺序处理，每一步不通过即停止：用 SHOP-TASK-026 的来源函数取访客来源，用 SHOP-TASK-035 的判定函数查锁定，已锁定返回 429（错误码 login_locked）且不查账号、不校验密码；按规范化用户名查账号并校验密码（账号不存在时用假哈希照样校验）；失败时用 SHOP-TASK-035 的函数计一次失败，账号存在时写 admin_login_failed、刚锁定时再写 admin_login_locked，并在返回前提交（会话依赖在请求结束时回滚未提交的改动，不提交审计会丢），返回 401（错误码 login_failed），用户名不存在与密码错误的状态码、响应体与响应头完全相同（耗时上账号存在时多一次审计提交，是 Kelvin 2026-10-05 接受的用户名计时侧信道，不另做时序对齐，在 docs/TODO.md 记录段写明）；Redis 不可用时返回 503（错误码 service_unavailable），发生在查锁定时不查账号，发生在计失败时返回同一个 503 而不是 401
       - 登录成功时在同一事务里签发后台会话、写 admin_login_succeeded 并提交，设置 cookie __Host-shop_admin_session（HttpOnly、Secure、SameSite=Strict、Path=/、不设 Domain、Max-Age 为 30 天），返回 204 且响应体为空
       - 提供 FastAPI 依赖 require_admin：按 cookie 用 SHOP-TASK-035 的校验函数取当前后台会话（含所属管理员与到期时间），没有有效会话时 401（错误码 admin_session_required），不区分会话不存在、已撤销或已到期；docstring 写明之后所有后台接口都必须用它，写操作还须校验 X-CSRF-Token
-      - GET /api/admin/session 经 require_admin 返回用户名、会话到期时间与由 cookie 算出的 CSRF 令牌；POST /api/admin/logout 经 require_admin 并校验 X-CSRF-Token 请求头（缺失或不符 403，错误码 csrf_failed，不撤销会话），通过后用 SHOP-TASK-035 的撤销函数撤销 require_admin 取到的当前会话、写 admin_logout 并提交，清除 cookie，返回 204；app/main.py 挂上路由
+      - GET /api/admin/session 经 require_admin 返回 JSON 对象 {username, expires_at, csrf_token}（用户名、会话到期时间，格式与 SHOP-TASK-021 支付接口的时间字段相同，以及由 cookie 算出的 CSRF 令牌）；所有错误响应体为 {"detail":"<错误码>"}，与现有接口相同；POST /api/admin/logout 经 require_admin 并校验 X-CSRF-Token 请求头（缺失或不符 403，错误码 csrf_failed，不撤销会话），通过后用 SHOP-TASK-035 的撤销函数撤销 require_admin 取到的当前会话、写 admin_logout 并提交，清除 cookie，返回 204；app/main.py 挂上路由
       - tests/test_admin_auth_api.py 用 TestClient 与 SQLite 内存库（开启外键检查，覆盖会话依赖与 SHOP-TASK-026 的取客户端依赖，Redis 用测试文件内的内存替身）验证：正确登录 204、cookie 属性、库里一条会话与一条成功审计；用户名不存在与密码错误响应完全相同、前者不写审计；已有账号的失败在另一个数据库会话里能读到一条 admin_login_failed，第 10 次失败另有且只有一条 admin_login_locked；同一来源与用户名第 10 次失败后正确密码也 429、另一来源不受影响；Redis 未配置与替身抛连接错误时 503 且没有查账号；替身只在计失败时抛错时返回 503；取会话与退出在无 cookie、会话过期、已撤销时都 401；退出缺或错 CSRF 403 且会话仍有效，通过后会话撤销、cookie 清除、再取会话 401；非 JSON 415、超过 8 KB 413（先于其他校验）、多余字段 422，错误响应都不回显请求内容；所有响应 no-store；每条测试写明它守住的是设计里哪一句或 Kelvin 的哪一项决定；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）；docs/TODO.md 新增 SHOP-TASK-036 记录段（接口与错误码、处理顺序、cookie 属性、偏离、验证到什么程度），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表或迁移；不改 SHOP-TASK-019、026、035 已有函数的行为，它们的测试照常通过；不改前端代码；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
     allowed_change_paths:
@@ -1614,6 +1614,48 @@ tasks:
       - app/services/order_lookup.py
       - app/main.py
       - tests/test_admin_orders.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 后台登录页 A01（只做登录页）。Kelvin 2026-10-05 决定：A02 订单页上线前，登录成功后留在本页显示已登录状态与退出按钮（过渡规则，
+  # 记录见 docs/HANDOFF.md 0.32），后台框架（导航、☰ 菜单）与登录后进入 A02 留给 A02 页面任务。开启前的骨架实测（2026-10-05，main 61f7b8a）
+  # 只剩路由表断言失败；SiteFrame.test.tsx 与 App.test.tsx 各一处按路由表遍历的断言须如下改。
+  - id: SHOP-TASK-038
+    title: 后台登录页 A01
+    purpose: >-
+      实现后台登录页 A01：管理员以用户名与密码登录，按 SHOP-TASK-036 的接口显示登录失败、锁定与暂不可用；
+      A02 订单页上线前，登录成功后留在本页显示已登录状态与退出按钮（Kelvin 2026-10-05 的过渡规则）。
+      后台页面不套前台的站点框架。不做后台导航与 ☰ 菜单、其他后台页面，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只调用已登记的登录接口，不碰金额、不收集或显示个人资料；密码只在页面内存里，提交后清空）。
+      拆分：不拆（12 个允许路径、8 条验收标准；页面、接口模块与三处按路由表遍历的测试同属前端一层）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-036
+    acceptance_criteria:
+      - 页面内容、流程与文案以 docs/UX.md 0.8 的 A01 与「管理后台总体」、docs/UX-COPY.md 0.8 为准，样式以 docs/design/pages/ 的 A01-desktop、A01-phone 为准，二者冲突时以 UX 文档为准并在 PR 里说明；A01 的去向在 A02 上线前按 docs/HANDOFF.md 0.32 的过渡规则；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；样式用 acuven-shop.css 的 acs-admin 类，其中表单字段用 acs-admin__field、错误提示用 acs-admin__alert、桌面语言链接用 acs-admin__lang（当前语言 aria-current 为 true），这三个类已由登记 PR 加入设计系统；手机与桌面的布局差异写在 frontend/src/styles/site.css（只放布局与显隐规则，手机的差异写在 767px 及以下的媒体查询里；只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
+      - 路由 /admin/login；App.tsx 对以 /admin 开头的路由不套 SiteFrame，直接渲染页面，其余路由照旧；前台页头、菜单与页脚不出现任何指向 /admin 的链接；页面根元素为 class acs-admin，data-mode 首次渲染为 light，在浏览器里按 prefers-color-scheme 设为 light 或 dark 并随设备设置变化（docs/UX.md「管理后台总体」深浅色随管理员设备设置），沿用 LanguageProvider 的界面语言（默认英文）
+      - 首次渲染（会话请求未返回、没有本浏览器存储）即显示演示横幅（common.demo_badge 与 admin.demo_banner）、admin.login_title 与语言切换（桌面为三种语言的站内链接，链接指向本页、点击切换界面语言；手机为显示当前语言名称的按钮、展开后列出三种语言，与前台页头手机版的当前语言按钮同一做法，可访问名称即按钮上的语言名，不另加文案，按钮用 acs-admin__btn acs-admin__btn--secondary，展开的语言列表沿用 acs-admin__lang；两者都渲染，由 site.css 按宽度显隐）；frontend/src/api/admin.ts 调用 GET /api/admin/session（响应字段按 SHOP-TASK-036：username、expires_at、csrf_token；错误体 {"detail":"<错误码>"}）：会话请求返回前不显示表单与已登录内容；200 显示已登录状态，401 显示登录表单，其他结果显示 common.error_retry 与登录表单
+      - 登录表单：admin.username、auth.password（autocomplete 分别为 username 与 current-password）与 auth.login_submit；用户名或密码任一为空时提交按钮禁用，不用浏览器自带的必填校验提示（那不是 UX-COPY 文字）；提交调用 POST /api/admin/login（JSON 请求体只有用户名与密码），提交期间按钮禁用；204 后再取会话并显示已登录状态；401 显示 admin.login_failed，429 显示 admin.locked，503 显示 common.service_unavailable，网络中断显示 common.network_check，其他显示 common.error_retry；每次提交后清空密码框、保留用户名；用户名与密码不写进网址、localStorage、sessionStorage 或 cookie，也不出现在任何错误提示里
+      - 已登录状态（过渡规则）：面板保留 admin.login_title 与语言切换，其下显示 admin.logged_in（{username} 为会话接口返回的用户名）与 admin.logout 按钮（acs-admin__btn acs-admin__btn--secondary），不显示表单；退出调用 POST /api/admin/logout 并带会话接口返回的 X-CSRF-Token，204 或 401 后回到登录表单，403 时重新取会话并显示 common.error_retry，网络中断显示 common.network_check，其他结果显示 common.error_retry 并保持已登录状态
+      - 按路由表遍历的现有测试只许这样改，其余断言不动：frontend/src/components/SiteFrame.test.tsx 把遍历的 paths 改为路由表里不以 /admin 开头的路由，注释写明后台页不套前台框架；frontend/src/App.test.tsx「labels every page as a demo」对以 /admin 开头的路由改为断言 admin.demo_banner、其余路由仍断言 common.demo_banner；frontend/src/router.test.tsx 的路由表断言加上 /admin/login
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch、matchMedia 与存储以替身代替）验证意图：首次渲染即有横幅、标题与语言切换（含手机版当前语言按钮）；用户名或密码为空时提交按钮禁用；会话 200 显示已登录状态与用户名、401 显示表单；登录请求体只有用户名与密码、成功后取会话；401、429、503、网络中断与其他错误各自的提示；提交后密码框清空且用户名与密码不进网址或任何浏览器存储；退出带 CSRF 令牌、成功后回到表单、403 重取会话；/admin/login 不渲染前台页头页脚；data-mode 随 prefers-color-scheme；页面文字全部来自字典；每条测试写明它守住的是 UX、DESIGN 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）；docs/TODO.md 新增 SHOP-TASK-038 记录段（页面状态、请求与错误处理、过渡规则、偏离、验证到什么程度，并写明未做浏览器验收、后台框架与登录后进入 A02 留给 A02 页面任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/admin.ts
+      - frontend/src/api/admin.test.ts
+      - frontend/src/pages/AdminLoginPage.tsx
+      - frontend/src/pages/AdminLoginPage.test.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
+      - frontend/src/App.test.tsx
+      - frontend/src/components/SiteFrame.test.tsx
+      - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
       - lint.check
