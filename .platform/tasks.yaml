@@ -1739,7 +1739,7 @@ tasks:
     purpose: >-
       用 SHOP-TASK-040 的规则函数给管理员提供退款申请列表、详情、批准与拒绝四个接口（A03 的后端）。
       不做页面，不做积分返还与追回，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）与 docs/HANDOFF.md 0.33 记录的 Kelvin 2026-10-06 决定。拆分：接口层。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-036
       - SHOP-TASK-040
