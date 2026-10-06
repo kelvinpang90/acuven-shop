@@ -1662,3 +1662,131 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 退款审核分三层（数据 / 规则 / 接口），依据 docs/DESIGN.md 1.11（提交 2d13250）「数据模型」RefundRequest / RefundLine 一行（审核人及理由）、
+  # 「订单与退款状态」「失败、并发与重试」「权限与资料保护」，以及 docs/HANDOFF.md 0.33 记录的 Kelvin 2026-10-06 决定（拒绝时理由必填、批准时可空，
+  # 1 到 500 个字符；理由只给管理员看，访客的 P09 只显示状态）。积分返还与追回等会员与积分账本任务接入，现有订单都是游客订单。
+  - id: SHOP-TASK-039
+    title: 退款申请的审核人与审核理由（数据模型）
+    purpose: >-
+      按 docs/DESIGN.md 1.11「数据模型」RefundRequest 一行给退款申请表加审核人与审核理由两列，写对应的 Alembic 迁移。
+      只加列与约束；不写批准、拒绝、冻结或接口逻辑，不做页面，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）。
+      拆分：数据层，规则与接口分别由 SHOP-TASK-040、041 交付。
+    status: ready
+    depends_on:
+      - SHOP-TASK-029
+      - SHOP-TASK-034
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.11「数据模型」RefundRequest / RefundLine 一行（申请状态、审核人及理由）、「订单与退款状态」以及 docs/HANDOFF.md 0.33 记录的 Kelvin 2026-10-06 决定一致；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - app/models/refund.py 的退款申请模型加审核人（可空，外键指向 SHOP-TASK-034 的管理员账号表，RESTRICT，建索引）与审核理由（可空，列长 500）；沿用 app/db/base.py 的基类、约束命名约定与表选项，不改该文件里其他模型、列与已有约束的行为
+      - 检查约束：状态为 requested 时审核人与审核理由都为空；状态为 approved 或 rejected 时审核人非空；状态为 rejected 时审核理由非空且 LENGTH 不小于 1；审核理由上限只由列长保证（MySQL 的 LENGTH 按字节计，沿用 app/models/order.py 的做法）；检查约束只用比较、LENGTH、IN 与 IS NULL，SQLite 与 MySQL 都能执行
+      - 新迁移文件 alembic/versions/20261006_0015_refund_review.py，revision 为 0015、down_revision 为 0014；upgrade 加两列、外键、索引与检查约束，downgrade 按依赖倒序撤销；约束名按命名约定逐个写出；对已有行可直接加列（迁移前不会有 approved 或 rejected 的申请，审核接口尚未存在）；迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，alembic check 在它比较的范围内无差异，由 PR 的必需 CI 检查 backend 执行；PR 正文列出新增的检查约束
+      - tests/test_refund_review_models.py 用 SQLite 内存库（开启外键检查）按模型建表，先写入合法的 requested、approved（理由为空与非空各一）与 rejected 申请作对照，再验证每个新检查约束与外键各至少一个被拒的反例（requested 有审核人或理由、approved 或 rejected 无审核人、rejected 无理由或理由为空串、审核人指向不存在的管理员、删除被申请引用的管理员被拒）；每条测试写明它守住的是设计里哪一句或 Kelvin 的哪一项决定；不改 tests/test_refunds.py 等已有测试文件，它们照常通过；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-039 记录段（新列与约束、迁移、偏离、验证到什么程度）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加接口、不改 app/main.py、不改已有迁移、不改前端代码
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - app/models/refund.py
+      - alembic/versions/20261006_0015_refund_review.py
+      - tests/test_refund_review_models.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 退款审核的规则层：批准、拒绝与全部退款后冻结访客确认收货。不加后台接口。
+  - id: SHOP-TASK-040
+    title: 退款审核规则与全部退款后冻结确认收货
+    purpose: >-
+      提供管理员批准与拒绝退款申请的规则函数（锁定订单行、校验状态、拒绝时释放占用的件、写审计），并按 SHOP-TASK-027 契约的约定
+      给访客确认收货补上「全部退款后冻结」。不加后台接口、不做页面，不做积分返还与追回（等会员与积分账本任务），不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 docs/HANDOFF.md 0.33 记录的 Kelvin 2026-10-06 决定。拆分：规则层，后台接口由 SHOP-TASK-041 交付。
+    status: ready
+    depends_on:
+      - SHOP-TASK-035
+      - SHOP-TASK-039
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.11「订单与退款状态」（requested 到 approved 或 rejected；已批准的退款不可再次批准；所有购买件数均已批准退款时冻结后续打包、发货与确认收货的推进，保留退款前履约状态；退款与履约状态分开存储）、「失败、并发与重试」以及 docs/HANDOFF.md 0.33 记录的 Kelvin 2026-10-06 决定一致；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - app/services/refund_review.py 提供批准与拒绝两个函数，接收数据库会话、申请 ID、管理员账号、审核理由与当前时间（不带时区的 UTC）；在同一事务里先以 SELECT … FOR UPDATE（SQLAlchemy 的 with_for_update）锁定该申请所属订单的订单行，锁定之后才读取申请与件的占用并判断，与 SHOP-TASK-037 推进发货使用同一锁定协议，模块 docstring 写明这一协议；只 flush 不提交，由调用方提交
+      - 批准：申请为 requested 时改为 approved，写审核时间与审核人，审核理由可空（去掉首尾空白后为空串即存空；非空时 1 到 500 个字符，否则抛理由不合法异常），各件保持占用；拒绝：审核理由去掉首尾空白后必须为 1 到 500 个字符（否则抛理由不合法异常），申请改为 rejected，写审核时间、审核人与理由，并把该申请各件的占用标记置空以释放这些件（SHOP-TASK-029 契约约定由审核任务置空）
+      - 重复审核：申请已是要设成的同一状态时不改任何数据、不写审计，返回当前状态（重复点击安全）；已是另一种审核结果时抛已审核异常并带当前状态；申请不存在时抛不存在异常；订单状态在批准与拒绝时都不改；每次实际改变状态都用 SHOP-TASK-035 的审计函数写一条审计（操作名 admin_refund_approved 或 admin_refund_rejected，对象类别 refund_request、对象 ID 为申请 ID，旧值与新值为审核前后的状态，不写理由原文），操作名常量定义在本模块
+      - 访客确认收货的冻结：app/services/order_lookup.py 的确认收货在检查状态前以同一协议锁定订单行，锁定后用 SHOP-TASK-029 的 refund_state 判断全部已退时抛新的冻结异常，不写确认收货记录与事件；app/api/order_lookup.py 把它映射为 409（错误码 fulfilment_frozen）并带订单当前状态，响应照常 no-store；其余确认收货行为与幂等重放不变，SHOP-TASK-027 的测试照常通过
+      - docstring 写明：积分返还与追回、会员订单由之后的会员与积分账本任务接入；理由只给管理员看（Kelvin 2026-10-06 决定），不出现在访客接口
+      - tests/test_refund_review.py 用 SQLite 内存库（开启外键检查）与 TestClient，自建订单、管理员与退款申请，验证：批准后状态、审核人、审核时间与审计各一，件仍占用；批准时理由为空存空、超过 500 个字符被拒；拒绝时无理由或只有空白被拒且数据不变，有理由时状态、理由与审计正确且件被释放、可再次申请同样的件；重复同一审核不重复写入；批准后再拒绝与拒绝后再批准都抛已审核异常；申请不存在；全部件都批准后访客确认收货返回 409 fulfilment_frozen 且订单不变，只退一部分时照常可确认；用 MySQL 方言编译审核与确认收货时锁定订单的查询，断言含 FOR UPDATE 且读取占用发生在锁定之后；审计不含理由原文；每条测试写明它守住的是设计里哪一句或 Kelvin 的哪一项决定；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）；docs/TODO.md 新增 SHOP-TASK-040 记录段（规则、锁定协议、冻结、偏离、验证到什么程度），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表或迁移；不改 SHOP-TASK-029、035 已有函数的行为，它们的测试照常通过；不改前端代码；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - app/services/refund_review.py
+      - app/services/order_lookup.py
+      - app/api/order_lookup.py
+      - tests/test_refund_review.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 退款审核的接口层：A03 所需的列表、详情、批准与拒绝。
+  - id: SHOP-TASK-041
+    title: 后台退款审核 API
+    purpose: >-
+      用 SHOP-TASK-040 的规则函数给管理员提供退款申请列表、详情、批准与拒绝四个接口（A03 的后端）。
+      不做页面，不做积分返还与追回，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）与 docs/HANDOFF.md 0.33 记录的 Kelvin 2026-10-06 决定。拆分：接口层。
+    status: ready
+    depends_on:
+      - SHOP-TASK-036
+      - SHOP-TASK-040
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.11「订单与退款状态」「权限与资料保护」以及 docs/HANDOFF.md 0.33 记录的 Kelvin 2026-10-06 决定一致；接口字段参照 docs/UX.md 0.8 的 A03，与设计冲突时以设计为准并在 PR 里说明；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - 四个接口都经 SHOP-TASK-036 的 require_admin（没有有效后台会话时 401 admin_session_required）；所有响应都带 Cache-Control 为 no-store，范围是这些接口的处理函数与依赖产生的响应（含错误），路径存在但方法不匹配时由框架返回的 405 不在此列；路径只用退款申请的内部整数 ID，订单号与收货资料不进路径或查询参数；422 不回显请求内容，沿用 app/api/pay.py 的 _body_errors 与 _language 写法；错误响应体为 {"detail":"<错误码>"}；不写日志，或日志只记录不含订单号、理由与令牌的事件
+      - POST /api/admin/refunds/query 只接受 JSON（否则 415），请求体上限 8 KB 且先于其他校验（超出 413），字段只有可选的状态（只允许 requested、approved、rejected）与页码（1 到 10000 的整数，默认 1），多出字段 422；只读，不要求 CSRF，不写审计；按申请时间从新到旧、同时按 ID 从大到小，每页 20 条；返回总数与本页各申请的 ID、申请时间、所属订单的内部 ID 与订单号、状态、申请金额（整数仙）与各行的商品名称（按语言参数取快照）和件数；不返回收货资料与理由
+      - GET /api/admin/refunds/{refund_id}（语言参数与目录接口相同）返回申请 ID、状态、申请时间、审核时间、审核人用户名（未审核为空）、审核理由（只在后台返回）、所属订单的内部 ID、订单号与订单状态、申请金额、各行的名称、规格说明、申请件数、该行购买件数与该行已批准件数、该单累计已退与剩余可退（复用 SHOP-TASK-029 的 refund_state），以及由 cookie 算出的 CSRF 令牌；不返回收货资料，不写审计；申请不存在 404（错误码 not_found）
+      - POST /api/admin/refunds/{refund_id}/approve 与 POST /api/admin/refunds/{refund_id}/reject 须带 X-CSRF-Token（缺失或不符 403 csrf_failed，先于读取申请）；只接受 JSON，请求体上限 8 KB，规则同上；请求体只有理由一个字段（approve 可省略或为空，reject 必填），多出字段 422；调用 SHOP-TASK-040 的函数并在成功后提交，返回 200 与申请当前状态；理由不合法 422（错误码 reason_invalid，不回显理由）；已是另一种审核结果 409（错误码 refund_already_reviewed）并带当前状态；申请不存在 404；app/main.py 挂上路由
+      - 不改 SHOP-TASK-029、036、040 已有函数的行为，它们的测试照常通过；不做积分字段（现有订单都是游客订单，积分等会员与积分账本任务），在 docs/TODO.md 记录段写明
+      - tests/test_admin_refunds.py 用 TestClient 与 SQLite 内存库（开启外键检查，覆盖会话依赖）自建管理员、后台会话、订单与申请，验证：无后台会话时四个接口都 401；列表排序、每页 20 条与第 2 页、按状态筛选、不含收货资料与理由；详情字段、审核人用户名与理由、累计已退与剩余可退、不含收货资料；批准与拒绝成功后状态与审计、拒绝缺理由 422 reason_invalid 且数据不变、重复同一审核 200 且不重复写入、相反审核 409 refund_already_reviewed、缺或错 CSRF 403 且数据不变、不存在 404；非 JSON 415、超过 8 KB 413（先于其他校验）、多余字段 422，错误响应不回显请求内容；所有响应 no-store；每条测试写明它守住的是设计里哪一句或 Kelvin 的哪一项决定；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）；docs/TODO.md 新增 SHOP-TASK-041 记录段（接口与字段、错误码、排序与分页、偏离、验证到什么程度，并写明 A03 页面留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表或迁移；不改前端代码；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - app/services/admin_refunds.py
+      - app/api/admin_refunds.py
+      - app/main.py
+      - tests/test_admin_refunds.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 发货满 7 天自动确认收货（定时任务，DESIGN 1.11「订单与退款状态」第 2 条）。全部退款后冻结的订单不自动完成。
+  - id: SHOP-TASK-042
+    title: 发货满 7 天自动确认收货
+    purpose: >-
+      在 SHOP-TASK-031 的定时任务运行器里加一个任务：模拟发货满 7×24 小时仍未确认收货的订单由系统改为已完成，全部退款后冻结的订单不处理；
+      并提供手动执行一次的子命令。不改其他定时任务，不加表或迁移，不加接口，不做页面，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）。拆分：不拆（规则单一，与运行器接入同属一层，共 5 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-031
+      - SHOP-TASK-040
+    acceptance_criteria:
+      - 实现与 docs/DESIGN.md 1.11「订单与退款状态」（若访客不操作，模拟发货满 7 天自动确认收货；自动完成只改演示状态，不影响 30 天退款期；所有购买件数均已批准退款时冻结确认收货的推进）与「失败、并发与重试」（任务可重复运行、只生效一次）一致；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - app/services/auto_complete.py 提供一个函数，接收数据库会话、当前时间（不带时区的 UTC）与单次上限：找出状态为 demo_shipped 且最近一条迁移到 demo_shipped 的状态事件时间不晚于当前时间减 7×24 小时的订单，按该时间从早到晚、同时按订单 ID 从小到大，最多处理上限张
+      - 每张订单在同一事务里先以 SELECT … FOR UPDATE 锁定订单行（与 SHOP-TASK-037、040 同一锁定协议），锁定后重新确认状态仍为 demo_shipped 且用 SHOP-TASK-029 的 refund_state 判断不是全部已退；通过时经 SHOP-TASK-010 的迁移判定函数（操作者 system）把订单改为 demo_completed、写一条操作者为 system 的状态事件，不写确认收货记录；全部已退或状态已变的订单跳过；返回本次完成的张数；同一时刻连续执行两次只生效一次
+      - app/jobs.py 新增该任务（名称 auto_complete_shipped，单轮上限与超时取消相同），在 default_jobs 里排在已有任务之后；新增子命令 complete-shipped 执行一次后退出，退出码与已有子命令的约定相同；日志只记录任务名、完成张数与异常类名，不记录订单号或个人资料；已有任务、子命令与运行器行为不变
+      - tests/test_jobs.py 只许把断言 default_jobs 名称列表的那一条加上 auto_complete_shipped，其余测试不动并照常通过
+      - tests/test_auto_complete.py 用 SQLite 内存库（开启外键检查）按模型建表、自建订单与状态事件，验证：发货满 7×24 小时的订单完成、事件操作者为 system、无确认收货记录；差一秒未满的不处理；全部已退的跳过、只退一部分的照常完成；已完成、已取消与其他状态不处理；以最近一次迁移到 demo_shipped 的时间为准；单次上限与排序生效；连续执行两次只生效一次；用 MySQL 方言编译锁定订单的查询，断言含 FOR UPDATE；complete-shipped 子命令的退出码；每条测试写明它守住的是设计里哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）；docs/TODO.md 新增 SHOP-TASK-042 记录段（规则、锁定、子命令、偏离、验证到什么程度），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI 工作流、Dockerfile、docker-compose.yml 与部署脚本（shop_jobs 容器沿用 run 子命令，无需改部署）；不装依赖；不加表、迁移或接口；不改前端代码
+      - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - app/services/auto_complete.py
+      - app/jobs.py
+      - tests/test_auto_complete.py
+      - tests/test_jobs.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
