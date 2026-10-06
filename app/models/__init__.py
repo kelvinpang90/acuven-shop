@@ -1,5 +1,6 @@
 """全部模型；import 本包即把它们注册到 app.db.base.Base.metadata。"""
 
+from app.models.admin import AdminAccount, AdminSession, AuditEvent
 from app.models.catalog import (
     Category,
     Product,
@@ -26,6 +27,9 @@ from app.models.site import SiteSetting
 from app.models.stock_reset import StockReset, StockResetLine
 
 __all__ = [
+    "AdminAccount",
+    "AdminSession",
+    "AuditEvent",
     "Category",
     "DemoFxRate",
     "Member",
