@@ -1497,7 +1497,7 @@ tasks:
       按 docs/DESIGN.md 1.11「数据模型」AdminAccount / AuditEvent 一行建立管理员账号、后台会话与审计记录三张表，写对应的 Alembic 迁移。
       只建表与约束；不写密码哈希、建账号命令、会话签发、锁定或登录逻辑，不加接口、不做页面，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）。拆分：数据层，规则与接口分别由 SHOP-TASK-035、036 交付。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-032
     acceptance_criteria:
