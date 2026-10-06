@@ -318,8 +318,29 @@ def _event(
 def _add_refund(
     db: Session, order_id: int, status: str, *, line_indexes: tuple[int, ...] = ()
 ) -> None:
-    """写一笔退款申请并提交；line_indexes 里的各行全部件都被它占用（占用标记 1）。"""
+    """写一笔退款申请并提交；line_indexes 里的各行全部件都被它占用（占用标记 1）。
+
+    approved 与 rejected 另写审核人、审核幂等键与审核请求指纹，rejected 另写理由（SHOP-TASK-039
+    的检查约束要求）；审核人是库里唯一的管理员账号，还没有时先建一个。
+    """
     reviewed_at = None if status == REFUND_REQUESTED else _now()
+    review: dict[str, Any] = {}
+    if status != REFUND_REQUESTED:
+        admin_id = db.scalar(select(AdminAccount.id))
+        if admin_id is None:
+            admin = AdminAccount(
+                username="shop_admin",
+                password_hash="not-a-real-hash",
+                created_at=_now() - timedelta(days=1),
+                password_updated_at=_now() - timedelta(days=1),
+            )
+            admin_id = _add(db, admin).id
+        review = {
+            "reviewer_admin_id": admin_id,
+            "review_idempotency_key": _key(),
+            "review_fingerprint": "1" * 64,
+            "review_reason": "Demo rejection" if status == REFUND_REJECTED else None,
+        }
     request = RefundRequest(
         order_id=order_id,
         status=status,
@@ -329,6 +350,7 @@ def _add_refund(
         amount_sen=0,
         created_at=_now(),
         reviewed_at=reviewed_at,
+        **review,
     )
     _add(db, request)
     stmt = select(OrderItem).where(
