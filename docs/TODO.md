@@ -1,6 +1,6 @@
 # TODO — 开发任务清单
 
-> 最后更新：2026-10-05
+> 最后更新：2026-10-06
 
 ---
 
@@ -863,3 +863,25 @@
   - 失败时有两条日志（重置任务带营业日期的一条与运行器原有的一条）。
   - `tests/test_jobs.py` 的调整只为新增的任务：检查超时取消加回库存件数的五个用例改为只运行默认列表里的超时取消任务（`_cancel_only()`），断言不变；默认任务名列表加上 `reset_daily_stock`；会话工厂不可用的用例每轮多一次开会话与一条 `job reset_daily_stock failed: OperationalError`；原来以 `reset-stock` 代表未知子命令的断言改用 `reset-everything`（`reset-stock` 现在是合法子命令，其退出码在 `tests/test_stock_reset.py` 里测）。没有删减或放宽原有用例。
 - 验证到什么程度：人工逐条对照验收标准与设计原句自查，人工核对模型与迁移的列、约束名、约束表达式与表选项一致。`tests/test_stock_reset.py` 用 SQLite 内存库（每个连接打开外键检查并断言已打开；与 `tests/test_jobs.py` 一样由引擎发 BEGIN，使保存点与 MySQL 上一样）按模型建表、直接写库建立商品规格与订单，每条测试的文档字符串写明它守住的设计原句或验收约定，覆盖：营业日期在 UTC 15:59:59 与 16:00:00 前后切换且各自一条记录；当日可用 = 初始 − 有效预留，有效预留含已到期但尚未取消的待支付订单（同一订单多行合计）、不含已支付、已发货与已取消订单，明细三个数与 SKU 数、记录各字段，初始库存、订单、订单行、事件与退款申请不变；预留大于初始时当日可用为 0；同一日期第二次执行不改动任何表（之间的扣库存不被覆盖）；失败后记录为 `failed`、只存异常类名、库存、订单与事件未变，再次执行成功后为 `succeeded`、尝试次数 2、首次开始时间不变、明细只有一份；连续失败尝试次数递增并记下最近的异常类名；先超时取消再统计（取消事件操作者 system），重置后再执行超时取消不重复加回，剩余预留到期取消后正好回到初始库存；删除规格后明细保留、外键为空；两个会话按可控的先后顺序（后到者检查到「尚未完成」之后、前者提交之后才执行认领写入；SQLite 不复现 MySQL 的阻塞等待）分别验证首次执行（插入撞唯一约束）与从同一条 `failed` 记录重试（条件 UPDATE 未命中），后到者都返回已完成、只生效一次、明细只有一份、前者之后的扣库存不被改写；认领时锁错误记为 `failed` 并把原异常交给调用方，前者已提交 `succeeded` 时不覆盖；一个执行者失败、另一个随后成功提交后，前者记录失败不覆盖 `succeeded`；两张表各检查约束、营业日期与（重置记录, SKU）唯一约束、两个外键与 RESTRICT 的被拒反例；运行器在当日已完成时不调用重置且算成功，未完成时调用、失败后只记日志（不含订单号与异常消息）、下一轮重试成功、之后当天不再调用；`reset-stock` 失败 1、成功与当日已完成 0、未配置 2、经 `main` 走会话工厂（未建表的内存库失败 1、日志不含连接串）。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest；迁移的 upgrade head、downgrade base、再 upgrade head 与 `alembic check` 也由该检查在真 MySQL 上执行。并发阻塞、READ COMMITTED 下的可见性与锁等待超时只能在真 MySQL 上体现，SQLite 测试只验证先后顺序下的结果；未在真 MySQL 上做并发演练，未构建镜像或起容器执行 `reset-stock`。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-034 管理员账号、后台会话与审计记录的数据模型
+
+- [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「数据模型」AdminAccount / AuditEvent 一行（「单一管理员、密码哈希、会话及后台操作记录」）、SiteSetting 一行（后台修改写入 `AuditEvent`：操作者、时间、新旧值）、「权限与资料保护」第 4–6 条与 `docs/HANDOFF.md` 记录的 Kelvin 2026-10-04 管理员登录决定，建立管理员账号、后台会话与审计记录三张表并写迁移：`app/models/admin.py`（`app/models/__init__.py` 导出 `AdminAccount`、`AdminSession`、`AuditEvent`）、迁移 `alembic/versions/20261004_0014_admin.py`（revision `0014`，down_revision `0013`）；测试见 `tests/test_admin_models.py`。只建表与约束：未写密码哈希、建账号命令、会话签发、锁定或登录逻辑，未加接口，未改 `app/main.py`、其他模型、已有迁移、前端、`.platform/`、CI、部署配置或设计，未装依赖。设计闸门：DESIGN 1.11（提交 `2d13250`）。
+- 三张表（沿用 `app/db/base.py` 的基类、命名约定与 InnoDB、utf8mb4，迁移逐个写出同样的约束名；时间一律不带时区的 UTC；检查约束只用比较、LENGTH 与 IS NULL；指向账号的外键一律 ON DELETE RESTRICT）：
+  - `admin_accounts`：`username` String(32)（唯一 `uq_admin_accounts_username`）、`password_hash` String(255)、`singleton_slot` Integer（Python 默认值 1，唯一 `uq_admin_accounts_singleton_slot`）、`created_at`、`password_updated_at`；全部非空，不存姓名、电话、邮箱或其他个人资料。检查约束：
+    - `ck_admin_accounts_username_length`：`LENGTH(username) >= 3 AND LENGTH(username) <= 32`
+    - `ck_admin_accounts_singleton_slot_one`：`singleton_slot = 1`
+    - 单例槽只能是 1 且全表唯一，库里至多一个账号：两个建账号命令并发时，后插入的一个被 `uq_admin_accounts_singleton_slot` 拒绝。
+  - `admin_sessions`：`admin_account_id` → `admin_accounts.id`（`fk_admin_sessions_admin_account_id_admin_accounts`，RESTRICT）、`token_hash` String(64)（会话令牌的 SHA-256 十六进制摘要，唯一 `uq_admin_sessions_token_hash`，令牌原文不入库）、`created_at`、`expires_at`、`revoked_at`（唯一可空列）。检查约束：`ck_admin_sessions_token_hash_length`（`LENGTH(token_hash) = 64`，不另加十六进制约束）、`ck_admin_sessions_expires_after_created`（`expires_at > created_at`）。
+  - `audit_events`：`occurred_at`（普通索引 `ix_audit_events_occurred_at`）、`admin_account_id` → `admin_accounts.id`（`fk_audit_events_admin_account_id_admin_accounts`，RESTRICT，非空）、`action` String(40)、`target_type` String(20)（可空）、`target_id` Integer（可空）、`old_value` / `new_value` String(255)（各自可空）；不存来源地址、提交的用户名、密码或其他个人资料。检查约束：
+    - `ck_audit_events_action_length`：`LENGTH(action) >= 1 AND LENGTH(action) <= 40`（不按枚举约束操作名）
+    - `ck_audit_events_target_type_length`：`target_type IS NULL OR (LENGTH(target_type) >= 1 AND LENGTH(target_type) <= 20)`
+    - `ck_audit_events_target_both_or_neither`：`(target_type IS NULL AND target_id IS NULL) OR (target_type IS NOT NULL AND target_id IS NOT NULL)`
+    - 旧值与新值不加长度检查，上限只由列长保证（MySQL 的 LENGTH 按字节计，沿用 `app/models/order.py` 的做法）。
+  - 会话与审计记录到账号的外键与 `member_sessions.member_id` 一样由 MySQL 自行建索引。0014 的 upgrade 依次建 `admin_accounts`、`admin_sessions`、`audit_events` 与其索引；downgrade 按依赖倒序先删索引与 `audit_events`，再删 `admin_sessions`、`admin_accounts`。`alembic check` 不比较检查约束与表选项，两边须人工核对一致。
+- 偏离与取舍，请审阅（未改设计，未发现须停下的设计问题；Kelvin 2026-10-04 的决定与 DESIGN 1.11 的这几条一致）：
+  - 用户名、操作名与对象类别的长度上限在库里以 LENGTH 检查：这三者由写入方保证为 ASCII（用户名只含小写字母、数字与下划线，后两者取自常量），MySQL 按字节计的 LENGTH 与字符数相同。会话摘要是否为小写十六进制、用户名的字符集、旧值与新值不含个人资料都由写入方保证。
+  - 密码哈希只靠列长 255 限制长度，不另加检查约束（与 `members.password_hash` 相同）。
+  - 单例槽只在 Python 侧默认 1，不设服务端默认值；`password_updated_at` 没有默认值，由建账号与重设密码的写入方写入。
+- 留给之后的任务：密码哈希、建账号命令、后台会话的 30 天时长、令牌生成与 cookie、登录锁定与审计写入由 SHOP-TASK-035、036 实现；后台业务操作（含查看订单原始资料、站点设置修改）的审计由管理后台业务接口任务补。
+- 验证到什么程度：人工逐条对照验收标准与设计原句自查，人工核对模型与迁移的列类型、可空性、约束名与表达式、外键删除行为、索引与表选项一致。`tests/test_admin_models.py` 用 SQLite 内存库（每个连接打开外键检查并断言已打开）按模型建表，先写入一个账号、一个有效与一个已撤销的会话、无对象的登录审计、带对象与新旧值的设置修改审计和只有新值的审计作对照；再覆盖：每个检查约束至少一个反例（先在独立连接上对该行逐条求值该表全部检查约束，断言目标约束不成立，再断言写入被拒且报出的是不成立的约束之一），含用户名过短、为空串与过长，单例槽为 2 与 0，会话到期等于或早于创建、摘要不是 64 个字符，操作名为空串或超过 40 个字符，对象类别为空串或超过 20 个字符，对象类别与对象 ID 只有一个为空；三张表每个非空列写入 NULL 被非空约束拒绝；第二个账号（单例槽重复）、重复用户名（只在该测试的连接上关掉检查约束，以单例槽 2 写入，单独验证用户名唯一约束）、重复会话摘要被唯一约束拒绝；会话与审计记录引用不存在的账号、删除被会话或审计记录引用的账号被外键拒绝；单例槽不写时为 1，新的操作名不改约束即可写入；各表只有指定的列可空，列集合不含个人资料、令牌原文、来源地址或提交的用户名，指向账号的外键都是 RESTRICT，发生时间索引存在。每条测试写明它守住的设计原句。这些测试与迁移在真 MySQL 上的 upgrade head、downgrade base、再 upgrade head 与 `alembic check` 只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
