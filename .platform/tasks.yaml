@@ -1672,7 +1672,7 @@ tasks:
       按 docs/DESIGN.md 1.11「数据模型」RefundRequest 一行与「失败、并发与重试」第 1 条（退款审核使用幂等键和数据库唯一约束）给退款申请表加审核人、审核理由、审核幂等键与审核请求指纹四列，写对应的 Alembic 迁移。
       只加列与约束；不写批准、拒绝、冻结或接口逻辑，不做页面，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）。
       拆分：数据层，规则与接口分别由 SHOP-TASK-040、041 交付。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-029
       - SHOP-TASK-034
