@@ -7,6 +7,8 @@ infra_redis 为本项目分配的独立库编号，多 API 进程共用；Redis 
 连接串取自 SHOP_REDIS_URL（末尾数字即运营者分配的库编号）。未配置、连不上、超时或 Redis 返回
 错误一律抛 RateLimitUnavailable（fail closed），由调用的接口拒绝请求（回答暂不可用），
 不得把它当作「未超限」放行。计数只在 Redis 里，丢失后从零开始。
+唯一的例外是计价与游客下单两个接口（Kelvin 2026-10-06 决定，SHOP-TASK-043）：它们用
+get_optional_redis_client，Redis 不可用时放行，见 app/api/checkout.py。
 
 本模块不写日志；连接串、主机、计数键、来源地址与标识原文都不出现在异常消息或返回值里。
 """
@@ -74,6 +76,19 @@ def get_redis_client(request: Request) -> redis.Redis:
     except (RedisError, ValueError):
         # 异常链里可能带连接串，from None 不带出去。
         raise RateLimitUnavailable() from None
+
+
+def get_optional_redis_client(request: Request) -> redis.Redis | None:
+    """FastAPI 依赖：同 get_redis_client，但未配置或创建失败时返回 None 而不是抛异常。
+
+    只供 Redis 不可用时放行的计价与游客下单接口使用（Kelvin 2026-10-06 决定）；其他接口仍用
+    get_redis_client 并拒绝请求。
+    测试用 app.dependency_overrides[get_optional_redis_client] 覆盖。
+    """
+    try:
+        return get_redis_client(request)
+    except RateLimitUnavailable:
+        return None
 
 
 def rate_limit_key(bucket: str, identifier: str) -> str:
