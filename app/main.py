@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
+from app.api.admin_auth import router as admin_auth_router
 from app.api.catalog import router as catalog_router
 from app.api.checkout import router as checkout_router
 from app.api.health import router as health_router
@@ -30,6 +31,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(pay_router)
     app.include_router(order_lookup_router)
     app.include_router(refunds_router)
+    app.include_router(admin_auth_router)
     return app
 
 
