@@ -90,7 +90,7 @@ def hash_password(password: str) -> str:
     """
     raw = _password_bytes(password)
     if raw is None:
-        raise ValueError("password must be text encodable as UTF-8")
+        raise ValueError("password must be text encodable as UTF-8") from None
     salt = secrets.token_bytes(SALT_BYTES)
     digest = _scrypt(raw, salt, SCRYPT_N, SCRYPT_R, SCRYPT_P)
     return _encode(SCRYPT_N, SCRYPT_R, SCRYPT_P, salt, digest)
