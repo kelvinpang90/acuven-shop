@@ -1595,7 +1595,7 @@ tasks:
       全部退款后冻结履约。不做退款审核、商品与其他后台接口，不做页面，不加表或迁移，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）与 docs/HANDOFF.md 记录的 Kelvin 2026-10-05 决定。
       拆分：不拆——状态迁移规则（SHOP-TASK-010）、全部已退判定（SHOP-TASK-029）与管理员会话（SHOP-TASK-036）都已由前面的任务提供，本任务只组合并接接口。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-029
       - SHOP-TASK-036
