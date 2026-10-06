@@ -55,7 +55,8 @@
   同理，现有代码已有落实写法的要求写明照哪个写：422 不回显沿用 `app/api/pay.py` 的 `_body_errors`、`_language`；请求指纹与令牌摘要沿用 `request_fingerprint_length`、`token_hash_length`，只约束长度 64，十六进制由服务层 `hexdigest` 保证，数据库层不另加十六进制约束。
   起因：SHOP-TASK-027 的 run babdccb4 以 `review_repair_exhausted` 失败（2026-10-05），三轮评审中的两轮都卡在这几处没写明的地方（405 缺 no-store、默认 422 带出 input、指纹未约束十六进制）。
 - **前端样式文件（Kelvin 2026-10-01 决定）**：`frontend/src/styles/acuven-shop.css` 是生成文件，只读，必须和 `docs/design/tokens/acuven-shop.css` 逐字节相同；
-  框架和页面的布局、显隐、媒体查询统一写在 `frontend/src/styles/site.css`，由 `frontend/src/main.tsx` 引入，只用设计变量，不写颜色、字体、圆角。
+  框架和页面的布局、显隐、媒体查询统一写在 `frontend/src/styles/site.css`，由 `frontend/src/main.tsx` 引入；不声明颜色、字体、圆角属性（由设计系统的类提供，用变量也不行），间距与尺寸照视觉稿直接写像素值（`acuven-shop.css` 没有间距与尺寸变量）。
+  登记任务时验收标准照这个写法写，不写「只用设计变量」：SHOP-TASK-038 的 run 因评审把它读成不许写像素间距，以 `review_repair_exhausted` 失败（2026-10-06）。
   每个有用户可见页面的前端任务，`allowed_change_paths` 固定带 `frontend/src/styles/site.css`，和 `frontend/src/router.tsx`、`frontend/src/i18n/copy.ts` 一样。
 - **新增路由的前端任务带上页面表**：`frontend/src/App.tsx` 的页面表按 `router.tsx` 的路由表穷举，路由表加了路径而页面表没加，类型检查不通过；
   所以目的或验收标准里新增路由（「路由 /…」「路径为 /…」）或允许改 `frontend/src/router.tsx` 的任务，`allowed_change_paths` 必须带 `frontend/src/App.tsx`，
