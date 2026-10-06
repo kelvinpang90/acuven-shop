@@ -190,7 +190,9 @@ def login(
         select(AdminAccount).where(AdminAccount.username == normalize_username(body.username))
     ).one_or_none()
     encoded = DUMMY_PASSWORD_HASH if account is None else account.password_hash
-    if account is None or not verify_password(body.password, encoded):
+    # 账号不存在时也用假哈希照样校验，避免短路跳过哈希计算。
+    password_ok = verify_password(body.password, encoded)
+    if account is None or not password_ok:
         # 先计失败：Redis 不可用时回答 503，不写审计。
         just_locked = record_login_failure(client, source, body.username)
         if account is not None:
