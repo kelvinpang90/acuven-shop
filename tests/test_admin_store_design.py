@@ -53,8 +53,13 @@ from app.models.store_design import (
     SINGLETON_SLOT,
     THEME_ACCENTS,
 )
+from app.services import store_design
 from app.services.admin_auth import issue_admin_session, revoke_admin_session
-from app.services.store_design import lock_setting_statement
+from app.services.store_design import (
+    StoreDesignInvalid,
+    check_theme_and_accent,
+    lock_setting_statement,
+)
 
 URL = "/api/admin/store-design"
 PUBLIC_URL = "/api/store-design"
@@ -876,6 +881,25 @@ def test_invalid_theme_or_accent_is_422(
     assert _snapshot(engine) == before
 
 
+def test_theme_is_checked_against_themes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """SHOP-TASK-051 验收「主题与主色以 THEMES 与 THEME_ACCENTS 为准」「主题不在 THEMES 为
+    theme_invalid」：主题以 THEMES 判定，不以 THEME_ACCENTS 的键代替；不在 THEMES 的主题即使
+    THEME_ACCENTS 里有它也是 theme_invalid，主色只在所选主题的 THEME_ACCENTS 里找。"""
+    monkeypatch.setattr(store_design, "THEMES", ("pandan",))
+
+    with pytest.raises(StoreDesignInvalid) as excinfo:
+        check_theme_and_accent("batik", None)
+    assert excinfo.value.code == "theme_invalid"
+    with pytest.raises(StoreDesignInvalid) as excinfo:
+        check_theme_and_accent("batik", "sogan")
+    assert excinfo.value.code == "theme_invalid"
+    check_theme_and_accent("pandan", None)
+    check_theme_and_accent("pandan", THEME_ACCENTS["pandan"][0])
+    with pytest.raises(StoreDesignInvalid) as excinfo:
+        check_theme_and_accent("pandan", "sogan")
+    assert excinfo.value.code == "accent_invalid"
+
+
 @pytest.mark.parametrize("which", ["missing", "inactive", "closed-category", "no-description"])
 def test_unavailable_featured_product_is_422(
     db: Session, client: TestClient, engine: Engine, token: str, seeded: None, which: str
@@ -1018,6 +1042,8 @@ def test_save_locks_the_singleton_before_reading(
     保存时锁定查询先于读取区块、精选与商品的查询。"""
     shop = _category(db, "shop")
     lamp = _product(db, "lamp", shop)
+    # 提交后 lamp 已过期，取 lamp.id 会查 products：在开始记录之前取出，只记录接口发的查询。
+    body = _body(featured=[lamp.id])
     tables = ("store_home_blocks", "store_featured_products", "products")
     seen: list[str] = []
 
@@ -1032,7 +1058,7 @@ def test_save_locks_the_singleton_before_reading(
 
     event.listen(engine, "before_execute", _record)
     try:
-        _ok(_put(client, token, _body(featured=[lamp.id])))
+        _ok(_put(client, token, body))
     finally:
         event.remove(engine, "before_execute", _record)
 

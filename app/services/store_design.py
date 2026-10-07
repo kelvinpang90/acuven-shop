@@ -37,6 +37,7 @@ from app.models.store_design import (
     HOME_BLOCKS,
     SINGLETON_SLOT,
     THEME_ACCENTS,
+    THEMES,
 )
 from app.services.admin_auth import record_audit
 from app.services.catalog import Language, published
@@ -274,10 +275,9 @@ def lock_setting_statement() -> Select[tuple[StoreDesignSetting]]:
 
 def check_theme_and_accent(theme: str, accent: str | None) -> None:
     """主题不在 THEMES 抛 theme_invalid；主色非空且不属于该主题抛 accent_invalid。不查库。"""
-    accents = THEME_ACCENTS.get(theme)
-    if accents is None:
+    if theme not in THEMES:
         raise StoreDesignInvalid("theme_invalid")
-    if accent is not None and accent not in accents:
+    if accent is not None and accent not in THEME_ACCENTS.get(theme, ()):
         raise StoreDesignInvalid("accent_invalid")
 
 
