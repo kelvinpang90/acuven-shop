@@ -1100,15 +1100,15 @@ export const COPY = {
     zh: "失败次数过多，登录已短时锁定。",
     ms: "Terlalu banyak cubaan gagal. Log masuk ini dikunci untuk seketika.",
   },
+  "admin.nav_orders": {
+    en: "Orders",
+    zh: "订单",
+    ms: "Pesanan",
+  },
   "admin.logout": {
     en: "Log out",
     zh: "退出登录",
     ms: "Log keluar",
-  },
-  "admin.logged_in": {
-    en: "You're logged in as {username}. The other admin pages are not available yet.",
-    zh: "已以 {username} 登录。后台其他页面尚未上线。",
-    ms: "Anda telah log masuk sebagai {username}. Halaman pentadbir lain belum tersedia.",
   },
 } as const satisfies Record<string, CopyEntry>;
 

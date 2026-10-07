@@ -237,7 +237,19 @@ body { margin: 0; }
 .site-admin-login__body { display: grid; gap: 16px; }
 .site-admin-login__body p { margin: 0; }
 .site-admin-login__submit { justify-content: center; min-height: 40px; }
-.site-admin-login__logout { justify-self: start; }
+
+/* 后台框架（A02 起各页）：横幅右侧为深色底上的退出按钮，其下左侧导航（底部为语言链接）+ 右侧内容，至少占满视口高度。
+   深色底沿用 acs-admin__nav；其中的次要按钮与语言链接按视觉稿改用导航的文字与边线变量（只换成另一个设计变量）。
+   手机顶栏与 ☰ 菜单在桌面不显示 */
+.site-admin { display: flex; flex-direction: column; min-height: 100vh; }
+.site-admin .acs-admin__nav { --a-ink: var(--a-on-nav); --a-muted: var(--a-nav-muted); --a-border: var(--a-nav-muted); --focus: var(--a-on-nav); }
+.site-admin__top { display: flex; align-items: stretch; }
+.site-admin__top .acs-admin__banner { flex-grow: 1; }
+.site-admin__banner-end { flex-direction: row; align-items: center; padding: 0 16px; }
+.site-admin__shell { flex-grow: 1; }
+.site-admin__nav .site-admin__lang { margin-top: auto; padding: 12px; }
+.site-admin__lang a { padding: 0; }
+.site-admin__bar, .site-admin__menu { display: none; }
 
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
@@ -417,4 +429,19 @@ body { margin: 0; }
   .site-admin-login__lang-menu:not([hidden]) { display: flex; flex-direction: column; align-items: flex-start; }
   .site-admin-login .acs-admin__input { min-height: 44px; }
   .site-admin-login__submit { min-height: 44px; }
+
+  /* 后台框架：横幅之下为深色顶栏（☰、当前导航项名称、右端退出按钮），左侧导航与横幅右侧的退出按钮不显示；
+     ☰ 展开后菜单（导航项与其下的语言链接）占据内容区，内容不显示 */
+  .site-admin .acs-admin__banner { padding: 6px 16px; }
+  .site-admin__banner-end { display: none; }
+  .site-admin__bar { display: flex; flex-direction: row; align-items: center; gap: 8px; padding: 8px 12px; }
+  .site-admin__menu-button { justify-content: center; min-width: 44px; min-height: 44px; padding: 0; border-width: 0; }
+  .site-admin__bar-title { min-width: 0; }
+  .site-admin__bar .site-admin__logout { margin-left: auto; flex-shrink: 0; }
+  .site-admin__menu:not([hidden]) { display: flex; flex-grow: 1; gap: 0; padding: 0; }
+  .site-admin__menu:not([hidden]) ~ .site-admin__shell { display: none; }
+  .site-admin__menu-nav { display: grid; }
+  .site-admin__menu-nav a { display: flex; align-items: center; min-height: 48px; padding: 0 16px; border-bottom: 1px solid var(--a-nav-muted); }
+  .site-admin__menu .site-admin__lang { margin-top: auto; gap: 16px; padding: 16px; }
+  .site-admin .acs-admin__main { padding: 16px; }
 }
