@@ -306,11 +306,13 @@ def list_products(
     sort: SortOrder = "newest",
     page: int = 1,
     page_size: int = DEFAULT_PAGE_SIZE,
+    slugs: Sequence[str] = (),
 ) -> ProductPage:
     """已发布商品的一页。
 
     query 按当前语言名称或英文名称做不区分大小写的包含匹配；多个分类 slug 之间为或；
-    options 是规格名 code → 规格值 code 列表。价格排序按最低单价；
+    options 是规格名 code → 规格值 code 列表；slugs 非空时只留 slug 在其中的商品，
+    不存在或未发布的 slug 自然被略去（SHOP-TASK-053）。各筛选之间为且。价格排序按最低单价；
     平手一律按商品 id 升序，翻页不重复、不遗漏。
     """
     conditions = [published()]
@@ -325,6 +327,8 @@ def list_products(
         conditions.append(Category.slug.in_(categories))
     if options:
         conditions.append(_has_matching_variant(options))
+    if slugs:
+        conditions.append(Product.slug.in_(slugs))
 
     count = select(func.count()).join_from(Product, Category, _in_category)
     total = session.scalar(count.where(*conditions))
