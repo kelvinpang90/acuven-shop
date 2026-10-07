@@ -6,6 +6,8 @@ import { COPY } from "./i18n/copy";
 import {
   ROUTE_PATHS,
   adminOrderPath,
+  adminRefundPath,
+  adminRefundsOrderPath,
   canonicalizeLocation,
   isPlainLeftClick,
   isRoutePath,
@@ -72,7 +74,9 @@ describe("route table", () => {
   // SHOP-TASK-055 验收第 2 条「路由 /admin/orders/:id（frontend/src/router.tsx 路由表…各加一项，router.test.tsx 的路由表断言加上它）」：
   // 订单详情以模式进表，在后台订单之后；
   // SHOP-TASK-056 验收第 2 条「路由 /admin/refunds 与 /admin/refunds/order/:orderId（frontend/src/router.tsx 路由表…各加两项，
-  // frontend/src/router.test.tsx 的路由表断言加上它们）」：退款申请列表与按订单筛选的列表进表，在订单详情之后；其余页面尚未实现，不在表里。
+  // frontend/src/router.test.tsx 的路由表断言加上它们）」：退款申请列表与按订单筛选的列表进表，在订单详情之后；
+  // SHOP-TASK-057 验收第 2 条「路由 /admin/refunds/:id（frontend/src/router.tsx…与 frontend/src/router.test.tsx 各加一项）」：
+  // 退款详情以模式进表，在按订单筛选的列表之后；其余页面尚未实现，不在表里。
   it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
@@ -91,7 +95,9 @@ describe("route table", () => {
       "/admin/orders/:id",
       "/admin/refunds",
       "/admin/refunds/order/:orderId",
+      "/admin/refunds/:id",
     ]);
+    expect(isRoutePath("/admin/refunds/7")).toBe(true);
     expect(isRoutePath("/admin/login")).toBe(true);
     expect(isRoutePath("/admin/orders")).toBe(true);
     expect(isRoutePath("/admin/orders/42")).toBe(true);
@@ -136,12 +142,39 @@ describe("route table", () => {
   // UX A03「状态与补充（0.9）」「从 A02 的待审退款数进入时只列该订单的申请」与 SHOP-TASK-056 验收第 5 条「以路径里的订单内部 ID 作为 order_id 查询」：
   // /admin/refunds/order/<内部 ID> 匹配按订单筛选的模式并把段值交给页面（是否为合法 ID 由页面判断，见 AdminRefundsPage.test.tsx）；
   // 少一段、多一段或以斜杠结尾都不匹配；/admin/refunds 不带段值。
+  // SHOP-TASK-057 验收第 2 条「加入后 /admin/refunds/order 匹配这个模式（段值为 order，页面按不合法 ID 处理）…只许把它从…
+  // 「不匹配任何路由」的路径列表里移出，并断言它匹配 /admin/refunds/:id、段值为 order」：/admin/refunds/order 已移出下面的列表。
   it("matches the admin refund list filtered by order internal ID", () => {
     expect(matchRoute("/admin/refunds")).toEqual({ pattern: "/admin/refunds", params: {} });
     expect(matchRoute("/admin/refunds/order/42")).toEqual({ pattern: "/admin/refunds/order/:orderId", params: { orderId: "42" } });
-    for (const path of ["/admin/refunds/order", "/admin/refunds/order/", "/admin/refunds/order/42/", "/admin/refunds/order/42/x", "/admin/refunds/"]) {
+    expect(matchRoute("/admin/refunds/order")).toEqual({ pattern: "/admin/refunds/:id", params: { id: "order" } });
+    for (const path of ["/admin/refunds/order/", "/admin/refunds/order/42/", "/admin/refunds/order/42/x", "/admin/refunds/"]) {
       expect(isRoutePath(path), path).toBe(false);
     }
+  });
+
+  // UX A03「状态与补充（0.9）」「退款详情有自己的网址，路径带申请的内部 ID」与 Kelvin 2026-10-07 决定「退款详情 /admin/refunds/<内部 ID>」：
+  // /admin/refunds/<内部 ID> 匹配退款详情的模式并把 ID 交给页面；adminRefundPath 与 adminRefundsOrderPath 由内部 ID 生成网址；
+  // 多出一段或以斜杠结尾不匹配详情（是否为合法 ID 由页面判断，见 AdminRefundDetail.test.tsx）。
+  it("matches the admin refund detail by internal ID", () => {
+    expect(matchRoute("/admin/refunds/7")).toEqual({ pattern: "/admin/refunds/:id", params: { id: "7" } });
+    expect(adminRefundPath(7)).toBe("/admin/refunds/7");
+    expect(matchRoute(adminRefundPath(2147483647))).toEqual({ pattern: "/admin/refunds/:id", params: { id: "2147483647" } });
+    expect(adminRefundsOrderPath(42)).toBe("/admin/refunds/order/42");
+    expect(matchRoute(adminRefundsOrderPath(42))).toEqual({ pattern: "/admin/refunds/order/:orderId", params: { orderId: "42" } });
+    for (const path of ["/admin/refunds/7/approve", "/admin/refunds/7/"]) {
+      expect(isRoutePath(path), path).toBe(false);
+    }
+  });
+
+  // SHOP-TASK-057 验收第 2 条「页面表映射到退款页」：/admin/refunds/<内部 ID> 与 /admin/refunds/order 渲染后台退款页的框架
+  // （会话请求返回前内容区标 aria-busy），当前导航项为退款；不套前台框架。
+  it.each(["/admin/refunds/7", "/admin/refunds/order"])("renders the admin refunds page for the detail path %s", (path) => {
+    const html = render(path);
+    expect(html).toContain(COPY["admin.demo_banner"].en);
+    expect(html).toContain(`<main class="acs-admin__main" aria-busy="true"></main>`);
+    expect(html).toMatch(new RegExp(`aria-current="page"[^>]*>${COPY["admin.nav_refunds"].en}</a>`));
+    expect(html).not.toContain(COPY["common.demo_banner"].en);
   });
 
   // SHOP-TASK-056 验收第 2 条「页面表各加两项…用 SHOP-TASK-047 的框架渲染，当前导航项为退款」：两条路径都渲染后台退款页的框架

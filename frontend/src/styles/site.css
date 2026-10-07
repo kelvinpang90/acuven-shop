@@ -295,6 +295,30 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-refunds__lines { display: grid; gap: 4px; }
 .site-admin-refunds__cards { display: none; margin: 0; padding: 0; list-style: none; }
 .site-admin-refunds__pager { display: flex; gap: 8px; justify-content: flex-end; }
+.site-admin-refunds__table a { color: inherit; }
+
+/* 后台退款详情与审核 A03（A03-desktop、A03-desktop-order、A03-desktop-reviewed）：打开申请时列表在左、480px 详情在右
+   （间距 24px，顶端对齐）；详情为一张面板（内边距 20px，区块间距 18px），标题之下为状态标签（间距 8px，靠左）；
+   内容面板在桌面不绘制自己的边框（手机为单独的面板），区块之间 12px 上内边距；各行名称与件数两端对齐；
+   理由输入框占满宽度（内边距 8px 10px），按钮同一行（间距 8px），◆ 提示在按钮之下；返回链接在桌面不显示 */
+.site-admin-refunds-split { display: grid; grid-template-columns: minmax(0, 1fr) 480px; column-gap: 24px; align-items: start; }
+.site-admin-refund { display: grid; gap: 16px; align-content: start; }
+.site-admin-refund__back { display: none; }
+.site-admin-refund__panel { display: grid; gap: 18px; padding: 20px; }
+.site-admin-refund__head { display: grid; gap: 8px; justify-items: start; }
+.site-admin-refund__head a { color: inherit; }
+.site-admin-refund__body { display: grid; gap: 18px; border-width: 0; }
+.site-admin-refund__block { display: grid; gap: 6px; }
+.site-admin-refund__block + .site-admin-refund__block { padding-top: 12px; }
+.site-admin-refund__row { display: flex; justify-content: space-between; gap: 12px; }
+.site-admin-refund__line-name { display: flex; flex-wrap: wrap; gap: 4px; }
+.site-admin-refund__reason { display: grid; gap: 6px; }
+.site-admin-refund__reason textarea { width: 100%; padding: 8px 10px; resize: vertical; }
+.site-admin-refund__reason-text { white-space: pre-wrap; }
+.site-admin-refund__actions { display: grid; gap: 8px; }
+.site-admin-refund__buttons { display: flex; gap: 8px; }
+.site-admin-refund__hint { display: flex; gap: 8px; padding: 8px 10px; }
+.site-admin-refund__hint svg { flex-shrink: 0; margin-top: 2px; }
 
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
@@ -532,7 +556,23 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-refunds .acs-admin__select, .site-admin-refunds__clear { min-height: 44px; }
   .site-admin-refunds__table { display: none; }
   .site-admin-refunds__cards { display: grid; gap: 10px; }
-  .site-admin-refunds__card { display: grid; gap: 4px; min-height: 44px; padding: 12px 14px; }
+  a.site-admin-refunds__card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; min-height: 44px; padding: 12px 14px; color: inherit; text-decoration: none; }
+  .site-admin-refunds__card-body { display: grid; gap: 4px; }
   .site-admin-refunds__pager { justify-content: center; }
   .site-admin-refunds__pager .acs-admin__btn { justify-content: center; min-width: 44px; min-height: 44px; }
+
+  /* 后台退款详情（A03-phone-detail、A03-phone-detail-rejected）：只显示详情，列表不显示；返回链接在详情顶部（至少 44px 高）；
+     外层面板不绘制（display: contents），标题与状态标签分列两端，内容面板（内边距 14px，区块间距 12px）、◆ 提示与
+     审核按钮（纵向排列、加高到 44px，◆ 提示排在按钮之前）依次排列，间距 14px */
+  .site-admin-refunds-split { display: block; }
+  .site-admin-refunds-split > .site-admin-refunds { display: none; }
+  .site-admin-refund { gap: 14px; }
+  a.site-admin-refund__back { display: inline-flex; align-items: center; gap: 4px; justify-self: start; min-height: 44px; color: inherit; }
+  .site-admin-refund__panel { display: contents; }
+  .site-admin-refund__head { display: flex; justify-content: space-between; align-items: center; }
+  .site-admin-refund__body { gap: 12px; border-width: 1px; padding: 14px; }
+  .site-admin-refund__actions { gap: 14px; }
+  .site-admin-refund__hint { order: -1; }
+  .site-admin-refund__buttons { flex-direction: column; gap: 14px; }
+  .site-admin-refund__buttons .acs-admin__btn { justify-content: center; min-height: 44px; }
 }

@@ -21,10 +21,14 @@ import {
   firstQuery,
   INITIAL_LIST,
   INVALID_ORDER_LIST,
+  listPathOf,
   listStep,
   loadRefunds,
+  openingOf,
   pagerOf,
   pageTo,
+  rememberedListQuery,
+  rememberListQuery,
   scopeOf,
 } from "./AdminRefundsPage";
 import type { AdminRefundsViewProps, ListState } from "./AdminRefundsPage";
@@ -33,6 +37,8 @@ import { formatDateTime } from "./TrackOrderPage";
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  // 模块内存里记下的查询放回全部申请的第 1 页，各条测试互不影响。
+  rememberListQuery(firstQuery(null));
 });
 
 const REFUNDS_PATH = "/admin/refunds";
@@ -337,12 +343,29 @@ describe("desktop table", () => {
     }
   });
 
-  // SHOP-TASK-056 验收第 4 条「行不可点（详情由 SHOP-TASK-057 接上）」：表格里没有链接、按钮、可聚焦元素或 aria-selected。
-  it("has no clickable rows", () => {
+  // SHOP-TASK-057 验收第 2 条「列表行链接到 /admin/refunds/<内部 ID>」（取代 SHOP-TASK-056 的「行不可点」）：每行只有订单号单元格里
+  // 一个指向该申请内部 ID 的站内链接（网址里没有订单号），其余单元格没有链接；表格里没有按钮；只看列表时没有行标 aria-selected。
+  it("links each row to the refund detail", () => {
     const table = element(render(), "div", "site-admin-refunds__table");
-    expect(table).not.toMatch(/<(a|button)\b/);
-    expect(table).not.toContain("tabindex");
+    const rows = all(all(table, "tbody")[0] ?? "", "tr");
+    expect(rows.map((row) => all(row, "td").map((td) => tags(td, "a").map((a) => attributes(a).get("href"))))).toEqual(
+      ROWS.map((row) => [[], [`/admin/refunds/${String(row.id)}`], [], [], [], []]),
+    );
+    expect(rows.map((row) => textNodes(all(row, "a")[0] ?? ""))).toEqual(ROWS.map((row) => [row.order_number]));
+    expect(table).not.toMatch(/<button\b/);
     expect(table).not.toContain("aria-selected");
+  });
+
+  // SHOP-TASK-057 验收第 2 条「桌面在列表右侧显示详情、当前行标 aria-selected」（视觉稿 A03-desktop、A03-desktop-reviewed）：
+  // 打开的申请（路径里的内部 ID）所在的行标 aria-selected="true"，其余行不标；ID 不在本页时没有行标。
+  it("marks the open request's row as selected", () => {
+    for (const row of ROWS) {
+      const table = element(render({ selectedId: String(row.id) }), "div", "site-admin-refunds__table");
+      const selected = tags(all(table, "tbody")[0] ?? "", "tr").map((tr) => attributes(tr).get("aria-selected"));
+      expect(selected).toEqual(ROWS.map((other) => (other.id === row.id ? "true" : undefined)));
+    }
+    expect(render({ selectedId: "99" })).not.toContain("aria-selected");
+    expect(render({ selectedId: "order" })).not.toContain("aria-selected");
   });
 });
 
@@ -363,7 +386,8 @@ describe("phone cards", () => {
       ]),
     );
     for (const item of items) {
-      expect(classes(tags(item, "li")[0] ?? "")).toEqual(["acs-admin__panel", "site-admin-refunds__card"]);
+      // SHOP-TASK-057 验收第 2 条「列表行链接到 /admin/refunds/<内部 ID>」：面板样式在整张卡片的链接上（A03-phone-list）。
+      expect(classes(tags(item, "a")[0] ?? "")).toEqual(["acs-admin__panel", "site-admin-refunds__card"]);
       const separators = all(item, "span").filter((span) => textNodes(span).join("") === "·" && tags(span, "span").length === 1);
       expect(separators.length).toBeGreaterThan(0);
       for (const separator of separators) {
@@ -377,10 +401,18 @@ describe("phone cards", () => {
     ]);
   });
 
-  // SHOP-TASK-056 验收第 4 条「行不可点」：卡片不是链接、没有按钮或 › 图形（A03-phone-list 的整张链接与 › 随详情任务加上）。
-  it("has no clickable cards", () => {
+  // SHOP-TASK-057 验收第 2 条「列表行链接到 /admin/refunds/<内部 ID>」与视觉稿 A03-phone-list（取代 SHOP-TASK-056 的「卡片不可点」）：
+  // 每张卡片恰好是一个指向该申请内部 ID 的链接，卡片文字都在链接里，右侧为 › 图形（aria-hidden）；没有按钮。
+  it("makes each card one link to the refund detail", () => {
     const cards = element(render(), "ul", "site-admin-refunds__cards");
-    expect(cards).not.toMatch(/<(a|button|svg)\b/);
+    const items = all(cards, "li");
+    expect(items.map((item) => tags(item, "a").map((a) => attributes(a).get("href")))).toEqual(ROWS.map((row) => [`/admin/refunds/${String(row.id)}`]));
+    for (const item of items) {
+      expect(textNodes(all(item, "a")[0] ?? "")).toEqual(textNodes(item));
+      const svg = tags(item, "svg")[0] ?? "";
+      expect(attributes(svg).get("aria-hidden")).toBe("true");
+    }
+    expect(cards).not.toMatch(/<button\b/);
   });
 
   // 验收第 1 条「布局与显隐写在 site.css」：表格与卡片两套都在页面里，各有自己的 class（桌面隐藏卡片、手机隐藏表格）。
@@ -693,6 +725,105 @@ describe("loading the list", () => {
     controller.abort();
     await pending;
     expect(moves.events).toEqual([]);
+  });
+});
+
+describe("list and detail", () => {
+  // SHOP-TASK-057 验收第 2 条「列表的筛选（状态、订单内部 ID、页码）保存在页面模块的内存变量里，在列表与详情之间切换时保留」
+  // （Kelvin 2026-10-07「列表的筛选与页码只在页面内存里，在列表与详情之间切换时保留」）：打开详情时沿用记下的查询（范围随它的订单筛选）；
+  // 回到同一范围的列表路径时取回；换到别的范围（另一张订单、清除筛选）时从该路径的第 1 页、全部状态开始；不合法的订单 ID 不取回。
+  it("keeps the filters between the list and the detail", () => {
+    expect(rememberedListQuery()).toEqual(firstQuery(null));
+    const everything: RefundsQuery = { status: "approved", order_id: null, page: 3 };
+    rememberListQuery(everything);
+    expect(openingOf(null, "9")).toEqual({ scope: "all", query: everything });
+    expect(openingOf(null)).toEqual({ scope: "all", query: everything });
+    expect(openingOf("42")).toEqual({ scope: "order", query: firstQuery(42) });
+    expect(openingOf("x")).toEqual({ scope: "invalid", query: firstQuery(null) });
+
+    const byOrder: RefundsQuery = { status: "requested", order_id: 42, page: 2 };
+    rememberListQuery(byOrder);
+    expect(openingOf(null, "12")).toEqual({ scope: "order", query: byOrder });
+    expect(openingOf("42")).toEqual({ scope: "order", query: byOrder });
+    expect(openingOf("43")).toEqual({ scope: "order", query: firstQuery(43) });
+    expect(openingOf(null)).toEqual({ scope: "all", query: firstQuery(null) });
+  });
+
+  // 同一条「返回链接回到当时的列表网址（/admin/refunds 或 /admin/refunds/order/<内部 ID>），不进查询参数或浏览器存储」：
+  // 列表网址只由订单筛选决定，状态与页码不进网址。
+  it("returns to the list address the detail was opened from", () => {
+    expect(listPathOf({ status: "approved", order_id: null, page: 3 })).toBe(REFUNDS_PATH);
+    expect(listPathOf({ status: "requested", order_id: 42, page: 2 })).toBe("/admin/refunds/order/42");
+    expect(listPathOf(firstQuery(null))).toBe(REFUNDS_PATH);
+  });
+
+  // SHOP-TASK-057 验收第 2 条「桌面在列表右侧显示详情…手机只显示详情与 common.back」：打开详情时列表与详情并排放在
+  // site-admin-refunds-split 里（列表在前），详情区读取中标 aria-busy、只有返回链接，返回链接指向记下的列表网址；
+  // 列表沿用记下的查询（状态下拉选中记下的状态，按订单筛选时有清除链接）；渲染过程不发请求（effect 不在服务端渲染执行）。
+  it.each<[RefundsQuery, string]>([
+    [{ status: "rejected", order_id: null, page: 2 }, REFUNDS_PATH],
+    [{ status: null, order_id: 42, page: 1 }, "/admin/refunds/order/42"],
+  ])("shows the list and the detail side by side (%#)", (query, back) => {
+    const calls = stubFetch();
+    rememberListQuery(query);
+    const html = renderToStaticMarkup(wrap(<AdminRefundsContent refundId="9" />, "en", "/admin/refunds/9"));
+    const split = element(html, "div", "site-admin-refunds-split");
+    expect(split.indexOf("site-admin-refunds__list")).toBeLessThan(split.indexOf("site-admin-refund\""));
+    const section = all(split, "section")[0] ?? "";
+    expect(attributes(tags(section, "section")[0] ?? "").get("aria-busy")).toBe("true");
+    const link = tags(section, "a")[0] ?? "";
+    expect(attributes(link).get("href")).toBe(back);
+    expect(textNodes(section)).toEqual([COPY["common.back"].en]);
+    expect(tags(html, "option").filter((tag) => attributes(tag).has("selected")).map((tag) => attributes(tag).get("value"))).toEqual([query.status ?? ""]);
+    expect(html.includes("site-admin-refunds__order")).toBe(query.order_id !== null);
+    expect(calls).toEqual([]);
+  });
+
+  // 同一条「手机只显示详情」的另一面：只看列表（/admin/refunds 与按订单筛选）时没有详情区与并排容器。
+  it("shows no detail on the list paths", () => {
+    for (const [orderId, path] of [
+      [null, REFUNDS_PATH],
+      ["42", "/admin/refunds/order/42"],
+    ] as const) {
+      const html = renderToStaticMarkup(wrap(<AdminRefundsContent orderId={orderId} />, "en", path));
+      expect(html).not.toContain("site-admin-refunds-split");
+      expect(html).not.toContain("<section");
+    }
+  });
+
+  // SHOP-TASK-057 验收第 2 条「加入后 /admin/refunds/order 匹配这个模式（段值为 order，页面按不合法 ID 处理）」与第 5 条
+  // 「路径 ID 不合法时详情位置显示 common.error_retry 与 common.back…桌面左侧列表照常显示」：段值 order 的详情与列表一样并排挂载，
+  // 列表沿用记下的查询；详情是否为合法 ID 由详情判断（见 AdminRefundDetail.test.tsx），内容区按申请 ID 换 key。
+  it("treats /admin/refunds/order as a detail path", () => {
+    expect(contentKey(null, "order")).toBe("refund:order");
+    expect(contentKey(null, "9")).not.toBe(contentKey(null, "10"));
+    expect(contentKey(null, "9")).not.toBe(contentKey("9"));
+    const html = renderToStaticMarkup(wrap(<AdminRefundsContent refundId="order" />, "en", "/admin/refunds/order"));
+    expect(html).toContain("site-admin-refunds-split");
+    expect(html).toContain("<select");
+  });
+
+  // 验收第 2 条「…不进查询参数或浏览器存储」：记下查询、打开详情与返回链接的整个过程不写 localStorage、sessionStorage、cookie 或历史记录，
+  // 页面上的链接没有查询串。
+  it("keeps the remembered filters out of addresses and browser storage", () => {
+    const storage = () => ({ getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn() });
+    const local = storage();
+    const session = storage();
+    const history = { pushState: vi.fn(), replaceState: vi.fn() };
+    vi.stubGlobal("localStorage", local);
+    vi.stubGlobal("sessionStorage", session);
+    vi.stubGlobal("history", history);
+    rememberListQuery({ status: "approved", order_id: 42, page: 4 });
+    const html = renderToStaticMarkup(wrap(<AdminRefundsContent refundId="9" />, "en", "/admin/refunds/9"));
+    for (const href of [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1] ?? "")) {
+      expect(href).not.toContain("?");
+      expect(href).not.toContain("approved");
+    }
+    for (const target of [local, session]) {
+      expect(target.setItem).not.toHaveBeenCalled();
+    }
+    expect(history.pushState).not.toHaveBeenCalled();
+    expect(history.replaceState).not.toHaveBeenCalled();
   });
 });
 
