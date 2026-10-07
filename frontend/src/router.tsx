@@ -14,7 +14,8 @@ import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 // 以 /admin 开头的是后台页（后台登录 /admin/login 的用户名、密码与 CSRF 令牌只在页面内存与请求体或请求头里；
 // 后台订单 /admin/orders 由后台框架凭服务端会话打开，CSRF 令牌同样只在页面内存与退出请求头里；
 // 订单详情 /admin/orders/:id 的段值是订单的内部 ID，订单号、收货资料与推进用的 CSRF 令牌只在页面内存与请求里，
-// 列表的搜索、筛选与页码只在页面模块的内存里）：
+// 列表的搜索、筛选与页码只在页面模块的内存里；退款申请列表 /admin/refunds 的状态筛选与页码只在页面内存里，
+// 按订单筛选 /admin/refunds/order/:orderId 的段值是订单的内部 ID，订单号只在页面内存里）：
 // App.tsx 不给它们套前台框架，前台页头、菜单与页脚也没有指向它们的入口（UX A01「前台不放入口链接」）。
 export const ROUTE_PATHS = [
   "/",
@@ -31,6 +32,8 @@ export const ROUTE_PATHS = [
   "/admin/login",
   "/admin/orders",
   "/admin/orders/:id",
+  "/admin/refunds",
+  "/admin/refunds/order/:orderId",
 ] as const;
 export type RoutePattern = (typeof ROUTE_PATHS)[number];
 
@@ -42,6 +45,7 @@ export const HOME_PATH: RoutePath = "/";
 export const PRODUCTS_PATH: RoutePath = "/products";
 export const ADMIN_LOGIN_PATH: RoutePath = "/admin/login";
 export const ADMIN_ORDERS_PATH: RoutePath = "/admin/orders";
+export const ADMIN_REFUNDS_PATH: RoutePath = "/admin/refunds";
 
 export type RouteParams = Readonly<Record<string, string>>;
 

@@ -70,7 +70,9 @@ describe("route table", () => {
   // SHOP-TASK-038 验收第 2 条「路由 /admin/login」：后台登录页进表，在隐私说明之后；
   // SHOP-TASK-047 验收第 5 条「路由 /admin/orders（frontend/src/router.tsx 路由表…加一项）」：后台订单页进表，在后台登录之后；
   // SHOP-TASK-055 验收第 2 条「路由 /admin/orders/:id（frontend/src/router.tsx 路由表…各加一项，router.test.tsx 的路由表断言加上它）」：
-  // 订单详情以模式进表，在后台订单之后；其余页面尚未实现，不在表里。
+  // 订单详情以模式进表，在后台订单之后；
+  // SHOP-TASK-056 验收第 2 条「路由 /admin/refunds 与 /admin/refunds/order/:orderId（frontend/src/router.tsx 路由表…各加两项，
+  // frontend/src/router.test.tsx 的路由表断言加上它们）」：退款申请列表与按订单筛选的列表进表，在订单详情之后；其余页面尚未实现，不在表里。
   it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
@@ -87,10 +89,14 @@ describe("route table", () => {
       "/admin/login",
       "/admin/orders",
       "/admin/orders/:id",
+      "/admin/refunds",
+      "/admin/refunds/order/:orderId",
     ]);
     expect(isRoutePath("/admin/login")).toBe(true);
     expect(isRoutePath("/admin/orders")).toBe(true);
     expect(isRoutePath("/admin/orders/42")).toBe(true);
+    expect(isRoutePath("/admin/refunds")).toBe(true);
+    expect(isRoutePath("/admin/refunds/order/42")).toBe(true);
     expect(isRoutePath("/privacy")).toBe(true);
     expect(isRoutePath("/products")).toBe(true);
     expect(isRoutePath("/products/crew-neck-tee")).toBe(true);
@@ -125,6 +131,27 @@ describe("route table", () => {
     for (const path of ["/admin/orders/42/status", "/admin/orders/", "/admin/orders/42/"]) {
       expect(isRoutePath(path), path).toBe(false);
     }
+  });
+
+  // UX A03「状态与补充（0.9）」「从 A02 的待审退款数进入时只列该订单的申请」与 SHOP-TASK-056 验收第 5 条「以路径里的订单内部 ID 作为 order_id 查询」：
+  // /admin/refunds/order/<内部 ID> 匹配按订单筛选的模式并把段值交给页面（是否为合法 ID 由页面判断，见 AdminRefundsPage.test.tsx）；
+  // 少一段、多一段或以斜杠结尾都不匹配；/admin/refunds 不带段值。
+  it("matches the admin refund list filtered by order internal ID", () => {
+    expect(matchRoute("/admin/refunds")).toEqual({ pattern: "/admin/refunds", params: {} });
+    expect(matchRoute("/admin/refunds/order/42")).toEqual({ pattern: "/admin/refunds/order/:orderId", params: { orderId: "42" } });
+    for (const path of ["/admin/refunds/order", "/admin/refunds/order/", "/admin/refunds/order/42/", "/admin/refunds/order/42/x", "/admin/refunds/"]) {
+      expect(isRoutePath(path), path).toBe(false);
+    }
+  });
+
+  // SHOP-TASK-056 验收第 2 条「页面表各加两项…用 SHOP-TASK-047 的框架渲染，当前导航项为退款」：两条路径都渲染后台退款页的框架
+  // （会话请求返回前内容区标 aria-busy），当前导航项为退款；不套前台框架。
+  it.each(["/admin/refunds", "/admin/refunds/order/42"])("renders the admin refunds page for %s", (path) => {
+    const html = render(path);
+    expect(html).toContain(COPY["admin.demo_banner"].en);
+    expect(html).toContain(`<main class="acs-admin__main" aria-busy="true"></main>`);
+    expect(html).toMatch(new RegExp(`aria-current="page"[^>]*>${COPY["admin.nav_refunds"].en}</a>`));
+    expect(html).not.toContain(COPY["common.demo_banner"].en);
   });
 
   // SHOP-TASK-055 验收第 2 条「页面表映射到订单页」：/admin/orders/<内部 ID> 渲染后台订单页的框架（会话请求返回前内容区标 aria-busy），
