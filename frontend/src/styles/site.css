@@ -261,6 +261,27 @@ body { margin: 0; }
 .site-admin-orders__num { text-align: right; }
 .site-admin-orders__cards { display: none; margin: 0; padding: 0; list-style: none; }
 .site-admin-orders__pager { display: flex; gap: 8px; justify-content: flex-end; }
+.site-admin-orders__table a { color: inherit; }
+
+/* 后台订单 A02 的详情（A02-desktop、A02-desktop-frozen）：选中订单后列表在左、520px 详情在右（间距 24px，顶端对齐）；
+   详情为一张面板（内边距 20px，区块间距 18px），标题与状态标签两端对齐，各行名称与金额两端对齐；
+   商品区块在桌面不绘制自己的边框（手机为单独的面板）；返回链接与手机的折叠区块在桌面不显示 */
+.site-admin-orders-split { display: grid; grid-template-columns: minmax(0, 1fr) 520px; column-gap: 24px; align-items: start; }
+.site-admin-order { display: grid; gap: 16px; align-content: start; }
+.site-admin-order__back { display: none; }
+.site-admin-order__panel { display: grid; gap: 18px; padding: 20px; }
+.site-admin-order__head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.site-admin-order__items { display: grid; gap: 8px; border-width: 0; }
+.site-admin-order__block { display: grid; gap: 6px; padding-top: 12px; }
+.site-admin-order__row { display: flex; justify-content: space-between; gap: 12px; }
+.site-admin-order__line-name { display: flex; flex-wrap: wrap; gap: 4px; }
+.site-admin-order__fold { display: none; }
+.site-admin-order__actions { display: grid; gap: 8px; padding-top: 12px; }
+.site-admin-order__buttons { display: flex; gap: 8px; }
+.site-admin-order__frozen { padding: 10px 12px; }
+.site-admin-order__hint { display: flex; gap: 8px; padding: 8px 10px; }
+.site-admin-order__hint svg { flex-shrink: 0; margin-top: 2px; }
+.site-admin-order__events { overflow-x: auto; }
 
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
@@ -464,8 +485,29 @@ body { margin: 0; }
   .site-admin-orders .acs-admin__input, .site-admin-orders .acs-admin__select { min-height: 44px; }
   .site-admin-orders__table { display: none; }
   .site-admin-orders__cards { display: grid; gap: 10px; }
-  .site-admin-orders__card { display: grid; gap: 4px; min-height: 44px; padding: 12px 14px; }
+  a.site-admin-orders__card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; min-height: 44px; padding: 12px 14px; color: inherit; text-decoration: none; }
+  .site-admin-orders__card-body { display: grid; gap: 4px; }
   .site-admin-orders__card-head { display: flex; justify-content: space-between; gap: 8px; }
   .site-admin-orders__pager { justify-content: center; }
   .site-admin-orders__pager .acs-admin__btn { justify-content: center; min-width: 44px; min-height: 44px; }
+
+  /* 后台订单详情（A02-phone-detail）：只显示详情，列表不显示；返回链接在详情顶部（至少 44px 高）；
+     面板不绘制（display: contents），标题、商品面板（内边距 14px）、各折叠区块（内边距 12px 14px，标题行至少 32px，
+     金额明细的标题行右端为合计）、推进按钮（纵向排列、加高到 44px）依次排列，间距 14px；桌面的区块不显示 */
+  .site-admin-orders-split { display: block; }
+  .site-admin-orders-split > .site-admin-orders { display: none; }
+  .site-admin-order { gap: 14px; }
+  a.site-admin-order__back { display: inline-flex; align-items: center; gap: 4px; justify-self: start; min-height: 44px; color: inherit; }
+  .site-admin-order__panel { display: contents; }
+  .site-admin-order__items { border-width: 1px; padding: 14px; }
+  .site-admin-order__desktop { display: none; }
+  .site-admin-order__fold { display: block; padding: 12px 14px; }
+  .site-admin-order__fold summary { display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 32px; cursor: pointer; }
+  .site-admin-order__fold-body { display: grid; gap: 6px; padding-top: 8px; }
+  .site-admin-order__recipient { gap: 4px; }
+  .site-admin-order__event-list { gap: 8px; margin: 0; padding-left: 0; list-style: none; }
+  .site-admin-order__event-list li { display: grid; gap: 2px; }
+  .site-admin-order__actions { padding-top: 0; }
+  .site-admin-order__buttons { flex-direction: column; }
+  .site-admin-order__buttons .acs-admin__btn { justify-content: center; min-height: 44px; }
 }

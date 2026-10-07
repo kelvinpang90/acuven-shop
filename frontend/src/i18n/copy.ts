@@ -95,6 +95,11 @@ export const COPY = {
     zh: "网络中断，正在确认上一步是否已完成…",
     ms: "Sambungan terputus. Menyemak sama ada tindakan terakhir anda berjaya…",
   },
+  "common.back": {
+    en: "Back",
+    zh: "返回",
+    ms: "Kembali",
+  },
   "common.rate_limited": {
     en: "Too many attempts. Please wait and try again later.",
     zh: "尝试次数过多，请稍后再试。",
@@ -534,6 +539,16 @@ export const COPY = {
     en: "Order summary",
     zh: "订单摘要",
     ms: "Ringkasan pesanan",
+  },
+  "checkout.summary_coupon": {
+    en: "Coupon discount",
+    zh: "优惠券抵扣",
+    ms: "Diskaun kupon",
+  },
+  "checkout.summary_points": {
+    en: "Points discount",
+    zh: "积分抵扣",
+    ms: "Diskaun mata",
   },
   "checkout.summary_shipping": {
     en: "Sample shipping",
@@ -1134,6 +1149,76 @@ export const COPY = {
     en: "{count} pending",
     zh: "{count} 项待审",
     ms: "{count} menunggu",
+  },
+  "admin.order_detail": {
+    en: "Order details",
+    zh: "订单详情",
+    ms: "Butiran pesanan",
+  },
+  "admin.event_log": {
+    en: "Event log",
+    zh: "事件记录",
+    ms: "Log peristiwa",
+  },
+  "admin.col_time": {
+    en: "Time",
+    zh: "时间",
+    ms: "Masa",
+  },
+  "admin.col_event": {
+    en: "Event",
+    zh: "事件",
+    ms: "Peristiwa",
+  },
+  "admin.col_actor": {
+    en: "By",
+    zh: "操作者",
+    ms: "Oleh",
+  },
+  "admin.actor_admin": {
+    en: "Admin",
+    zh: "管理员",
+    ms: "Pentadbir",
+  },
+  "admin.actor_system": {
+    en: "System",
+    zh: "系统",
+    ms: "Sistem",
+  },
+  "admin.actor_customer": {
+    en: "Customer",
+    zh: "顾客",
+    ms: "Pelanggan",
+  },
+  "admin.recipient_raw": {
+    en: "Shipping details (original)",
+    zh: "原始收货资料",
+    ms: "Butiran penghantaran (asal)",
+  },
+  "admin.recipient_audited": {
+    en: "Viewing these details is recorded in the audit log.",
+    zh: "查看此资料会记入审计记录。",
+    ms: "Paparan butiran ini direkodkan dalam log audit.",
+  },
+  "admin.mark_packed": {
+    en: "Mark as packed (demo)",
+    zh: "标记为已打包（演示）",
+    ms: "Tandakan dibungkus (demo)",
+  },
+  "admin.mark_shipped": {
+    en: "Mark as shipped (demo)",
+    zh: "标记为已发货（演示）",
+    ms: "Tandakan dihantar (demo)",
+  },
+  "admin.ship_hint": {
+    en: "No real parcel or courier booking is created.",
+    zh: "不会产生真实包裹或物流下单。",
+    ms: "Tiada bungkusan atau tempahan kurier sebenar dicipta.",
+  },
+  "admin.frozen": {
+    en: "All items refunded — fulfilment is frozen.",
+    zh: "全部商品已退款，履约已冻结。",
+    ms: "Semua item dibayar balik — pemenuhan dibekukan.",
   },
   "admin.logout": {
     en: "Log out",

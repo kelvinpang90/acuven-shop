@@ -5,6 +5,7 @@ import App from "./App";
 import { COPY } from "./i18n/copy";
 import {
   ROUTE_PATHS,
+  adminOrderPath,
   canonicalizeLocation,
   isPlainLeftClick,
   isRoutePath,
@@ -67,7 +68,9 @@ describe("route table", () => {
   // SHOP-TASK-028 验收第 2 条「路由 /track（P08）与 /track/order（P09 查单模式）」：两页进表，在支付页之后；
   // SHOP-TASK-030 验收第 2 条「路由 /track/order/refund（P10 查单模式）」：进表，在订单详情之后；
   // SHOP-TASK-038 验收第 2 条「路由 /admin/login」：后台登录页进表，在隐私说明之后；
-  // SHOP-TASK-047 验收第 5 条「路由 /admin/orders（frontend/src/router.tsx 路由表…加一项）」：后台订单页进表，在后台登录之后；其余页面尚未实现，不在表里。
+  // SHOP-TASK-047 验收第 5 条「路由 /admin/orders（frontend/src/router.tsx 路由表…加一项）」：后台订单页进表，在后台登录之后；
+  // SHOP-TASK-055 验收第 2 条「路由 /admin/orders/:id（frontend/src/router.tsx 路由表…各加一项，router.test.tsx 的路由表断言加上它）」：
+  // 订单详情以模式进表，在后台订单之后；其余页面尚未实现，不在表里。
   it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
@@ -83,9 +86,11 @@ describe("route table", () => {
       "/privacy",
       "/admin/login",
       "/admin/orders",
+      "/admin/orders/:id",
     ]);
     expect(isRoutePath("/admin/login")).toBe(true);
     expect(isRoutePath("/admin/orders")).toBe(true);
+    expect(isRoutePath("/admin/orders/42")).toBe(true);
     expect(isRoutePath("/privacy")).toBe(true);
     expect(isRoutePath("/products")).toBe(true);
     expect(isRoutePath("/products/crew-neck-tee")).toBe(true);
@@ -107,6 +112,29 @@ describe("route table", () => {
       expect(isRoutePath(path), path).toBe(false);
       expect(resolvePath(path)).toBe("/");
     }
+  });
+
+  // UX A02「状态与补充（0.9）」「订单详情有自己的网址，路径带订单的内部 ID，订单号不进网址」与 SHOP-TASK-055 验收第 2 条：
+  // /admin/orders/<内部 ID> 匹配订单详情的模式并把 ID 交给页面；adminOrderPath 由内部 ID 生成同一网址；
+  // 多出一段或去掉 ID 不匹配详情（是否为合法 ID 由页面判断，见 AdminOrderDetail.test.tsx）。
+  it("matches the admin order detail by internal ID", () => {
+    expect(matchRoute("/admin/orders/42")).toEqual({ pattern: "/admin/orders/:id", params: { id: "42" } });
+    expect(adminOrderPath(42)).toBe("/admin/orders/42");
+    expect(matchRoute(adminOrderPath(2147483647))).toEqual({ pattern: "/admin/orders/:id", params: { id: "2147483647" } });
+    expect(matchRoute("/admin/orders")).toEqual({ pattern: "/admin/orders", params: {} });
+    for (const path of ["/admin/orders/42/status", "/admin/orders/", "/admin/orders/42/"]) {
+      expect(isRoutePath(path), path).toBe(false);
+    }
+  });
+
+  // SHOP-TASK-055 验收第 2 条「页面表映射到订单页」：/admin/orders/<内部 ID> 渲染后台订单页的框架（会话请求返回前内容区标 aria-busy），
+  // 当前导航项为订单；不套前台框架。
+  it("renders the admin orders page for an order detail path", () => {
+    const html = render("/admin/orders/42");
+    expect(html).toContain(COPY["admin.demo_banner"].en);
+    expect(html).toContain(`<main class="acs-admin__main" aria-busy="true"></main>`);
+    expect(html).toMatch(new RegExp(`aria-current="page"[^>]*>${COPY["admin.nav_orders"].en}</a>`));
+    expect(html).not.toContain(COPY["common.demo_banner"].en);
   });
 
   // UX 页面地图「P10 退款申请 /track/order/refund」：渲染退款申请页；接口返回之前（服务端渲染）主体为空并标 aria-busy，不出现订单内容或授权过期提示。
