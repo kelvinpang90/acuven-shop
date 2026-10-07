@@ -3,16 +3,23 @@
 依据 docs/DESIGN.md 1.11（提交 2d13250）「权限与资料保护」第 4 条（单一管理员也须服务端授权
 与会话到期）与第 6 条（应用日志不记录密码），以及 docs/HANDOFF.md 记录的 Kelvin 2026-10-04
 管理员登录决定：唯一的管理员账号由运营者在服务器上于 API 容器内运行本命令创建，密码以不回显
-的方式输入，不经命令行参数或环境变量。
+的方式输入，不经命令行参数或环境变量；docs/HANDOFF.md 0.37 记录的 Kelvin 2026-10-07 决定：
+登录名（账号表的 username 列）为邮箱。
 
 用法（运营者在服务器上于 shop_api 容器内运行，例如在本仓库检出的根目录里
-docker compose exec shop_api python -m app.admin create <用户名>）：
-    python -m app.admin create <用户名>    建立唯一的管理员账号；库里已有任何账号时拒绝
+docker compose exec shop_api python -m app.admin create <邮箱>）：
+    python -m app.admin create <邮箱>      建立唯一的管理员账号；库里已有任何账号时拒绝
     python -m app.admin reset-password     重设唯一账号的密码并撤销它的全部后台会话
 
-两者都以不回显的方式读两次密码，不一致、少于 12 个字符或多于 256 个字符时拒绝。用户名须为
-3 到 32 个小写字母、数字或下划线。成功时写对应的审计记录（admin_account_created /
-admin_password_reset）并提交。
+两者都以不回显的方式读两次密码，不一致、少于 12 个字符或多于 256 个字符时拒绝。成功时写
+对应的审计记录（admin_account_created / admin_password_reset）并提交。
+
+create 的登录名先去掉首尾空白并转小写（与登录时的 normalize_username 相同），再按 Kelvin
+2026-10-07 的常见邮箱格式校验，通过后存规范化后的值：只收 ASCII；本地部分 1 到 64 个字符，
+只含小写字母、数字与 . _ % + -，不以点开头或结尾、不含连续的点；域名至少两段，每段 1 到 63 个
+小写字母、数字或连字符且不以连字符开头或结尾，最后一段为至少 2 个字母；总长 6 到 254。
+所给的值含非 ASCII 字符时也拒绝（个别非 ASCII 字符转小写后会变成 ASCII 字母）。只校验格式，
+不发邮件。不合格时的错误输出只说明须为邮箱，不回显所给的值。
 
 库里至多一个管理员账号：create 先检查库里没有账号再读密码；两个 create 并发时，后插入的
 一个撞上账号表单例槽的唯一约束（SHOP-TASK-034），回滚后以同样的方式拒绝。
@@ -38,10 +45,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.db.session import _session_factory
-from app.models.admin import USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH, AdminAccount
+from app.models.admin import USERNAME_MAX_LENGTH, AdminAccount
 from app.services.admin_auth import (
     ADMIN_ACCOUNT_CREATED,
     ADMIN_PASSWORD_RESET,
+    normalize_username,
     record_audit,
     revoke_all_admin_sessions,
 )
@@ -50,7 +58,14 @@ from app.services.pw_hash import hash_password
 PASSWORD_MIN_LENGTH = 12
 PASSWORD_MAX_LENGTH = 256
 
-USERNAME_PATTERN = re.compile(rf"[a-z0-9_]{{{USERNAME_MIN_LENGTH},{USERNAME_MAX_LENGTH}}}")
+EMAIL_MIN_LENGTH = 6
+EMAIL_MAX_LENGTH = USERNAME_MAX_LENGTH
+EMAIL_LOCAL_MAX_LENGTH = 64
+# 本地部分：点只能夹在其他字符之间（不在首尾、不连续）；长度另查。
+_EMAIL_LOCAL = r"[a-z0-9_%+-]+(?:\.[a-z0-9_%+-]+)*"
+# 域名：每段 1 到 63 个字符、不以连字符开头或结尾；最后一段至少 2 个字母。
+_EMAIL_LABEL = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+EMAIL_PATTERN = re.compile(rf"(?P<local>{_EMAIL_LOCAL})@(?:{_EMAIL_LABEL}\.)+[a-z]{{2,63}}")
 
 # 退出码：成功 0，被拒绝或失败 1，未配置数据库 2。
 EXIT_OK = 0
@@ -97,6 +112,23 @@ def _hash(password: str) -> str:
         raise _Rejected("password must be valid text") from None
 
 
+def _normalized_email(username: str) -> str:
+    """去掉首尾空白、转小写后按邮箱格式校验，返回规范化后的值。拒绝时不回显所给的值。"""
+    normalized = normalize_username(username)
+    match = EMAIL_PATTERN.fullmatch(normalized)
+    if (
+        not username.isascii()
+        or match is None
+        or not EMAIL_MIN_LENGTH <= len(normalized) <= EMAIL_MAX_LENGTH
+        or len(match.group("local")) > EMAIL_LOCAL_MAX_LENGTH
+    ):
+        raise _Rejected(
+            "username must be an email address"
+            f" ({EMAIL_MIN_LENGTH} to {EMAIL_MAX_LENGTH} ASCII characters)"
+        )
+    return normalized
+
+
 def _the_account(db: Session) -> AdminAccount | None:
     return db.scalars(select(AdminAccount).order_by(AdminAccount.id)).first()
 
@@ -107,11 +139,7 @@ def _create(
     reader: PasswordReader,
     now: Callable[[], datetime],
 ) -> str:
-    if not USERNAME_PATTERN.fullmatch(username):
-        raise _Rejected(
-            f"username must be {USERNAME_MIN_LENGTH} to {USERNAME_MAX_LENGTH}"
-            " lowercase letters, digits or underscores"
-        )
+    username = _normalized_email(username)
     # 先在一个短会话里检查，不在等运营者输入密码时占着事务。
     with session_factory() as db:
         if _the_account(db) is not None:
@@ -244,7 +272,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     commands = parser.add_subparsers(dest="command", required=True)
     create = commands.add_parser("create", help="create the single admin account")
-    create.add_argument("username", help="3-32 lowercase letters, digits or underscores")
+    create.add_argument(
+        "username",
+        metavar="email",
+        help="the admin login name, an email address (stored trimmed and lowercased)",
+    )
     commands.add_parser(
         "reset-password", help="reset the admin password and revoke all admin sessions"
     )

@@ -241,9 +241,9 @@ def test_singleton_slot_defaults_to_one(session: Session) -> None:
             {"username": ""},
         ),
         (
-            "「单一管理员」：用户名超过 32 个字符",
+            "Kelvin 2026-10-07（HANDOFF 0.37）「列加长到 254 个字符」：用户名超过 254 个字符",
             "ck_admin_accounts_username_length",
-            {"username": "a" * 33},
+            {"username": "a" * 255},
         ),
         (
             "「库里至多一个管理员账号，由账号表的单例槽唯一约束保证」：单例槽为 2",

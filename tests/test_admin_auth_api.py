@@ -562,7 +562,8 @@ def test_oversized_body_is_413_first(
     ("body", "loc"),
     [
         ({"extra": "secret-extra-value"}, ["body", "extra"]),
-        ({"username": "u" * 65}, ["body", "username"]),
+        # Kelvin 2026-10-07（HANDOFF 0.37）「列加长到 254 个字符」：登录名上限随之为 254。
+        ({"username": "u" * 255}, ["body", "username"]),
         ({"username": ""}, ["body", "username"]),
         ({"password": "p" * 257}, ["body", "password"]),
         ({"password": ""}, ["body", "password"]),
@@ -579,7 +580,8 @@ def test_invalid_body_is_422_without_echo_or_counting(
     loc: list[str],
 ) -> None:
     """「应用日志与监控不记录……密码」，错误响应不回显。SHOP-TASK-036 验收：请求体只有 username
-    与 password 两个字符串，多出字段 422；用户名 1 到 64、密码 1 到 256 个字符，否则 422；
+    与 password 两个字符串，多出字段 422；用户名 1 到 254（Kelvin 2026-10-07 的邮箱上限，
+    SHOP-TASK-049）、密码 1 到 256 个字符，否则 422；
     每条错误只含位置、类型与固定消息，不回显请求内容；这类 422 不计失败、不查账号；no-store。
     """
     request: dict[str, Any] = {"username": USERNAME, "password": WRONG_PASSWORD}
@@ -595,7 +597,7 @@ def test_invalid_body_is_422_without_echo_or_counting(
     errors = response.json()["detail"]
     assert loc in [error["loc"] for error in errors]
     assert all(set(error) == {"type", "loc", "msg"} for error in errors)
-    for value in ["secret-extra-value", WRONG_PASSWORD, "u" * 65, "p" * 257, "12345678901234"]:
+    for value in ["secret-extra-value", WRONG_PASSWORD, "u" * 255, "p" * 257, "12345678901234"]:
         assert value not in response.text
     assert not _touches_accounts(statements)
     assert fake.values == {}
@@ -612,6 +614,33 @@ def test_length_boundaries_are_accepted(
 
     assert response.status_code == 401, response.text
     assert fake.count(FAILURE_BUCKET, SOURCE, "u" * 64) == 1
+
+
+def test_254_character_email_can_log_in(engine: Engine, client: TestClient) -> None:
+    """Kelvin 2026-10-07（HANDOFF 0.37）「取值改为邮箱，列加长到 254 个字符」「登录时照旧去掉首尾
+    空白并转小写后比对」。SHOP-TASK-049 验收：254 个字符的邮箱账号能登录（大写的写法也能，仍是
+    254 个字符），204 并签发会话。
+    """
+    email = "a" * 64 + "@" + "b" * 63 + "." + "c" * 63 + "." + "d" * 61
+    assert len(email) == 254
+    with Session(engine) as session:
+        row = AdminAccount(
+            username=email,
+            password_hash=PASSWORD_HASH,
+            created_at=_now() - timedelta(days=1),
+            password_updated_at=_now() - timedelta(days=1),
+        )
+        session.add(row)
+        session.commit()
+        account_id = row.id
+
+    exact = _login(client, email, PASSWORD)
+    variant = _login(client, email.upper(), PASSWORD)
+
+    assert exact.status_code == 204, exact.text
+    assert variant.status_code == 204, variant.text
+    assert [owner for owner, *_ in _sessions(engine)] == [account_id, account_id]
+    assert _actions(engine) == [SUCCEEDED, SUCCEEDED]
 
 
 # ---------------------------------------------------------------------------

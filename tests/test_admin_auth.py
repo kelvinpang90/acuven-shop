@@ -648,6 +648,25 @@ def test_counter_keys_use_json_identifier_digest() -> None:
         assert "shop_admin" not in key.lower()
 
 
+def test_email_variants_share_one_key_without_email_text() -> None:
+    """守住 docs/HANDOFF.md 0.37 Kelvin 2026-10-07「登录时照旧去掉首尾空白并转小写后比对」与
+    「登录锁定计数的 Redis 键照旧是摘要，不含邮箱原文」：大小写与首尾空白不同的同一邮箱经
+    login_identifier 后是同一个标识、落到同一个计数键，键里不含邮箱的任何部分。"""
+    fake = FakeRedis()
+    variants = ["Shop.Admin@Example.COM", "  shop.admin@example.com\t", "SHOP.ADMIN@EXAMPLE.COM "]
+    identifier = '["203.0.113.5", "shop.admin@example.com"]'
+
+    assert {login_identifier(SOURCE, email) for email in variants} == {identifier}
+    for email in variants:
+        _fail(fake, 1, SOURCE, email)
+
+    assert set(fake.values) == {_key("admin_login_failures", identifier)}
+    assert fake.values[_key("admin_login_failures", identifier)] == len(variants)
+    for key in fake.values:
+        for part in ["shop.admin", "example.com", "@"]:
+            assert part not in key.lower()
+
+
 @pytest.mark.parametrize("where", ["get", "execute"])
 def test_redis_unavailable_raises(where: str) -> None:
     """守住「失败、并发与重试」第 4 条「管理员登录等依赖 Redis 限流的敏感接口也拒绝请求」：
