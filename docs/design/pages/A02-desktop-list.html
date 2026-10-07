@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>A02 Orders, no order selected — desktop</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}.acs-admin__input,.acs-admin__select{box-sizing:border-box;max-width:100%;min-width:0}.acs-admin main *{min-width:0;overflow-wrap:anywhere}</style>
+</head>
+<body>
+<div class="acs-admin" data-mode="light" style="width: 1440px; height: 900px; display: flex; flex-direction: column">
+<div style="display: flex; align-items: stretch"><div class="acs-admin__banner" style="flex-grow: 1"><span class="acs-tag acs-tag--demo">DEMO</span>Admin — demo store. Actions here never move real money or goods.</div><div style="display: flex; align-items: center; padding: 0 16px; background: var(--a-nav)"><button class="acs-admin__btn acs-admin__btn--secondary" type="button" style="color: var(--a-on-nav); border-color: var(--a-nav-muted)">Log out</button></div></div>
+<div class="acs-admin__shell" style="flex-grow: 1">
+<nav class="acs-admin__nav" aria-label="Admin"><a href="#" aria-current="page">Orders</a><a href="#">Refunds</a><a href="#">Products</a><a href="#">Coupons</a><a href="#">Shipping &amp; demo rates</a><a href="#">Stock resets</a><a href="#">Store design</a><a href="#">Site settings</a>
+<span style="margin-top: auto; display: flex; gap: 10px; padding: 12px; font-size: 12px"><a href="#" style="padding: 0; color: var(--a-on-nav)">English</a><a href="#" style="padding: 0">中文</a><a href="#" style="padding: 0">Bahasa Melayu</a></span></nav>
+<main class="acs-admin__main" style="align-items: start">
+<div style="display: grid; gap: 16px">
+<h1 class="acs-admin__h">Orders</h1>
+<div style="display: flex; gap: 8px"><input class="acs-admin__input" type="search" aria-label="Search by order number" placeholder="Search by order number" style="width: 280px"><select class="acs-admin__select" aria-label="Status"><option>Status</option></select></div>
+<div class="acs-admin__panel" style="overflow-x: auto">
+<table class="acs-admin__table"><thead><tr><th>Order number</th><th>Date</th><th>Status</th><th style="text-align: right">Total (MYR)</th><th>Refunds</th></tr></thead>
+<tbody>
+<tr><td>T4LW-6NQB</td><td>10 Sep 2026</td><td><span class="acs-tag acs-tag--neutral">Shipped (demo)</span></td><td style="text-align: right">RM 76.40</td><td class="acs-admin__muted">—</td></tr>
+<tr><td>H3PZ-4W8C</td><td>9 Sep 2026</td><td><span class="acs-tag acs-tag--neutral">Completed (demo)</span></td><td style="text-align: right">RM 42.00</td><td><a href="#" style="color: var(--a-ink); text-decoration: underline; text-underline-offset: 2px">1 pending</a></td></tr>
+<tr><td>Q9DM-3VKA</td><td>9 Sep 2026</td><td><span class="acs-tag acs-tag--neutral">Packed (demo)</span></td><td style="text-align: right">RM 58.00</td><td class="acs-admin__muted">—</td></tr>
+<tr><td>M8XR-7KQE</td><td>8 Sep 2026</td><td><span class="acs-tag acs-tag--outline">Cancelled (demo)</span></td><td style="text-align: right">RM 59.00</td><td class="acs-admin__muted">—</td></tr>
+<tr><td>F2JC-8RTE</td><td>7 Sep 2026</td><td><span class="acs-tag acs-tag--neutral">Completed (demo)</span></td><td style="text-align: right">RM 120.50</td><td class="acs-admin__muted">—</td></tr>
+<tr><td>W6PN-1HXD</td><td>7 Sep 2026</td><td><span class="acs-tag acs-tag--neutral">Paid (demo)</span></td><td style="text-align: right">RM 33.00</td><td class="acs-admin__muted">—</td></tr>
+</tbody></table>
+</div>
+<div style="display: flex; gap: 8px; justify-content: flex-end"><button class="acs-admin__btn acs-admin__btn--secondary" type="button" aria-label="Previous page">‹</button><button class="acs-admin__btn acs-admin__btn--secondary" type="button" aria-label="Next page">›</button></div>
+</div>
+</main>
+</div>
+</div>
+</body>
+</html>

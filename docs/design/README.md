@@ -2,6 +2,7 @@
 
 > 2026-09-30 导出。Kelvin 已于 2026-09-30 认可视觉稿；本导出合并后，由后续运营者 PR 在 `docs/HANDOFF.md` 记录审阅与提交号。
 > 2026-10-05 补充后台画板：全部后台页面的手机稿，A03、A05、A06、A07、A09 的桌面稿，后台 ☰ 菜单；各后台页面右上角加退出按钮（`admin.logout`），已画的 A02、A04、A08 桌面导航补上站点设置。Kelvin 已于 2026-10-05 认可，记录见 `docs/HANDOFF.md`。
+> 2026-10-06 补充 A02、A03 的 8 张状态画板：A02 未选订单与翻页、全部已退冻结、搜索无结果、手机翻页；A03 按订单筛选（桌面、手机）、已批准（桌面）、已拒绝（手机）。Kelvin 已于 2026-10-06 认可，记录见 `docs/HANDOFF.md`。
 
 页面的内容、流程、去向与文案以 [UX.md](../UX.md) 与 [UX-COPY.md](../UX-COPY.md) 为准；本目录只规定样式。二者冲突时以 UX 文档为准，并把冲突报给运营者。
 
@@ -114,9 +115,17 @@
 | A02 订单与模拟发货 · 桌面 | [A02-desktop.html](pages/A02-desktop.html) | [A02-desktop.png](reference/A02-desktop.png) | 1440 × 900 |
 | A02 订单列表 · 手机 | [A02-phone-list.html](pages/A02-phone-list.html) | [A02-phone-list.png](reference/A02-phone-list.png) | 390 × 844 |
 | A02 订单详情 · 手机 | [A02-phone-detail.html](pages/A02-phone-detail.html) | [A02-phone-detail.png](reference/A02-phone-detail.png) | 390 × 1280 |
+| A02 未选订单 · 桌面（翻页、待审退款数链接） | [A02-desktop-list.html](pages/A02-desktop-list.html) | [A02-desktop-list.png](reference/A02-desktop-list.png) | 1440 × 900 |
+| A02 全部已退、履约冻结 · 桌面 | [A02-desktop-frozen.html](pages/A02-desktop-frozen.html) | [A02-desktop-frozen.png](reference/A02-desktop-frozen.png) | 1440 × 900 |
+| A02 搜索无结果 · 桌面 | [A02-desktop-empty.html](pages/A02-desktop-empty.html) | [A02-desktop-empty.png](reference/A02-desktop-empty.png) | 1440 × 600 |
+| A02 订单列表翻页 · 手机 | [A02-phone-list-pages.html](pages/A02-phone-list-pages.html) | [A02-phone-list-pages.png](reference/A02-phone-list-pages.png) | 390 × 844 |
 | A03 退款审核 · 桌面 | [A03-desktop.html](pages/A03-desktop.html) | [A03-desktop.png](reference/A03-desktop.png) | 1440 × 900 |
 | A03 退款列表 · 手机 | [A03-phone-list.html](pages/A03-phone-list.html) | [A03-phone-list.png](reference/A03-phone-list.png) | 390 × 900 |
 | A03 退款详情 · 手机 | [A03-phone-detail.html](pages/A03-phone-detail.html) | [A03-phone-detail.png](reference/A03-phone-detail.png) | 390 × 900 |
+| A03 只看一张订单 · 桌面（不含积分行） | [A03-desktop-order.html](pages/A03-desktop-order.html) | [A03-desktop-order.png](reference/A03-desktop-order.png) | 1440 × 900 |
+| A03 已批准 · 桌面 | [A03-desktop-reviewed.html](pages/A03-desktop-reviewed.html) | [A03-desktop-reviewed.png](reference/A03-desktop-reviewed.png) | 1440 × 900 |
+| A03 只看一张订单 · 手机 | [A03-phone-list-order.html](pages/A03-phone-list-order.html) | [A03-phone-list-order.png](reference/A03-phone-list-order.png) | 390 × 700 |
+| A03 已拒绝 · 手机 | [A03-phone-detail-rejected.html](pages/A03-phone-detail-rejected.html) | [A03-phone-detail-rejected.png](reference/A03-phone-detail-rejected.png) | 390 × 844 |
 | A04 商品、规格与库存 · 桌面 | [A04-desktop.html](pages/A04-desktop.html) | [A04-desktop.png](reference/A04-desktop.png) | 1440 × 1080 |
 | A04 编辑商品 · 手机 | [A04-phone-edit.html](pages/A04-phone-edit.html) | [A04-phone-edit.png](reference/A04-phone-edit.png) | 390 × 1700 |
 | A05 优惠券 · 桌面 | [A05-desktop.html](pages/A05-desktop.html) | [A05-desktop.png](reference/A05-desktop.png) | 1440 × 900 |
