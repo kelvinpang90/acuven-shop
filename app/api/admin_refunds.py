@@ -12,8 +12,10 @@ A03。路径只用退款申请的内部整数 ID；订单号与收货资料不�
 
 列表（POST …/query）只读，不要求 CSRF，不写审计：
 1. 请求体按实际读到的字节逐块判断，超过 8 KB 即 413，先于一切校验；不是 JSON 415；
-   请求体只有可选的 status（requested、approved、rejected 之一）与 page（1 到 10000 的
-   整数，默认 1），多出字段 422。
+   请求体只有可选的 status（requested、approved、rejected 之一）、page（1 到 10000 的
+   整数，默认 1）与 order_id（订单的内部整数 ID，1 到 2147483647，或 null；SHOP-TASK-046，
+   依据 docs/HANDOFF.md 0.35 记录的 Kelvin 2026-10-06 决定），多出字段 422。订单内部 ID
+   只在请求体里，不进路径或查询参数；订单不存在或没有申请时是空列表而不是 404。
 2. require_admin（401）→ 语言参数（422）。
 详情（GET）：require_admin（401）→ 路径里的申请 ID 与语言参数（422）→
 申请不存在 404 not_found → 返回，另带由 cookie 算出的 CSRF 令牌。不写审计。
@@ -85,12 +87,14 @@ _ReviewFunction = Callable[
 
 
 class RefundQueryIn(BaseModel):
-    """可选的申请状态与页码。"""
+    """可选的申请状态、页码与订单内部 ID。"""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
     status: RefundStatus | None = None
     page: int = Field(default=1, ge=1, le=MAX_PAGE)
+    # 订单的内部 ID 与申请的内部 ID 同为 INT 列，上限相同。
+    order_id: int | None = Field(default=None, ge=1, le=MAX_REFUND_ID)
 
 
 class ReviewIn(BaseModel):
@@ -155,7 +159,7 @@ def query(
     body: QueryDep, admin: AdminDep, lang: LanguageDep, session: SessionDep
 ) -> AdminRefundPage:
     """申请列表：排序与分页见 query_refunds；不含收货资料与理由。"""
-    return query_refunds(session, body.status, body.page, lang)
+    return query_refunds(session, body.status, body.page, lang, order_id=body.order_id)
 
 
 @router.get("/{refund_id}", response_model=AdminRefundDetailOut)

@@ -6,7 +6,8 @@
 - 「权限与资料保护」：仅管理员可见所有订单原始资料；日志不记录姓名、完整电话、地址与
   订单查询参数。退款审核用不到收货资料，这里一律不读收货资料。
 以及 docs/HANDOFF.md 0.33 记录的 Kelvin 2026-10-06 决定：审核理由只给管理员看
-（本模块的视图只供后台接口使用）。
+（本模块的视图只供后台接口使用）；0.35 记录的同日决定：列表可按订单内部 ID 筛选，供 A02
+订单的待审退款数链接到只含该单申请的 A03 列表（SHOP-TASK-046）。
 
 复用而不复制：累计已退与剩余可退用 SHOP-TASK-029 的 refund_state；分页常量沿用
 app/services/admin_orders.py。批准与拒绝在 app/services/refund_review.py（SHOP-TASK-040）。
@@ -100,13 +101,24 @@ def _utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC)
 
 
-def query_refunds(db: Session, status: str | None, page: int, lang: Language) -> AdminRefundPage:
+def query_refunds(
+    db: Session,
+    status: str | None,
+    page: int,
+    lang: Language,
+    *,
+    order_id: int | None = None,
+) -> AdminRefundPage:
     """后台退款申请列表；只读，不写审计。
 
     按申请时间从新到旧、同时申请按 ID 从大到小，每页 PAGE_SIZE 条。
-    状态、页码（1 到 10000）与语言由调用方校验。
+    状态、页码（1 到 10000）、订单内部 ID 与语言由调用方校验。给出 order_id 时只列该订单的
+    申请（docs/HANDOFF.md 0.35 记录的 Kelvin 2026-10-06 决定，SHOP-TASK-046）；订单不存在
+    或没有申请时与其他无结果的筛选一样是总数为 0 的空列表。
     """
     conditions = [] if status is None else [RefundRequest.status == status]
+    if order_id is not None:
+        conditions.append(RefundRequest.order_id == order_id)
     total = int(db.scalar(select(func.count()).select_from(RefundRequest).where(*conditions)) or 0)
     if total == 0:
         return AdminRefundPage(total=0, page=page, page_size=PAGE_SIZE, refunds=[])
