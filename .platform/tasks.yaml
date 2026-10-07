@@ -2067,3 +2067,131 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # A08 店铺装修的后台读取与保存接口（不含标志图）。写入规则见 app/services/store_design.py 的模块说明（SHOP-TASK-044、045）。
+  - id: SHOP-TASK-051
+    title: 后台店铺装修的读取与保存接口（不含标志图）
+    purpose: >-
+      给管理员提供店铺装修设置的读取与保存两个接口（A08 的后端）：主题、主色、首页四个区块的顺序与显隐、最多 4 件精选商品及顺序，保存时校验并写审计记录。
+      不含标志图，不做页面，不改前台读取接口与前台，不加表或迁移，不改设计。
+      设计闸门：不适用（只改前台外观设置，不涉及金额计算与个人资料，见 docs/HANDOFF.md 2026-09-30 关于 REQUIREMENTS 1.9 的记录）。拆分：接口层，不拆（5 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-036
+      - SHOP-TASK-045
+    acceptance_criteria:
+      - 实现与 docs/REQUIREMENTS.md「店铺装修」、docs/UX.md 0.10 的 A08 以及 app/services/store_design.py 模块说明里留给本任务的写入规则一致；主题与主色以 app/models/store_design.py 的 THEMES 与 THEME_ACCENTS 为准；发现需求或设计本身有问题时停下并在 PR 里说明，不自行改
+      - 新文件 app/api/admin_store_design.py（app/main.py 挂上路由），两个接口都经 SHOP-TASK-036 的 require_admin（无有效后台会话 401 admin_session_required），所有响应（含错误）带 Cache-Control 为 no-store，沿用 SHOP-TASK-027 的路由类 _NoStoreRoute；不写日志
+      - GET /api/admin/store-design?lang=en|zh|ms（语言参数同目录接口，默认 en）返回 theme、accent（为空时 null）、home_blocks（按位置排序的 {block, visible}）、featured（按位置排序，每项 product_id、slug、按语言取的 name 与 published，已不满足 published() 的精选商品也列出、published 为 false）、choices（全部满足 published() 的商品，每项 product_id、slug、name，按商品 ID 升序）与由 cookie 算出的 csrf_token；设置行不存在时按 SHOP-TASK-045 的默认值返回；不写审计
+      - PUT /api/admin/store-design 须带 X-CSRF-Token（经 SHOP-TASK-036 的 require_admin_csrf），只接受 JSON（否则 415），请求体上限 8 KB 且先于其他校验（超出 413）；请求体只有 theme、accent（字符串或 null）、home_blocks（恰好 4 项 {block, visible}，block 恰为 hero、how、categories、featured 的一个排列，数组顺序即位置）与 featured_product_ids（0 到 4 个不重复的正整数，数组顺序即位置），多出字段或结构不合格 422（detail 为不回显输入值的错误数组，沿用 app/api/pay.py 的 _body_errors）；检查顺序 413 → 415 → 401 → 403 → 422 → 业务校验
+      - 业务校验（错误体为 {"detail":"<错误码>"}，422）：主题不在 THEMES 为 theme_invalid；主色非 null 且不在该主题的 THEME_ACCENTS 为 accent_invalid；任一精选商品不存在或此刻不满足 published()（复用 app/services/catalog.py 的 published）为 featured_unavailable；任一校验不通过时不写入任何东西
+      - 保存在一个事务里完成：先以 SELECT … FOR UPDATE 锁定装修设置单例行（不存在时按默认值插入后再锁定），再读取当前设置；与请求完全相同时返回 200 与当前设置，不写入、不写审计；否则改写主题、主色与更新时间，按请求整体替换首页区块与精选商品各行，并用 SHOP-TASK-035 的 record_audit 写一条 admin_store_design_saved（对象类别 store_design，old_value 与 new_value 为不超过 255 个字符的紧凑 JSON，只含主题、主色、区块顺序与显隐、精选商品内部 ID），一起提交；返回 200 与保存后的设置（字段同 GET，不含 choices 与 csrf_token）；修改对之后的 GET /api/store-design 立即生效
+      - tests/test_admin_store_design.py 用 TestClient 与 SQLite 内存库（开启外键检查，覆盖会话依赖）自建管理员、后台会话与商品（含已下架或不满足 published() 的商品），每条测试写明它守住的是需求或 UX 的哪一句，验证——无会话时两个接口都 401；GET 的字段、默认值、已下架精选商品的 published 为 false、choices 只含可上架商品；PUT 成功改写并在另一会话里读到、写一条审计（old 与 new 不超过 255 个字符且不含商品名称）、公开接口 GET /api/store-design 随之改变；相同设置 200 且不写审计；theme_invalid、accent_invalid（含属于别的主题的主色）、featured_unavailable（不存在、已下架）、区块不是排列、精选超过 4 件或重复时 422 且数据不变；缺或错 CSRF 403 且数据不变；非 JSON 415、超过 8 KB 413、多余字段 422 不回显；所有响应 no-store；用 MySQL 方言编译锁定查询含 FOR UPDATE；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-051 记录段（接口与字段、校验与错误码、锁定与事务、审计、偏离、验证到什么程度，并写明标志图与 A08 页面留给之后的任务）；不改 planning-v1 块；复选框只允许 [ ] / [x]；改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表或迁移；不改前端代码；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - app/api/admin_store_design.py
+      - app/main.py
+      - tests/test_admin_store_design.py
+      - app/services/store_design.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # A07 库存重置结果的后台查询接口。结果由 SHOP-TASK-032 的每日库存重置写入 stock_resets 与 stock_reset_lines。
+  - id: SHOP-TASK-052
+    title: 后台库存重置结果的查询接口
+    purpose: >-
+      给管理员提供每日库存重置结果的列表与单日明细两个只读接口（A07 的后端）。
+      不改库存重置本身，不加表或迁移，不做页面，不改设计。
+      设计闸门：不适用（只读演示库存的重置记录，不改金额与库存规则，不含个人资料）。拆分：接口层，不拆（4 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-032
+      - SHOP-TASK-036
+    acceptance_criteria:
+      - 实现与 docs/UX.md 0.10 的 A07 一致，字段取自 SHOP-TASK-032 的 stock_resets 与 stock_reset_lines；发现需求或设计本身有问题时停下并在 PR 里说明，不自行改
+      - 新文件 app/api/admin_stock_resets.py（app/main.py 挂上路由），两个接口都经 SHOP-TASK-036 的 require_admin（无有效后台会话 401 admin_session_required），只读，不要求 CSRF，不写审计、不写日志，所有响应（含错误）带 Cache-Control 为 no-store，沿用 SHOP-TASK-027 的路由类 _NoStoreRoute
+      - GET /api/admin/stock-resets?page=N（1 到 10000 的整数，默认 1，不合法 422）返回 {total, page, page_size（30）, resets}，按马来西亚营业日期从新到旧，每项 id、business_date（YYYY-MM-DD）、result（succeeded 或 failed）、sku_count、completed_at（带 Z 的 UTC，失败时为 null）；不返回异常类名与尝试次数；page 超出时 resets 为空、total 照常
+      - GET /api/admin/stock-resets/{reset_id} 返回该次重置的上述字段与 lines（按 SKU 升序，每项 sku、initial_stock、held_quantity、available_stock）；路径 ID 只接受不带符号与前导零、不超过 2147483647 的十进制整数，否则 422（{"type":"reset_id_invalid","loc":["path","reset_id"],"msg":"Stock reset ID should be a positive integer"}），不存在 404 not_found
+      - tests/test_admin_stock_resets.py 用 TestClient 与 SQLite 内存库（开启外键检查，覆盖会话依赖）自建管理员、后台会话与重置记录（成功、失败各若干天，含规格已删除即 variant_id 为空的明细行），每条测试写明它守住的是 UX A07 的哪一句，验证——无会话时两个接口都 401；列表排序、每页 30 条与第 2 页、字段、失败时 completed_at 为 null、不含异常类名；明细的行与排序、variant_id 为空的行照常返回；路径 ID 不合法 422、不存在 404；所有响应 no-store；不写审计；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-052 记录段（接口与字段、排序与分页、偏离、验证到什么程度，并写明 A07 页面留给之后的任务）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表或迁移；不改 app/services/stock_reset.py；不改前端代码；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - app/api/admin_stock_resets.py
+      - app/main.py
+      - tests/test_admin_stock_resets.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 商品列表接口按 slug 筛选，供前台首页按精选商品的 slug 取商品卡片（SHOP-TASK-054）。
+  - id: SHOP-TASK-053
+    title: 商品列表接口按 slug 筛选
+    purpose: >-
+      给公开的商品列表接口加可重复的 slug 查询参数，只返回这些 slug 中满足 published() 的商品，供首页按店铺装修的精选商品取商品卡片。
+      不改其他筛选、排序、分页与字段，不加表或迁移，不改前端，不改设计。
+      设计闸门：不适用（只读筛选，商品与价格字段不变）。拆分：接口层，不拆（4 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-013
+    acceptance_criteria:
+      - GET /api/products 新增可重复的查询参数 slug（最多 20 个，每个 1 到 100 个字符，超出 422），给出时只返回 slug 在其中且满足 published() 的商品，与其他筛选为且；不存在或不满足 published() 的 slug 被略去而不是报错；排序、分页、每页条数与每项字段不变；不给时与现在完全相同
+      - app/services/catalog.py 的 list_products 以带默认值空元组的关键字参数接收 slug 列表，现有调用方式与行为不变；app/api/catalog.py 把查询参数传入
+      - tests/test_catalog_slug_filter.py 用 TestClient 与 SQLite 内存库（开启外键检查）按现有目录测试的方式建数据，每条测试写明它守住的是哪一条规则，验证——按多个 slug 只返回这些商品且总数正确；不存在与不满足 published() 的 slug 被略去；与分类筛选同时用时为且；不给 slug 时结果与现在相同；超过 20 个或单个超过 100 个字符时 422；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）；已有目录测试不改并照常通过
+      - docs/TODO.md 新增 SHOP-TASK-053 记录段（参数、规则、偏离、验证到什么程度）；不改 planning-v1 块；复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表或迁移；不改前端代码；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - app/services/catalog.py
+      - app/api/catalog.py
+      - tests/test_catalog_slug_filter.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  # 前台按店铺装修显示（主题、主色、首页区块、精选商品）。Kelvin 2026-10-07 决定本浏览器记住上次取到的主题、主色与区块（docs/HANDOFF.md 0.38）。
+  - id: SHOP-TASK-054
+    title: 前台按店铺装修显示
+    purpose: >-
+      前台改为按 SHOP-TASK-045 的 GET /api/store-design 显示：全站的主题与主色，首页四个区块的顺序与显隐，精选商品按管理员挑选的顺序显示（未挑选或都已下架时显示最新 4 件）。
+      本浏览器记住上次取到的主题、主色与区块，打开时先用它，取到新设置后更新（Kelvin 2026-10-07 决定）。不含标志图，不做后台页面，不改后端，不装依赖，不改设计。
+      设计闸门：不适用（只改前台外观，不涉及金额与个人资料；浏览器里只存主题、主色与区块设置）。拆分：不拆（12 个允许路径，均为前台读取设置与首页显示）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-045
+      - SHOP-TASK-053
+    acceptance_criteria:
+      - 以 docs/REQUIREMENTS.md「店铺装修」、docs/UX.md 0.10 的 P01 与 A08 说明、docs/HANDOFF.md 0.38 与 app/services/store_design.py 模块说明里留给本任务的规则为准；样式沿用现有主题与 docs/design/tokens/acuven-shop.css 的 data-shop-theme 与 data-accent；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局写在 frontend/src/styles/site.css（只用设计变量，不写颜色、字体或圆角；不改生成的 frontend/src/styles/acuven-shop.css）
+      - frontend/src/storeDesign.ts 改为提供店铺装修设置：页面加载时请求一次 GET /api/store-design（同源，cache 为 no-store），响应体不合格算失败；主题须是 10 款主题之一、主色须为 null 或该主题的可选主色、区块须为 hero、how、categories、featured 的一个排列，否则整份视为不合格；常量与 docs/design/tokens/themes.json 一致由测试守住；没有提供者或请求返回前用本浏览器记住的设置，没有或不合格时用现有默认值（班兰、默认主色、四个区块按默认顺序全部显示），深浅色仍跟随访客设备
+      - 本浏览器记住（Kelvin 2026-10-07 决定）：请求成功后把主题、主色与区块写入 localStorage 的 acuven-shop.store-design（不写精选商品）；读取时校验，不合格即忽略；所有存储读写包在 try/catch 里，存储不可用时照常显示；请求失败时保持当前显示，不清除已记住的设置
+      - 全站框架 frontend/src/components/SiteFrame.tsx 的根元素 data-shop-theme 取当前主题，主色非 null 时加 data-accent，为 null 时不设；没有提供者时取默认值，frontend/src/components/SiteFrame.test.tsx 等现有测试不改并照常通过
+      - 首页 frontend/src/pages/HomePage.tsx 按设置的顺序与显隐渲染四个区块（★ home.demo_hint 照常始终显示）；精选商品在设置返回后才取——featured_slugs 非空时经 SHOP-TASK-053 的 slug 参数取商品卡片（frontend/src/api/catalog.ts 新增对应网址函数），按 featured_slugs 的顺序显示返回的商品；featured_slugs 为空、设置请求失败或按 slug 一件也没取到时显示最新 4 件（现有 featuredProductsUrl）；主视觉区块用同一组商品；隐藏的区块不发对应请求
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与存储以替身代替）在 frontend/src/storeDesign.test.ts、frontend/src/api/catalog.test.ts 与 frontend/src/pages/HomePage.test.tsx 验证意图——首次渲染用记住的设置、没有时用默认值；请求成功后更新并记住、不记精选商品；响应或记住的值不合格时忽略；存储抛错时照常显示；data-accent 的有无；区块顺序与显隐；精选按挑选顺序显示、为空或取不到时显示最新 4 件；slug 网址的编码；常量与 themes.json 一致；每条测试写明它守住的是需求、UX 或 Kelvin 决定的哪一句；frontend/src/pages/HomePage.test.tsx 现有断言只按需要改并写明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-054 记录段（设置的读取与记住、主题与主色、区块、精选商品与回退规则、偏离、验证到什么程度，并写明未做浏览器验收、标志图与 A08 页面留给之后的任务）；不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths（frontend/src/router.tsx 与 frontend/src/App.tsx 按页面任务的惯例列入，App.tsx 只在需要放置设置提供者时改，不新增路由）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/storeDesign.ts
+      - frontend/src/storeDesign.test.ts
+      - frontend/src/api/catalog.ts
+      - frontend/src/api/catalog.test.ts
+      - frontend/src/components/SiteFrame.tsx
+      - frontend/src/pages/HomePage.tsx
+      - frontend/src/pages/HomePage.test.tsx
+      - frontend/src/App.tsx
+      - frontend/src/router.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
