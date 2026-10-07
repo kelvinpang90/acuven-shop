@@ -29,6 +29,7 @@ afterEach(() => {
 });
 
 const ORDERS_PATH = "/admin/orders";
+const REFUNDS_PATH = "/admin/refunds";
 const LOGIN_PATH = "/admin/login";
 const USERNAME = "shop-admin";
 const TOKEN = "admin-csrf-1";
@@ -38,13 +39,14 @@ const SIGNED_IN: FrameState = { status: "in", csrfToken: TOKEN, error: null };
 const LANGUAGE_LABEL = { en: "common.lang_en", zh: "common.lang_zh", ms: "common.lang_ms" } as const;
 const HTML_LANG = { en: "en", zh: "zh-Hans", ms: "ms" } as const;
 
-// UX-COPY 第 10 节里全部导航项的键（admin.nav_orders 之外的都是尚未上线页面的项）。
+// UX-COPY 第 10 节里全部导航项的键（admin.nav_orders 与 admin.nav_refunds 之外的都是尚未上线页面的项）。
 const DOC_NAV_KEYS = [...uxCopy.matchAll(/^\| `(admin\.nav_[a-z_]+)` \|/gm)].map((m) => m[1] ?? "");
+const LIVE_NAV_KEYS = ["admin.nav_orders", "admin.nav_refunds"];
 // 尚未上线页面的导航项在 UX-COPY 里的三语文字。
 function otherNavLabels(language: Language): string[] {
   const column = { en: 2, zh: 3, ms: 4 }[language];
   return [...uxCopy.matchAll(/^\| `(admin\.nav_[a-z_]+)` \|(.*)$/gm)]
-    .filter((m) => m[1] !== "admin.nav_orders")
+    .filter((m) => !LIVE_NAV_KEYS.includes(m[1] ?? ""))
     .map((m) => (`|${m[2] ?? ""}`.split("|")[column - 1] ?? "").trim());
 }
 
@@ -285,20 +287,24 @@ describe("first render", () => {
     expect(bar.indexOf("site-admin__bar-title")).toBeLessThan(bar.indexOf("site-admin__logout"));
   });
 
-  // Kelvin 2026-10-06（docs/HANDOFF.md 0.35）「后台导航只显示已上线页面的导航项（先只有订单）」与验收第 2 条「当前项标 aria-current="page"」
-  // 「nav 元素不加 aria-label」：桌面左侧导航只有一项 admin.nav_orders，指向 /admin/orders 并标 aria-current="page"；
+  // Kelvin 2026-10-06（docs/HANDOFF.md 0.35）「后台导航只显示已上线页面的导航项」与验收第 2 条「当前项标 aria-current="page"」
+  // 「nav 元素不加 aria-label」；SHOP-TASK-056 改动：原来断言导航只含订单一项，现按 UX「管理后台总体」「导航项依次为 [admin.nav_orders]、
+  // [admin.nav_refunds]、…」与 SHOP-TASK-056 验收第 2 条改为「按 UX 顺序只含订单与退款两项、其他 admin.nav_* 不出现」：
+  // 桌面左侧导航依次为 admin.nav_orders（指向 /admin/orders，当前页标 aria-current="page"）与 admin.nav_refunds（指向 /admin/refunds）；
   // UX-COPY 里其他 admin.nav_* 的文字在内容区以外都不出现（A02 的列头 admin.col_refunds 与 admin.nav_refunds 文字相同，SHOP-TASK-048）；
   // 页面上任何 nav 都没有 aria-label。
-  it.each(LANGUAGES)("lists only the orders item in the navigation in %s", (language) => {
-    expect(ADMIN_NAV).toEqual(["orders"]);
-    expect(DOC_NAV_KEYS).toContain("admin.nav_orders");
-    expect(DOC_NAV_KEYS.length).toBeGreaterThan(1);
+  it.each(LANGUAGES)("lists only the orders and refunds items in UX order in the navigation in %s", (language) => {
+    expect(ADMIN_NAV).toEqual(["orders", "refunds"]);
+    expect(DOC_NAV_KEYS.slice(0, 2)).toEqual(LIVE_NAV_KEYS);
+    expect(DOC_NAV_KEYS.length).toBeGreaterThan(2);
     for (const html of [renderApp(ORDERS_PATH, language), render({}, language), render({ menuOpen: true }, language)]) {
       const nav = element(html, "nav", "site-admin__nav");
       const items = tags(nav, "a").filter((tag) => !attributes(tag).has("lang"));
-      expect(items.map((tag) => attributes(tag).get("href"))).toEqual([ORDERS_PATH]);
-      expect(items.map((tag) => attributes(tag).get("aria-current"))).toEqual(["page"]);
+      expect(items.map((tag) => attributes(tag).get("href"))).toEqual([ORDERS_PATH, REFUNDS_PATH]);
+      expect(items.map((tag) => attributes(tag).get("aria-current"))).toEqual(["page", undefined]);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_orders"][language])}</a>`);
+      expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_refunds"][language])}</a>`);
+      expect(nav.indexOf(COPY["admin.nav_orders"][language])).toBeLessThan(nav.indexOf(escapeHtml(COPY["admin.nav_refunds"][language])));
       for (const tag of tags(html, "nav")) {
         expect(attributes(tag).has("aria-label")).toBe(false);
       }
@@ -351,7 +357,8 @@ describe("phone menu", () => {
   });
 
   // 验收第 2 条「点开后按 A00-phone-menu 显示导航项、语言链接与退出按钮」：展开时按钮 aria-expanded 为 true，菜单不带 hidden，
-  // 依次为只含订单一项的导航（aria-current="page"）与三种语言的链接；退出按钮仍在顶栏右端；顶栏名称按 A00-phone-menu 为 common.nav_menu。
+  // 依次为导航与三种语言的链接；退出按钮仍在顶栏右端；顶栏名称按 A00-phone-menu 为 common.nav_menu。
+  // SHOP-TASK-056 改动：原来断言菜单的导航只含订单一项，现按验收第 2 条「☰ 菜单同样」改为按 UX 顺序只含订单（aria-current="page"）与退款两项。
   it.each(LANGUAGES)("opens the menu with the navigation, the languages and the logout button in %s", (language) => {
     const html = render({ menuOpen: true }, language);
     const bar = element(html, "div", "site-admin__bar");
@@ -364,8 +371,12 @@ describe("phone menu", () => {
     expect(attributes(menuTag).has("hidden")).toBe(false);
     expect(attributes(menuTag).get("id")).toBe(attributes(buttonTag).get("aria-controls"));
     const nav = element(menu, "nav", "site-admin__menu-nav");
-    expect(tags(nav, "a").map((tag) => [attributes(tag).get("href"), attributes(tag).get("aria-current")])).toEqual([[ORDERS_PATH, "page"]]);
+    expect(tags(nav, "a").map((tag) => [attributes(tag).get("href"), attributes(tag).get("aria-current")])).toEqual([
+      [ORDERS_PATH, "page"],
+      [REFUNDS_PATH, undefined],
+    ]);
     expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_orders"][language])}</a>`);
+    expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_refunds"][language])}</a>`);
     const langs = element(menu, "div", "site-admin__lang");
     expect(menu.indexOf(langs)).toBeGreaterThan(menu.indexOf(nav));
     expect(tags(langs, "a").map((tag) => attributes(tag).get("lang"))).toEqual(LANGUAGES.map((option) => HTML_LANG[option]));

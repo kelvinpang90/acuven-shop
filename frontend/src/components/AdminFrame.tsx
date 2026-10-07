@@ -6,13 +6,13 @@ import type { SessionRead } from "../api/admin";
 import { LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { htmlLang, useCopy, useLanguage } from "../i18n/language";
-import { ADMIN_LOGIN_PATH, ADMIN_ORDERS_PATH, Link, useRouter } from "../router";
+import { ADMIN_LOGIN_PATH, ADMIN_ORDERS_PATH, ADMIN_REFUNDS_PATH, Link, useRouter } from "../router";
 import type { RoutePath } from "../router";
 
 // 后台框架（docs/UX.md「管理后台总体」，视觉稿 A02-desktop、A02-phone-list 与 A00-phone-menu 的框架部分）：A01 以外的后台页共用。
 // 顶部常驻演示横幅；admin.logout 桌面在横幅右侧、手机在顶栏右端；桌面左侧导航（底部为语言切换）+ 右侧内容；
 // 手机顶栏为 ☰ 与当前导航项名称，点开后列出导航项与语言切换。桌面与手机两套都渲染，由 site.css 按宽度显隐。
-// 导航只列已上线的页面（Kelvin 2026-10-06，docs/HANDOFF.md）：目前只有订单。
+// 导航只列已上线的页面（Kelvin 2026-10-06，docs/HANDOFF.md）：目前依次为订单与退款。
 // 打开时读后台会话：200 才显示页面内容，401 换成登录页 A01；CSRF 令牌只在 React 状态与退出请求头里。
 // 根元素为 acs-admin，深浅色随管理员设备设置：服务端渲染与首次客户端渲染都是浅色，挂载后才读 prefers-color-scheme。
 
@@ -94,12 +94,13 @@ export function AdminAlert({ error }: { error: CopyKey }) {
 }
 
 // 导航项：只列已上线的页面，依 UX「管理后台总体」的顺序；其余页面上线时各自加上。
-export type AdminNavItem = "orders";
+export type AdminNavItem = "orders" | "refunds";
 
-export const ADMIN_NAV: readonly AdminNavItem[] = ["orders"];
+export const ADMIN_NAV: readonly AdminNavItem[] = ["orders", "refunds"];
 
 const NAV_ENTRY: Readonly<Record<AdminNavItem, { path: RoutePath; label: CopyKey }>> = {
   orders: { path: ADMIN_ORDERS_PATH, label: "admin.nav_orders" },
+  refunds: { path: ADMIN_REFUNDS_PATH, label: "admin.nav_refunds" },
 };
 
 // 框架的状态：会话请求返回前（loading）、会话读取失败（failed，内容区只有 common.error_retry）、

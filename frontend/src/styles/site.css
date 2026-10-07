@@ -283,6 +283,19 @@ body { margin: 0; }
 .site-admin-order__hint svg { flex-shrink: 0; margin-top: 2px; }
 .site-admin-order__events { overflow-x: auto; }
 
+/* 后台退款申请列表 A03（A03-desktop 的列表部分、A03-desktop-order）：标题、状态筛选、列表依次排列（间距 16px）；
+   状态筛选、筛选标签与 list.filter_clear 同一行（间距 8px）；桌面为表格（金额列靠右，商品与件数各行上下排列），
+   手机卡片在桌面不显示；翻页按钮在列表下方靠右 */
+.site-admin-refunds { display: grid; gap: 16px; }
+.site-admin-refunds__filters, .site-admin-refunds__order { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+a.site-admin-refunds__clear { text-decoration: none; }
+.site-admin-refunds__list { display: grid; gap: 16px; }
+.site-admin-refunds__table { overflow-x: auto; }
+.site-admin-refunds__num { text-align: right; }
+.site-admin-refunds__lines { display: grid; gap: 4px; }
+.site-admin-refunds__cards { display: none; margin: 0; padding: 0; list-style: none; }
+.site-admin-refunds__pager { display: flex; gap: 8px; justify-content: flex-end; }
+
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
 
@@ -510,4 +523,16 @@ body { margin: 0; }
   .site-admin-order__actions { padding-top: 0; }
   .site-admin-order__buttons { flex-direction: column; }
   .site-admin-order__buttons .acs-admin__btn { justify-content: center; min-height: 44px; }
+
+  /* 后台退款申请列表（A03-phone-list、A03-phone-list-order）：状态筛选占一行并加高到 44px，其下为筛选标签与 list.filter_clear
+     （至少 44px 高）；表格不显示，改为卡片列表（内边距 12px 14px，申请时间、订单号、名称 × 件数 · 金额、状态标签上下排列，间距 4px）；
+     间距 10px；翻页按钮居中、加大到 44px */
+  .site-admin-refunds, .site-admin-refunds__list { gap: 10px; }
+  .site-admin-refunds__filters { flex-direction: column; align-items: stretch; gap: 10px; }
+  .site-admin-refunds .acs-admin__select, .site-admin-refunds__clear { min-height: 44px; }
+  .site-admin-refunds__table { display: none; }
+  .site-admin-refunds__cards { display: grid; gap: 10px; }
+  .site-admin-refunds__card { display: grid; gap: 4px; min-height: 44px; padding: 12px 14px; }
+  .site-admin-refunds__pager { justify-content: center; }
+  .site-admin-refunds__pager .acs-admin__btn { justify-content: center; min-width: 44px; min-height: 44px; }
 }

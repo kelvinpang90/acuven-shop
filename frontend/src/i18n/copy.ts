@@ -1120,6 +1120,11 @@ export const COPY = {
     zh: "订单",
     ms: "Pesanan",
   },
+  "admin.nav_refunds": {
+    en: "Refunds",
+    zh: "退款审核",
+    ms: "Bayaran balik",
+  },
   "admin.filter_status": {
     en: "Status",
     zh: "状态",
@@ -1149,6 +1154,16 @@ export const COPY = {
     en: "{count} pending",
     zh: "{count} 项待审",
     ms: "{count} menunggu",
+  },
+  "admin.col_requested_at": {
+    en: "Requested at",
+    zh: "申请时间",
+    ms: "Dimohon pada",
+  },
+  "admin.col_amount": {
+    en: "Amount (MYR)",
+    zh: "金额（MYR）",
+    ms: "Amaun (MYR)",
   },
   "admin.order_detail": {
     en: "Order details",
