@@ -52,13 +52,52 @@ async function readSiteRules(): Promise<string> {
     .replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
-// 选择器组里每个选择器的最后一段都是 a 元素（如 `.x a`、`a.y`、`a:hover`）时才算链接规则。
+// 在括号、方括号与引号之外按分隔符切开（`a:is(.x, .y)` 的逗号、`[aria-label="A B"]` 的空格不切）。
+function splitTopLevel(
+  text: string,
+  isSeparator: (char: string) => boolean,
+): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let quote = "";
+  let start = 0;
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text.charAt(i);
+    if (quote) {
+      if (char === "\\") i += 1;
+      else if (char === quote) quote = "";
+    } else if (char === '"' || char === "'") quote = char;
+    else if (char === "(" || char === "[") depth += 1;
+    else if (char === ")" || char === "]") depth -= 1;
+    else if (depth === 0 && isSeparator(char)) {
+      parts.push(text.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(text.slice(start));
+  return parts;
+}
+
+// 最后一段复合选择器以 a 元素开头、且不带伪元素（`::x` 或旧写法 `:before` 等）时才算选中链接。
+function selectsLink(selector: string): boolean {
+  const compounds = splitTopLevel(selector.trim(), (char) =>
+    /[\s>+~]/.test(char),
+  );
+  const last = compounds[compounds.length - 1] ?? "";
+  const pseudos = splitTopLevel(last, (char) => char === ":").slice(1);
+  return (
+    /^a(?![\w-])/.test(last) &&
+    !pseudos.some(
+      (pseudo) =>
+        pseudo === "" ||
+        /^(before|after|first-line|first-letter)$/i.test(pseudo),
+    )
+  );
+}
+
+// 选择器组里每个选择器都选中链接时才算链接规则。
 function isLinkRule(selectors: string): boolean {
-  return selectors
-    .split(",")
-    .every((selector) =>
-      /(^|[\s>+~])a(?![\w-])[^\s>+~]*$/.test(selector.trim()),
-    );
+  return splitTopLevel(selectors, (char) => char === ",").every(selectsLink);
 }
 
 // 只从链接规则里去掉 color: inherit，其他规则里的同一声明照样被下面的检查拦住。
@@ -95,6 +134,17 @@ describe("site.css", () => {
         "@media (max-width: 767px) { a.y:hover, .z > a { color: inherit } }",
       ),
     ).not.toMatch(declared);
+    expect(
+      withoutLinkColorInherit(
+        'a:is(.x, .y), .z a[aria-label="Order details"] { color: inherit; }',
+      ),
+    ).not.toMatch(declared);
+    expect(withoutLinkColorInherit("a::before { color: inherit; }")).toMatch(
+      declared,
+    );
+    expect(withoutLinkColorInherit(".x a:after { color: inherit; }")).toMatch(
+      declared,
+    );
     expect(withoutLinkColorInherit("body { color: inherit; }")).toMatch(
       declared,
     );
