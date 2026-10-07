@@ -13,7 +13,10 @@ import type { RoutePath } from "../router";
 export { DARK_SCHEME_QUERY, watchColorScheme } from "../components/AdminFrame";
 export type { ColorMode, MatchMedia, SchemeQuery } from "../components/AdminFrame";
 
-// 后台登录页 A01（docs/UX.md「管理后台总体」与 A01）：管理员以用户名与密码登录，调用 SHOP-TASK-036 的接口。
+// 后台登录页 A01（docs/UX.md「管理后台总体」与 A01）：管理员以邮箱与密码登录，调用 SHOP-TASK-036 的接口。
+// 登录名输入框标签为 admin.email（UX 0.10，Kelvin 2026-10-07）：type="text" 加 inputMode="email" 让手机弹出邮箱键盘，
+// autocomplete 仍为 username（密码管理按登录名识别），关闭自动大写与拼写检查；内容原样提交，去空白与转小写由服务端做（SHOP-TASK-049），
+// 请求体字段名仍为 username。
 // 不套前台的站点框架（App.tsx 对 /admin 开头的路由直接渲染页面），也不用后台框架（A01 没有导航与退出按钮）；
 // 根元素为 acs-admin，深浅色随管理员设备设置（与后台框架相同，见 components/AdminFrame.tsx）。界面语言沿用 LanguageProvider（默认英文）。
 // 去向为 A02（UX A01「去向：A02」）：打开时已有会话即用 replace 进入 /admin/orders，登录成功后用 navigate 进入。
@@ -185,10 +188,14 @@ export function AdminLoginView({ mode, state, fields, busy, onChange, onLogIn }:
           {screen.status === "form" && (
             <form className="site-admin-login__body" method="post" noValidate onSubmit={handleSubmit}>
               <label className="acs-admin__field">
-                {t("admin.username")}
+                {t("admin.email")}
                 <input
                   className="acs-admin__input"
+                  type="text"
+                  inputMode="email"
                   autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
                   value={fields.username}
                   onChange={(event) => {
                     onChange({ ...fields, username: event.currentTarget.value });

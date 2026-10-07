@@ -343,8 +343,9 @@ describe("colour mode", () => {
 });
 
 describe("login form", () => {
-  // SHOP-TASK-038 验收第 4 条「登录表单：admin.username、auth.password（autocomplete 分别为 username 与 current-password）与 auth.login_submit」
-  // 与 UX A01 线框的顺序：两个带标签的输入框（acs-admin__field）、提交按钮；输入框不设 name，表单 method 为 post，不用脚本时也提交不出用户名或密码。
+  // SHOP-TASK-038 验收第 4 条「登录表单：登录名、auth.password（autocomplete 分别为 username 与 current-password）与 auth.login_submit」
+  // （登录名标签自 SHOP-TASK-050 起为 admin.email）与 UX A01 线框的顺序：两个带标签的输入框（acs-admin__field）、提交按钮；
+  // 输入框不设 name，表单 method 为 post，不用脚本时也提交不出用户名或密码。
   it.each(LANGUAGES)("has the username and password fields and the submit button in %s", (language) => {
     const html = render({ fields: FILLED }, language);
     const form = tags(html, "form")[0] ?? "";
@@ -359,7 +360,7 @@ describe("login form", () => {
     expect(tags(html, "input")).toHaveLength(2);
     expect(username?.get("autocomplete")).toBe("username");
     expect(username?.get("class")).toBe("acs-admin__input");
-    expect(username?.get("type") ?? "text").toBe("text");
+    expect(username?.get("type")).toBe("text");
     expect(password?.get("autocomplete")).toBe("current-password");
     expect(password?.get("type")).toBe("password");
     expect(password?.get("class")).toBe("acs-admin__input");
@@ -367,7 +368,7 @@ describe("login form", () => {
       expect(input?.has("name")).toBe(false);
     }
     const positions = [
-      html.indexOf(`>${escapeHtml(COPY["admin.username"][language])}<input`),
+      html.indexOf(`>${escapeHtml(COPY["admin.email"][language])}<input`),
       html.indexOf(`>${escapeHtml(COPY["auth.password"][language])}<input`),
       html.indexOf(`>${escapeHtml(COPY["auth.login_submit"][language])}</button>`),
     ];
@@ -378,6 +379,23 @@ describe("login form", () => {
     const submit = tags(html, "button").find((tag) => attributes(tag).get("type") === "submit") ?? "";
     expect(classes(submit)).toContain("acs-admin__btn");
     expect(classes(submit)).not.toContain("acs-admin__btn--secondary");
+  });
+
+  // SHOP-TASK-050 验收第 2 条与 docs/HANDOFF.md 0.37 记录的 Kelvin 2026-10-07 决定「唯一管理员以邮箱登录…登录页标签新增文案 admin.email，admin.username 停用」
+  // （docs/UX.md 0.10 A01 `[admin.email]`）：登录名输入框的标签是 admin.email，type 为 text、inputMode 为 email（手机弹出邮箱键盘），
+  // autocomplete 仍为 username（密码管理按登录名识别），关闭自动大写与拼写检查；字典里不再有 admin.username。
+  it.each(LANGUAGES)("labels the login name field as email in %s", (language) => {
+    const html = render({ fields: FILLED }, language);
+    const label = element(html, "label", "acs-admin__field");
+    expect(label.startsWith(`<label class="acs-admin__field">${escapeHtml(COPY["admin.email"][language])}<input`)).toBe(true);
+    const field = attributes(tags(label, "input")[0] ?? "");
+    expect(field.get("type")).toBe("text");
+    expect(field.get("inputmode")).toBe("email");
+    expect(field.get("autocomplete")).toBe("username");
+    expect(field.get("autocapitalize")).toBe("none");
+    expect(field.get("spellcheck")).toBe("false");
+    expect(field.get("value")).toBe(USERNAME);
+    expect(Object.keys(COPY)).not.toContain("admin.username");
   });
 
   // SHOP-TASK-038 验收第 4 条「用户名或密码任一为空时提交按钮禁用，不用浏览器自带的必填校验提示（那不是 UX-COPY 文字）」与「提交期间按钮禁用」：
