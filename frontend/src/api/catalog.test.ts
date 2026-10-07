@@ -4,6 +4,7 @@ import {
   CatalogError,
   categoriesUrl,
   failedRemote,
+  featuredBySlugsUrl,
   featuredProductsUrl,
   fetchCatalog,
   optionsUrl,
@@ -85,6 +86,42 @@ describe("catalog request addresses", () => {
       ["page", "1"],
       ["page_size", "4"],
     ]);
+  });
+
+  // SHOP-TASK-054 验收「featured_slugs 非空时经 SHOP-TASK-053 的 slug 参数取商品卡片（frontend/src/api/catalog.ts 新增对应网址函数）」
+  // 与 UX P01（0.6）「显示 A08 挑选的商品（最多 4 件）」：每个挑选的 slug 一个可重复的 slug 参数，按挑选顺序写出，最多 4 件放得下一页。
+  it("asks for the picked featured products by repeated slug", () => {
+    const url = featuredBySlugsUrl("ms", ["tote-bag", "crew-neck-tee", "mug"]);
+    expect(pathOf(url)).toBe("/api/catalog/products");
+    expect(params(url)).toEqual([
+      ["lang", "ms"],
+      ["slug", "tote-bag"],
+      ["slug", "crew-neck-tee"],
+      ["slug", "mug"],
+      ["sort", "newest"],
+      ["page", "1"],
+      ["page_size", "4"],
+    ]);
+  });
+
+  // SHOP-TASK-054 验收「slug 网址的编码」：slug 作为查询参数的值编码一次，接口解码后得到原样的 slug，不会被拆成别的参数。
+  it.each([
+    ["a b", "slug=a+b"],
+    ["a&page=9", "slug=a%26page%3D9"],
+    ["a%20b", "slug=a%2520b"],
+    ["中", "slug=%E4%B8%AD"],
+    ["a+b", "slug=a%2Bb"],
+  ])("encodes the picked slug %j once", (slug, encoded) => {
+    const url = featuredBySlugsUrl("en", [slug]);
+    expect(url).toContain(`&${encoded}&`);
+    expect(new URL(url, "https://shop.example").searchParams.getAll("slug")).toEqual([slug]);
+    expect(new URL(url, "https://shop.example").searchParams.getAll("page")).toEqual(["1"]);
+  });
+
+  // SHOP-TASK-053「不给时条件不变，与之前完全相同」：其他列表请求不带 slug 参数。
+  it("adds no slug parameter to other product list requests", () => {
+    expect(productsUrl("en", { q: "tee" })).not.toContain("slug=");
+    expect(featuredProductsUrl("en")).not.toContain("slug=");
   });
 });
 

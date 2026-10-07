@@ -8,7 +8,7 @@ import { browserStorage, htmlLang, useCopy, useLanguage } from "../i18n/language
 import { keywordSearch, parseProductListQuery } from "../pages/productListQuery";
 import { HOME_PATH, isRoutePath, Link, PRODUCTS_PATH, useRouter } from "../router";
 import type { RoutePath } from "../router";
-import { storeDesign } from "../storeDesign";
+import { STORE_MODE, useStoreDesign } from "../storeDesign";
 
 // 全站框架（docs/UX.md「全局框架」）：演示横幅、页头、页面主体、页脚。
 // 结构与类名沿用 docs/design/pages/ 的静态页面；桌面与手机的差异只由 styles/site.css 的媒体查询切换。
@@ -275,10 +275,11 @@ function SiteFooter() {
   );
 }
 
-// 前台根元素：class acs 与主题取值（storeDesign.ts）；不设 data-accent，即该主题的默认主色。
+// 前台根元素：class acs 与店铺装修的主题（storeDesign.ts）；主色为 null 时不设 data-accent，即该主题的默认主色。
 export default function SiteFrame({ children }: { children: ReactNode }) {
+  const { theme, accent } = useStoreDesign();
   return (
-    <div className="acs site" data-shop-theme={storeDesign.theme} data-mode={storeDesign.mode}>
+    <div className="acs site" data-shop-theme={theme} data-accent={accent ?? undefined} data-mode={STORE_MODE}>
       <DemoBanner />
       <SiteHeader />
       {children}

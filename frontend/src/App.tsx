@@ -18,6 +18,7 @@ import TrackOrderPage from "./pages/TrackOrderPage";
 import TrackPage from "./pages/TrackPage";
 import { RouterProvider, useRouter } from "./router";
 import type { RoutePattern } from "./router";
+import { StoreDesignProvider } from "./storeDesign";
 
 // 按 router.tsx 的路由表穷举：表里每个模式恰好对应一个页面。
 const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
@@ -42,15 +43,22 @@ function isAdminPattern(pattern: RoutePattern): boolean {
 }
 
 // 以实际路径为 key：从一件商品换到另一件时页面重新开始（规格、数量与提示不带过去）。
-function CurrentPage() {
+// 店铺装修设置只给前台：提供者在前台页之间切换时保留，设置只取一次；后台页不取。
+function CurrentPage({ storage }: { storage: LanguageStorage | null | undefined }) {
   const { path, pattern } = useRouter();
   const Page = PAGES[pattern];
   const page = <Page key={path} />;
-  return isAdminPattern(pattern) ? page : <SiteFrame>{page}</SiteFrame>;
+  return isAdminPattern(pattern) ? (
+    page
+  ) : (
+    <StoreDesignProvider storage={storage}>
+      <SiteFrame>{page}</SiteFrame>
+    </StoreDesignProvider>
+  );
 }
 
 interface AppProps {
-  // 测试用：给定初始路径与语言存储；浏览器里不传，分别读地址栏与 localStorage。
+  // 测试用：给定初始路径与语言、店铺装修所用的存储；浏览器里不传，分别读地址栏与 localStorage。
   initialPath?: string | undefined;
   storage?: LanguageStorage | null | undefined;
 }
@@ -59,7 +67,7 @@ export default function App({ initialPath, storage }: AppProps) {
   return (
     <LanguageProvider storage={storage}>
       <RouterProvider initialPath={initialPath}>
-        <CurrentPage />
+        <CurrentPage storage={storage} />
       </RouterProvider>
     </LanguageProvider>
   );

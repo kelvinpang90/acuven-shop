@@ -1,16 +1,16 @@
-import { categoriesUrl, featuredProductsUrl, useCatalog } from "../api/catalog";
+import { categoriesUrl, featuredBySlugsUrl, featuredProductsUrl, useCatalog } from "../api/catalog";
 import type { CategoryListItem, ProductPage, Remote } from "../api/catalog";
 import ProductCard, { CatalogImage } from "../components/ProductCard";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
-import type { CopyKey } from "../i18n/copy";
+import type { CopyKey, Language } from "../i18n/copy";
 import { useCopy, useLanguage } from "../i18n/language";
 import { Link, PRODUCTS_PATH } from "../router";
-import { storeDesign } from "../storeDesign";
-import type { HomeBlock, HomeBlockSetting } from "../storeDesign";
+import { useStoreDesign } from "../storeDesign";
+import type { HomeBlock, HomeBlockSetting, StoreDesignValue } from "../storeDesign";
 import { categorySearch } from "./productListQuery";
 
 // 首页 P01（docs/UX.md P01）：★ home.demo_hint 固定在页头下方、所有区块之前，不属于任何区块、不可隐藏；
-// 其后是主视觉、演示怎么玩、按分类浏览、精选商品四个区块，顺序与显隐来自 storeDesign.ts，隐藏的区块整块不渲染。
+// 其后是主视觉、演示怎么玩、按分类浏览、精选商品四个区块，顺序与显隐来自店铺装修设置（storeDesign.ts），隐藏的区块整块不渲染。
 // 区块文案全部来自字典；分类与商品来自目录接口，某个请求失败只在该区块显示 common.error_retry。
 
 const HOW_STEPS: readonly CopyKey[] = ["home.how_1", "home.how_2", "home.how_3", "home.how_4"];
@@ -93,7 +93,7 @@ function CategoriesBlock({ categories }: { categories: Remote<CategoryListItem[]
   );
 }
 
-// 精选商品：后台挑选尚未实现，按 UX P01「未挑选」时的规则显示最新的 4 件。
+// 精选商品：按 A08 挑选的顺序显示，未挑选或都取不到时显示最新的 4 件（见 featuredSource）。
 function FeaturedBlock({ featured }: { featured: Remote<ProductPage> }) {
   const t = useCopy();
   return (
@@ -148,13 +148,83 @@ function isShown(blocks: readonly HomeBlockSetting[], block: HomeBlock): boolean
   return blocks.some((setting) => setting.block === block && setting.visible);
 }
 
+const LOADING: Remote<never> = { status: "loading" };
+
+// 只为显示中的区块请求：主视觉的图块与「精选商品」共用同一组商品。
+export function categoriesRequest(language: Language, blocks: readonly HomeBlockSetting[]): string | null {
+  return isShown(blocks, "categories") ? categoriesUrl(language) : null;
+}
+
+// 精选商品要用的挑选：设置还没返回、或主视觉与精选商品都隐藏时为 null，即先不取（也不取最新 4 件）。
+export function featuredSlugsToShow(design: Pick<StoreDesignValue, "homeBlocks" | "featuredSlugs">): readonly string[] | null {
+  const { homeBlocks, featuredSlugs } = design;
+  return isShown(homeBlocks, "hero") || isShown(homeBlocks, "featured") ? featuredSlugs : null;
+}
+
+// 有挑选时按 slug 取商品卡片（SHOP-TASK-053）。
+export function pickedRequest(language: Language, slugs: readonly string[] | null): string | null {
+  return slugs !== null && slugs.length > 0 ? featuredBySlugsUrl(language, slugs) : null;
+}
+
+// 按挑选顺序排返回的商品（接口按 newest 返回）；没返回的 slug 略去，重复的 slug 只算一次。
+export function orderedFeatured(page: ProductPage, slugs: readonly string[]): ProductPage {
+  const items = [...new Set(slugs)].flatMap((slug) => page.items.filter((item) => item.slug === slug).slice(0, 1));
+  return { ...page, items };
+}
+
+export type FeaturedSource =
+  | { kind: "loading" }
+  | { kind: "error" }
+  | { kind: "picked"; page: ProductPage }
+  | { kind: "newest" };
+
+// 精选商品取自哪里（REQUIREMENTS「店铺装修」、UX P01）：按挑选顺序只显示仍上架的商品；未挑选（含设置请求失败）
+// 或按 slug 的请求成功但一件也没返回时显示最新 4 件；按 slug 的请求本身失败时在区块显示错误，不改取最新 4 件。
+export function featuredSource(slugs: readonly string[] | null, picked: Remote<ProductPage>): FeaturedSource {
+  if (slugs === null) {
+    return { kind: "loading" };
+  }
+  if (slugs.length === 0) {
+    return { kind: "newest" };
+  }
+  switch (picked.status) {
+    case "loading":
+      return { kind: "loading" };
+    case "ready": {
+      const page = orderedFeatured(picked.data, slugs);
+      return page.items.length > 0 ? { kind: "picked", page } : { kind: "newest" };
+    }
+    default:
+      return { kind: "error" };
+  }
+}
+
+export function newestRequest(language: Language, source: FeaturedSource): string | null {
+  return source.kind === "newest" ? featuredProductsUrl(language) : null;
+}
+
+export function featuredRemote(source: FeaturedSource, newest: Remote<ProductPage>): Remote<ProductPage> {
+  switch (source.kind) {
+    case "loading":
+      return LOADING;
+    case "error":
+      return { status: "error" };
+    case "picked":
+      return { status: "ready", data: source.page };
+    case "newest":
+      return newest;
+  }
+}
+
 export default function HomePage() {
   const { language } = useLanguage();
-  const blocks = storeDesign.homeBlocks;
-  // 只为显示中的区块请求：主视觉的图块与「精选商品」共用同一个请求。
-  const categories = useCatalog<CategoryListItem[]>(isShown(blocks, "categories") ? categoriesUrl(language) : null);
-  const featured = useCatalog<ProductPage>(
-    isShown(blocks, "hero") || isShown(blocks, "featured") ? featuredProductsUrl(language) : null,
-  );
-  return <HomeView blocks={blocks} categories={categories} featured={featured} />;
+  const design = useStoreDesign();
+  const blocks = design.homeBlocks;
+  const categories = useCatalog<CategoryListItem[]>(categoriesRequest(language, blocks));
+  // 精选在设置返回后才取：先按挑选取，必要时再取最新 4 件。
+  const slugs = featuredSlugsToShow(design);
+  const picked = useCatalog<ProductPage>(pickedRequest(language, slugs));
+  const source = featuredSource(slugs, picked);
+  const newest = useCatalog<ProductPage>(newestRequest(language, source));
+  return <HomeView blocks={blocks} categories={categories} featured={featuredRemote(source, newest)} />;
 }

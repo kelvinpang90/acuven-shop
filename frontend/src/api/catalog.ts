@@ -15,7 +15,7 @@ export function isSortOrder(value: unknown): value is SortOrder {
   return typeof value === "string" && (SORT_ORDERS as readonly string[]).includes(value);
 }
 
-// 首页「精选商品」：后台挑选尚未实现，按 UX P01「未挑选」时的规则取最新的 4 件。
+// 首页「精选商品」最多 4 件（UX P01、A08）：未挑选或挑选的都取不到时取最新的 4 件。
 export const FEATURED_COUNT = 4;
 
 // 商品文案按请求语言给出，缺少时为英文并标 english_fallback。
@@ -83,11 +83,13 @@ export interface ProductDetail {
   max_per_order: number;
 }
 
-// 商品列表接口的参数；category 与 option 可重复，option 写成 <规格名 code>:<规格值 code>。
+// 商品列表接口的参数；category、option 与 slug 可重复，option 写成 <规格名 code>:<规格值 code>。
 export interface ProductListRequest {
   q?: string | undefined;
   categories?: readonly string[] | undefined;
   options?: readonly string[] | undefined;
+  // 只取这些商品（SHOP-TASK-053）；结果仍按 sort 排序，不按给出的顺序。
+  slugs?: readonly string[] | undefined;
   sort?: SortOrder | undefined;
   page?: number | undefined;
   pageSize?: number | undefined;
@@ -112,6 +114,9 @@ export function productsUrl(language: Language, request: ProductListRequest = {}
   for (const option of request.options ?? []) {
     params.append("option", option);
   }
+  for (const slug of request.slugs ?? []) {
+    params.append("slug", slug);
+  }
   params.set("sort", request.sort ?? "newest");
   params.set("page", String(request.page ?? 1));
   if (request.pageSize !== undefined) {
@@ -122,6 +127,11 @@ export function productsUrl(language: Language, request: ProductListRequest = {}
 
 export function featuredProductsUrl(language: Language): string {
   return productsUrl(language, { sort: "newest", page: 1, pageSize: FEATURED_COUNT });
+}
+
+// 店铺装修挑选的精选商品（最多 4 件）：按 slug 取商品卡片，首页再按挑选顺序重排。
+export function featuredBySlugsUrl(language: Language, slugs: readonly string[]): string {
+  return productsUrl(language, { slugs, sort: "newest", page: 1, pageSize: FEATURED_COUNT });
 }
 
 // 商品详情：slug 是路由解码后的值，在请求路径里只编码一次。
