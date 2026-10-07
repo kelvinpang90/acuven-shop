@@ -251,6 +251,17 @@ body { margin: 0; }
 .site-admin__lang a { padding: 0; }
 .site-admin__bar, .site-admin__menu { display: none; }
 
+/* 后台订单 A02 的列表（A02-desktop-list、A02-desktop-empty）：标题、搜索与筛选、列表依次排列；搜索框 280px 与状态筛选同一行；
+   桌面为表格（合计列靠右），手机卡片在桌面不显示；翻页按钮在列表下方靠右 */
+.site-admin-orders { display: grid; gap: 16px; }
+.site-admin-orders__filters { display: flex; gap: 8px; }
+.site-admin-orders__search { width: 280px; }
+.site-admin-orders__list { display: grid; gap: 16px; }
+.site-admin-orders__table { overflow-x: auto; }
+.site-admin-orders__num { text-align: right; }
+.site-admin-orders__cards { display: none; margin: 0; padding: 0; list-style: none; }
+.site-admin-orders__pager { display: flex; gap: 8px; justify-content: flex-end; }
+
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
 
@@ -444,4 +455,17 @@ body { margin: 0; }
   .site-admin__menu-nav a { display: flex; align-items: center; min-height: 48px; padding: 0 16px; border-bottom: 1px solid var(--a-nav-muted); }
   .site-admin__menu .site-admin__lang { margin-top: auto; gap: 16px; padding: 16px; }
   .site-admin .acs-admin__main { padding: 16px; }
+
+  /* 后台订单列表（A02-phone-list、A02-phone-list-pages）：搜索框与状态筛选各占一行并加高，表格不显示，改为卡片列表
+     （第一行订单号与状态分列两端，其下为日期、合计与待审数）；翻页按钮居中、加大到 44px */
+  .site-admin-orders, .site-admin-orders__list { gap: 10px; }
+  .site-admin-orders__filters { flex-direction: column; gap: 10px; }
+  .site-admin-orders__search { width: auto; }
+  .site-admin-orders .acs-admin__input, .site-admin-orders .acs-admin__select { min-height: 44px; }
+  .site-admin-orders__table { display: none; }
+  .site-admin-orders__cards { display: grid; gap: 10px; }
+  .site-admin-orders__card { display: grid; gap: 4px; min-height: 44px; padding: 12px 14px; }
+  .site-admin-orders__card-head { display: flex; justify-content: space-between; gap: 8px; }
+  .site-admin-orders__pager { justify-content: center; }
+  .site-admin-orders__pager .acs-admin__btn { justify-content: center; min-width: 44px; min-height: 44px; }
 }

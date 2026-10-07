@@ -1105,6 +1105,36 @@ export const COPY = {
     zh: "订单",
     ms: "Pesanan",
   },
+  "admin.filter_status": {
+    en: "Status",
+    zh: "状态",
+    ms: "Status",
+  },
+  "admin.search_order": {
+    en: "Search by order number",
+    zh: "按订单号搜索",
+    ms: "Cari mengikut nombor pesanan",
+  },
+  "admin.col_date": {
+    en: "Date",
+    zh: "日期",
+    ms: "Tarikh",
+  },
+  "admin.col_total": {
+    en: "Total (MYR)",
+    zh: "合计（MYR）",
+    ms: "Jumlah (MYR)",
+  },
+  "admin.col_refunds": {
+    en: "Refunds",
+    zh: "退款",
+    ms: "Bayaran balik",
+  },
+  "admin.refunds_pending": {
+    en: "{count} pending",
+    zh: "{count} 项待审",
+    ms: "{count} menunggu",
+  },
   "admin.logout": {
     en: "Log out",
     zh: "退出登录",
