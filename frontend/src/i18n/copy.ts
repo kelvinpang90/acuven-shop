@@ -1235,6 +1235,46 @@ export const COPY = {
     zh: "全部商品已退款，履约已冻结。",
     ms: "Semua item dibayar balik — pemenuhan dibekukan.",
   },
+  "admin.refund_detail": {
+    en: "Refund request details",
+    zh: "退款申请详情",
+    ms: "Butiran permohonan bayaran balik",
+  },
+  "admin.refund_qty": {
+    en: "Requested {requested} / bought {bought} / approved {approved}",
+    zh: "申请 {requested} / 购买 {bought} / 已批准 {approved}",
+    ms: "Dimohon {requested} / dibeli {bought} / diluluskan {approved}",
+  },
+  "admin.refund_amount": {
+    en: "Cash refund (demo): RM {amount}",
+    zh: "模拟退现金：RM {amount}",
+    ms: "Bayaran balik tunai (demo): RM {amount}",
+  },
+  "admin.refund_approve": {
+    en: "Approve (demo)",
+    zh: "批准（演示）",
+    ms: "Luluskan (demo)",
+  },
+  "admin.refund_reject": {
+    en: "Reject",
+    zh: "拒绝",
+    ms: "Tolak",
+  },
+  "admin.refund_reason": {
+    en: "Reason",
+    zh: "理由",
+    ms: "Sebab",
+  },
+  "admin.refund_hint": {
+    en: "Approving never sends real money.",
+    zh: "批准不会退还任何真实款项。",
+    ms: "Kelulusan tidak pernah menghantar wang sebenar.",
+  },
+  "admin.reviewed_by": {
+    en: "Reviewed by {username} on {time}",
+    zh: "由 {username} 于 {time} 审核",
+    ms: "Disemak oleh {username} pada {time}",
+  },
   "admin.logout": {
     en: "Log out",
     zh: "退出登录",

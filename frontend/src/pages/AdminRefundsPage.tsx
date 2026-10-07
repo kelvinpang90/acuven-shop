@@ -7,22 +7,42 @@ import type { AdminRefundList, AdminRefundRow, RefundsQuery, RefundsRead, Refund
 import AdminFrame, { AdminAlert } from "../components/AdminFrame";
 import type { CopyKey, Language } from "../i18n/copy";
 import { useCopy, useLanguage } from "../i18n/language";
-import { ADMIN_LOGIN_PATH, ADMIN_REFUNDS_PATH, Link, useRouter } from "../router";
+import { ADMIN_LOGIN_PATH, ADMIN_REFUNDS_PATH, adminRefundPath, adminRefundsOrderPath, Link, useRouter } from "../router";
 import type { RoutePath } from "../router";
+import AdminRefundDetailContent, { REFUND_STATUS_LABEL, RefundStatusTag } from "./AdminRefundDetail";
 import { formatDateTime, usePrice } from "./TrackOrderPage";
 
-// 后台退款申请列表 A03（docs/UX.md 0.10 A03 与「状态与补充（0.9）」，视觉稿 A03-desktop 的列表部分、A03-phone-list、
-// A03-desktop-order 与 A03-phone-list-order）：用后台框架渲染，当前导航项为退款。
+// 后台退款审核 A03（docs/UX.md 0.10 A03 与「状态与补充（0.9）」，视觉稿 A03-desktop、A03-phone-list、A03-phone-detail、
+// A03-desktop-order、A03-phone-list-order、A03-desktop-reviewed 与 A03-phone-detail-rejected）：用后台框架渲染，当前导航项为退款。
 // /admin/refunds 列出全部申请；/admin/refunds/order/:orderId 只列该订单的申请（段值为订单的内部 ID），
 // 状态筛选旁显示筛选标签「pay.order_no 订单号」（订单号取自返回的第一行）与链接到 /admin/refunds 的 list.filter_clear。
-// 标题之下为状态筛选，其下为列表：桌面为表格，手机为卡片，两套都渲染，由 site.css 按宽度显隐；行与卡片不可点（详情与审核由 SHOP-TASK-057 接上）。
-// 调用 POST /api/admin/refunds/query（lang 为当前界面语言）；状态与页码只在 React 状态里，订单内部 ID 只在路径与请求体里，
-// 订单号只在页面内存里，都不进查询参数或浏览器存储。改变筛选回到第 1 页；翻页与没有结果时的显示沿用 A02 列表（SHOP-TASK-048）。
+// /admin/refunds/:id 在桌面列表右侧显示该申请的详情与审核（AdminRefundDetail.tsx），手机只显示详情。
+// 标题之下为状态筛选，其下为列表：桌面为表格，手机为卡片，两套都渲染，由 site.css 按宽度显隐。
+// 表格行的订单号与整张手机卡片链接到 /admin/refunds/<内部 ID>；当前申请的表格行标 aria-selected。
+// 调用 POST /api/admin/refunds/query（lang 为当前界面语言）；状态、订单内部 ID 与页码只在本模块的内存变量里（不进查询参数或浏览器存储），
+// 在列表与详情之间切换时保留，详情的返回链接回到当时的列表网址；订单号只在页面内存里。
+// 改变筛选回到第 1 页；翻页与没有结果时的显示沿用 A02 列表（SHOP-TASK-048）。
 // 401 换成登录页 A01；离开页面、改变筛选、页码或界面语言时中止旧请求，旧请求的结果不再更新页面。
 
 // 打开时的查询：全部状态的第 1 页；order_id 由路径决定。
 export function firstQuery(orderId: number | null): RefundsQuery {
   return { status: null, order_id: orderId, page: 1 };
+}
+
+// 上次的查询（状态、订单内部 ID 与页码）：只在本模块的内存里，列表与详情各自挂载页面时取用；重新载入页面后回到全部申请的第 1 页。
+let lastQuery: RefundsQuery = firstQuery(null);
+
+export function rememberedListQuery(): RefundsQuery {
+  return lastQuery;
+}
+
+export function rememberListQuery(query: RefundsQuery): void {
+  lastQuery = query;
+}
+
+// 列表网址：按订单筛选时为 /admin/refunds/order/<订单内部 ID>，否则为 /admin/refunds。
+export function listPathOf(query: RefundsQuery): RoutePath {
+  return query.order_id === null ? ADMIN_REFUNDS_PATH : adminRefundsOrderPath(query.order_id);
 }
 
 // 改变筛选：订单筛选不变，回到第 1 页。
@@ -105,32 +125,25 @@ export async function loadRefunds(query: RefundsQuery, language: Language, signa
   }
 }
 
-// 退款申请状态与它的名称、标签样式（视觉稿 A03-desktop：审核中为演示标签、已批准为成功标签、已拒绝为描边标签）。
-export const REFUND_STATUS_LABEL: Readonly<Record<RefundStatus, CopyKey>> = {
-  requested: "order.refund_requested",
-  approved: "order.refund_approved",
-  rejected: "order.refund_rejected",
-};
-
-const REFUND_TAG_CLASS: Readonly<Record<RefundStatus, string>> = {
-  requested: "acs-tag acs-tag--demo",
-  approved: "acs-tag acs-tag--success",
-  rejected: "acs-tag acs-tag--outline",
-};
-
-function StatusTag({ status }: { status: RefundStatus }) {
-  const t = useCopy();
-  return <span className={REFUND_TAG_CLASS[status]}>{t(REFUND_STATUS_LABEL[status])}</span>;
+function ChevronIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  );
 }
 
-// 桌面表格的一行：申请时间、订单号、商品名称（逐行）、件数（与名称逐行对应）、申请金额与状态；行不可点。
-function RefundRow({ refund }: { refund: AdminRefundRow }) {
+// 桌面表格的一行：申请时间、订单号（链接到该申请的详情）、商品名称（逐行）、件数（与名称逐行对应）、申请金额与状态；
+// 当前申请标 aria-selected。
+function RefundRow({ refund, selected }: { refund: AdminRefundRow; selected: boolean }) {
   const price = usePrice();
   const { language } = useLanguage();
   return (
-    <tr>
+    <tr aria-selected={selected ? "true" : undefined}>
       <td>{formatDateTime(refund.created_at, language)}</td>
-      <td>{refund.order_number}</td>
+      <td>
+        <Link to={adminRefundPath(refund.id)}>{refund.order_number}</Link>
+      </td>
       <td>
         <span className="site-admin-refunds__lines">
           {refund.lines.map((line, index) => (
@@ -147,32 +160,38 @@ function RefundRow({ refund }: { refund: AdminRefundRow }) {
       </td>
       <td className="site-admin-refunds__num">{price(refund.amount_sen)}</td>
       <td>
-        <StatusTag status={refund.status} />
+        <RefundStatusTag status={refund.status} />
       </td>
     </tr>
   );
 }
 
-// 手机卡片（A03-phone-list）：申请时间、订单号、名称 × 件数 · 金额、状态标签；分隔符 · 以 aria-hidden 标出。卡片不可点。
+// 手机卡片（A03-phone-list）：整张为一个链接，指向该申请的详情；申请时间、订单号、名称 × 件数 · 金额、状态标签，右侧为 › 图形；
+// 分隔符 · 以 aria-hidden 标出。卡片里不嵌套其他链接或按钮。
 function RefundCard({ refund }: { refund: AdminRefundRow }) {
   const price = usePrice();
   const { language } = useLanguage();
   return (
-    <li className="acs-admin__panel site-admin-refunds__card">
-      <span className="acs-admin__muted">{formatDateTime(refund.created_at, language)}</span>
-      <span>{refund.order_number}</span>
-      <span>
-        {refund.lines.map((line, index) => (
-          <span key={index}>
-            <span>{`${line.name} × ${String(line.quantity)}`}</span>
-            <span aria-hidden="true"> · </span>
+    <li>
+      <Link className="acs-admin__panel site-admin-refunds__card" to={adminRefundPath(refund.id)}>
+        <span className="site-admin-refunds__card-body">
+          <span className="acs-admin__muted">{formatDateTime(refund.created_at, language)}</span>
+          <span>{refund.order_number}</span>
+          <span>
+            {refund.lines.map((line, index) => (
+              <span key={index}>
+                <span>{`${line.name} × ${String(line.quantity)}`}</span>
+                <span aria-hidden="true"> · </span>
+              </span>
+            ))}
+            <span>{price(refund.amount_sen)}</span>
           </span>
-        ))}
-        <span>{price(refund.amount_sen)}</span>
-      </span>
-      <span>
-        <StatusTag status={refund.status} />
-      </span>
+          <span>
+            <RefundStatusTag status={refund.status} />
+          </span>
+        </span>
+        <ChevronIcon />
+      </Link>
     </li>
   );
 }
@@ -189,15 +208,31 @@ export function scopeOf(orderId: string | null): { scope: RefundsScope; orderId:
   return parsed === null ? { scope: "invalid", orderId: null } : { scope: "order", orderId: parsed };
 }
 
+// 挂载时的范围与查询。详情（refundId 不为 null）沿用记下的查询，范围随它的订单筛选；
+// 列表路径按段值决定范围，记下的查询属于同一范围（同一订单筛选或都不按订单）时取回，否则从该路径的第 1 页、全部状态开始。
+export function openingOf(orderId: string | null, refundId: string | null = null): { scope: RefundsScope; query: RefundsQuery } {
+  const remembered = rememberedListQuery();
+  if (refundId !== null) {
+    return { scope: remembered.order_id === null ? "all" : "order", query: remembered };
+  }
+  const { scope, orderId: filterId } = scopeOf(orderId);
+  if (scope !== "invalid" && remembered.order_id === filterId) {
+    return { scope, query: remembered };
+  }
+  return { scope, query: firstQuery(filterId) };
+}
+
 export interface AdminRefundsViewProps {
   scope: RefundsScope;
   status: RefundStatus | null;
   state: ListState;
+  // 当前打开详情的申请（路径里的内部 ID）；只在列表时为 null 或不给。
+  selectedId?: string | null;
   onStatus: (status: RefundStatus | null) => void;
   onPage: (page: number) => void;
 }
 
-export function AdminRefundsView({ scope, status, state, onStatus, onPage }: AdminRefundsViewProps) {
+export function AdminRefundsView({ scope, status, state, selectedId = null, onStatus, onPage }: AdminRefundsViewProps) {
   const t = useCopy();
   const { list } = state;
   const pager = list === null ? null : pagerOf(list);
@@ -255,7 +290,7 @@ export function AdminRefundsView({ scope, status, state, onStatus, onPage }: Adm
                 </thead>
                 <tbody>
                   {list.refunds.map((refund) => (
-                    <RefundRow key={refund.id} refund={refund} />
+                    <RefundRow key={refund.id} refund={refund} selected={String(refund.id) === selectedId} />
                   ))}
                 </tbody>
               </table>
@@ -304,22 +339,26 @@ export function AdminRefundsView({ scope, status, state, onStatus, onPage }: Adm
   );
 }
 
-// 框架的内容区：框架确认已登录后才挂载。orderId 为路径里的段值（不按订单筛选时为 null）：
-// 合法时挂载即按该订单查询第 1 页，不合法时不发请求、只显示 common.error_retry 与 list.filter_clear。
-export function AdminRefundsContent({ orderId = null }: { orderId?: string | null }) {
+// 框架的内容区：框架确认已登录后才挂载。orderId 为按订单筛选的路径段值（不按订单筛选时为 null）：
+// 合法时挂载即按该订单查询，不合法时不发请求、只显示 common.error_retry 与 list.filter_clear。
+// refundId 为退款详情的路径段值：不为 null 时按记下的查询显示列表，并在列表右侧显示该申请的详情（手机只显示详情）。
+export function AdminRefundsContent({ orderId = null, refundId = null }: { orderId?: string | null; refundId?: string | null }) {
   const { replace } = useRouter();
   const { language } = useLanguage();
-  const { scope, orderId: filterId } = scopeOf(orderId);
-  const [query, setQuery] = useState<RefundsQuery>(() => firstQuery(filterId));
+  const [opening] = useState(() => openingOf(orderId, refundId));
+  const { scope } = opening;
+  const [query, setQuery] = useState<RefundsQuery>(opening.query);
   const [state, setState] = useState<ListState>(scope === "invalid" ? INVALID_ORDER_LIST : INITIAL_LIST);
   // 列表区所显示结果的界面语言：切换语言后、新语言的结果到来之前，列表区同样标 aria-busy。
   const [shownLanguage, setShownLanguage] = useState<Language>(language);
 
   // 每次查询或界面语言变化都发出新请求，并中止上一次的（离开页面时同样中止）。路径 ID 不合法时不发请求。
+  // 发出的查询记在模块内存里，供列表与详情之间切换时取回。
   useEffect(() => {
     if (scope === "invalid") {
       return undefined;
     }
+    rememberListQuery(query);
     const controller = new AbortController();
     const show = (next: ListState) => {
       setState(next);
@@ -336,11 +375,12 @@ export function AdminRefundsContent({ orderId = null }: { orderId?: string | nul
     setState((current) => ({ ...current, busy: true, error: null }));
   };
 
-  return (
+  const list = (
     <AdminRefundsView
       scope={scope}
       status={query.status}
       state={scope !== "invalid" && shownLanguage !== language ? { ...state, busy: true } : state}
+      selectedId={refundId}
       onStatus={(status) => {
         run(filterBy(status, query));
       }}
@@ -349,25 +389,48 @@ export function AdminRefundsContent({ orderId = null }: { orderId?: string | nul
       }}
     />
   );
+  if (refundId === null) {
+    return list;
+  }
+  return (
+    <div className="site-admin-refunds-split">
+      {list}
+      <AdminRefundDetailContent
+        key={refundId}
+        id={refundId}
+        backTo={listPathOf(query)}
+        onReviewed={() => {
+          // 审核 200 之后按同一查询重新查询列表（新的对象让 effect 再执行一次）。
+          setQuery((current) => ({ ...current }));
+          setState((current) => ({ ...current, busy: true, error: null }));
+        }}
+      />
+    </div>
+  );
 }
 
-// 内容区按路径段值换一份：从 /admin/refunds/order/42 经 list.filter_clear 回到 /admin/refunds，或换成另一张订单时，
-// 内容区重新挂载，查询、列表区状态都从头开始（不沿用旧的 order_id、状态与页码，并按新的路径重新查询）。
-export function contentKey(orderId: string | null): string {
+// 内容区按路径段值换一份：从 /admin/refunds/order/42 经 list.filter_clear 回到 /admin/refunds、换成另一张订单，
+// 或在列表与详情之间、详情与详情之间切换时，内容区重新挂载，查询按 openingOf 重新决定（列表区状态从头开始并重新查询）。
+export function contentKey(orderId: string | null, refundId: string | null = null): string {
+  if (refundId !== null) {
+    return `refund:${refundId}`;
+  }
   return orderId === null ? "all" : `order:${orderId}`;
 }
 
-export function AdminRefundsRoute({ orderId }: { orderId: string | null }) {
-  return <AdminRefundsContent key={contentKey(orderId)} orderId={orderId} />;
+export function AdminRefundsRoute({ orderId, refundId = null }: { orderId: string | null; refundId?: string | null }) {
+  return <AdminRefundsContent key={contentKey(orderId, refundId)} orderId={orderId} refundId={refundId} />;
 }
 
-// /admin/refunds 与 /admin/refunds/order/:orderId 都是本页；后者的段值即订单的内部 ID（是否合法由内容区判断）。
+// /admin/refunds、/admin/refunds/order/:orderId 与 /admin/refunds/:id 都是本页；按订单筛选的段值即订单的内部 ID，
+// 退款详情的段值即申请的内部 ID（是否合法分别由内容区与详情判断；/admin/refunds/order 按段值 order 的详情处理）。
 export default function AdminRefundsPage() {
   const { pattern, params } = useRouter();
   const orderId = pattern === "/admin/refunds/order/:orderId" ? (params.orderId ?? null) : null;
+  const refundId = pattern === "/admin/refunds/:id" ? (params.id ?? null) : null;
   return (
     <AdminFrame current="refunds">
-      <AdminRefundsRoute orderId={orderId} />
+      <AdminRefundsRoute orderId={orderId} refundId={refundId} />
     </AdminFrame>
   );
 }

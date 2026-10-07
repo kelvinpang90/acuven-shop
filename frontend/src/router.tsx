@@ -15,7 +15,9 @@ import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 // 后台订单 /admin/orders 由后台框架凭服务端会话打开，CSRF 令牌同样只在页面内存与退出请求头里；
 // 订单详情 /admin/orders/:id 的段值是订单的内部 ID，订单号、收货资料与推进用的 CSRF 令牌只在页面内存与请求里，
 // 列表的搜索、筛选与页码只在页面模块的内存里；退款申请列表 /admin/refunds 的状态筛选与页码只在页面内存里，
-// 按订单筛选 /admin/refunds/order/:orderId 的段值是订单的内部 ID，订单号只在页面内存里）：
+// 按订单筛选 /admin/refunds/order/:orderId 的段值是订单的内部 ID，订单号只在页面内存里；
+// 退款详情 /admin/refunds/:id 的段值是申请的内部 ID，订单号、理由、审核人邮箱、令牌与幂等键只在页面内存与请求里，
+// 列表的筛选与页码只在页面模块的内存里）：
 // App.tsx 不给它们套前台框架，前台页头、菜单与页脚也没有指向它们的入口（UX A01「前台不放入口链接」）。
 export const ROUTE_PATHS = [
   "/",
@@ -34,6 +36,7 @@ export const ROUTE_PATHS = [
   "/admin/orders/:id",
   "/admin/refunds",
   "/admin/refunds/order/:orderId",
+  "/admin/refunds/:id",
 ] as const;
 export type RoutePattern = (typeof ROUTE_PATHS)[number];
 
@@ -113,6 +116,16 @@ export function productPath(slug: string): RoutePath {
 // 后台订单详情的实际路径：段值为订单的内部 ID（订单号不进网址）。
 export function adminOrderPath(id: number): RoutePath {
   return `/admin/orders/${String(id)}`;
+}
+
+// 后台退款详情的实际路径：段值为申请的内部 ID。
+export function adminRefundPath(id: number): RoutePath {
+  return `/admin/refunds/${String(id)}`;
+}
+
+// 只含某张订单申请的退款列表的实际路径：段值为订单的内部 ID（订单号不进网址）。
+export function adminRefundsOrderPath(orderId: number): RoutePath {
+  return `/admin/refunds/order/${String(orderId)}`;
 }
 
 // 未知路径落到首页。
