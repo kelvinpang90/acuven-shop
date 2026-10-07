@@ -404,8 +404,13 @@ export default function AdminOrderDetail({ orderId }: { orderId: string }) {
   useEffect(() => {
     const controller = new AbortController();
     lifetime.current = controller;
-    void openDetail(orderId, openLanguage.current, controller.signal, { show: setState, replace });
+    // 读取推迟到本次提交之后再发：开发模式 StrictMode 挂载、清理、再挂载是同步连续进行的，
+    // 被丢弃的第一次 effect 在清理时取消计时，GET 不会发出，服务端只写一次审计。
+    const timer = setTimeout(() => {
+      void openDetail(orderId, openLanguage.current, controller.signal, { show: setState, replace });
+    }, 0);
     return () => {
+      clearTimeout(timer);
       controller.abort();
     };
   }, [orderId, replace]);

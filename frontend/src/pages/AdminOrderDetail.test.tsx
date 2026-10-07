@@ -685,7 +685,11 @@ describe("dictionary", () => {
       for (const html of [render({ state }, language), render({ state, states: null }, language)]) {
         expect(html).not.toMatch(/\stitle=/i);
         for (const value of visibleTexts(html)) {
-          expect(allowed.has(value), value).toBe(true);
+          // 收货资料各段之间的分隔「, 」与后一段在静态标记里连成一个文本节点（如「, 47000」），拆开后分别核对。
+          const parts = value.startsWith(", ") ? [",", value.slice(2)] : [value];
+          for (const part of parts) {
+            expect(allowed.has(part), value).toBe(true);
+          }
         }
       }
     }
