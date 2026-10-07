@@ -25,6 +25,7 @@ from app.models.refund import RefundLine, RefundLineUnit, RefundRequest
 from app.models.shipping import DemoFxRate, ShippingRate
 from app.models.site import SiteSetting
 from app.models.stock_reset import StockReset, StockResetLine
+from app.models.store_design import StoreDesignSetting, StoreFeaturedProduct, StoreHomeBlock
 
 __all__ = [
     "AdminAccount",
@@ -56,6 +57,9 @@ __all__ = [
     "SmsDailyUsage",
     "StockReset",
     "StockResetLine",
+    "StoreDesignSetting",
+    "StoreFeaturedProduct",
+    "StoreHomeBlock",
     "VariantOptionValue",
     "VerificationAttempt",
 ]

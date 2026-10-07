@@ -1099,3 +1099,27 @@
   - 按来源的计数依赖边缘反向代理设置 X-Real-IP（见 SHOP-TASK-026）；代理不设置时所有访客共用一个来源计数，计价 300 次、下单 60 次会被全站共用，上线前须由运营者确认。
   - 429 不写日志。
 - 验证到什么程度：人工逐条对照验收标准自查。`tests/test_public_rate_limits.py` 用 TestClient 与 SQLite 内存库（会话依赖换成每个请求一个会话），新增的可选取客户端依赖换成测试文件内自写的内存替身 Redis（事务管道的 INCR 与 EXPIRE NX，带可拨动的时钟，可注入 `redis.exceptions` 的 `ConnectionError` 与 `TimeoutError`；不连真 Redis、未加依赖），访客来源用 X-Real-IP 区分，每条测试的文档字符串写明它守住 Kelvin 2026-10-06 决定的哪一项。覆盖：计价第 300 次放行、第 301 次 429（响应体、不回显 SKU）、另一来源不受影响、窗口差一秒仍 429 而满 10 分钟后恢复；计价 429 与 413 响应头相同且无 `no-store`；计价 413 不计数且已超限时仍是 413；计价 JSON 不完整、字段不合法与非 JSON 请求体计数一次后返回与未配置 Redis 时相同的 422，超限后同样的请求是 429；下单首单 201 加 59 次幂等重放后第 61 次（新键）429，不创建订单、授权或订单访问会话、不扣库存、不设 cookie、不回显姓名、地址、电话与幂等键，超限后同键重放也是 429；下单另一来源不受影响；下单 429 与 415 响应头相同且无 `no-store`；下单 413、两种 415 不计数且已超限时仍是 413 / 415；下单 JSON 不完整、字段不合法、幂等键不合法与缺失计数一次后返回与未配置 Redis 时相同的 422 且不创建订单，超限后是 429；替身抛连接错误或超时时两个接口照常处理（计价 200、下单 201），各记一条 WARNING，只含桶名，不含来源地址、连接串、异常消息与请求内容；可选依赖返回空时超过两个阈值也照常处理、不计数、不记日志；不覆盖任何依赖、连接串为空时照常处理且不记日志；连接串为空或格式不对时原来的依赖仍抛 `RateLimitUnavailable`、可选依赖返回空。已有测试未改：它们不覆盖取客户端依赖、连接串为空，即放行。这些测试由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest；未连真 Redis 验证计数与过期，未经真实反向代理验证来源。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-044 店铺装修设置的数据模型与默认值（不含标志图）
+
+- [x] 按 `docs/REQUIREMENTS.md`「店铺装修」、`docs/UX.md` 0.8 的 A08 与 P01 以及 `docs/HANDOFF.md` 0.34 记录的 Kelvin 2026-10-06 决定（存储首版不含标志图），建立店铺装修设置的三张表与迁移并写入默认值：`app/models/store_design.py`（`app/models/__init__.py` 导出 `StoreDesignSetting`、`StoreHomeBlock`、`StoreFeaturedProduct`）、迁移 `alembic/versions/20261006_0016_store_design.py`（revision `0016`，down_revision `0015`）；测试见 `tests/test_store_design_models.py`。主题与主色取值以 `docs/design/tokens/themes.json` 为准。未做读取、接口或页面，未改 `app/main.py`、其他模型、已有迁移、前端、`.platform/`、CI、部署配置或设计，未装依赖。设计闸门：不适用（店铺装修只改变前台外观，不涉及金额计算与个人资料，见 `docs/HANDOFF.md` 2026-09-30 关于 REQUIREMENTS 1.9 的记录）。拆分：数据层，读取与公开接口由 SHOP-TASK-045 交付。
+- 三张表（沿用 `app/db/base.py` 的基类、命名约定与 InnoDB、utf8mb4；时间是不带时区的 UTC；除主色外全部非空）：
+  - `store_design_settings`：`id`、`singleton_slot`（非空整数，全表唯一 `uq_store_design_settings_singleton_slot`）、`theme` String(20)、`accent` String(20) 可空（空即该主题的默认主色，即 themes.json 该主题 accentOptions 的第一项）、`updated_at`。全表只有一行。
+  - `store_home_blocks`：`id`、`block` String(20)（全表唯一 `uq_store_home_blocks_block`）、`position`（全表唯一 `uq_store_home_blocks_position`）、`is_visible`。四行齐全由迁移初始化、由之后的写入在同一事务里保持（模型 docstring 写明），库里不加行数约束。
+  - `store_featured_products`：`id`、`position`（全表唯一 `uq_store_featured_products_position`）、`product_id` → `products.id`（`fk_store_featured_products_product_id_products`，ON DELETE RESTRICT；唯一约束 `uq_store_featured_products_product_id` 同时充当外键索引）。位置 1 到 4 且唯一，故至多四行。
+- 检查约束（只用比较、LENGTH、IN 与 IS NULL，SQLite 与 MySQL 都能执行）：
+  - `ck_store_design_settings_singleton_slot_one`：`singleton_slot = 1`
+  - `ck_store_design_settings_theme_known`：`theme IN ('pandan', 'pasar', 'receipt', 'kopitiam', 'batik', 'malam', 'gula', 'galeri', 'songket', 'litar')`
+  - `ck_store_design_settings_accent_length`：`accent IS NULL OR (LENGTH(accent) >= 1 AND LENGTH(accent) <= 20)`
+  - `ck_store_home_blocks_block_known`：`block IN ('hero', 'how', 'categories', 'featured')`
+  - `ck_store_home_blocks_position_range`：`position >= 1 AND position <= 4`
+  - `ck_store_featured_products_position_range`：`position >= 1 AND position <= 4`
+- 常量（`app/models/store_design.py`）：`THEME_ACCENTS`（10 款主题按 themes.json 顺序，各自可选主色 id 按 accentOptions 顺序）、`THEMES`、`HOME_BLOCKS`、`FEATURED_MAX = 4`，默认值 `DEFAULT_THEME = "pandan"`、`DEFAULT_ACCENT = None`、`DEFAULT_HOME_BLOCKS`（hero、how、categories、featured 依次位置 1 到 4，全部显示）。
+- 迁移 0016：upgrade 建三张表，写入设置一行（槽 1、主题 pandan、主色为空、更新时间为执行迁移时的 UTC）与四个区块（按上面的顺序全部显示），不写精选商品；downgrade 按依赖倒序删三张表。约束名按命名约定逐个写出。`alembic check` 不比较检查约束与表选项，模型与迁移两边已人工核对一致，测试另在 SQLite 上比较两边建出的表。
+- 偏离与取舍，请审阅（未改需求与设计，未发现须停下的需求或设计问题）：
+  - 迁移 0016 从 `app.models.store_design` 导入主题 id、区块、长度上限、单例槽与默认值常量，与模型、之后的读取与写入共用同一份（验收要求「供迁移、之后的读取与写入共用」），不同于已有迁移不 import app 的做法（`alembic/env.py` 本就导入 `app.models`）。代价：以后改这些常量会连带改变 0016 重放时建出的约束与写入的默认值，因此改常量时须另写新迁移改库里的约束与数据。
+  - 主色是否属于所选主题、精选时商品须已上架由之后的写入方校验；之后下架的精选商品仍留在表里，前台按目录可见判定不显示（UX A08、P01，Kelvin 2026-10-06「复用目录的 published() 判定」由 SHOP-TASK-045 实现）。
+  - 区块与精选的位置全表唯一，逐行就地交换位置会在中途撞上唯一约束；写入方须在同一事务里另行处理（如先删后写），已写在模型 docstring 里。
+  - 被精选的商品不能物理删除（RESTRICT）；现有代码只有示例目录迁移 0003 的 downgrade 删商品，按迁移顺序那时 0016 已删表。
+- 留给之后的任务：标志图的上传、移除与存储（随图片的格式、大小与存放规则与商品图一起做，Kelvin 2026-10-06 决定）；设置的读取与公开接口（SHOP-TASK-045）；后台修改（含审计记录）与 A08 页面；前台按设置显示主题、主色、区块与精选商品。
+- 验证到什么程度：人工逐条对照验收标准自查，人工核对模型与迁移的列、约束名、约束表达式一致。`tests/test_store_design_models.py` 用 SQLite 内存库（每个连接打开外键检查并断言已打开）按模型建表，每条测试（参数化的是每个用例）写明它守住的需求原句或 Kelvin 2026-10-06 的决定，覆盖：合法的设置（含换主题与主色）、调过顺序且有隐藏的四个区块、满 4 件的精选商品写得进去且求值辅助函数不报任何约束不成立；只有主色可空、设置表没有标志图的列；第二行设置（槽 2 被检查约束拒绝，槽 1 被唯一约束拒绝）、未知主题与大小写不同的主题、主色为空串与长 21、未知区块、区块位置 0 与 5、精选位置 0 与 5 被对应检查约束拒绝；重复区块、重复区块位置、重复精选商品、重复精选位置被唯一约束拒绝；精选指向不存在的商品与删除被精选引用的商品被外键拒绝；常量表的主题与主色（含顺序）与 themes.json 一致、默认主题与 themes.json 的 `default` 相同；默认值常量；在空 SQLite 连接上执行迁移 0016 的 upgrade 后查回的设置与区块等于默认值常量、没有精选商品，迁移用的主题 id、区块与默认值就是模型常量本身（同一对象）；迁移建出的三张表与按模型建出的逐列、逐个检查约束、唯一约束与外键相同，downgrade 后三张表都不在。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest；迁移的 upgrade head、downgrade base、再 upgrade head 与 `alembic check` 也由该检查在真 MySQL 上执行。检查命令结果由 Worker 另行记录。
