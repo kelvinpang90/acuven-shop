@@ -1085,10 +1085,10 @@ export const COPY = {
     zh: "管理员登录",
     ms: "Log masuk pentadbir",
   },
-  "admin.username": {
-    en: "Username",
-    zh: "用户名",
-    ms: "Nama pengguna",
+  "admin.email": {
+    en: "Email",
+    zh: "邮箱",
+    ms: "E-mel",
   },
   "admin.login_failed": {
     en: "Username or password is incorrect.",
