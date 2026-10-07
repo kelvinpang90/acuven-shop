@@ -53,6 +53,7 @@ const categoryList: CategoryListItem[] = [
 
 const loading: Remote<never> = { status: "loading" };
 const failed: Remote<never> = { status: "error" };
+const notFound: Remote<never> = { status: "not_found" };
 
 interface RenderOptions {
   blocks?: readonly HomeBlockSetting[];
@@ -301,7 +302,7 @@ describe("featured products from the store design", () => {
   });
 
   // SHOP-TASK-054 验收「按 slug 的请求本身失败（网络中断或非 2xx）时与现在精选请求失败的处理相同（区块显示现有的错误提示），不再改取最新 4 件」。
-  it.each([failed, { status: "not_found" } as Remote<never>])("shows the retry message without the newest when the picked request is %j", (picked) => {
+  it.each([failed, notFound])("shows the retry message without the newest when the picked request is %j", (picked) => {
     const source = featuredSource(["a"], picked);
     expect(source).toEqual({ kind: "error" });
     expect(newestRequest("en", source)).toBeNull();
