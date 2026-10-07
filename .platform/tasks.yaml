@@ -2006,7 +2006,7 @@ tasks:
       按 docs/HANDOFF.md 0.37 记录的 Kelvin 2026-10-07 决定，把唯一管理员账号的登录名改为邮箱：账号表的登录名列加长并改长度约束（新迁移），
       建账号命令按邮箱格式校验并存规范化后的值，登录接口放宽登录名的长度上限。列名与接口字段名不变，不改登录、锁定、会话与审计的规则，不改前端，不改设计。
       设计闸门：docs/HANDOFF.md 0.37（Kelvin 2026-10-07 批准的管理员邮箱处理）。
-      拆分：不拆（数据库、命令与接口三处必须一起改才能用邮箱建号并登录，共 8 个允许路径，改动小）。
+      拆分：不拆（数据库、命令与接口三处必须一起改才能用邮箱建号并登录，共 9 个允许路径，改动小）。
     status: ready
     depends_on:
       - SHOP-TASK-036
@@ -2015,7 +2015,7 @@ tasks:
       - app/models/admin.py 的登录名上限 USERNAME_MAX_LENGTH 改为 254，列为 String(254)，检查约束 ck_admin_accounts_username_length 改为长度 3 到 254（下限不变）；新迁移 alembic/versions/20261007_0017_admin_email.py，revision 为 0017、down_revision 为 0016，upgrade 把列改为 VARCHAR(254) 非空并以同名重建检查约束，downgrade 先确认没有超过 32 个字符的登录名（有则抛错并说明，不截断）再改回；迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，alembic check 在它比较的范围内无差异，由 PR 的必需 CI 检查 backend 执行；不改已有迁移
       - app/admin.py 的 create 先去掉首尾空白并转小写，再按邮箱格式校验，通过后存规范化后的值；格式为本地部分@域名，只收 ASCII，本地部分 1 到 64 个字符，只含小写字母、数字与 . _ % + -，不以点开头或结尾、不含连续的点；域名至少两段，每段 1 到 63 个字符的小写字母、数字或连字符且不以连字符开头或结尾，最后一段为至少 2 个字母；总长 6 到 254；不合格时以原有的拒绝退出码退出，错误输出说明须为邮箱，不回显所给的值；只校验格式，不发邮件；reset-password 与其余行为不变；帮助文字改为说明登录名为邮箱
       - app/api/admin_auth.py 登录请求体的 username 上限由 64 改为 254 个字符（下限 1 不变），其余校验、检查顺序、锁定计数、错误码与响应不变；锁定计数仍按 SHOP-TASK-035 的 login_identifier 与 SHOP-TASK-026 的计数函数（键为摘要，不含邮箱原文）；不写日志，或日志不含邮箱
-      - 现有测试只许这样改，其余断言不动——tests/test_admin_cli.py 把测试用的登录名常量改为邮箱，把合法与不合法登录名的参数化测试改为邮箱规则的正反例（含大写与首尾空白被规范化后接受、非 ASCII、缺 @、连续的点、超长等被拒且不回显）；tests/test_admin_models.py 把「超过 32 个字符」的反例改为超过 254 个字符；tests/test_admin_auth_api.py 把 65 个字符的反例改为 255 个字符并加一条 254 个字符的邮箱可登录的正例
+      - 现有测试只许这样改，其余断言不动——tests/test_admin_cli.py 把测试用的登录名常量改为邮箱，把合法与不合法登录名的参数化测试改为邮箱规则的正反例（含大写与首尾空白被规范化后接受、非 ASCII、缺 @、连续的点、超长等被拒且不回显）；tests/test_admin_models.py 把「超过 32 个字符」的反例改为超过 254 个字符；tests/test_admin_auth_api.py 把 65 个字符的反例改为 255 个字符并加一条 254 个字符的邮箱可登录的正例；tests/test_admin_auth.py 只新增一条测试：大小写与首尾空白不同的同一邮箱经 login_identifier 后落到同一个限流键，且键里不含邮箱原文（守住 HANDOFF 0.37「锁定计数的 Redis 键不含邮箱原文」）；其他直接写入账号表的测试夹具（如 tests/test_admin_refunds.py 的审核人）不经建号命令、只受长度约束，不改
       - 每条新增或改动的测试写明它守住的是 Kelvin 的哪一项决定；用 SQLite 内存库与 TestClient，由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）；其他已有测试不改并照常通过
       - docs/TODO.md 新增 SHOP-TASK-049 记录段（列与约束、迁移、邮箱格式与规范化、接口上限、个人资料的处理、偏离、验证到什么程度，并写明登录页标签由 SHOP-TASK-050 改）；不改 planning-v1 块；复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不改前端代码；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：docs/HANDOFF.md 0.37），不合并、不直推
@@ -2027,6 +2027,7 @@ tasks:
       - tests/test_admin_cli.py
       - tests/test_admin_models.py
       - tests/test_admin_auth_api.py
+      - tests/test_admin_auth.py
       - docs/TODO.md
     allowed_commands:
       - lint.check
