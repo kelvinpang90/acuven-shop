@@ -62,7 +62,7 @@
 
 - `docs/REQUIREMENTS.md` 1.12 SHA-256：`f5a8aec56d51314d6ae86cb373952a324dc9acb682f29cc2815ae977c35a87d3`。
 - `docs/DESIGN.md` 1.11 SHA-256：`8ae963d8a9f7a281a24cebea034312dca3b20129c4d2fc78c9765a9b19dca640`。
-- `docs/UX.md` 0.7 SHA-256：`d674d0635bec88c5868abab6e60c2f6f51bd8b25db5c487a9185784c4ec1029b`；`docs/UX-COPY.md` 0.6 SHA-256：`fe11ee11588ef09b787404744c6658dbbd1d1e4c00f53ff47c4f3b8bced2df6e`。
+- `docs/UX.md` 0.10 SHA-256：`b1c06267d197ef727cf43313335ec4cbf60895e435da074dd35a7e40c0063b58`；`docs/UX-COPY.md` 0.10 SHA-256：`8c768c88932812e466c917e859cacfcd1e683e6675a23d4bcda6f67c36f8abc2`（随加入本条的 PR 合并；之前各获批版本的提交号与 SHA-256 见上方「进度与当前文件」表与「已批准事项与版本留存」，UX 0.7 为 `d674d0635bec88c5868abab6e60c2f6f51bd8b25db5c487a9185784c4ec1029b`、UX-COPY 0.6 为 `fe11ee11588ef09b787404744c6658dbbd1d1e4c00f53ff47c4f3b8bced2df6e`）。
 - `docs/design/tokens/acuven-shop.css` SHA-256：`8fdf811b3fe44a939afed92c6f9eb19809d173d736c5349b53005dca8bc94c7e`（提交 `641534c`；认可时为 `36ccf80c…`，只改字体提供方式）。
 - 本交接单 0.37 的 SHA-256 在本地提交后回报；文件无法可靠记录自身的最终哈希，否则写入哈希又会改变文件内容。
 
