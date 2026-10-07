@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from app.api.admin_auth import router as admin_auth_router
 from app.api.admin_orders import router as admin_orders_router
 from app.api.admin_refunds import router as admin_refunds_router
+from app.api.admin_store_design import router as admin_store_design_router
 from app.api.catalog import router as catalog_router
 from app.api.checkout import router as checkout_router
 from app.api.health import router as health_router
@@ -38,6 +39,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(admin_auth_router)
     app.include_router(admin_orders_router)
     app.include_router(admin_refunds_router)
+    app.include_router(admin_store_design_router)
     return app
 
 
