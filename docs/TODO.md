@@ -1256,7 +1256,7 @@
   - `GET /api/admin/stock-resets/{reset_id}`：返回上述各字段与 `lines`，每项 `sku`、`initial_stock`、`held_quantity`、`available_stock`（对应 `admin.stock_reset_breakdown` 的三个数）；不返回规格 ID，规格已删除（`variant_id` 为空）的行凭 SKU 快照照常返回。重置不存在 404 `not_found`。
 - 排序与分页：列表按营业日期从新到旧（营业日期全表唯一，不需要第二排序键）；明细按 SKU 升序。`page` 为 1 到 10000 的十进制整数（不带符号与前导零），默认 1；不合法时 422，`detail` 为固定的一条错误 `{"type":"page_invalid","loc":["query","page"],"msg":"Page should be an integer from 1 to 10000"}`，不含所给的值（写法同 `app/api/pay.py` 的 `_language`）。超出的页 `resets` 为空、`total` 照常。路径 ID 只接受不带符号与前导零、不超过 2147483647 的十进制整数，否则 422 `{"type":"reset_id_invalid","loc":["path","reset_id"],"msg":"Stock reset ID should be a positive integer"}`。
 - 偏离与取舍，请审阅（未改需求与设计）：
-  - 待确认的设计问题（未停下，按任务合同实现）：A07 线框里失败那一行下面也画了「▸（展开后）<sku> [admin.stock_reset_breakdown]」，但按 SHOP-TASK-032 失败时整笔回滚，失败记录的 `sku_count` 为 0、没有明细，所以失败那天的明细 `lines` 总是空数组，列表里的 SKU 数显示 0。A07 页面需要决定失败行是否可展开、空明细怎么显示；如果希望失败时也显示各 SKU，需要改 SHOP-TASK-032 的失败记录与 A07 说明。
+  - 失败记录的明细（对照 A07 后判断不是设计问题，接口不需要停下）：A07 线框的「▸（展开后）<sku> [admin.stock_reset_breakdown]」在桌面与手机稿里都画在整张列表之后，表示「每行可展开看各 SKU」的通用写法，没有规定失败那天必须有 SKU 明细；按 SHOP-TASK-032 失败时整笔回滚，失败记录本来就没有明细（`sku_count` 为 0）。接口照实返回：失败那天的 `lines` 为空数组，没有新造或推算数据，也不与 A07 的任何一句冲突。失败行展开后空明细怎么显示属于页面细节，留给 A07 页面的任务。
   - `page` 不合法时的错误类型 `page_invalid` 与消息由本任务确定，合同只规定了写法。
   - 明细的 SKU 升序交给数据库排序：MySQL 按列的排序规则（默认不区分大小写），SQLite 按字节。SKU 只有大小写不同时两边顺序可能不同；测试只用大写 SKU。
 - 留给之后的任务：A07 页面（后台库存重置结果页，调用本任务的两个接口，包括 `admin.stock_reset_failed` 那一行和展开明细的显示），以及在 `ADMIN_NAV` 里加上它的导航项；运营告警邮件接入之前，`admin.stock_reset_failed`「已告警运营者」仍按 `docs/HANDOFF.md` 2026-10-01 的决定处理。
