@@ -35,6 +35,8 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   "/privacy": PrivacyPage,
   "/admin/login": AdminLoginPage,
   "/admin/orders": AdminOrdersPage,
+  // 订单详情与列表是同一页（桌面列表在左、详情在右，手机只显示详情）。
+  "/admin/orders/:id": AdminOrdersPage,
 };
 
 // 后台页（以 /admin 开头的路由）不套前台的站点框架，直接渲染页面；其余页面照旧放在 SiteFrame 里。

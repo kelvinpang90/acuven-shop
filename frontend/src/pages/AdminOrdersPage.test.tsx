@@ -19,12 +19,16 @@ import {
   listStep,
   loadOrders,
   pagerOf,
+  rememberedListQuery,
+  rememberListQuery,
   searchFor,
 } from "./AdminOrdersPage";
 import type { AdminOrdersViewProps, ListState } from "./AdminOrdersPage";
 import { formatDate } from "./TrackOrderPage";
 
+// 上次的查询存在页面模块的内存变量里（SHOP-TASK-055）：每条测试之后放回第 1 页，测试之间互不影响。
 afterEach(() => {
+  rememberListQuery(FIRST_QUERY);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -286,7 +290,9 @@ describe("desktop table", () => {
 
   // 验收第 4 条「日期用 formatDate 按界面语言显示，合计用 common.price_myr 与 formatSen（RM 加金额）；状态显示对应的 order.status_*；
   // 待审数大于 0 时显示 admin.refunds_pending，为 0 时桌面表格显示 —」与 UX「状态与补充（0.9）」「为 0 时显示 —」：
-  // 每行依次为订单号、日期、状态名、合计与待审数；行与单元格里没有链接或按钮（行不可点）。
+  // 每行依次为订单号、日期、状态名、合计与待审数。
+  // SHOP-TASK-055 改动：原来断言「行与单元格里没有链接或按钮（行不可点）」，本任务按验收第 2 条「桌面表格行的订单号链接到 /admin/orders/<内部 ID>」
+  // 加上了订单号链接，改为只有订单号单元格里有一个链接、其余单元格没有链接，表格里没有按钮（待审退款数仍为文字）。
   it.each(LANGUAGES)("shows each order in a row in %s", (language) => {
     const table = element(render({}, language), "div", "site-admin-orders__table");
     const rows = all(all(table, "tbody")[0] ?? "", "tr");
@@ -302,8 +308,41 @@ describe("desktop table", () => {
       [CANCELLED.order_number, formatDate(CANCELLED.created_at, language), COPY["order.status_cancelled"][language], price(5900, language), "—"],
     ]);
     expect(price(7640, language)).toBe("RM 76.40");
-    expect(table).not.toMatch(/<(a|button)\b/);
+    for (const row of rows) {
+      const cells = all(row, "td");
+      expect(tags(cells[0] ?? "", "a")).toHaveLength(1);
+      expect(cells.slice(1).join("")).not.toContain("<a");
+    }
+    expect(table).not.toContain("<button");
     expect(table).not.toContain("tabindex");
+  });
+
+  // SHOP-TASK-055 验收第 2 条「桌面表格行的订单号链接到 /admin/orders/<内部 ID>」与 UX「状态与补充（0.9）」「订单详情有自己的网址，
+  // 路径带订单的内部 ID，订单号不进网址」（Kelvin 2026-10-06）：每行订单号是指向 /admin/orders/<内部 ID> 的站内链接，网址里没有订单号。
+  it("links each order number to its detail by internal ID", () => {
+    const table = element(render(), "div", "site-admin-orders__table");
+    const links = all(table, "a");
+    expect(links.map((link) => attributes(tags(link, "a")[0] ?? "").get("href"))).toEqual(ROWS.map((row) => `/admin/orders/${String(row.id)}`));
+    expect(links.map((link) => textNodes(link).join(""))).toEqual(ROWS.map((row) => row.order_number));
+    for (const row of ROWS) {
+      expect(table).not.toContain(`href="/admin/orders/${row.order_number}"`);
+    }
+  });
+
+  // SHOP-TASK-055 验收第 2 条「桌面在列表右侧显示详情、当前订单的表格行标 aria-selected」（视觉稿 A02-desktop 的 tr aria-selected="true"）：
+  // 只有当前订单那一行标 aria-selected="true"，其余行不带这个属性；只看列表（未选订单）时没有行标出。
+  it("marks the row of the open order as selected", () => {
+    const selectedRows = (selectedId: string | null) =>
+      tags(element(render({ selectedId }), "div", "site-admin-orders__table"), "tr")
+        .filter((tag) => attributes(tag).has("aria-selected"))
+        .map((tag) => attributes(tag).get("aria-selected"));
+    expect(selectedRows("41")).toEqual(["true"]);
+    const table = element(render({ selectedId: "41" }), "div", "site-admin-orders__table");
+    const selected = all(all(table, "tbody")[0] ?? "", "tr").find((row) => attributes(tags(row, "tr")[0] ?? "").get("aria-selected") === "true") ?? "";
+    expect(textNodes(selected)[0]).toBe(COMPLETED.order_number);
+    expect(selectedRows(null)).toEqual([]);
+    expect(selectedRows("999")).toEqual([]);
+    expect(tags(render(), "tr").some((tag) => attributes(tag).has("aria-selected"))).toBe(false);
   });
 
   // 视觉稿 A02-desktop-list：状态为标签（已取消为描边标签，其余为中性标签），— 为次要文字，合计列靠右。
@@ -325,7 +364,9 @@ describe("desktop table", () => {
 describe("phone cards", () => {
   // 验收第 4 条「手机为卡片列表（订单号与状态、日期、合计与待审数）…为 0 时手机卡片不显示（照 A02-phone-list）」与
   // UX「状态与补充（0.9）」「手机卡片…待审数只作文字，为 0 时不显示」：每张卡片第一行为订单号与状态名，第二行为日期 · 合计，
-  // 待审数大于 0 时再加 · admin.refunds_pending；没有 —；卡片不是链接（行不可点，订单详情留给之后的任务）。
+  // 待审数大于 0 时再加 · admin.refunds_pending；没有 —。
+  // SHOP-TASK-055 改动：原来断言卡片不是链接、列表项本身是面板；本任务按验收第 2 条「手机卡片整张为一个链接指向同一网址
+  // （照 A02-phone-list，卡片里不嵌套其他链接）」改为每个列表项里恰好一个链接（面板样式在链接上），没有按钮，卡片的文字都在链接里。
   it.each(LANGUAGES)("shows each order as a card in %s", (language) => {
     const cards = element(render({}, language), "ul", "site-admin-orders__cards");
     const items = all(cards, "li");
@@ -343,9 +384,14 @@ describe("phone cards", () => {
       [CANCELLED.order_number, COPY["order.status_cancelled"][language], formatDate(CANCELLED.created_at, language), "·", price(5900, language)],
     ]);
     expect(cards).not.toContain("—");
-    expect(cards).not.toMatch(/<(a|button)\b/);
-    for (const item of items) {
-      expect(classes(tags(item, "li")[0] ?? "")).toContain("acs-admin__panel");
+    expect(cards).not.toContain("<button");
+    for (const [index, item] of items.entries()) {
+      const links = all(item, "a");
+      expect(links).toHaveLength(1);
+      const link = links[0] ?? "";
+      expect(classes(tags(link, "a")[0] ?? "")).toEqual(["acs-admin__panel", "site-admin-orders__card"]);
+      expect(attributes(tags(link, "a")[0] ?? "").get("href")).toBe(`/admin/orders/${String(ROWS[index]?.id)}`);
+      expect(textNodes(link)).toEqual(textNodes(item));
       expect(element(item, "span", "site-admin-orders__card-head")).toContain("acs-tag");
       // 分隔符只是视觉，不读出。
       const separators = all(item, "span").filter((span) => textNodes(span).join("") === "·");
@@ -505,6 +551,81 @@ describe("loading the list", () => {
     controller.abort();
     await pending;
     expect(moves.events).toEqual([]);
+  });
+});
+
+describe("list and detail", () => {
+  function content(orderId: string | null, language: Language = "en"): string {
+    return renderToStaticMarkup(wrap(<AdminOrdersContent orderId={orderId} />, language));
+  }
+
+  // UX「状态与补充（0.9）」「桌面未选订单时列表占满内容区，不显示详情；选中订单后详情在列表右侧」与 SHOP-TASK-055 验收第 2 条
+  // 「桌面在列表右侧显示详情…手机只显示详情与 common.back…由 site.css 按宽度显隐」：只看列表时没有详情区；
+  // 打开一张订单时列表与详情并排放在 site-admin-orders-split 里，列表在前、详情在后（读取中标 aria-busy，顶部为返回链接）。
+  it("puts the detail to the right of the list only when an order is open", () => {
+    const listOnly = content(null);
+    expect(listOnly).not.toContain("site-admin-orders-split");
+    expect(listOnly).not.toContain("<section");
+    const split = content("42");
+    const wrapper = element(split, "div", "site-admin-orders-split");
+    expect(wrapper.indexOf(`class="site-admin-orders"`)).toBeGreaterThan(0);
+    expect(wrapper.indexOf("<section")).toBeGreaterThan(wrapper.indexOf(`class="site-admin-orders"`));
+    const section = tags(wrapper, "section")[0] ?? "";
+    expect(classes(section)).toEqual(["site-admin-order"]);
+    expect(attributes(section).get("aria-busy")).toBe("true");
+    expect(wrapper).toContain(`<a class="site-admin-order__back" href="${ORDERS_PATH}">`);
+  });
+
+  // SHOP-TASK-055 验收第 2 条「列表的查询条件（订单号、状态、页码）保存在页面模块的内存变量里，在列表与详情之间切换时保留」与
+  // docs/HANDOFF.md 记录的 Kelvin 2026-10-07 决定「列表的筛选与页码只在页面内存里，在列表与详情之间切换时保留」：
+  // 第一次打开为全部订单的第 1 页、搜索框为空；记下的查询在每次挂载（列表、详情、换一张订单、回到列表）时都取回，
+  // 搜索框填上已提交的订单号，状态下拉选中所记的状态。
+  it("keeps the query when switching between the list and a detail", () => {
+    expect(rememberedListQuery()).toEqual(FIRST_QUERY);
+    const fresh = tags(all(content(null), "form")[0] ?? "", "input")[0] ?? "";
+    expect(attributes(fresh).get("value")).toBe("");
+    const query: OrdersQuery = { order_number: "T4LW-6NQB", status: "demo_shipped", page: 3 };
+    rememberListQuery(query);
+    for (const orderId of [null, "42", "41", null]) {
+      const form = all(content(orderId), "form")[0] ?? "";
+      expect(attributes(tags(form, "input")[0] ?? "").get("value")).toBe("T4LW-6NQB");
+      const selected = all(form, "option").filter((option) => attributes(option).has("selected"));
+      expect(selected.map((option) => attributes(option).get("value"))).toEqual(["demo_shipped"]);
+      expect(rememberedListQuery()).toEqual(query);
+    }
+  });
+
+  // 同一条「不进网址或浏览器存储」与 DESIGN 1.11「权限与资料保护」：记下与取回查询不写 localStorage、sessionStorage、cookie 或历史记录，
+  // 页面上的链接只用内部 ID，不含所记的订单号。
+  it("keeps the remembered query out of the address and browser storage", () => {
+    const storage = () => ({ getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn() });
+    const local = storage();
+    const session = storage();
+    const history = { pushState: vi.fn(), replaceState: vi.fn() };
+    vi.stubGlobal("localStorage", local);
+    vi.stubGlobal("sessionStorage", session);
+    vi.stubGlobal("history", history);
+    rememberListQuery({ order_number: "T4LW-6NQB", status: null, page: 2 });
+    for (const html of [content(null), content("42")]) {
+      for (const href of [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1] ?? "")) {
+        expect(href).not.toContain("T4LW");
+        expect(href).not.toContain("?");
+      }
+    }
+    expect(rememberedListQuery().order_number).toBe("T4LW-6NQB");
+    for (const target of [local, session]) {
+      expect(target.setItem).not.toHaveBeenCalled();
+    }
+    expect(history.pushState).not.toHaveBeenCalled();
+    expect(history.replaceState).not.toHaveBeenCalled();
+  });
+
+  // SHOP-TASK-055 目的「待审退款数仍为文字」：选中订单时表格里的待审数仍不是链接。
+  it("keeps the pending refund count as text", () => {
+    const table = element(render({ selectedId: "41" }), "div", "site-admin-orders__table");
+    const cell = all(all(table, "tbody")[0] ?? "", "tr").map((row) => all(row, "td")[4] ?? "")[1] ?? "";
+    expect(textNodes(cell)).toEqual([translate("en", "admin.refunds_pending", { count: 2 })]);
+    expect(cell).not.toContain("<a");
   });
 });
 

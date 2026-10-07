@@ -6,34 +6,34 @@ import type { AdminOrderList, AdminOrderRow, OrderStatus, OrdersQuery, OrdersRea
 import AdminFrame, { AdminAlert } from "../components/AdminFrame";
 import type { CopyKey } from "../i18n/copy";
 import { useCopy, useLanguage } from "../i18n/language";
-import { ADMIN_LOGIN_PATH, useRouter } from "../router";
+import { ADMIN_LOGIN_PATH, adminOrderPath, Link, useRouter } from "../router";
 import type { RoutePath } from "../router";
+import AdminOrderDetailContent, { STATUS_LABEL, statusTagClass } from "./AdminOrderDetail";
 import { formatDate, usePrice } from "./TrackOrderPage";
 
-// 后台订单 A02 的订单列表（docs/UX.md 0.9 A02 与「状态与补充（0.9）」，视觉稿 A02-desktop 的列表部分、A02-desktop-list、
-// A02-desktop-empty、A02-phone-list 与 A02-phone-list-pages）：用后台框架渲染，当前导航项为订单。
+// 后台订单 A02（docs/UX.md 0.10 A02 与「状态与补充（0.9）」，视觉稿 A02-desktop、A02-desktop-list、A02-desktop-empty、
+// A02-desktop-frozen、A02-phone-list、A02-phone-list-pages 与 A02-phone-detail）：用后台框架渲染，当前导航项为订单。
+// /admin/orders 为订单列表，占满内容区；/admin/orders/:id 在桌面列表右侧显示该单详情（AdminOrderDetail.tsx），手机只显示详情。
 // 标题之下为订单号搜索框与状态筛选，其下为列表：桌面为表格，手机为卡片，两套都渲染，由 site.css 按宽度显隐。
-// 调用 POST /api/admin/orders/query；搜索、筛选与页码只在页面内存里，不进网址。提交搜索或改变筛选回到第 1 页。
-// 总数超过每页条数时列表下方为上一页与下一页两个按钮（‹ 与 ›），不显示页码。没有符合条件的订单时桌面只显示列头，不另写空状态文字。
-// 行不可点：订单详情与发货、待审退款数链接到 A03 留给之后的任务。
+// 表格行的订单号与整张手机卡片链接到 /admin/orders/<内部 ID>；当前订单的表格行标 aria-selected。
+// 调用 POST /api/admin/orders/query；搜索、筛选与页码只在本模块的内存变量里（不进网址或浏览器存储），在列表与详情之间切换时保留。
+// 提交搜索或改变筛选回到第 1 页。总数超过每页条数时列表下方为上一页与下一页两个按钮（‹ 与 ›），不显示页码。
+// 没有符合条件的订单时桌面只显示列头，不另写空状态文字。待审退款数仍为文字，链接到 A03 留给之后的任务。
 // 401 换成登录页 A01；离开页面或发出新查询时中止旧请求，旧请求的结果不再更新页面。
-
-// 状态名（order.status_*）与标签样式（取自视觉稿 A02：已取消为描边标签，其余为中性标签）。
-const STATUS_LABEL: Readonly<Record<OrderStatus, CopyKey>> = {
-  awaiting_demo_payment: "order.status_awaiting",
-  demo_paid: "order.status_paid",
-  demo_packed: "order.status_packed",
-  demo_shipped: "order.status_shipped",
-  demo_completed: "order.status_completed",
-  demo_cancelled: "order.status_cancelled",
-};
-
-function statusTagClass(status: OrderStatus): string {
-  return status === "demo_cancelled" ? "acs-tag acs-tag--outline" : "acs-tag acs-tag--neutral";
-}
 
 // 打开时的查询：全部订单的第 1 页。
 export const FIRST_QUERY: OrdersQuery = { order_number: null, status: null, page: 1 };
+
+// 上次的查询（订单号、状态与页码）：只在本模块的内存里，列表与详情各自挂载页面时取用；重新载入页面后回到第 1 页。
+let lastQuery: OrdersQuery = FIRST_QUERY;
+
+export function rememberedListQuery(): OrdersQuery {
+  return lastQuery;
+}
+
+export function rememberListQuery(query: OrdersQuery): void {
+  lastQuery = query;
+}
 
 // 提交搜索：输入原样作为订单号（规范化由服务端负责），去掉首尾空白后为空则不按订单号筛选；状态不变，回到第 1 页。
 export function searchFor(input: string, current: OrdersQuery): OrdersQuery {
@@ -104,14 +104,24 @@ export async function loadOrders(query: OrdersQuery, signal: AbortSignal, moves:
   }
 }
 
-// 桌面表格的一行：订单号、日期、状态、合计与待审数（为 0 时显示 —）。
-function OrderRow({ order }: { order: AdminOrderRow }) {
+function ChevronIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+// 桌面表格的一行：订单号（链接到该单详情）、日期、状态、合计与待审数（为 0 时显示 —）；当前订单标 aria-selected。
+function OrderRow({ order, selected }: { order: AdminOrderRow; selected: boolean }) {
   const t = useCopy();
   const price = usePrice();
   const { language } = useLanguage();
   return (
-    <tr>
-      <td>{order.order_number}</td>
+    <tr aria-selected={selected ? "true" : undefined}>
+      <td>
+        <Link to={adminOrderPath(order.id)}>{order.order_number}</Link>
+      </td>
       <td>{formatDate(order.created_at, language)}</td>
       <td>
         <span className={statusTagClass(order.status)}>{t(STATUS_LABEL[order.status])}</span>
@@ -126,28 +136,34 @@ function OrderRow({ order }: { order: AdminOrderRow }) {
   );
 }
 
-// 手机卡片：订单号与状态，其下为日期 · 合计（· 待审数，为 0 时不显示）。
+// 手机卡片（A02-phone-list）：整张为一个链接，指向该单详情；订单号与状态，其下为日期 · 合计（· 待审数，为 0 时不显示），右侧为 › 图形。
+// 卡片里不嵌套其他链接或按钮。
 function OrderCard({ order }: { order: AdminOrderRow }) {
   const t = useCopy();
   const price = usePrice();
   const { language } = useLanguage();
   return (
-    <li className="acs-admin__panel site-admin-orders__card">
-      <span className="site-admin-orders__card-head">
-        <span>{order.order_number}</span>
-        <span className={statusTagClass(order.status)}>{t(STATUS_LABEL[order.status])}</span>
-      </span>
-      <span className="acs-admin__muted">
-        <span>{formatDate(order.created_at, language)}</span>
-        <span aria-hidden="true"> · </span>
-        <span>{price(order.total_sen)}</span>
-        {order.refunds_pending > 0 && (
-          <>
+    <li>
+      <Link className="acs-admin__panel site-admin-orders__card" to={adminOrderPath(order.id)}>
+        <span className="site-admin-orders__card-body">
+          <span className="site-admin-orders__card-head">
+            <span>{order.order_number}</span>
+            <span className={statusTagClass(order.status)}>{t(STATUS_LABEL[order.status])}</span>
+          </span>
+          <span className="acs-admin__muted">
+            <span>{formatDate(order.created_at, language)}</span>
             <span aria-hidden="true"> · </span>
-            <span>{t("admin.refunds_pending", { count: order.refunds_pending })}</span>
-          </>
-        )}
-      </span>
+            <span>{price(order.total_sen)}</span>
+            {order.refunds_pending > 0 && (
+              <>
+                <span aria-hidden="true"> · </span>
+                <span>{t("admin.refunds_pending", { count: order.refunds_pending })}</span>
+              </>
+            )}
+          </span>
+        </span>
+        <ChevronIcon />
+      </Link>
     </li>
   );
 }
@@ -157,13 +173,15 @@ export interface AdminOrdersViewProps {
   draft: string;
   status: OrderStatus | null;
   state: ListState;
+  // 当前打开详情的订单（路径里的内部 ID）；只在列表时为 null 或不给。
+  selectedId?: string | null;
   onDraft: (value: string) => void;
   onSearch: () => void;
   onStatus: (status: OrderStatus | null) => void;
   onPage: (page: number) => void;
 }
 
-export function AdminOrdersView({ draft, status, state, onDraft, onSearch, onStatus, onPage }: AdminOrdersViewProps) {
+export function AdminOrdersView({ draft, status, state, selectedId = null, onDraft, onSearch, onStatus, onPage }: AdminOrdersViewProps) {
   const t = useCopy();
   const { list } = state;
   const pager = list === null ? null : pagerOf(list);
@@ -222,7 +240,7 @@ export function AdminOrdersView({ draft, status, state, onDraft, onSearch, onSta
                 </thead>
                 <tbody>
                   {list.orders.map((order) => (
-                    <OrderRow key={order.id} order={order} />
+                    <OrderRow key={order.id} order={order} selected={String(order.id) === selectedId} />
                   ))}
                 </tbody>
               </table>
@@ -271,11 +289,12 @@ export function AdminOrdersView({ draft, status, state, onDraft, onSearch, onSta
   );
 }
 
-// 框架的内容区：框架确认已登录后才挂载，挂载即查询第 1 页。
-export function AdminOrdersContent() {
+// 框架的内容区：框架确认已登录后才挂载，挂载即按上次的查询（第一次为全部订单的第 1 页）查询；
+// 搜索框里预先填上已提交的订单号。orderId 不为 null 时在列表右侧显示该单详情（手机只显示详情）。
+export function AdminOrdersContent({ orderId = null }: { orderId?: string | null }) {
   const { replace } = useRouter();
-  const [draft, setDraft] = useState("");
-  const [query, setQuery] = useState<OrdersQuery>(FIRST_QUERY);
+  const [draft, setDraft] = useState(() => rememberedListQuery().order_number ?? "");
+  const [query, setQuery] = useState<OrdersQuery>(rememberedListQuery);
   const [state, setState] = useState<ListState>(INITIAL_LIST);
 
   // 每次查询变化都发出新请求，并中止上一次的（离开页面时同样中止）。
@@ -288,15 +307,17 @@ export function AdminOrdersContent() {
   }, [query, replace]);
 
   const run = (next: OrdersQuery) => {
+    rememberListQuery(next);
     setQuery(next);
     setState((current) => ({ ...current, busy: true, error: null }));
   };
 
-  return (
+  const list = (
     <AdminOrdersView
       draft={draft}
       status={query.status}
       state={state}
+      selectedId={orderId}
       onDraft={setDraft}
       onSearch={() => {
         run(searchFor(draft, query));
@@ -309,12 +330,24 @@ export function AdminOrdersContent() {
       }}
     />
   );
+  if (orderId === null) {
+    return list;
+  }
+  return (
+    <div className="site-admin-orders-split">
+      {list}
+      <AdminOrderDetailContent key={orderId} id={orderId} />
+    </div>
+  );
 }
 
+// /admin/orders 与 /admin/orders/:id 都是本页；后者的段值即订单的内部 ID（是否合法由详情判断）。
 export default function AdminOrdersPage() {
+  const { pattern, params } = useRouter();
+  const orderId = pattern === "/admin/orders/:id" ? (params.id ?? null) : null;
   return (
     <AdminFrame current="orders">
-      <AdminOrdersContent />
+      <AdminOrdersContent orderId={orderId} />
     </AdminFrame>
   );
 }
