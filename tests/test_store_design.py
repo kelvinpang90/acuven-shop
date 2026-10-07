@@ -308,6 +308,27 @@ def test_read_only_selects_and_writes_nothing_back(db: Session) -> None:
     assert db.scalar(select(StoreDesignSetting.id)) is None
 
 
+def test_read_does_not_flush_pending_or_dirty_changes(db: Session) -> None:
+    """SHOP-TASK-045 验收「读取不写库」：调用方会话里有未 flush 的新行与改动时，读取也只发
+    SELECT，不把它们 flush 进库；读到的是库里已有的数据，改动仍留在会话里等调用方处理。"""
+    _setting(db, "batik", "sogan")
+    _blocks(db, ("hero", 1, True))
+    setting = db.scalars(select(StoreDesignSetting)).one()
+    setting.theme, setting.accent = "litar", "red"
+    pending = StoreHomeBlock(block="how", position=2, is_visible=False)
+    db.add(pending)
+    statements = _record_statements(db)
+
+    design = read_store_design(db)
+
+    assert statements
+    assert all(statement.lstrip().upper().startswith("SELECT") for statement in statements)
+    assert (design.theme, design.accent) == ("batik", "sogan")
+    assert design.home_blocks == _all_visible()
+    assert pending in db.new
+    assert setting in db.dirty
+
+
 # ---- 公开接口 ----
 
 

@@ -49,10 +49,16 @@ def read_store_design(db: Session) -> StoreDesign:
     app/services/catalog.py 的 published() 的商品（商品启用、分类启用、英文资料齐全、至少一件
     启用规格）；之后下架的商品仍在表里，只是不出现在结果中，其余商品的顺序不变。
 
-    只查列值而不加载 ORM 对象。写入与校验（主色须属于所选主题、精选最多 4 件且须满足
+    只查列值而不加载 ORM 对象；查询期间关闭 autoflush，调用方会话里未提交的改动不会因读取被
+    flush 进库（读到的是库里已有的数据）。写入与校验（主色须属于所选主题、精选最多 4 件且须满足
     published()、四个区块在同一事务里保持齐全）由之后的管理后台业务接口任务实现；未挑选或挑选的
     都不可见时显示最新 4 件，由前台按设置显示的任务实现。
     """
+    with db.no_autoflush:
+        return _read(db)
+
+
+def _read(db: Session) -> StoreDesign:
     setting_stmt = select(StoreDesignSetting.theme, StoreDesignSetting.accent)
     setting = db.execute(
         setting_stmt.where(StoreDesignSetting.singleton_slot == SINGLETON_SLOT)
