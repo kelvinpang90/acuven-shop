@@ -509,8 +509,8 @@ def test_default_constants() -> None:
 
 def test_migration_writes_the_default_constants(migrated: Connection) -> None:
     """默认值常量与迁移写入的相同：设置一行（槽 1、主题 pandan、主色为空、有更新时间），四个
-    区块按 hero、how、categories、featured 的顺序全部显示，「未挑选」时没有精选商品。迁移里
-    主题 id 与区块的副本也与模型常量相同。
+    区块按 hero、how、categories、featured 的顺序全部显示，「未挑选」时没有精选商品。迁移用的
+    主题 id、区块与默认值就是模型的常量本身（共用同一份，不是副本）。
     """
     settings = migrated.execute(
         text("SELECT singleton_slot, theme, accent, updated_at FROM store_design_settings")
@@ -528,11 +528,11 @@ def test_migration_writes_the_default_constants(migrated: Connection) -> None:
         DEFAULT_HOME_BLOCKS
     )
     assert featured == 0
-    assert MIGRATION.THEMES == THEMES
-    assert MIGRATION.HOME_BLOCKS == HOME_BLOCKS
-    assert MIGRATION.DEFAULT_THEME == DEFAULT_THEME
-    assert MIGRATION.DEFAULT_ACCENT == DEFAULT_ACCENT
-    assert MIGRATION.DEFAULT_HOME_BLOCKS == DEFAULT_HOME_BLOCKS
+    assert MIGRATION.THEMES is THEMES
+    assert MIGRATION.HOME_BLOCKS is HOME_BLOCKS
+    assert MIGRATION.DEFAULT_THEME is DEFAULT_THEME
+    assert MIGRATION.DEFAULT_ACCENT is DEFAULT_ACCENT
+    assert MIGRATION.DEFAULT_HOME_BLOCKS is DEFAULT_HOME_BLOCKS
 
 
 def _schema(conn: Connection) -> dict[str, Any]:

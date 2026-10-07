@@ -8,8 +8,8 @@ alembic check 不比较检查约束与表选项，改这里或模型时须人工
 
 upgrade 建三张表并写入默认值：设置一行（主题 pandan，主色为空即该主题的默认主色，更新时间为
 执行迁移时的 UTC）；四个区块按 hero、how、categories、featured 的顺序全部显示；没有精选商品。
-主题 id 与默认值是这里的常量副本（迁移不 import app，模型以后改了旧迁移不跟着变），
-与模型常量一致由 tests/test_store_design_models.py 守住。
+主题 id、区块、长度上限与默认值直接用 app/models/store_design.py 的常量，与模型、之后的读取与
+写入共用同一份；以后若要改这些常量，须另写新迁移改库里的约束与数据，不能只改常量。
 downgrade 按依赖倒序删表。迁移只在 MySQL 上执行，不要求能在 SQLite 上执行。
 
 Revision ID: 0016
@@ -25,39 +25,26 @@ from datetime import UTC, datetime
 import sqlalchemy as sa
 
 from alembic import op
+from app.models.store_design import (
+    ACCENT_MAX_LENGTH,
+    BLOCK_MAX_LENGTH,
+    DEFAULT_ACCENT,
+    DEFAULT_HOME_BLOCKS,
+    DEFAULT_THEME,
+    FEATURED_MAX,
+    HOME_BLOCKS,
+    SINGLETON_SLOT,
+    THEME_MAX_LENGTH,
+    THEMES,
+)
 
 revision: str = "0016"
 down_revision: str | None = "0015"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# 与 app.db.base.MYSQL_TABLE_OPTIONS 相同；迁移不 import app，模型以后改了旧迁移不跟着变。
+# 与 app.db.base.MYSQL_TABLE_OPTIONS 相同。
 TABLE_OPTIONS = {"mysql_engine": "InnoDB", "mysql_charset": "utf8mb4"}
-
-# docs/design/tokens/themes.json 的 10 款主题 id，与 app.models.store_design.THEMES 相同。
-THEMES = (
-    "pandan",
-    "pasar",
-    "receipt",
-    "kopitiam",
-    "batik",
-    "malam",
-    "gula",
-    "galeri",
-    "songket",
-    "litar",
-)
-HOME_BLOCKS = ("hero", "how", "categories", "featured")
-
-DEFAULT_THEME = "pandan"
-DEFAULT_ACCENT = None
-# （区块、位置、是否显示）
-DEFAULT_HOME_BLOCKS = (
-    ("hero", 1, True),
-    ("how", 2, True),
-    ("categories", 3, True),
-    ("featured", 4, True),
-)
 
 
 def _in_list(values: Sequence[str]) -> str:
@@ -69,11 +56,11 @@ def upgrade() -> None:
         "store_design_settings",
         sa.Column("id", sa.Integer(), nullable=False),
         sa.Column("singleton_slot", sa.Integer(), nullable=False),
-        sa.Column("theme", sa.String(length=20), nullable=False),
-        sa.Column("accent", sa.String(length=20), nullable=True),
+        sa.Column("theme", sa.String(length=THEME_MAX_LENGTH), nullable=False),
+        sa.Column("accent", sa.String(length=ACCENT_MAX_LENGTH), nullable=True),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.CheckConstraint(
-            "singleton_slot = 1",
+            f"singleton_slot = {SINGLETON_SLOT}",
             name=op.f("ck_store_design_settings_singleton_slot_one"),
         ),
         sa.CheckConstraint(
@@ -81,7 +68,7 @@ def upgrade() -> None:
             name=op.f("ck_store_design_settings_theme_known"),
         ),
         sa.CheckConstraint(
-            "accent IS NULL OR (LENGTH(accent) >= 1 AND LENGTH(accent) <= 20)",
+            f"accent IS NULL OR (LENGTH(accent) >= 1 AND LENGTH(accent) <= {ACCENT_MAX_LENGTH})",
             name=op.f("ck_store_design_settings_accent_length"),
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_store_design_settings")),
@@ -91,7 +78,7 @@ def upgrade() -> None:
     blocks = op.create_table(
         "store_home_blocks",
         sa.Column("id", sa.Integer(), nullable=False),
-        sa.Column("block", sa.String(length=20), nullable=False),
+        sa.Column("block", sa.String(length=BLOCK_MAX_LENGTH), nullable=False),
         sa.Column("position", sa.Integer(), nullable=False),
         sa.Column("is_visible", sa.Boolean(), nullable=False),
         sa.CheckConstraint(
@@ -99,7 +86,7 @@ def upgrade() -> None:
             name=op.f("ck_store_home_blocks_block_known"),
         ),
         sa.CheckConstraint(
-            "position >= 1 AND position <= 4",
+            f"position >= 1 AND position <= {len(HOME_BLOCKS)}",
             name=op.f("ck_store_home_blocks_position_range"),
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_store_home_blocks")),
@@ -113,7 +100,7 @@ def upgrade() -> None:
         sa.Column("position", sa.Integer(), nullable=False),
         sa.Column("product_id", sa.Integer(), nullable=False),
         sa.CheckConstraint(
-            "position >= 1 AND position <= 4",
+            f"position >= 1 AND position <= {FEATURED_MAX}",
             name=op.f("ck_store_featured_products_position_range"),
         ),
         sa.ForeignKeyConstraint(
@@ -131,7 +118,7 @@ def upgrade() -> None:
         settings,
         [
             {
-                "singleton_slot": 1,
+                "singleton_slot": SINGLETON_SLOT,
                 "theme": DEFAULT_THEME,
                 "accent": DEFAULT_ACCENT,
                 "updated_at": datetime.now(UTC).replace(tzinfo=None),
