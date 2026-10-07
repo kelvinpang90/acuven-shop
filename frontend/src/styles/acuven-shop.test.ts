@@ -27,7 +27,9 @@ describe("design tokens stylesheet", () => {
   // 验收：frontend/src/styles/acuven-shop.css 与 docs/design/tokens/acuven-shop.css 逐字节相同（不手改生成的文件）。
   it("is a byte-for-byte copy of docs/design/tokens/acuven-shop.css", async () => {
     const frontendCopy = await readBytes("./acuven-shop.css");
-    const designSource = await readBytes("../../../docs/design/tokens/acuven-shop.css");
+    const designSource = await readBytes(
+      "../../../docs/design/tokens/acuven-shop.css",
+    );
     // 对照：确实读到了生成的样式（含字体引入），不是两份空文件。
     expect(new TextDecoder().decode(designSource)).toContain("@font-face");
     expect(firstDifference(frontendCopy, designSource)).toBe(-1);
@@ -45,17 +47,67 @@ describe("design tokens stylesheet", () => {
 
 // 去掉注释后的 site.css：只检查规则本身，说明规则的注释不应触发规则。
 async function readSiteRules(): Promise<string> {
-  return new TextDecoder().decode(await readBytes("./site.css")).replace(/\/\*[\s\S]*?\*\//g, "");
+  return new TextDecoder()
+    .decode(await readBytes("./site.css"))
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
+// 选择器组里每个选择器的最后一段都是 a 元素（如 `.x a`、`a.y`、`a:hover`）时才算链接规则。
+function isLinkRule(selectors: string): boolean {
+  return selectors
+    .split(",")
+    .every((selector) =>
+      /(^|[\s>+~])a(?![\w-])[^\s>+~]*$/.test(selector.trim()),
+    );
+}
+
+// 只从链接规则里去掉 color: inherit，其他规则里的同一声明照样被下面的检查拦住。
+function withoutLinkColorInherit(css: string): string {
+  return css.replace(
+    /([^{}]*)\{([^{}]*)\}/g,
+    (rule, selectors: string, body: string) =>
+      isLinkRule(selectors)
+        ? `${selectors}{${body.replace(/(^|[\s;])color\s*:\s*inherit\s*(?=;|$)/gi, "$1")}}`
+        : rule,
+  );
 }
 
 describe("site.css", () => {
   // 验收：site.css 只放布局与显隐规则，只用设计变量，不写颜色、字体或圆角。
   // 例外（Kelvin 2026-10-07 决定）：链接可写 color: inherit 取父元素的颜色，不写颜色值与变量。
   it("sets no colours, fonts or radii", async () => {
-    const css = (await readSiteRules()).replace(/(^|[\s;{])color\s*:\s*inherit\s*(?=[;}])/gi, "$1");
+    const css = withoutLinkColorInherit(await readSiteRules());
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     expect(css).not.toMatch(/\b(rgba?|hsla?|oklch|color-mix)\(/i);
-    expect(css).not.toMatch(/(^|[\s;{])(color|background|background-color|border-color|fill|stroke|font|font-family|font-size|font-weight|border-radius)\s*:/i);
+    expect(css).not.toMatch(
+      /(^|[\s;{])(color|background|[\w-]*-color|fill|stroke|font|font-[\w-]+|[\w-]*radius)\s*:/i,
+    );
+  });
+
+  // 对照：例外只放过链接规则里的 color: inherit，非链接规则、其他取值与其他属性仍被拦住。
+  it("allows color: inherit only on links", () => {
+    const declared = /(^|[\s;{])color\s*:/i;
+    expect(withoutLinkColorInherit(".x a { color: inherit; }")).not.toMatch(
+      declared,
+    );
+    expect(
+      withoutLinkColorInherit(
+        "@media (max-width: 767px) { a.y:hover, .z > a { color: inherit } }",
+      ),
+    ).not.toMatch(declared);
+    expect(withoutLinkColorInherit("body { color: inherit; }")).toMatch(
+      declared,
+    );
+    expect(withoutLinkColorInherit(".a { color: inherit; }")).toMatch(declared);
+    expect(withoutLinkColorInherit("a, .x { color: inherit; }")).toMatch(
+      declared,
+    );
+    expect(withoutLinkColorInherit("a { color: inherit !important; }")).toMatch(
+      declared,
+    );
+    expect(withoutLinkColorInherit("a { color: var(--a-ink); }")).toMatch(
+      declared,
+    );
   });
 
   // 验收：不使用只供视觉稿的 acs--phone；手机差异写在 767px 及以下的媒体查询里。
