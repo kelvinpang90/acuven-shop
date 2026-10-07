@@ -50,8 +50,9 @@ async function readSiteRules(): Promise<string> {
 
 describe("site.css", () => {
   // 验收：site.css 只放布局与显隐规则，只用设计变量，不写颜色、字体或圆角。
+  // 例外（Kelvin 2026-10-07 决定）：链接可写 color: inherit 取父元素的颜色，不写颜色值与变量。
   it("sets no colours, fonts or radii", async () => {
-    const css = await readSiteRules();
+    const css = (await readSiteRules()).replace(/(^|[\s;{])color\s*:\s*inherit\s*(?=[;}])/gi, "$1");
     expect(css).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     expect(css).not.toMatch(/\b(rgba?|hsla?|oklch|color-mix)\(/i);
     expect(css).not.toMatch(/(^|[\s;{])(color|background|background-color|border-color|fill|stroke|font|font-family|font-size|font-weight|border-radius)\s*:/i);
