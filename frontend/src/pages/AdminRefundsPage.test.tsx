@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -13,7 +13,9 @@ import { RouterProvider } from "../router";
 import type { RoutePath } from "../router";
 import {
   AdminRefundsContent,
+  AdminRefundsRoute,
   AdminRefundsView,
+  contentKey,
   filterBy,
   filterOrderNumber,
   firstQuery,
@@ -431,7 +433,8 @@ describe("paging", () => {
       expect(buttons.map((button) => button.has("disabled"))).toEqual([prevDisabled, nextDisabled]);
       expect(textNodes(pager)).toEqual(["‹", "›"]);
       expect(tags(html, "button")).toHaveLength(2);
-      expect(textNodes(html)).not.toContain(String(page));
+      // 不显示页码：翻页区（含按钮的可访问名称）里没有当前页的数字。表格与卡片里的件数也是数字，不在此列。
+      expect(visibleTexts(pager).join(" ")).not.toContain(String(page));
     }
   });
 });
@@ -520,6 +523,43 @@ describe("filtering by order", () => {
     expect(attributes(link).get("href")).toBe(REFUNDS_PATH);
     expect(textNodes(html)).toEqual([COPY["admin.nav_refunds"][language], COPY["list.filter_clear"][language], COPY["common.error_retry"][language]]);
     expect(calls).toEqual([]);
+  });
+
+  // 同一条「以路径里的订单内部 ID 作为 order_id 查询」与「list.filter_clear（链接到 /admin/refunds）」：路径的订单 ID 变化时（经清除链接回到
+  // /admin/refunds、换成另一张订单、或合法与不合法之间切换），内容区以不同的 key 重新挂载，查询从路径重新开始，不沿用旧的 order_id、状态与页码。
+  it("starts over when the order ID in the path changes", () => {
+    const paths: [string | null, string][] = [
+      ["42", "/admin/refunds/order/42"],
+      [null, REFUNDS_PATH],
+      ["43", "/admin/refunds/order/43"],
+      ["x", "/admin/refunds/order/x"],
+    ];
+    const keys = paths.map(([orderId]) => {
+      const routed = AdminRefundsRoute({ orderId }) as ReactElement<{ orderId: string | null }>;
+      expect(routed.type).toBe(AdminRefundsContent);
+      expect(routed.props.orderId).toBe(orderId);
+      expect(routed.key).toBe(contentKey(orderId));
+      return routed.key;
+    });
+    expect(new Set(keys).size).toBe(paths.length);
+    expect(contentKey("42")).toBe(contentKey("42"));
+
+    // 每次挂载都从该路径的第 1 页、全部状态开始：/admin/refunds 没有订单筛选与清除链接，/order/43 有，不合法 ID 只有提示与清除链接。
+    const calls = stubFetch();
+    const markup = ([orderId, path]: [string | null, string]) => renderToStaticMarkup(wrap(AdminRefundsRoute({ orderId }), "en", path));
+    const [order42 = "", all42 = "", order43 = "", invalid = ""] = paths.map(markup);
+    for (const html of [order42, order43]) {
+      expect(html).toContain("site-admin-refunds__order");
+      expect(attributes(tags(html, "div").find((tag) => classes(tag).includes("site-admin-refunds__list")) ?? "").get("aria-busy")).toBe("true");
+      expect(tags(html, "option").filter((tag) => attributes(tag).has("selected")).map((tag) => attributes(tag).get("value"))).toEqual([""]);
+    }
+    expect(all42).not.toContain("site-admin-refunds__order");
+    expect(all42).toContain("<select");
+    expect(invalid).not.toContain("<select");
+    expect(invalid).toContain(escapeHtml(COPY["common.error_retry"].en));
+    expect(calls).toEqual([]);
+    expect(firstQuery(scopeOf("43").orderId)).toEqual({ status: null, order_id: 43, page: 1 });
+    expect(firstQuery(scopeOf(null).orderId)).toEqual({ status: null, order_id: null, page: 1 });
   });
 
   // 同一条「订单内部 ID 只在路径里，订单号只在页面内存里，不进查询参数或浏览器存储」：按订单查询与显示标签的整个过程不写

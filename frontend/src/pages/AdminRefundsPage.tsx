@@ -351,13 +351,23 @@ export function AdminRefundsContent({ orderId = null }: { orderId?: string | nul
   );
 }
 
+// 内容区按路径段值换一份：从 /admin/refunds/order/42 经 list.filter_clear 回到 /admin/refunds，或换成另一张订单时，
+// 内容区重新挂载，查询、列表区状态都从头开始（不沿用旧的 order_id、状态与页码，并按新的路径重新查询）。
+export function contentKey(orderId: string | null): string {
+  return orderId === null ? "all" : `order:${orderId}`;
+}
+
+export function AdminRefundsRoute({ orderId }: { orderId: string | null }) {
+  return <AdminRefundsContent key={contentKey(orderId)} orderId={orderId} />;
+}
+
 // /admin/refunds 与 /admin/refunds/order/:orderId 都是本页；后者的段值即订单的内部 ID（是否合法由内容区判断）。
 export default function AdminRefundsPage() {
   const { pattern, params } = useRouter();
   const orderId = pattern === "/admin/refunds/order/:orderId" ? (params.orderId ?? null) : null;
   return (
     <AdminFrame current="refunds">
-      <AdminRefundsContent orderId={orderId} />
+      <AdminRefundsRoute orderId={orderId} />
     </AdminFrame>
   );
 }
