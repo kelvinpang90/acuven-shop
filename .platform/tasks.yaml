@@ -1837,7 +1837,7 @@ tasks:
       建立店铺装修设置的三张表（主题与主色、首页四个区块的顺序与显隐、最多 4 件精选商品及顺序）与迁移，写入默认值。
       不含标志图（Kelvin 2026-10-06 决定），不做读取、接口与页面，不改设计。
       设计闸门：不适用（店铺装修只改变前台外观，不涉及金额计算与个人资料，见 docs/HANDOFF.md 2026-09-30 关于 REQUIREMENTS 1.9 的记录）。拆分：数据层，读取与公开接口由 SHOP-TASK-045 交付。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-039
     acceptance_criteria:
