@@ -1931,7 +1931,7 @@ tasks:
       不做订单列表、详情与发货，不做其他后台页面，不装依赖，不改后端，不改设计。
       设计闸门：不适用（只调用已登记的会话与退出接口，不碰金额，不收集或显示个人资料）。
       拆分：框架与 A02 订单列表分开（列表由 SHOP-TASK-048 接上），本任务 11 个允许路径。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-038
     acceptance_criteria:
