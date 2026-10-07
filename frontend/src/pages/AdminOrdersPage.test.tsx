@@ -19,6 +19,8 @@ import {
   listStep,
   loadOrders,
   pagerOf,
+  rememberedQuery,
+  rememberQuery,
   searchFor,
 } from "./AdminOrdersPage";
 import type { AdminOrdersViewProps, ListState } from "./AdminOrdersPage";
@@ -27,6 +29,8 @@ import { formatDate } from "./TrackOrderPage";
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  // SHOP-TASK-055：查询条件记在模块的内存变量里，每条测试之后回到打开时的查询。
+  rememberQuery(FIRST_QUERY);
 });
 
 const ORDERS_PATH = "/admin/orders";
@@ -90,6 +94,7 @@ function props(overrides: Partial<AdminOrdersViewProps> = {}): AdminOrdersViewPr
     draft: "",
     status: null,
     state: shown(list()),
+    selectedId: null,
     onDraft: noop,
     onSearch: noop,
     onStatus: noop,
@@ -98,10 +103,10 @@ function props(overrides: Partial<AdminOrdersViewProps> = {}): AdminOrdersViewPr
   };
 }
 
-function wrap(element: ReactNode, language: Language) {
+function wrap(element: ReactNode, language: Language, path: string = ORDERS_PATH) {
   return (
     <LanguageProvider storage={languageStorage(language)}>
-      <RouterProvider initialPath={ORDERS_PATH}>{element}</RouterProvider>
+      <RouterProvider initialPath={path}>{element}</RouterProvider>
     </LanguageProvider>
   );
 }
@@ -286,7 +291,9 @@ describe("desktop table", () => {
 
   // 验收第 4 条「日期用 formatDate 按界面语言显示，合计用 common.price_myr 与 formatSen（RM 加金额）；状态显示对应的 order.status_*；
   // 待审数大于 0 时显示 admin.refunds_pending，为 0 时桌面表格显示 —」与 UX「状态与补充（0.9）」「为 0 时显示 —」：
-  // 每行依次为订单号、日期、状态名、合计与待审数；行与单元格里没有链接或按钮（行不可点）。
+  // 每行依次为订单号、日期、状态名、合计与待审数。
+  // （SHOP-TASK-055 改动：原断言「行与单元格里没有链接或按钮」随验收第 2 条「桌面表格行的订单号链接到 /admin/orders/<内部 ID>」
+  // 改为订单号是唯一的链接、指向该单内部 ID 的详情；待审数仍为文字，表格里仍没有按钮。）
   it.each(LANGUAGES)("shows each order in a row in %s", (language) => {
     const table = element(render({}, language), "div", "site-admin-orders__table");
     const rows = all(all(table, "tbody")[0] ?? "", "tr");
@@ -302,8 +309,24 @@ describe("desktop table", () => {
       [CANCELLED.order_number, formatDate(CANCELLED.created_at, language), COPY["order.status_cancelled"][language], price(5900, language), "—"],
     ]);
     expect(price(7640, language)).toBe("RM 76.40");
-    expect(table).not.toMatch(/<(a|button)\b/);
+    expect(rows.map((row) => tags(row, "a").map((a) => attributes(a).get("href")))).toEqual([["/admin/orders/42"], ["/admin/orders/41"], ["/admin/orders/40"]]);
+    expect(rows.map((row) => textNodes(all(row, "a")[0] ?? "").join(""))).toEqual(ROWS.map((row) => row.order_number));
+    expect(rows.map((row) => all(row, "td").findIndex((td) => td.includes("<a ")))).toEqual([0, 0, 0]);
+    expect(table).not.toMatch(/<button\b/);
     expect(table).not.toContain("tabindex");
+  });
+
+  // SHOP-TASK-055 验收第 2 条「桌面在列表右侧显示详情、当前订单的表格行标 aria-selected」（视觉稿 A02-desktop 的选中行）：
+  // 只有内部 ID 与详情相同的那一行标 aria-selected="true"；没有打开详情时没有行标出；链接里没有订单号以外的东西进网址。
+  it("marks the row of the order shown in the details", () => {
+    const table = element(render({ selectedId: 41 }), "div", "site-admin-orders__table");
+    const rows = tags(all(table, "tbody")[0] ?? "", "tr");
+    expect(rows.map((row) => attributes(row).get("aria-selected") ?? null)).toEqual([null, "true", null]);
+    const none = element(render(), "div", "site-admin-orders__table");
+    expect(none).not.toContain("aria-selected");
+    for (const href of [...render().matchAll(/href="([^"]*)"/g)].map((m) => m[1] ?? "")) {
+      expect(href).toMatch(/^\/admin\/orders\/\d+$/);
+    }
   });
 
   // 视觉稿 A02-desktop-list：状态为标签（已取消为描边标签，其余为中性标签），— 为次要文字，合计列靠右。
@@ -324,8 +347,10 @@ describe("desktop table", () => {
 
 describe("phone cards", () => {
   // 验收第 4 条「手机为卡片列表（订单号与状态、日期、合计与待审数）…为 0 时手机卡片不显示（照 A02-phone-list）」与
-  // UX「状态与补充（0.9）」「手机卡片…待审数只作文字，为 0 时不显示」：每张卡片第一行为订单号与状态名，第二行为日期 · 合计，
-  // 待审数大于 0 时再加 · admin.refunds_pending；没有 —；卡片不是链接（行不可点，订单详情留给之后的任务）。
+  // UX「状态与补充（0.9）」「手机卡片整张进入订单详情，待审数只作文字，为 0 时不显示」：每张卡片第一行为订单号与状态名，第二行为日期 · 合计，
+  // 待审数大于 0 时再加 · admin.refunds_pending；没有 —。
+  // （SHOP-TASK-055 改动：原断言「卡片不是链接」与「li 带 acs-admin__panel」随验收第 2 条「手机卡片整张为一个链接指向同一网址
+  // （照 A02-phone-list，卡片里不嵌套其他链接）」改为每张卡片恰好一个指向该单详情的链接、面板样式在链接上、右侧 › 图形不读出、没有按钮。）
   it.each(LANGUAGES)("shows each order as a card in %s", (language) => {
     const cards = element(render({}, language), "ul", "site-admin-orders__cards");
     const items = all(cards, "li");
@@ -343,9 +368,13 @@ describe("phone cards", () => {
       [CANCELLED.order_number, COPY["order.status_cancelled"][language], formatDate(CANCELLED.created_at, language), "·", price(5900, language)],
     ]);
     expect(cards).not.toContain("—");
-    expect(cards).not.toMatch(/<(a|button)\b/);
+    expect(cards).not.toMatch(/<button\b/);
+    expect(items.map((item) => tags(item, "a").map((a) => attributes(a).get("href")))).toEqual([["/admin/orders/42"], ["/admin/orders/41"], ["/admin/orders/40"]]);
     for (const item of items) {
-      expect(classes(tags(item, "li")[0] ?? "")).toContain("acs-admin__panel");
+      const link = all(item, "a")[0] ?? "";
+      expect(textNodes(link)).toEqual(textNodes(item));
+      expect(classes(tags(link, "a")[0] ?? "")).toEqual(["acs-admin__panel", "site-admin-orders__card"]);
+      expect(attributes(tags(link, "svg")[0] ?? "").get("aria-hidden")).toBe("true");
       expect(element(item, "span", "site-admin-orders__card-head")).toContain("acs-tag");
       // 分隔符只是视觉，不读出。
       const separators = all(item, "span").filter((span) => textNodes(span).join("") === "·");
@@ -508,6 +537,83 @@ describe("loading the list", () => {
   });
 });
 
+describe("list and details", () => {
+  // SHOP-TASK-055 验收第 2 条「路由 /admin/orders/:id…页面表映射到订单页；桌面在列表右侧显示详情…手机只显示详情与 common.back，由 site.css 按宽度显隐」
+  // 与 UX「状态与补充（0.9）」「桌面未选订单时列表占满内容区，不显示详情；选中订单后详情在列表右侧」：
+  // 给出订单 ID 时列表之后为详情（打开时只有只在手机显示的返回链接并标 aria-busy），外层带 --detail 供 site.css 排成两栏或只显示详情；
+  // 没有订单 ID 时没有详情。
+  it("puts the details after the list only when an order is open", () => {
+    const withDetail = renderToStaticMarkup(wrap(<AdminOrdersContent orderId="42" />, "en", `${ORDERS_PATH}/42`));
+    const outer = tags(withDetail, "div")[0] ?? "";
+    expect(classes(outer)).toEqual(["site-admin-orders-page", "site-admin-orders-page--detail"]);
+    const section = tags(withDetail, "section")[0] ?? "";
+    expect(classes(section)).toEqual(["acs-admin__panel", "site-admin-order"]);
+    expect(attributes(section).get("aria-busy")).toBe("true");
+    expect(withDetail.indexOf("<form")).toBeLessThan(withDetail.indexOf("<section"));
+    expect(withDetail).toContain(`<a class="site-admin-order__back" href="${ORDERS_PATH}">`);
+    const listOnly = renderToStaticMarkup(wrap(<AdminOrdersContent />, "en"));
+    expect(classes(tags(listOnly, "div")[0] ?? "")).toEqual(["site-admin-orders-page"]);
+    expect(listOnly).not.toContain("<section");
+    expect(listOnly).not.toContain("site-admin-order__back");
+  });
+
+  // 同一条「列表的查询条件（订单号、状态、页码）保存在页面模块的内存变量里，在列表与详情之间切换时保留」与 HANDOFF 0.38
+  // （Kelvin 2026-10-07「列表的筛选与页码只在页面内存里，在列表与详情之间切换时保留」）：记住的查询在列表页与详情页重新挂载时沿用，
+  // 搜索框显示记住的订单号（原样），下拉选中记住的状态；第一次打开时为全部订单的第 1 页。
+  it("keeps the query when switching between the list and the details", () => {
+    expect(rememberedQuery()).toEqual(FIRST_QUERY);
+    const query: OrdersQuery = { order_number: " t4lw-6nqb ", status: "demo_shipped", page: 3 };
+    rememberQuery(filterBy("demo_shipped", searchFor(" t4lw-6nqb ", FIRST_QUERY)));
+    rememberQuery({ ...rememberedQuery(), page: 3 });
+    expect(rememberedQuery()).toEqual(query);
+    for (const [path, orderId] of [[`${ORDERS_PATH}/42`, "42"], [ORDERS_PATH, null], [`${ORDERS_PATH}/41`, "41"]] as const) {
+      const html = renderToStaticMarkup(wrap(<AdminOrdersContent orderId={orderId} />, "en", path));
+      const form = all(html, "form")[0] ?? "";
+      expect(attributes(tags(form, "input")[0] ?? "").get("value"), path).toBe(" t4lw-6nqb ");
+      const selected = all(form, "option").filter((option) => attributes(option).has("selected"));
+      expect(selected.map((option) => attributes(option).get("value")), path).toEqual(["demo_shipped"]);
+    }
+  });
+
+  // 同一条「不进网址或浏览器存储」与 DESIGN 1.11「权限与资料保护」：记住查询与渲染列表、详情时不写 localStorage、sessionStorage、cookie
+  // 或历史记录；页面里的链接只有 /admin/orders 与 /admin/orders/<内部 ID>，没有订单号。
+  it("keeps the query out of the address and browser storage", () => {
+    const storage = () => ({ getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn() });
+    const local = storage();
+    const session = storage();
+    const cookieWrites: string[] = [];
+    const doc = {};
+    Object.defineProperty(doc, "cookie", {
+      get: () => "",
+      set: (value: string) => {
+        cookieWrites.push(value);
+      },
+    });
+    const history = { pushState: vi.fn(), replaceState: vi.fn() };
+    vi.stubGlobal("localStorage", local);
+    vi.stubGlobal("sessionStorage", session);
+    vi.stubGlobal("document", doc);
+    vi.stubGlobal("history", history);
+
+    rememberQuery({ order_number: SHIPPED.order_number, status: "demo_shipped", page: 2 });
+    const pages = [
+      renderToStaticMarkup(wrap(<AdminOrdersContent orderId="42" />, "en", `${ORDERS_PATH}/42`)),
+      render({ draft: SHIPPED.order_number, status: "demo_shipped", selectedId: 42 }),
+    ];
+    for (const html of pages) {
+      for (const href of [...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1] ?? "")) {
+        expect(href).toMatch(/^\/admin\/orders(\/\d+)?$/);
+      }
+    }
+    for (const target of [local, session]) {
+      expect(target.setItem).not.toHaveBeenCalled();
+    }
+    expect(cookieWrites).toEqual([]);
+    expect(history.pushState).not.toHaveBeenCalled();
+    expect(history.replaceState).not.toHaveBeenCalled();
+  });
+});
+
 describe("dictionary", () => {
   // 验收第 6 条「页面文字全部来自字典」与第 1 条「需要 UX-COPY 里没有的界面文字时停下…不自行编写文案」：
   // 列表、空列表、翻页、读取中与两种失败，每段文字（含 aria-label 与 placeholder）都是当前语言的字典文案，或接口给的订单号、
@@ -532,9 +638,13 @@ describe("dictionary", () => {
       { busy: false, list: null, error: "common.network_check" },
       { busy: false, list: null, error: "common.error_retry" },
     ];
-    const pages = [renderToStaticMarkup(wrap(<AdminOrdersContent />, language))];
+    // SHOP-TASK-055：另查打开详情时的内容区与带选中行的列表（详情本身的文字见 AdminOrderDetail.test.tsx）。
+    const pages = [
+      renderToStaticMarkup(wrap(<AdminOrdersContent />, language)),
+      renderToStaticMarkup(wrap(<AdminOrdersContent orderId="42" />, language, `${ORDERS_PATH}/42`)),
+    ];
     for (const state of states) {
-      pages.push(render({ state }, language), render({ state, status: "demo_paid" }, language));
+      pages.push(render({ state }, language), render({ state, status: "demo_paid", selectedId: 41 }, language));
     }
     for (const html of pages) {
       expect(html).not.toMatch(/\stitle=/i);

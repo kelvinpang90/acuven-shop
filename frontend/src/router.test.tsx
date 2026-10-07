@@ -5,6 +5,7 @@ import App from "./App";
 import { COPY } from "./i18n/copy";
 import {
   ROUTE_PATHS,
+  adminOrderPath,
   canonicalizeLocation,
   isPlainLeftClick,
   isRoutePath,
@@ -67,7 +68,9 @@ describe("route table", () => {
   // SHOP-TASK-028 验收第 2 条「路由 /track（P08）与 /track/order（P09 查单模式）」：两页进表，在支付页之后；
   // SHOP-TASK-030 验收第 2 条「路由 /track/order/refund（P10 查单模式）」：进表，在订单详情之后；
   // SHOP-TASK-038 验收第 2 条「路由 /admin/login」：后台登录页进表，在隐私说明之后；
-  // SHOP-TASK-047 验收第 5 条「路由 /admin/orders（frontend/src/router.tsx 路由表…加一项）」：后台订单页进表，在后台登录之后；其余页面尚未实现，不在表里。
+  // SHOP-TASK-047 验收第 5 条「路由 /admin/orders（frontend/src/router.tsx 路由表…加一项）」：后台订单页进表，在后台登录之后；
+  // SHOP-TASK-055 验收第 2 条「路由 /admin/orders/:id（…路由表…各加一项，router.test.tsx 的路由表断言加上它）」：订单详情进表，在后台订单之后；
+  // 其余页面尚未实现，不在表里。
   it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
@@ -83,9 +86,11 @@ describe("route table", () => {
       "/privacy",
       "/admin/login",
       "/admin/orders",
+      "/admin/orders/:id",
     ]);
     expect(isRoutePath("/admin/login")).toBe(true);
     expect(isRoutePath("/admin/orders")).toBe(true);
+    expect(isRoutePath("/admin/orders/42")).toBe(true);
     expect(isRoutePath("/privacy")).toBe(true);
     expect(isRoutePath("/products")).toBe(true);
     expect(isRoutePath("/products/crew-neck-tee")).toBe(true);
@@ -98,6 +103,20 @@ describe("route table", () => {
     expect(isRoutePath("/track/order/refund")).toBe(true);
     expect(isRoutePath("/account/order/refund")).toBe(false);
     expect(isRoutePath("/login")).toBe(false);
+  });
+
+  // SHOP-TASK-055 验收第 2 条「路由 /admin/orders/:id」与 HANDOFF（Kelvin 2026-10-06「订单详情…路径带内部整数 ID，订单号仍不进网址」，
+  // 2026-10-07 定下的网址 /admin/orders/<内部 ID>）：详情路径恰好多一段，段值原样交给页面（是否为合法 ID 由页面判断）；
+  // 详情链接只放内部 ID；再多一段不匹配、按未知路径落到首页。
+  it("gives the admin order details one path segment for the internal ID", () => {
+    expect(matchRoute("/admin/orders/42")).toEqual({ pattern: "/admin/orders/:id", params: { id: "42" } });
+    expect(matchRoute("/admin/orders/abc")).toEqual({ pattern: "/admin/orders/:id", params: { id: "abc" } });
+    expect(matchRoute("/admin/orders")).toEqual({ pattern: "/admin/orders", params: {} });
+    expect(adminOrderPath(42)).toBe("/admin/orders/42");
+    for (const path of ["/admin/orders/42/status", "/admin/orders/", "/admin/order/42"]) {
+      expect(isRoutePath(path), path).toBe(false);
+      expect(resolvePath(path)).toBe("/");
+    }
   });
 
   // SHOP-TASK-030 验收第 2 条「订单号与 CSRF 令牌不进任何路径、查询参数」：退款申请页的路径不带任何段值，多出一段（如把订单号放进路径）不匹配、按未知路径落到首页。

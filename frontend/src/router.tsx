@@ -12,7 +12,8 @@ import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 // 订单详情 /track/order 与退款申请 /track/order/refund 凭服务端查单授权读取订单，订单号只在页面内存与写接口的请求体里）。
 // 查询参数只用于商品列表的搜索、筛选、排序与页码（pages/productListQuery.ts），也不放语言。
 // 以 /admin 开头的是后台页（后台登录 /admin/login 的用户名、密码与 CSRF 令牌只在页面内存与请求体或请求头里；
-// 后台订单 /admin/orders 由后台框架凭服务端会话打开，CSRF 令牌同样只在页面内存与退出请求头里）：
+// 后台订单 /admin/orders 由后台框架凭服务端会话打开，CSRF 令牌同样只在页面内存与退出请求头里；
+// 订单详情 /admin/orders/:id 的路径段是订单的内部整数 ID，订单号、收货资料与推进用的 CSRF 令牌只在页面内存与请求里）：
 // App.tsx 不给它们套前台框架，前台页头、菜单与页脚也没有指向它们的入口（UX A01「前台不放入口链接」）。
 export const ROUTE_PATHS = [
   "/",
@@ -28,6 +29,7 @@ export const ROUTE_PATHS = [
   "/privacy",
   "/admin/login",
   "/admin/orders",
+  "/admin/orders/:id",
 ] as const;
 export type RoutePattern = (typeof ROUTE_PATHS)[number];
 
@@ -101,6 +103,11 @@ export function isRoutePath(path: string): path is RoutePath {
 // 商品详情的实际路径：slug 在路径里只编码一次。
 export function productPath(slug: string): RoutePath {
   return `/products/${encodeURIComponent(slug)}`;
+}
+
+// 后台订单详情的实际路径：段为订单的内部 ID（Kelvin 2026-10-06/07，订单号不进网址）。
+export function adminOrderPath(id: number): RoutePath {
+  return `/admin/orders/${String(id)}`;
 }
 
 // 未知路径落到首页。

@@ -262,6 +262,22 @@ body { margin: 0; }
 .site-admin-orders__cards { display: none; margin: 0; padding: 0; list-style: none; }
 .site-admin-orders__pager { display: flex; gap: 8px; justify-content: flex-end; }
 
+/* 后台订单 A02 的详情（A02-desktop、A02-desktop-frozen）：选中订单后详情在列表右侧，宽 520px、间距 24px；
+   详情面板内各区块之间 18px，金额明细、收货资料、推进与事件记录各以上边线分隔；手机的返回与折叠区块在桌面不显示 */
+.site-admin-orders-page { display: grid; gap: 16px; }
+.site-admin-orders-page--detail { grid-template-columns: minmax(0, 1fr) 520px; column-gap: 24px; align-items: start; }
+.site-admin-order { display: grid; gap: 18px; padding: 20px; }
+.site-admin-order__back { display: none; }
+.site-admin-order__head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.site-admin-order__items { display: grid; gap: 8px; padding: 0; border-width: 0; }
+.site-admin-order__row { display: flex; justify-content: space-between; gap: 12px; }
+.site-admin-order__block { display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--a-line); }
+.site-admin-order__actions { gap: 8px; }
+.site-admin-order__buttons { display: flex; gap: 8px; }
+.site-admin-order__frozen { margin: 0; padding: 10px 12px; }
+.site-admin-order__hint { gap: 8px; margin: 0; padding: 8px 10px; }
+.site-admin-order__fold { display: none; }
+
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
 
@@ -464,8 +480,27 @@ body { margin: 0; }
   .site-admin-orders .acs-admin__input, .site-admin-orders .acs-admin__select { min-height: 44px; }
   .site-admin-orders__table { display: none; }
   .site-admin-orders__cards { display: grid; gap: 10px; }
-  .site-admin-orders__card { display: grid; gap: 4px; min-height: 44px; padding: 12px 14px; }
+  .site-admin-orders__card { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; min-height: 44px; padding: 12px 14px; text-decoration: none; }
+  .site-admin-orders__card-body { display: grid; gap: 4px; }
   .site-admin-orders__card-head { display: flex; justify-content: space-between; gap: 8px; }
   .site-admin-orders__pager { justify-content: center; }
   .site-admin-orders__pager .acs-admin__btn { justify-content: center; min-width: 44px; min-height: 44px; }
+
+  /* 后台订单详情（A02-phone-detail）：只显示详情，列表不显示；详情面板不绘制框（display: contents），各区块间距 14px；
+     顶部为返回链接（44px 高）；商品为面板，金额明细、收货资料与事件记录改为可折叠面板（桌面的同名区块不显示）；
+     两个推进按钮各占一行并加高到 44px */
+  .site-admin-orders-page--detail { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .site-admin-orders-page--detail .site-admin-orders { display: none; }
+  .site-admin-order { display: contents; }
+  .site-admin-order__back { display: flex; align-items: center; gap: 8px; justify-self: start; min-height: 44px; }
+  .site-admin-order__items { padding: 14px; border-width: 1px; }
+  .site-admin-order__wide { display: none; }
+  .site-admin-order__actions { padding-top: 0; border-top: 0; }
+  .site-admin-order__buttons { flex-direction: column; }
+  .site-admin-order__button { justify-content: center; min-height: 44px; }
+  .site-admin-order__fold { display: block; padding: 12px 14px; }
+  .site-admin-order__summary { display: flex; justify-content: space-between; align-items: center; min-height: 32px; cursor: pointer; }
+  .site-admin-order__fold-body { display: grid; gap: 6px; padding-top: 8px; }
+  .site-admin-order__events { gap: 8px; margin: 0; padding-left: 0; list-style: none; }
+  .site-admin-order__event { display: grid; gap: 2px; }
 }
