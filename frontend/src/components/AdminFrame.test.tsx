@@ -8,8 +8,7 @@ import App from "../App";
 import { CSRF_HEADER } from "../api/pay";
 import { BRAND, COPY, LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
-import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
-import { AdminOrdersContent } from "../pages/AdminOrdersPage";
+import { LANGUAGE_STORAGE_KEY, LanguageProvider, useCopy } from "../i18n/language";
 import { RouterProvider } from "../router";
 import {
   ADMIN_NAV,
@@ -61,6 +60,12 @@ function renderApp(path: string, language: Language = "en"): string {
 }
 
 const noop = () => undefined;
+
+// 框架内容的替身：只渲染订单页的标题 admin.nav_orders（h1）。订单页的列表由 pages/AdminOrdersPage.test.tsx 测试（SHOP-TASK-048）。
+function AdminOrdersContent() {
+  const t = useCopy();
+  return <h1 className="acs-admin__h">{t("admin.nav_orders")}</h1>;
+}
 
 function props(overrides: Partial<AdminFrameViewProps> = {}): AdminFrameViewProps {
   return {
@@ -282,7 +287,8 @@ describe("first render", () => {
 
   // Kelvin 2026-10-06（docs/HANDOFF.md 0.35）「后台导航只显示已上线页面的导航项（先只有订单）」与验收第 2 条「当前项标 aria-current="page"」
   // 「nav 元素不加 aria-label」：桌面左侧导航只有一项 admin.nav_orders，指向 /admin/orders 并标 aria-current="page"；
-  // UX-COPY 里其他 admin.nav_* 的文字在页面上都不出现；页面上任何 nav 都没有 aria-label。
+  // UX-COPY 里其他 admin.nav_* 的文字在内容区以外都不出现（A02 的列头 admin.col_refunds 与 admin.nav_refunds 文字相同，SHOP-TASK-048）；
+  // 页面上任何 nav 都没有 aria-label。
   it.each(LANGUAGES)("lists only the orders item in the navigation in %s", (language) => {
     expect(ADMIN_NAV).toEqual(["orders"]);
     expect(DOC_NAV_KEYS).toContain("admin.nav_orders");
@@ -296,7 +302,7 @@ describe("first render", () => {
       for (const tag of tags(html, "nav")) {
         expect(attributes(tag).has("aria-label")).toBe(false);
       }
-      const texts = visibleTexts(html);
+      const texts = visibleTexts(html.replace(element(html, "main", "acs-admin__main"), ""));
       for (const label of otherNavLabels(language)) {
         expect(label).not.toBe("");
         expect(texts).not.toContain(label);
@@ -578,7 +584,8 @@ describe("colour mode", () => {
 
 describe("dictionary", () => {
   // 验收第 6 条「页面文字全部来自字典」与第 1 条「需要 UX-COPY 里没有的界面文字时停下…不自行编写文案」：
-  // 读取中、已登录（含退出中与每种退出提示）、读取失败，菜单收起与展开，每段文字（含 aria-label）都是当前语言的某条字典文案；没有 title 或 placeholder。
+  // 读取中、已登录（含退出中与每种退出提示）、读取失败，菜单收起与展开，每段文字（含 aria-label）都是当前语言的某条字典文案；
+  // title 与 placeholder 的值也必须是当前语言的字典文案（A02 视觉稿的搜索框以 admin.search_order 作占位文字，SHOP-TASK-048）。
   it.each(LANGUAGES)("shows only dictionary text in %s", (language) => {
     const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language]));
     const errors: (CopyKey | null)[] = [null, "common.error_retry", "common.network_check"];
@@ -590,7 +597,9 @@ describe("dictionary", () => {
       }
     }
     for (const html of pages) {
-      expect(html).not.toMatch(/\s(title|placeholder)=/i);
+      for (const m of html.matchAll(/\s(?:title|placeholder)="([^"]*)"/gi)) {
+        expect(allowed.has(unescapeHtml(m[1] ?? "")), m[0]).toBe(true);
+      }
       for (const value of visibleTexts(html)) {
         expect(allowed.has(value), value).toBe(true);
       }
