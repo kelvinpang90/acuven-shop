@@ -4,12 +4,13 @@ GET /api/admin/session，以及之后所有后台接口共用的会话依赖 req
 依据 docs/DESIGN.md 1.11（提交 2d13250）「权限与资料保护」第 4 条：「管理员登录按来源与账号
 组合限流，连续失败后短时锁定并告警；锁定解除不绕过密码校验。单一管理员也须服务端授权与会话
 到期」，第 5 条「后台单一管理员也须认证，不把权限检查留给前端」，第 6 条（应用日志不记录
-密码），以及 docs/HANDOFF.md 记录的 Kelvin 2026-10-04 管理员登录决定（含 2026-10-05 补充）。
-规则函数见 app/services/admin_auth.py。
+密码），以及 docs/HANDOFF.md 记录的 Kelvin 2026-10-04 管理员登录决定（含 2026-10-05 补充）
+与 0.37 记录的 Kelvin 2026-10-07 决定（登录名为邮箱，字段名仍叫 username；邮箱不写进日志与
+错误响应，锁定计数的 Redis 键仍是摘要）。规则函数见 app/services/admin_auth.py。
 
 登录的处理顺序，每一步不通过即停止：
 1. 请求体按实际读到的字节逐块判断，超过 8 KB 即 413，先于一切校验；不是 JSON 415；
-   请求体只有 username（1 到 64 个字符）与 password（1 到 256 个字符）两个字符串，
+   请求体只有 username（1 到 254 个字符）与 password（1 到 256 个字符）两个字符串，
    否则 422。这些回答不计失败、不碰 Redis、不查账号。
 2. 取 Redis 客户端（未配置即 503）与访客来源（SHOP-TASK-026 的 client_source）。
 3. login_locked 为真即 429 login_locked：不查账号、不校验密码、不计失败。
@@ -73,7 +74,8 @@ COOKIE_MAX_AGE_SECONDS = int(SESSION_LIFETIME.total_seconds())
 CSRF_HEADER = "X-CSRF-Token"
 _NO_STORE = {"Cache-Control": "no-store"}
 
-USERNAME_MAX_CHARS = 64
+# 邮箱总长上限，与账号表的列长相同（Kelvin 2026-10-07）；这里不校验邮箱格式。
+USERNAME_MAX_CHARS = 254
 PASSWORD_MAX_CHARS = 256
 
 

@@ -4,9 +4,11 @@
 与会话到期」）与第 6 条（「应用日志……不记录……密码」），以及 docs/HANDOFF.md 记录的
 Kelvin 2026-10-04 管理员登录决定（下称「Kelvin 2026-10-04」）：「唯一的管理员账号由运营者在
 服务器上于 API 容器内运行命令创建，密码以不回显的方式输入，不经命令行参数或环境变量」「库里
-至多一个管理员账号，由账号表的单例槽唯一约束保证」「本轮审计只记……建账号、重设密码」。
-每条测试的文档字符串写明它守住的设计原句或 Kelvin 的哪一项决定；没有直接原句的，写明守住的
-是 SHOP-TASK-035 验收的哪一条。
+至多一个管理员账号，由账号表的单例槽唯一约束保证」「本轮审计只记……建账号、重设密码」，以及
+docs/HANDOFF.md 0.37 记录的 Kelvin 2026-10-07 决定（下称「Kelvin 2026-10-07」）：唯一管理员以
+邮箱登录，建账号时先去掉首尾空白并转小写，再按常见邮箱格式校验。每条测试的文档字符串写明
+它守住的设计原句或 Kelvin 的哪一项决定；没有直接原句的，写明守住的是 SHOP-TASK-035 验收的
+哪一条。
 
 读密码函数换成测试里按顺序回答的替身，会话工厂换成 SQLite 内存库（StaticPool，每个连接打开
 外键检查）上的会话；命令的输出写进 StringIO，断言其中不含密码或哈希。
@@ -33,7 +35,8 @@ from app.services.pw_hash import hash_password, verify_password
 
 NOW = datetime(2026, 10, 6, 3, 0)
 EARLIER = NOW - timedelta(days=3)
-USERNAME = "shop_admin"
+# Kelvin 2026-10-07「唯一管理员以邮箱登录」：测试用的登录名是规范化后的邮箱。
+USERNAME = "shop.admin@example.com"
 PASSWORD = "a long admin passphrase"
 NEW_PASSWORD = "another long passphrase"
 OLD_HASH = hash_password("the old admin passphrase")
@@ -255,16 +258,68 @@ def test_create_accepts_password_length_bounds(
     assert verify_password(password, _accounts(engine)[0].password_hash)
 
 
+# 254 个字符的邮箱：本地部分 64 个字符，域名三段（63、63、61 个字符）。
+LONGEST_EMAIL = "a" * 64 + "@" + "b" * 63 + "." + "c" * 63 + "." + "d" * 61
+
+
 @pytest.mark.parametrize(
     "username",
-    ["ab", "a" * 33, "Shop_admin", "shop-admin", "shop admin", " shop_admin", "管理员账号", ""],
-    ids=["too-short", "too-long", "uppercase", "hyphen", "space", "leading-space", "cjk", "empty"],
+    [
+        "管理员@example.com",
+        "ädmin@example.com",
+        "Kelvin@example.com",
+        "shop.admin.example.com",
+        "shop@@example.com",
+        "shop..admin@example.com",
+        ".shop@example.com",
+        "shop.@example.com",
+        "shop admin@example.com",
+        "shop!admin@example.com",
+        "a" * 65 + "@example.com",
+        "shop@example",
+        "shop@.example.com",
+        "shop@-example.com",
+        "shop@example-.com",
+        "shop@exa_mple.com",
+        "shop@" + "b" * 64 + ".com",
+        "shop@example.c",
+        "shop@example.c0m",
+        "a" * 64 + "@" + "b" * 63 + "." + "c" * 63 + "." + "d" * 62,
+        "",
+        "   ",
+    ],
+    ids=[
+        "cjk",
+        "non-ascii-letter",
+        "kelvin-sign-lowercases-to-ascii",
+        "missing-at",
+        "two-ats",
+        "consecutive-dots",
+        "local-leading-dot",
+        "local-trailing-dot",
+        "space",
+        "disallowed-character",
+        "local-65-characters",
+        "single-label-domain",
+        "empty-label",
+        "label-leading-hyphen",
+        "label-trailing-hyphen",
+        "underscore-in-domain",
+        "label-64-characters",
+        "last-label-one-letter",
+        "last-label-digit",
+        "255-characters",
+        "empty",
+        "whitespace-only",
+    ],
 )
-def test_create_rejects_invalid_username(
+def test_create_rejects_invalid_email(
     engine: Engine, factory: Callable[[], Session], username: str
 ) -> None:
-    """守住验收「用户名不合 3 到 32 个小写字母、数字或下划线时拒绝」（账号表只检查长度，字符集
-    由写入方保证）：非零退出，不读密码、不写入。"""
+    """守住 Kelvin 2026-10-07「按常见邮箱格式校验：只收 ASCII，本地部分 1 到 64 个字符，只含小写
+    字母、数字与 . _ % + -，不以点开头或结尾、不含连续的点；域名至少两段，每段 1 到 63 个字符，
+    最后一段至少 2 个字母；总长 6 到 254」与「（邮箱）不写进日志与错误响应」：不合格时以原有的
+    拒绝退出码退出，错误输出说明须为邮箱且不回显所给的值，不读密码、不写入。"""
     reader = Reader(PASSWORD, PASSWORD)
     output = Output()
 
@@ -272,17 +327,31 @@ def test_create_rejects_invalid_username(
 
     assert reader.prompts == []
     assert _accounts(engine) == []
-    assert "username" in output.err.getvalue()
+    assert "email" in output.err.getvalue()
+    given = username.strip()
+    if given:
+        assert given not in output.text
+        assert given.lower() not in output.text
 
 
-@pytest.mark.parametrize("username", ["abc", "a" * 32, "admin_2026"])
-def test_create_accepts_valid_usernames(
-    engine: Engine, factory: Callable[[], Session], username: str
+@pytest.mark.parametrize(
+    ("username", "stored"),
+    [
+        ("  Shop.Admin@Example.COM \t", "shop.admin@example.com"),
+        ("a@b.co", "a@b.co"),
+        ("first.last+tag_1%x-y@mail-01.example.co.uk",) * 2,
+        (LONGEST_EMAIL, LONGEST_EMAIL),
+    ],
+    ids=["uppercase-and-whitespace", "6-characters", "allowed-characters", "254-characters"],
+)
+def test_create_accepts_valid_email_and_stores_normalized(
+    engine: Engine, factory: Callable[[], Session], username: str, stored: str
 ) -> None:
-    """守住验收「3 到 32 个小写字母、数字或下划线」的边界：3 与 32 个字符、
-    含数字与下划线的用户名可以。"""
+    """守住 Kelvin 2026-10-07「建账号时先去掉首尾空白并转小写，再按常见邮箱格式校验」与「列加长到
+    254 个字符」：大写与首尾空白被规范化后接受，存规范化后的值；总长 6 与 254 个字符、含
+    . _ % + - 与多段域名的邮箱可以。"""
     assert _create(factory, username, Reader(PASSWORD, PASSWORD), Output()) == admin.EXIT_OK
-    assert [a.username for a in _accounts(engine)] == [username]
+    assert [a.username for a in _accounts(engine)] == [stored]
 
 
 @pytest.mark.parametrize("error", [EOFError(), KeyboardInterrupt()], ids=["eof", "interrupt"])

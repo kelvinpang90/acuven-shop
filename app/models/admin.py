@@ -4,15 +4,18 @@
 （「单一管理员、密码哈希、会话及后台操作记录」）、SiteSetting 一行（后台修改写入
 AuditEvent：操作者、时间、新旧值）、「权限与资料保护」第 4–6 条，以及 docs/HANDOFF.md
 记录的 Kelvin 2026-10-04 管理员登录决定（库里至多一个管理员账号，由账号表的单例槽
-唯一约束保证；每条审计记录都属于某个账号；审计记录不存来源地址与提交的用户名）。
+唯一约束保证；每条审计记录都属于某个账号；审计记录不存来源地址与提交的用户名），以及
+docs/HANDOFF.md 0.37 记录的 Kelvin 2026-10-07 决定（登录名列仍叫 username，取值改为邮箱，
+列加长到 254 个字符；SHOP-TASK-049，迁移 0017）。
 
 时间一律是不带时区的 UTC。外键一律 RESTRICT：被会话或审计记录引用的账号不能物理删除。
 除后台会话撤销时间与审计记录的对象类别、对象 ID、旧值、新值外全部非空：检查约束遇到空值会放行，
 非空约束不能省。
 
 检查约束只用比较、LENGTH、LIKE、IN / NOT IN 与 IS NULL，MySQL 与 SQLite 都能执行。
-用户名只含小写字母、数字与下划线、会话摘要为小写十六进制、操作名与对象类别取自写入方的常量，
-都由写入方保证；库里只检查长度（这些都是 ASCII，MySQL 按字节计的 LENGTH 与字符数相同）。
+用户名是规范化后的 ASCII 邮箱（app/admin.py 校验格式）、会话摘要为小写十六进制、操作名
+与对象类别取自写入方的常量，都由写入方保证；库里只检查长度（这些都是 ASCII，MySQL 按字节
+计的 LENGTH 与字符数相同）。
 旧值与新值可能含非 ASCII 字符，上限只由列长保证，库里不加长度上限检查（与 app/models/order.py
 的幂等键相同）。
 这里只建表与约束：密码哈希、建账号命令、会话签发与时长、锁定与登录都由之后的任务实现。
@@ -35,7 +38,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import MYSQL_TABLE_OPTIONS, Base
 
 USERNAME_MIN_LENGTH = 3
-USERNAME_MAX_LENGTH = 32
+USERNAME_MAX_LENGTH = 254
 PASSWORD_HASH_MAX_LENGTH = 255
 TOKEN_HASH_LENGTH = 64
 ACTION_MAX_LENGTH = 40
@@ -52,7 +55,9 @@ def _utcnow() -> datetime:
 
 
 class AdminAccount(Base):
-    """唯一的管理员账号：只有用户名、密码哈希、单例槽与创建、密码更新时间，不存其他个人资料。
+    """唯一的管理员账号：只有用户名（邮箱）、密码哈希、单例槽与创建、密码更新时间。
+
+    不存其他个人资料。
 
     两个建账号命令并发时，后插入的一个撞上单例槽的唯一约束被拒。
     """
