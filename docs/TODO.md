@@ -1260,3 +1260,15 @@
   - 明细的 SKU 升序交给数据库排序：MySQL 按列的排序规则（默认不区分大小写），SQLite 按字节。SKU 只有大小写不同时两边顺序可能不同；测试只用大写 SKU。
 - 留给之后的任务：A07 页面（后台库存重置结果页，调用本任务的两个接口，包括 `admin.stock_reset_failed` 那一行和展开明细的显示），以及在 `ADMIN_NAV` 里加上它的导航项；运营告警邮件接入之前，`admin.stock_reset_failed`「已告警运营者」仍按 `docs/HANDOFF.md` 2026-10-01 的决定处理。
 - 验证到什么程度：人工逐条对照验收标准与 A07 原句自查。`tests/test_admin_stock_resets.py` 用 TestClient 与 SQLite 内存库（StaticPool，打开外键检查并断言已打开；会话依赖换成每个请求一个绑定同一内存库的会话，结果在另一个会话里读），自建管理员、后台会话、商品规格与重置记录（成功、失败各若干天；一条明细的规格在写入后被删除，在库里确认 `variant_id` 已置空）。每条测试（参数化的是每个用例）的文档字符串写明它守住的是 A07 的哪一句或验收里的哪项约定。覆盖：无会话、库里没有的令牌、已到期与已撤销的会话时两个接口都 401（页码或路径 ID 不合法时也先 401）；只有两个 GET 路由、查询参数只有 `page`；33 天的记录乱序写入，列表按营业日期从新到旧，第 1 页 30 条，第 2 页 3 条，第 3 页为空、`total` 照常，默认与显式第 1 页一致；字段恰为约定的五个，`completed_at` 带 `Z`，失败时为 `null`，响应里没有异常类名与尝试次数；空列表；`page=10000` 合法；不合法的页码（0、负数、带 `+`、前导零、10001、超长、小数、指数、字母、空串、带空格、全角数字）都是固定的 422；明细的四个字段与按 SKU 升序，`variant_id` 为空的行照常返回，别的日期的明细不混入；失败记录的明细 `lines` 为空、不含异常类名；不存在与最大合法 ID 都是 404；不合法的路径 ID 都是固定的 422；200、401、404、422 都带 no-store，不写审计，应用不记日志，重置记录与明细不变。未覆盖：真 MySQL 上的排序规则与时间序列化。这些测试由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-053 商品列表接口按 slug 筛选
+
+- [x] 给公开的商品列表接口 `GET /api/catalog/products` 加可重复的查询参数 `slug`，供首页按店铺装修的精选商品取商品卡片：`app/api/catalog.py`（依赖 `_slug_filter`，把参数传给服务函数）、`app/services/catalog.py`（`list_products` 新增带默认值空元组的关键字参数 `slugs`）；测试见新文件 `tests/test_catalog_slug_filter.py`。未改其他筛选、排序、分页与字段，未改已有目录测试、前端代码、设计文档、`.platform/`、CI 或部署配置，未加表或迁移，未装依赖。设计闸门：不适用（只读筛选，商品与价格字段不变）。拆分：接口层，不拆。
+- 参数：`slug=<商品 slug>` 可重复，最多 20 个（`MAX_SLUGS`），每个 1 到 100 个字符（`MAX_SLUG_LENGTH`，与商品 slug 的列长相同）。超过 20 个时 422，`detail` 为一条 `{"type":"too_many_slugs","loc":["query","slug"],"msg":"At most 20 slug values are allowed"}`；有空串或超过 100 个字符的值时 422，每个不合格的值一条 `{"type":"slug_length_invalid","loc":["query","slug",<序号>],"msg":"Slug should have 1 to 100 characters"}`。写法同 `app/api/pay.py` 的 `_language`（`RequestValidationError` 加 `app/api/orders.py` 的 `_error`），不含所给的值。
+- 规则：给出时只返回 slug 在其中且满足 `published()` 的商品（`Product.slug IN (...)` 加进同一组条件），与搜索、分类、规格筛选为且；不存在或不满足 `published()` 的 slug 被略去，不报错；同一 slug 重复给出只算一次。排序（默认 newest，不按参数顺序）、分页、每页条数、总数的算法与每项字段不变。不给时条件不变，与之前完全相同；`list_products` 不给 `slugs` 时行为不变。
+- 偏离与取舍，请审阅（未改需求与设计，未发现须停下的需求或设计问题）：
+  - 结果按所选排序返回，不按 slug 参数的顺序；首页要按装修设置的位置显示时，由前台按 `featured_slugs` 的顺序重排卡片（留给 SHOP-TASK-054）。
+  - slug 的校验依赖放在会话依赖之前：数据库未配置时，不合法的 slug 先得到 422，合法时仍是 503。
+  - 错误类型 `too_many_slugs`、`slug_length_invalid` 与消息由本任务确定，合同只规定了写法。
+- 留给之后的任务：前台按店铺装修显示精选商品（调用本参数、按位置排卡片、精选为空时取最新 4 件）由 SHOP-TASK-054 实现。
+- 验证到什么程度：人工逐条对照验收标准自查。`tests/test_catalog_slug_filter.py` 用 TestClient 与 SQLite 内存库（StaticPool，打开外键检查并断言已打开，会话依赖换成测试自己的会话），建数据的辅助函数从 `tests/test_catalog_api.py` 导入（不改该文件），每条测试的文档字符串写明它守住的规则，覆盖：多个 slug 只返回这些商品、总数正确、按 newest 排序、分页与 price_desc 照常、每项与不筛选时的对应项相同、重复 slug 不重复返回；不存在、商品停用、分类停用、没有启用 SKU 的 slug 被略去且仍 200，全部略去时为空页；与分类筛选、搜索同时用时为且；不给 slug 时结果与之前相同、服务函数不给与给空元组相同；21 个、101 个字符、空串时 422，错误只有类型、位置与固定消息、不回显所给的值；20 个与 100 个字符的边界被接受。这些测试由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest；未在真 MySQL 上验证。检查命令结果由 Worker 另行记录。
