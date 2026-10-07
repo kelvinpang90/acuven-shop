@@ -357,6 +357,8 @@ describe("order details", () => {
     expect(attributes(tags(back, "a")[0] ?? "").get("href")).toBe(ORDERS_PATH);
     expect(visibleTexts(back)).toEqual([COPY["common.back"][language]]);
     expect(attributes(tags(back, "svg")[0] ?? "").get("aria-hidden")).toBe("true");
+    // 验收第 1 条「样式以…A02-phone-detail 为准」：返回为正文色（视觉稿 color: inherit），带 .acs-admin .acs-tag--outline 的正文色。
+    expect(classes(tags(back, "a")[0] ?? "")).toEqual(["acs-tag--outline", "site-admin-order__back"]);
   });
 });
 

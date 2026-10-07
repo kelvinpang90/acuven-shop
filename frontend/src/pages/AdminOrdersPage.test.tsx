@@ -343,6 +343,16 @@ describe("desktop table", () => {
     expect(table).toContain(`<td class="acs-admin__muted">—</td>`);
     expect(classes(tags(table, "th")[3] ?? "")).toContain("site-admin-orders__num");
   });
+
+  // SHOP-TASK-055 验收第 1 条「样式以 docs/design/pages/ 的 A02-desktop-list…为准」：订单号链接为正文色（视觉稿 color: var(--a-ink)，
+  // 不是浏览器默认的链接颜色）；site.css 不写颜色，链接带生成样式里 .acs-admin .acs-tag--outline 的正文色，不带 acs-tag（没有标签的边框与字号）。
+  it("gives the order number links the body text colour", () => {
+    const links = tags(element(render(), "div", "site-admin-orders__table"), "a");
+    expect(links).toHaveLength(ROWS.length);
+    for (const link of links) {
+      expect(classes(link)).toEqual(["acs-tag--outline", "site-admin-orders__link"]);
+    }
+  });
 });
 
 describe("phone cards", () => {
@@ -382,6 +392,16 @@ describe("phone cards", () => {
       for (const separator of separators) {
         expect(attributes(tags(separator, "span")[0] ?? "").get("aria-hidden")).toBe("true");
       }
+    }
+  });
+
+  // SHOP-TASK-055 验收第 1 条「样式以 docs/design/pages/…为准」（A02-phone-list 卡片链接 color: inherit，即正文色）：
+  // 卡片的内容与 › 图形带 .acs-admin .acs-tag--outline 的正文色；链接本身不带，免得面板边线被换成 --a-border。
+  it("gives the card contents the body text colour", () => {
+    for (const item of all(element(render(), "ul", "site-admin-orders__cards"), "li")) {
+      expect(classes(tags(item, "a")[0] ?? "")).not.toContain("acs-tag--outline");
+      expect(classes(tags(item, "span")[0] ?? "")).toEqual(["acs-tag--outline", "site-admin-orders__card-body"]);
+      expect(classes(tags(item, "svg")[0] ?? "")).toEqual(["acs-tag--outline"]);
     }
   });
 
@@ -550,7 +570,8 @@ describe("list and details", () => {
     expect(classes(section)).toEqual(["acs-admin__panel", "site-admin-order"]);
     expect(attributes(section).get("aria-busy")).toBe("true");
     expect(withDetail.indexOf("<form")).toBeLessThan(withDetail.indexOf("<section"));
-    expect(withDetail).toContain(`<a class="site-admin-order__back" href="${ORDERS_PATH}">`);
+    // 返回链接另带取正文色的 acs-tag--outline（视觉稿 A02-phone-detail 的 color: inherit），所以完整开始标签里有它。
+    expect(withDetail).toContain(`<a class="acs-tag--outline site-admin-order__back" href="${ORDERS_PATH}">`);
     const listOnly = renderToStaticMarkup(wrap(<AdminOrdersContent />, "en"));
     expect(classes(tags(listOnly, "div")[0] ?? "")).toEqual(["site-admin-orders-page"]);
     expect(listOnly).not.toContain("<section");

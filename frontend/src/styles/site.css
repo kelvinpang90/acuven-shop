@@ -259,6 +259,8 @@ body { margin: 0; }
 .site-admin-orders__list { display: grid; gap: 16px; }
 .site-admin-orders__table { overflow-x: auto; }
 .site-admin-orders__num { text-align: right; }
+/* 订单号链接（A02-desktop-list）：下划线偏移 2px；正文色由标记上的 acs-tag--outline 取得（见 AdminOrderDetail.tsx 的 INK_TEXT）。 */
+.site-admin-orders__link { text-underline-offset: 2px; }
 .site-admin-orders__cards { display: none; margin: 0; padding: 0; list-style: none; }
 .site-admin-orders__pager { display: flex; gap: 8px; justify-content: flex-end; }
 

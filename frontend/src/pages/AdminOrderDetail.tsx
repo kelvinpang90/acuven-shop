@@ -34,6 +34,11 @@ export function statusTagClass(status: OrderStatus): string {
   return status === "demo_cancelled" ? "acs-tag acs-tag--outline" : "acs-tag acs-tag--neutral";
 }
 
+// 后台链接的文字为正文色（A02-desktop-list 订单号的 color: var(--a-ink)，A02-phone-list 卡片与 A02-phone-detail 返回的 color: inherit）：
+// site.css 不写颜色，借生成样式里 .acs-admin .acs-tag--outline 的 color: var(--a-ink)；不带 acs-tag 时元素没有边框样式，
+// 它的 border-color 不起作用。
+export const INK_TEXT = "acs-tag--outline";
+
 // 操作者类别（UX A02 [admin.actor_*]）：访客与会员都是顾客。
 const ACTOR_LABEL: Readonly<Record<ActorType, CopyKey>> = {
   guest: "admin.actor_customer",
@@ -377,7 +382,7 @@ export function AdminOrderDetailView({ state, states, onAdvance }: AdminOrderDet
   const { screen } = state;
   return (
     <section className="acs-admin__panel site-admin-order" aria-busy={state.busy}>
-      <Link className="site-admin-order__back" to={ADMIN_ORDERS_PATH}>
+      <Link className={`${INK_TEXT} site-admin-order__back`} to={ADMIN_ORDERS_PATH}>
         <BackIcon />
         <span>{t("common.back")}</span>
       </Link>

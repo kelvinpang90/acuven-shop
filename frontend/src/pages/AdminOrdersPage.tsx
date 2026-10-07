@@ -8,7 +8,7 @@ import type { CopyKey } from "../i18n/copy";
 import { useCopy, useLanguage } from "../i18n/language";
 import { ADMIN_LOGIN_PATH, adminOrderPath, Link, useRouter } from "../router";
 import type { RoutePath } from "../router";
-import AdminOrderDetail, { STATUS_LABEL, statusTagClass } from "./AdminOrderDetail";
+import AdminOrderDetail, { INK_TEXT, STATUS_LABEL, statusTagClass } from "./AdminOrderDetail";
 import { formatDate, usePrice } from "./TrackOrderPage";
 
 // 后台订单 A02（docs/UX.md 0.10 A02 与「状态与补充（0.9）」，视觉稿 A02-desktop、A02-desktop-list、A02-desktop-frozen、
@@ -112,7 +112,9 @@ function OrderRow({ order, selected }: { order: AdminOrderRow; selected: boolean
   return (
     <tr aria-selected={selected ? "true" : undefined}>
       <td>
-        <Link to={adminOrderPath(order.id)}>{order.order_number}</Link>
+        <Link className={`${INK_TEXT} site-admin-orders__link`} to={adminOrderPath(order.id)}>
+          {order.order_number}
+        </Link>
       </td>
       <td>{formatDate(order.created_at, language)}</td>
       <td>
@@ -130,14 +132,15 @@ function OrderRow({ order, selected }: { order: AdminOrderRow; selected: boolean
 
 function ChevronIcon() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <svg className={INK_TEXT} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M9 6l6 6-6 6" />
     </svg>
   );
 }
 
 // 手机卡片（照 A02-phone-list）：整张为一个指向该单详情的链接，里面不再嵌套链接；订单号与状态，其下为日期 · 合计
-// （· 待审数，只作文字，为 0 时不显示），右侧为 › 图形。
+// （· 待审数，只作文字，为 0 时不显示），右侧为 › 图形。正文色加在内容与图形上而不是链接上：链接上的 .acs-admin .acs-tag--outline
+// 会把面板边线换成 --a-border。
 function OrderCard({ order }: { order: AdminOrderRow }) {
   const t = useCopy();
   const price = usePrice();
@@ -145,7 +148,7 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
   return (
     <li>
       <Link className="acs-admin__panel site-admin-orders__card" to={adminOrderPath(order.id)}>
-        <span className="site-admin-orders__card-body">
+        <span className={`${INK_TEXT} site-admin-orders__card-body`}>
           <span className="site-admin-orders__card-head">
             <span>{order.order_number}</span>
             <span className={statusTagClass(order.status)}>{t(STATUS_LABEL[order.status])}</span>
