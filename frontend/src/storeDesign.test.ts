@@ -240,7 +240,10 @@ describe("loading the store design", () => {
     const storage = remembered({ theme: "galeri", accent: null, home_blocks: response.home_blocks });
     const result = await loadStoreDesign(storage);
     expect(result).toEqual({ design: responseDesign, featuredSlugs: ["mug", "tote-bag"] });
-    expect(storage.data[STORE_DESIGN_STORAGE_KEY]).not.toContain("featured");
+    // home_blocks 本身含 { block: "featured" }，所以按属性检查：不记 featured_slugs，也不留下挑选的 slug。
+    const stored = JSON.parse(storage.data[STORE_DESIGN_STORAGE_KEY] ?? "") as Record<string, unknown>;
+    expect(stored).not.toHaveProperty("featured_slugs");
+    expect(stored).not.toHaveProperty("featuredSlugs");
     expect(storage.data[STORE_DESIGN_STORAGE_KEY]).not.toContain("mug");
     expect(readRememberedDesign(storage)).toEqual(responseDesign);
     expect(settledStoreDesign(initialStoreDesign(memoryStorage()), result)).toEqual({
