@@ -1,65 +1,27 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { FormEvent, MouseEvent } from "react";
+import type { FormEvent } from "react";
 
-import { readAdminSession, submitAdminLogin, submitAdminLogout } from "../api/admin";
-import type { AdminSession, LoginReply, SessionRead } from "../api/admin";
-import { LANGUAGES } from "../i18n/copy";
-import type { CopyKey, Language } from "../i18n/copy";
-import { htmlLang, useCopy, useLanguage } from "../i18n/language";
-import { useRouter } from "../router";
+import { readAdminSession, submitAdminLogin } from "../api/admin";
+import type { LoginReply, SessionRead } from "../api/admin";
+import { AdminAlert, LANGUAGE_LABEL, LanguageLinks, useColorMode } from "../components/AdminFrame";
+import type { ColorMode } from "../components/AdminFrame";
+import type { CopyKey } from "../i18n/copy";
+import { useCopy, useLanguage } from "../i18n/language";
+import { ADMIN_ORDERS_PATH, useRouter } from "../router";
+import type { RoutePath } from "../router";
 
-// 后台登录页 A01（docs/UX.md「管理后台总体」与 A01）：管理员以用户名与密码登录，调用 SHOP-TASK-036 的三个接口。
-// 不套前台的站点框架（App.tsx 对 /admin 开头的路由直接渲染页面）；根元素为 acs-admin，深浅色随管理员设备设置，
-// 服务端渲染与首次客户端渲染都是浅色，挂载后才读 prefers-color-scheme。界面语言沿用 LanguageProvider（默认英文）。
-// 过渡规则（Kelvin 2026-10-05，docs/HANDOFF.md）：A02 上线前登录成功后留在本页，面板保留标题与语言切换，
-// 其下显示 admin.logged_in 与次要样式的 admin.logout；后台框架与「登录后进入 A02」留给 A02 页面任务。
-// 用户名与密码只在页面内存（React 状态）与登录请求体里，每次提交后清空密码框；CSRF 令牌只在内存与退出请求头里。
+export { DARK_SCHEME_QUERY, watchColorScheme } from "../components/AdminFrame";
+export type { ColorMode, MatchMedia, SchemeQuery } from "../components/AdminFrame";
+
+// 后台登录页 A01（docs/UX.md「管理后台总体」与 A01）：管理员以用户名与密码登录，调用 SHOP-TASK-036 的接口。
+// 不套前台的站点框架（App.tsx 对 /admin 开头的路由直接渲染页面），也不用后台框架（A01 没有导航与退出按钮）；
+// 根元素为 acs-admin，深浅色随管理员设备设置（与后台框架相同，见 components/AdminFrame.tsx）。界面语言沿用 LanguageProvider（默认英文）。
+// 去向为 A02（UX A01「去向：A02」）：打开时已有会话即用 replace 进入 /admin/orders，登录成功后用 navigate 进入。
+// 用户名与密码只在页面内存（React 状态）与登录请求体里，每次提交后清空密码框。
 // 表单不用浏览器自带的必填校验（那不是 UX-COPY 文字）：任一项为空时提交按钮禁用。
 
-export type ColorMode = "light" | "dark";
-
-export const DARK_SCHEME_QUERY = "(prefers-color-scheme: dark)";
-
-// matchMedia 返回值里本页用到的部分。
-export interface SchemeQuery {
-  readonly matches: boolean;
-  addEventListener(type: "change", listener: () => void): void;
-  removeEventListener(type: "change", listener: () => void): void;
-}
-
-export type MatchMedia = (query: string) => SchemeQuery;
-
-// 按设备的深浅色设置报告一次当前值，并在设置变化时再报告；返回取消订阅。没有 matchMedia 时保持浅色、不报告。
-export function watchColorScheme(matchMedia: MatchMedia | null, onMode: (mode: ColorMode) => void): () => void {
-  if (matchMedia === null) {
-    return () => undefined;
-  }
-  const query = matchMedia(DARK_SCHEME_QUERY);
-  const report = () => {
-    onMode(query.matches ? "dark" : "light");
-  };
-  report();
-  query.addEventListener("change", report);
-  return () => {
-    query.removeEventListener("change", report);
-  };
-}
-
-function browserMatchMedia(): MatchMedia | null {
-  return typeof window !== "undefined" && typeof window.matchMedia === "function" ? (query) => window.matchMedia(query) : null;
-}
-
-// 首次渲染为浅色，挂载后按设备设置并随之变化。
-function useColorMode(): ColorMode {
-  const [mode, setMode] = useState<ColorMode>("light");
-  useEffect(() => watchColorScheme(browserMatchMedia(), setMode), []);
-  return mode;
-}
-
-export type SignedIn = { status: "in"; username: string; csrfToken: string };
-
-// 面板的内容：会话请求返回前（loading）只有标题与语言切换；form 为登录表单；in 为已登录状态（过渡规则）。
-export type AdminScreen = { status: "loading" } | { status: "form" } | SignedIn;
+// 面板的内容：会话请求返回前（loading）只有标题与语言切换；form 为登录表单。
+export type AdminScreen = { status: "loading" } | { status: "form" };
 
 export interface AdminState {
   screen: AdminScreen;
@@ -69,6 +31,12 @@ export interface AdminState {
 export const INITIAL_STATE: AdminState = { screen: { status: "loading" }, error: null };
 
 const FORM: AdminScreen = { status: "form" };
+
+// 进入 A02 订单页（已有会话或登录成功）。
+export const TO_ORDERS = "orders";
+
+// 一步的结果：留在本页显示某个状态，或进入 A02。
+export type AdminOutcome = AdminState | typeof TO_ORDERS;
 
 export interface LoginFields {
   username: string;
@@ -91,15 +59,11 @@ export const LOGIN_ERROR: Readonly<Record<Exclude<LoginReply, "ok">, CopyKey>> =
   failed: "common.error_retry",
 };
 
-function signedIn(session: AdminSession): SignedIn {
-  return { status: "in", username: session.username, csrfToken: session.csrf_token };
-}
-
-// 打开本页时按会话接口决定面板：200 已登录，401 登录表单，其他结果登录表单与 common.error_retry。
-export function sessionState(read: SessionRead): AdminState {
+// 打开本页时按会话接口决定：200 进入 A02，401 登录表单，其他结果登录表单与 common.error_retry。
+export function sessionState(read: SessionRead): AdminOutcome {
   switch (read.kind) {
     case "ok":
-      return { screen: signedIn(read.session), error: null };
+      return TO_ORDERS;
     case "none":
       return { screen: FORM, error: null };
     case "failed":
@@ -108,69 +72,41 @@ export function sessionState(read: SessionRead): AdminState {
   }
 }
 
-// 登录：204 后再取会话并显示已登录状态（取不到时留在表单并显示 common.error_retry）；其余回答留在表单并显示对应提示。
-export async function logIn(fields: LoginFields, signal?: AbortSignal): Promise<AdminState> {
+// 登录：204 进入 A02（会话由后台框架读取）；其余回答留在表单并显示对应提示。
+export async function logIn(fields: LoginFields): Promise<AdminOutcome> {
   const reply = await submitAdminLogin(fields.username, fields.password);
-  if (reply !== "ok") {
-    return { screen: FORM, error: LOGIN_ERROR[reply] };
-  }
-  const read = await readAdminSession(signal);
-  return read.kind === "ok" ? { screen: signedIn(read.session), error: null } : { screen: FORM, error: "common.error_retry" };
+  return reply === "ok" ? TO_ORDERS : { screen: FORM, error: LOGIN_ERROR[reply] };
 }
 
 // 提交登录：先清空密码框（保留用户名），再以提交时的值发请求。
-export function beginLogIn(fields: LoginFields, setFields: (fields: LoginFields) => void, signal?: AbortSignal): Promise<AdminState> {
+export function beginLogIn(fields: LoginFields, setFields: (fields: LoginFields) => void): Promise<AdminOutcome> {
   setFields({ username: fields.username, password: "" });
-  return logIn(fields, signal);
+  return logIn(fields);
 }
 
-// 退出：204 或 401 回到登录表单；403 重新取会话（取得新令牌）并显示 common.error_retry；
-// 网络中断显示 common.network_check、其他结果显示 common.error_retry，都保持已登录状态。
-export async function logOut(current: SignedIn, signal?: AbortSignal): Promise<AdminState> {
-  const reply = await submitAdminLogout(current.csrfToken);
-  switch (reply) {
-    case "done":
-      return { screen: FORM, error: null };
-    case "network":
-      return { screen: current, error: "common.network_check" };
-    case "failed":
-      return { screen: current, error: "common.error_retry" };
-    case "csrf": {
-      const read = await readAdminSession(signal);
-      if (read.kind === "ok") {
-        return { screen: signedIn(read.session), error: "common.error_retry" };
-      }
-      return { screen: read.kind === "none" ? FORM : current, error: "common.error_retry" };
-    }
+// 本页对一步结果的处理：显示状态，或经路由进入 A02。
+export interface LoginMoves {
+  show: (state: AdminState) => void;
+  replace: (path: RoutePath) => void;
+  navigate: (path: RoutePath) => void;
+}
+
+// 打开时已有会话：用 replace 进入 A02，登录页不留在历史记录里。
+export function settleSession(outcome: AdminOutcome, moves: LoginMoves): void {
+  if (outcome === TO_ORDERS) {
+    moves.replace(ADMIN_ORDERS_PATH);
+  } else {
+    moves.show(outcome);
   }
 }
 
-const LANGUAGE_LABEL: Readonly<Record<Language, CopyKey>> = {
-  en: "common.lang_en",
-  zh: "common.lang_zh",
-  ms: "common.lang_ms",
-};
-
-// 语言选项：链接指向本页（网址里不带语言），点击只切换界面语言并保存在本浏览器（与前台页头相同）。
-function LanguageLinks({ onChosen }: { onChosen?: () => void }) {
-  const t = useCopy();
-  const { language, setLanguage } = useLanguage();
-  const { path } = useRouter();
-  return LANGUAGES.map((option) => (
-    <a
-      key={option}
-      href={path}
-      lang={htmlLang(option)}
-      aria-current={option === language ? "true" : undefined}
-      onClick={(event: MouseEvent<HTMLAnchorElement>) => {
-        event.preventDefault();
-        setLanguage(option);
-        onChosen?.();
-      }}
-    >
-      {t(LANGUAGE_LABEL[option])}
-    </a>
-  ));
+// 登录成功：用 navigate 进入 A02。
+export function settleLogIn(outcome: AdminOutcome, moves: LoginMoves): void {
+  if (outcome === TO_ORDERS) {
+    moves.navigate(ADMIN_ORDERS_PATH);
+  } else {
+    moves.show(outcome);
+  }
 }
 
 function ChevronIcon() {
@@ -219,15 +155,6 @@ function PanelHead() {
   );
 }
 
-function Alert({ error }: { error: CopyKey }) {
-  const t = useCopy();
-  return (
-    <div className="acs-admin__alert" role="alert">
-      <span>{t(error)}</span>
-    </div>
-  );
-}
-
 export interface AdminLoginViewProps {
   mode: ColorMode;
   state: AdminState;
@@ -235,12 +162,11 @@ export interface AdminLoginViewProps {
   busy: boolean;
   onChange: (fields: LoginFields) => void;
   onLogIn: () => void;
-  onLogOut: () => void;
 }
 
 // 输入框不设 name：不用脚本时表单（method="post"）也提交不出用户名或密码，更不会进网址。
 // 错误提示在提交按钮之后（UX A01 线框）。
-export function AdminLoginView({ mode, state, fields, busy, onChange, onLogIn, onLogOut }: AdminLoginViewProps) {
+export function AdminLoginView({ mode, state, fields, busy, onChange, onLogIn }: AdminLoginViewProps) {
   const t = useCopy();
   const { screen, error } = state;
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -284,17 +210,8 @@ export function AdminLoginView({ mode, state, fields, busy, onChange, onLogIn, o
               <button className="acs-admin__btn site-admin-login__submit" type="submit" disabled={!canLogIn(fields, busy)}>
                 {t("auth.login_submit")}
               </button>
-              {error !== null && <Alert error={error} />}
+              {error !== null && <AdminAlert error={error} />}
             </form>
-          )}
-          {screen.status === "in" && (
-            <div className="site-admin-login__body">
-              <p>{t("admin.logged_in", { username: screen.username })}</p>
-              <button className="acs-admin__btn acs-admin__btn--secondary site-admin-login__logout" type="button" disabled={busy} onClick={onLogOut}>
-                {t("admin.logout")}
-              </button>
-              {error !== null && <Alert error={error} />}
-            </div>
           )}
         </div>
       </main>
@@ -304,6 +221,7 @@ export function AdminLoginView({ mode, state, fields, busy, onChange, onLogIn, o
 
 export default function AdminLoginPage() {
   const mode = useColorMode();
+  const { replace, navigate } = useRouter();
   const [state, setState] = useState<AdminState>(INITIAL_STATE);
   const [fields, setFields] = useState<LoginFields>(EMPTY_LOGIN);
   const [busy, setBusy] = useState(false);
@@ -315,18 +233,15 @@ export default function AdminLoginPage() {
     lifetime.current = controller;
     void readAdminSession(controller.signal).then((read) => {
       if (!controller.signal.aborted) {
-        setState(sessionState(read));
+        settleSession(sessionState(read), { show: setState, replace, navigate });
       }
     });
     return () => {
       controller.abort();
     };
-  }, []);
+  }, [replace, navigate]);
 
-  const settle = (next: AdminState) => {
-    if (lifetime.current?.signal.aborted) {
-      return;
-    }
+  const show = (next: AdminState) => {
     setState(next);
     setBusy(false);
   };
@@ -344,15 +259,11 @@ export default function AdminLoginPage() {
         }
         setBusy(true);
         setState({ screen: state.screen, error: null });
-        void beginLogIn(fields, setFields, lifetime.current?.signal).then(settle);
-      }}
-      onLogOut={() => {
-        if (state.screen.status !== "in" || busy) {
-          return;
-        }
-        setBusy(true);
-        setState({ screen: state.screen, error: null });
-        void logOut(state.screen, lifetime.current?.signal).then(settle);
+        void beginLogIn(fields, setFields).then((outcome) => {
+          if (!lifetime.current?.signal.aborted) {
+            settleLogIn(outcome, { show, replace, navigate });
+          }
+        });
       }}
     />
   );

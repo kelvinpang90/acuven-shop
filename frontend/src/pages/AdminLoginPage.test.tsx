@@ -4,8 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "../App";
 import { readAdminSession } from "../api/admin";
-import { CSRF_HEADER } from "../api/pay";
-import { BRAND, COPY, formatCopy, LANGUAGES } from "../i18n/copy";
+import { BRAND, COPY, LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { RouterProvider, ROUTE_PATHS } from "../router";
@@ -18,11 +17,13 @@ import {
   INITIAL_STATE,
   LOGIN_ERROR,
   logIn,
-  logOut,
   sessionState,
+  settleLogIn,
+  settleSession,
+  TO_ORDERS,
   watchColorScheme,
 } from "./AdminLoginPage";
-import type { AdminLoginViewProps, AdminState, ColorMode, SchemeQuery, SignedIn } from "./AdminLoginPage";
+import type { AdminLoginViewProps, AdminOutcome, AdminState, ColorMode, LoginMoves, SchemeQuery } from "./AdminLoginPage";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -35,7 +36,7 @@ const PASSWORD = "s3cret-Passw0rd!";
 const TOKEN = "admin-csrf-1";
 const FILLED = { username: USERNAME, password: PASSWORD };
 const SESSION = { username: USERNAME, expires_at: "2026-11-05T08:00:00Z", csrf_token: TOKEN };
-const SIGNED_IN: SignedIn = { status: "in", username: USERNAME, csrfToken: TOKEN };
+const ORDERS_PATH = "/admin/orders";
 const FORM_STATE: AdminState = { screen: { status: "form" }, error: null };
 const LANGUAGE_LABEL = { en: "common.lang_en", zh: "common.lang_zh", ms: "common.lang_ms" } as const;
 const HTML_LANG = { en: "en", zh: "zh-Hans", ms: "ms" } as const;
@@ -54,7 +55,25 @@ function renderApp(path: string, language: Language = "en"): string {
 const noop = () => undefined;
 
 function props(overrides: Partial<AdminLoginViewProps> = {}): AdminLoginViewProps {
-  return { mode: "light", state: FORM_STATE, fields: EMPTY_LOGIN, busy: false, onChange: noop, onLogIn: noop, onLogOut: noop, ...overrides };
+  return { mode: "light", state: FORM_STATE, fields: EMPTY_LOGIN, busy: false, onChange: noop, onLogIn: noop, ...overrides };
+}
+
+// 路由替身：记录本页经 replace 还是 navigate 去了哪里，以及留在本页时显示的状态。
+function fakeMoves() {
+  const moves: string[] = [];
+  const shown: AdminState[] = [];
+  const target: LoginMoves = {
+    show: (state) => {
+      shown.push(state);
+    },
+    replace: (path) => {
+      moves.push(`replace ${path}`);
+    },
+    navigate: (path) => {
+      moves.push(`navigate ${path}`);
+    },
+  };
+  return { target, moves, shown };
 }
 
 function wrap(element: ReactElement, language: Language): ReactElement {
@@ -158,10 +177,6 @@ function stubFetch(...replies: (Response | (() => never))[]) {
 const networkDown = (): never => {
   throw new TypeError("Failed to fetch");
 };
-
-function headers(call: Call | undefined): Record<string, string> {
-  return (call?.init.headers ?? {}) as Record<string, string>;
-}
 
 function body(call: Call | undefined): unknown {
   return JSON.parse(call?.init.body as string);
@@ -406,54 +421,59 @@ describe("login form", () => {
 });
 
 describe("session", () => {
-  // SHOP-TASK-038 验收第 3 条「200 显示已登录状态，401 显示登录表单，其他结果显示 common.error_retry 与登录表单」。
+  // SHOP-TASK-038 验收第 3 条「401 显示登录表单，其他结果显示 common.error_retry 与登录表单」；
+  // SHOP-TASK-047 验收第 6 条「打开时会话 200 即用 replace 进入 /admin/orders」（UX A01「去向：A02」）：200 的结果是进入 A02，不再有已登录状态。
   it("chooses the panel from the session reply", () => {
-    expect(sessionState({ kind: "ok", session: SESSION })).toEqual({ screen: SIGNED_IN, error: null });
+    expect(sessionState({ kind: "ok", session: SESSION })).toBe(TO_ORDERS);
     expect(sessionState({ kind: "none" })).toEqual({ screen: { status: "form" }, error: null });
     expect(sessionState({ kind: "failed" })).toEqual({ screen: { status: "form" }, error: "common.error_retry" });
     expect(sessionState({ kind: "network" })).toEqual({ screen: { status: "form" }, error: "common.error_retry" });
-    const html = render({ state: sessionState({ kind: "failed" }) });
+    const html = render({ state: { screen: { status: "form" }, error: "common.error_retry" } });
     expect(tags(html, "input")).toHaveLength(2);
     expect(element(html, "div", "acs-admin__alert")).toContain(COPY["common.error_retry"].en);
   });
 
-  // SHOP-TASK-038 验收第 5 条与 HANDOFF Kelvin 2026-10-05 过渡规则「面板保留标题与语言切换，其下显示 admin.logged_in 与次要样式的 admin.logout」：
-  // 已登录时标题、两种语言切换照旧，admin.logged_in 的 {username} 为会话接口返回的用户名，admin.logout 为 acs-admin__btn acs-admin__btn--secondary，没有表单与输入框。
-  it.each(LANGUAGES)("shows the logged-in state with the username and the logout button in %s", (language) => {
-    const html = render({ state: { screen: SIGNED_IN, error: null } }, language);
-    expect(element(html, "h1", "acs-admin__h")).toContain(escapeHtml(COPY["admin.login_title"][language]));
-    expect(html).toContain("site-admin-login__lang-links");
-    expect(html).toContain("site-admin-login__lang-button");
-    const text = escapeHtml(formatCopy(COPY["admin.logged_in"][language], { username: USERNAME }));
-    expect(html).toContain(`<p>${text}</p>`);
-    const logoutButton = (source: string) => tags(source, "button").find((tag) => classes(tag).includes("site-admin-login__logout")) ?? "";
-    const logout = logoutButton(html);
-    expect(classes(logout)).toContain("acs-admin__btn");
-    expect(classes(logout)).toContain("acs-admin__btn--secondary");
-    expect(attributes(logout).get("type")).toBe("button");
-    expect(attributes(logout).has("disabled")).toBe(false);
-    expect(html.indexOf(logout)).toBeGreaterThan(html.indexOf(text));
-    expect(html).toContain(`>${escapeHtml(COPY["admin.logout"][language])}</button>`);
-    expect(html).not.toMatch(/<(form|input)\b/);
-    // 只按 type 找提交按钮：zh 的 admin.logout「退出登录」以 auth.login_submit「登录」结尾，不能按文字子串判断。
-    expect(tags(html, "button").filter((tag) => attributes(tag).get("type") === "submit")).toHaveLength(0);
-    expect(attributes(tags(html, "main")[0] ?? "").get("aria-busy")).toBe("false");
-    // 退出请求进行中按钮禁用（派生实现约束：不重复提交）。
-    expect(attributes(logoutButton(render({ state: { screen: SIGNED_IN, error: null }, busy: true }, language))).has("disabled")).toBe(true);
+  // SHOP-TASK-047 验收第 6 条「打开时会话 200 即用 replace 进入 /admin/orders」与「取消 docs/HANDOFF.md 0.32 的过渡规则」：
+  // 会话 200 时以 replace（不是 navigate）换成 /admin/orders，不显示任何状态；401 与其他结果留在本页显示表单，不跳转。
+  it("replaces the page with /admin/orders when a session exists", () => {
+    const ok = fakeMoves();
+    settleSession(sessionState({ kind: "ok", session: SESSION }), ok.target);
+    expect(ok.moves).toEqual([`replace ${ORDERS_PATH}`]);
+    expect(ok.shown).toEqual([]);
+    for (const read of [{ kind: "none" }, { kind: "failed" }, { kind: "network" }] as const) {
+      const stay = fakeMoves();
+      settleSession(sessionState(read), stay.target);
+      expect(stay.moves).toEqual([]);
+      expect(stay.shown).toEqual([sessionState(read)]);
+    }
+  });
+
+  // SHOP-TASK-047 验收第 6 条「删除已登录状态、A01 上的退出按钮及其逻辑」：本页的各状态都没有 admin.logout 按钮。
+  it.each(LANGUAGES)("has no logout button in %s", (language) => {
+    for (const state of [INITIAL_STATE, FORM_STATE, { screen: { status: "form" as const }, error: "common.error_retry" as const }]) {
+      const html = render({ state }, language);
+      expect(html).not.toContain(`>${escapeHtml(COPY["admin.logout"][language])}</button>`);
+      expect(html).not.toContain("site-admin-login__logout");
+    }
   });
 });
 
 describe("logging in", () => {
-  // SHOP-TASK-038 验收第 4 条「JSON 请求体只有用户名与密码…204 后再取会话并显示已登录状态」与「每次提交后清空密码框、保留用户名」：
-  // 提交时先把密码框清空、保留用户名，请求体恰好是提交时的用户名与密码；204 之后紧接着 GET 会话，结果为已登录状态与用户名。
-  it("clears the password, posts both fields and reads the session after 204", async () => {
-    const calls = stubFetch(empty(204), json(200, SESSION));
+  // SHOP-TASK-038 验收第 4 条「JSON 请求体只有用户名与密码」与「每次提交后清空密码框、保留用户名」；
+  // SHOP-TASK-047 验收第 6 条「登录 204 后用 navigate 进入 /admin/orders」（UX A01「去向：A02」）：
+  // 提交时先把密码框清空、保留用户名，请求体恰好是提交时的用户名与密码；204 之后不再读会话（由 A02 的后台框架读取），以 navigate 进入 /admin/orders。
+  it("clears the password, posts both fields and goes to /admin/orders after 204", async () => {
+    const calls = stubFetch(empty(204));
     const setFields = vi.fn();
     const outcome = await beginLogIn(FILLED, setFields);
     expect(setFields.mock.calls).toEqual([[{ username: USERNAME, password: "" }]]);
-    expect(calls.map((call) => `${String(call.init.method)} ${call.url}`)).toEqual(["POST /api/admin/login", "GET /api/admin/session"]);
+    expect(calls.map((call) => `${String(call.init.method)} ${call.url}`)).toEqual(["POST /api/admin/login"]);
     expect(body(calls[0])).toEqual({ username: USERNAME, password: PASSWORD });
-    expect(outcome).toEqual({ screen: SIGNED_IN, error: null });
+    expect(outcome).toBe(TO_ORDERS);
+    const after = fakeMoves();
+    settleLogIn(outcome, after.target);
+    expect(after.moves).toEqual([`navigate ${ORDERS_PATH}`]);
+    expect(after.shown).toEqual([]);
     // 页面按清空后的值重新渲染：密码框为空、用户名保留。
     const html = render({ fields: { username: USERNAME, password: "" } });
     const [username, password] = tags(html, "input").map(attributes);
@@ -478,57 +498,23 @@ describe("logging in", () => {
     expect(calls).toHaveLength(1);
   });
 
-  // 派生实现约束（实现选择）：守住第 4 条「204 后再取会话并显示已登录状态」——登录 204 之后会话取不到（401、其他失败或网络中断）时不显示已登录，
-  // 留在表单并显示 common.error_retry。
-  it.each([json(401, { detail: "admin_session_required" }), json(500, {}), networkDown])("stays on the form when the session cannot be read after 204 (%#)", async (reply) => {
-    stubFetch(empty(204), reply);
-    await expect(logIn(FILLED)).resolves.toEqual({ screen: { status: "form" }, error: "common.error_retry" });
-  });
-});
-
-describe("logging out", () => {
-  // SHOP-TASK-038 验收第 5 条「退出调用 POST /api/admin/logout 并带会话接口返回的 X-CSRF-Token，204 或 401 后回到登录表单」：
-  // 请求头带当前会话的令牌；204 与 401 都回到表单，不显示提示，也不再读取会话。
-  it.each([empty(204), json(401, { detail: "admin_session_required" })])("goes back to the form after the reply %#", async (reply) => {
-    const calls = stubFetch(reply);
-    await expect(logOut(SIGNED_IN)).resolves.toEqual({ screen: { status: "form" }, error: null });
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.url).toBe("/api/admin/logout");
-    expect(calls[0]?.init.method).toBe("POST");
-    expect(headers(calls[0])[CSRF_HEADER]).toBe(TOKEN);
-  });
-
-  // SHOP-TASK-038 验收第 5 条「403 时重新取会话并显示 common.error_retry」：POST 之后紧接着 GET 会话，按新会话（新令牌）保持已登录并提示重试；
-  // 重新取会话得到 401 时回到表单并提示重试，其他失败时保持原来的已登录状态并提示重试。
-  it("reads the session again after 403", async () => {
-    const calls = stubFetch(json(403, { detail: "csrf_failed" }), json(200, { ...SESSION, csrf_token: "admin-csrf-2" }));
-    await expect(logOut(SIGNED_IN)).resolves.toEqual({ screen: { ...SIGNED_IN, csrfToken: "admin-csrf-2" }, error: "common.error_retry" });
-    expect(calls.map((call) => `${String(call.init.method)} ${call.url}`)).toEqual(["POST /api/admin/logout", "GET /api/admin/session"]);
-    stubFetch(json(403, { detail: "csrf_failed" }), json(401, { detail: "admin_session_required" }));
-    await expect(logOut(SIGNED_IN)).resolves.toEqual({ screen: { status: "form" }, error: "common.error_retry" });
-    stubFetch(json(403, { detail: "csrf_failed" }), json(500, {}));
-    await expect(logOut(SIGNED_IN)).resolves.toEqual({ screen: SIGNED_IN, error: "common.error_retry" });
-  });
-
-  // SHOP-TASK-038 验收第 5 条「网络中断显示 common.network_check，其他结果显示 common.error_retry 并保持已登录状态」：两种情况都不读取会话，令牌不变；
-  // 提示在退出按钮之后。
-  it("keeps the logged-in state on other failures", async () => {
-    stubFetch(networkDown);
-    await expect(logOut(SIGNED_IN)).resolves.toEqual({ screen: SIGNED_IN, error: "common.network_check" });
-    for (const reply of [json(500, {}), json(200, {}), json(503, {})]) {
-      const calls = stubFetch(reply);
-      await expect(logOut(SIGNED_IN)).resolves.toEqual({ screen: SIGNED_IN, error: "common.error_retry" });
-      expect(calls).toHaveLength(1);
-    }
-    const html = render({ state: { screen: SIGNED_IN, error: "common.network_check" } });
-    expect(html.indexOf(element(html, "div", "acs-admin__alert"))).toBeGreaterThan(html.indexOf(`${COPY["admin.logout"].en}</button>`));
+  // SHOP-TASK-047 验收第 6 条「登录 204 后用 navigate 进入 /admin/orders」与「登录表单、错误处理…其余行为不变」：
+  // 失败的回答留在本页显示表单与提示，不跳转。
+  it("stays on the page after a failed login", async () => {
+    stubFetch(json(401, { detail: "login_failed" }));
+    const outcome = await logIn(FILLED);
+    const stay = fakeMoves();
+    settleLogIn(outcome, stay.target);
+    expect(stay.moves).toEqual([]);
+    expect(stay.shown).toEqual([{ screen: { status: "form" }, error: "admin.login_failed" }]);
   });
 });
 
 describe("browser storage and addresses", () => {
   // SHOP-TASK-038 验收第 4 条「用户名与密码不写进网址、localStorage、sessionStorage 或 cookie，也不出现在任何错误提示里」与任务目的「密码只在页面内存里，提交后清空」：
-  // 读取会话、各种登录回答（含网络中断）、登录成功与退出（含 403 后重读）的整个过程不写任何浏览器存储、cookie 或历史记录；
+  // 读取会话（401 与 200）、各种登录回答（含网络中断）与登录成功的整个过程不写任何浏览器存储、cookie 或历史记录；
   // 请求地址固定，不含用户名、密码或令牌；各状态下的错误提示不含用户名或密码。
+  // （SHOP-TASK-047：A01 不再有退出，退出的同类断言见 components/AdminFrame.test.tsx。）
   it("keeps the username, password and token out of addresses and browser storage", async () => {
     const storage = () => ({ getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn() });
     const local = storage();
@@ -556,22 +542,14 @@ describe("browser storage and addresses", () => {
       json(500, {}),
       empty(204),
       json(200, SESSION),
-      json(403, { detail: "csrf_failed" }),
-      json(200, SESSION),
-      empty(204),
     );
-    const states: AdminState[] = [];
-    states.push(sessionState(await readAdminSession()));
+    const outcomes: AdminOutcome[] = [];
+    outcomes.push(sessionState(await readAdminSession()));
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      states.push(await beginLogIn(FILLED, noop));
+      outcomes.push(await beginLogIn(FILLED, noop));
     }
-    const signedInState = await beginLogIn(FILLED, noop);
-    states.push(signedInState);
-    if (signedInState.screen.status !== "in") {
-      throw new Error("expected to be logged in");
-    }
-    states.push(await logOut(signedInState.screen));
-    states.push(await logOut(SIGNED_IN));
+    expect(await beginLogIn(FILLED, noop)).toBe(TO_ORDERS);
+    expect(sessionState(await readAdminSession())).toBe(TO_ORDERS);
 
     for (const target of [local, session]) {
       expect(target.setItem).not.toHaveBeenCalled();
@@ -579,12 +557,14 @@ describe("browser storage and addresses", () => {
     expect(cookieWrites).toEqual([]);
     expect(history.pushState).not.toHaveBeenCalled();
     expect(history.replaceState).not.toHaveBeenCalled();
-    expect(calls).toHaveLength(11);
+    expect(calls).toHaveLength(8);
     for (const call of calls) {
       expect(call.url).toMatch(/^\/api\/admin\/(session|login|logout)$/);
       expect(call.url).not.toContain(USERNAME);
       expect(call.url).not.toContain(TOKEN);
     }
+    const states = outcomes.filter((outcome): outcome is AdminState => outcome !== TO_ORDERS);
+    expect(states).toHaveLength(6);
     for (const state of states) {
       for (const language of LANGUAGES) {
         const html = render({ state, fields: { username: USERNAME, password: "" } }, language);
@@ -601,19 +581,15 @@ describe("browser storage and addresses", () => {
 
 describe("dictionary", () => {
   // SHOP-TASK-038 验收第 7 条「页面文字全部来自字典」与第 1 条「需要 UX-COPY 里没有的界面文字时停下…不自行编写文案」：
-  // 读取中、登录表单（含提交中与每种提示）、已登录（含每种提示）各状态下，每段文字都是当前语言的某条字典文案，
-  // admin.logged_in 只把 {username} 换成会话接口给的用户名；手机语言按钮的可访问名称就是语言名，没有另加的 aria-label 或 title。
+  // 读取中、登录表单（含提交中与每种提示）各状态下，每段文字都是当前语言的某条字典文案（SHOP-TASK-047 删去了已登录状态与 admin.logged_in）；
+  // 手机语言按钮的可访问名称就是语言名，没有另加的 aria-label 或 title。
   it.each(LANGUAGES)("shows only dictionary text in %s", (language) => {
-    const allowed = new Set<string>([
-      ...Object.values(COPY).map((entry) => entry[language]),
-      formatCopy(COPY["admin.logged_in"][language], { username: USERNAME }),
-    ]);
+    const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language]));
     const errors: (CopyKey | null)[] = [null, ...Object.values(LOGIN_ERROR)];
     const states: Partial<AdminLoginViewProps>[] = [
       { state: INITIAL_STATE },
       { fields: FILLED, busy: true },
       ...errors.map((error) => ({ state: { screen: { status: "form" as const }, error }, fields: FILLED })),
-      ...errors.map((error) => ({ state: { screen: SIGNED_IN, error } })),
     ];
     for (const state of states) {
       const html = render(state, language);

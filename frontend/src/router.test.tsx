@@ -66,8 +66,9 @@ describe("route table", () => {
   // SHOP-TASK-025 验收第 2 条「路由 /checkout」：结账页进表，在购物车之后；
   // SHOP-TASK-028 验收第 2 条「路由 /track（P08）与 /track/order（P09 查单模式）」：两页进表，在支付页之后；
   // SHOP-TASK-030 验收第 2 条「路由 /track/order/refund（P10 查单模式）」：进表，在订单详情之后；
-  // SHOP-TASK-038 验收第 2 条「路由 /admin/login」：后台登录页进表，在隐私说明之后；其余页面尚未实现，不在表里。
-  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page and the admin login page", () => {
+  // SHOP-TASK-038 验收第 2 条「路由 /admin/login」：后台登录页进表，在隐私说明之后；
+  // SHOP-TASK-047 验收第 5 条「路由 /admin/orders（frontend/src/router.tsx 路由表…加一项）」：后台订单页进表，在后台登录之后；其余页面尚未实现，不在表里。
+  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
       "/products",
@@ -81,8 +82,10 @@ describe("route table", () => {
       "/track/order/refund",
       "/privacy",
       "/admin/login",
+      "/admin/orders",
     ]);
     expect(isRoutePath("/admin/login")).toBe(true);
+    expect(isRoutePath("/admin/orders")).toBe(true);
     expect(isRoutePath("/privacy")).toBe(true);
     expect(isRoutePath("/products")).toBe(true);
     expect(isRoutePath("/products/crew-neck-tee")).toBe(true);

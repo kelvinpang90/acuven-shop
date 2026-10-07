@@ -4,6 +4,7 @@ import SiteFrame from "./components/SiteFrame";
 import { LanguageProvider } from "./i18n/language";
 import type { LanguageStorage } from "./i18n/language";
 import AdminLoginPage from "./pages/AdminLoginPage";
+import AdminOrdersPage from "./pages/AdminOrdersPage";
 import CartPage from "./pages/CartPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import HomePage from "./pages/HomePage";
@@ -32,6 +33,7 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   "/track/order/refund": RefundPage,
   "/privacy": PrivacyPage,
   "/admin/login": AdminLoginPage,
+  "/admin/orders": AdminOrdersPage,
 };
 
 // 后台页（以 /admin 开头的路由）不套前台的站点框架，直接渲染页面；其余页面照旧放在 SiteFrame 里。
