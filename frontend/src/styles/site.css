@@ -372,6 +372,26 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-store-design__add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 8px; }
 .site-admin-store-design__add .acs-admin__select { min-width: 0; max-width: 100%; }
 .site-admin-store-design__save { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+/* A08 的预览（SHOP-TASK-066，A08-desktop 的 aside）：页面分两列，左栏为标题、说明与表单区，右栏为 460px 的预览栏（列间距 24px，顶端对齐）；
+   预览栏内边距 16px、上下间距 12px，顶部为 admin.preview 与两个切换按钮（两端对齐，按钮间距 4px）。缩样：横幅至少 32px 高；
+   页头一行两端对齐（内边距 10px 14px）；其下内边距 14px、各块间距 12px；主视觉内边距 16px、间距 10px，按钮靠左；商品卡两列
+   （间距 10px），图为正方形。手机用的 details 在桌面隐藏。缩样的字号、字重、页头分隔线、how 标题的字体与预览栏标题的字重
+   site.css 写不了，记在 docs/TODO.md 的偏离里 */
+.site-admin-store-design { grid-template-columns: minmax(0, 1fr) 460px; column-gap: 24px; align-items: start; }
+.site-admin-store-design > :not(.site-admin-store-design__aside) { grid-column: 1; }
+.site-admin-store-design__aside { grid-column: 2; grid-row: 1 / span 3; display: grid; gap: 12px; min-width: 0; padding: 16px; }
+.site-admin-store-design__preview-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.site-admin-store-design__modes { display: flex; gap: 4px; }
+.site-admin-store-design__shop .acs-banner { min-height: 32px; }
+.site-admin-store-design__shop-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 14px; }
+.site-admin-store-design__shop-body { display: grid; gap: 12px; padding: 14px; }
+.site-admin-store-design__shop-body .acs-hint { margin: 0; }
+.site-admin-store-design__hero { display: grid; gap: 10px; padding: 16px; }
+.site-admin-store-design__hero .acs-btn { justify-self: start; }
+.site-admin-store-design__cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.site-admin-store-design__cards .acs-pcard__img { aspect-ratio: 1 / 1; }
+.site-admin-store-design__cards .acs-pcard__name { overflow-wrap: anywhere; }
+.site-admin-store-design__details { display: none; }
 
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
@@ -672,4 +692,12 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-store-design__add .acs-admin__btn { min-height: 44px; }
   .site-admin-store-design__save { display: grid; gap: 10px; }
   .site-admin-store-design__save .acs-admin__btn { justify-content: center; min-height: 44px; }
+  /* 预览（A08-phone）：页面单列，预览栏隐藏；精选之后、保存之前为 details（内边距 12px 14px，summary 至少 32px 高）。
+     视觉稿的 summary 为 flex，会去掉展开标记；UX 手机线框为「▸ [admin.preview]」，这里保留原生标记，以上下内边距 6px 代替居中。
+     展开后的切换按钮与缩样同桌面（与 summary 及彼此间距 12px，视觉稿未画展开后的样子，取桌面预览栏的间距） */
+  .site-admin-store-design { grid-template-columns: minmax(0, 1fr); }
+  .site-admin-store-design__aside { display: none; }
+  .site-admin-store-design__details { display: block; padding: 12px 14px; }
+  .site-admin-store-design__details > summary { min-height: 32px; padding: 6px 0; cursor: pointer; }
+  .site-admin-store-design__preview-body { display: grid; gap: 12px; padding-top: 12px; }
 }

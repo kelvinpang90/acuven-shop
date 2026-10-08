@@ -13,6 +13,9 @@ import type {
 } from "../api/adminStoreDesign";
 import { FEATURED_COUNT } from "../api/catalog";
 import AdminFrame, { AdminAlert } from "../components/AdminFrame";
+import { PlaceholderShape } from "../components/ProductCard";
+import { DemoHint } from "../components/SiteFrame";
+import { BRAND } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { useCopy, useLanguage } from "../i18n/language";
 import { ADMIN_LOGIN_PATH, useRouter } from "../router";
@@ -26,7 +29,8 @@ import { startDeferred } from "./AdminOrderDetail";
 // admin.nav_store_design），h1 仍在页面里，由 site.css 在 767px 及以下只留给读屏。
 // 其下为表单（SHOP-TASK-064）：主题（10 款，按 THEME_ACCENTS 的顺序）、所选主题的主色、首页四个区块的顺序与显隐、
 // 精选商品的挑选（SHOP-TASK-065：最多 FEATURED_COUNT 件，可排序、移出，原已在精选里、之后下架的照列）与 common.save。
-// 不含标志图（Kelvin 2026-10-06 决定）；预览由 SHOP-TASK-066 接上。
+// 不含标志图（Kelvin 2026-10-06 决定）。预览（SHOP-TASK-066）：桌面为表单右侧的预览栏，手机为精选之后、保存之前收起的 details，
+// 按表单当前（未保存）的主题与主色显示首页缩样，可切换浅色与深色。
 // 打开页面与切换界面语言时以界面语言调用 GET /api/admin/store-design?lang=，保存为 PUT（经 api/adminStoreDesign.ts）。
 // 401 换成登录页 A01；离开页面或切换语言时中止读取与进行中的保存，旧请求的结果不再更新页面。
 
@@ -516,10 +520,154 @@ function FeaturedGroup({
   );
 }
 
+// 预览的深浅色（默认浅色）与切换按钮的文字。
+export type PreviewMode = "light" | "dark";
+
+export const PREVIEW_MODES: readonly PreviewMode[] = ["light", "dark"];
+
+const MODE_NAME: Readonly<Record<PreviewMode, CopyKey>> = {
+  light: "admin.preview_light",
+  dark: "admin.preview_dark",
+};
+
+// 缩样里的一张商品卡：只有名称（name 为 null 时用 slug，同精选列表），没有价格（Kelvin 2026-10-08，HANDOFF 0.40）。
+export interface PreviewProduct {
+  product_id: number;
+  name: string;
+}
+
+export const PREVIEW_CARD_COUNT = 2;
+
+// 两张商品卡（Kelvin 2026-10-08「取精选里前两件仍上架的商品，不足时按可挑选商品的顺序补足」）：按精选列表当前的顺序取 published 为 true 的，
+// 不足两件时按 choices 的顺序补上尚未取到的商品，仍不足时只有现有的（可以为零张）。
+export function previewProducts(featured: readonly FeaturedProduct[], choices: readonly ProductChoice[]): PreviewProduct[] {
+  const picked: PreviewProduct[] = featured
+    .filter((product) => product.published)
+    .slice(0, PREVIEW_CARD_COUNT)
+    .map((product) => ({ product_id: product.product_id, name: product.name ?? product.slug }));
+  for (const choice of choices) {
+    if (picked.length >= PREVIEW_CARD_COUNT) {
+      break;
+    }
+    if (!picked.some((product) => product.product_id === choice.product_id)) {
+      picked.push({ product_id: choice.product_id, name: choice.name });
+    }
+  }
+  return picked;
+}
+
+// 浅色与深色两个切换按钮：aria-pressed 标当前，当前的为 acs-admin__btn，另一个加 acs-admin__btn--secondary。
+function PreviewModes({ mode, onMode }: { mode: PreviewMode; onMode: (mode: PreviewMode) => void }) {
+  const t = useCopy();
+  return (
+    <span className="site-admin-store-design__modes">
+      {PREVIEW_MODES.map((option) => (
+        <button
+          key={option}
+          className={option === mode ? "acs-admin__btn" : "acs-admin__btn acs-admin__btn--secondary"}
+          type="button"
+          aria-pressed={option === mode}
+          onClick={() => {
+            onMode(option);
+          }}
+        >
+          {t(MODE_NAME[option])}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+// 首页缩样（UX A08「所选主题与主色的首页缩样」，视觉稿的预览框）：acs-admin__preview 内为设了表单当前主题、主色（第一项不设，同前台）
+// 与所选深浅色的 .acs 元素；内容固定、不随首页区块的顺序与显隐变化，依次为演示横幅、页头一行（品牌文字与 common.nav_cart，{count} 为 0）、
+// ★ home.demo_hint、主视觉（home.hero_title 与按钮样式的 home.hero_cta）、home.how_title 与商品卡。只用 span、div 与 p，
+// 没有链接、按钮或其他可交互元素。
+function ShopSample({ form, choices, mode }: { form: DesignForm; choices: readonly ProductChoice[]; mode: PreviewMode }) {
+  const t = useCopy();
+  const products = previewProducts(form.featured, choices);
+  return (
+    <div className="acs-admin__preview">
+      <div
+        className="acs site-admin-store-design__shop"
+        data-shop-theme={form.theme}
+        data-accent={form.accent === defaultAccent(form.theme) ? undefined : form.accent}
+        data-mode={mode}
+      >
+        <div className="acs-banner">
+          <span className="acs-tag acs-tag--demo">{t("common.demo_badge")}</span>
+          <span>{t("common.demo_banner_short")}</span>
+        </div>
+        <div className="site-admin-store-design__shop-head">
+          <span className="acs-brand">{BRAND}</span>
+          <span>{t("common.nav_cart", { count: 0 })}</span>
+        </div>
+        <div className="site-admin-store-design__shop-body">
+          <DemoHint>{t("home.demo_hint")}</DemoHint>
+          <div className="acs-panel site-admin-store-design__hero">
+            <span className="acs-display-s">{t("home.hero_title")}</span>
+            <span className="acs-btn acs-btn--primary acs-btn--sm">{t("home.hero_cta")}</span>
+          </div>
+          <span>{t("home.how_title")}</span>
+          {products.length > 0 && (
+            <div className="site-admin-store-design__cards">
+              {products.map((product) => (
+                <span key={product.product_id} className="acs-pcard">
+                  <span className="acs-pcard__img">
+                    <PlaceholderShape />
+                  </span>
+                  <span className="acs-pcard__name">{product.name}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export interface PreviewProps {
+  form: DesignForm;
+  choices: readonly ProductChoice[];
+  mode: PreviewMode;
+  onMode: (mode: PreviewMode) => void;
+}
+
+// 桌面的预览栏（视觉稿右侧 460px 的 aside）：顶部为 admin.preview 与切换按钮，其下为缩样；767px 及以下由 site.css 隐藏。
+export function PreviewAside({ form, choices, mode, onMode }: PreviewProps) {
+  const t = useCopy();
+  return (
+    <aside className="acs-admin__panel site-admin-store-design__aside">
+      <div className="site-admin-store-design__preview-head">
+        <span>{t("admin.preview")}</span>
+        <PreviewModes mode={mode} onMode={onMode} />
+      </div>
+      <ShopSample form={form} choices={choices} mode={mode} />
+    </aside>
+  );
+}
+
+// 手机的预览（UX A08 手机线框「▸ [admin.preview]」，A08-phone）：精选之后、保存之前，默认收起的 details，展开后为与桌面相同的
+// 切换按钮与缩样；768px 及以上由 site.css 隐藏。
+export function PreviewDetails({ form, choices, mode, onMode }: PreviewProps) {
+  const t = useCopy();
+  return (
+    <details className="acs-admin__panel site-admin-store-design__details">
+      <summary>{t("admin.preview")}</summary>
+      <div className="site-admin-store-design__preview-body">
+        <PreviewModes mode={mode} onMode={onMode} />
+        <ShopSample form={form} choices={choices} mode={mode} />
+      </div>
+    </details>
+  );
+}
+
 type ReadyState = Extract<DesignState, { status: "ready" }>;
 
 function DesignFormView({
   state,
+  mode,
+  onMode,
   onTheme,
   onAccent,
   onShow,
@@ -528,7 +676,7 @@ function DesignFormView({
   onFeaturedRemove,
   onFeaturedAdd,
   onSave,
-}: { state: ReadyState } & FormHandlers) {
+}: { state: ReadyState; mode: PreviewMode; onMode: (mode: PreviewMode) => void } & FormHandlers) {
   const t = useCopy();
   const { form } = state;
   return (
@@ -550,6 +698,7 @@ function DesignFormView({
         onFeaturedRemove={onFeaturedRemove}
         onFeaturedAdd={onFeaturedAdd}
       />
+      <PreviewDetails form={form} choices={state.base.choices} mode={mode} onMode={onMode} />
       <div className="site-admin-store-design__save">
         <button className="acs-admin__btn" type="submit" disabled={state.saving} aria-busy={state.saving}>
           {t("common.save")}
@@ -565,17 +714,20 @@ export interface AdminStoreDesignViewProps extends FormHandlers {
   state: DesignState;
 }
 
-// 页头之下为表单区：读取中标 aria-busy、不显示表单；读取失败时只有提示。
+// 页头之下为表单区：读取中标 aria-busy、不显示表单；读取失败时只有提示。取得设置后另有预览：桌面为表单区右侧的预览栏，
+// 手机为表单里的 details（两份按 site.css 的媒体查询显隐，共用同一个深浅色选择，默认浅色）。
 export function AdminStoreDesignView({ state, ...handlers }: AdminStoreDesignViewProps) {
   const t = useCopy();
+  const [mode, setMode] = useState<PreviewMode>("light");
   return (
     <div className="site-admin-store-design">
       <h1 className="acs-admin__h site-admin-store-design__title">{t("admin.nav_store_design")}</h1>
       <p className="site-admin-store-design__note">{t("admin.design_demo_note")}</p>
       <div className="site-admin-store-design__body" aria-busy={state.status === "loading"}>
         {state.status === "failed" && <AdminAlert error={state.error} />}
-        {state.status === "ready" && <DesignFormView state={state} {...handlers} />}
+        {state.status === "ready" && <DesignFormView state={state} mode={mode} onMode={setMode} {...handlers} />}
       </div>
+      {state.status === "ready" && <PreviewAside form={state.form} choices={state.base.choices} mode={mode} onMode={setMode} />}
     </div>
   );
 }
