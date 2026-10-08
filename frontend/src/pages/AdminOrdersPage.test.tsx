@@ -293,6 +293,8 @@ describe("desktop table", () => {
   // 每行依次为订单号、日期、状态名、合计与待审数。
   // SHOP-TASK-055 改动：原来断言「行与单元格里没有链接或按钮（行不可点）」，本任务按验收第 2 条「桌面表格行的订单号链接到 /admin/orders/<内部 ID>」
   // 加上了订单号链接，改为只有订单号单元格里有一个链接、其余单元格没有链接，表格里没有按钮（待审退款数仍为文字）。
+  // SHOP-TASK-058 改动：按 UX「状态与补充（0.9）」「桌面表格里待审数大于 0 时 [admin.refunds_pending] 是链接」，
+  // 原来的「其余单元格没有链接」改为日期、状态与合计单元格没有链接，待审数单元格在大于 0 时恰好一个链接、为 0 时没有链接。
   it.each(LANGUAGES)("shows each order in a row in %s", (language) => {
     const table = element(render({}, language), "div", "site-admin-orders__table");
     const rows = all(all(table, "tbody")[0] ?? "", "tr");
@@ -308,10 +310,11 @@ describe("desktop table", () => {
       [CANCELLED.order_number, formatDate(CANCELLED.created_at, language), COPY["order.status_cancelled"][language], price(5900, language), "—"],
     ]);
     expect(price(7640, language)).toBe("RM 76.40");
-    for (const row of rows) {
+    for (const [index, row] of rows.entries()) {
       const cells = all(row, "td");
       expect(tags(cells[0] ?? "", "a")).toHaveLength(1);
-      expect(cells.slice(1).join("")).not.toContain("<a");
+      expect(cells.slice(1, 4).join("")).not.toContain("<a");
+      expect(tags(cells[4] ?? "", "a")).toHaveLength((ROWS[index]?.refunds_pending ?? 0) > 0 ? 1 : 0);
     }
     expect(table).not.toContain("<button");
     expect(table).not.toContain("tabindex");
@@ -319,9 +322,10 @@ describe("desktop table", () => {
 
   // SHOP-TASK-055 验收第 2 条「桌面表格行的订单号链接到 /admin/orders/<内部 ID>」与 UX「状态与补充（0.9）」「订单详情有自己的网址，
   // 路径带订单的内部 ID，订单号不进网址」（Kelvin 2026-10-06）：每行订单号是指向 /admin/orders/<内部 ID> 的站内链接，网址里没有订单号。
+  // SHOP-TASK-058 改动：表格里多了待审数链接，原来取表格里全部链接，改为只取每行第一个单元格（订单号）里的链接。
   it("links each order number to its detail by internal ID", () => {
     const table = element(render(), "div", "site-admin-orders__table");
-    const links = all(table, "a");
+    const links = all(all(table, "tbody")[0] ?? "", "tr").flatMap((row) => all(all(row, "td")[0] ?? "", "a"));
     expect(links.map((link) => attributes(tags(link, "a")[0] ?? "").get("href"))).toEqual(ROWS.map((row) => `/admin/orders/${String(row.id)}`));
     expect(links.map((link) => textNodes(link).join(""))).toEqual(ROWS.map((row) => row.order_number));
     for (const row of ROWS) {
@@ -343,6 +347,32 @@ describe("desktop table", () => {
     expect(selectedRows(null)).toEqual([]);
     expect(selectedRows("999")).toEqual([]);
     expect(tags(render(), "tr").some((tag) => attributes(tag).has("aria-selected"))).toBe(false);
+  });
+
+  // SHOP-TASK-058 验收第 2 条与 UX「状态与补充（0.9）」「桌面表格里待审数大于 0 时 [admin.refunds_pending] 是链接，
+  // 进入只含该单申请的 A03；为 0 时显示 —」：待审数大于 0 的单元格只有一个站内链接，指向 /admin/refunds/order/<订单内部 ID>，
+  // 链接文字为 admin.refunds_pending；网址里没有订单号；为 0 的单元格是不带链接的 —。
+  it.each(LANGUAGES)("links the pending refund count to the order's refund requests in %s", (language) => {
+    const many: AdminOrderRow = { ...SHIPPED, id: 7, order_number: "Q2WE-9RTY", refunds_pending: 5 };
+    const table = element(render({ state: shown(list({ orders: [...ROWS, many], total: 4 })) }, language), "div", "site-admin-orders__table");
+    const cells = all(all(table, "tbody")[0] ?? "", "tr").map((row) => all(row, "td")[4] ?? "");
+    for (const [index, order] of [...ROWS, many].entries()) {
+      const cell = cells[index] ?? "";
+      const links = all(cell, "a");
+      if (order.refunds_pending > 0) {
+        expect(links).toHaveLength(1);
+        const link = links[0] ?? "";
+        expect(attributes(tags(link, "a")[0] ?? "").get("href")).toBe(`/admin/refunds/order/${String(order.id)}`);
+        expect(textNodes(link)).toEqual([translate(language, "admin.refunds_pending", { count: order.refunds_pending })]);
+        expect(textNodes(cell)).toEqual(textNodes(link));
+      } else {
+        expect(links).toHaveLength(0);
+        expect(cell).toBe(`<td class="acs-admin__muted">—</td>`);
+      }
+    }
+    for (const order of [...ROWS, many]) {
+      expect(table).not.toContain(`/admin/refunds/order/${order.order_number}`);
+    }
   });
 
   // 视觉稿 A02-desktop-list：状态为标签（已取消为描边标签，其余为中性标签），— 为次要文字，合计列靠右。
@@ -399,6 +429,27 @@ describe("phone cards", () => {
       for (const separator of separators) {
         expect(attributes(tags(separator, "span")[0] ?? "").get("aria-hidden")).toBe("true");
       }
+    }
+  });
+
+  // SHOP-TASK-058 验收第 2 条与 UX「状态与补充（0.9）」「手机卡片整张进入订单详情，待审数只作文字，为 0 时不显示」：
+  // 待审数大于 0 的卡片仍只有整张卡片这一个链接（指向订单详情），链接里没有嵌套的链接，卡片里没有指向 /admin/refunds 的网址，
+  // 待审数是链接里的普通文字。
+  it("keeps the pending refund count as text inside the card link", () => {
+    const cards = element(render(), "ul", "site-admin-orders__cards");
+    expect(cards).not.toContain("/admin/refunds");
+    for (const [index, item] of all(cards, "li").entries()) {
+      const anchors = tags(item, "a");
+      expect(anchors).toHaveLength(1);
+      expect(attributes(anchors[0] ?? "").get("href")).toBe(`/admin/orders/${String(ROWS[index]?.id)}`);
+      const link = all(item, "a")[0] ?? "";
+      expect(tags(link.slice(1), "a")).toEqual([]);
+    }
+    const completed = all(cards, "li")[1] ?? "";
+    const count = all(completed, "span").filter((span) => textNodes(span).join("") === translate("en", "admin.refunds_pending", { count: 2 }));
+    expect(count.length).toBeGreaterThan(0);
+    for (const span of count) {
+      expect(span).not.toContain("<a");
     }
   });
 
@@ -620,12 +671,14 @@ describe("list and detail", () => {
     expect(history.replaceState).not.toHaveBeenCalled();
   });
 
-  // SHOP-TASK-055 目的「待审退款数仍为文字」：选中订单时表格里的待审数仍不是链接。
-  it("keeps the pending refund count as text", () => {
+  // SHOP-TASK-058 改动：原来按 SHOP-TASK-055 目的「待审退款数仍为文字」断言选中订单时表格里的待审数不是链接；本任务按
+  // UX「状态与补充（0.9）」「桌面表格里待审数大于 0 时 [admin.refunds_pending] 是链接，进入只含该单申请的 A03」改为：
+  // 选中订单（右侧有详情）时表格里的待审数同样是指向 /admin/refunds/order/<订单内部 ID> 的链接。
+  it("links the pending refund count while an order is open", () => {
     const table = element(render({ selectedId: "41" }), "div", "site-admin-orders__table");
     const cell = all(all(table, "tbody")[0] ?? "", "tr").map((row) => all(row, "td")[4] ?? "")[1] ?? "";
     expect(textNodes(cell)).toEqual([translate("en", "admin.refunds_pending", { count: 2 })]);
-    expect(cell).not.toContain("<a");
+    expect(tags(cell, "a").map((tag) => attributes(tag).get("href"))).toEqual([`/admin/refunds/order/${String(COMPLETED.id)}`]);
   });
 });
 
