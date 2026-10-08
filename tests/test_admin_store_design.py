@@ -5,7 +5,8 @@
 只能从中选一个；首页由四个区块组成，管理员可调整它们的顺序与显示或隐藏；精选商品由管理员挑选最多
 4 件已上架商品并排定顺序；装修保存后对所有访客生效；修改记入后台审计记录）、docs/UX.md 0.10 的
 A08（下称「A08」）与 docs/HANDOFF.md 0.34 记录的 Kelvin 2026-10-06 决定（首版不含标志图；精选
-商品复用目录的 published() 判定）。每条测试（参数化的测试是每个用例）的文档字符串写明它守住的需求
+商品复用目录的 published() 判定），以及 0.40 记录的 Kelvin 2026-10-08 决定（原已在精选里、之后
+才下架的商品保存时放行，SHOP-TASK-061）。每条测试（参数化的测试是每个用例）的文档字符串写明它守住的需求
 或 A08 原句；没有直接原句的，写明是 SHOP-TASK-051 验收里的约定。
 
 用 SQLite 内存库按模型建表（StaticPool，每个连接打开外键检查并断言已打开）。管理员、后台会话、
@@ -928,12 +929,14 @@ def test_unavailable_featured_product_is_422(
     assert _snapshot(engine) == before
 
 
-def test_keeping_a_delisted_featured_product_is_422(
+def test_keeping_a_delisted_featured_product_is_allowed(
     db: Session, client: TestClient, engine: Engine, token: str, seeded: None
 ) -> None:
-    """A08「之后下架的商品仍留在列表中」；SHOP-TASK-051 验收「任一精选商品……此刻不满足
-    published() 为 featured_unavailable」：精选之后下架的商品在 GET 里 published 为假，原样再
-    提交它时 422，移出后才能保存。"""
+    """A08「之后下架的商品仍留在列表中，前台不显示它」；Kelvin 2026-10-08「精选里原已挑选、之后
+    才下架的商品，保存时放行」（取代 SHOP-TASK-051 的「任一精选商品此刻不满足 published() 即
+    featured_unavailable」，所以原先的 422 改为放行、测试改名）：精选之后下架的商品在 GET 里
+    published 为假；原样再提交为 200 且库里与审计都不变；只改主题时 200，它留在原位置，审计新值
+    含它的 ID；调整它的位置也能保存；前台仍不显示它。"""
     shop = _category(db, "shop")
     lamp = _product(db, "lamp", shop)
     mug = _product(db, "mug", shop)
@@ -943,16 +946,51 @@ def test_keeping_a_delisted_featured_product_is_422(
     before = _snapshot(engine)
 
     listed = _ok(_get(client, token))["featured"]
-    kept = _put(client, token, _body(theme="litar", accent=None, featured=[lamp.id, mug.id]))
+    same = _ok(_put(client, token, _body(featured=[lamp.id, mug.id])))
 
     assert [(item["product_id"], item["published"]) for item in listed] == [
         (lamp.id, False),
         (mug.id, True),
     ]
-    _assert_error(kept, 422, {"detail": "featured_unavailable"})
+    assert same["featured"] == listed
     assert _snapshot(engine) == before
-    _ok(_put(client, token, _body(theme="litar", accent=None, featured=[mug.id])))
-    assert _snapshot(engine)[2] == [(1, mug.id)]
+    assert len(_audits(engine)) == 1
+
+    kept = [lamp.id, mug.id]
+    themed = _ok(_put(client, token, _body(theme="litar", accent=None, featured=kept)))
+
+    assert themed["theme"] == "litar"
+    assert themed["featured"] == listed
+    assert _snapshot(engine)[2] == [(1, lamp.id), (2, mug.id)]
+    audits = _audits(engine)
+    assert len(audits) == 2
+    assert audits[1][4] == f'["litar",null,"F1H0W1C1",[{lamp.id},{mug.id}]]'
+
+    _ok(_put(client, token, _body(theme="litar", accent=None, featured=[mug.id, lamp.id])))
+
+    assert _snapshot(engine)[2] == [(1, mug.id), (2, lamp.id)]
+    assert _audits(engine)[2][4] == f'["litar",null,"F1H0W1C1",[{mug.id},{lamp.id}]]'
+    assert _ok(client.get(PUBLIC_URL))["featured_slugs"] == ["mug"]
+
+
+def test_re_adding_a_removed_delisted_product_is_422(
+    db: Session, client: TestClient, engine: Engine, token: str, seeded: None
+) -> None:
+    """Kelvin 2026-10-08「只有新加入的商品须此刻上架」；A08「(✗) 移出精选」：放行只看保存前的
+    当前精选，已下架的商品移出并保存后再加回即为新加入，422 featured_unavailable，数据不变。"""
+    shop = _category(db, "shop")
+    lamp = _product(db, "lamp", shop)
+    mug = _product(db, "mug", shop)
+    _ok(_put(client, token, _body(featured=[lamp.id, mug.id])))
+    db.execute(update(Product).where(Product.id == lamp.id).values(is_active=False))
+    db.commit()
+    _ok(_put(client, token, _body(featured=[mug.id])))
+    before = _snapshot(engine)
+
+    response = _put(client, token, _body(featured=[mug.id, lamp.id]))
+
+    _assert_error(response, 422, {"detail": "featured_unavailable"})
+    assert _snapshot(engine) == before
 
 
 def test_save_response_names_follow_the_language(
