@@ -363,4 +363,24 @@ html[data-theme$="-dark"] .acs-admin, .acs-admin[data-mode="dark"] { --a-bg: #15
 .acs-admin__lang a[aria-current="true"] { color: var(--a-ink); font-weight: 700; }
 .acs-admin .acs-tag--neutral { background: var(--a-select); color: var(--a-ink); }
 .acs-admin .acs-tag--outline { border-color: var(--a-border); color: var(--a-ink); }
+/* A08 店铺装修（2026-10-08）：主题与主色的选项、色块与预览框，取自 A08 视觉稿的行内样式。
+   色块放在设了 data-shop-theme（主色另设 data-accent）的 .acs 元素上，取该主题的颜色。 */
+.acs-admin__choice { display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--a-line); border-radius: 4px; }
+.acs-admin__choice:has(input:checked) { border: 2px solid var(--a-accent); background: var(--a-select); }
+.acs-admin__ring { position: relative; display: grid; place-items: center; width: 44px; height: 44px; border: 2px solid transparent; border-radius: 50%; }
+.acs-admin__ring:has(input:checked) { border-color: var(--a-accent); }
+.acs-admin__ring:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
+.acs-admin__ring input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.acs-admin__preview { border: 1px solid var(--a-line); border-radius: 4px; overflow: hidden; }
+.acs.acs-swatch { display: flex; border-radius: 4px; overflow: hidden; background: transparent; }
+.acs-swatch > span { width: 18px; height: 22px; }
+.acs-swatch__surface { background: var(--surface-alt); }
+.acs-swatch__accent { background: var(--accent); }
+.acs-swatch__demo { background: var(--demo); }
+.acs.acs-swatch--dot { display: block; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); }
+@media (max-width: 767px) {
+  .acs-swatch > span { width: 16px; height: 20px; }
+  .acs-admin__choice, .acs-admin__choice:has(input:checked) { min-height: 44px; padding: 0; border: 0; background: transparent; }
+  .acs-admin__choice:has(input:checked) { font-weight: 700; }
+}
 @media (max-width: 767px) { .acs-admin__shell { grid-template-columns: 1fr; } .acs-admin__nav { display: none; } }
