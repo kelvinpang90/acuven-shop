@@ -833,6 +833,8 @@ describe("navigation", () => {
   // 经路由打开两条退款路径，桌面导航与 ☰ 菜单都依次为订单与退款两项，退款标 aria-current="page"；手机顶栏名称为 admin.nav_refunds；
   // 没有其他导航项。
   // SHOP-TASK-059 改动：按 SHOP-TASK-059 验收第 3 条把「依次为订单与退款两项」改为依次为订单、退款与库存重置（/admin/stock-resets）三项。
+  // SHOP-TASK-062 改动：按 SHOP-TASK-062 验收第 3 条把「依次为订单、退款与库存重置三项」改为依次为订单、退款、库存重置与
+  // 店铺装修（/admin/store-design）四项；当前项与手机顶栏名称不变。
   it.each(LANGUAGES)("marks the refunds item as current in %s", (language) => {
     for (const path of [REFUNDS_PATH, "/admin/refunds/order/42"]) {
       const html = renderApp(path, language);
@@ -842,11 +844,13 @@ describe("navigation", () => {
           [ORDERS_PATH, undefined],
           [REFUNDS_PATH, "page"],
           ["/admin/stock-resets", undefined],
+          ["/admin/store-design", undefined],
         ]);
         expect(all(nav, "a").filter((a) => !attributes(tags(a, "a")[0] ?? "").has("lang")).map((a) => textNodes(a).join(""))).toEqual([
           COPY["admin.nav_orders"][language],
           COPY["admin.nav_refunds"][language],
           COPY["admin.nav_stock_resets"][language],
+          COPY["admin.nav_store_design"][language],
         ]);
       }
       expect(element(html, "span", "site-admin__bar-title")).toBe(

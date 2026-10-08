@@ -340,6 +340,11 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-stock-resets__cards { display: none; margin: 0; padding: 0; list-style: none; }
 .site-admin-stock-resets__pager { display: flex; gap: 8px; justify-content: flex-end; }
 
+/* 后台店铺装修 A08 的页头（A08-desktop）：标题与演示说明上下排列（间距 16px）；说明内边距 10px 12px。
+   说明的底色、文字颜色、字号、圆角与 ★ 图形 site.css 写不了，记在 docs/TODO.md 的偏离里 */
+.site-admin-store-design { display: grid; gap: 16px; }
+.site-admin-store-design__note { margin: 0; padding: 10px 12px; }
+
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
 
@@ -612,4 +617,9 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-stock-resets__line { display: grid; gap: 2px; padding: 6px 0; }
   .site-admin-stock-resets__pager { justify-content: center; }
   .site-admin-stock-resets__pager .acs-admin__btn { justify-content: center; min-width: 44px; min-height: 44px; }
+
+  /* 后台店铺装修的页头（A08-phone 与 UX A08 手机线框）：顶栏已是 admin.nav_store_design，页面里不显示标题，h1 只留给读屏；
+     演示说明在内容区最上方，与之后各块间距 14px */
+  .site-admin-store-design { gap: 14px; }
+  .site-admin-store-design__title { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }
