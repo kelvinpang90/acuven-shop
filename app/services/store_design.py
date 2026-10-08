@@ -8,8 +8,10 @@
 
 公开读取（read_store_design，SHOP-TASK-045）只发 SELECT，不写库。后台读取与保存
 （read_admin_store_design、product_choices、save_store_design）由 SHOP-TASK-051 实现，接口见
-app/api/admin_store_design.py：主题须在 THEMES、主色为空或属于所选主题（THEME_ACCENTS）、精选
-商品此刻须满足 published()；保存锁定设置单例行后在同一事务里整体替换四个区块与精选各行并写审计。
+app/api/admin_store_design.py：主题须在 THEMES、主色为空或属于所选主题（THEME_ACCENTS）；精选
+商品须此刻满足 published() 或已在保存前的当前精选里（docs/HANDOFF.md 0.40 记录的 Kelvin
+2026-10-08 决定：原已挑选、之后才下架的商品保存时放行，只有新加入的商品须此刻上架，SHOP-TASK-061）；
+保存锁定设置单例行后在同一事务里整体替换四个区块与精选各行并写审计。
 请求结构（恰好四个区块且为一个排列、精选 0 到 4 件不重复）由接口校验。本模块不写日志。
 未挑选或挑选的商品都不可见时显示最新 4 件的规则由前台按设置显示的任务实现，这里不补。
 """
@@ -339,8 +341,10 @@ def save_store_design(
        成为新事务的第一条语句：MySQL 默认的 REPEATABLE READ 下读取快照在第一条非锁定读时建立，
        锁定之后才读取的当前设置能看到等锁期间别人提交的保存。单例行不存在时在保存点里按默认值
        插入，撞上唯一约束即回滚该保存点，然后再锁定。
-    3. 任一精选商品不存在或此刻不满足 published() 抛 featured_unavailable。
-    4. 读取当前设置；与请求完全相同时回滚（释放锁），返回当前设置，不写审计。
+    3. 读取当前精选各行的商品 ID；请求的每件精选商品须此刻满足 published() 或已在当前精选里
+       （之后才下架的商品放行，可调整位置），两者都不满足（含不存在的商品）抛
+       featured_unavailable。放行只看保存前的当前精选：移出并保存后再加回即为新加入。
+    4. 读取当前设置的其余部分；与请求完全相同时回滚（释放锁），返回当前设置，不写审计。
     5. 改写主题、主色与更新时间；先删除原有区块与精选各行并 flush，再按请求插入（逐行就地
        改位置会在中途撞上位置、区块与商品的唯一约束）；写一条 admin_store_design_saved 审计
        （旧值与新值见 audit_value），一起提交。
@@ -349,12 +353,14 @@ def save_store_design(
 
     db.rollback()
     setting = _lock_setting(db, now)
-    if len(_published_ids(db, featured_ids)) != len(featured_ids):
+    current_ids = _featured_ids(db)
+    kept = set(current_ids)
+    added = [product_id for product_id in featured_ids if product_id not in kept]
+    if len(_published_ids(db, added)) != len(added):
         db.rollback()
         raise StoreDesignInvalid("featured_unavailable")
 
     stored_blocks = _stored_blocks(db)
-    current_ids = _featured_ids(db)
     current = (setting.theme, setting.accent, stored_blocks, current_ids)
     if current == (theme, accent, home_blocks, featured_ids):
         design = read_admin_store_design(db, lang)
