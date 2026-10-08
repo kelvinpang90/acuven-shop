@@ -2609,3 +2609,185 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 会员体系后端第一批：短信验证服务（SHOP-TASK-067 适配器、068 每日预算、069 发送与核验规则、070 发送接口）、
+  # 会员会话与密码登录锁定规则（071）、短信验证记录到期删除（072）。依据 docs/DESIGN.md 1.11（提交 2d13250）与
+  # docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（Turnstile、标准档限流与预算、30 天会话与 5 次锁 15 分钟、记录保留 30 天）。
+  # 之后的批次（会员登录与注册接口、优惠券与积分、会员订单、注销）在这批合并后再登记。
+  - id: SHOP-TASK-067
+    title: 短信验证与人机挑战的服务适配器
+    purpose: >-
+      按 docs/DESIGN.md 1.11「失败、并发与重试」第 4 条（Twilio Verify 托管验证码、发送前托管人机挑战并在后端核验令牌）与 docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（人机挑战用 Cloudflare Turnstile），
+      新建两个适配器：Twilio Verify 的发送与核验、Turnstile 的令牌核验，以及它们的配置项与测试替身。只用标准库发请求，不加依赖；不做限流、预算、记录与接口（由 SHOP-TASK-068 到 070 接上），不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41（手机号与验证码交给短信服务商）。拆分：外部服务适配层（6 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-012
+    acceptance_criteria:
+      - 新文件 app/services/sms_provider.py 提供 Twilio Verify v2 的两个调用——对规范化 E.164 号码发起短信验证（Channel 为 sms）与按验证请求 ID 加验证码核验；结果归类为发起——accepted（带提供方请求 ID）、undeliverable（提供方以号码无效、不能收短信或不支持该目的地拒绝，可能没有请求 ID）、unavailable（未配置、超时、网络错误、认证失败、限流或 5xx）；核验——approved、wrong_code（验证仍待核验）、expired（已过期、已取消、尝试次数用尽或找不到）、unavailable；提供方错误码与状态到这些类别的对应写成常量表并有注释说明依据
+      - 新文件 app/services/captcha.py 提供 Turnstile 令牌核验——passed、failed（令牌缺失、过长、无效或已用过）、unavailable（未配置、超时、网络错误或非 2xx）；不把访客来源地址交给 Turnstile
+      - 两个适配器都只用标准库 urllib 发 HTTPS POST（表单编码），连接与读取超时各 5 秒，不重试；HTTP 调用经可注入的传输函数，测试与之后的任务可替换；另各提供一个测试替身（按预设结果返回、记录调用次数，不发网络请求）与一个按配置构造实例的函数（供 SHOP-TASK-070 用作 FastAPI 依赖并在测试中覆盖）
+      - 配置项加在 app/core/config.py（前缀 SHOP_，默认值都是空串即未配置，未配置时调用一律归为 unavailable、不发请求）——twilio_account_sid、twilio_auth_token、twilio_verify_service_sid、twilio_verify_base_url、turnstile_secret_key、turnstile_verify_url；变量名已由登记 PR 写进 .env.example（SHOP_TWILIO_ACCOUNT_SID 等六项），本任务不改它
+      - 不写日志；手机号、验证码、令牌、凭据、请求与响应原文不出现在异常消息、repr 或返回值里（返回值只有类别与提供方请求 ID）
+      - tests/test_sms_provider.py 与 tests/test_captcha.py 以替换的传输函数验证意图（不发真实网络请求）——请求方法、路径、表单字段与认证头；各提供方状态码与错误码到类别的对应（含超时、网络错误、非 JSON 响应、缺字段）；未配置时不调用传输函数；异常消息与 repr 不含号码、验证码与凭据；每条测试写明它守住的是设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-067 记录段（两个适配器的调用与归类、配置项、偏离、验证到什么程度，并写明限流、预算、记录与接口留给 SHOP-TASK-068 到 070、真实服务未接通验证），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置与 docker-compose；不装依赖（不改 pyproject.toml）；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41），不合并、不直推
+    allowed_change_paths:
+      - app/services/sms_provider.py
+      - app/services/captcha.py
+      - tests/test_sms_provider.py
+      - tests/test_captcha.py
+      - app/core/config.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-068
+    title: 短信每日总量与费用预算的原子预占与结算
+    purpose: >-
+      按 docs/DESIGN.md 1.11「失败、并发与重试」第 4 条（短信每日总量及费用预算在本项目 MySQL 按日原子计数兜底，发送前按目的地预占保守的单次最高费用，未知费用时停发，结算后更新记录）
+      与 docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（全站每天 200 条、费用上限 20 美元，按目的地配置单次最高费用、未配置即停发，按预占价结算），在 SHOP-TASK-012 的 SmsDailyUsage 表上实现预占、结算与释放。
+      不发短信，不做 Redis 限流与接口，不加表或迁移，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41（短信费用预算）。拆分：业务规则层（4 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-012
+    acceptance_criteria:
+      - 新文件 app/services/sms_budget.py——预占按马来西亚时间（UTC+8）的日期找到当日行（不存在时在保存点里插入零值行，撞上日期唯一约束即回滚保存点再找），以 SELECT … FOR UPDATE 锁定后判断：目的地（按 E.164 的国家呼叫码 60 或 65）的单次最高费用未配置或为 0 时拒绝（unknown_cost）；sent_count 加 1 超过每日条数上限、或 reserved 加 settled 加本次费用超过每日费用上限时拒绝（over_budget）；否则 sent_count 加 1、reserved 加本次费用，返回预占凭据（日期与金额）
+      - 结算把这次的金额从 reserved 移到 settled（按预占价，Kelvin 2026-10-08 决定）；释放把金额从 reserved 减去并把 sent_count 减 1（短信未发出时用）；结算与释放都锁定同一日期行、不跨日、金额与计数不会成为负数（库里已有非负约束，代码另行防护并在违反时抛错）；三个函数只 flush、不提交，由调用方提交；MySQL 出错时异常交给调用方（调用方据此停发）
+      - 配置项加在 app/core/config.py（前缀 SHOP_）——sms_daily_count_limit（默认 200）、sms_daily_cost_limit_micro_usd（默认 20000000）、sms_max_cost_micro_usd_my 与 sms_max_cost_micro_usd_sg（默认 0 即未配置、停发）；金额一律是整数微美元；变量名与默认值已由登记 PR 写进 .env.example，本任务不改它
+      - 不写日志；手机号不出现在异常消息与返回值里（只用国家呼叫码判定目的地）
+      - tests/test_sms_budget.py 用 SQLite 内存库（开启外键检查）验证意图——马来西亚日期在 UTC 15:59:59 与 16:00:00 前后切换；首次预占插入当日行；条数与费用恰到上限放行、超过一条或一仙拒绝且不改数；未配置目的地拒绝；结算与释放后的三个数；结算与释放不能把数减成负数；两个会话先后预占时按顺序计数（SQLite 不复现 MySQL 的阻塞等待，在 TODO 记录段写明）；每条测试写明它守住的是设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-068 记录段（预占、结算、释放、配置项、偏离、验证到什么程度），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表或迁移（不改 app/models/）；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41），不合并、不直推
+    allowed_change_paths:
+      - app/services/sms_budget.py
+      - tests/test_sms_budget.py
+      - app/core/config.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-069
+    title: 短信验证的发送与核验规则
+    purpose: >-
+      按 docs/DESIGN.md 1.11「边界与原则」第 3、4 条、「失败、并发与重试」第 2 到 5 条与 docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（标准档限流），
+      把 SHOP-TASK-067 的适配器、068 的每日预算与 SHOP-TASK-026 的 Redis 限流组合成发送与核验两个规则函数，并写 SHOP-TASK-012 的短信验证记录。
+      不做接口，不做登录、注册与认领（由之后的任务接上），不加表或迁移，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41（短信验证、个人资料与费用）。拆分：业务规则层（4 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-067
+      - SHOP-TASK-068
+    acceptance_criteria:
+      - 新文件 app/services/sms_verification.py 的发送函数（入参为规范化 E.164 号码、用途、人机挑战令牌、访客来源与当前 UTC 时间，适配器、Redis 客户端（可为 None，表示未配置或连不上）与数据库会话由调用方传入）按顺序判定，任一步不通过即停止——1 按当次读取的 app/services/site_settings.py 开关，关闭即 sms_disabled（不核验人机挑战、不调用服务商、不预占预算、不计限流、不写记录）；2 号码不属于 app/services/phone.py 的短信白名单即 not_whitelisted（不写记录）；3 Turnstile 为 failed 即 captcha_failed（不写记录）；4 Redis 限流（app/services/rate_limit.py 的 hit），超限即 rate_limited（不写记录，不降级），客户端为 None 或抛 RateLimitUnavailable 即停发；5 每日预算预占，unknown_cost 或 over_budget 即停发；预占成功即先提交，使每日上限在之后的步骤失败时仍然计入；6 调用服务商发起验证
+      - 结果与记录（写记录与结算或释放在第二个事务里一起提交）——accepted 写状态 sent 的记录（带提供方请求 ID）并结算预占，返回 sent；Twilio Verify 对同一号码仍待核验的验证再次发起时沿用原请求 ID，此时不新增记录，而是把已有的那条记录改为本次结果的状态（accepted 为 sent，带回已存在请求 ID 的 undeliverable 为 undeliverable）、用途改为本次的用途、更新时间改为当前（同一请求 ID 以最近一次发送的用途为准，之前用途的待核验随之作废），照样结算本次预占；undeliverable 写状态 undeliverable 的记录（有请求 ID 时带上并结算，没有时释放预占），返回 undeliverable；停发（Turnstile 服务本身 unavailable 与服务商 unavailable——Kelvin 2026-10-08 决定人机挑战服务故障按停发、可改游客，访客未通过挑战的 captcha_failed 不降级；Redis 不可用即 RateLimitUnavailable；预算拒绝）写状态 suspended 的记录（不带请求 ID，已预占的释放），返回 suspended。记录的用途为调用方给出的用途，与 app/services/ordering.py 现有的降级判定（最近 30 分钟、用途 checkout、状态 undeliverable 或 suspended）衔接；预占前或预占时 MySQL 出错，异常交给调用方（不调用服务商、不写记录）；第二个事务提交失败时异常交给调用方，已提交的预占保留为 reserved（保守计入每日上限），这次的验证码因没有记录而无法核验，访客可在限流允许时重发
+      - 限流（Kelvin 2026-10-08 标准档，阈值做成 app/core/config.py 的配置项 sms_phone_limit_per_minute、sms_phone_limit_per_hour、sms_phone_limit_per_day、sms_source_limit_per_hour，默认值即下列数，变量名已由登记 PR 写进 .env.example、本任务不改它）——每个号码 60 秒 1 条、1 小时 5 条、24 小时 10 条；每个来源 1 小时 10 条；每个国家呼叫码 24 小时的上限直接取 SHOP-TASK-068 的 sms_daily_count_limit（默认 200，不另设配置项，Kelvin 2026-10-08 同意按国家限流取全站每日上限）；计数桶名各不相同，号码与来源只以 rate_limit_key 的摘要进 Redis；按号码 60 秒、号码 1 小时、号码 24 小时、来源 1 小时、国家呼叫码 24 小时的顺序逐桶计数，第一个超限的桶即 rate_limited，其后的桶不再计数，已计入的桶不回退
+      - 核验函数（入参为号码、用途、验证码与当前 UTC 时间，数据库会话与 SHOP-TASK-067 的短信服务适配器由调用方传入，与发送函数相同；之后的登录、注册与重设任务照此调用）——按当次从数据库读取的 app/services/site_settings.py 开关（不缓存），关闭即 sms_disabled（不调用服务商，含记录已存在之后才关闭的情形）；验证码不是 4 到 10 位数字即 wrong_code（不调用服务商）；找该号码与用途 created_at 在最近 10 分钟内（Twilio Verify 验证码默认有效期，从首次发起算，沿用请求 ID 的重发不延长，所以按创建时间而不是更新时间）状态为 sent 的最新记录，没有即 no_pending；按其请求 ID 调用服务商——approved 以条件更新（仅当该记录仍为 sent 且用途仍是读取时的用途）改为 approved，更新不到即 no_pending（同一次验证只能用一次；核验途中被另一次发送改写了用途的，旧用途的核验不再生效），返回 approved 与记录 ID；wrong_code 不改记录；expired 改为 rejected 返回 expired；unavailable 不改记录返回 unavailable（验证码错误、过期与服务不可用都不降级为游客）；只 flush、不提交
+      - 不写日志；手机号、验证码、令牌与来源不出现在异常消息与返回值里
+      - tests/test_sms_verification.py 用 SQLite 内存库、SHOP-TASK-067 的测试替身与内存 Redis 替身（照 tests/test_admin_auth.py 的 FakeRedis 写法，不加依赖）验证意图——判定顺序（开关关闭时人机挑战、服务商、预算与限流都未被调用）；白名单外不写记录；每个限流阈值恰到上限放行、多一次拒绝；预算拒绝与 Redis 为 None 或不可用写 suspended 并释放；预占先于服务商调用提交、第二个事务失败时预占保留；沿用同一请求 ID 时（accepted 与 undeliverable 两种结果各一例）改写原记录的用途与状态、不新增记录；第一个超限的桶之后的桶不计数；核验读到记录后、条件更新前用途被改写时返回 no_pending；三种发起结果的记录、请求 ID 与预算；与 ordering 的降级判定衔接（undeliverable 与 suspended 的 checkout 记录使马新号码可游客下单，rate_limited 与 captcha_failed 不能）；核验的各结果、10 分钟窗口、一次验证只能用一次、发送之后关闭开关时核验不调用服务商；Turnstile 服务不可用写 suspended 而访客未通过挑战不写记录；异常消息不含号码与验证码；每条测试写明它守住的是设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-069 记录段（判定顺序、结果与记录、限流、核验、偏离、验证到什么程度，并写明接口、登录注册与认领留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/ordering.py、.platform/、CI、部署配置；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41），不合并、不直推
+    allowed_change_paths:
+      - app/services/sms_verification.py
+      - tests/test_sms_verification.py
+      - app/core/config.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-070
+    title: 发送短信验证码接口
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 1、3 条与「失败、并发与重试」，提供公开的发送短信验证码接口，调用 SHOP-TASK-069 的发送函数；用途限结账验证、注册、短信登录与密码重设（注销确认在会员注销任务里接上）。
+      核验不单独开接口，由之后的登录、注册与重设任务在各自接口里调用 SHOP-TASK-069 的核验函数。不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41（短信验证与个人资料）。拆分：接口层（4 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-069
+    acceptance_criteria:
+      - 新文件 app/api/sms.py（app/main.py 挂上路由）提供 POST /api/sms/send；路由器用 SHOP-TASK-027 的 _NoStoreRoute，处理函数与依赖产生的响应（含错误）都带 Cache-Control 为 no-store；路径存在但方法不匹配时由框架返回的 405 不含请求内容与个人资料，不在此列；不需要会话与 CSRF（公开接口，由人机挑战与限流保护）
+      - 检查顺序沿用 app/api/orders.py 的写法——413（请求体逐块读，超过 4 KB，先于一切；captcha_token 最长 2048 个字符，其余字段很短，4 KB 留足余量）→ 415（不是 JSON）→ 422（结构）；请求体只有 phone（字符串）、phone_region（字符串，规范化方式与游客下单的 phone 与 phone_region 相同，经 app/services/phone.py 的 normalize_phone）、purpose（checkout、register、login、reset_password 之一）与 captcha_token（1 到 2048 个字符的字符串），都必填、严格类型、多出字段 422；422 不回显请求内容，沿用 app/api/pay.py 的 _body_errors；号码不成立为 422，类型 phone_invalid
+      - 结果到响应——sent 为 200 {"status":"sent"}；sms_disabled 为 403、not_whitelisted 为 422、captcha_failed 为 403、rate_limited 为 429、undeliverable 为 422 sms_undeliverable、suspended 为 503 sms_suspended，错误体为 {"detail":"<错误码>"}（错误码即前述名称）；提交由发送函数负责（见 SHOP-TASK-069）；处理中 MySQL 出错为 503 sms_suspended（此时无法写停发记录，游客下单本身也依赖 MySQL，不另作降级）；数据库未配置时照 app/db/session.py 的 get_session 现有回答，与其他接口相同，不另转换；登录与重设用途对未注册号码照常发送，响应不暴露号码是否已注册
+      - 适配器经 SHOP-TASK-067 的依赖函数注入（测试中覆盖为替身），Redis 客户端由本文件里的一个依赖函数取得——它调用 app/services/rate_limit.py 的 get_redis_client，抛 RateLimitUnavailable 时返回 None（不让异常经 _NoStoreRoute 变成 503 service_unavailable），测试覆盖这个依赖函数——None 交给发送函数（由它在开关、白名单与人机挑战之后按停发处理，不得放行发送；不用 get_optional_redis_client，它只供计价与游客下单），来源取 client_source；不写日志
+      - tests/test_sms_api.py 用 TestClient、SQLite 内存库与替身验证意图——413、415、422 的顺序与不回显；每个结果的状态码与错误体；no-store；登录与重设用途对未注册号码与已注册号码的响应相同；未知用途（含 delete_account）422；每条测试写明它守住的是设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-070 记录段（接口、字段、结果与状态码、偏离、验证到什么程度，并写明核验在登录注册任务里接上、前端 V1 留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41），不合并、不直推
+    allowed_change_paths:
+      - app/api/sms.py
+      - app/main.py
+      - tests/test_sms_api.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-071
+    title: 会员会话与密码登录锁定规则
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 3 条（会话到期、退出与服务端授权检查；未设密码与密码错误返回相同的通用失败）与 docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（会话 30 天不续期、同一号码加来源 15 分钟内失败 5 次锁 15 分钟），
+      仿照 app/services/admin_auth.py 实现会员会话的签发、校验、撤销、CSRF 与密码登录锁定规则函数，在 SHOP-TASK-012 的 MemberSession 表上。不做接口与 cookie，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41（会员登录与个人资料）。拆分：业务规则层（3 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-012
+      - SHOP-TASK-035
+    acceptance_criteria:
+      - 新文件 app/services/member_auth.py——签发会话：令牌原文为 secrets.token_urlsafe(32)，库里只存其 SHA-256 十六进制摘要，到期为签发时刻加 30 天、不随使用延长，会员状态须为 active；校验 cookie 值：格式不对、会话不存在、已撤销、已到期或会员已不是 active 都不通过，通过时返回会话与会员；撤销单个会话与撤销某会员的全部会话（写撤销时间，行保留，返回撤销条数）；只 flush、不提交
+      - CSRF 令牌不入库，由令牌原文加本模块独有的用途前缀做 SHA-256 得到（前缀不同于 app/services/admin_auth.py 与 app/services/order_access.py），比较用常量时间；格式写法与 admin_auth 相同
+      - 密码校验沿用 app/services/pw_hash.py——按号码找 active 会员，不存在或未设密码时以 DUMMY_PASSWORD_HASH 照样校验一次，三种失败（号码未注册、未设密码、密码错误）对调用方是同一个结果；密码长度规则（至少 8 个字符）作为函数提供给之后的设置与重设密码任务
+      - 登录锁定（计数用 app/services/rate_limit.py）——标识为 [访客来源, 规范化 E.164 号码] 的 JSON 编码；失败计数窗口 15 分钟、窗口内第 5 次失败时在锁定桶计一次，锁定 15 分钟（锁定桶过期只在首次计入时设置）；锁定期间即使密码正确也拒绝，锁定到期后照常校验；成功登录不清零失败计数；Redis 不可用时抛 RateLimitUnavailable，调用方必须拒绝登录；写法与 admin_auth 的 login_locked、record_login_failure 一致
+      - 不写日志；令牌、CSRF 令牌、cookie 值、号码、来源与密码不出现在异常消息、repr 或返回值里（签发结果的令牌字段 repr=False）
+      - tests/test_member_auth.py 用 SQLite 内存库与内存 Redis 替身（照 tests/test_admin_auth.py 的 FakeRedis 写法，不加依赖）验证意图——签发后只存摘要、30 天到期不续期；各种不通过的情形（含已注销会员、已撤销、已到期、格式不对）；撤销单个与全部；CSRF 与 admin、订单访问的令牌不同、错与缺都不通过；三种密码失败对调用方相同且都调用一次哈希校验；锁定在第 5 次失败时开始、锁定中正确密码也拒绝、15 分钟后照常校验、按来源与号码组合锁定；异常与 repr 不含敏感值；每条测试写明它守住的是设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-071 记录段（会话、CSRF、密码校验、锁定、偏离、验证到什么程度，并写明 cookie 与接口留给会员登录接口任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/admin_auth.py、.platform/、CI、部署配置；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41），不合并、不直推
+    allowed_change_paths:
+      - app/services/member_auth.py
+      - tests/test_member_auth.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-072
+    title: 短信验证记录满 30 天删除
+    purpose: >-
+      按 docs/DESIGN.md 1.11「资料保留」第 4 条（短信验证请求及发送记录短期保留用于防滥用）与 docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（保留 30 天），
+      新增定时任务：删除创建满 30 天的短信验证记录，并提供人工补跑命令。不改表与迁移，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41（个人资料保留期）。拆分：定时任务层（6 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-012
+      - SHOP-TASK-042
+    acceptance_criteria:
+      - 新文件 app/services/sms_retention.py 删除 created_at 不晚于当前 UTC 时间减 30 天（恰满 30 天即删除）的 VerificationAttempt 行，每次最多删除一批（上限沿用 app/jobs.py 的 CANCEL_BATCH_LIMIT），返回删除条数；可重复运行，重复执行不出错；不碰 SmsDailyUsage、会员与订单
+      - app/jobs.py 的 default_jobs 在已有三项之后加上这项任务（名称 delete_expired_verifications），并加人工补跑子命令 delete-verifications（执行一次后退出，退出码与日志写法沿用 complete-shipped：成功 0、失败 1、未配置 SHOP_DATABASE_URL 2；日志只含删除条数与异常类名）；模块说明的用法一段补上这条命令
+      - tests/test_jobs.py 与 tests/test_auto_complete.py 只许把默认任务名列表的断言加上 delete_expired_verifications，并按需要调整会话工厂不可用时每轮多出的一次开会话与一条失败日志的计数，写明原因；其余现有断言不动
+      - tests/test_sms_retention.py 用 SQLite 内存库验证意图——恰满 30 天的删除、差一秒的保留；每批上限；各状态与用途一律按时间删除；不碰其他表；补跑命令的退出码与日志不含手机号；每条测试写明它守住的是设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-072 记录段（删除规则、任务与补跑命令、改动的现有测试、偏离、验证到什么程度），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置与 docker-compose；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41），不合并、不直推
+    allowed_change_paths:
+      - app/services/sms_retention.py
+      - tests/test_sms_retention.py
+      - app/jobs.py
+      - tests/test_jobs.py
+      - tests/test_auto_complete.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
