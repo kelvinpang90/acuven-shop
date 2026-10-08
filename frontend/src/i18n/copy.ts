@@ -95,6 +95,11 @@ export const COPY = {
     zh: "网络中断，正在确认上一步是否已完成…",
     ms: "Sambungan terputus. Menyemak sama ada tindakan terakhir anda berjaya…",
   },
+  "common.save": {
+    en: "Save",
+    zh: "保存",
+    ms: "Simpan",
+  },
   "common.back": {
     en: "Back",
     zh: "返回",
@@ -1329,6 +1334,116 @@ export const COPY = {
     en: "The demo banner and demo hints always show on the storefront and can't be turned off here.",
     zh: "前台的演示横幅与演示提示始终显示，这里不能关闭。",
     ms: "Sepanduk demo dan petunjuk demo sentiasa dipaparkan di kedai dan tidak boleh dimatikan di sini.",
+  },
+  "admin.theme": {
+    en: "Theme",
+    zh: "主题",
+    ms: "Tema",
+  },
+  "admin.theme_pandan": {
+    en: "Pandan",
+    zh: "班兰",
+    ms: "Pandan",
+  },
+  "admin.theme_pasar": {
+    en: "Pasar Pagi",
+    zh: "早市",
+    ms: "Pasar Pagi",
+  },
+  "admin.theme_receipt": {
+    en: "Receipt",
+    zh: "小票",
+    ms: "Resit",
+  },
+  "admin.theme_kopitiam": {
+    en: "Kopitiam",
+    zh: "咖啡店",
+    ms: "Kopitiam",
+  },
+  "admin.theme_batik": {
+    en: "Batik",
+    zh: "蜡染",
+    ms: "Batik",
+  },
+  "admin.theme_malam": {
+    en: "Pasar Malam",
+    zh: "夜市",
+    ms: "Pasar Malam",
+  },
+  "admin.theme_gula": {
+    en: "Gula-Gula",
+    zh: "糖果",
+    ms: "Gula-Gula",
+  },
+  "admin.theme_galeri": {
+    en: "Galeri",
+    zh: "画廊",
+    ms: "Galeri",
+  },
+  "admin.theme_songket": {
+    en: "Songket",
+    zh: "金线",
+    ms: "Songket",
+  },
+  "admin.theme_litar": {
+    en: "Litar",
+    zh: "电路",
+    ms: "Litar",
+  },
+  "admin.theme_dark_note": {
+    en: "Every theme has a light and a dark version. Visitors see the one that matches their device setting.",
+    zh: "每款主题都有浅色与深色，访客看到哪一种取决于其设备设置。",
+    ms: "Setiap tema ada versi cerah dan gelap. Pelawat melihat versi yang sepadan dengan tetapan peranti mereka.",
+  },
+  "admin.accent": {
+    en: "Accent colour",
+    zh: "主色",
+    ms: "Warna utama",
+  },
+  "admin.accent_option": {
+    en: "Colour {n}",
+    zh: "颜色 {n}",
+    ms: "Warna {n}",
+  },
+  "admin.accent_hint": {
+    en: "Only colours that stay readable in both light and dark mode are offered.",
+    zh: "只提供在浅色与深色下都清楚可读的颜色。",
+    ms: "Hanya warna yang kekal jelas dalam mod cerah dan gelap ditawarkan.",
+  },
+  "admin.home_blocks": {
+    en: "Home page blocks",
+    zh: "首页区块",
+    ms: "Blok halaman utama",
+  },
+  "admin.block_hero": {
+    en: "Main banner",
+    zh: "主视觉",
+    ms: "Sepanduk utama",
+  },
+  "admin.block_show": {
+    en: "Show",
+    zh: "显示",
+    ms: "Papar",
+  },
+  "admin.block_move_up": {
+    en: "Move up",
+    zh: "上移",
+    ms: "Alih ke atas",
+  },
+  "admin.block_move_down": {
+    en: "Move down",
+    zh: "下移",
+    ms: "Alih ke bawah",
+  },
+  "admin.home_blocks_hint": {
+    en: "Block text comes from the store's translations and can't be edited here. The demo hint on the home page always shows above these blocks.",
+    zh: "区块文字来自店铺的三语文案，不能在这里修改。首页的演示提示始终显示在这些区块上方。",
+    ms: "Teks blok datang daripada terjemahan kedai dan tidak boleh disunting di sini. Petunjuk demo di halaman utama sentiasa dipaparkan di atas blok ini.",
+  },
+  "admin.design_saved": {
+    en: "Saved. The storefront now uses these settings.",
+    zh: "已保存，前台已改用这些设置。",
+    ms: "Disimpan. Kedai kini menggunakan tetapan ini.",
   },
   "admin.logout": {
     en: "Log out",
