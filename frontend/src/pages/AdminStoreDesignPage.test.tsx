@@ -737,7 +737,8 @@ describe("saving", () => {
   // PUT，带读取给的 CSRF 令牌与中止用的 signal，请求体为当前的主题、主色、区块与读取到的精选 ID。
   it.each(LANGUAGES)("saves the current choice with the interface language in %s", async (language) => {
     const form = showBlock(chooseTheme(formOf(DETAIL), "batik"), 1, false);
-    const calls = stubFetch(json(200, savedBody({ ...DETAIL, ...saveInput(DETAIL, form), accent: "indigo" })));
+    const input = saveInput(DETAIL, form);
+    const calls = stubFetch(json(200, savedBody({ ...DETAIL, theme: input.theme, accent: "indigo", home_blocks: [...input.home_blocks] })));
     const controller = new AbortController();
     await submitDesign(DETAIL, form, language, controller.signal, fakeMoves(startSaving(readyState({ form }))).target);
     expect(calls).toHaveLength(1);
