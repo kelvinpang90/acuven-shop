@@ -2422,7 +2422,7 @@ tasks:
     creates_pull_request: true
 
   # A08 店铺装修（/admin/store-design）：SHOP-TASK-061 先改保存校验（原已在精选里、之后下架的商品放行，Kelvin 2026-10-08 决定），
-  # 页面分四步：062 路由与导航，063 主题、主色、首页区块与保存，064 精选商品，065 预览。后端为 SHOP-TASK-051；不含标志图（Kelvin 2026-10-06 决定）。
+  # 页面分五步：062 路由与导航，063 请求模块，064 主题、主色、首页区块与保存，065 精选商品，066 预览（063 原含页面与请求，预审报 TOO_LARGE 后拆开）。后端为 SHOP-TASK-051；不含标志图（Kelvin 2026-10-06 决定）。
   # 色块与选项样式由设计系统提供（acs-admin__choice、acs-admin__ring、acs-admin__preview、acs-swatch，Kelvin 2026-10-08 决定，docs/HANDOFF.md 0.40）。
   - id: SHOP-TASK-061
     title: 后台店铺装修保存时放行原已在精选里的下架商品
@@ -2455,18 +2455,18 @@ tasks:
     title: 后台店铺装修页的路由与导航 A08
     purpose: >-
       按 docs/UX.md 0.10 的 A08 加上后台店铺装修页：路由 /admin/store-design，用后台框架渲染，当前导航项为店铺装修，内容区只有页标题与演示说明；
-      后台导航按 UX 顺序加上店铺装修。表单、精选商品与预览由 SHOP-TASK-063、064、065 接上。不调用接口，不装依赖，不改后端，不改设计。
+      后台导航按 UX 顺序加上店铺装修。请求模块、表单、精选商品与预览由 SHOP-TASK-063 到 066 接上。不调用接口，不装依赖，不改后端，不改设计。
       设计闸门：不适用（只加路由、导航与静态文字）。
-      拆分：A08 拆成路由与导航（本任务，12 个允许路径）、主题主色区块与保存（SHOP-TASK-063）、精选商品（SHOP-TASK-064）与预览（SHOP-TASK-065），因为导航加一项要同时改后台框架与退款、库存重置两页已有的导航测试。
+      拆分：A08 拆成路由与导航（本任务，12 个允许路径）、请求模块（SHOP-TASK-063）、主题主色区块与保存（SHOP-TASK-064）、精选商品（SHOP-TASK-065）与预览（SHOP-TASK-066），因为导航加一项要同时改后台框架与退款、库存重置两页已有的导航测试。
     status: ready
     depends_on:
       - SHOP-TASK-059
     acceptance_criteria:
       - 页面内容与文案以 docs/UX.md 0.10 的 A08、docs/UX-COPY.md 0.10 与 docs/HANDOFF.md 0.35、0.40 为准，样式以 docs/design/pages/ 的 A08-desktop 与 A08-phone 的页头部分为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色（如演示说明的底色）不搬，记入 docs/TODO.md 的偏离（评审不以此要求修改），不借用其他组件的类来取颜色
-      - 路由 /admin/store-design（frontend/src/router.tsx、frontend/src/App.tsx 与 frontend/src/router.test.tsx 各加一项），新文件 frontend/src/pages/AdminStoreDesignPage.tsx 用后台框架渲染，当前导航项为店铺装修（手机顶栏标题为 admin.nav_store_design），内容区为 h1 admin.nav_store_design 与其下的 admin.design_demo_note；页面不发起自己的请求（表单由 SHOP-TASK-063 接上）
+      - 路由 /admin/store-design（frontend/src/router.tsx、frontend/src/App.tsx 与 frontend/src/router.test.tsx 各加一项），新文件 frontend/src/pages/AdminStoreDesignPage.tsx 用后台框架渲染，当前导航项为店铺装修（手机顶栏标题为 admin.nav_store_design），内容区为 h1 admin.nav_store_design 与其下的 admin.design_demo_note；页面不发起自己的请求（表单由 SHOP-TASK-064 接上）
       - frontend/src/components/AdminFrame.tsx 的导航按 UX 顺序只含已上线的订单、退款、库存重置与店铺装修四项（桌面导航与 ☰ 菜单同样）；frontend/src/components/AdminFrame.test.tsx 只许把「只含订单、退款与库存重置三项」的断言（桌面导航与手机菜单）改为按 UX 顺序只含这四项、其他 admin.nav_* 不出现；frontend/src/pages/AdminRefundsPage.test.tsx 与 frontend/src/pages/AdminStockResetsPage.test.tsx 只许把 navigation 一组里「依次为订单、退款与库存重置三项」的断言改为依次为这四项（各自的当前项与手机顶栏名称不变）；三个文件的其余断言不动
       - 用 vitest 与 react-dom/server（不加测试依赖，路由以替身代替）在 frontend/src/pages/AdminStoreDesignPage.test.tsx 验证意图——经路由打开页面渲染后台框架、不套前台框架；当前导航项为店铺装修且四项顺序正确；标题与演示说明；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - docs/TODO.md 新增 SHOP-TASK-062 记录段（路由、导航变化、改动的现有测试、偏离、验证到什么程度，并写明未做浏览器验收、表单精选与预览留给 SHOP-TASK-063 到 065），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - docs/TODO.md 新增 SHOP-TASK-062 记录段（路由、导航变化、改动的现有测试、偏离、验证到什么程度，并写明未做浏览器验收、请求模块、表单、精选与预览留给 SHOP-TASK-063 到 066），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
     allowed_change_paths:
       - frontend/src/pages/AdminStoreDesignPage.tsx
@@ -2488,59 +2488,49 @@ tasks:
     creates_pull_request: true
 
   - id: SHOP-TASK-063
-    title: 后台店铺装修的主题、主色、首页区块与保存 A08
+    title: 后台店铺装修的读取与保存请求模块 A08
     purpose: >-
-      在 SHOP-TASK-062 的店铺装修页上实现 A08 的读取、主题、主色、首页区块与保存：调用 SHOP-TASK-051 的读取与保存接口，精选商品本任务只原样提交、不显示。
-      不含标志图（Kelvin 2026-10-06 决定，docs/HANDOFF.md 0.34），精选商品与预览由 SHOP-TASK-064、065 接上。不改路由与导航，不装依赖，不改后端，不改设计。
-      设计闸门：不适用（只改前台外观设置，不涉及金额计算与个人资料）。
-      拆分：见 SHOP-TASK-062，本任务 9 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+      为 A08 页面新建调用 SHOP-TASK-051 读取与保存接口的请求模块与测试，供 SHOP-TASK-064 到 066 使用；不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只改前台外观设置的请求，不涉及金额计算与个人资料）。
+      拆分：A08 页面的请求层（3 个允许路径）；原 SHOP-TASK-063 合并请求与页面，预审报 TOO_LARGE 后拆出。
     status: ready
     depends_on:
       - SHOP-TASK-051
-      - SHOP-TASK-062
     acceptance_criteria:
-      - 页面内容与文案以 docs/UX.md 0.10 的 A08、docs/UX-COPY.md 0.10 与 docs/HANDOFF.md 0.35、0.40 为准，样式以 docs/design/pages/ 的 A08-desktop 与 A08-phone 为准，主题选项、色条与主色色块用设计系统的 acs-admin__choice、acs-swatch、acs-admin__ring 与 acs-swatch--dot（docs/design/COMPONENTS.md「AdminShell」A08 一条），二者冲突时以 UX 文档为准并在 PR 里说明；不显示 admin.logo 一组；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 与上述类写不了的颜色、字号、字重与底色不搬，记入 docs/TODO.md 的偏离（评审不以此要求修改），不借用其他组件的类来取颜色
-      - 新文件 frontend/src/api/adminStoreDesign.ts 调用 GET /api/admin/store-design?lang=<界面语言> 与 PUT /api/admin/store-design（同源 cookie，cache 为 no-store；PUT 带 X-CSRF-Token 为读取得到的 csrf_token，JSON 请求体只有 theme、accent、home_blocks 与 featured_product_ids），只取 SHOP-TASK-051 记录段列出的字段（含 featured 与 choices，供 SHOP-TASK-064 使用），响应体不合格算失败（主题不在 frontend/src/storeDesign.ts 的 THEME_ACCENTS、主色非 null 且不属于该主题、home_blocks 不是 HOME_BLOCKS 的一个排列都算不合格）；读取结果归为 ok、none（401）、failed 与 network，保存结果归为 ok、none（401）、csrf（403）、failed 与 network
-      - 主题——legend admin.theme，10 个单选按 THEME_ACCENTS 的顺序，每项为 acs-admin__choice 里的单选、主题色条（acs-swatch，data-shop-theme 为该主题，三段依次 acs-swatch__surface、acs-swatch__accent、acs-swatch__demo）与主题名 admin.theme_<主题 id>，桌面两列、手机单列，其下 admin.theme_dark_note。主色——legend admin.accent，所选主题的各主色依次为 acs-admin__ring 里的单选（可访问名称 admin.accent_option，{n} 为从 1 起的序号），内放 acs-swatch--dot（data-shop-theme 为所选主题、data-accent 为该主色），其下 admin.accent_hint；读取到的主色为 null 时选第一项，换主题时改选新主题的第一项，保存时选第一项提交 null、其余提交主色 id
-      - 首页区块——legend admin.home_blocks，按读取到的顺序四行，每行序号、区块名（hero、how、categories、featured 依次为 admin.block_hero、home.how_title、home.categories、home.featured）、勾选框 admin.block_show（勾选为显示）与上移、下移按钮（可访问名称 admin.block_move_up、admin.block_move_down，按钮内为 aria-hidden 的图形；第一行上移与最后一行下移禁用），其下 admin.home_blocks_hint
-      - 读取与保存——打开页面按界面语言读取，进行中标 aria-busy、取得前不显示表单；401 用路由的 replace 进入 /admin/login；网络中断显示 common.network_check，其他失败显示 common.error_retry；切换界面语言时重新读取并以结果重置表单；离开页面时中止请求，旧请求的结果不再更新页面。common.save 以 PUT 提交当前选择，featured_product_ids 原样提交读取到的精选商品 ID 顺序；保存进行中按钮禁用并标 aria-busy；200 后以返回的设置更新表单并显示 admin.design_saved（之后再改任何设置即隐藏）；401 同上；403 重新读取（以结果重置表单）并显示 common.error_retry；网络中断显示 common.network_check；其他失败（含 422）显示 common.error_retry 并保留表单
-      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/api/adminStoreDesign.test.ts 与 frontend/src/pages/AdminStoreDesignPage.test.tsx 验证意图——字段与响应体不合格算失败、请求头与请求体；10 款主题的顺序、名称与色条，主色色块与读屏名称，null 选第一项、换主题改选第一项、第一项提交 null；区块的名称、显隐与移动、首末按钮禁用；精选原样提交；保存成功、401、403、网络中断与其他失败；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；SHOP-TASK-062 写的现有断言只按需要改并写明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - docs/TODO.md 新增 SHOP-TASK-063 记录段（请求、表单、保存、偏离、验证到什么程度，并写明未做浏览器验收、精选商品与预览留给 SHOP-TASK-064、065），不改 planning-v1 块，复选框只允许 [ ] / [x]
-      - 改动只落在 allowed_change_paths（不新增路由，不改导航）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+      - 新文件 frontend/src/api/adminStoreDesign.ts 调用 GET /api/admin/store-design?lang=<语言> 与 PUT /api/admin/store-design?lang=<语言>（同源 cookie，cache 为 no-store；PUT 带 X-CSRF-Token 为调用方给出的 csrf_token，Content-Type 为 application/json，JSON 请求体只有 theme、accent、home_blocks 与 featured_product_ids 四个字段），写法沿用 frontend/src/api/adminRefunds.ts 与 frontend/src/api/adminStockResets.ts 的现有做法
+      - 只取 SHOP-TASK-051 记录段列出的字段——读取为 theme、accent、home_blocks、featured（product_id、slug、name 或 null、published）、choices（product_id、slug、name）与 csrf_token；保存为 theme、accent、home_blocks 与 featured；响应体不合格算失败（主题不在 frontend/src/storeDesign.ts 的 THEME_ACCENTS、主色非 null 且不属于该主题、home_blocks 不是 HOME_BLOCKS 的一个排列、字段缺少或类型不对都算不合格）
+      - 读取结果归为 ok、none（401）、failed 与 network；保存结果归为 ok、none（401）、csrf（403）、failed（含 422 与其他状态）与 network；调用方可传入 AbortSignal，中止时按现有模块的做法处理
+      - 用 vitest（不加测试依赖，fetch 以替身代替）在 frontend/src/api/adminStoreDesign.test.ts 验证意图——请求地址、方法、语言参数、请求头与请求体；字段与响应体不合格算失败（含属于别的主题的主色、区块重复或缺少）；各状态码的归类与网络中断；每条测试写明它守住的是 SHOP-TASK-051 记录段或 UX 的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-063 记录段（请求、字段与归类、偏离、验证到什么程度，并写明页面留给 SHOP-TASK-064 到 066），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths（不改页面、路由与导航）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
     allowed_change_paths:
       - frontend/src/api/adminStoreDesign.ts
       - frontend/src/api/adminStoreDesign.test.ts
-      - frontend/src/pages/AdminStoreDesignPage.tsx
-      - frontend/src/pages/AdminStoreDesignPage.test.tsx
-      - frontend/src/router.tsx
-      - frontend/src/App.tsx
-      - frontend/src/i18n/copy.ts
-      - frontend/src/styles/site.css
       - docs/TODO.md
     allowed_commands:
       - lint.check
       - format.check
     creates_branch: true
     creates_pull_request: true
-
   - id: SHOP-TASK-064
-    title: 后台店铺装修的精选商品挑选 A08
+    title: 后台店铺装修的主题、主色、首页区块与保存 A08
     purpose: >-
-      在 SHOP-TASK-063 的店铺装修表单上实现 A08 的精选商品挑选：最多 4 件、可排序、移出，保存时按列表提交。
-      原已在精选里、之后下架的商品照列（SHOP-TASK-061 放行保存，Kelvin 2026-10-08 决定）。不改请求文件，不改路由与导航，不装依赖，不改后端，不改设计。
+      在 SHOP-TASK-062 的店铺装修页上实现 A08 的读取、主题、主色、首页区块与保存：经 SHOP-TASK-063 的请求模块调用读取与保存接口，精选商品本任务只原样提交、不显示。
+      不含标志图（Kelvin 2026-10-06 决定，docs/HANDOFF.md 0.34），精选商品与预览由 SHOP-TASK-065、066 接上。不改路由与导航，不装依赖，不改后端，不改设计。
       设计闸门：不适用（只改前台外观设置，不涉及金额计算与个人资料）。
       拆分：见 SHOP-TASK-062，本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
     status: ready
     depends_on:
       - SHOP-TASK-061
+      - SHOP-TASK-062
       - SHOP-TASK-063
     acceptance_criteria:
-      - 页面内容与文案以 docs/UX.md 0.10 的 A08（含「精选商品（0.6）」一条）、docs/UX-COPY.md 0.10 与 docs/HANDOFF.md 0.40 为准；视觉稿没有画精选商品，样式沿用同页首页区块一组的写法与设计系统已有的 acs-admin__panel、acs-admin__select、acs-admin__btn，在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；site.css 写不了的颜色、字号、字重与底色不搬，记入 docs/TODO.md 的偏离（评审不以此要求修改），不借用其他组件的类来取颜色
-      - 首页区块一组之后、保存按钮之前为 legend admin.featured_pick 的一组——按读取到的顺序列出精选商品（含 published 为 false 的，照列、不加标记），每行序号、名称（name 为 null 时显示 slug）、上移与下移（可访问名称 admin.block_move_up、admin.block_move_down，规则同首页区块）与移出（可访问名称 admin.featured_remove），按钮内为 aria-hidden 的图形；精选为空时不显示行
-      - 添加——下拉（可访问名称 admin.featured_add）按 choices 的顺序列出尚未在精选里的商品名称，默认选中第一项；按钮 admin.featured_add 把所选商品加到末尾；已有 4 件或没有可添加的商品时下拉与按钮都禁用；其下 admin.featured_hint
-      - 保存时 featured_product_ids 按列表当前顺序提交（取代 SHOP-TASK-063 的原样提交）；200 后以返回的 featured 更新列表并照旧显示 admin.design_saved，choices 保持读取到的不变（保存响应不含 choices）；改动精选也隐藏 admin.design_saved；403 与切换语言照 SHOP-TASK-063 重新读取并重置
-      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AdminStoreDesignPage.test.tsx 验证意图——行的顺序、名称与 slug 回退、已下架商品照列；移动与首末按钮禁用、移出；下拉只列未选的商品、加到末尾、满 4 件与无可加时禁用；保存提交列表顺序并以返回结果更新；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；SHOP-TASK-063 写的「精选原样提交」断言改为按列表提交并写明原因，其余现有断言只按需要改并写明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - docs/TODO.md 新增 SHOP-TASK-064 记录段（列表、添加、保存、偏离、验证到什么程度，并写明未做浏览器验收、预览留给 SHOP-TASK-065），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 页面内容与文案以 docs/UX.md 0.10 的 A08、docs/UX-COPY.md 0.10 与 docs/HANDOFF.md 0.35、0.40 为准，样式以 docs/design/pages/ 的 A08-desktop 与 A08-phone 为准，主题选项、色条与主色色块用设计系统的 acs-admin__choice、acs-swatch、acs-admin__ring 与 acs-swatch--dot（docs/design/COMPONENTS.md「AdminShell」A08 一条），二者冲突时以 UX 文档为准并在 PR 里说明；不显示 admin.logo 一组；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 与上述类写不了的颜色、字号、字重与底色不搬，记入 docs/TODO.md 的偏离（评审不以此要求修改），不借用其他组件的类来取颜色
+      - 主题——legend admin.theme，10 个单选按 THEME_ACCENTS 的顺序，每项为 acs-admin__choice 里的单选、主题色条（acs-swatch，data-shop-theme 为该主题，三段依次 acs-swatch__surface、acs-swatch__accent、acs-swatch__demo）与主题名 admin.theme_<主题 id>，桌面两列、手机单列，其下 admin.theme_dark_note。主色——legend admin.accent，所选主题的各主色依次为 acs-admin__ring 里的单选（可访问名称 admin.accent_option，{n} 为从 1 起的序号），内放 acs-swatch--dot（data-shop-theme 为所选主题、data-accent 为该主色），其下 admin.accent_hint；读取到的主色为 null 时选第一项，换主题时改选新主题的第一项；保存时主题与主色都与读取到的相同则原样提交读取到的 accent（含 null），否则提交所选主色 id（未改动的表单再次保存不改变存储）
+      - 首页区块——legend admin.home_blocks，按读取到的顺序四行，每行序号、区块名（hero、how、categories、featured 依次为 admin.block_hero、home.how_title、home.categories、home.featured）、勾选框 admin.block_show（勾选为显示）与上移、下移按钮（可访问名称 admin.block_move_up、admin.block_move_down，按钮内为 aria-hidden 的图形；第一行上移与最后一行下移禁用），其下 admin.home_blocks_hint
+      - 读取与保存（经 SHOP-TASK-063 的请求模块，语言参数为界面语言）——打开页面读取，进行中标 aria-busy、取得前不显示表单；401 用路由的 replace 进入 /admin/login；网络中断显示 common.network_check，其他失败显示 common.error_retry，都不显示表单；切换界面语言时重新读取，重新读取与首次读取的显示与失败处理相同，取得后以结果重置表单；离开页面时中止请求，旧请求的结果不再更新页面。common.save 以 PUT 提交当前选择，featured_product_ids 原样提交读取到的精选商品 ID 顺序；保存进行中按钮禁用并标 aria-busy；200 后以返回的设置更新表单并显示 admin.design_saved（之后再改任何设置即隐藏）；401 同上；403 时重新读取（显示同上），取得后以结果重置表单并在表单上方显示 common.error_retry；网络中断显示 common.network_check；其他失败（含 422）显示 common.error_retry 并保留表单
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AdminStoreDesignPage.test.tsx 验证意图——10 款主题的顺序、名称与色条，主色色块与读屏名称，null 选第一项、换主题改选第一项、未改动时原样提交主色、改选后提交主色 id；区块的名称、显隐与移动、首末按钮禁用；精选原样提交；保存带界面语言、成功、401、403 后重新读取、网络中断与其他失败；切换语言重新读取；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；SHOP-TASK-062 写的现有断言只按需要改并写明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-064 记录段（读取、表单、保存、偏离、验证到什么程度，并写明未做浏览器验收、精选商品与预览留给 SHOP-TASK-065、066），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths（不新增路由，不改导航，不改 frontend/src/api/adminStoreDesign.ts）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
     allowed_change_paths:
       - frontend/src/pages/AdminStoreDesignPage.tsx
@@ -2557,22 +2547,54 @@ tasks:
     creates_pull_request: true
 
   - id: SHOP-TASK-065
+    title: 后台店铺装修的精选商品挑选 A08
+    purpose: >-
+      在 SHOP-TASK-064 的店铺装修表单上实现 A08 的精选商品挑选：最多 4 件、可排序、移出，保存时按列表提交。
+      原已在精选里、之后下架的商品照列（SHOP-TASK-061 放行保存，Kelvin 2026-10-08 决定）。不改请求文件，不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只改前台外观设置，不涉及金额计算与个人资料）。
+      拆分：见 SHOP-TASK-062，本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+    status: ready
+    depends_on:
+      - SHOP-TASK-064
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.10 的 A08（含「精选商品（0.6）」一条）、docs/UX-COPY.md 0.10 与 docs/HANDOFF.md 0.40 为准；视觉稿没有画精选商品，样式沿用同页首页区块一组的写法与设计系统已有的 acs-admin__panel、acs-admin__select、acs-admin__btn，在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；site.css 写不了的颜色、字号、字重与底色不搬，记入 docs/TODO.md 的偏离（评审不以此要求修改），不借用其他组件的类来取颜色
+      - 首页区块一组之后、保存按钮之前为 legend admin.featured_pick 的一组——按读取到的顺序列出精选商品（含 published 为 false 的，照列、不加标记），每行序号、名称（name 为 null 时显示 slug）、上移与下移（可访问名称 admin.block_move_up、admin.block_move_down，规则同首页区块）与移出（可访问名称 admin.featured_remove），按钮内为 aria-hidden 的图形；精选为空时不显示行
+      - 添加——下拉（可访问名称 admin.featured_add）按 choices 的顺序列出尚未在精选里的商品名称，默认选中第一项；按钮 admin.featured_add 把所选商品加到末尾；已有 4 件或没有可添加的商品时下拉与按钮都禁用；其下 admin.featured_hint
+      - 保存时 featured_product_ids 按列表当前顺序提交（取代 SHOP-TASK-064 的原样提交）；200 后以返回的 featured 更新列表并照旧显示 admin.design_saved，choices 保持读取到的不变（保存响应不含 choices）；改动精选也隐藏 admin.design_saved；403 与切换语言照 SHOP-TASK-064 重新读取并重置
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AdminStoreDesignPage.test.tsx 验证意图——行的顺序、名称与 slug 回退、已下架商品照列；移动与首末按钮禁用、移出；下拉只列未选的商品、加到末尾、满 4 件与无可加时禁用；保存提交列表顺序并以返回结果更新；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；SHOP-TASK-064 写的「精选原样提交」断言改为按列表提交并写明原因，其余现有断言只按需要改并写明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-065 记录段（列表、添加、保存、偏离、验证到什么程度，并写明未做浏览器验收、预览留给 SHOP-TASK-066），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths（不新增路由，不改导航，不改 frontend/src/api/adminStoreDesign.ts）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/AdminStoreDesignPage.tsx
+      - frontend/src/pages/AdminStoreDesignPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-066
     title: 后台店铺装修的预览 A08
     purpose: >-
-      在 SHOP-TASK-064 的店铺装修页上实现 A08 的预览：按表单当前（未保存）的主题与主色显示首页缩样，可切换浅色与深色。
+      在 SHOP-TASK-065 的店铺装修页上实现 A08 的预览：按表单当前（未保存）的主题与主色显示首页缩样，可切换浅色与深色。
       商品卡只显示名称与占位图、不显示价格（Kelvin 2026-10-08 决定，docs/HANDOFF.md 0.40），不发起新的请求。不改请求文件，不改路由与导航，不装依赖，不改后端，不改设计。
       设计闸门：不适用（只改前台外观设置的预览，不涉及金额计算与个人资料）。
       拆分：见 SHOP-TASK-062，本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
     status: ready
     depends_on:
-      - SHOP-TASK-064
+      - SHOP-TASK-065
     acceptance_criteria:
       - 页面内容与文案以 docs/UX.md 0.10 的 A08、docs/UX-COPY.md 0.10 与 docs/HANDOFF.md 0.40 为准，样式以 docs/design/pages/ 的 A08-desktop 与 A08-phone 的预览部分为准，预览框用设计系统的 acs-admin__preview，缩样用前台已有的组件类（acs-banner、acs-tag acs-tag--demo、acs-brand、acs-hint、acs-display-s、acs-btn acs-btn--primary acs-btn--sm、acs-panel、acs-pcard），二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 与上述类写不了的颜色、字号、字重与底色不搬，记入 docs/TODO.md 的偏离（评审不以此要求修改），不借用其他组件的类来取颜色
       - 位置——桌面为表单右侧的预览栏（acs-admin__panel，视觉稿宽 460px），顶部为 admin.preview 与两个切换按钮 admin.preview_light、admin.preview_dark（aria-pressed 标当前，当前的用 acs-admin__btn、另一个加 acs-admin__btn--secondary，默认浅色）；手机（767px 及以下）在精选商品一组之后、保存按钮之前，以原生 details 收起（summary 为 admin.preview，默认收起，展开后内容与桌面相同）；同一份预览按媒体查询换位置或渲染两份按媒体查询显隐由实现决定，测试按渲染结果验证
       - 缩样——acs-admin__preview 内为 class 含 acs 的元素，data-shop-theme 为表单当前的主题，data-accent 为当前主色（选第一项时不设，与前台相同），data-mode 为所选的 light 或 dark，改选主题、主色或深浅色立即更新、不必保存；内容固定、不随首页区块的顺序与显隐变化，依次为演示横幅（common.demo_badge 标签与 common.demo_banner_short）、页头一行（品牌文字取 frontend/src/i18n/copy.ts 的 BRAND，与 common.nav_cart，{count} 为 0）、★ 提示 home.demo_hint、主视觉（home.hero_title 与按钮样式的 home.hero_cta）、home.how_title 与两张商品卡；缩样里没有链接、按钮或其他可交互元素，文字用当前界面语言
       - 商品卡（acs-pcard，占位图与名称，不显示价格）——取精选里前两件 published 为 true 的商品，不足两件时按 choices 的顺序补上未在其中的商品，仍不足时只显示现有的（可以为零张）；不发起新的请求
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AdminStoreDesignPage.test.tsx 验证意图——预览随未保存的主题与主色变化、第一项主色不设 data-accent；浅色与深色切换及 aria-pressed；缩样内容与顺序固定、不随区块显隐变化、没有可交互元素；商品卡的取法（已下架跳过、由 choices 补足、零张）且没有价格；手机为默认收起的 details；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；现有断言只按需要改并写明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - docs/TODO.md 新增 SHOP-TASK-065 记录段（位置、缩样、商品卡、偏离、验证到什么程度，并写明未做浏览器验收），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - docs/TODO.md 新增 SHOP-TASK-066 记录段（位置、缩样、商品卡、偏离、验证到什么程度，并写明未做浏览器验收），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths（不新增路由，不改导航，不改 frontend/src/api/adminStoreDesign.ts）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
     allowed_change_paths:
       - frontend/src/pages/AdminStoreDesignPage.tsx
