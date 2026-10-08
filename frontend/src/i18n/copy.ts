@@ -1125,6 +1125,11 @@ export const COPY = {
     zh: "退款审核",
     ms: "Bayaran balik",
   },
+  "admin.nav_stock_resets": {
+    en: "Stock resets",
+    zh: "库存重置",
+    ms: "Tetapan semula stok",
+  },
   "admin.filter_status": {
     en: "Status",
     zh: "状态",
@@ -1274,6 +1279,16 @@ export const COPY = {
     en: "Reviewed by {username} on {time}",
     zh: "由 {username} 于 {time} 审核",
     ms: "Disemak oleh {username} pada {time}",
+  },
+  "admin.stock_reset_title": {
+    en: "Daily stock reset results",
+    zh: "每日库存重置结果",
+    ms: "Keputusan tetapan semula stok harian",
+  },
+  "admin.stock_reset_note": {
+    en: "Resets restore today's stock only. Past orders, refunds and points are not changed.",
+    zh: "重置只恢复当日库存，不改动历史订单、退款与积分。",
+    ms: "Tetapan semula hanya memulihkan stok hari ini. Pesanan, bayaran balik dan mata lalu tidak diubah.",
   },
   "admin.logout": {
     en: "Log out",

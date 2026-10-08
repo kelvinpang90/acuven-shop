@@ -76,7 +76,9 @@ describe("route table", () => {
   // SHOP-TASK-056 验收第 2 条「路由 /admin/refunds 与 /admin/refunds/order/:orderId（frontend/src/router.tsx 路由表…各加两项，
   // frontend/src/router.test.tsx 的路由表断言加上它们）」：退款申请列表与按订单筛选的列表进表，在订单详情之后；
   // SHOP-TASK-057 验收第 2 条「路由 /admin/refunds/:id（frontend/src/router.tsx…与 frontend/src/router.test.tsx 各加一项）」：
-  // 退款详情以模式进表，在按订单筛选的列表之后；其余页面尚未实现，不在表里。
+  // 退款详情以模式进表，在按订单筛选的列表之后；
+  // SHOP-TASK-059 验收第 2 条「路由 /admin/stock-resets（frontend/src/router.tsx、frontend/src/App.tsx 与 frontend/src/router.test.tsx 各加一项）」：
+  // 库存重置结果进表，在退款详情之后；其余页面尚未实现，不在表里。
   it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
@@ -96,7 +98,9 @@ describe("route table", () => {
       "/admin/refunds",
       "/admin/refunds/order/:orderId",
       "/admin/refunds/:id",
+      "/admin/stock-resets",
     ]);
+    expect(isRoutePath("/admin/stock-resets")).toBe(true);
     expect(isRoutePath("/admin/refunds/7")).toBe(true);
     expect(isRoutePath("/admin/login")).toBe(true);
     expect(isRoutePath("/admin/orders")).toBe(true);

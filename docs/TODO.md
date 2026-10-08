@@ -1,6 +1,6 @@
 # TODO — 开发任务清单
 
-> 最后更新：2026-10-07
+> 最后更新：2026-10-08
 
 ---
 
@@ -1403,3 +1403,19 @@
 - 已有测试的改动（只按需要，注释写明原因）：`pages/AdminOrdersPage.test.tsx` 的「shows each order in a row」由「订单号之外的单元格没有链接」改为日期、状态与合计单元格没有链接，待审数单元格大于 0 时一个链接、为 0 时没有；「links each order number to its detail by internal ID」由取表格里全部链接改为只取每行订单号单元格里的链接；「keeps the pending refund count as text」（SHOP-TASK-055 守住「待审退款数仍为文字」）改为「links the pending refund count while an order is open」，断言选中订单时待审数同样链接到 `/admin/refunds/order/41`。其余断言未动。
 - 新增测试：「links the pending refund count to the order's refund requests」（三种语言）——大于 0 时单元格里只有一个链接，指向 `/admin/refunds/order/<订单内部 ID>`，文字为 `admin.refunds_pending`，网址里没有订单号；为 0 时是不带链接的 —。「keeps the pending refund count as text inside the card link」——每张卡片只有一个指向订单详情的链接、没有嵌套链接、卡片里没有 `/admin/refunds` 网址，待审数是普通文字。注释写明守住的是 UX A02「状态与补充（0.9）」的上述原句。
 - 验证到什么程度：人工逐条对照验收标准、UX A02「状态与补充（0.9）」原句与 A02-desktop-list 的链接样式自查；测试用 vitest 与 `react-dom/server` 的服务端渲染断言链接目标与结构。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查。真实点击后的导航与 A03 按订单筛选的实际显示未在 DOM 中执行。未做浏览器验收（未在真实浏览器或手机上打开页面，未连真实后端点击链接进入 A03，也未与视觉稿对比）。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-059 后台库存重置页的路由与导航 A07
+
+- [x] 按 `docs/UX.md` 0.10 的 A07 与「管理后台总体」、`docs/UX-COPY.md` 0.10、`docs/HANDOFF.md` 0.35（Kelvin 2026-10-06：后台导航只显示已上线页面的项）与 0.39（Kelvin 2026-10-07：A02、A03、A07 页面决定），以及 `docs/design/pages/` 的 A07-desktop 与 A07-phone 的页头部分，加上后台库存重置页：路由 `/admin/stock-resets`，用 SHOP-TASK-047 的后台框架渲染，当前导航项为库存重置，内容区只有页标题与说明；后台导航按 UX 顺序加上库存重置。改动：`frontend/src/pages/AdminStockResetsPage.tsx`（新）、`pages/AdminStockResetsPage.test.tsx`（新）、`components/AdminFrame.tsx`、`components/AdminFrame.test.tsx`、`pages/AdminRefundsPage.test.tsx`、`router.tsx`、`router.test.tsx`、`App.tsx`、`i18n/copy.ts`、`styles/site.css`。页面不调用接口；未装依赖（未改 `package.json`、锁文件），未改后端、CI、部署配置、`.platform/`、设计或生成的 `styles/acuven-shop.css`。设计闸门：不适用（只加路由、导航与静态文字）。拆分：A07 拆成路由与导航（本任务）和列表与明细（SHOP-TASK-060）。
+- 路由：`router.tsx` 路由表在 `/admin/refunds/:id` 之后加 `/admin/stock-resets`（没有动态段），新增常量 `ADMIN_STOCK_RESETS_PATH`；`App.tsx` 页面表把它映射到 `AdminStockResetsPage`（以 `/admin` 开头，不套前台框架）。
+- 页面（`pages/AdminStockResetsPage.tsx`）：`AdminFrame current="stockResets"` 里放内容区 `AdminStockResetsContent`（另行导出供测试）：h1 `admin.stock_reset_title`（`acs-admin__h`），其下为说明 `admin.stock_reset_note`（`p`）。本页不引入接口模块、没有 effect，打开时唯一的请求是框架读取会话。
+- 导航变化（`components/AdminFrame.tsx`）：`AdminNavItem` 加 `stockResets`，`ADMIN_NAV` 由订单、退款两项改为依 UX「管理后台总体」顺序的订单、退款、库存重置三项（库存重置指向 `/admin/stock-resets`，文字 `admin.nav_stock_resets`）；桌面左侧导航、手机 ☰ 菜单与手机顶栏名称都按此；商品、优惠券、运费、店铺装修与站点设置仍不出现。
+- 字典（`i18n/copy.ts`）：从 UX-COPY 原样抄入 `admin.nav_stock_resets`、`admin.stock_reset_title`、`admin.stock_reset_note` 三个键。未用到 UX-COPY 以外的界面文字。
+- 样式（`styles/site.css`）：`.site-admin-stock-resets` 为标题与说明上下排列（间距 16px），内容最宽 960px（A07-desktop 的 `main` 写的是 `max-width: 960px`，后台框架的 `main` 为各页共用，所以写在本页容器上）；说明去掉 `p` 的外边距、内边距 10px 12px。767px 及以下间距 10px（照 A07-phone）。没有颜色、字体或圆角属性。
+- 已有测试的改动（只按验收允许的范围）：`components/AdminFrame.test.tsx` 只把「只含订单与退款两项」的断言改为按 UX 顺序只含订单、退款与库存重置三项、其他 `admin.nav_*` 不出现——「lists only the orders and refunds items」一条改名为「lists only the orders, refunds and stock resets items」，断言 `ADMIN_NAV` 为三项、UX-COPY 的导航键里这三项依次出现（原为「前两个导航键即这两项」，库存重置在 UX-COPY 里排第 6，中间隔着未上线的项），桌面导航的三个链接依次指向 `/admin/orders`（`aria-current="page"`）、`/admin/refunds` 与 `/admin/stock-resets`；「opens the menu」一条里菜单导航的断言同样改为这三项；找出「其他导航项文字」所用的 `LIVE_NAV_KEYS` 随之加上 `admin.nav_stock_resets`。`pages/AdminRefundsPage.test.tsx` 只把 navigation 一组里「依次为订单与退款两项」改为依次为订单、退款与库存重置三项（退款仍标 `aria-current="page"`，手机顶栏名称仍为 `admin.nav_refunds`）。`router.test.tsx` 的路由表断言加上 `/admin/stock-resets`（并断言它在表里）。两个导航测试文件的其余断言未动。
+- 偏离与取舍，请审阅（未改设计，未新增 UX-COPY 以外的界面文字）：
+  - UX 与视觉稿没有冲突：UX A07 线框与两张视觉稿的页头都是标题之下为说明。视觉稿的桌面导航画了完整的 8 项，按 Kelvin 2026-10-06 决定只显示已上线的三项。
+  - `site.css` 写不了、未搬的视觉：说明的 `--demo-soft` 底色、`--on-demo-soft` 文字色、4px 圆角与 13px 字号；A07-phone 里 h1 的 17px 字号。说明未借用其他组件的类取色。评审不以此要求修改。
+  - 说明用 `p` 元素（视觉稿为 `div`），只影响语义，外边距在 `site.css` 里去掉。
+- 留给之后的任务：每日重置的列表（日期、结果、SKU 数）与展开的每 SKU 明细、调用 SHOP-TASK-052 的两个接口、失败行与空明细的显示（SHOP-TASK-060）；A04 与 A07 之间的入口与去向（随 A04）；上面列出的颜色、字号与圆角偏离。
+- 验证到什么程度：人工逐条对照验收标准、UX A07 线框与「管理后台总体」的导航顺序、HANDOFF 0.35 与 0.39 的决定原句自查，人工核对新增的 3 个字典键与 UX-COPY 原文（逐字比较由已有的 `i18n/copy.test.ts` 覆盖）。测试用 vitest 与 `react-dom/server`（未加测试依赖；路由以给定初始路径的 `RouterProvider` 代替，会话以 `AdminFrameView` 的 `state` 替身代替），每条注释写明它守住的 UX、Kelvin 决定或验收的哪一句。`pages/AdminStockResetsPage.test.tsx` 覆盖：经路由打开 `/admin/stock-resets` 渲染后台框架（演示横幅、会话未返回时内容区为空并标 `aria-busy`）、不套前台框架；桌面导航与 ☰ 菜单依次为订单、退款与库存重置三项、库存重置为当前项；手机顶栏名称为 `admin.nav_stock_resets`；已登录时内容区只有 h1 `admin.stock_reset_title` 与其下的 `admin.stock_reset_note`，没有表格、列表或按钮；页面源码不引入接口模块、不调用 `fetch`、没有 effect；三种语言下各状态的页面文字只来自字典。浏览器相关的部分（会话读取的实际接线、点击导航项换页、媒体查询下的间距与布局）未在 DOM 中执行。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查。未做浏览器验收（未在真实浏览器或手机上打开页面，也未与视觉稿对比）；列表与每日明细留给 SHOP-TASK-060。检查命令结果由 Worker 另行记录。

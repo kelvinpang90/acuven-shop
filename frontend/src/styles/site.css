@@ -322,6 +322,11 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-refund__hint { display: flex; gap: 8px; padding: 8px 10px; }
 .site-admin-refund__hint svg { flex-shrink: 0; margin-top: 2px; }
 
+/* 后台库存重置结果 A07 的页头（A07-desktop）：内容最宽 960px，标题与说明上下排列（间距 16px）；说明内边距 10px 12px。
+   说明的底色、文字颜色、字号与圆角 site.css 写不了，记在 docs/TODO.md 的偏离里 */
+.site-admin-stock-resets { display: grid; gap: 16px; max-width: 960px; }
+.site-admin-stock-resets__note { margin: 0; padding: 10px 12px; }
+
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
 
@@ -577,4 +582,7 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-refund__hint { order: -1; }
   .site-admin-refund__buttons { flex-direction: column; gap: 14px; }
   .site-admin-refund__buttons .acs-admin__btn { justify-content: center; min-height: 44px; }
+
+  /* 后台库存重置结果的页头（A07-phone）：标题与说明间距 10px */
+  .site-admin-stock-resets { gap: 10px; }
 }
