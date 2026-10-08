@@ -29,6 +29,10 @@ import {
   moveBlock,
   moveFeatured,
   openDesign,
+  PREVIEW_MODES,
+  PreviewAside,
+  PreviewDetails,
+  previewProducts,
   readStep,
   removeFeatured,
   saveInput,
@@ -38,7 +42,7 @@ import {
   submitDesign,
   THEME_NAME,
 } from "./AdminStoreDesignPage";
-import type { AdminStoreDesignViewProps, DesignChange, DesignForm, DesignMoves, DesignState } from "./AdminStoreDesignPage";
+import type { AdminStoreDesignViewProps, DesignChange, DesignForm, DesignMoves, DesignState, PreviewMode } from "./AdminStoreDesignPage";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -365,6 +369,8 @@ describe("content", () => {
   // 下移与 common.save，没有别的按钮；横幅与说明的断言不变。
   // SHOP-TASK-065 改动：精选一组加了按钮，所以列表在区块的按钮之后多了每件精选的上移、下移、移出与添加按钮（没有 aria-label 的
   // 按钮改记 type，以区分添加与保存）；仍没有关闭横幅或说明的按钮。
+  // SHOP-TASK-066 改动：预览加了浅色、深色两个切换按钮（没有 aria-label，记 type），手机的 details 里一份在保存之前，桌面的预览栏里
+  // 一份在表单之后，所以列表多了这四个；仍没有关闭横幅或说明的按钮。
   it.each(LANGUAGES)("keeps the demo banner and the demo note in %s", (language) => {
     const html = renderSignedIn(language);
     expect(element(html, "div", "acs-admin__banner")).toContain(escapeHtml(COPY["admin.demo_banner"][language]));
@@ -379,8 +385,13 @@ describe("content", () => {
       ...DETAIL.home_blocks.flatMap(() => [COPY["admin.block_move_up"][language], COPY["admin.block_move_down"][language]]),
       ...DETAIL.featured.flatMap(() => [COPY["admin.block_move_up"][language], COPY["admin.block_move_down"][language], COPY["admin.featured_remove"][language]]),
       "button",
+      "button",
+      "button",
       "submit",
+      "button",
+      "button",
     ]);
+    expect(tags(ready, "button").filter((tag) => attributes(tag).has("aria-pressed"))).toHaveLength(4);
   });
 
   // SHOP-TASK-064 验收第 4 条「经 SHOP-TASK-063 的请求模块」与第 7 条「不改 frontend/src/api/adminStoreDesign.ts」：本页只经
@@ -397,9 +408,11 @@ describe("content", () => {
 
   // Kelvin 2026-10-06（docs/HANDOFF.md 0.34）「店铺装修设置的存储与公开读取首版先不含标志图」与 SHOP-TASK-064 验收第 1 条
   // 「不显示 admin.logo 一组」，以及 SHOP-TASK-065 验收第 2 条「首页区块一组之后、保存按钮之前为 legend admin.featured_pick 的一组」：
-  // 表单依次为主题、主色、首页区块与精选商品四组，精选在区块之后、保存之前；没有标志与预览的文字（预览由 SHOP-TASK-066 接上）。
+  // 表单依次为主题、主色、首页区块与精选商品四组，精选在区块之后、保存之前；没有标志的文字。
   // SHOP-TASK-065 改动：原「has only the theme, accent and home block groups」（SHOP-TASK-064 守住「精选商品本任务只原样提交、不显示」）
   // 改为四组，因为本任务就是显示精选商品；标志与预览的断言不变。
+  // SHOP-TASK-066 改动：去掉「没有 admin.preview」（守的是「预览由 SHOP-TASK-066 接上」），因为本任务就是接上预览；预览的位置与内容
+  // 由下面「preview」各条验证。标志的断言不变。
   it.each(LANGUAGES)("has the theme, accent, home block and featured groups in %s", (language) => {
     const html = render(readyState(), language);
     const groups = allOf(html, "fieldset", "site-admin-store-design__group");
@@ -415,7 +428,7 @@ describe("content", () => {
     const texts = visibleTexts(html);
     // 这些键可能尚未抄入字典（只收录页面实际用到的键），所以按字符串查找：页面源码不引用它们，字典里有时页面也不显示其文字。
     const dictionary: Readonly<Record<string, Readonly<Record<Language, string>> | undefined>> = COPY;
-    for (const key of ["admin.logo", "admin.logo_hint", "admin.logo_remove", "admin.preview"]) {
+    for (const key of ["admin.logo", "admin.logo_hint", "admin.logo_remove"]) {
       expect(pageSource).not.toContain(`"${key}"`);
       const entry = dictionary[key];
       if (entry !== undefined) {
@@ -868,6 +881,279 @@ describe("featured products", () => {
   });
 });
 
+describe("preview", () => {
+  // 之后才下架的马克杯（同 DETAIL 精选的第二件）。
+  const MUG: FeaturedProduct = { product_id: 3, slug: "ceramic-mug", name: "Ceramic Mug", published: false };
+
+  function aside(html: string): string {
+    return element(html, "aside", "site-admin-store-design__aside");
+  }
+
+  function details(html: string): string {
+    return element(html, "details", "site-admin-store-design__details");
+  }
+
+  // 预览框（acs-admin__preview）与其中的 .acs 元素的属性。
+  function sample(container: string): string {
+    return element(container, "div", "acs-admin__preview");
+  }
+
+  function shop(container: string): Map<string, string> {
+    return attributes(tags(sample(container), "div")[1] ?? "");
+  }
+
+  // 页面上的两份预览：桌面的预览栏与手机的 details。
+  function both(html: string): string[] {
+    return [aside(html), details(html)];
+  }
+
+  // 只渲染两份预览，深浅色由参数给出（页面里由 AdminStoreDesignView 的状态给出，点击在服务端渲染里无法模拟）。
+  function renderPreview(mode: PreviewMode, language: Language = "en", form: DesignForm = formOf(DETAIL), choices: readonly ProductChoice[] = DETAIL.choices): string[] {
+    const props = { form, choices, mode, onMode: noop };
+    return [renderToStaticMarkup(wrap(<PreviewAside {...props} />, language)), renderToStaticMarkup(wrap(<PreviewDetails {...props} />, language))];
+  }
+
+  function modeButtons(html: string): string[] {
+    return tags(element(html, "span", "site-admin-store-design__modes"), "button");
+  }
+
+  // SHOP-TASK-066 验收第 2 条「桌面为表单右侧的预览栏（acs-admin__panel…）；顶部为 admin.preview 与两个切换按钮 admin.preview_light、
+  // admin.preview_dark（aria-pressed 标当前，当前的用 acs-admin__btn、另一个加 acs-admin__btn--secondary，默认浅色）」与 UX A08 桌面线框
+  // 「[admin.preview] <所选主题与主色的首页缩样…> ( [admin.preview_light] ) ( [admin.preview_dark] )」：取得设置后，页面在表单区之后
+  // （表单之外，site.css 把它放在右栏）有一个 acs-admin__panel 的 aside；它先是 admin.preview、浅色与深色，再是缩样；默认浅色按下。
+  it.each(LANGUAGES)("puts the desktop preview beside the form, light by default, in %s", (language) => {
+    const page = element(render(readyState(), language), "div", "site-admin-store-design");
+    const panel = aside(page);
+    expect(classes(tags(panel, "aside")[0] ?? "")).toEqual(["acs-admin__panel", "site-admin-store-design__aside"]);
+    expect(page.endsWith(`${element(page, "div", "site-admin-store-design__body")}${panel}</div>`)).toBe(true);
+    expect(element(page, "form", "site-admin-store-design__form")).not.toContain("<aside");
+    const head = element(panel, "div", "site-admin-store-design__preview-head");
+    expect(textNodes(head)).toEqual([COPY["admin.preview"][language], COPY["admin.preview_light"][language], COPY["admin.preview_dark"][language]]);
+    expect(panel.indexOf(head) + head.length).toBe(panel.indexOf(sample(panel)));
+    expect(modeButtons(panel).map((tag) => [classes(tag), attributes(tag).get("type"), attributes(tag).get("aria-pressed")])).toEqual([
+      [["acs-admin__btn"], "button", "true"],
+      [["acs-admin__btn", "acs-admin__btn--secondary"], "button", "false"],
+    ]);
+    expect(shop(panel).get("data-mode")).toBe("light");
+  });
+
+  // 同一条「手机（767px 及以下）在精选商品一组之后、保存按钮之前，以原生 details 收起（summary 为 admin.preview，默认收起，展开后内容与桌面相同）」
+  // 与 UX A08 手机线框「[admin.featured_hint] / ▸ [admin.preview] / ( [common.save] )」：表单里紧接精选一组之后、紧接保存之前为没有 open 的
+  // details，第一个子元素是只有 admin.preview 的 summary；其后的切换按钮与缩样与桌面的逐字相同。两份由 site.css 的媒体查询显隐。
+  it.each(LANGUAGES)("folds the phone preview between the featured group and save in %s", (language) => {
+    const html = render(readyState(), language);
+    const form = element(html, "form", "site-admin-store-design__form");
+    const folded = details(form);
+    const opening = tags(folded, "details")[0] ?? "";
+    expect(classes(opening)).toEqual(["acs-admin__panel", "site-admin-store-design__details"]);
+    expect(attributes(opening).has("open")).toBe(false);
+    const featured = group(html, 3);
+    expect(form.indexOf(featured) + featured.length).toBe(form.indexOf(folded));
+    expect(form.indexOf(folded) + folded.length).toBe(form.indexOf(element(form, "div", "site-admin-store-design__save")));
+    const summary = elementAt(folded, "summary", folded.indexOf("<summary"));
+    expect(folded.indexOf("<summary")).toBe(opening.length);
+    expect(tags(folded, "summary")).toHaveLength(1);
+    expect(summary).toBe(`<summary>${escapeHtml(COPY["admin.preview"][language])}</summary>`);
+    const panel = aside(html);
+    expect(element(folded, "span", "site-admin-store-design__modes")).toBe(element(panel, "span", "site-admin-store-design__modes"));
+    expect(sample(folded)).toBe(sample(panel));
+    expect(textNodes(folded).slice(1)).toEqual(textNodes(panel).slice(1));
+  });
+
+  // UX A08「预览只在本页按未保存的选择显示」：读取中与读取失败时没有表单，也没有预览。
+  it("shows no preview without a design", () => {
+    for (const state of [LOADING, { status: "failed", error: "common.error_retry" } as const]) {
+      const html = render(state);
+      expect(html).not.toMatch(/<(aside|details)\b/);
+      expect(html).not.toContain("acs-admin__preview");
+    }
+  });
+
+  // SHOP-TASK-066 验收第 3 条「acs-admin__preview 内为 class 含 acs 的元素，data-shop-theme 为表单当前的主题，data-accent 为当前主色
+  // （选第一项时不设，与前台相同）…改选主题、主色…立即更新、不必保存」与 UX A08「预览只在本页按未保存的选择显示」：读取到的是咖啡店与 null，
+  // 表单改选之后两份缩样都按表单（而不是读取到的设置）显示；主色为第一项（含改走又改回）时不设 data-accent。
+  it("follows the unsaved theme and accent", () => {
+    const start = formOf(DETAIL);
+    const cases: [DesignForm, ShopTheme, string | undefined][] = [
+      [start, "kopitiam", undefined],
+      [chooseAccent(start, "teh"), "kopitiam", "teh"],
+      [chooseAccent(chooseAccent(start, "tile"), "kopi"), "kopitiam", undefined],
+      [chooseTheme(start, "batik"), "batik", undefined],
+      [chooseAccent(chooseTheme(start, "batik"), "maroon"), "batik", "maroon"],
+    ];
+    for (const [form, theme, accent] of cases) {
+      for (const copy of both(render(readyState({ form })))) {
+        expect(sample(copy).startsWith(`<div class="acs-admin__preview"><div class="acs `)).toBe(true);
+        const found = shop(copy);
+        expect([found.get("data-shop-theme"), found.has("data-accent"), found.get("data-accent")]).toEqual([theme, accent !== undefined, accent]);
+      }
+    }
+    // 每款主题的每个主色：第一项不设 data-accent，其他项设为该项的 id。
+    for (const theme of SHOP_THEMES) {
+      const accents: readonly string[] = THEME_ACCENTS[theme];
+      accents.forEach((accent, index) => {
+        const found = shop(aside(render(readyState({ form: chooseAccent(chooseTheme(start, theme), accent) }))));
+        expect([found.get("data-shop-theme"), found.get("data-accent")]).toEqual([theme, index === 0 ? undefined : accent]);
+      });
+    }
+  });
+
+  // SHOP-TASK-066 验收第 2 条「aria-pressed 标当前，当前的用 acs-admin__btn、另一个加 acs-admin__btn--secondary」与第 3 条「data-mode 为所选的
+  // light 或 dark」，UX A08「( [admin.preview_light] ) ( [admin.preview_dark] )」：选深色时两份缩样都为 data-mode="dark"，深色按下、浅色为
+  // 次要按钮；选浅色时反过来。按钮依次为浅色、深色，type 为 button（不提交表单）。页面默认浅色，两份共用同一个选择。
+  it.each(LANGUAGES)("switches between light and dark in %s", (language) => {
+    expect(PREVIEW_MODES).toEqual(["light", "dark"]);
+    for (const mode of PREVIEW_MODES) {
+      for (const html of renderPreview(mode, language)) {
+        expect(shop(html).get("data-mode")).toBe(mode);
+        expect(modeButtons(html).map((tag) => [classes(tag), attributes(tag).get("type"), attributes(tag).get("aria-pressed")])).toEqual(
+          PREVIEW_MODES.map((option) => [
+            option === mode ? ["acs-admin__btn"] : ["acs-admin__btn", "acs-admin__btn--secondary"],
+            "button",
+            String(option === mode),
+          ]),
+        );
+        expect(textNodes(element(html, "span", "site-admin-store-design__modes"))).toEqual([
+          COPY["admin.preview_light"][language],
+          COPY["admin.preview_dark"][language],
+        ]);
+      }
+    }
+    expect(both(render(readyState(), language)).map((copy) => shop(copy).get("data-mode"))).toEqual(["light", "light"]);
+    expect(pageSource).toMatch(/const \[mode, setMode\] = useState<PreviewMode>\("light"\);/);
+    expect([...pageSource.matchAll(/mode=\{mode\} onMode=\{setMode\}/g)]).toHaveLength(2);
+  });
+
+  // SHOP-TASK-066 验收第 3 条「依次为演示横幅（common.demo_badge 标签与 common.demo_banner_short）、页头一行（品牌文字取 BRAND，与
+  // common.nav_cart，{count} 为 0）、★ 提示 home.demo_hint、主视觉（home.hero_title 与按钮样式的 home.hero_cta）、home.how_title 与两张商品卡」
+  // 「文字用当前界面语言」、第 1 条「缩样用前台已有的组件类」与 UX A08「预览里的文字用当前后台语言」：缩样的文字按此顺序，各部分用对应的类。
+  it.each(LANGUAGES)("draws the home sample in a fixed order in %s", (language) => {
+    const box = sample(aside(render(readyState({ base: PICKING, form: formOf(PICKING) }), language)));
+    expect(textNodes(box)).toEqual([
+      COPY["common.demo_badge"][language],
+      COPY["common.demo_banner_short"][language],
+      BRAND,
+      translate(language, "common.nav_cart", { count: 0 }),
+      COPY["home.demo_hint"][language],
+      COPY["home.hero_title"][language],
+      COPY["home.hero_cta"][language],
+      COPY["home.how_title"][language],
+      "Crew Neck Tee",
+      "enamel-pin",
+    ]);
+    const banner = element(box, "div", "acs-banner");
+    expect(textNodes(banner)).toEqual([COPY["common.demo_badge"][language], COPY["common.demo_banner_short"][language]]);
+    expect(element(banner, "span", "acs-tag")).toBe(`<span class="acs-tag acs-tag--demo">${escapeHtml(COPY["common.demo_badge"][language])}</span>`);
+    const head = element(box, "div", "site-admin-store-design__shop-head");
+    expect(head).toBe(
+      `<div class="site-admin-store-design__shop-head"><span class="acs-brand">${BRAND}</span><span>${escapeHtml(translate(language, "common.nav_cart", { count: 0 }))}</span></div>`,
+    );
+    const hint = element(box, "p", "acs-hint");
+    expect(tags(hint, "svg").map((tag) => [attributes(tag).get("class"), attributes(tag).get("aria-hidden")])).toEqual([["acs-hint__mark", "true"]]);
+    expect(textNodes(hint)).toEqual([COPY["home.demo_hint"][language]]);
+    const hero = element(box, "div", "acs-panel");
+    expect(element(hero, "span", "acs-display-s")).toBe(`<span class="acs-display-s">${escapeHtml(COPY["home.hero_title"][language])}</span>`);
+    expect(element(hero, "span", "acs-btn")).toBe(`<span class="acs-btn acs-btn--primary acs-btn--sm">${escapeHtml(COPY["home.hero_cta"][language])}</span>`);
+    expect(allOf(box, "span", "acs-pcard")).toHaveLength(2);
+  });
+
+  // 同一条「内容固定、不随首页区块的顺序与显隐变化」与 UX A08「★ [home.demo_hint] 不在列表中，始终显示」：区块全部隐藏、全部显示或调换顺序后，
+  // 两份缩样都与原来逐字相同。
+  it("keeps the sample when blocks are hidden or moved", () => {
+    const start = formOf(DETAIL);
+    const original = sample(aside(render(readyState({ form: start }))));
+    const indexes = start.homeBlocks.map((_setting, index) => index);
+    const hidden = indexes.reduce((form, index) => showBlock(form, index, false), start);
+    const shown = indexes.reduce((form, index) => showBlock(form, index, true), start);
+    const moved = moveBlock(moveBlock(start, 0, 1), 2, 1);
+    for (const form of [hidden, shown, moved]) {
+      for (const copy of both(render(readyState({ form })))) {
+        expect(sample(copy)).toBe(original);
+      }
+    }
+  });
+
+  // 同一条「缩样里没有链接、按钮或其他可交互元素」：两份缩样（两张、一张与零张商品卡）里没有 a、button、input、select、textarea、label、
+  // details、summary，也没有 href、tabindex、role 或 contenteditable。
+  it("has nothing interactive in the sample", () => {
+    const states = [
+      readyState(),
+      readyState({ base: PICKING, form: formOf(PICKING) }),
+      readyState({ base: { ...DETAIL, featured: [MUG], choices: [LINEN] }, form: { ...formOf(DETAIL), featured: [MUG] } }),
+      readyState({ base: { ...DETAIL, featured: [], choices: [] }, form: { ...formOf(DETAIL), featured: [] } }),
+    ];
+    for (const state of states) {
+      for (const copy of both(render(state))) {
+        const box = sample(copy);
+        expect(box).not.toMatch(/<(a|button|input|select|textarea|label|details|summary|iframe)\b/);
+        expect(box).not.toMatch(/\s(href|tabindex|role|contenteditable)=/i);
+      }
+    }
+  });
+
+  // Kelvin 2026-10-08（HANDOFF 0.40）「取精选里前两件仍上架的商品，不足时按可挑选商品的顺序补足」与 SHOP-TASK-066 验收第 4 条「取精选里前两件
+  // published 为 true 的商品，不足两件时按 choices 的顺序补上未在其中的商品，仍不足时只显示现有的（可以为零张）」。
+  it("picks the cards from published featured products, then from choices", () => {
+    const ids = (featured: readonly FeaturedProduct[], choices: readonly ProductChoice[]) => previewProducts(featured, choices).map((product) => product.product_id);
+    // 已下架的马克杯跳过，取 T 恤与徽章（name 为 null 时用 slug，同精选列表）。
+    expect(previewProducts(PICKING.featured, CHOICES)).toEqual([
+      { product_id: 7, name: "Crew Neck Tee" },
+      { product_id: 5, name: "enamel-pin" },
+    ]);
+    // 多于两件上架时按列表当前的顺序取前两件。
+    expect(ids([PIN, MUG, { ...TOTE, published: true }, { ...TEE, published: true }], CHOICES)).toEqual([5, 2]);
+    // 只有一件上架：按 choices 的顺序补上第一件尚未取到的（托特包）；已取到的不重复（T 恤在 choices 里也不再取）。
+    expect(ids([MUG, { ...TEE, published: true }], CHOICES)).toEqual([7, 2]);
+    expect(ids([{ ...TEE, published: true }], [TEE, LINEN])).toEqual([7, 9]);
+    // 都已下架或没有精选：全由 choices 的前两件补足。
+    expect(ids([MUG], CHOICES)).toEqual([2, 7]);
+    expect(ids([], CHOICES)).toEqual([2, 7]);
+    // 仍不足：只有现有的，可以为零张。
+    expect(ids([], [LINEN])).toEqual([9]);
+    expect(ids([MUG], [])).toEqual([]);
+    expect(ids([], [])).toEqual([]);
+  });
+
+  // 同一条「商品卡（acs-pcard，占位图与名称，不显示价格）」与 Kelvin 2026-10-08「两张商品卡只显示名称与占位图、不显示价格」：每张卡依次为占位图
+  // （acs-pcard__img 里 aria-hidden 的 svg）与名称，没有 acs-pcard__price，缩样里没有金额；卡片按表单当前（未保存）的精选取，张数随取法为 2、1 或 0，
+  // 零张时没有卡片的容器。
+  it.each(LANGUAGES)("draws cards with a placeholder and a name only in %s", (language) => {
+    const cards = (state: DesignState) => {
+      const box = sample(aside(render(state, language)));
+      expect(box).not.toMatch(/acs-pcard__price|acs-price|RM\s?\d/);
+      return allOf(box, "span", "acs-pcard");
+    };
+    const two = cards(readyState({ base: PICKING, form: formOf(PICKING) }));
+    expect(two.map(textNodes)).toEqual([["Crew Neck Tee"], ["enamel-pin"]]);
+    for (const card of two) {
+      expect(card).toMatch(
+        /^<span class="acs-pcard"><span class="acs-pcard__img"><svg viewBox="0 0 100 100" aria-hidden="true">[\s\S]*?<\/svg><\/span><span class="acs-pcard__name">[^<]*<\/span><\/span>$/,
+      );
+    }
+    // 未保存地移出 T 恤：徽章之后由 choices 的托特包补上。
+    expect(cards(readyState({ base: PICKING, form: removeFeatured(formOf(PICKING), 0) })).map(textNodes)).toEqual([["enamel-pin"], ["Canvas Tote"]]);
+    const one = { ...DETAIL, featured: [MUG], choices: [LINEN] };
+    expect(cards(readyState({ base: one, form: formOf(one) })).map(textNodes)).toEqual([["Linen Shirt"]]);
+    const none = { ...DETAIL, featured: [MUG], choices: [] };
+    const html = render(readyState({ base: none, form: formOf(none) }), language);
+    expect(cards(readyState({ base: none, form: formOf(none) }))).toEqual([]);
+    for (const copy of both(html)) {
+      expect(sample(copy)).not.toContain("site-admin-store-design__cards");
+      expect(textNodes(sample(copy)).at(-1)).toBe(COPY["home.how_title"][language]);
+    }
+  });
+
+  // SHOP-TASK-066 验收第 4 条「不发起新的请求」与 Kelvin 2026-10-08「不为预览另发请求」：渲染带预览的页面不调用 fetch；页面源码里的请求仍只有
+  // 店铺装修模块的一次读取与一次保存调用（「reads and saves only through the store design API module」未改）。
+  it("makes no request for the preview", () => {
+    const calls = stubFetch();
+    render(readyState({ base: PICKING, form: formOf(PICKING) }));
+    renderPreview("dark");
+    expect(calls).toEqual([]);
+    expect([...pageSource.matchAll(/\b(readAdminStoreDesign|saveAdminStoreDesign)\(/g)].map((m) => m[1])).toEqual(["readAdminStoreDesign", "saveAdminStoreDesign"]);
+  });
+});
+
 describe("reading", () => {
   // SHOP-TASK-064 验收第 4 条「打开页面读取，进行中标 aria-busy、取得前不显示表单」：读取中表单区标 aria-busy 且为空。
   it("marks the form area busy and shows no form while reading", () => {
@@ -1153,8 +1439,12 @@ describe("dictionary", () => {
   // 页面没有 title 或 placeholder。
   // SHOP-TASK-065 改动：加上精选的各状态（有精选、已下架照列、name 为 null、为空、满 4 件、没有可添加的），并把商品名称与 slug
   // 列为允许的文字——它们是接口返回的数据，不是界面文案（验收第 5 条「页面文字全部来自字典」指界面文字）；精选的序号同区块的序号。
+  // SHOP-TASK-066 改动：加上预览的深色与零张商品卡的状态，并允许 copy.ts 的 BRAND 与 {count} 为 0 的 common.nav_cart——SHOP-TASK-066
+  // 验收第 3 条要求缩样的页头为「品牌文字取 frontend/src/i18n/copy.ts 的 BRAND，与 common.nav_cart，{count} 为 0」。
   it.each(LANGUAGES)("shows only dictionary text in %s", (language) => {
     const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language]));
+    allowed.add(BRAND);
+    allowed.add(translate(language, "common.nav_cart", { count: 0 }));
     for (const index of [1, 2, 3, 4, 5]) {
       allowed.add(String(index));
       allowed.add(translate(language, "admin.accent_option", { n: index }));
@@ -1177,8 +1467,13 @@ describe("dictionary", () => {
       readyState({ base: PICKING, form: addFeatured(formOf(PICKING), TOTE) }),
       readyState({ base: PICKING, form: { ...formOf(PICKING), featured: [] } }),
       readyState({ base: { ...DETAIL, choices: [] }, form: formOf(DETAIL) }),
+      readyState({ base: { ...DETAIL, featured: [], choices: [] }, form: { ...formOf(DETAIL), featured: [] } }),
     ];
     const pages = [renderApp(STORE_DESIGN_PATH, language), renderSignedIn(language), renderSignedIn(language, { menuOpen: true })];
+    for (const mode of PREVIEW_MODES) {
+      const props = { form: chooseAccent(formOf(PICKING), "tile"), choices: CHOICES, mode, onMode: noop };
+      pages.push(renderToStaticMarkup(wrap(<PreviewAside {...props} />, language)), renderToStaticMarkup(wrap(<PreviewDetails {...props} />, language)));
+    }
     for (const state of states) {
       pages.push(render(state, language));
     }

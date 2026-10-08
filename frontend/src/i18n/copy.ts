@@ -1395,6 +1395,21 @@ export const COPY = {
     zh: "每款主题都有浅色与深色，访客看到哪一种取决于其设备设置。",
     ms: "Setiap tema ada versi cerah dan gelap. Pelawat melihat versi yang sepadan dengan tetapan peranti mereka.",
   },
+  "admin.preview": {
+    en: "Preview",
+    zh: "预览",
+    ms: "Pratonton",
+  },
+  "admin.preview_light": {
+    en: "Light",
+    zh: "浅色",
+    ms: "Cerah",
+  },
+  "admin.preview_dark": {
+    en: "Dark",
+    zh: "深色",
+    ms: "Gelap",
+  },
   "admin.accent": {
     en: "Accent colour",
     zh: "主色",
