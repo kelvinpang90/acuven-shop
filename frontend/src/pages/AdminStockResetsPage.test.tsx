@@ -260,6 +260,8 @@ describe("navigation", () => {
   // Kelvin 2026-10-06（docs/HANDOFF.md 0.35）「后台导航只显示已上线页面的导航项」；SHOP-TASK-059 验收第 2、3 条「当前导航项为库存重置」
   // 「按 UX 顺序只含已上线的订单、退款与库存重置三项（桌面导航与 ☰ 菜单同样）」：经路由打开本页，桌面导航与 ☰ 菜单都依次为
   // 订单、退款与库存重置三项，库存重置标 aria-current="page"，没有其他导航项。
+  // SHOP-TASK-062 改动：按 SHOP-TASK-062 验收第 3 条把「依次为订单、退款与库存重置三项」改为依次为订单、退款、库存重置与
+  // 店铺装修（/admin/store-design）四项；当前项仍为库存重置，手机顶栏名称不变（下一条）。
   it.each(LANGUAGES)("marks the stock resets item as current, after orders and refunds, in %s", (language) => {
     const html = renderApp(STOCK_RESETS_PATH, language);
     for (const nav of [element(html, "nav", "site-admin__nav"), element(html, "nav", "site-admin__menu-nav")]) {
@@ -268,9 +270,15 @@ describe("navigation", () => {
         [ORDERS_PATH, undefined],
         [REFUNDS_PATH, undefined],
         [STOCK_RESETS_PATH, "page"],
+        ["/admin/store-design", undefined],
       ]);
-      const labels = textNodes(nav).slice(0, 3);
-      expect(labels).toEqual([COPY["admin.nav_orders"][language], COPY["admin.nav_refunds"][language], COPY["admin.nav_stock_resets"][language]]);
+      const labels = textNodes(nav).slice(0, 4);
+      expect(labels).toEqual([
+        COPY["admin.nav_orders"][language],
+        COPY["admin.nav_refunds"][language],
+        COPY["admin.nav_stock_resets"][language],
+        COPY["admin.nav_store_design"][language],
+      ]);
     }
   });
 

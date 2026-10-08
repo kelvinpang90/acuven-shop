@@ -1320,6 +1320,16 @@ export const COPY = {
     zh: "重置只恢复当日库存，不改动历史订单、退款与积分。",
     ms: "Tetapan semula hanya memulihkan stok hari ini. Pesanan, bayaran balik dan mata lalu tidak diubah.",
   },
+  "admin.nav_store_design": {
+    en: "Store design",
+    zh: "店铺装修",
+    ms: "Reka bentuk kedai",
+  },
+  "admin.design_demo_note": {
+    en: "The demo banner and demo hints always show on the storefront and can't be turned off here.",
+    zh: "前台的演示横幅与演示提示始终显示，这里不能关闭。",
+    ms: "Sepanduk demo dan petunjuk demo sentiasa dipaparkan di kedai dan tidak boleh dimatikan di sini.",
+  },
   "admin.logout": {
     en: "Log out",
     zh: "退出登录",
