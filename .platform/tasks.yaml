@@ -2393,7 +2393,7 @@ tasks:
       调用 SHOP-TASK-052 的列表与明细接口。不改路由与导航，不改库存重置本身，不装依赖，不改后端，不改设计。
       设计闸门：不适用（只读显示演示库存的重置记录）。
       拆分：见 SHOP-TASK-059（路由与导航先交付），本任务 9 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-052
       - SHOP-TASK-059
