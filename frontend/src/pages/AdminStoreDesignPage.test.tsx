@@ -375,8 +375,14 @@ describe("content", () => {
       COPY["admin.home_blocks"][language],
     ]);
     const texts = visibleTexts(html);
-    for (const key of ["admin.logo", "admin.logo_hint", "admin.logo_remove", "admin.featured_pick", "admin.featured_add", "admin.preview"] as const) {
-      expect(texts).not.toContain(COPY[key][language]);
+    // 这些键可能尚未抄入字典（只收录页面实际用到的键），所以按字符串查找：页面源码不引用它们，字典里有时页面也不显示其文字。
+    const dictionary: Readonly<Record<string, Readonly<Record<Language, string>> | undefined>> = COPY;
+    for (const key of ["admin.logo", "admin.logo_hint", "admin.logo_remove", "admin.featured_pick", "admin.featured_add", "admin.preview"]) {
+      expect(pageSource).not.toContain(`"${key}"`);
+      const entry = dictionary[key];
+      if (entry !== undefined) {
+        expect(texts).not.toContain(entry[language]);
+      }
     }
     for (const product of DETAIL.featured) {
       expect(html).not.toContain(product.name ?? "");
@@ -697,6 +703,8 @@ describe("language", () => {
     expect(shownState(entry, "en")).toBe(entry.state);
     expect(shownState(entry, "zh")).toBe(LOADING);
     expect(shownState(entry, "ms")).toBe(LOADING);
+    // 每次换语言都把状态重置为读取中，所以 en → zh 后在 zh 的结果未到时又换回 en，也不再显示 en 旧的表单，而是等新的读取。
+    expect(pageSource).toMatch(/if \(entry\.language !== language\) \{\s*setEntry\(\{ language, state: LOADING \}\);\s*\}/);
     // 新语言的读取与首次读取相同：取到后表单按结果重置（改过的主题与已保存提示都不带过去）。
     stubFetch(json(200, DETAIL));
     const moves = fakeMoves();

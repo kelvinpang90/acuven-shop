@@ -421,6 +421,10 @@ export function AdminStoreDesignContent() {
   const { replace } = useRouter();
   const { language } = useLanguage();
   const [entry, setEntry] = useState<DesignEntry>({ language, state: LOADING });
+  // 每次切换语言都先回到读取中（含读取未到时又换回先前语言的情形，不再显示那个语言旧的表单），与首次读取相同。
+  if (entry.language !== language) {
+    setEntry({ language, state: LOADING });
+  }
   // 当前语言下的请求（读取、保存与 403 后的重新读取）共用的中止；离开页面或切换语言时中止。
   const lifetime = useRef<AbortController | null>(null);
 
