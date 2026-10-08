@@ -2493,7 +2493,7 @@ tasks:
       为 A08 页面新建调用 SHOP-TASK-051 读取与保存接口的请求模块与测试，供 SHOP-TASK-064 到 066 使用；不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
       设计闸门：不适用（只改前台外观设置的请求，不涉及金额计算与个人资料）。
       拆分：A08 页面的请求层（3 个允许路径）；原 SHOP-TASK-063 合并请求与页面，预审报 TOO_LARGE 后拆出。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-051
     acceptance_criteria:
