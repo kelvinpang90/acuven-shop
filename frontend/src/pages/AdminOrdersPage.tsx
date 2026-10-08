@@ -6,7 +6,7 @@ import type { AdminOrderList, AdminOrderRow, OrderStatus, OrdersQuery, OrdersRea
 import AdminFrame, { AdminAlert } from "../components/AdminFrame";
 import type { CopyKey } from "../i18n/copy";
 import { useCopy, useLanguage } from "../i18n/language";
-import { ADMIN_LOGIN_PATH, adminOrderPath, Link, useRouter } from "../router";
+import { ADMIN_LOGIN_PATH, adminOrderPath, adminRefundsOrderPath, Link, useRouter } from "../router";
 import type { RoutePath } from "../router";
 import AdminOrderDetailContent, { STATUS_LABEL, statusTagClass } from "./AdminOrderDetail";
 import { formatDate, usePrice } from "./TrackOrderPage";
@@ -16,9 +16,10 @@ import { formatDate, usePrice } from "./TrackOrderPage";
 // /admin/orders 为订单列表，占满内容区；/admin/orders/:id 在桌面列表右侧显示该单详情（AdminOrderDetail.tsx），手机只显示详情。
 // 标题之下为订单号搜索框与状态筛选，其下为列表：桌面为表格，手机为卡片，两套都渲染，由 site.css 按宽度显隐。
 // 表格行的订单号与整张手机卡片链接到 /admin/orders/<内部 ID>；当前订单的表格行标 aria-selected。
+// 表格里大于 0 的待审退款数链接到 /admin/refunds/order/<订单内部 ID>（A03 按订单筛选）；手机卡片里待审数只作文字。
 // 调用 POST /api/admin/orders/query；搜索、筛选与页码只在本模块的内存变量里（不进网址或浏览器存储），在列表与详情之间切换时保留。
 // 提交搜索或改变筛选回到第 1 页。总数超过每页条数时列表下方为上一页与下一页两个按钮（‹ 与 ›），不显示页码。
-// 没有符合条件的订单时桌面只显示列头，不另写空状态文字。待审退款数仍为文字，链接到 A03 留给之后的任务。
+// 没有符合条件的订单时桌面只显示列头，不另写空状态文字。
 // 401 换成登录页 A01；离开页面或发出新查询时中止旧请求，旧请求的结果不再更新页面。
 
 // 打开时的查询：全部订单的第 1 页。
@@ -112,7 +113,8 @@ function ChevronIcon() {
   );
 }
 
-// 桌面表格的一行：订单号（链接到该单详情）、日期、状态、合计与待审数（为 0 时显示 —）；当前订单标 aria-selected。
+// 桌面表格的一行：订单号（链接到该单详情）、日期、状态、合计与待审数（大于 0 时链接到只含该单申请的 A03，为 0 时显示 —）；
+// 当前订单标 aria-selected。
 function OrderRow({ order, selected }: { order: AdminOrderRow; selected: boolean }) {
   const t = useCopy();
   const price = usePrice();
@@ -128,7 +130,11 @@ function OrderRow({ order, selected }: { order: AdminOrderRow; selected: boolean
       </td>
       <td className="site-admin-orders__num">{price(order.total_sen)}</td>
       {order.refunds_pending > 0 ? (
-        <td>{t("admin.refunds_pending", { count: order.refunds_pending })}</td>
+        <td>
+          <Link className="site-admin-orders__refunds" to={adminRefundsOrderPath(order.id)}>
+            {t("admin.refunds_pending", { count: order.refunds_pending })}
+          </Link>
+        </td>
       ) : (
         <td className="acs-admin__muted">—</td>
       )}
