@@ -2458,7 +2458,7 @@ tasks:
       后台导航按 UX 顺序加上店铺装修。请求模块、表单、精选商品与预览由 SHOP-TASK-063 到 066 接上。不调用接口，不装依赖，不改后端，不改设计。
       设计闸门：不适用（只加路由、导航与静态文字）。
       拆分：A08 拆成路由与导航（本任务，12 个允许路径）、请求模块（SHOP-TASK-063）、主题主色区块与保存（SHOP-TASK-064）、精选商品（SHOP-TASK-065）与预览（SHOP-TASK-066），因为导航加一项要同时改后台框架与退款、库存重置两页已有的导航测试。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-059
     acceptance_criteria:
