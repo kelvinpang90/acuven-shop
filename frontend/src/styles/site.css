@@ -327,6 +327,19 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-stock-resets { display: grid; gap: 16px; max-width: 960px; }
 .site-admin-stock-resets__note { margin: 0; padding: 10px 12px; }
 
+/* A07 的每日结果（A07-desktop）：表格在可横向滚动的面板里，SKU 数靠右；每天的展开处在该日下方另起一行（单元格不留内边距，
+   details 内边距 8px 12px，明细表与 summary 间距 6px）；卡片不显示，翻页按钮靠右。summary 的字重、明细的字号 site.css 写不了，
+   记在 docs/TODO.md 的偏离里 */
+.site-admin-stock-resets__list, .site-admin-stock-resets__page { display: grid; gap: 16px; }
+.site-admin-stock-resets__table { overflow-x: auto; }
+.site-admin-stock-resets__num { text-align: right; }
+.site-admin-stock-resets__detail-row > td { padding: 0; }
+.site-admin-stock-resets__details { padding: 8px 12px; }
+.site-admin-stock-resets__details > summary { cursor: pointer; }
+.site-admin-stock-resets__details > .acs-admin__table, .site-admin-stock-resets__details > .acs-admin__alert { margin-top: 6px; }
+.site-admin-stock-resets__cards { display: none; margin: 0; padding: 0; list-style: none; }
+.site-admin-stock-resets__pager { display: flex; gap: 8px; justify-content: flex-end; }
+
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
 
@@ -585,4 +598,18 @@ a.site-admin-refunds__clear { text-decoration: none; }
 
   /* 后台库存重置结果的页头（A07-phone）：标题与说明间距 10px */
   .site-admin-stock-resets { gap: 10px; }
+
+  /* A07 的每日结果（A07-phone）：表格不显示、卡片显示（间距 10px，卡片内边距 12px，各项间距 8px，第一行日期与结果标签两端对齐、可换行），
+     展开处在卡片里（summary 至少 32px 高，每个 SKU 一项、SKU 与 breakdown 上下排列、间距 2px、上下内边距 6px）；翻页按钮居中、至少 44×44。
+     各 SKU 之间的分隔线颜色、日期的字重与明细的字号 site.css 写不了，记在 docs/TODO.md 的偏离里 */
+  .site-admin-stock-resets__list, .site-admin-stock-resets__page { gap: 10px; }
+  .site-admin-stock-resets__table { display: none; }
+  .site-admin-stock-resets__cards { display: grid; gap: 10px; }
+  .site-admin-stock-resets__card { display: grid; gap: 8px; padding: 12px; }
+  .site-admin-stock-resets__card-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; }
+  .site-admin-stock-resets__card .site-admin-stock-resets__details { padding: 0; }
+  .site-admin-stock-resets__card .site-admin-stock-resets__details > summary { display: flex; align-items: center; min-height: 32px; }
+  .site-admin-stock-resets__line { display: grid; gap: 2px; padding: 6px 0; }
+  .site-admin-stock-resets__pager { justify-content: center; }
+  .site-admin-stock-resets__pager .acs-admin__btn { justify-content: center; min-width: 44px; min-height: 44px; }
 }
