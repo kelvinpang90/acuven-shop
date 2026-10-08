@@ -1440,6 +1440,26 @@ export const COPY = {
     zh: "区块文字来自店铺的三语文案，不能在这里修改。首页的演示提示始终显示在这些区块上方。",
     ms: "Teks blok datang daripada terjemahan kedai dan tidak boleh disunting di sini. Petunjuk demo di halaman utama sentiasa dipaparkan di atas blok ini.",
   },
+  "admin.featured_pick": {
+    en: "Featured products (up to 4)",
+    zh: "精选商品（最多 4 件）",
+    ms: "Produk pilihan (sehingga 4)",
+  },
+  "admin.featured_add": {
+    en: "Add product",
+    zh: "添加商品",
+    ms: "Tambah produk",
+  },
+  "admin.featured_remove": {
+    en: "Remove from featured",
+    zh: "移出精选",
+    ms: "Keluarkan daripada pilihan",
+  },
+  "admin.featured_hint": {
+    en: "Only published products are shown on the home page, in this order. If none are chosen, or none of them are published, the 4 newest products are shown.",
+    zh: "首页按此顺序只显示仍上架的商品；未挑选或挑选的都已下架时，显示最新的 4 件。",
+    ms: "Hanya produk yang diterbitkan dipaparkan di halaman utama, mengikut susunan ini. Jika tiada yang dipilih atau tiada yang diterbitkan, 4 produk terbaharu dipaparkan.",
+  },
   "admin.design_saved": {
     en: "Saved. The storefront now uses these settings.",
     zh: "已保存，前台已改用这些设置。",

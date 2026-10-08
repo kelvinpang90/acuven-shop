@@ -363,6 +363,14 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-store-design__show input { width: 16px; height: 16px; }
 .site-admin-store-design__moves { display: flex; gap: 4px; }
 .site-admin-store-design__hint { padding-top: 8px; }
+/* 精选商品（SHOP-TASK-065，视觉稿未画，沿用首页区块一组）：组内间距 4px，每行为序号（24px）、名称与上移、下移、移出三列
+   （间距 12px，上下内边距 8px）；其下添加的下拉与按钮同一行（间距 8px，上内边距 8px） */
+.site-admin-store-design__featured { gap: 4px; }
+.site-admin-store-design__pick { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 0; }
+.site-admin-store-design__pick-name { display: contents; }
+.site-admin-store-design__pick-name > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.site-admin-store-design__add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding-top: 8px; }
+.site-admin-store-design__add .acs-admin__select { min-width: 0; max-width: 100%; }
 .site-admin-store-design__save { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 
 @media (max-width: 767px) {
@@ -656,6 +664,12 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-store-design__block-name { display: flex; gap: 4px; min-width: 0; }
   .site-admin-store-design__show input { width: 20px; height: 20px; }
   .site-admin-store-design__show > span { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* 精选商品：组内间距 2px，每行为「序号 名称」与按钮两列（间距 8px，至少 48px 高）；下拉占满一行、与按钮都至少 44px 高 */
+  .site-admin-store-design__featured { gap: 2px; }
+  .site-admin-store-design__pick { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; min-height: 48px; padding: 0; }
+  .site-admin-store-design__pick-name { display: flex; gap: 4px; min-width: 0; }
+  .site-admin-store-design__add .acs-admin__select { flex: 1 1 100%; min-height: 44px; }
+  .site-admin-store-design__add .acs-admin__btn { min-height: 44px; }
   .site-admin-store-design__save { display: grid; gap: 10px; }
   .site-admin-store-design__save .acs-admin__btn { justify-content: center; min-height: 44px; }
 }

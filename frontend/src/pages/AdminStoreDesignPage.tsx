@@ -2,7 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, Dispatch, FormEvent, SetStateAction } from "react";
 
 import { readAdminStoreDesign, saveAdminStoreDesign } from "../api/adminStoreDesign";
-import type { AdminStoreDesign, AdminStoreDesignDetail, StoreDesignInput, StoreDesignRead, StoreDesignSave } from "../api/adminStoreDesign";
+import type {
+  AdminStoreDesign,
+  AdminStoreDesignDetail,
+  FeaturedProduct,
+  ProductChoice,
+  StoreDesignInput,
+  StoreDesignRead,
+  StoreDesignSave,
+} from "../api/adminStoreDesign";
+import { FEATURED_COUNT } from "../api/catalog";
 import AdminFrame, { AdminAlert } from "../components/AdminFrame";
 import type { CopyKey, Language } from "../i18n/copy";
 import { useCopy, useLanguage } from "../i18n/language";
@@ -15,8 +24,9 @@ import { startDeferred } from "./AdminOrderDetail";
 // 后台店铺装修 A08（docs/UX.md 0.10 A08，视觉稿 A08-desktop 与 A08-phone）：用后台框架渲染，当前导航项为店铺装修。
 // 内容区为标题 admin.nav_store_design（h1）与其下的 admin.design_demo_note；手机线框与 A08-phone 不画标题（顶栏已是
 // admin.nav_store_design），h1 仍在页面里，由 site.css 在 767px 及以下只留给读屏。
-// 其下为表单（SHOP-TASK-064）：主题（10 款，按 THEME_ACCENTS 的顺序）、所选主题的主色、首页四个区块的顺序与显隐与 common.save。
-// 不含标志图（Kelvin 2026-10-06 决定）；精选商品本页只原样提交读取到的 ID 顺序、不显示，挑选与预览由 SHOP-TASK-065、066 接上。
+// 其下为表单（SHOP-TASK-064）：主题（10 款，按 THEME_ACCENTS 的顺序）、所选主题的主色、首页四个区块的顺序与显隐、
+// 精选商品的挑选（SHOP-TASK-065：最多 FEATURED_COUNT 件，可排序、移出，原已在精选里、之后下架的照列）与 common.save。
+// 不含标志图（Kelvin 2026-10-06 决定）；预览由 SHOP-TASK-066 接上。
 // 打开页面与切换界面语言时以界面语言调用 GET /api/admin/store-design?lang=，保存为 PUT（经 api/adminStoreDesign.ts）。
 // 401 换成登录页 A01；离开页面或切换语言时中止读取与进行中的保存，旧请求的结果不再更新页面。
 
@@ -42,11 +52,12 @@ export const BLOCK_NAME: Readonly<Record<HomeBlock, CopyKey>> = {
   featured: "home.featured",
 };
 
-// 表单里的选择：主题、所选主色（总是该主题的一个选项）与按位置排序的四个区块。
+// 表单里的选择：主题、所选主色（总是该主题的一个选项）、按位置排序的四个区块与按位置排序的精选商品。
 export interface DesignForm {
   theme: ShopTheme;
   accent: string;
   homeBlocks: readonly HomeBlockSetting[];
+  featured: readonly FeaturedProduct[];
 }
 
 // 主题的第一项主色（null 即它，storeDesign.ts）。
@@ -56,7 +67,7 @@ export function defaultAccent(theme: ShopTheme): string {
 
 // 以读取或保存返回的设置重置表单：主色为 null 时选第一项。
 export function formOf(design: AdminStoreDesign): DesignForm {
-  return { theme: design.theme, accent: design.accent ?? defaultAccent(design.theme), homeBlocks: design.home_blocks };
+  return { theme: design.theme, accent: design.accent ?? defaultAccent(design.theme), homeBlocks: design.home_blocks, featured: design.featured };
 }
 
 // 换主题时改选新主题的第一项主色（UX A08「选主题后，主色选项换成该主题的一组（默认选第一项）」）。
@@ -72,28 +83,57 @@ export function showBlock(form: DesignForm, index: number, visible: boolean): De
   return { ...form, homeBlocks: form.homeBlocks.map((setting, at) => (at === index ? { block: setting.block, visible } : setting)) };
 }
 
+// 与上一行（-1）或下一行（1）互换；第一行上移与最后一行下移时为 null。
+function swapped<T>(items: readonly T[], index: number, offset: -1 | 1): T[] | null {
+  const next = [...items];
+  const moved = next[index];
+  const other = next[index + offset];
+  if (moved === undefined || other === undefined) {
+    return null;
+  }
+  next[index] = other;
+  next[index + offset] = moved;
+  return next;
+}
+
 // 与上一行（-1）或下一行（1）互换；第一行上移与最后一行下移不变。
 export function moveBlock(form: DesignForm, index: number, offset: -1 | 1): DesignForm {
-  const blocks = [...form.homeBlocks];
-  const moved = blocks[index];
-  const other = blocks[index + offset];
-  if (moved === undefined || other === undefined) {
+  const blocks = swapped(form.homeBlocks, index, offset);
+  return blocks === null ? form : { ...form, homeBlocks: blocks };
+}
+
+// 精选的排序规则同首页区块（UX A08「(↑)(↓) 调整顺序，规则同首页区块」）。
+export function moveFeatured(form: DesignForm, index: number, offset: -1 | 1): DesignForm {
+  const featured = swapped(form.featured, index, offset);
+  return featured === null ? form : { ...form, featured };
+}
+
+export function removeFeatured(form: DesignForm, index: number): DesignForm {
+  return { ...form, featured: form.featured.filter((_product, at) => at !== index) };
+}
+
+// 下拉里可添加的商品：按 choices 的顺序、尚未在精选里的（同一商品不重复）。
+export function featuredOptions(choices: readonly ProductChoice[], form: DesignForm): ProductChoice[] {
+  return choices.filter((choice) => !form.featured.some((product) => product.product_id === choice.product_id));
+}
+
+// 加到末尾；已有 FEATURED_COUNT 件或已在精选里时不变。可挑选的商品都满足 published()，所以加入的一件 published 为 true。
+export function addFeatured(form: DesignForm, choice: ProductChoice): DesignForm {
+  if (form.featured.length >= FEATURED_COUNT || form.featured.some((product) => product.product_id === choice.product_id)) {
     return form;
   }
-  blocks[index] = other;
-  blocks[index + offset] = moved;
-  return { ...form, homeBlocks: blocks };
+  return { ...form, featured: [...form.featured, { product_id: choice.product_id, slug: choice.slug, name: choice.name, published: true }] };
 }
 
 // 保存的请求：主题与读取到的相同、且所选主色就是读取到的主色（读取到 null 时即该主题的第一项）时原样提交读取到的 accent（含 null），
-// 否则提交所选主色 id，所以未改动的表单再次保存不改变存储；精选原样提交读取到的商品 ID 顺序。
+// 否则提交所选主色 id，所以未改动的表单再次保存不改变存储；精选按列表当前的顺序提交商品 ID。
 export function saveInput(base: AdminStoreDesign, form: DesignForm): StoreDesignInput {
   const unchanged = form.theme === base.theme && form.accent === (base.accent ?? defaultAccent(base.theme));
   return {
     theme: form.theme,
     accent: unchanged ? base.accent : form.accent,
     home_blocks: form.homeBlocks,
-    featured_product_ids: base.featured.map((product) => product.product_id),
+    featured_product_ids: form.featured.map((product) => product.product_id),
   };
 }
 
@@ -245,11 +285,22 @@ function ArrowIcon({ up }: { up: boolean }) {
   );
 }
 
+function RemoveIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
 interface FormHandlers {
   onTheme: (theme: ShopTheme) => void;
   onAccent: (accent: string) => void;
   onShow: (index: number, visible: boolean) => void;
   onMove: (index: number, offset: -1 | 1) => void;
+  onFeaturedMove: (index: number, offset: -1 | 1) => void;
+  onFeaturedRemove: (index: number) => void;
+  onFeaturedAdd: (choice: ProductChoice) => void;
   onSave: () => void;
 }
 
@@ -369,9 +420,115 @@ function BlocksGroup({ form, onShow, onMove }: { form: DesignForm } & Pick<FormH
   );
 }
 
+// 精选商品（UX A08「精选商品（0.6）」，视觉稿未画，写法沿用首页区块一组）：按列表顺序每行序号、名称（name 为 null 时显示 slug；
+// 之后下架的照列、不加标记）、上移、下移与移出；其下为添加的下拉（按 choices 的顺序列出尚未在精选里的商品，默认选第一项）与按钮，
+// 已有 FEATURED_COUNT 件或没有可添加的商品时两者都禁用；最后为 admin.featured_hint。
+function FeaturedGroup({
+  form,
+  choices,
+  onFeaturedMove,
+  onFeaturedRemove,
+  onFeaturedAdd,
+}: { form: DesignForm; choices: readonly ProductChoice[] } & Pick<FormHandlers, "onFeaturedMove" | "onFeaturedRemove" | "onFeaturedAdd">) {
+  const t = useCopy();
+  const [picked, setPicked] = useState<number | null>(null);
+  const options = featuredOptions(choices, form);
+  // 所选的一件已加入（不再是选项）或还没选过时，选第一项。
+  const selected = options.find((choice) => choice.product_id === picked) ?? options[0];
+  const blocked = form.featured.length >= FEATURED_COUNT || selected === undefined;
+  const last = form.featured.length - 1;
+  return (
+    <fieldset className="acs-admin__panel site-admin-store-design__group site-admin-store-design__featured">
+      <legend>{t("admin.featured_pick")}</legend>
+      {form.featured.map(({ product_id, slug, name }, index) => (
+        <div key={product_id} className="site-admin-store-design__pick">
+          <span className="site-admin-store-design__pick-name">
+            <span className="acs-admin__muted">{index + 1}</span>
+            <span>{name ?? slug}</span>
+          </span>
+          <span className="site-admin-store-design__moves">
+            <button
+              className="acs-admin__btn acs-admin__btn--secondary"
+              type="button"
+              aria-label={t("admin.block_move_up")}
+              disabled={index === 0}
+              onClick={() => {
+                onFeaturedMove(index, -1);
+              }}
+            >
+              <ArrowIcon up />
+            </button>
+            <button
+              className="acs-admin__btn acs-admin__btn--secondary"
+              type="button"
+              aria-label={t("admin.block_move_down")}
+              disabled={index === last}
+              onClick={() => {
+                onFeaturedMove(index, 1);
+              }}
+            >
+              <ArrowIcon up={false} />
+            </button>
+            <button
+              className="acs-admin__btn acs-admin__btn--secondary"
+              type="button"
+              aria-label={t("admin.featured_remove")}
+              onClick={() => {
+                onFeaturedRemove(index);
+              }}
+            >
+              <RemoveIcon />
+            </button>
+          </span>
+        </div>
+      ))}
+      <div className="site-admin-store-design__add">
+        <select
+          className="acs-admin__select"
+          aria-label={t("admin.featured_add")}
+          value={selected?.product_id ?? ""}
+          disabled={blocked}
+          onChange={(event: ChangeEvent<HTMLSelectElement>) => {
+            setPicked(Number(event.target.value));
+          }}
+        >
+          {options.map((choice) => (
+            <option key={choice.product_id} value={choice.product_id}>
+              {choice.name}
+            </option>
+          ))}
+        </select>
+        <button
+          className="acs-admin__btn acs-admin__btn--secondary"
+          type="button"
+          disabled={blocked}
+          onClick={() => {
+            if (selected !== undefined) {
+              onFeaturedAdd(selected);
+            }
+          }}
+        >
+          {t("admin.featured_add")}
+        </button>
+      </div>
+      <span className="acs-admin__muted site-admin-store-design__hint">{t("admin.featured_hint")}</span>
+    </fieldset>
+  );
+}
+
 type ReadyState = Extract<DesignState, { status: "ready" }>;
 
-function DesignFormView({ state, onTheme, onAccent, onShow, onMove, onSave }: { state: ReadyState } & FormHandlers) {
+function DesignFormView({
+  state,
+  onTheme,
+  onAccent,
+  onShow,
+  onMove,
+  onFeaturedMove,
+  onFeaturedRemove,
+  onFeaturedAdd,
+  onSave,
+}: { state: ReadyState } & FormHandlers) {
   const t = useCopy();
   const { form } = state;
   return (
@@ -386,6 +543,13 @@ function DesignFormView({ state, onTheme, onAccent, onShow, onMove, onSave }: { 
       <ThemeGroup form={form} onTheme={onTheme} />
       <AccentGroup form={form} onAccent={onAccent} />
       <BlocksGroup form={form} onShow={onShow} onMove={onMove} />
+      <FeaturedGroup
+        form={form}
+        choices={state.base.choices}
+        onFeaturedMove={onFeaturedMove}
+        onFeaturedRemove={onFeaturedRemove}
+        onFeaturedAdd={onFeaturedAdd}
+      />
       <div className="site-admin-store-design__save">
         <button className="acs-admin__btn" type="submit" disabled={state.saving} aria-busy={state.saving}>
           {t("common.save")}
@@ -455,6 +619,15 @@ export function AdminStoreDesignContent() {
       }}
       onMove={(index, offset) => {
         edit((form) => moveBlock(form, index, offset));
+      }}
+      onFeaturedMove={(index, offset) => {
+        edit((form) => moveFeatured(form, index, offset));
+      }}
+      onFeaturedRemove={(index) => {
+        edit((form) => removeFeatured(form, index));
+      }}
+      onFeaturedAdd={(choice) => {
+        edit((form) => addFeatured(form, choice));
       }}
       onSave={() => {
         const controller = lifetime.current;
