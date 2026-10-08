@@ -1285,6 +1285,36 @@ export const COPY = {
     zh: "每日库存重置结果",
     ms: "Keputusan tetapan semula stok harian",
   },
+  "admin.col_date_myt": {
+    en: "Date (Malaysia time)",
+    zh: "日期（马来西亚时间）",
+    ms: "Tarikh (waktu Malaysia)",
+  },
+  "admin.col_result": {
+    en: "Result",
+    zh: "结果",
+    ms: "Keputusan",
+  },
+  "admin.col_sku_count": {
+    en: "SKUs",
+    zh: "SKU 数",
+    ms: "Bilangan SKU",
+  },
+  "admin.stock_reset_breakdown": {
+    en: "Initial {initial} − active holds {held} = available today {available}",
+    zh: "初始 {initial} − 有效预留 {held} = 当日可用 {available}",
+    ms: "Awal {initial} − tahanan aktif {held} = tersedia hari ini {available}",
+  },
+  "admin.stock_reset_ok": {
+    en: "Completed",
+    zh: "已完成",
+    ms: "Selesai",
+  },
+  "admin.stock_reset_failed": {
+    en: "Failed — the operator has been alerted",
+    zh: "失败——已告警运营者",
+    ms: "Gagal — pengendali telah dimaklumkan",
+  },
   "admin.stock_reset_note": {
     en: "Resets restore today's stock only. Past orders, refunds and points are not changed.",
     zh: "重置只恢复当日库存，不改动历史订单、退款与积分。",
