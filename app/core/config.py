@@ -43,6 +43,16 @@ class Settings(BaseSettings):
     turnstile_secret_key: str = ""
     turnstile_verify_url: str = ""
 
+    # 短信每日总量与费用预算的 MySQL 兜底（app/services/sms_budget.py）。
+    # 默认值按 Kelvin 2026-10-08 的决定：全站每天 200 条、费用上限 20 美元。
+    # 金额一律是整数微美元（百万分之一美元）。
+    sms_daily_count_limit: int = 200
+    sms_daily_cost_limit_micro_usd: int = 20_000_000
+    # 按目的地（马来西亚 60、新加坡 65）的单次最高费用，发送前按它预占、按它结算。
+    # 0 = 未配置：该目的地停发。
+    sms_max_cost_micro_usd_my: int = 0
+    sms_max_cost_micro_usd_sg: int = 0
+
 
 @lru_cache
 def get_settings() -> Settings:
