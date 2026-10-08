@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "../App";
-import type { AdminStoreDesign, AdminStoreDesignDetail } from "../api/adminStoreDesign";
+import type { AdminStoreDesign, AdminStoreDesignDetail, FeaturedProduct, ProductChoice } from "../api/adminStoreDesign";
 import { AdminFrameView } from "../components/AdminFrame";
 import type { AdminFrameViewProps, FrameState } from "../components/AdminFrame";
 import { BRAND, COPY, LANGUAGES, translate } from "../i18n/copy";
@@ -16,17 +16,21 @@ import type { ShopTheme } from "../storeDesign";
 // 经 Vite 的 ?raw 读成字符串（与 i18n/copy.test.ts 读 UX-COPY 相同），用来确认本页只经店铺装修的请求模块读取与保存。
 import pageSource from "./AdminStoreDesignPage.tsx?raw";
 import {
+  addFeatured,
   AdminStoreDesignContent,
   AdminStoreDesignView,
   BLOCK_NAME,
   chooseAccent,
   chooseTheme,
   editForm,
+  featuredOptions,
   formOf,
   LOADING,
   moveBlock,
+  moveFeatured,
   openDesign,
   readStep,
+  removeFeatured,
   saveInput,
   shownState,
   showBlock,
@@ -69,6 +73,16 @@ const DETAIL: AdminStoreDesignDetail = {
   ],
   csrf_token: "design-csrf-1",
 };
+
+// 挑选精选用的设置（SHOP-TASK-065）：精选三件——上架的 T 恤、之后下架的马克杯与名称为 null 的徽章；可挑选的四件按商品 ID 升序，
+// 其中托特包、亚麻衬衫与羊毛帽尚未在精选里。
+const PIN: FeaturedProduct = { product_id: 5, slug: "enamel-pin", name: null, published: true };
+const TOTE: ProductChoice = { product_id: 2, slug: "canvas-tote", name: "Canvas Tote" };
+const TEE: ProductChoice = { product_id: 7, slug: "crew-neck-tee", name: "Crew Neck Tee" };
+const LINEN: ProductChoice = { product_id: 9, slug: "linen-shirt", name: "Linen Shirt" };
+const CAP: ProductChoice = { product_id: 12, slug: "wool-cap", name: "Wool Cap" };
+const CHOICES: ProductChoice[] = [TOTE, TEE, LINEN, CAP];
+const PICKING: AdminStoreDesignDetail = { ...DETAIL, featured: [...DETAIL.featured, PIN], choices: CHOICES };
 
 // 保存的响应体（不含 choices 与 csrf_token）。
 function savedBody(design: AdminStoreDesign): AdminStoreDesign {
@@ -118,7 +132,17 @@ function renderSignedIn(language: Language = "en", overrides: Partial<AdminFrame
 }
 
 function render(state: DesignState = readyState(), language: Language = "en"): string {
-  const props: AdminStoreDesignViewProps = { state, onTheme: noop, onAccent: noop, onShow: noop, onMove: noop, onSave: noop };
+  const props: AdminStoreDesignViewProps = {
+    state,
+    onTheme: noop,
+    onAccent: noop,
+    onShow: noop,
+    onMove: noop,
+    onFeaturedMove: noop,
+    onFeaturedRemove: noop,
+    onFeaturedAdd: noop,
+    onSave: noop,
+  };
   return renderToStaticMarkup(wrap(<AdminStoreDesignView {...props} />, language));
 }
 
@@ -189,7 +213,7 @@ function allOf(html: string, name: string, className: string): string[] {
   return [...html.matchAll(new RegExp(`<${name}\\b[^>]*>`, "g"))].filter((m) => classes(m[0]).includes(className)).map((m) => elementAt(html, name, m.index));
 }
 
-// 第 index 个分组（主题、主色、首页区块）。
+// 第 index 个分组（主题、主色、首页区块、精选商品）。
 function group(html: string, index: number): string {
   return allOf(html, "fieldset", "site-admin-store-design__group")[index] ?? "";
 }
@@ -339,6 +363,8 @@ describe("content", () => {
   // 本页同时有后台演示横幅与演示说明，二者都不带 hidden，也没有关闭它们的控件。
   // SHOP-TASK-064 改动：原断言「内容区没有按钮」（SHOP-TASK-062 时内容区只有页头）改为表单取得后内容区的按钮只有各区块的上移、
   // 下移与 common.save，没有别的按钮；横幅与说明的断言不变。
+  // SHOP-TASK-065 改动：精选一组加了按钮，所以列表在区块的按钮之后多了每件精选的上移、下移、移出与添加按钮（没有 aria-label 的
+  // 按钮改记 type，以区分添加与保存）；仍没有关闭横幅或说明的按钮。
   it.each(LANGUAGES)("keeps the demo banner and the demo note in %s", (language) => {
     const html = renderSignedIn(language);
     expect(element(html, "div", "acs-admin__banner")).toContain(escapeHtml(COPY["admin.demo_banner"][language]));
@@ -348,9 +374,11 @@ describe("content", () => {
     expect(tags(element(html, "main", "acs-admin__main"), "button")).toEqual([]);
     const ready = render(readyState(), language);
     expect(element(ready, "p", "site-admin-store-design__note")).toContain(escapeHtml(COPY["admin.design_demo_note"][language]));
-    const buttons = tags(ready, "button").map((tag) => attributes(tag).get("aria-label") ?? "submit");
+    const buttons = tags(ready, "button").map((tag) => attributes(tag).get("aria-label") ?? attributes(tag).get("type"));
     expect(buttons).toEqual([
       ...DETAIL.home_blocks.flatMap(() => [COPY["admin.block_move_up"][language], COPY["admin.block_move_down"][language]]),
+      ...DETAIL.featured.flatMap(() => [COPY["admin.block_move_up"][language], COPY["admin.block_move_down"][language], COPY["admin.featured_remove"][language]]),
+      "button",
       "submit",
     ]);
   });
@@ -359,33 +387,40 @@ describe("content", () => {
   // api/adminStoreDesign 读取与保存，不引入其他接口模块，也不直接调用 fetch。
   // SHOP-TASK-064 改动：原「makes no requests of its own」（SHOP-TASK-062 守住「页面不发起自己的请求（表单由 SHOP-TASK-064 接上）」）
   // 改为只经店铺装修的请求模块，因为本任务就是接上读取与保存。
+  // SHOP-TASK-065 改动：精选的件数上限用商品目录模块的 FEATURED_COUNT（与请求模块校验的是同一个常量），所以多了一行只引入这个常量的
+  // import；断言改为 api/catalog 只引入 FEATURED_COUNT，读取与保存仍只经 api/adminStoreDesign。
   it("reads and saves only through the store design API module", () => {
-    expect([...pageSource.matchAll(/from "\.\.\/api\/([^"]+)"/g)].map((m) => m[1])).toEqual(["adminStoreDesign", "adminStoreDesign"]);
+    expect([...pageSource.matchAll(/from "\.\.\/api\/([^"]+)"/g)].map((m) => m[1])).toEqual(["adminStoreDesign", "adminStoreDesign", "catalog"]);
+    expect(pageSource).toContain(`import { FEATURED_COUNT } from "../api/catalog";`);
     expect(pageSource).not.toMatch(/\bfetch\s*\(/);
   });
 
-  // Kelvin 2026-10-06（docs/HANDOFF.md 0.34）「店铺装修设置的存储与公开读取首版先不含标志图」与验收第 1 条「不显示 admin.logo 一组」，
-  // 以及目的「精选商品本任务只原样提交、不显示」「精选商品与预览由 SHOP-TASK-065、066 接上」：表单只有主题、主色与首页区块三组，
-  // 没有标志、精选与预览的文字，也不显示精选商品的名称。
-  it.each(LANGUAGES)("has only the theme, accent and home block groups in %s", (language) => {
+  // Kelvin 2026-10-06（docs/HANDOFF.md 0.34）「店铺装修设置的存储与公开读取首版先不含标志图」与 SHOP-TASK-064 验收第 1 条
+  // 「不显示 admin.logo 一组」，以及 SHOP-TASK-065 验收第 2 条「首页区块一组之后、保存按钮之前为 legend admin.featured_pick 的一组」：
+  // 表单依次为主题、主色、首页区块与精选商品四组，精选在区块之后、保存之前；没有标志与预览的文字（预览由 SHOP-TASK-066 接上）。
+  // SHOP-TASK-065 改动：原「has only the theme, accent and home block groups」（SHOP-TASK-064 守住「精选商品本任务只原样提交、不显示」）
+  // 改为四组，因为本任务就是显示精选商品；标志与预览的断言不变。
+  it.each(LANGUAGES)("has the theme, accent, home block and featured groups in %s", (language) => {
     const html = render(readyState(), language);
-    expect(allOf(html, "fieldset", "site-admin-store-design__group").map(legend)).toEqual([
+    const groups = allOf(html, "fieldset", "site-admin-store-design__group");
+    expect(groups.map(legend)).toEqual([
       COPY["admin.theme"][language],
       COPY["admin.accent"][language],
       COPY["admin.home_blocks"][language],
+      COPY["admin.featured_pick"][language],
     ]);
+    const save = element(html, "div", "site-admin-store-design__save");
+    expect(html.indexOf(groups[3] ?? "")).toBeGreaterThan(html.indexOf(groups[2] ?? "") + (groups[2] ?? "").length - 1);
+    expect(html.indexOf(save)).toBeGreaterThan(html.indexOf(groups[3] ?? "") + (groups[3] ?? "").length - 1);
     const texts = visibleTexts(html);
     // 这些键可能尚未抄入字典（只收录页面实际用到的键），所以按字符串查找：页面源码不引用它们，字典里有时页面也不显示其文字。
     const dictionary: Readonly<Record<string, Readonly<Record<Language, string>> | undefined>> = COPY;
-    for (const key of ["admin.logo", "admin.logo_hint", "admin.logo_remove", "admin.featured_pick", "admin.featured_add", "admin.preview"]) {
+    for (const key of ["admin.logo", "admin.logo_hint", "admin.logo_remove", "admin.preview"]) {
       expect(pageSource).not.toContain(`"${key}"`);
       const entry = dictionary[key];
       if (entry !== undefined) {
         expect(texts).not.toContain(entry[language]);
       }
-    }
-    for (const product of DETAIL.featured) {
-      expect(html).not.toContain(product.name ?? "");
     }
   });
 });
@@ -473,8 +508,9 @@ describe("accents", () => {
 
   // SHOP-TASK-064 验收第 2 条「读取到的主色为 null 时选第一项」：主色为 null 时表单选第一项（咖啡店为 kopi），页面上第一个圆环被选中；
   // 读取到具体的主色时选它。
+  // SHOP-TASK-065 改动：表单多了按列表排序的精选（featured），所以期望的表单加上读取到的精选；主色的断言不变。
   it("selects the first accent when the saved accent is null", () => {
-    expect(formOf(DETAIL)).toEqual({ theme: "kopitiam", accent: "kopi", homeBlocks: DETAIL.home_blocks });
+    expect(formOf(DETAIL)).toEqual({ theme: "kopitiam", accent: "kopi", homeBlocks: DETAIL.home_blocks, featured: DETAIL.featured });
     const checked = (state: DesignState) => tags(group(render(state), 1), "input").map((tag) => attributes(tag).has("checked"));
     expect(checked(readyState())).toEqual([true, false, false, false]);
     const tile = { ...DETAIL, accent: "tile" };
@@ -484,10 +520,11 @@ describe("accents", () => {
 
   // SHOP-TASK-064 验收第 2 条「换主题时改选新主题的第一项」与 UX A08「选主题后，主色选项换成该主题的一组（默认选第一项）」：
   // 换到任何别的主题时主色为该主题的第一项，主题组与主色组跟着变；再点已选的主题不改主色。
+  // SHOP-TASK-065 改动：期望的表单加上不变的精选（featured），理由同上。
   it("switches to the first accent of a new theme", () => {
     const start = chooseAccent(formOf(DETAIL), "red");
     for (const theme of SHOP_THEMES.filter((other) => other !== "kopitiam")) {
-      expect(chooseTheme(start, theme)).toEqual({ theme, accent: THEME_ACCENTS[theme][0], homeBlocks: DETAIL.home_blocks });
+      expect(chooseTheme(start, theme)).toEqual({ theme, accent: THEME_ACCENTS[theme][0], homeBlocks: DETAIL.home_blocks, featured: DETAIL.featured });
     }
     expect(chooseTheme(start, "kopitiam")).toBe(start);
     const html = render(readyState({ form: chooseTheme(start, "batik") }));
@@ -615,12 +652,219 @@ describe("home blocks", () => {
 });
 
 describe("featured products", () => {
-  // 目的「精选商品本任务只原样提交、不显示」与验收第 4 条「featured_product_ids 原样提交读取到的精选商品 ID 顺序」：
-  // 不论表单怎么改，精选 ID 都是读取到的顺序（含已下架的那件，Kelvin 2026-10-08 决定保存时放行）；没有精选时为空数组。
-  it("sends the saved featured ids in their order", () => {
-    const form = moveBlock(chooseTheme(formOf(DETAIL), "gula"), 1, 1);
-    expect(saveInput(DETAIL, form).featured_product_ids).toEqual([7, 3]);
-    expect(saveInput({ ...DETAIL, featured: [] }, formOf(DETAIL)).featured_product_ids).toEqual([]);
+  const picking = (form: DesignForm = formOf(PICKING)) => readyState({ base: PICKING, form });
+
+  // 精选一组（第 4 组）里的各行。
+  function picks(html: string): string[] {
+    return allOf(group(html, 3), "div", "site-admin-store-design__pick");
+  }
+
+  // 添加用的下拉与按钮所在的一行。
+  function adder(html: string): { select: Map<string, string>; options: Map<string, string>[]; texts: string[]; button: Map<string, string> } {
+    const add = element(group(html, 3), "div", "site-admin-store-design__add");
+    const select = element(add, "select", "acs-admin__select");
+    return {
+      select: attributes(tags(select, "select")[0] ?? ""),
+      options: tags(select, "option").map(attributes),
+      texts: textNodes(select),
+      button: attributes(tags(add, "button")[0] ?? ""),
+    };
+  }
+
+  // SHOP-TASK-065 验收第 2 条「按读取到的顺序列出精选商品（含 published 为 false 的，照列、不加标记），每行序号、名称
+  // （name 为 null 时显示 slug）」、UX A08「1 <名称>  (↑)(↓)(✗)」「之后下架的商品仍留在列表中」与 Kelvin 2026-10-08（HANDOFF 0.40）
+  // 「页面照列这些商品、不加标记」：legend 为 admin.featured_pick；三行依次为 T 恤、已下架的马克杯与只有 slug 的徽章，每行只有序号与名称；
+  // 已下架那行的序号与名称写法与其他行相同（同样的标签与 class、名称不是次要文字）。
+  it.each(LANGUAGES)("lists the featured products in order, unpublished ones too, in %s", (language) => {
+    const html = render(picking(), language);
+    expect(legend(group(html, 3))).toBe(COPY["admin.featured_pick"][language]);
+    const rows = picks(html);
+    expect(rows.map((row) => textNodes(row))).toEqual([
+      ["1", "Crew Neck Tee"],
+      ["2", "Ceramic Mug"],
+      ["3", "enamel-pin"],
+    ]);
+    const names = rows.map((row) => element(row, "span", "site-admin-store-design__pick-name"));
+    const shape = (name: string) => name.replace(/>[^<]*</g, "><");
+    expect(names.map(shape)).toEqual(names.map(() => `<span class="site-admin-store-design__pick-name"><span class="acs-admin__muted"></span><span></span></span>`));
+    expect(rows.map((row) => classes(tags(row, "div")[0] ?? ""))).toEqual(rows.map(() => ["site-admin-store-design__pick"]));
+  });
+
+  // 同一条「精选为空时不显示行」：没有精选时一行也没有，组里仍有添加与提示。
+  it("shows no rows when nothing is featured", () => {
+    const html = render(picking({ ...formOf(PICKING), featured: [] }));
+    expect(picks(html)).toEqual([]);
+    expect(textNodes(group(html, 3))).toEqual([COPY["admin.featured_pick"].en, ...CHOICES.map((choice) => choice.name), COPY["admin.featured_add"].en, COPY["admin.featured_hint"].en]);
+  });
+
+  // SHOP-TASK-065 验收第 2 条「上移与下移（可访问名称 admin.block_move_up、admin.block_move_down，规则同首页区块）与移出（可访问名称
+  // admin.featured_remove），按钮内为 aria-hidden 的图形」与 UX A08「(↑)(↓) 调整顺序，规则同首页区块」「（(✗) 读屏标签
+  // [admin.featured_remove]）」：每行三个按钮，只含 aria-hidden 的 svg、没有文字；只有第一行上移与最后一行下移禁用，移出都可点。
+  it.each(LANGUAGES)("has move and remove buttons with only the ends disabled in %s", (language) => {
+    const rows = picks(render(picking(), language));
+    rows.forEach((row, index) => {
+      const buttons = tags(row, "button").map(attributes);
+      expect(buttons.map((button) => button.get("aria-label"))).toEqual([
+        COPY["admin.block_move_up"][language],
+        COPY["admin.block_move_down"][language],
+        COPY["admin.featured_remove"][language],
+      ]);
+      expect(buttons.map((button) => button.get("type"))).toEqual(["button", "button", "button"]);
+      expect(buttons.map((button) => button.has("disabled"))).toEqual([index === 0, index === rows.length - 1, false]);
+      expect(tags(row, "svg").map((svg) => attributes(svg).get("aria-hidden"))).toEqual(["true", "true", "true"]);
+    });
+    // 只有一件时上移与下移都禁用。
+    const single = picks(render(picking({ ...formOf(PICKING), featured: [PIN] }), language));
+    expect(tags(single[0] ?? "", "button").map((tag) => attributes(tag).has("disabled"))).toEqual([true, true, false]);
+  });
+
+  // 同一条「规则同首页区块」与 UX A08「(✗) 移出精选」：上移、下移与相邻一件互换，首件上移与末件下移不变；移出只去掉那一件，
+  // 其余保持顺序；页面按新顺序编号。
+  it("moves and removes featured products", () => {
+    const form = formOf(PICKING);
+    const ids = (next: DesignForm) => next.featured.map((product) => product.product_id);
+    expect(ids(moveFeatured(form, 2, -1))).toEqual([7, 5, 3]);
+    expect(ids(moveFeatured(form, 0, 1))).toEqual([3, 7, 5]);
+    expect(moveFeatured(form, 0, -1)).toBe(form);
+    expect(moveFeatured(form, 2, 1)).toBe(form);
+    expect(moveFeatured(form, 1, 1).featured[2]).toEqual(DETAIL.featured[1]);
+    expect(ids(removeFeatured(form, 1))).toEqual([7, 5]);
+    expect(ids(removeFeatured(removeFeatured(removeFeatured(form, 0), 0), 0))).toEqual([]);
+    expect(picks(render(picking(moveFeatured(form, 2, -1)))).map((row) => textNodes(row))).toEqual([
+      ["1", "Crew Neck Tee"],
+      ["2", "enamel-pin"],
+      ["3", "Ceramic Mug"],
+    ]);
+  });
+
+  // SHOP-TASK-065 验收第 3 条「下拉（可访问名称 admin.featured_add）按 choices 的顺序列出尚未在精选里的商品名称，默认选中第一项；
+  // 按钮 admin.featured_add …；其下 admin.featured_hint」与 UX A08「从已上架商品中挑选…同一商品不重复」：下拉只有托特包、亚麻衬衫
+  // 与羊毛帽（T 恤已在精选里），值为商品 ID，第一项被选中；按钮文字为 admin.featured_add；组的最后为 admin.featured_hint。
+  it.each(LANGUAGES)("offers only the products not yet featured in %s", (language) => {
+    const html = render(picking(), language);
+    const { select, options, texts, button } = adder(html);
+    expect(select.get("aria-label")).toBe(COPY["admin.featured_add"][language]);
+    expect(options.map((option) => [option.get("value"), option.has("selected")])).toEqual([
+      ["2", true],
+      ["9", false],
+      ["12", false],
+    ]);
+    expect(texts).toEqual(["Canvas Tote", "Linen Shirt", "Wool Cap"]);
+    expect([select.has("disabled"), button.has("disabled"), button.get("type")]).toEqual([false, false, "button"]);
+    expect(textNodes(element(group(html, 3), "div", "site-admin-store-design__add")).at(-1)).toBe(COPY["admin.featured_add"][language]);
+    expect(textNodes(group(html, 3)).at(-1)).toBe(COPY["admin.featured_hint"][language]);
+    expect(featuredOptions(CHOICES, formOf(PICKING)).map((choice) => choice.product_id)).toEqual([2, 9, 12]);
+    // 移出 T 恤后它按 choices 的顺序回到下拉里（在托特包之后）。
+    expect(featuredOptions(CHOICES, removeFeatured(formOf(PICKING), 0)).map((choice) => choice.product_id)).toEqual([2, 7, 9, 12]);
+  });
+
+  // 同一条「按钮 admin.featured_add 把所选商品加到末尾」：加入的一件在最后（published 为 true，可挑选的都已上架），之后不再出现在下拉里，
+  // 下拉又选中剩下的第一项；已在精选里的不重复加入。
+  it("adds the chosen product at the end", () => {
+    const added = addFeatured(formOf(PICKING), TOTE);
+    expect(added.featured).toEqual([...PICKING.featured, { product_id: 2, slug: "canvas-tote", name: "Canvas Tote", published: true }]);
+    expect(addFeatured(formOf(PICKING), TEE)).toEqual(formOf(PICKING));
+    const fewer = addFeatured(formOf(DETAIL), LINEN);
+    expect(fewer.featured.map((product) => product.product_id)).toEqual([7, 3, 9]);
+    const html = render(picking(fewer));
+    expect(picks(html).map((row) => textNodes(row))).toEqual([
+      ["1", "Crew Neck Tee"],
+      ["2", "Ceramic Mug"],
+      ["3", "Linen Shirt"],
+    ]);
+    expect(adder(html).options.map((option) => [option.get("value"), option.has("selected")])).toEqual([
+      ["2", true],
+      ["12", false],
+    ]);
+  });
+
+  // SHOP-TASK-065 验收第 3 条「已有 4 件或没有可添加的商品时下拉与按钮都禁用」与 UX A08「最多 4 件…满 4 件时 [admin.featured_add] 禁用」：
+  // 满 4 件时下拉（仍有未选的商品）与按钮都禁用，再加也不变；未满但可挑选的都已在精选里（或没有可挑选的）时同样禁用。
+  it("disables adding when four are featured or nothing is left", () => {
+    const full = addFeatured(formOf(PICKING), TOTE);
+    expect(full.featured).toHaveLength(4);
+    expect(addFeatured(full, LINEN)).toBe(full);
+    const disabled = (state: DesignState) => {
+      const { select, button } = adder(render(state));
+      return [select.has("disabled"), button.has("disabled")];
+    };
+    expect(adder(render(picking(full))).options.map((option) => option.get("value"))).toEqual(["9", "12"]);
+    expect(disabled(picking(full))).toEqual([true, true]);
+    const tee = { ...DETAIL, featured: [DETAIL.featured[0] ?? PIN], choices: [TEE] };
+    expect(disabled(readyState({ base: tee, form: formOf(tee) }))).toEqual([true, true]);
+    expect(adder(render(readyState({ base: tee, form: formOf(tee) }))).options).toEqual([]);
+    const none = { ...DETAIL, featured: [], choices: [] };
+    expect(disabled(readyState({ base: none, form: formOf(none) }))).toEqual([true, true]);
+    expect(disabled(picking())).toEqual([false, false]);
+  });
+
+  // SHOP-TASK-065 验收第 4 条「保存时 featured_product_ids 按列表当前顺序提交（取代 SHOP-TASK-064 的原样提交）」与 Kelvin 2026-10-08
+  // （HANDOFF 0.40）「精选里原已挑选、之后才下架的商品，保存时放行」：提交的是列表当前的顺序（含已下架的马克杯）；未改动时与读取到的相同；
+  // 全部移出时为空数组。
+  // SHOP-TASK-065 改动：原「sends the saved featured ids in their order」（SHOP-TASK-064 守住「featured_product_ids 原样提交读取到的
+  // 精选商品 ID 顺序」）改为按列表提交，因为本任务让精选可以排序、移出与添加，原样提交会丢掉这些改动。
+  it("sends the featured ids in the list order", () => {
+    const form = formOf(PICKING);
+    expect(saveInput(PICKING, form).featured_product_ids).toEqual([7, 3, 5]);
+    expect(saveInput(PICKING, moveBlock(chooseTheme(form, "gula"), 1, 1)).featured_product_ids).toEqual([7, 3, 5]);
+    const changed = addFeatured(removeFeatured(moveFeatured(form, 2, -1), 0), LINEN);
+    expect(saveInput(PICKING, changed).featured_product_ids).toEqual([5, 3, 9]);
+    expect(saveInput(PICKING, { ...form, featured: [] }).featured_product_ids).toEqual([]);
+  });
+
+  // 同一条「200 后以返回的 featured 更新列表并照旧显示 admin.design_saved，choices 保持读取到的不变（保存响应不含 choices）」：
+  // 请求体按列表顺序；返回的精选（徽章此时有了名称）成为列表与之后保存的依据，下拉按读取到的 choices 列出未选的商品，显示 admin.design_saved。
+  it.each(LANGUAGES)("saves the list and updates it from the reply in %s", async (language) => {
+    const form = addFeatured(removeFeatured(moveFeatured(formOf(PICKING), 2, -1), 0), LINEN);
+    const returned: FeaturedProduct[] = [
+      { product_id: 5, slug: "enamel-pin", name: "Enamel Pin", published: true },
+      { product_id: 3, slug: "ceramic-mug", name: "Ceramic Mug", published: false },
+      { product_id: 9, slug: "linen-shirt", name: "Linen Shirt", published: true },
+    ];
+    const calls = stubFetch(json(200, savedBody({ ...PICKING, featured: returned })));
+    const moves = fakeMoves(startSaving(picking(form)));
+    await submitDesign(PICKING, form, language, new AbortController().signal, moves.target);
+    expect((bodyOf(calls[0]) as { featured_product_ids: unknown }).featured_product_ids).toEqual([5, 3, 9]);
+    expect(moves.events).toEqual(["update ready"]);
+    const current = moves.current;
+    expect(current.status === "ready" && [current.base.choices, current.base.featured, current.form.featured, current.saved]).toEqual([CHOICES, returned, returned, true]);
+    const html = render(current, language);
+    expect(picks(html).map((row) => textNodes(row))).toEqual([
+      ["1", "Enamel Pin"],
+      ["2", "Ceramic Mug"],
+      ["3", "Linen Shirt"],
+    ]);
+    expect(adder(html).texts).toEqual(["Canvas Tote", "Crew Neck Tee", "Wool Cap"]);
+    expect(element(html, "div", "site-admin-store-design__save")).toContain(`<span role="status">${escapeHtml(COPY["admin.design_saved"][language])}</span>`);
+  });
+
+  // 同一条「改动精选也隐藏 admin.design_saved」：保存成功后上移、下移、移出或添加精选，admin.design_saved 都不再显示。
+  it("hides the saved message after a featured change", () => {
+    const saved = readyState({ base: PICKING, form: formOf(PICKING), saved: true });
+    const changes: ((form: DesignForm) => DesignForm)[] = [
+      (form) => moveFeatured(form, 1, -1),
+      (form) => moveFeatured(form, 1, 1),
+      (form) => removeFeatured(form, 0),
+      (form) => addFeatured(form, CAP),
+    ];
+    for (const change of changes) {
+      const next = editForm(saved, change);
+      expect(next).toEqual(readyState({ base: PICKING, form: change(formOf(PICKING)), saved: false }));
+      expect(render(next)).not.toContain(escapeHtml(COPY["admin.design_saved"].en));
+    }
+  });
+
+  // 同一条「403 与切换语言照 SHOP-TASK-064 重新读取并重置」：403 后重新读取，改过的精选不保留，列表与下拉按新读取的结果重置。
+  it("resets the featured list after the read that follows 403", async () => {
+    const fresh: AdminStoreDesignDetail = { ...PICKING, featured: [PIN], csrf_token: "design-csrf-2" };
+    stubFetch(json(403, { detail: "csrf_invalid" }), json(200, fresh));
+    const form = removeFeatured(formOf(PICKING), 2);
+    const moves = fakeMoves(startSaving(picking(form)));
+    await submitDesign(PICKING, form, "en", new AbortController().signal, moves.target);
+    expect(moves.current).toEqual({ status: "ready", base: fresh, form: formOf(fresh), saving: false, saved: false, alert: "common.error_retry", saveError: null });
+    const html = render(moves.current);
+    expect(picks(html).map((row) => textNodes(row))).toEqual([["1", "enamel-pin"]]);
+    expect(adder(html).texts).toEqual(CHOICES.map((choice) => choice.name));
   });
 });
 
@@ -734,7 +978,8 @@ describe("saving", () => {
   };
 
   // SHOP-TASK-064 验收第 4 条「common.save 以 PUT 提交当前选择」「（语言参数为界面语言）」与 SHOP-TASK-063 的请求头：保存以界面语言的地址
-  // PUT，带读取给的 CSRF 令牌与中止用的 signal，请求体为当前的主题、主色、区块与读取到的精选 ID。
+  // PUT，带读取给的 CSRF 令牌与中止用的 signal，请求体为当前的主题、主色、区块与精选 ID（SHOP-TASK-065 起为列表当前的顺序，
+  // 这里未改精选，与读取到的相同）。
   it.each(LANGUAGES)("saves the current choice with the interface language in %s", async (language) => {
     const form = showBlock(chooseTheme(formOf(DETAIL), "batik"), 1, false);
     const input = saveInput(DETAIL, form);
@@ -780,9 +1025,10 @@ describe("saving", () => {
 
   // SHOP-TASK-064 验收第 4 条「200 后以返回的设置更新表单并显示 admin.design_saved」：返回的设置（主色 null）成为表单与之后保存的依据，
   // CSRF 令牌与可挑选商品沿用读取的；页面在保存按钮旁显示 admin.design_saved。之后原样再存提交返回的主色 null（不改变存储）。
+  // SHOP-TASK-065 改动：表单多了精选（featured），这里给出与返回相同的精选；其余断言不变。
   it.each(LANGUAGES)("updates the form from the saved design in %s", async (language) => {
     stubFetch(json(200, savedBody(ZH_SAVED)));
-    const form: DesignForm = { theme: "batik", accent: "indigo", homeBlocks: ZH_SAVED.home_blocks };
+    const form: DesignForm = { theme: "batik", accent: "indigo", homeBlocks: ZH_SAVED.home_blocks, featured: ZH_SAVED.featured };
     const moves = fakeMoves(startSaving(readyState({ form })));
     await submitDesign(DETAIL, form, language, new AbortController().signal, moves.target);
     expect(moves.events).toEqual(["update ready"]);
@@ -857,6 +1103,7 @@ describe("saving", () => {
 
   // SHOP-TASK-064 验收第 4 条「网络中断显示 common.network_check；其他失败（含 422）显示 common.error_retry 并保留表单」：
   // 保存失败后按钮恢复可点，表单保持当前选择（含保存进行中的改动），提示在保存按钮旁；不显示 admin.design_saved。
+  // SHOP-TASK-065 改动：表单多了精选一组，保留的 fieldset 由 3 个改为 4 个。
   it.each<[Response | (() => never), "common.network_check" | "common.error_retry"]>([
     [networkDown, "common.network_check"],
     [json(422, { detail: "featured_unavailable" }), "common.error_retry"],
@@ -878,7 +1125,7 @@ describe("saving", () => {
       expect(save).toContain(`<div class="acs-admin__alert" role="alert"><span>${escapeHtml(COPY[key][language])}</span></div>`);
       expect(attributes(tags(save, "button")[0] ?? "").has("disabled")).toBe(false);
       expect(html).not.toContain(escapeHtml(COPY["admin.design_saved"][language]));
-      expect(tags(html, "fieldset")).toHaveLength(3);
+      expect(tags(html, "fieldset")).toHaveLength(4);
     }
   });
 
@@ -904,11 +1151,16 @@ describe("dictionary", () => {
   // （SHOP-TASK-062 的同名测试扩展到表单的各状态）：经路由打开（会话未返回）、已登录（菜单收起与展开）、读取中、读取失败、
   // 每款主题的表单、保存中、保存成功、保存失败与 403 后，每段文字（含 aria-label）都是当前语言的字典文案，此外只有区块的序号；
   // 页面没有 title 或 placeholder。
+  // SHOP-TASK-065 改动：加上精选的各状态（有精选、已下架照列、name 为 null、为空、满 4 件、没有可添加的），并把商品名称与 slug
+  // 列为允许的文字——它们是接口返回的数据，不是界面文案（验收第 5 条「页面文字全部来自字典」指界面文字）；精选的序号同区块的序号。
   it.each(LANGUAGES)("shows only dictionary text in %s", (language) => {
     const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language]));
     for (const index of [1, 2, 3, 4, 5]) {
       allowed.add(String(index));
       allowed.add(translate(language, "admin.accent_option", { n: index }));
+    }
+    for (const product of [...DETAIL.featured, ...DETAIL.choices, ...PICKING.featured, ...CHOICES]) {
+      allowed.add(product.name ?? product.slug);
     }
     const themes: ShopTheme[] = [...SHOP_THEMES];
     const states: DesignState[] = [
@@ -921,6 +1173,10 @@ describe("dictionary", () => {
       readyState({ saveError: "common.network_check" }),
       readyState({ saveError: "common.error_retry" }),
       readyState({ alert: "common.error_retry" }),
+      readyState({ base: PICKING, form: formOf(PICKING) }),
+      readyState({ base: PICKING, form: addFeatured(formOf(PICKING), TOTE) }),
+      readyState({ base: PICKING, form: { ...formOf(PICKING), featured: [] } }),
+      readyState({ base: { ...DETAIL, choices: [] }, form: formOf(DETAIL) }),
     ];
     const pages = [renderApp(STORE_DESIGN_PATH, language), renderSignedIn(language), renderSignedIn(language, { menuOpen: true })];
     for (const state of states) {
