@@ -219,5 +219,9 @@ html[data-theme$="-dark"] .acs-admin, .acs-admin[data-mode="dark"] { --a-bg: #15
 .acs-swatch__accent { background: var(--accent); }
 .acs-swatch__demo { background: var(--demo); }
 .acs.acs-swatch--dot { display: block; width: 32px; height: 32px; border-radius: 50%; background: var(--accent); }
-@media (max-width: 767px) { .acs-swatch > span { width: 16px; height: 20px; } }
+@media (max-width: 767px) {
+  .acs-swatch > span { width: 16px; height: 20px; }
+  .acs-admin__choice, .acs-admin__choice:has(input:checked) { min-height: 44px; padding: 0; border: 0; background: transparent; }
+  .acs-admin__choice:has(input:checked) { font-weight: 700; }
+}
 @media (max-width: 767px) { .acs-admin__shell { grid-template-columns: 1fr; } .acs-admin__nav { display: none; } }

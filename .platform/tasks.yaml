@@ -2498,9 +2498,9 @@ tasks:
       - SHOP-TASK-051
     acceptance_criteria:
       - 新文件 frontend/src/api/adminStoreDesign.ts 调用 GET /api/admin/store-design?lang=<语言> 与 PUT /api/admin/store-design?lang=<语言>（同源 cookie，cache 为 no-store；PUT 带 X-CSRF-Token 为调用方给出的 csrf_token，Content-Type 为 application/json，JSON 请求体只有 theme、accent、home_blocks 与 featured_product_ids 四个字段），写法沿用 frontend/src/api/adminRefunds.ts 与 frontend/src/api/adminStockResets.ts 的现有做法
-      - 只取 SHOP-TASK-051 记录段列出的字段——读取为 theme、accent、home_blocks、featured（product_id、slug、name 或 null、published）、choices（product_id、slug、name）与 csrf_token；保存为 theme、accent、home_blocks 与 featured；响应体不合格算失败（主题不在 frontend/src/storeDesign.ts 的 THEME_ACCENTS、主色非 null 且不属于该主题、home_blocks 不是 HOME_BLOCKS 的一个排列、字段缺少或类型不对都算不合格）
+      - 只取 SHOP-TASK-051 记录段列出的字段——读取为 theme、accent、home_blocks、featured（product_id、slug、name 或 null、published）、choices（product_id、slug、name）与 csrf_token；保存为 theme、accent、home_blocks 与 featured；响应体不合格算失败（主题不在 frontend/src/storeDesign.ts 的 THEME_ACCENTS、主色非 null 且不属于该主题、home_blocks 不是 HOME_BLOCKS 的一个排列且 visible 不是布尔值、featured 超过 4 项或 product_id 重复、choices 的 product_id 重复、任一 product_id 不是正整数、slug 不是非空字符串、featured 的 name 不是字符串或 null、choices 的 name 不是字符串、published 不是布尔值、csrf_token 不是非空字符串、字段缺少或类型不对都算不合格）
       - 读取结果归为 ok、none（401）、failed 与 network；保存结果归为 ok、none（401）、csrf（403）、failed（含 422 与其他状态）与 network；调用方可传入 AbortSignal，中止时按现有模块的做法处理
-      - 用 vitest（不加测试依赖，fetch 以替身代替）在 frontend/src/api/adminStoreDesign.test.ts 验证意图——请求地址、方法、语言参数、请求头与请求体；字段与响应体不合格算失败（含属于别的主题的主色、区块重复或缺少）；各状态码的归类与网络中断；每条测试写明它守住的是 SHOP-TASK-051 记录段或 UX 的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - 用 vitest（不加测试依赖，fetch 以替身代替）在 frontend/src/api/adminStoreDesign.test.ts 验证意图——请求地址、方法、语言参数、请求头与请求体；字段与响应体不合格算失败（含属于别的主题的主色、区块重复或缺少、精选超过 4 项或重复、product_id 与 slug、name、published、csrf_token 的类型不对）；各状态码的归类与网络中断；每条测试写明它守住的是 SHOP-TASK-051 记录段或 UX 的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/TODO.md 新增 SHOP-TASK-063 记录段（请求、字段与归类、偏离、验证到什么程度，并写明页面留给 SHOP-TASK-064 到 066），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths（不改页面、路由与导航）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
     allowed_change_paths:
