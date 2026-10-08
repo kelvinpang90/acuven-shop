@@ -6,6 +6,7 @@ import type { LanguageStorage } from "./i18n/language";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminOrdersPage from "./pages/AdminOrdersPage";
 import AdminRefundsPage from "./pages/AdminRefundsPage";
+import AdminStockResetsPage from "./pages/AdminStockResetsPage";
 import CartPage from "./pages/CartPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import HomePage from "./pages/HomePage";
@@ -43,6 +44,7 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   "/admin/refunds/order/:orderId": AdminRefundsPage,
   // 退款详情与列表是同一页（桌面列表在左、详情在右，手机只显示详情）。
   "/admin/refunds/:id": AdminRefundsPage,
+  "/admin/stock-resets": AdminStockResetsPage,
 };
 
 // 后台页（以 /admin 开头的路由）不套前台的站点框架，直接渲染页面；其余页面照旧放在 SiteFrame 里。
