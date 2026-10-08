@@ -2349,35 +2349,68 @@ tasks:
     creates_branch: true
     creates_pull_request: true
 
-  # A07 库存重置结果页（/admin/stock-resets）。后端为 SHOP-TASK-052；失败文案照用（Kelvin 2026-10-07 决定，告警邮件为上线前提）。
+  # A07 库存重置结果页（/admin/stock-resets）分两步：SHOP-TASK-059 加路由、导航与页标题，SHOP-TASK-060 接列表与每日明细。后端为 SHOP-TASK-052；失败文案照用（Kelvin 2026-10-07 决定，告警邮件为上线前提）。
+  # 拆分起因：059 开启前的骨架实测（2026-10-08）发现导航加一项会让 SHOP-TASK-056 的 AdminRefundsPage.test.tsx 导航断言失效，原契约加上它超过 12 个允许路径。
   - id: SHOP-TASK-059
-    title: 后台库存重置结果 A07
+    title: 后台库存重置页的路由与导航 A07
     purpose: >-
-      实现 A07 库存重置结果页：路由 /admin/stock-resets，按日期列出每天的重置结果与 SKU 数，展开某一天显示各 SKU 的初始库存、有效预留与当日可用，调用 SHOP-TASK-052 的列表与明细接口；
-      后台导航按 UX 顺序加上库存重置。不改库存重置本身，不装依赖，不改后端，不改设计。
-      设计闸门：不适用（只读显示演示库存的重置记录）。拆分：不拆（12 个允许路径）。
+      按 docs/UX.md 0.10 的 A07 加上后台库存重置页：路由 /admin/stock-resets，用后台框架渲染，当前导航项为库存重置，内容区只有页标题与说明；
+      后台导航按 UX 顺序加上库存重置。列表与每日明细由 SHOP-TASK-060 接上。不调用接口，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只加路由、导航与静态文字）。
+      拆分：A07 拆成路由与导航（本任务，11 个允许路径）和列表与明细（SHOP-TASK-060），因为导航加一项要同时改后台框架与退款页已有的导航测试，合在一个任务里超过 12 个允许路径。
+    status: ready
+    depends_on:
+      - SHOP-TASK-056
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.10 的 A07、docs/UX-COPY.md 0.10 与 docs/HANDOFF.md 0.35、0.39 为准，样式以 docs/design/pages/ 的 A07-desktop 与 A07-phone 的页头部分为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入 docs/TODO.md 的偏离（评审不以此要求修改），不借用其他组件的类来取颜色
+      - 路由 /admin/stock-resets（frontend/src/router.tsx、frontend/src/App.tsx 与 frontend/src/router.test.tsx 各加一项），新文件 frontend/src/pages/AdminStockResetsPage.tsx 用后台框架渲染，当前导航项为库存重置（手机顶栏标题为 admin.nav_stock_resets），内容区为 h1 admin.stock_reset_title 与其下的 admin.stock_reset_note；页面不发起自己的请求（列表由 SHOP-TASK-060 接上）
+      - frontend/src/components/AdminFrame.tsx 的导航按 UX 顺序只含已上线的订单、退款与库存重置三项（桌面导航与 ☰ 菜单同样）；frontend/src/components/AdminFrame.test.tsx 只许把「只含订单与退款两项」的断言（桌面导航与手机菜单）改为按 UX 顺序只含这三项、其他 admin.nav_* 不出现；frontend/src/pages/AdminRefundsPage.test.tsx 只许把 navigation 一组里「依次为订单与退款两项」的断言改为依次为订单、退款与库存重置三项（退款仍标 aria-current="page"，手机顶栏名称仍为 admin.nav_refunds）；两个文件的其余断言不动
+      - 用 vitest 与 react-dom/server（不加测试依赖，路由以替身代替）在 frontend/src/pages/AdminStockResetsPage.test.tsx 验证意图——经路由打开页面渲染后台框架、不套前台框架；当前导航项为库存重置且三项顺序正确；标题与说明；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-059 记录段（路由、导航变化、改动的现有测试、偏离、验证到什么程度，并写明未做浏览器验收、列表与明细留给 SHOP-TASK-060），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/AdminStockResetsPage.tsx
+      - frontend/src/pages/AdminStockResetsPage.test.tsx
+      - frontend/src/components/AdminFrame.tsx
+      - frontend/src/components/AdminFrame.test.tsx
+      - frontend/src/pages/AdminRefundsPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-060
+    title: 后台库存重置结果列表与明细 A07
+    purpose: >-
+      在 SHOP-TASK-059 的库存重置页上实现 A07 的列表与明细：按日期列出每天的重置结果与 SKU 数，展开某一天显示各 SKU 的初始库存、有效预留与当日可用，
+      调用 SHOP-TASK-052 的列表与明细接口。不改路由与导航，不改库存重置本身，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只读显示演示库存的重置记录）。
+      拆分：见 SHOP-TASK-059（路由与导航先交付），本任务 9 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
     status: ready
     depends_on:
       - SHOP-TASK-052
-      - SHOP-TASK-056
+      - SHOP-TASK-059
     acceptance_criteria:
       - 页面内容与文案以 docs/UX.md 0.10 的 A07、docs/UX-COPY.md 0.10 与 docs/HANDOFF.md 0.35、0.39 为准，样式以 docs/design/pages/ 的 A07-desktop 与 A07-phone 为准，二者冲突时以 UX 文档为准并在 PR 里说明；admin.stock_reset_failed 照用（Kelvin 2026-10-07 决定）；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入 docs/TODO.md 的偏离（评审不以此要求修改），不借用其他组件的类来取颜色
-      - 路由 /admin/stock-resets（frontend/src/router.tsx、frontend/src/App.tsx 与 frontend/src/router.test.tsx 各加一项），新文件 frontend/src/pages/AdminStockResetsPage.tsx 用后台框架渲染，当前导航项为库存重置；frontend/src/components/AdminFrame.tsx 的导航按 UX 顺序只含已上线的订单、退款与库存重置三项；frontend/src/components/AdminFrame.test.tsx 只许把「只含订单与退款两项」的断言改为按 UX 顺序只含这三项、其他 admin.nav_* 不出现，其余断言不动
       - 新文件 frontend/src/api/adminStockResets.ts 调用 GET /api/admin/stock-resets?page=N 与 GET /api/admin/stock-resets/{内部 ID}（同源 cookie，cache 为 no-store），只取 SHOP-TASK-052 记录段列出的字段，响应体不合格算失败；结果归为 ok、none（401）、failed 与 network
-      - 页面：h1 admin.stock_reset_title，其下 admin.stock_reset_note；桌面表格列头 admin.col_date_myt、admin.col_result 与 admin.col_sku_count，手机为卡片；日期按界面语言显示营业日期本身（不按访客时区换算）；结果用 admin.stock_reset_ok 或 admin.stock_reset_failed 标签（样式照视觉稿）；每天的明细用原生 details 与 summary 展开（summary 文字为 admin.col_sku_count，照视觉稿；桌面放在该日表格行下方另起的一行，手机放在卡片里），首次展开时请求该日明细，每个 SKU 一行显示 SKU 与 admin.stock_reset_breakdown（{initial}、{held}、{available} 依次为初始库存、有效预留与当日可用），明细为空时展开后不显示行；翻页与没有结果时的显示沿用 SHOP-TASK-048 的做法（每页 30 条）
+      - 页面：SHOP-TASK-059 的 h1 admin.stock_reset_title 与 admin.stock_reset_note 之下，桌面表格列头 admin.col_date_myt、admin.col_result 与 admin.col_sku_count，手机为卡片；日期按界面语言显示营业日期本身（不按访客时区换算）；结果用 admin.stock_reset_ok 或 admin.stock_reset_failed 标签（样式照视觉稿）；每天的明细用原生 details 与 summary 展开（summary 文字为 admin.col_sku_count，照视觉稿；桌面放在该日表格行下方另起的一行，手机放在卡片里），首次展开时请求该日明细，每个 SKU 一行显示 SKU 与 admin.stock_reset_breakdown（{initial}、{held}、{available} 依次为初始库存、有效预留与当日可用），明细为空时展开后不显示行；翻页与没有结果时的显示沿用 SHOP-TASK-048 的做法（每页 30 条）
       - 请求进行中标 aria-busy；401 用路由的 replace 进入 /admin/login；网络中断显示 common.network_check，其他失败显示 common.error_retry（明细读取失败只在该行展开处显示）；离开页面或翻页时中止旧请求，旧请求的结果不再更新页面
-      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/api/adminStockResets.test.ts 与 frontend/src/pages/AdminStockResetsPage.test.tsx 验证意图——字段与响应体不合格算失败；表头、卡片、日期不随时区偏移、结果标签；展开时才请求明细、明细行与 breakdown 文字、空明细；翻页；401、网络中断与其他失败；导航只含三项且顺序正确；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - docs/TODO.md 新增 SHOP-TASK-059 记录段（路由、请求、列表与展开、导航变化、偏离、验证到什么程度，并写明未做浏览器验收），不改 planning-v1 块，复选框只允许 [ ] / [x]
-      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/api/adminStockResets.test.ts 与 frontend/src/pages/AdminStockResetsPage.test.tsx 验证意图——字段与响应体不合格算失败；表头、卡片、日期不随时区偏移、结果标签；展开时才请求明细、明细行与 breakdown 文字、空明细；翻页；401、网络中断与其他失败；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；SHOP-TASK-059 写的现有断言只按需要改并写明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-060 记录段（请求、列表与展开、偏离、验证到什么程度，并写明未做浏览器验收），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths（不新增路由，不改导航）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
     allowed_change_paths:
       - frontend/src/api/adminStockResets.ts
       - frontend/src/api/adminStockResets.test.ts
       - frontend/src/pages/AdminStockResetsPage.tsx
       - frontend/src/pages/AdminStockResetsPage.test.tsx
-      - frontend/src/components/AdminFrame.tsx
-      - frontend/src/components/AdminFrame.test.tsx
       - frontend/src/router.tsx
-      - frontend/src/router.test.tsx
       - frontend/src/App.tsx
       - frontend/src/i18n/copy.ts
       - frontend/src/styles/site.css
