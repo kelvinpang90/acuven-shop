@@ -2791,3 +2791,68 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # WhatsApp 联系链接的配置来源（UX Q10：配置缺失时隐藏）：SHOP-TASK-073 由服务器私有配置 SHOP_WHATSAPP_CONTACT_URL 经公开的站点设置接口提供，
+  # SHOP-TASK-074 让页脚与隐私说明 P14 在已配置时显示联系入口。仓库只记变量名，不写真实号码或链接（DESIGN 1.11「上线依赖与设计闸门」）。
+  - id: SHOP-TASK-073
+    title: 站点设置接口提供 WhatsApp 联系链接
+    purpose: >-
+      按 docs/DESIGN.md 1.11「上线依赖与设计闸门」（配置 WhatsApp 联系方式，仓库只记录变量名）与 docs/UX.md 0.10 待决问题 Q10（配置缺失时隐藏），
+      在 app/core/config.py 加 WhatsApp 联系链接的配置项，并由 SHOP-TASK-022 的公开接口 GET /api/site-settings 一并返回，供前台决定是否显示联系入口。
+      不改短信验证开关的读取与判定，不加表或迁移，不改前端，不改设计。
+      设计闸门：不适用（公司公开的联系链接，不涉及金额计算与访客个人资料）。拆分：接口层（4 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-022
+    acceptance_criteria:
+      - app/core/config.py 加配置项 whatsapp_contact_url（环境变量 SHOP_WHATSAPP_CONTACT_URL，默认空串即未配置；变量名已由登记 PR 写进 .env.example，本任务不改它）
+      - GET /api/site-settings 的响应在 sms_verification_enabled 之后加字段 whatsapp_contact_url——配置值去掉首尾空白后，协议为 https、主机部分非空、不含空白与控制字符、长度不超过 512 个字符时为该字符串，否则（含未配置）为 null；配置不合格时不报错、不写日志；接口其余行为不变（不需登录、不读写 cookie、只发 SELECT、Cache-Control 为 no-store）；模块说明随之改写
+      - tests/test_site_settings.py 只许把断言整个响应体只含 sms_verification_enabled 一个字段（含字段列表）的现有断言改为另含 whatsapp_contact_url（未配置时为 null），其余现有断言不动；并新增——已配置时原样返回、首尾空白去掉、非 https 协议、缺主机、含空白、超过 512 个字符与空串都为 null、字段顺序；每条测试写明它守住的是设计或 UX Q10 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-073 记录段（配置项、字段与校验、改动的现有测试、偏离、验证到什么程度，并写明前台显示留给 SHOP-TASK-074、真实链接由运营者在服务器私有配置填写），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - app/core/config.py
+      - app/api/site_settings.py
+      - tests/test_site_settings.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-074
+    title: 页脚与隐私说明 P14 在已配置时显示 WhatsApp 联系入口
+    purpose: >-
+      按 docs/UX.md 0.10「全局框架」的页脚、P14 的「联系」段与待决问题 Q10（配置缺失时整个按钮或整段隐藏，不显示占位文字），
+      前台读取 SHOP-TASK-073 在 GET /api/site-settings 返回的 whatsapp_contact_url，已配置时在每页页脚显示 common.whatsapp_cta 按钮、在 P14 显示「联系」段。不改后端，不装依赖，不改设计。
+      设计闸门：不适用（显示公司公开的联系链接，不涉及金额计算与访客个人资料）。
+      拆分：前端显示层（11 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-073
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.10 的「全局框架」页脚、P14 与 Q10、docs/UX-COPY.md 0.10 为准，样式以 docs/design/pages/ 的 P01-desktop、P01-phone 的页脚与 P14-desktop、P14-phone 的「联系」段为准（按钮为 acs-btn acs-btn--secondary，内含 aria-hidden 的对话气泡图形），二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入 docs/TODO.md 的偏离（评审不以此要求修改），不借用其他组件的类来取颜色
+      - frontend/src/api/siteSettings.ts 另取 whatsapp_contact_url——是协议为 https 且主机非空的绝对地址字符串时为该地址，其余（缺字段、null、其他类型或不合格）一律为 null，不因它让现有 fetchSiteSettings 失败（结账页读取开关的行为不变）；另提供供页脚与 P14 共用的读取（同一次页面加载只请求一次，取得前与失败时为 null）
+      - 页脚（frontend/src/components/SiteFrame.tsx）——链接已取得时在页脚主体之后显示 common.whatsapp_cta 按钮，链到该地址，在新标签页打开并带 rel 为 noopener noreferrer；未取得、未配置或读取失败时整个按钮不渲染（Q10），不显示占位文字或空容器；模块说明里「配置来源由之后单独登记的任务提供」一句随之改写
+      - 隐私说明 P14（frontend/src/pages/PrivacyPage.tsx）——同样在链接已取得时于现有四段之后显示「联系」段——h2 privacy.h_contact、privacy.contact 与链到该地址的 privacy.contact_button 按钮（同上新标签页与 rel）；未取得时整段不渲染；模块说明随之改写
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/api/siteSettings.test.ts、frontend/src/components/SiteFrame.test.tsx 与 frontend/src/pages/PrivacyPage.test.tsx 验证意图——字段的各种取值与不合格时为 null、开关读取不受影响；一次页面加载只请求一次；初始渲染（未取得）与未配置、失败时页脚按钮与「联系」段都不出现；已取得时按钮的文字、地址、target 与 rel、顺序与 aria-hidden 图形；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Q10 的哪一句；现有断言只按需要改并写明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-074 记录段（读取、页脚、P14、改动的现有测试、偏离、验证到什么程度，并写明未做浏览器验收、真实链接由运营者配置），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths（不新增路由）；不改 .platform/、CI、部署配置与后端；不装依赖（不改 package.json 与 package-lock.json）；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/siteSettings.ts
+      - frontend/src/api/siteSettings.test.ts
+      - frontend/src/components/SiteFrame.tsx
+      - frontend/src/components/SiteFrame.test.tsx
+      - frontend/src/pages/PrivacyPage.tsx
+      - frontend/src/pages/PrivacyPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
