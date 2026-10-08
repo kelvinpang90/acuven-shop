@@ -31,7 +31,7 @@ from datetime import date, datetime
 
 import pytest
 from sqlalchemy import Engine, create_engine, event, insert, select, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -227,6 +227,70 @@ def test_insert_colliding_with_existing_row_rolls_back_savepoint(
 
     assert counts(db) == (6, 2 * COST_MY, 0)
     assert row_count(db) == 1
+
+
+def test_other_integrity_error_on_insert_propagates(db: Session) -> None:
+    """守住验收第 1 条「撞上日期唯一约束即回滚保存点再找」只认日期冲突，
+    与验收第 2 条「MySQL 出错时异常交给调用方（调用方据此停发）」：
+    插入当日行因别的约束失败时，原 IntegrityError 抛出，不转成别的错误，
+    也不留行。
+    """
+    db.execute(
+        text(
+            "CREATE TRIGGER block_sms_usage BEFORE INSERT ON sms_daily_usage "
+            "BEGIN SELECT RAISE(ABORT, 'blocked'); END"
+        )
+    )
+    db.commit()
+
+    with pytest.raises(IntegrityError):
+        reserve_sms(db, make_settings(), PHONE_MY, NOW)
+    db.rollback()
+    assert row_count(db) == 0
+
+
+@pytest.mark.parametrize(
+    ("orig", "expected"),
+    [
+        (
+            Exception(
+                1062,
+                "Duplicate entry '2026-10-08' for key 'uq_sms_daily_usage_usage_date'",
+            ),
+            True,
+        ),
+        (
+            Exception(
+                1062,
+                "Duplicate entry '2026-10-08' for key "
+                "'sms_daily_usage.uq_sms_daily_usage_usage_date'",
+            ),
+            True,
+        ),
+        (Exception(1062, "Duplicate entry '1' for key 'sms_daily_usage.PRIMARY'"), False),
+        (Exception(3819, "Check constraint 'ck_sms_daily_usage_x' is violated."), False),
+        (Exception("UNIQUE constraint failed: sms_daily_usage.usage_date"), True),
+        (Exception("UNIQUE constraint failed: sms_daily_usage.id"), False),
+        (Exception("CHECK constraint failed: sent_count_non_negative"), False),
+    ],
+    ids=[
+        "mysql57-date-key",
+        "mysql8-date-key",
+        "mysql-other-key",
+        "mysql-check",
+        "sqlite-date",
+        "sqlite-other-unique",
+        "sqlite-check",
+    ],
+)
+def test_only_date_unique_conflict_counts_as_duplicate(orig: Exception, expected: bool) -> None:
+    """守住验收第 1 条「撞上日期唯一约束即回滚保存点再找」与验收第 2 条
+    「MySQL 出错时异常交给调用方」：只有日期唯一约束冲突（MySQL 1062 且键为
+    日期唯一键，或 SQLite 对日期列的唯一约束）被当作别人已插入，其余完整性
+    错误都不算。
+    """
+    exc = IntegrityError("INSERT INTO sms_daily_usage", {}, orig)
+    assert sms_budget._is_duplicate_date(exc) is expected
 
 
 def test_reservation_uses_destination_cost(db: Session) -> None:

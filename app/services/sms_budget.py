@@ -14,7 +14,8 @@
 UTC 16:00:00 起即马来西亚的下一天。金额一律是整数微美元。
 
 - reserve_sms：先用普通查询找当日行，没有时在保存点里插入零值行，
-  撞上日期唯一约束即回滚保存点；然后以 SELECT … FOR UPDATE 锁定该行再判断：
+  撞上日期唯一约束即回滚保存点（其他完整性错误原样抛出）；
+  然后以 SELECT … FOR UPDATE 锁定该行再判断：
   目的地按 E.164 的国家呼叫码（60 马来西亚、65 新加坡）取单次最高费用，
   未配置（0）或其他目的地为 unknown_cost；条数加 1 超过每日条数上限，
   或已预占加已结算加本次费用超过每日费用上限为 over_budget；
@@ -66,6 +67,13 @@ COUNTRY_CODE_SG = "65"
 
 # 规范化的 E.164：加号、首位非 0，共 2 到 15 位数字。
 _E164_PATTERN = re.compile(r"\+[1-9][0-9]{1,14}")
+
+# 日期唯一约束冲突的识别（约束名按 app/db/base.py 的命名约定）。
+_MYSQL_DUPLICATE_ENTRY = 1062
+_MYSQL_DATE_KEY_PATTERN = re.compile(
+    r"for key '(?:sms_daily_usage\.)?uq_sms_daily_usage_usage_date'$"
+)
+_SQLITE_DATE_UNIQUE_MESSAGE = "UNIQUE constraint failed: sms_daily_usage.usage_date"
 
 
 class SmsBudgetError(RuntimeError):
@@ -176,7 +184,8 @@ def _find(db: Session, day: date) -> int | None:
 def _insert_zero_row(db: Session, day: date) -> None:
     """在保存点里插入当日的零值行。
 
-    撞上日期唯一约束（别人已插入）时回滚保存点、不报错。
+    撞上日期唯一约束（别人已插入）时保存点已回滚、不报错；
+    其他完整性错误原样抛给调用方。
     """
     try:
         with db.begin_nested():
@@ -188,8 +197,21 @@ def _insert_zero_row(db: Session, day: date) -> None:
                     settled_micro_usd=0,
                 )
             )
-    except IntegrityError:
-        pass
+    except IntegrityError as exc:
+        if not _is_duplicate_date(exc):
+            raise
+
+
+def _is_duplicate_date(exc: IntegrityError) -> bool:
+    """完整性错误是否正是 sms_daily_usage 的日期唯一约束冲突。
+
+    MySQL（PyMySQL）：错误码 1062，键名为 uq_sms_daily_usage_usage_date
+    （8.0 起带表名前缀）。SQLite（测试）：按约束列报的固定消息。
+    """
+    args = getattr(exc.orig, "args", ())
+    if len(args) >= 2 and args[0] == _MYSQL_DUPLICATE_ENTRY:
+        return _MYSQL_DATE_KEY_PATTERN.search(str(args[1])) is not None
+    return str(exc.orig) == _SQLITE_DATE_UNIQUE_MESSAGE
 
 
 def _lock(db: Session, day: date) -> SmsDailyUsage | None:
