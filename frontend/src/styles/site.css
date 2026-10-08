@@ -345,6 +345,26 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-store-design { display: grid; gap: 16px; }
 .site-admin-store-design__note { margin: 0; padding: 10px 12px; }
 
+/* A08 的表单（A08-desktop 左栏）：各组为面板（去掉 fieldset 的外边距，内边距 18px，组内间距 12px，legend 左右内边距 4px），
+   与保存按钮上下排列（间距 16px）；主题两列（间距 8px，单选 16×16），主色一行（间距 12px）；区块每行为序号（24px）、名称、
+   显示勾选框（与文字间距 6px，16×16）与上移、下移（间距 4px）四列（间距 12px，上下内边距 8px），组内间距 4px，提示上内边距 8px；
+   保存按钮与保存后的提示同一行（间距 12px）。主题选项、色条、主色圆环与圆点的样式来自设计系统的类。
+   legend 的字重、提示的字号与区块行之间的分隔线 site.css 写不了，记在 docs/TODO.md 的偏离里 */
+.site-admin-store-design__body, .site-admin-store-design__form { display: grid; gap: 16px; }
+.site-admin-store-design__group { display: grid; gap: 12px; min-width: 0; margin: 0; padding: 18px; }
+.site-admin-store-design__group > legend { padding: 0 4px; }
+.site-admin-store-design__themes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.site-admin-store-design__themes input { width: 16px; height: 16px; }
+.site-admin-store-design__accents { display: flex; flex-wrap: wrap; gap: 12px; }
+.site-admin-store-design__blocks { gap: 4px; }
+.site-admin-store-design__block { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 8px 0; }
+.site-admin-store-design__block-name { display: contents; }
+.site-admin-store-design__show { display: flex; gap: 6px; align-items: center; }
+.site-admin-store-design__show input { width: 16px; height: 16px; }
+.site-admin-store-design__moves { display: flex; gap: 4px; }
+.site-admin-store-design__hint { padding-top: 8px; }
+.site-admin-store-design__save { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
 
@@ -622,4 +642,20 @@ a.site-admin-refunds__clear { text-decoration: none; }
      演示说明在内容区最上方，与之后各块间距 14px */
   .site-admin-store-design { gap: 14px; }
   .site-admin-store-design__title { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+  /* A08 的表单（A08-phone）：各组内边距 14px、组内间距 8px，与保存按钮间距 14px；主题单列（单选 18×18，选项行由设计系统改为 44px）；
+     主色间距 10px；区块每行为「序号 名称」、勾选框（20×20，「显示」文字只留给读屏，照 UX 手机线框「☐」）与上移、下移三列
+     （间距 8px，至少 48px 高），组内间距 2px；保存按钮占满宽度、至少 44px 高，提示在其下 */
+  .site-admin-store-design__body, .site-admin-store-design__form { gap: 14px; }
+  .site-admin-store-design__group { gap: 8px; padding: 14px; }
+  .site-admin-store-design__themes { grid-template-columns: minmax(0, 1fr); }
+  .site-admin-store-design__themes input { width: 18px; height: 18px; }
+  .site-admin-store-design__accents { gap: 10px; }
+  .site-admin-store-design__blocks { gap: 2px; }
+  .site-admin-store-design__block { grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; min-height: 48px; padding: 0; }
+  .site-admin-store-design__block-name { display: flex; gap: 4px; min-width: 0; }
+  .site-admin-store-design__show input { width: 20px; height: 20px; }
+  .site-admin-store-design__show > span { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .site-admin-store-design__save { display: grid; gap: 10px; }
+  .site-admin-store-design__save .acs-admin__btn { justify-content: center; min-height: 44px; }
 }
