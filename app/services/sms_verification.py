@@ -129,11 +129,11 @@ def send_verification(
     6. 调用服务商，按结果写记录并结算或释放，一起提交。
 
     停发写 suspended 记录（不带请求 ID，已预占的释放）并提交，返回 suspended。
-    号码须为规范化 E.164（否则抛 InvalidPhoneNumber）；用途不在 VERIFICATION_PURPOSES 里抛
-    ValueError。预占前或预占时 MySQL 出错、服务商抛出异常、第二个事务失败（含请求 ID 撞上
+    号码须为规范化 E.164（否则抛 InvalidPhoneNumber）；开关开启时用途不在
+    VERIFICATION_PURPOSES 里抛 ValueError（开关关闭时先返回 sms_disabled）。
+    预占前或预占时 MySQL 出错、服务商抛出异常、第二个事务失败（含请求 ID 撞上
     唯一约束），都抛 SmsVerificationError 交给调用方。
     """
-    _check_purpose(purpose)
     try:
         return _send(
             db,
@@ -167,6 +167,7 @@ def _send(
 ) -> SendOutcome:
     if not is_sms_verification_enabled(db):
         return SendOutcome.SMS_DISABLED
+    _check_purpose(purpose)
     if not is_sms_whitelisted(phone_e164):
         return SendOutcome.NOT_WHITELISTED
 
@@ -348,10 +349,10 @@ def verify_code(
        （仅当该记录仍为 sent 且用途仍是读取时的用途），更新不到即 no_pending；wrong_code 与
        unavailable 不改记录。
 
-    用途不在 VERIFICATION_PURPOSES 里抛 ValueError；数据库出错或服务商抛出异常时抛
+    开关开启时用途不在 VERIFICATION_PURPOSES 里抛 ValueError（开关关闭时先返回
+    sms_disabled）；数据库出错或服务商抛出异常时抛
     SmsVerificationError。
     """
-    _check_purpose(purpose)
     try:
         return _verify(db, provider, phone_e164, purpose, code, now)
     except SQLAlchemyError:
@@ -370,6 +371,7 @@ def _verify(
 ) -> VerifyResult:
     if not is_sms_verification_enabled(db):
         return VerifyResult(VerifyStatus.SMS_DISABLED)
+    _check_purpose(purpose)
     if not isinstance(code, str) or not _CODE_PATTERN.fullmatch(code):
         return VerifyResult(VerifyStatus.WRONG_CODE)
 

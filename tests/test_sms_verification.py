@@ -414,6 +414,25 @@ def test_disabled_switch_rejects_before_captcha_provider_budget_and_rate_limit(
     assert attempts(db) == []
 
 
+def test_disabled_switch_is_decided_before_purpose_check(db: Session) -> None:
+    """第 3 条：开关关闭时“所有短信发送请求……即被拒绝”；原则第 4 条：开关关闭后提交的验证码
+    不再核验。验收：开关是发送与核验的第一步，用途不合法也返回 sms_disabled 而不是抛异常。
+    """
+    set_switch(db, False)
+    fake, provider, captcha = FakeRedis(), Provider(), FakeCaptchaVerifier()
+    outcome = send(
+        db, redis_client=fake, provider=provider, captcha=captcha, purpose="not_a_purpose"
+    )
+    assert outcome is SendOutcome.SMS_DISABLED
+    assert captcha.calls == 0
+    assert provider.send_calls == 0
+    assert fake.values == {}
+    assert attempts(db) == []
+    result = verify_code(db, provider, PHONE_MY, "not_a_purpose", CODE, NOW)
+    assert result == VerifyResult(VerifyStatus.SMS_DISABLED)
+    assert provider.check_calls == 0
+
+
 def test_switch_is_read_on_each_send(db: Session) -> None:
     """原则第 4 条：“发送短信……时，服务端都按当时读取的开关值判定”。"""
     set_switch(db, True)

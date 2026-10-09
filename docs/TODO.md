@@ -1615,7 +1615,7 @@
 - 核验（`verify_code(db, provider, phone_e164, purpose, code, now) -> VerifyResult(status, attempt_id)`）：当次从数据库读取的开关关闭即 `sms_disabled`（不调用服务商）；验证码不是 4 到 10 位 ASCII 数字即 `wrong_code`（不调用服务商）；找该号码与用途 `now - 10 分钟 <= created_at <= now`、状态 `sent` 的最新记录（按创建时间、再按 ID 倒序），没有即 `no_pending`；按其请求 ID 调用服务商：`approved` 以条件更新（仅当仍为 `sent` 且用途仍是读取时的用途）改为 `approved` 并返回记录 ID，`expired` 以同样的条件更新改为 `rejected` 返回 `expired`，两者更新不到即 `no_pending`；`wrong_code` 与 `unavailable` 不改记录。只 flush、不提交。
 - 不泄露：本模块不写日志；返回值只有类别与记录 ID；异常消息固定，不含手机号、验证码、令牌与来源。
 - 偏离与取舍，请审阅（未改设计，未发现须停下的设计问题）：
-  - 用途不在 `VERIFICATION_PURPOSES` 里时两个函数都在读开关之前抛 `ValueError`（编程错误，不读库、不调用任何服务）；号码不是规范化 E.164 时由 `is_sms_whitelisted` 抛 `InvalidPhoneNumber`。
+  - 两个函数都先读开关：关闭即返回 `sms_disabled`（用途不合法也一样，不抛异常）；开关开启而用途不在 `VERIFICATION_PURPOSES` 里时抛 `ValueError`（编程错误，在白名单、人机挑战与验证码格式之前，不调用任何服务、不写记录）；号码不是规范化 E.164 时由 `is_sms_whitelisted` 抛 `InvalidPhoneNumber`。
   - 服务商返回 `accepted` 却没有请求 ID 时按 `unavailable` 停发（记录不能没有请求 ID 而为 `sent`）。SHOP-TASK-067 的适配器的 `undeliverable` 从不带请求 ID；带请求 ID 的分支按验收实现，只由测试替身覆盖。
   - 国家呼叫码以 `normalize_phone(号码, "MY").country_code` 取得（号码以加号开头，默认地区不起作用）。
   - 返回 `sms_disabled`、`not_whitelisted`、`captcha_failed`、`rate_limited` 时只读过开关，不提交也不回滚，事务由调用方结束；预占前或预占时出错、第二个事务失败时本模块也不回滚，由调用方回滚。
