@@ -35,8 +35,9 @@ Twilio Verify 对同一号码仍待核验的验证再次发起时沿用原请求
 （之前用途的待核验随之作废）。
 
 核验 check_verification：开关关闭为 sms_disabled；验证码不是 4 到 10 位
-数字为 wrong_code；找该号码与用途创建于最近 10 分钟内、状态为 sent 的
-最新记录（按创建时间：沿用请求 ID 的重发不延长有效期），没有为
+数字为 wrong_code；找该号码与用途创建于最近 10 分钟内（[now - 10 分钟,
+now]，晚于 now 的记录不算）、状态为 sent 的最新记录（按创建时间：沿用
+请求 ID 的重发不延长有效期），没有为
 no_pending；再按请求 ID 调用服务商。approved 以条件更新（仍为 sent 且
 用途未变）改为 approved，更新不到为 no_pending；expired 改为 rejected；
 wrong_code 与 unavailable 不改记录。只 flush、不提交。
@@ -327,6 +328,7 @@ def check_verification(
             VerificationAttempt.purpose == purpose,
             VerificationAttempt.status == VERIFICATION_SENT,
             VerificationAttempt.created_at >= now - CHECK_WINDOW,
+            VerificationAttempt.created_at <= now,
         )
         .order_by(VerificationAttempt.created_at.desc(), VerificationAttempt.id.desc())
         .limit(1)

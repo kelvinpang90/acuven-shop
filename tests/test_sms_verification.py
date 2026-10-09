@@ -1041,13 +1041,21 @@ def test_code_length_bounds_reach_provider(db: Session, code: str) -> None:
         pytest.param(
             timedelta(minutes=10, seconds=1), CheckOutcomeStatus.NO_PENDING, 0, id="10_min_1_s"
         ),
+        pytest.param(timedelta(0), CheckOutcomeStatus.APPROVED, 1, id="created_now"),
+        pytest.param(
+            timedelta(seconds=-1), CheckOutcomeStatus.NO_PENDING, 0, id="created_1_s_in_future"
+        ),
+        pytest.param(
+            timedelta(minutes=-5), CheckOutcomeStatus.NO_PENDING, 0, id="created_5_min_in_future"
+        ),
     ],
 )
 def test_check_window_is_ten_minutes(
     db: Session, age: timedelta, outcome_status: CheckOutcomeStatus, provider_calls: int
 ) -> None:
     """Kelvin 决定：“核验只认 10 分钟内的验证（Twilio Verify 验证码的
-    默认有效期）”。窗口外即 no_pending，不调用服务商。
+    默认有效期）”。窗口是 [now - 10 分钟, now]：早于窗口与创建时间晚于
+    当前时间的记录都不是“最近 10 分钟内”，即 no_pending，不调用服务商。
     """
     h = _sent(db, now=NOW - age)
 
