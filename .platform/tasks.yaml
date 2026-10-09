@@ -2856,3 +2856,32 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  - id: SHOP-TASK-075
+    title: 短信验证后登录或注册与认领游客订单规则
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 1、2、3 条（注册、短信登录与结账验证是同一个短信验证流程：验证通过后号码已注册则登录，未注册则创建无密码会员并登录，随后自动认领该号码近 30 天、未认领的游客订单；每个游客订单只能认领一次）
+      与「计价、优惠、积分与库存」第 3 条（认领过去游客订单不追发积分），在 SHOP-TASK-069 的核验函数与 SHOP-TASK-071 的会话签发之上实现规则函数。不做接口与 cookie，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41（会员注册登录与个人资料）。拆分：业务规则层（3 个允许路径）；接口与会话 cookie 留给之后单独登记的任务。
+    status: ready
+    depends_on:
+      - SHOP-TASK-069
+      - SHOP-TASK-071
+    acceptance_criteria:
+      - 新文件 app/services/member_sms_login.py 提供一个函数，入参为数据库会话、SHOP-TASK-067 的短信服务适配器、号码、用途、验证码与当前 UTC 时间（不带时区，写法同 app/services/member_auth.py）；用途只接受 checkout、register、login（三者是同一个流程），其余（含 reset_password、delete_account）抛 ValueError，不核验；号码不是规范化 E.164 时抛 app/services/phone.py 的 InvalidPhoneNumber，不核验、不写库；异常消息不含号码与验证码
+      - 先调用 app/services/sms_verification.py 的 verify_code；结果不是 approved（wrong_code、expired、unavailable、no_pending、sms_disabled）时原样返回该结果，不查会员、不建会员、不认领、不签发会话（开关在流程途中被关闭后不登录、不注册，由 verify_code 的 sms_disabled 保证）
+      - approved 时按号码找 status 为 active 的会员；找到即登录该会员（密码哈希不变）；找不到即创建 active、无密码哈希的会员，创建时间为当前时间；创建放在保存点里，撞上 members 的号码唯一约束（并发注册同一号码）时回到保存点，以加锁读（SELECT … FOR UPDATE，MySQL 可重复读下普通读会沿用旧快照、看不到对方刚提交的会员；SQLite 忽略加锁）改读已存在的 active 会员登录，不报错；加锁读仍找不到时按本函数自己的数据库错误处理（见下文，不建会员、不签发会话）；已注销的会员（号码已清空）不会被找到，同号重新验证创建新会员
+      - 认领以一条条件更新完成——收货电话等于该号码、claim_status 为 open、member_id 为空、created_at 在当前时间减 30 天与当前时间之间（两端都含，恰满 30 天仍认领；创建时间晚于当前时间的不认领，写法同 verify_code 的 10 分钟窗口）的订单，把 member_id 设为该会员、claim_status 改为 claimed；不论订单状态；不碰 claimed 与 not_claimable 的订单（含注销后 member_id 已清空的），同一订单不会被认领两次；不发积分、不写订单事件、不改订单状态与收货资料、不影响游客短期凭据与查单授权；每次短信验证通过都执行一次（登录与新注册相同）
+      - 认领之后用 SHOP-TASK-071 的 issue_member_session 签发会话；返回结果含核验结果、会员（repr=False）、签发的会话（repr=False）、本次认领的订单数与是否新建会员；全程只 flush、不提交，核验记录改为 approved、会员、认领与会话由调用方在同一个事务里提交；verify_code 的 SmsVerificationError 原样交给调用方，本函数自己的查会员、建会员与认领出现数据库错误时在 except 块之外抛不含号码与 SQL 参数的异常（写法同 sms_verification 的 _STORE_FAILED）；不写日志
+      - tests/test_member_sms_login.py 用 SQLite 内存库与 SHOP-TASK-067 的测试替身（照 tests/test_sms_verification.py 的写法，不加依赖）验证意图——三个用途都走同一流程、其余用途被拒且不调用服务商；各个非 approved 结果都不建会员、不认领、不签发会话；已注册号码登录原会员且密码哈希不变；未注册号码新建无密码会员；撞上号码唯一约束时以加锁读登录已存在的会员（复现方式由实现决定，例如在查找之后、插入之前另写入同号会员）；已注销会员同号重新验证得到新会员且旧会员的 claimed 订单不被再次认领；认领只取近 30 天（恰满 30 天认领、早一秒不认领、创建时间晚于当前时间的不认领）、open 且 member_id 为空、收货电话相同的订单，其他号码、claimed、not_claimable 的订单不变；第二次验证通过不重复认领；认领不发积分、不写订单事件；签发的会话能被 check_member_session 校验通过；函数返回后未提交（回滚后会员、认领与会话都不存在）；异常消息与 repr 不含号码与验证码；每条测试写明它守住的是设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-075 记录段（用途、核验、登录或注册、认领、签发与事务、偏离、验证到什么程度，并写明接口与会话 cookie 留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/sms_verification.py、app/services/member_auth.py、.platform/、CI、部署配置；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41），不合并、不直推
+    allowed_change_paths:
+      - app/services/member_sms_login.py
+      - tests/test_member_sms_login.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
