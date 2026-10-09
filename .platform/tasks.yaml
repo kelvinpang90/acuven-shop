@@ -2768,7 +2768,7 @@ tasks:
       按 docs/DESIGN.md 1.11「资料保留」第 4 条（短信验证请求及发送记录短期保留用于防滥用）与 docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（保留 30 天），
       新增定时任务：删除创建满 30 天的短信验证记录，并提供人工补跑命令。不改表与迁移，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41（个人资料保留期）。拆分：定时任务层（6 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-012
       - SHOP-TASK-042
