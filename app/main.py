@@ -18,6 +18,7 @@ from app.api.pay import router as pay_router
 from app.api.refunds import router as refunds_router
 from app.api.regions import router as regions_router
 from app.api.site_settings import router as site_settings_router
+from app.api.sms import router as sms_router
 from app.api.store_design import router as store_design_router
 from app.core.config import Settings, get_settings
 
@@ -37,6 +38,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(pay_router)
     app.include_router(order_lookup_router)
     app.include_router(refunds_router)
+    app.include_router(sms_router)
     app.include_router(admin_auth_router)
     app.include_router(admin_orders_router)
     app.include_router(admin_refunds_router)
