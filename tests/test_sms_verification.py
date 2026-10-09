@@ -42,6 +42,7 @@ from datetime import date, datetime, timedelta
 import pytest
 import redis
 from sqlalchemy import Engine, create_engine, event, insert, select, text, update
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -67,6 +68,7 @@ from app.services.sms_verification import (
     BUCKET_PHONE_MINUTE,
     BUCKET_SOURCE_HOUR,
     SendOutcome,
+    SmsVerificationError,
     VerifyResult,
     VerifyStatus,
     send_verification,
@@ -370,6 +372,13 @@ def track_releases(monkeypatch: pytest.MonkeyPatch) -> list[object]:
 
     monkeypatch.setattr(sms_verification, "release_sms", _release)
     return calls
+
+
+def assert_sanitized(exc: BaseException) -> None:
+    """异常消息不含号码、验证码、令牌与来源，也不挂原异常（异常链里可能带着它们）。"""
+    for text_value in (PHONE_MY, PHONE_MY[1:], CODE, TOKEN, SOURCE):
+        assert text_value not in str(exc) and text_value not in repr(exc)
+    assert exc.__cause__ is None and exc.__context__ is None
 
 
 def guest_allowed(db: Session, phone: str, now: datetime) -> bool:
@@ -709,17 +718,18 @@ def test_undeliverable_with_request_id_settles(db: Session, enabled: None) -> No
 
 def test_reservation_is_committed_before_provider_call(db: Session, enabled: None) -> None:
     """第 4 条“防 Redis 重置后超过日上限”；验收：预占成功即先提交，之后的步骤抛出异常时
-    每日上限仍然计入。服务商被调用时会话已不在事务里；服务商抛异常时交给调用方，
-    回滚后预占仍为 reserved，没有记录。
+    每日上限仍然计入。服务商被调用时会话已不在事务里；服务商抛异常时交给调用方（换成
+    不含号码、不挂原异常的 SmsVerificationError），回滚后预占仍为 reserved，没有记录。
     """
     seen: list[bool] = []
 
     def _raise() -> None:
         seen.append(db.in_transaction())
-        raise RuntimeError("provider exploded")
+        raise RuntimeError(f"provider exploded for {PHONE_MY}")
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(SmsVerificationError) as excinfo:
         send(db, provider=Provider(on_send=_raise))
+    assert_sanitized(excinfo.value)
     assert seen == [False]
     db.rollback()
     assert usage(db) == (1, COST_MY, 0)
@@ -730,7 +740,8 @@ def test_second_transaction_failure_keeps_reservation(
     db: Session, enabled: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """验收：第二个事务提交失败时异常交给调用方，已提交的预占保留为 reserved（保守计入
-    每日上限），不重试；这次没有记录。异常消息不含号码。
+    每日上限），不重试；这次没有记录。数据库异常的消息带着 SQL 参数里的完整号码，交给
+    调用方的是消息固定、不挂原异常的 SmsVerificationError。
     """
     original = db.commit
     commits: list[int] = []
@@ -738,14 +749,63 @@ def test_second_transaction_failure_keeps_reservation(
     def _commit() -> None:
         commits.append(1)
         if len(commits) == 2:
-            raise RuntimeError("commit failed")
+            raise OperationalError("COMMIT", {"phone": PHONE_MY}, Exception("lost connection"))
         original()
 
     monkeypatch.setattr(db, "commit", _commit)
-    with pytest.raises(RuntimeError) as excinfo:
+    with pytest.raises(SmsVerificationError) as excinfo:
         send(db)
-    assert PHONE_MY not in str(excinfo.value)
+    assert_sanitized(excinfo.value)
     assert len(commits) == 2
+    db.rollback()
+    assert usage(db) == (1, COST_MY, 0)
+    assert attempts(db) == []
+
+
+def test_request_id_unique_conflict_on_insert_is_sanitized(
+    db: Session, enabled: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """验收：两次并发发送都没读到同一请求 ID 的记录、插入时撞上请求 ID 唯一约束时不重读、
+    不重试，异常交给调用方，已提交的预占保留为 reserved，这次没有记录；手机号不出现在
+    异常消息里。另一次发送在本次读过之后、插入之前写入同一请求 ID（以会话的
+    before_flush 事件在插入前直接写库模拟）；SQLAlchemy 的 IntegrityError 消息带着 INSERT
+    参数中的完整号码，交给调用方的是不含号码、不挂原异常的 SmsVerificationError。
+    """
+    done: list[int] = []
+
+    @event.listens_for(db, "before_flush")
+    def _concurrent_insert(session, _flush_context, _instances) -> None:
+        pending = [o for o in session.new if isinstance(o, VerificationAttempt)]
+        if not done and any(o.provider_request_id == RID_A for o in pending):
+            done.append(1)
+            session.connection().execute(
+                insert(VerificationAttempt).values(
+                    phone=PHONE_SG,
+                    purpose="login",
+                    status="sent",
+                    provider_request_id=RID_A,
+                    created_at=NOW,
+                    updated_at=NOW,
+                )
+            )
+
+    calls: list[str] = []
+    original = sms_verification._send
+
+    def _spy(*args: object) -> SendOutcome:
+        try:
+            return original(*args)
+        except IntegrityError as exc:
+            # 原异常确实带着号码，这条测试才有意义。
+            calls.append(str(exc))
+            raise
+
+    monkeypatch.setattr(sms_verification, "_send", _spy)
+    with pytest.raises(SmsVerificationError) as excinfo:
+        send(db, provider=Provider(SendResult(SendStatus.ACCEPTED, RID_A)))
+    assert done == [1]
+    assert len(calls) == 1 and PHONE_MY in calls[0]
+    assert_sanitized(excinfo.value)
     db.rollback()
     assert usage(db) == (1, COST_MY, 0)
     assert attempts(db) == []
@@ -1067,6 +1127,34 @@ def test_errors_do_not_contain_phone_or_code(db: Session, enabled: None) -> None
     outcome = send(db, now=NOW + timedelta(hours=1))
     for text_value in (PHONE_MY, TOKEN, SOURCE):
         assert text_value not in repr(outcome)
+
+
+def test_verify_database_and_provider_errors_are_sanitized(
+    db: Session, enabled: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """验收：手机号与验证码不出现在异常消息里。核验时数据库出错（异常消息带着 SQL 参数
+    里的完整号码）或服务商抛出异常（消息里带着验证码）时，交给调用方的是消息固定、
+    不挂原异常的 SmsVerificationError；记录不变。
+    """
+    add_attempt(db)
+
+    def _raise() -> None:
+        raise RuntimeError(f"check failed for {PHONE_MY} with {CODE}")
+
+    with pytest.raises(SmsVerificationError) as excinfo:
+        verify_code(db, Provider(on_check=_raise), PHONE_MY, "login", CODE, NOW)
+    assert_sanitized(excinfo.value)
+
+    def _fail(*_args: object, **_kwargs: object) -> None:
+        raise OperationalError("SELECT", {"phone": PHONE_MY}, Exception("lost connection"))
+
+    monkeypatch.setattr(db, "execute", _fail)
+    with pytest.raises(SmsVerificationError) as excinfo:
+        verify_code(db, Provider(), PHONE_MY, "login", CODE, NOW)
+    assert_sanitized(excinfo.value)
+    monkeypatch.undo()
+    db.rollback()
+    assert attempts(db) == [(PHONE_MY, "login", "sent", RID_A, FIVE_MINUTES_AGO, FIVE_MINUTES_AGO)]
 
 
 def test_no_log_records(db: Session, enabled: None, caplog: pytest.LogCaptureFixture) -> None:

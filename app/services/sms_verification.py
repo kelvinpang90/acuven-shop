@@ -18,7 +18,10 @@ Kelvin 2026-10-08 决定（标准档限流；人机挑战服务本身不可用�
 核验 verify_code 只 flush、不提交，由调用方（登录、注册与重设）与之后的步骤一起提交。
 
 时间一律是不带时区的 UTC。接口、登录、注册与认领不在这里。
-本模块不写日志；手机号、验证码、令牌与来源不出现在异常消息与返回值里。
+本模块不写日志；手机号、验证码、令牌与来源不出现在异常消息与返回值里。数据库异常（如请求 ID
+撞上唯一约束时的 IntegrityError，消息里带 INSERT 参数中的完整号码）与服务商调用抛出的异常
+都换成消息固定的 SmsVerificationError 交给调用方，且不挂原异常（__cause__ 与 __context__
+都为空）；会话须由调用方回滚。
 """
 
 from __future__ import annotations
@@ -30,6 +33,7 @@ from enum import StrEnum
 
 import redis
 from sqlalchemy import select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
@@ -65,6 +69,13 @@ BUCKET_COUNTRY_DAY = "sms_country_day"
 _MINUTE = 60
 _HOUR = 3600
 _DAY = 86400
+
+_STORE_FAILED = "sms verification storage failed"
+_PROVIDER_FAILED = "sms provider call failed"
+
+
+class SmsVerificationError(RuntimeError):
+    """数据库或服务商调用失败。消息固定，不含号码、验证码、令牌与来源，也不挂原异常。"""
 
 
 class SendOutcome(StrEnum):
@@ -119,9 +130,41 @@ def send_verification(
 
     停发写 suspended 记录（不带请求 ID，已预占的释放）并提交，返回 suspended。
     号码须为规范化 E.164（否则抛 InvalidPhoneNumber）；用途不在 VERIFICATION_PURPOSES 里抛
-    ValueError。预占前或预占时 MySQL 出错、服务商抛出异常、第二个事务失败，都把异常交给调用方。
+    ValueError。预占前或预占时 MySQL 出错、服务商抛出异常、第二个事务失败（含请求 ID 撞上
+    唯一约束），都抛 SmsVerificationError 交给调用方。
     """
     _check_purpose(purpose)
+    try:
+        return _send(
+            db,
+            settings,
+            redis_client,
+            provider,
+            captcha,
+            phone_e164,
+            purpose,
+            captcha_token,
+            source,
+            now,
+        )
+    except SQLAlchemyError:
+        pass
+    # 在 except 块之外抛出，不挂带着 SQL 参数（含完整号码）的原异常。
+    raise SmsVerificationError(_STORE_FAILED)
+
+
+def _send(
+    db: Session,
+    settings: Settings,
+    redis_client: redis.Redis | None,
+    provider: SmsProvider,
+    captcha: CaptchaVerifier,
+    phone_e164: str,
+    purpose: str,
+    captcha_token: str | None,
+    source: str,
+    now: datetime,
+) -> SendOutcome:
     if not is_sms_verification_enabled(db):
         return SendOutcome.SMS_DISABLED
     if not is_sms_whitelisted(phone_e164):
@@ -149,7 +192,7 @@ def send_verification(
     db.commit()
     reservation = reserved.reservation
 
-    result = provider.start_verification(phone_e164)
+    result = _start_verification(provider, phone_e164)
     if result.status is SendStatus.ACCEPTED and result.request_id is not None:
         return _record_provider_request(
             db, phone_e164, purpose, result, VERIFICATION_SENT, reservation, now
@@ -165,6 +208,24 @@ def send_verification(
         )
     # unavailable（受理却没有请求 ID 也按此处理，记录不能没有请求 ID 而为 sent）。
     return _suspend(db, phone_e164, purpose, reservation, now)
+
+
+def _start_verification(provider: SmsProvider, phone_e164: str) -> SendResult:
+    """调用服务商发起验证；抛出的异常换成不挂原异常的 SmsVerificationError。"""
+    try:
+        return provider.start_verification(phone_e164)
+    except Exception:
+        pass
+    raise SmsVerificationError(_PROVIDER_FAILED)
+
+
+def _check_verification(provider: SmsProvider, request_id: str, code: str) -> CheckStatus:
+    """按请求 ID 核验；抛出的异常换成不挂原异常的 SmsVerificationError。"""
+    try:
+        return provider.check_verification(request_id, code)
+    except Exception:
+        pass
+    raise SmsVerificationError(_PROVIDER_FAILED)
 
 
 def _hit_rate_limits(client: redis.Redis, settings: Settings, phone_e164: str, source: str) -> bool:
@@ -287,9 +348,26 @@ def verify_code(
        （仅当该记录仍为 sent 且用途仍是读取时的用途），更新不到即 no_pending；wrong_code 与
        unavailable 不改记录。
 
-    用途不在 VERIFICATION_PURPOSES 里抛 ValueError。
+    用途不在 VERIFICATION_PURPOSES 里抛 ValueError；数据库出错或服务商抛出异常时抛
+    SmsVerificationError。
     """
     _check_purpose(purpose)
+    try:
+        return _verify(db, provider, phone_e164, purpose, code, now)
+    except SQLAlchemyError:
+        pass
+    # 在 except 块之外抛出，不挂带着 SQL 参数（含完整号码）的原异常。
+    raise SmsVerificationError(_STORE_FAILED)
+
+
+def _verify(
+    db: Session,
+    provider: SmsProvider,
+    phone_e164: str,
+    purpose: str,
+    code: str,
+    now: datetime,
+) -> VerifyResult:
     if not is_sms_verification_enabled(db):
         return VerifyResult(VerifyStatus.SMS_DISABLED)
     if not isinstance(code, str) or not _CODE_PATTERN.fullmatch(code):
@@ -310,7 +388,7 @@ def verify_code(
     if pending is None or pending.provider_request_id is None:
         return VerifyResult(VerifyStatus.NO_PENDING)
 
-    checked = provider.check_verification(pending.provider_request_id, code)
+    checked = _check_verification(provider, pending.provider_request_id, code)
     if checked is CheckStatus.APPROVED:
         if not _finish(db, pending.id, purpose, VERIFICATION_APPROVED, now):
             return VerifyResult(VerifyStatus.NO_PENDING)
