@@ -2739,7 +2739,7 @@ tasks:
       按 docs/DESIGN.md 1.11「权限与资料保护」第 3 条（会话到期、退出与服务端授权检查；未设密码与密码错误返回相同的通用失败）与 docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（会话 30 天不续期、同一号码加来源 15 分钟内失败 5 次锁 15 分钟），
       仿照 app/services/admin_auth.py 实现会员会话的签发、校验、撤销、CSRF 与密码登录锁定规则函数，在 SHOP-TASK-012 的 MemberSession 表上。不做接口与 cookie，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41（会员登录与个人资料）。拆分：业务规则层（3 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-012
       - SHOP-TASK-035
