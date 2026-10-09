@@ -2885,3 +2885,34 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  - id: SHOP-TASK-076
+    title: 短信登录或注册接口、会员会话与退出
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 3 条（注册、短信登录与结账验证是同一个短信验证流程；会话到期、退出与服务端授权检查）与第 5 条（会话以服务端会话实现，经 HttpOnly、Secure、SameSite=Lax 的 cookie 交给浏览器，写操作另须 CSRF 令牌），
+      以及 docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（会员会话 30 天、不随使用延长），提供短信登录或注册、读取当前会员会话与退出三个接口，并提供之后会员接口共用的会话与 CSRF 依赖。
+      调用 SHOP-TASK-075 的规则函数，不做密码登录、设置与重设密码、注销与前端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41（会员登录与个人资料）。拆分：接口层（4 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-070
+      - SHOP-TASK-075
+    acceptance_criteria:
+      - 新文件 app/api/member_auth.py（app/main.py 挂上路由）在 /api/member 下提供 POST /api/member/sms-login、GET /api/member/session、POST /api/member/logout；路由器用 SHOP-TASK-027 的 _NoStoreRoute，处理函数与依赖产生的响应（含错误）都带 Cache-Control 为 no-store；路径存在但方法不匹配时由框架返回的 405 不含请求内容与个人资料，不在此列；写法照 app/api/admin_auth.py 与 app/api/sms.py
+      - 会话 cookie 名为 __Host-shop_member_session，值为 SHOP-TASK-071 签发的令牌原文，带 HttpOnly、Secure、SameSite=Lax、Path=/、不设 Domain，Max-Age 为 SHOP-TASK-071 的 SESSION_LIFETIME 的秒数；退出时以相同属性清除；cookie 值与令牌不出现在响应体、日志与错误回显里
+      - POST /api/member/sms-login 的检查顺序沿用 app/api/sms.py——413（请求体逐块读，超过 4 KB，先于一切）→ 415（不是 JSON）→ 422（结构）；请求体只有 phone、phone_region（规范化方式与 POST /api/sms/send 相同，经 normalize_phone）、purpose（checkout、register、login 之一）与 code（1 到 16 个字符的字符串，是否为 4 到 10 位数字由核验函数判断），都必填、严格类型、多出字段 422；422 不回显请求内容，沿用 app/api/pay.py 的 _body_errors；号码不成立为 422，类型 phone_invalid；短信服务适配器经 SHOP-TASK-067 的 get_sms_provider 注入（测试中覆盖为替身）
+      - sms-login 的结果到响应——approved 时提交（核验记录、会员、认领与会话在同一个事务里）后设置 cookie，200 {"created":<是否新建会员>}，不返回号码、会员 ID 与认领数；wrong_code 为 422 code_wrong；expired 与 no_pending 都为 422 code_expired（须重新发送）；unavailable 为 503 sms_unavailable；sms_disabled 为 403 sms_disabled；非 approved 时也先提交（核验函数可能已把记录改为 rejected）再回答，且不设置 cookie；核验或本流程出现数据库错误（含 SmsVerificationError 与提交失败）时回滚，503 sms_unavailable，不设置 cookie；错误体为 {"detail":"<错误码>"}；数据库未配置时照 app/db/session.py 的 get_session 现有回答；请求已带会员会话 cookie 时照常处理并以新会话覆盖 cookie
+      - 依赖 require_member（按 cookie 用 check_member_session 取当前会话与会员，不通过即 401 member_session_required，不区分会话不存在、已撤销、已到期或会员已注销；只读、不延长会话；不受短信验证开关影响）与 require_member_csrf（X-CSRF-Token 请求头恰好一个且与由 cookie 算出的值一致，否则 403 csrf_failed），供之后的会员接口使用；GET /api/member/session 返回 {"phone_masked","has_password","expires_at","csrf_token"}——phone_masked 保留号码前 3 个字符与最后 4 个字符、中间每个字符换成星号，has_password 为是否已设密码，expires_at 为带时区的 UTC 时间（写法同 GET /api/admin/session）；POST /api/member/logout 先过 require_member_csrf，撤销当前会话、提交、清除 cookie，204；CSRF 不通过时不撤销
+      - tests/test_member_auth_api.py 用 TestClient、SQLite 内存库与 SHOP-TASK-067 的测试替身（照 tests/test_sms_api.py 与 tests/test_admin_auth_api.py 的写法，不加依赖）验证意图——413、415、422 的顺序与不回显；三种用途登录已注册号码与注册新号码（created 的真假、会员与认领确实已提交）；每个非 approved 结果的状态码与错误体、不设 cookie、不建会员（expired 时记录已提交为 rejected）；数据库错误时回滚且不设 cookie；cookie 的名称与各属性；session 接口的四个字段与号码遮盖、各种不通过的情形同为 401；短信验证开关关闭后已建立的会话仍可读取；退出要求 CSRF，缺失、错误或多个请求头都 403 且会话仍有效，通过后会话已撤销、cookie 已清除；no-store；响应体与错误不含号码原文、令牌与验证码；每条测试写明它守住的是设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-076 记录段（接口、cookie、字段、结果与状态码、共用依赖、偏离、验证到什么程度，并写明密码登录、设置与重设密码、注销与前端留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41），不合并、不直推
+    allowed_change_paths:
+      - app/api/member_auth.py
+      - app/main.py
+      - tests/test_member_auth_api.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
