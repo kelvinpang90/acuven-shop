@@ -26,11 +26,9 @@
 
 <!-- openclaw:planning-v1:begin -->
 ### 当前计划
-1. `SHOP-TASK-072` 短信验证记录满 30 天删除
-2. `SHOP-TASK-073` 站点设置接口提供 WhatsApp 联系链接
-3. `SHOP-TASK-074` 页脚与隐私说明 P14 在已配置时显示 WhatsApp 联系入口
-4. `SHOP-TASK-075` 短信验证后登录或注册与认领游客订单规则
-5. `SHOP-TASK-076` 短信登录或注册接口、会员会话与退出
+1. `SHOP-TASK-074` 页脚与隐私说明 P14 在已配置时显示 WhatsApp 联系入口
+2. `SHOP-TASK-075` 短信验证后登录或注册与认领游客订单规则
+3. `SHOP-TASK-076` 短信登录或注册接口、会员会话与退出
 
 ### 已阻塞
 - 待登记：短信验证组件 V1 与结账会员路径（马新号码验证、自动注册或登录、优惠券与积分；会员访问 P06、P07）｜阻塞：依赖短信验证服务、会员注册登录接口、优惠券与积分账本
@@ -1652,3 +1650,34 @@
   - 号码不出现在异常消息与 repr 里；`authenticate_member` 与 `check_member_session` 返回的 `Member` 对象本身带号码列（签发会话要用会员），由调用方不把它写进回答或日志。
 - 留给之后的任务：会员登录接口任务（之后登记）负责会话 cookie 的名称与属性、按 `client_source` 取来源、把号码按 `normalize_phone` 规范化、接口的回答与状态码、退出接口；设置与重设密码任务调用 `password_length_ok` 与 `pw_hash.hash_password`，重设后调用 `revoke_all_member_sessions`；会员注销任务调用 `revoke_all_member_sessions`。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.11 第 3、6 条与 HANDOFF 0.41 的 Kelvin 2026-10-08 决定原句自查。`tests/test_member_auth.py`（SQLite 内存库、每个连接开启外键检查；照 `tests/test_admin_auth.py` 写的内存替身 `FakeRedis`，不连真 Redis、不加依赖；每条测试的文档字符串写明守住的设计原句、Kelvin 决定或验收条目）覆盖：签发后可校验并返回会话与会员；到期前一秒通过、30 天时刻起不通过、反复校验不延长；库里只有另算的摘要、任何列都不含令牌或 CSRF 令牌；令牌互不相同；已注销会员不能签发、签发后注销的会话不再通过；撤销单个（行保留、再撤销不改时间、另一会话不受影响）与撤销全部（返回条数、已撤销的保留原时间、其他会员不受影响）；调用方回滚时签发与撤销都不生效；8 种格式不合法的 cookie 不发任何 SQL；库里没有的令牌不通过；带时区的时间被拒；CSRF 令牌等于另算的带前缀摘要、与后台和订单访问的两两不同且后两者不能用于会员、错误或缺失或属于另一会话时不通过；正确密码通过；号码未注册、未设密码、密码错误三种失败都返回 `None` 且各恰好调用一次哈希校验（前两种用假哈希），注销后的号码同未注册；密码长度 7 个字符拒绝、8 个字符（含非 ASCII）通过；第 5 次失败返回刚锁定、第 6 次不再返回；锁定期间正确密码被拒且不校验密码、15 分钟后错误密码照常不通过而正确密码通过；锁定期间再计入不延长锁定；中间夹着成功登录照样累计；窗口过后不累计；按来源与号码组合锁定；并发两次失败只报一次刚锁定；IPv6 来源不相混；计数键为另算的 JSON 标识摘要且不含来源与号码；会员锁定不影响后台锁定；6 种不是规范化 E.164 的号码被拒且消息不含号码；替身在读与事务执行时抛连接错误都抛不可用异常且消息不含号码与来源；签发与校验结果的 repr 不含令牌、CSRF 令牌、号码或密码哈希；不产生 `app.` 下的日志。未连真 Redis 或真 MySQL。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-072 短信验证记录满 30 天删除
+
+- [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「资料保留」第 4 条（短信验证请求及发送记录短期保留用于防滥用）、「失败、并发与重试」第 6 条（定时任务可重复运行、只生效一次；失败有告警与人工补跑办法）与 `docs/HANDOFF.md` 0.41 记录的 Kelvin 2026-10-08 决定（4）（短信验证记录含完整手机号保留 30 天后删除），在 SHOP-TASK-031 的定时任务运行器里加一个任务并提供手动执行一次的子命令：新文件 `app/services/sms_retention.py`；改 `app/jobs.py`；测试见新文件 `tests/test_sms_retention.py`。未加表或迁移，未改设计、`.platform/`、CI、Dockerfile、`docker-compose.yml` 或部署配置，未装依赖。设计闸门：DESIGN 1.11（提交 `2d13250`）与 HANDOFF 0.41（个人资料保留期）。拆分：定时任务层（6 个允许路径）。
+- 删除规则（`app/services/sms_retention.py` 的 `delete_expired_verifications(db, now, limit)`，`now` 是不带时区的 UTC，返回删除条数）：删除 `verification_attempts` 里 `created_at` 不晚于 `now` 减 30 天（`VERIFICATION_RETENTION` = 30×24 小时；恰满 30 天即删除，差一秒保留）的行，不分状态与用途。每次最多 `limit` 条，按创建时间从早到晚、同一时间按 ID 从小到大；先读出候选 ID，再按 ID 删除（删除语句再带一次时间条件），然后提交；没有候选时回滚只读事务，`limit` 为 0 或负数时不查询、返回 0。函数返回时不留未结束的事务。可重复运行：已删除的行不再是候选，重复执行只删除新到期的行。只删 `verification_attempts`，不碰 `sms_daily_usage`、会员、会员会话与订单；没有别的表引用 `verification_attempts`。
+- 运行器（`app/jobs.py`）：`delete_verifications_job()` 名为 `delete_expired_verifications`，以 `own_transactions=True` 注册（服务删除一批后自己提交）；单轮上限 `VERIFICATION_DELETE_BATCH_LIMIT` 等于 `CANCEL_BATCH_LIMIT`（100）。`default_jobs()` 依次为超时取消、每日库存重置、自动确认收货、删除短信验证记录。日志沿用运行器：有删除时记 `job delete_expired_verifications done: <条数> changed`，失败记 `job delete_expired_verifications failed: <异常类名>`，不记录手机号。模块说明的依据、用法、任务列表、事务与日志几段补上了这项任务与命令。
+- 手动补跑：`docker compose exec shop_jobs python -m app.jobs delete-verifications`（`shop_jobs` 不在时可用 `docker compose run --rm --no-deps shop_jobs python -m app.jobs delete-verifications`）。执行一次（同一上限 100 条）后退出，退出码与日志写法沿用 `complete-shipped`：成功 0（日志总是记一条 `done`，含 0 条）；任务失败 1；未配置 `SHOP_DATABASE_URL` 2。删除条数等于 100 时可能还有剩余，可再执行一次；重复执行不出错。`shop_jobs` 容器沿用 `run` 子命令，部署不用改。
+- 改动的现有测试（只按验收改）：`tests/test_jobs.py` 的 `test_default_jobs_use_the_fixed_round_limit` 默认任务名列表加上 `delete_expired_verifications`；`test_database_unavailable_is_logged_by_class_name_only` 每轮多一个任务，会话工厂不可用时每轮多开一次会话、多记一条失败日志，所以两轮的开会话次数由 6 改为 8、每轮的失败日志加上 `job delete_expired_verifications failed: OperationalError`（注释写明原因），断言意图不变。`tests/test_auto_complete.py` 的 `test_job_is_registered_after_existing_jobs_with_own_transactions` 默认任务名列表加上 `delete_expired_verifications`（注释写明 `default[-1]` 现在检查的是这项）；`default[-1].own_transactions` 与 `jobs.auto_complete_job().own_transactions` 两条断言原样保留。其余现有断言未动。
+- 偏离与取舍，请审阅（未改设计，未发现须停下的设计问题）：
+  - 设计「失败、并发与重试」写的是「使用操作标识保证只生效一次」（点名每日库存重置与积分过期）。本任务不许加表；删除本身天然只生效一次（已删除的行不再是候选），不另记操作标识。
+  - 30 天按 30×24 小时、以库里不带时区的 UTC 比较，不按马来西亚日期切日。
+  - 每轮只删一批（100 条）；短信每日上限 200 条时，每分钟一轮足以追上，积压时由之后各轮或补跑命令继续。
+  - 会员注销不连带删除该号码的验证记录（不在本任务范围）；它们照样满 30 天后由本任务删除。
+  - 共享备份中的验证记录不在本任务范围，按「资料保留」的备份边界另行处理。
+- 留给之后的任务：运营告警邮件接入任务失败告警（在那之前按 SHOP-TASK-031 以容器不健康体现）。
+- 验证到什么程度：人工逐条对照验收标准、DESIGN 1.11 原句与 HANDOFF 0.41 的 Kelvin 2026-10-08 决定自查。`tests/test_sms_retention.py` 用 SQLite 内存库（引擎设置与 `tests/test_auto_complete.py` 相同）按模型建表，直接写验证记录、会员、会员会话、短信每日用量与订单，每条测试的文档字符串写明它守住的设计原句、Kelvin 决定或验收约定，覆盖：恰满 30 天与更早的删除；差一秒的保留、一秒后照常删除；五种状态乘五种用途一律按时间删除（满的删、未满的留）；除 `verification_attempts` 外每张表的每一行不变（含与被删记录同一号码的会员及其会话）；每批上限与删除顺序（ID 与时间先后故意相反）；默认上限等于 `CANCEL_BATCH_LIMIT`（上限加一条时一次删上限条、下一次删剩下的一条）；重复执行不出错、返回 0、不留未结束的事务；上限 0；任务名、排在已有三项之后、`own_transactions=True`；运行器一轮删除、第二轮不再记日志，日志不含手机号；`delete-verifications` 成功 0（两次执行，日志只有任务名与条数、不含手机号）、失败 1（日志只有任务名与异常类名，不含连接信息或手机号）、未配置 2、经 `main` 走 SHOP_DATABASE_URL 与会话工厂（未建表的内存库失败 1、日志不含连接串）。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。未在真 MySQL 上验证删除语句与并发；未起容器实际执行子命令。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-073 站点设置接口提供 WhatsApp 联系链接
+
+- [x] 按 `docs/DESIGN.md` 1.11「上线依赖与设计闸门」（配置 WhatsApp 联系方式，仓库只记录变量名）与 `docs/UX.md` 0.10 待决问题 Q10（配置缺失时隐藏 WhatsApp 按钮，不显示占位文字），给 SHOP-TASK-022 的公开接口 `GET /api/site-settings` 加上 WhatsApp 联系链接：改 `app/core/config.py`、`app/api/site_settings.py`；测试见 `tests/test_site_settings.py`。未改短信验证开关的读取与判定，未加表或迁移，未改 `.env.example`（变量名已由登记 PR 写入）、前端、设计、`.platform/`、CI 或部署配置，未装依赖。设计闸门：不适用（公司公开的联系链接，不涉及金额计算与访客个人资料）。拆分：接口层（4 个允许路径）。
+- 配置项：`Settings.whatsapp_contact_url`（环境变量 `SHOP_WHATSAPP_CONTACT_URL`），默认空串即未配置。
+- 字段与校验：响应在 `sms_verification_enabled` 之后加 `whatsapp_contact_url`（`str | None`），即 `{"sms_verification_enabled": <布尔>, "whatsapp_contact_url": <字符串或 null>}`。取值由 `app/api/site_settings.py` 的 `whatsapp_contact_url(configured)` 算出：配置值去掉首尾空白（`str.strip()`）后，非空、不超过 512 个字符（`WHATSAPP_CONTACT_URL_MAX_LENGTH`，按字符计）、没有任何空白字符（`str.isspace()`，含全角空格）与控制字符（Unicode 类别 `Cc`，含 NUL、DEL、CR、LF）、经 `urllib.parse.urlsplit` 解析协议为 `https` 且 `hostname` 非空时返回去掉空白后的字符串，否则（含未配置、`urlsplit` 抛 `ValueError`）返回 `null`。配置不合格时不报错、不写日志。配置值每次请求从 `request.app.state.settings` 取，不查库；接口其余行为不变（不需登录、不读写 cookie、只发开关的那条 SELECT、`Cache-Control: no-store`、写方法 405、未配置数据库时 503）。模块说明改写为两个字段各自的用途与依据。
+- 改动的现有测试（只按验收改）：`test_endpoint_follows_the_stored_switch` 的四处、`test_endpoint_returns_only_the_switch_with_no_store` 的整体相等与字段列表、`test_endpoint_needs_no_login_sets_no_cookie_and_only_reads` 的整体相等，这些断言都在断言整个响应体只含 `sms_verification_enabled`，现改为另含 `"whatsapp_contact_url": None`（字段列表改为两项）；`test_endpoint_returns_only_the_switch_with_no_store` 的文档字符串随之改为两个字段。测试模块说明补上 DESIGN「上线依赖与设计闸门」与 UX Q10 的依据。其余现有断言未动。
+- 偏离与取舍，请审阅（未改设计，未发现须停下的设计问题）：
+  - 协议比较不分大小写（`urlsplit` 本身把协议转成小写，`HTTPS://…` 视为 https），返回的是去掉空白后的原字符串，不做规范化。
+  - 「主机部分非空」按 `urlsplit(...).hostname` 判断：只有端口（`https://:443/…`）、只有用户信息（`https://user@/…`）、没有 `//`（`https:host`）都算缺主机；不校验主机是否像域名，也不限定 `wa.me` 等具体主机，以便运营者填任意 WhatsApp 联系链接。
+  - 只拒 `Cc` 类控制字符与空白；不拒其他不可见的格式字符（如 U+200B，验收未要求）。
+  - 512 个字符按去掉首尾空白后的长度计。
+  - 测试里的链接一律用 `chat.example.com`，仓库不出现真实号码或主机。
+- 留给之后的任务：前台页脚与隐私说明 P14 在已配置时显示 WhatsApp 联系入口、未配置时隐藏（SHOP-TASK-074）。真实链接由运营者在服务器私有配置里填写 `SHOP_WHATSAPP_CONTACT_URL`，仓库不存。
+- 验证到什么程度：人工逐条对照验收标准、DESIGN 1.11「上线依赖与设计闸门」与 UX Q10 原句自查。`tests/test_site_settings.py` 新增的测试用 SQLite 内存库与 TestClient，以 `Settings(_env_file=None, whatsapp_contact_url=…)` 建应用，每条测试的文档字符串写明它守住的设计或 UX Q10 原句与验收条目，覆盖：已配置时原样返回（开关字段照常）；首尾空白与换行去掉；恰好 512 个字符返回；空串、只有空白、http、ftp、javascript、whatsapp 自定义协议、无协议、以 `//` 开头、`https://`、空主机、只有端口、只有用户信息、`https:` 后无 `//`、残缺的 IPv6 方括号、中间含空格、制表符、全角空格、NUL、DEL、CRLF、513 个字符都为 `null`，状态码 200 且没有 `app` 下的日志；已配置与未配置时字段顺序都是开关在前、链接在后；已配置时带不带 cookie 结果相同、不设 cookie、只发 SELECT、带 `no-store`。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。

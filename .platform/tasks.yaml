@@ -2768,7 +2768,7 @@ tasks:
       按 docs/DESIGN.md 1.11「资料保留」第 4 条（短信验证请求及发送记录短期保留用于防滥用）与 docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（保留 30 天），
       新增定时任务：删除创建满 30 天的短信验证记录，并提供人工补跑命令。不改表与迁移，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41（个人资料保留期）。拆分：定时任务层（6 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-012
       - SHOP-TASK-042
@@ -2801,7 +2801,7 @@ tasks:
       在 app/core/config.py 加 WhatsApp 联系链接的配置项，并由 SHOP-TASK-022 的公开接口 GET /api/site-settings 一并返回，供前台决定是否显示联系入口。
       不改短信验证开关的读取与判定，不加表或迁移，不改前端，不改设计。
       设计闸门：不适用（公司公开的联系链接，不涉及金额计算与访客个人资料）。拆分：接口层（4 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-022
     acceptance_criteria:
