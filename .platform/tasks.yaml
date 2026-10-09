@@ -2801,7 +2801,7 @@ tasks:
       在 app/core/config.py 加 WhatsApp 联系链接的配置项，并由 SHOP-TASK-022 的公开接口 GET /api/site-settings 一并返回，供前台决定是否显示联系入口。
       不改短信验证开关的读取与判定，不加表或迁移，不改前端，不改设计。
       设计闸门：不适用（公司公开的联系链接，不涉及金额计算与访客个人资料）。拆分：接口层（4 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-022
     acceptance_criteria:
