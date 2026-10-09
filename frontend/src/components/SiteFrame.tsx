@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import type { FormEvent, MouseEvent, ReactNode } from "react";
 
+import { useWhatsAppContactUrl } from "../api/siteSettings";
 import { cartItemCount, useCartLines } from "../cart";
 import { BRAND, LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
@@ -14,8 +15,9 @@ import { STORE_MODE, useStoreDesign } from "../storeDesign";
 // 结构与类名沿用 docs/design/pages/ 的静态页面；桌面与手机的差异只由 styles/site.css 的媒体查询切换。
 //
 // 页头搜索框跳到带搜索词的商品列表 P02。页头购物车入口 common.nav_cart（{count} 为本浏览器购物车各行件数之和）链到 P04，
-// 桌面在导航行右侧、手机在第一行语言按钮之后。WhatsApp 联系链接的配置来源
-// 由之后单独登记的任务提供，在那之前页脚不渲染 WhatsApp 按钮（UX Q10：配置缺失时隐藏）。不设站内联系表单。
+// 桌面在导航行右侧、手机在第一行语言按钮之后。页脚的 WhatsApp 按钮 common.whatsapp_cta 在页脚主体之后，
+// 链接取自 GET /api/site-settings 的 whatsapp_contact_url（api/siteSettings.ts，页脚与 P14 共用一次读取），在新标签页打开；
+// 取得前、未配置或读取失败时整个按钮不渲染（UX Q10：配置缺失时隐藏，不显示占位文字）。不设站内联系表单。
 
 interface NavItem {
   path: string;
@@ -260,8 +262,21 @@ function SiteHeader() {
   );
 }
 
+// WhatsApp 联系按钮（页脚与 P14 的「联系」段）：次要按钮，前面是对话气泡图形；在新标签页打开，不带来源页与 opener。
+export function WhatsAppButton({ href, className, children }: { href: string; className: string; children: ReactNode }) {
+  return (
+    <a className={`acs-btn acs-btn--secondary ${className}`} href={href} target="_blank" rel="noopener noreferrer">
+      <svg className="site-whatsapp-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true">
+        <path d="M4 20l1.4-4A8 8 0 1 1 8 18.6z" />
+      </svg>
+      {children}
+    </a>
+  );
+}
+
 function SiteFooter() {
   const t = useCopy();
+  const whatsApp = useWhatsAppContactUrl();
   return (
     <footer className="acs-footer site-footer">
       <div className="site-footer__main">
@@ -271,6 +286,11 @@ function SiteFooter() {
           {t("common.nav_privacy")}
         </Link>
       </div>
+      {whatsApp !== null && (
+        <WhatsAppButton href={whatsApp} className="site-footer__whatsapp">
+          {t("common.whatsapp_cta")}
+        </WhatsAppButton>
+      )}
     </footer>
   );
 }

@@ -1,5 +1,7 @@
 import type { ComponentType } from "react";
 
+import { WhatsAppContactProvider } from "./api/siteSettings";
+import type { WhatsAppContactReader } from "./api/siteSettings";
 import SiteFrame from "./components/SiteFrame";
 import { LanguageProvider } from "./i18n/language";
 import type { LanguageStorage } from "./i18n/language";
@@ -70,17 +72,21 @@ function CurrentPage({ storage }: { storage: LanguageStorage | null | undefined 
 }
 
 interface AppProps {
-  // 测试用：给定初始路径与语言、店铺装修所用的存储；浏览器里不传，分别读地址栏与 localStorage。
+  // 测试用：给定初始路径与语言、店铺装修所用的存储、WhatsApp 联系链接的读取；浏览器里不传，
+  // 分别读地址栏、localStorage 与本次页面加载唯一的读取（api/siteSettings.ts）。
   initialPath?: string | undefined;
   storage?: LanguageStorage | null | undefined;
+  whatsAppContact?: WhatsAppContactReader | undefined;
 }
 
-export default function App({ initialPath, storage }: AppProps) {
+export default function App({ initialPath, storage, whatsAppContact }: AppProps) {
   return (
     <LanguageProvider storage={storage}>
-      <RouterProvider initialPath={initialPath}>
-        <CurrentPage storage={storage} />
-      </RouterProvider>
+      <WhatsAppContactProvider reader={whatsAppContact}>
+        <RouterProvider initialPath={initialPath}>
+          <CurrentPage storage={storage} />
+        </RouterProvider>
+      </WhatsAppContactProvider>
     </LanguageProvider>
   );
 }

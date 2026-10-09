@@ -26,6 +26,12 @@ body { margin: 0; }
 .site-footer__main { display: grid; gap: 12px; justify-items: start; }
 .site-footer__text { margin: 0; max-width: 42em; }
 
+/* WhatsApp 按钮（P01-desktop、P14-desktop）：对话气泡图形不收缩；页脚的按钮在第二列靠右，P14「联系」段的按钮靠左。
+   按钮在页脚里的颜色来自 acuven-shop.css 的 .acs-footer .acs-btn--secondary */
+.site-whatsapp-icon { flex-shrink: 0; }
+.site-footer__whatsapp { justify-self: end; }
+.site-privacy__contact { justify-self: start; }
+
 /* 首页 P01：★ 提示在页头下方、所有区块之前 */
 .site-home { padding: 24px var(--gutter) 104px; }
 .site-home__block { display: flex; flex-direction: column; gap: 28px; padding-top: 96px; }
@@ -409,6 +415,9 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-header__cart { display: inline-flex; align-items: center; min-height: 44px; }
 
   .site-footer { grid-template-columns: minmax(0, 1fr); }
+  /* WhatsApp 按钮（P01-phone、P14-phone）：占满宽度；页脚的按钮文字靠左，内边距 12px 16px */
+  .site-footer__whatsapp, .site-privacy__contact { display: flex; justify-self: stretch; }
+  .site-footer__whatsapp { justify-content: flex-start; padding: 12px 16px; text-align: left; }
 
   .site-home { padding: 16px var(--gutter) 48px; }
   .site-home__block { gap: 16px; padding-top: 48px; }
