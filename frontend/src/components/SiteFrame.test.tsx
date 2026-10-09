@@ -1,18 +1,52 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { createWhatsAppContactReader } from "../api/siteSettings";
+import type { WhatsAppContactReader } from "../api/siteSettings";
 import App from "../App";
 import { BRAND, COPY, LANGUAGES, formatCopy } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY } from "../i18n/language";
 import { isRoutePath, ROUTE_PATHS } from "../router";
 
-function render(path: string, language: Language = "en"): string {
+// SHOP-TASK-074 起可传入 WhatsApp 联系链接的读取（替身）；不传时为新建、尚未请求的读取，即取得前的首次渲染，现有测试不受影响。
+function render(path: string, language: Language = "en", whatsAppContact?: WhatsAppContactReader): string {
   const storage = {
     getItem: (key: string) => (key === LANGUAGE_STORAGE_KEY ? language : null),
     setItem: () => undefined,
   };
-  return renderToStaticMarkup(<App initialPath={path} storage={storage} />);
+  return renderToStaticMarkup(
+    <App initialPath={path} storage={storage} whatsAppContact={whatsAppContact ?? createWhatsAppContactReader()} />,
+  );
+}
+
+// 测试里的链接一律用 chat.example.com，仓库不出现真实号码或主机。
+const WHATSAPP_LINK = "https://chat.example.com/acuven?text=hi";
+
+// 以替身 fetch 读完一次后的读取：respond 决定接口的回答。
+async function settledReader(respond: () => Promise<Response>): Promise<WhatsAppContactReader> {
+  vi.stubGlobal("fetch", vi.fn(respond));
+  try {
+    const reader = createWhatsAppContactReader();
+    await reader.load();
+    return reader;
+  } finally {
+    vi.unstubAllGlobals();
+  }
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function settings(whatsappContactUrl: unknown): () => Promise<Response> {
+  return () =>
+    Promise.resolve(
+      new Response(JSON.stringify({ sms_verification_enabled: false, whatsapp_contact_url: whatsappContactUrl }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
 }
 
 function section(html: string, pattern: RegExp): string {
@@ -254,6 +288,7 @@ describe("footer", () => {
   });
 
   // UX Q10：WhatsApp 联系链接未配置时隐藏所有 WhatsApp 按钮，不显示占位文字——不含 whatsapp（不区分大小写）与 {{ 对所有页面断言。
+  // （SHOP-TASK-074 起这里是链接取得前的首次渲染；未配置与读取失败见下方「before the contact link is known…」。断言未改。）
   // UX「全局框架」页脚一条的「不设站内联系表单」，按页面推算（SHOP-TASK-033）：每页的演示横幅、页头（先去掉 role="search" 的搜索表单）与页脚都没有 form 或 textarea；
   // 页面主体只对不在 PAGE_FORM_PATHS 的页面断言，表里页面主体的表单由各自页面的测试负责。商品列表的筛选控件不在表单里，照常断言。
   // 改为推算是为了之后每个有表单的页面任务（结账、模拟支付、订单查询、退款申请等）不必为这条测试改这个文件。
@@ -276,5 +311,44 @@ describe("footer", () => {
     expect(contactFormFindings(page("<form></form>", "<main></main>"), "/checkout")).toEqual(["form in frame"]);
     expect(contactFormFindings(page("WhatsApp {{phone}}", "<main></main>"), "/checkout")).toEqual(["whatsapp", "{{"]);
     expect(contactFormFindings(page("", "<main></main>"), "/privacy")).toEqual([]);
+  });
+
+  // UX Q10「配置缺失时隐藏所有 WhatsApp 按钮与联系段落，不显示占位文字」与 SHOP-TASK-074 验收「未取得、未配置或读取失败时整个按钮不渲染…不显示占位文字或空容器」：
+  // 接口回答链接为 null、缺字段、不合格（http），或请求失败（503、网络错误）后，每页都没有 whatsapp、{{，页脚只有页脚主体一个子元素。
+  it.each([
+    ["not configured", settings(null)],
+    ["missing", () => Promise.resolve(new Response(JSON.stringify({ sms_verification_enabled: true }), { status: 200 }))],
+    ["not https", settings("http://chat.example.com/")],
+    ["503", () => Promise.resolve(new Response("{}", { status: 503 }))],
+    ["network error", () => Promise.reject(new TypeError("Failed to fetch"))],
+  ] as [string, () => Promise<Response>][])("renders no WhatsApp button when the link is %s", async (name, respond) => {
+    const reader = await settledReader(respond);
+    for (const path of paths) {
+      const html = render(path, "en", reader);
+      expect(contactFormFindings(html, path), `${name} ${path}`).toEqual([]);
+      expect(footer(html), `${name} ${path}`).toMatch(/^<footer class="acs-footer site-footer"><div class="site-footer__main">[\s\S]*?<\/div><\/footer>$/);
+    }
+  });
+
+  // UX「全局框架」页脚「[common.whatsapp_cta] 链到 {{WHATSAPP_CONTACT_LINK}}」与 SHOP-TASK-074 验收「链接已取得时在页脚主体之后显示 common.whatsapp_cta 按钮，链到该地址，
+  // 在新标签页打开并带 rel 为 noopener noreferrer」、「按钮为 acs-btn acs-btn--secondary，内含 aria-hidden 的对话气泡图形」：
+  // 每个前台页、每种语言，页脚主体之后恰有一个按钮，文字取自字典，图形在文字之前；页面没有 {{ 与行内样式。
+  it.each(languages)("shows the WhatsApp button after the footer body in %s once the link is loaded", async (language) => {
+    const reader = await settledReader(settings(WHATSAPP_LINK));
+    for (const path of paths) {
+      const html = render(path, language, reader);
+      const content = footer(html);
+      const button = section(content, /<a class="acs-btn acs-btn--secondary site-footer__whatsapp"[^>]*>[\s\S]*?<\/a>/);
+      expect(button).toMatch(/^<a [^>]*\bhref="https:\/\/chat\.example\.com\/acuven\?text=hi"/);
+      expect(button).toMatch(/^<a [^>]*\btarget="_blank"/);
+      expect(button).toMatch(/^<a [^>]*\brel="noopener noreferrer"/);
+      expect(button).toMatch(
+        new RegExp(`^<a [^>]*><svg [^>]*aria-hidden="true"[^>]*><path [^>]*></path></svg>${escapeRegExp(COPY["common.whatsapp_cta"][language])}</a>$`),
+      );
+      expect(content.endsWith(`</div>${button}</footer>`), path).toBe(true);
+      expect(html.match(/site-footer__whatsapp/g), path).toHaveLength(1);
+      expect(html, path).not.toContain("{{");
+      expect(html, path).not.toContain("style=");
+    }
   });
 });

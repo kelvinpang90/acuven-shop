@@ -80,6 +80,11 @@ export const COPY = {
     zh: "Acuven 网店方案演示站。所有商品、价格、库存、支付、运费、发货与退款均为模拟。",
     ms: "Kedai demo Acuven untuk mempamerkan penyelesaian kedai dalam talian. Semua produk, harga, stok, bayaran, penghantaran dan bayaran balik adalah simulasi.",
   },
+  "common.whatsapp_cta": {
+    en: "Interested in a store like this? Chat with Acuven on WhatsApp",
+    zh: "想要这样的网店？通过 WhatsApp 联系 Acuven",
+    ms: "Berminat dengan kedai seperti ini? Hubungi Acuven melalui WhatsApp",
+  },
   "common.price_myr": {
     en: "RM {amount}",
     zh: "RM {amount}",
@@ -1094,6 +1099,21 @@ export const COPY = {
     en: "This whole site is a demonstration; no real orders are fulfilled.",
     zh: "整个网站都是演示，不履行任何真实订单。",
     ms: "Seluruh laman ini adalah demonstrasi; tiada pesanan sebenar dipenuhi.",
+  },
+  "privacy.h_contact": {
+    en: "Contact",
+    zh: "联系",
+    ms: "Hubungi",
+  },
+  "privacy.contact": {
+    en: "Questions? Contact Acuven on WhatsApp.",
+    zh: "有疑问？请通过 WhatsApp 联系 Acuven。",
+    ms: "Ada soalan? Hubungi Acuven melalui WhatsApp.",
+  },
+  "privacy.contact_button": {
+    en: "Chat on WhatsApp",
+    zh: "通过 WhatsApp 联系",
+    ms: "Sembang di WhatsApp",
   },
   "admin.demo_banner": {
     en: "Admin — demo store. Actions here never move real money or goods.",
