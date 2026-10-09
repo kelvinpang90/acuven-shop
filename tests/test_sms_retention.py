@@ -7,8 +7,8 @@
   人工补跑办法」（SHOP-TASK-031 起对所有定时任务适用）；「权限与资料保护」：日志不记录完整电话。
 以及 docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（4）：「短信验证记录（含完整手机号）
 保留 30 天后删除。」
-每条测试（参数化的是每个用例）的文档字符串写明它守住的是哪一句；没有直接原句的，写明是
-SHOP-TASK-072 验收里的约定。
+每条测试（参数化的是每个用例）的文档字符串写明它守住的是上述哪一句，并写明对应的
+SHOP-TASK-072 验收约定。
 
 用 SQLite 内存库（StaticPool，每个连接打开外键检查并断言已打开；按 SQLAlchemy 文档关掉 pysqlite
 的事务处理、由引擎发 BEGIN，与 tests/test_jobs.py 相同）按模型建表。验证记录、会员、会员会话、
@@ -287,7 +287,9 @@ def test_each_run_deletes_at_most_one_batch_oldest_first(engine: Engine) -> None
 def test_default_batch_limit_is_the_cancel_batch_limit(
     engine: Engine, factory: jobs.SessionFactory
 ) -> None:
-    """SHOP-TASK-072 验收：每次最多删除一批，上限沿用 app/jobs.py 的 CANCEL_BATCH_LIMIT——默认
+    """Kelvin 2026-10-08：「短信验证记录（含完整手机号）保留 30 天后删除。」「失败、并发与重试」
+    第 6 条：定时任务「可重复运行」——一次删不完的到期记录由下一次接着删，最终全部删除。
+    SHOP-TASK-072 验收：每次最多删除一批，上限沿用 app/jobs.py 的 CANCEL_BATCH_LIMIT——默认
     任务一次删除上限条，多出的一条留到下一次。"""
     limit = jobs.CANCEL_BATCH_LIMIT
     assert jobs.VERIFICATION_DELETE_BATCH_LIMIT == limit
@@ -314,7 +316,9 @@ def test_running_twice_does_not_fail_and_deletes_once(engine: Engine) -> None:
 
 
 def test_zero_limit_deletes_nothing(engine: Engine) -> None:
-    """SHOP-TASK-072 验收：每次最多删除一批（上限 0 时一条也不删）。"""
+    """「资料保留」第 4 条：短信验证请求及发送记录「短期保留用于防滥用」——删除只能来自本次
+    批次的额度，不能越过上限多删。「失败、并发与重试」第 6 条：「可重复运行」——额度为 0 的一次
+    运行不出错，记录留给下一次。SHOP-TASK-072 验收：每次最多删除一批（上限 0 时一条也不删）。"""
     attempt_id = _attempt(engine, DUE)
 
     assert _run(engine, limit=0) == 0
