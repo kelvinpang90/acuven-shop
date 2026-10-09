@@ -360,6 +360,7 @@ def test_default_jobs_use_the_fixed_round_limit(
         "cancel_expired_orders",
         "reset_daily_stock",
         "auto_complete_shipped",
+        "delete_expired_verifications",
     ]
 
 
@@ -453,13 +454,15 @@ def test_database_unavailable_is_logged_by_class_name_only(
     clock.advance(60)
     runner.run_round()
 
-    # 每轮三个任务（超时取消、SHOP-TASK-032 的每日库存重置与 SHOP-TASK-042 的发货满 7 天
-    # 自动确认收货）各开一次会话、各记一条失败；SHOP-TASK-042 在默认列表末尾加了第三个任务。
-    assert len(calls) == 6
+    # 每轮四个任务（超时取消、SHOP-TASK-032 的每日库存重置、SHOP-TASK-042 的发货满 7 天
+    # 自动确认收货与 SHOP-TASK-072 的删除满 30 天短信验证记录）各开一次会话、各记一条失败；
+    # SHOP-TASK-042 在默认列表末尾加了第三个任务，SHOP-TASK-072 又在其后加了第四个。
+    assert len(calls) == 8
     each_round = [
         "job cancel_expired_orders failed: OperationalError",
         "job reset_daily_stock failed: OperationalError",
         "job auto_complete_shipped failed: OperationalError",
+        "job delete_expired_verifications failed: OperationalError",
     ]
     assert _job_messages(caplog) == each_round * 2
     assert all(SECRET not in message for message in caplog.messages)
