@@ -1,7 +1,10 @@
-"""站点设置表、短信验证开关的读取函数与 GET /api/site-settings。
+"""站点设置表、短信验证开关的读取函数与 GET /api/site-settings（含 WhatsApp 联系链接）。
 
-依据 docs/DESIGN.md 1.11（提交 2d13250）「边界与原则」第 4 条与「数据模型」的 SiteSetting 一行。
-每条测试的文档字符串写明它守住的设计原句；没有直接原句的写明是 SHOP-TASK-022 验收标准里的约定。
+依据 docs/DESIGN.md 1.11（提交 2d13250）「边界与原则」第 4 条、「数据模型」的 SiteSetting 一行
+与「上线依赖与设计闸门」（配置 WhatsApp 联系方式），
+以及 docs/UX.md 待决问题 Q10（配置缺失时隐藏）。
+每条测试的文档字符串写明它守住的设计或 UX 原句；没有直接原句的写明是 SHOP-TASK-022 或
+SHOP-TASK-073 验收标准里的约定。
 
 用 SQLite 内存库按模型建表；接口的会话依赖换成测试自己的会话。
 """
@@ -173,30 +176,42 @@ def test_read_ignores_a_stale_loaded_object(db: Session) -> None:
 
 def test_endpoint_follows_the_stored_switch(db: Session, client: TestClient) -> None:
     """「修改对之后的请求立即生效」：接口返回值随库中开关变化，没有那一行时为关闭。"""
-    assert client.get(URL).json() == {"sms_verification_enabled": False}
+    assert client.get(URL).json() == {
+        "sms_verification_enabled": False,
+        "whatsapp_contact_url": None,
+    }
 
     _setting(db, enabled=False)
-    assert client.get(URL).json() == {"sms_verification_enabled": False}
+    assert client.get(URL).json() == {
+        "sms_verification_enabled": False,
+        "whatsapp_contact_url": None,
+    }
 
     _set_enabled(db, True)
-    assert client.get(URL).json() == {"sms_verification_enabled": True}
+    assert client.get(URL).json() == {
+        "sms_verification_enabled": True,
+        "whatsapp_contact_url": None,
+    }
 
     _set_enabled(db, False)
-    assert client.get(URL).json() == {"sms_verification_enabled": False}
+    assert client.get(URL).json() == {
+        "sms_verification_enabled": False,
+        "whatsapp_contact_url": None,
+    }
 
 
 def test_endpoint_returns_only_the_switch_with_no_store(db: Session, client: TestClient) -> None:
     """「每次判定都从数据库读取当前值、不缓存」：响应带 Cache-Control: no-store，
-    浏览器与代理不留旧值；响应体只有 sms_verification_enabled 一个字段
-    （SHOP-TASK-022 验收「不返回其他内容」）。"""
+    浏览器与代理不留旧值；响应体只有 sms_verification_enabled 与 whatsapp_contact_url 两个字段
+    （SHOP-TASK-022 验收「不返回其他内容」，SHOP-TASK-073 加上联系链接，未配置时为 null）。"""
     _setting(db, enabled=True)
 
     response = client.get(URL)
 
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
-    assert response.json() == {"sms_verification_enabled": True}
-    assert list(response.json()) == ["sms_verification_enabled"]
+    assert response.json() == {"sms_verification_enabled": True, "whatsapp_contact_url": None}
+    assert list(response.json()) == ["sms_verification_enabled", "whatsapp_contact_url"]
 
 
 def test_endpoint_needs_no_login_sets_no_cookie_and_only_reads(
@@ -213,7 +228,7 @@ def test_endpoint_needs_no_login_sets_no_cookie_and_only_reads(
 
     for response in (anonymous, with_cookie):
         assert response.status_code == 200
-        assert response.json() == {"sms_verification_enabled": True}
+        assert response.json() == {"sms_verification_enabled": True, "whatsapp_contact_url": None}
         assert "set-cookie" not in response.headers
     for method in ("post", "put", "patch", "delete"):
         assert client.request(method.upper(), URL, json={}).status_code == 405
@@ -227,3 +242,124 @@ def test_endpoint_without_a_database_answers_503() -> None:
     client = TestClient(create_app(Settings(_env_file=None, database_url="")))
 
     assert client.get(URL).status_code == 503
+
+
+# ---- WhatsApp 联系链接 ----
+
+CONTACT_URL = "https://chat.example.com/contact?ref=shop"
+
+
+def _client_with_contact(db: Session, configured: str) -> TestClient:
+    app = create_app(Settings(_env_file=None, whatsapp_contact_url=configured))
+    app.dependency_overrides[get_session] = lambda: db
+    return TestClient(app)
+
+
+def test_configured_contact_url_is_returned_as_is(db: Session) -> None:
+    """DESIGN 1.11「上线依赖与设计闸门」「配置 WhatsApp 联系方式」：配置了合格的链接时，
+    接口原样返回它，前台据此显示联系入口；开关字段照常返回。"""
+    _setting(db, enabled=True)
+
+    response = _client_with_contact(db, CONTACT_URL).get(URL)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "sms_verification_enabled": True,
+        "whatsapp_contact_url": CONTACT_URL,
+    }
+
+
+def test_contact_url_has_surrounding_whitespace_removed(db: Session) -> None:
+    """DESIGN 1.11「配置 WhatsApp 联系方式」：私有配置里链接前后多出的空白、换行不算链接的一部分，
+    去掉后返回（SHOP-TASK-073 验收「配置值去掉首尾空白后」）。"""
+    response = _client_with_contact(db, f"  \t{CONTACT_URL}\n ").get(URL)
+
+    assert response.json()["whatsapp_contact_url"] == CONTACT_URL
+
+
+def test_contact_url_of_512_characters_is_returned(db: Session) -> None:
+    """DESIGN 1.11「配置 WhatsApp 联系方式」：恰好 512 个字符的链接照常返回，是下一条超长反例的对照
+    （SHOP-TASK-073 验收「长度不超过 512 个字符」）。"""
+    url = "https://chat.example.com/" + "a" * (512 - len("https://chat.example.com/"))
+    assert len(url) == 512
+
+    response = _client_with_contact(db, url).get(URL)
+
+    assert response.json()["whatsapp_contact_url"] == url
+
+
+@pytest.mark.parametrize(
+    "configured",
+    [
+        pytest.param("", id="empty"),
+        pytest.param("   ", id="only-whitespace"),
+        pytest.param("http://chat.example.com/contact", id="http"),
+        pytest.param("ftp://chat.example.com/contact", id="ftp"),
+        pytest.param("javascript:alert(1)", id="javascript"),
+        pytest.param("whatsapp://send?phone=0", id="app-scheme"),
+        pytest.param("chat.example.com/contact", id="no-scheme"),
+        pytest.param("//chat.example.com/contact", id="scheme-relative"),
+        pytest.param("https://", id="no-host"),
+        pytest.param("https:///contact", id="empty-host"),
+        pytest.param("https://:443/contact", id="port-only"),
+        pytest.param("https://user@/contact", id="userinfo-only"),
+        pytest.param("https:chat.example.com", id="no-slashes"),
+        pytest.param("https://[::1/contact", id="broken-ipv6"),
+        pytest.param("https://chat.example.com/con tact", id="space"),
+        pytest.param("https://chat.example.com/con\ttact", id="tab"),
+        pytest.param("https://chat.example.com/con　tact", id="ideographic-space"),
+        pytest.param("https://chat.example.com/con\x00tact", id="nul"),
+        pytest.param("https://chat.example.com/con\x7ftact", id="del"),
+        pytest.param("https://chat.example.com/\r\nSet-Cookie:x", id="crlf"),
+        pytest.param(
+            "https://chat.example.com/" + "a" * (513 - len("https://chat.example.com/")),
+            id="513-characters",
+        ),
+    ],
+)
+def test_unusable_contact_url_is_null_without_error_or_log(
+    db: Session, configured: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """UX Q10「配置缺失时隐藏 WhatsApp 按钮……不显示占位文字」：未配置（空串）或配置不合格
+    （非 https 协议、缺主机、含空白或控制字符、超过 512 个字符）时一律返回 null，前台隐藏入口，
+    接口不报错、不写日志（SHOP-TASK-073 验收）。"""
+    _setting(db, enabled=False)
+
+    with caplog.at_level("DEBUG"):
+        response = _client_with_contact(db, configured).get(URL)
+
+    assert response.status_code == 200
+    assert response.json() == {"sms_verification_enabled": False, "whatsapp_contact_url": None}
+    assert [r for r in caplog.records if r.name.startswith("app")] == []
+
+
+def test_contact_url_comes_after_the_switch(db: Session) -> None:
+    """UX Q10「配置缺失时隐藏」靠前台读这个字段：字段紧跟在 sms_verification_enabled 之后，
+    已配置与未配置时字段顺序相同
+    （SHOP-TASK-073 验收「在 sms_verification_enabled 之后加字段」）。"""
+    _setting(db, enabled=True)
+
+    for configured in (CONTACT_URL, ""):
+        response = _client_with_contact(db, configured).get(URL)
+        assert list(response.json()) == ["sms_verification_enabled", "whatsapp_contact_url"]
+
+
+def test_configured_contact_url_keeps_the_endpoint_read_only(db: Session) -> None:
+    """DESIGN 1.11「配置 WhatsApp 联系方式」只加一个读配置的字段，接口其余行为不变：
+    SHOP-TASK-022 验收「不需要登录，不读写 cookie；只发 SELECT」与 Cache-Control: no-store。"""
+    _setting(db, enabled=True)
+    client = _client_with_contact(db, CONTACT_URL)
+    statements = _record_statements(db)
+
+    anonymous = client.get(URL)
+    client.cookies.set("session", "anything")
+    with_cookie = client.get(URL)
+
+    for response in (anonymous, with_cookie):
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        assert response.json()["whatsapp_contact_url"] == CONTACT_URL
+        assert "set-cookie" not in response.headers
+
+    assert statements
+    assert all(statement.lstrip().upper().startswith("SELECT") for statement in statements)

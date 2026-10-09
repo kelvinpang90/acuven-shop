@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     sms_phone_limit_per_day: int = 10
     sms_source_limit_per_hour: int = 10
 
+    # WhatsApp 联系链接（https 开头的完整链接）。空串 = 未配置：GET /api/site-settings 返回 null，
+    # 前台隐藏联系入口（UX Q10）。不合格的值同样按未配置处理（app/api/site_settings.py）。
+    whatsapp_contact_url: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
