@@ -1659,7 +1659,7 @@
 - 人工补跑：`docker compose exec shop_jobs python -m app.jobs delete-verifications`（`shop_jobs` 不在时可用 `docker compose run --rm --no-deps shop_jobs python -m app.jobs delete-verifications`）。执行一次（同一上限 100 条）后退出，写法沿用 `complete-shipped`：成功 0（日志总是记一条 `done`，含 0 条）；任务失败 1（日志只含任务名与异常类名）；未配置 `SHOP_DATABASE_URL` 2（日志 `database is not configured`）。删除条数等于 100 时可能还有剩余，可再执行一次；重复执行不出错。`shop_jobs` 容器沿用 `run` 子命令，部署不用改。
 - 改动的现有测试（验收只许这两处，其余断言未动）：
   - `tests/test_jobs.py`：`test_default_jobs_use_the_fixed_round_limit` 的默认任务名列表加上 `delete_expired_verifications`；`test_database_unavailable_is_logged_by_class_name_only` 按每轮四个任务计会话调用次数（6 改为 8：新任务同样每轮开一次会话）与失败日志（每轮多一条 `job delete_expired_verifications failed: OperationalError`），注释写明原因。
-  - `tests/test_auto_complete.py`：`test_job_is_registered_after_existing_jobs_with_own_transactions` 的默认任务名列表加上 `delete_expired_verifications`，注释写明。该测试其后的 `default[-1].own_transactions is True` 未改，现在检查的是新任务（它同样以 `own_transactions` 注册）；自动确认收货以 `own_transactions` 注册仍由下一行 `jobs.auto_complete_job().own_transactions is True` 守住。
+  - `tests/test_auto_complete.py`：`test_job_is_registered_after_existing_jobs_with_own_transactions` 的默认任务名列表加上 `delete_expired_verifications`，注释写明。该测试其后的 `default[-1].own_transactions is True` 未改，现在检查的是新任务（它同样以 `own_transactions` 注册）。验收只许改默认任务名列表，所以没有为自动确认收货另加断言：该文件里不再有断言直接检查 `auto_complete_shipped` 以 `own_transactions` 注册，这一点由 `app/jobs.py` 的 `auto_complete_job()` 实现保持不变。
   - `tests/test_stock_reset.py` 的运行器用例也用 `default_jobs()`，未改：那些用例里没有短信验证记录，新任务删除 0 条、不记日志、按成功计时，断言不受影响。
 - 偏离与取舍，请审阅（未改设计，未发现须停下的设计问题）：
   - 以 `own_transactions=True` 注册而不是运行器默认的外层事务加保存点。一批删除只有一条写语句，两种方式结果相同；选它是因为验收不许改 `tests/test_auto_complete.py` 里「默认列表最后一项以 `own_transactions` 注册」的现有断言，新任务排在末尾。

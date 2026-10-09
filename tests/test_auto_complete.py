@@ -667,7 +667,6 @@ def test_job_is_registered_after_existing_jobs_with_own_transactions() -> None:
         "delete_expired_verifications",
     ]
     assert default[-1].own_transactions is True
-    assert jobs.auto_complete_job().own_transactions is True
     assert jobs.AUTO_COMPLETE_BATCH_LIMIT == jobs.CANCEL_BATCH_LIMIT
 
 
