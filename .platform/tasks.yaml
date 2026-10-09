@@ -2774,8 +2774,8 @@ tasks:
       - SHOP-TASK-042
     acceptance_criteria:
       - 新文件 app/services/sms_retention.py 删除 created_at 不晚于当前 UTC 时间减 30 天（恰满 30 天即删除）的 VerificationAttempt 行，每次最多删除一批（上限沿用 app/jobs.py 的 CANCEL_BATCH_LIMIT），返回删除条数；可重复运行，重复执行不出错；不碰 SmsDailyUsage、会员与订单
-      - app/jobs.py 的 default_jobs 在已有三项之后加上这项任务（名称 delete_expired_verifications），并加人工补跑子命令 delete-verifications（执行一次后退出，退出码与日志写法沿用 complete-shipped：成功 0、失败 1、未配置 SHOP_DATABASE_URL 2；日志只含删除条数与异常类名）；模块说明的用法一段补上这条命令
-      - tests/test_jobs.py 与 tests/test_auto_complete.py 只许把默认任务名列表的断言加上 delete_expired_verifications，并按需要调整会话工厂不可用时每轮多出的一次开会话与一条失败日志的计数，写明原因；其余现有断言不动
+      - app/jobs.py 的 default_jobs 在已有三项之后加上这项任务（名称 delete_expired_verifications），以 own_transactions=True 注册、自己提交（tests/test_auto_complete.py 现有的 default[-1].own_transactions 断言在加入后检查的是这项），并加人工补跑子命令 delete-verifications（执行一次后退出，退出码与日志写法沿用 complete-shipped：成功 0、失败 1、未配置 SHOP_DATABASE_URL 2；日志只含删除条数与异常类名）；模块说明的用法一段补上这条命令
+      - tests/test_jobs.py 与 tests/test_auto_complete.py 只许把默认任务名列表的断言加上 delete_expired_verifications，并按需要调整会话工厂不可用时每轮多出的一次开会话与一条失败日志的计数，写明原因；其余现有断言不动——tests/test_auto_complete.py 在 main 上已有 default[-1].own_transactions 与 jobs.auto_complete_job().own_transactions 两条断言，两条都原样保留，不增不删不改
       - tests/test_sms_retention.py 用 SQLite 内存库验证意图——恰满 30 天的删除、差一秒的保留；每批上限；各状态与用途一律按时间删除；不碰其他表；补跑命令的退出码与日志不含手机号；每条测试写明它守住的是设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
       - docs/TODO.md 新增 SHOP-TASK-072 记录段（删除规则、任务与补跑命令、改动的现有测试、偏离、验证到什么程度），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置与 docker-compose；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41），不合并、不直推
