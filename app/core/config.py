@@ -53,6 +53,14 @@ class Settings(BaseSettings):
     sms_max_cost_micro_usd_my: int = 0
     sms_max_cost_micro_usd_sg: int = 0
 
+    # 短信发送的 Redis 限流（app/services/sms_verification.py），默认值按 Kelvin 2026-10-08 的
+    # 标准档：每个号码 60 秒 1 条、1 小时 5 条、24 小时 10 条，每个来源 1 小时 10 条。
+    # 每个国家呼叫码 24 小时的上限直接取 sms_daily_count_limit，不另设配置项。
+    sms_phone_limit_per_minute: int = 1
+    sms_phone_limit_per_hour: int = 5
+    sms_phone_limit_per_day: int = 10
+    sms_source_limit_per_hour: int = 10
+
 
 @lru_cache
 def get_settings() -> Settings:
