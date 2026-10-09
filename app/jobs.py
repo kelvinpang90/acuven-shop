@@ -1,5 +1,5 @@
-"""定时任务运行器：常驻进程每分钟执行一轮任务；另有手动执行一次超时取消、当日库存重置或
-发货满 7 天自动确认收货的命令。
+"""定时任务运行器：常驻进程每分钟执行一轮任务；另有手动执行一次超时取消、当日库存重置、
+发货满 7 天自动确认收货或删除满 30 天短信验证记录的命令。
 
 依据 docs/DESIGN.md 1.11（提交 2d13250）：
 - 「计价、优惠、积分与库存」第 6 条：15 分钟未支付自动取消并释放；每天按马来西亚时间重建当日
@@ -9,6 +9,8 @@
   发货满 7 天自动确认收货；全部已退的订单冻结（SHOP-TASK-042，见 app/services/auto_complete.py）。
 - 「失败、并发与重试」第 6 条：定时任务可重复运行、只生效一次；失败有告警与人工补跑办法。
   运营告警邮件接入之前，以容器不健康代替告警（见下文心跳）。
+- 「资料保留」第 4 条：短信验证请求及发送记录短期保留用于防滥用；docs/HANDOFF.md 0.41 记录的
+  Kelvin 2026-10-08 决定保留 30 天后删除（SHOP-TASK-072，见 app/services/sms_retention.py）。
 
 用法（生产栈里的 shop_jobs 容器与 shop_api 同一镜像）：
     python -m app.jobs run              常驻循环，SIGTERM 或 SIGINT 时退出
@@ -16,6 +18,10 @@
     python -m app.jobs reset-stock      执行一次当日库存重置后退出（运营者手动补跑用；只重置当前
                                         马来西亚营业日期，不补过去的日期；已完成也以 0 退出）
     python -m app.jobs complete-shipped 执行一次发货满 7 天自动确认收货后退出（运营者手动补跑用）
+    python -m app.jobs delete-verifications
+                                        执行一次删除创建满 30 天的短信验证记录后
+                                        退出（运营者手动补跑用；每次最多删一批，
+                                        剩余的可再执行一次）
 
 数据库连接沿用 SHOP_DATABASE_URL 与 app/db/session.py 的会话工厂。
 
@@ -33,18 +39,21 @@
 
 任务列表：先超时取消（每轮最多 CANCEL_BATCH_LIMIT 张，剩余的下一轮继续），再每日库存重置
 （当前马来西亚营业日期已有 succeeded 记录时跳过，否则执行；失败只记日志、下一轮重试），再发货
-满 7 天自动确认收货（每轮最多完成 AUTO_COMPLETE_BATCH_LIMIT 张，与超时取消相同）。之后的
-任务按同样方式加入 default_jobs()：写一个 Job（名称与执行函数）。每个任务必须
+满 7 天自动确认收货（每轮最多完成 AUTO_COMPLETE_BATCH_LIMIT 张，与超时取消相同），再删除
+创建满 30 天的短信验证记录（每轮最多删 VERIFICATION_DELETE_BATCH_LIMIT 条，与超时取消
+相同）。之后的任务按同样方式加入 default_jobs()：写一个 Job（名称与执行函数）。每个任务必须
 可重复运行且只生效一次（一轮执行到一半失败或运营者手动补跑都会再次运行它），判定本次无需
 执行而跳过也算成功、正常返回，只有真正出错才抛异常。
 
 库存重置自己管理事务（Job.own_transactions）：它要在独立事务里记下失败，不能放进运行器的
 事务里随失败一起回滚。自动确认收货也自己管理事务：每张订单锁定订单行之前先结束此前的事务，
 使锁定成为新事务的第一条语句（SHOP-TASK-040 的锁定协议）；放进运行器的外层事务以保存点执行时，
-外层事务的读取快照会让锁定之后的读取看不到等锁期间别人提交的审核、发货或确认。
+外层事务的读取快照会让锁定之后的读取看不到等锁期间别人提交的审核、发货或确认。删除短信验证
+记录也自己管理事务：一批删除就是一条 DELETE，在新会话里执行后提交，不需要外层事务与保存点。
 
-日志只记录任务名、生效条数（超时取消即取消张数，库存重置即 SKU 数，自动确认收货即完成张数）、
-营业日期、结果与异常类名，不记录订单号、个人资料、连接串或异常消息原文。
+日志只记录任务名、生效条数（超时取消即取消张数，库存重置即 SKU 数，自动确认收货即完成张数，
+删除短信验证记录即删除条数）、营业日期、结果与异常类名，不记录订单号、手机号等个人资料、
+连接串或异常消息原文。
 """
 
 from __future__ import annotations
@@ -69,6 +78,7 @@ from app.core.config import get_settings
 from app.db.session import _session_factory
 from app.services.auto_complete import auto_complete_shipped_orders
 from app.services.payment import expire_overdue_orders
+from app.services.sms_retention import delete_expired_verifications
 from app.services.stock_reset import business_date, reset_completed, reset_daily_stock
 
 logger = logging.getLogger(__name__)
@@ -81,6 +91,8 @@ UNHEALTHY_AFTER_SECONDS = 600.0
 CANCEL_BATCH_LIMIT = 100
 # 自动确认收货每轮最多完成的订单数（跳过的全部已退订单不计入）；剩余的下一轮继续。
 AUTO_COMPLETE_BATCH_LIMIT = CANCEL_BATCH_LIMIT
+# 删除满 30 天短信验证记录每轮最多删除的条数；剩余的下一轮继续。
+VERIFICATION_DELETE_BATCH_LIMIT = CANCEL_BATCH_LIMIT
 # 容器内固定的临时目录路径；docker-compose.yml 里 shop_jobs 的健康检查用同一路径。
 HEARTBEAT_PATH = Path("/tmp/acuven_shop_jobs_heartbeat")
 # 收到停止信号时一轮仍在执行，最多再等这么久；须短于验收的 10 秒。
@@ -160,9 +172,28 @@ def auto_complete_job(limit: int = AUTO_COMPLETE_BATCH_LIMIT) -> Job:
     return Job(name="auto_complete_shipped", run=run, own_transactions=True)
 
 
+def delete_verifications_job(limit: int = VERIFICATION_DELETE_BATCH_LIMIT) -> Job:
+    """删除创建满 30 天的短信验证记录：SHOP-TASK-072 的 delete_expired_verifications，
+    每次最多删除 limit 条，返回删除条数。一条 DELETE 在新会话里执行后提交，所以
+    own_transactions。"""
+
+    def run(db: Session, now: datetime) -> int:
+        count = delete_expired_verifications(db, now, limit)
+        db.commit()
+        return count
+
+    return Job(name="delete_expired_verifications", run=run, own_transactions=True)
+
+
 def default_jobs() -> list[Job]:
-    """run 每轮按顺序执行的任务：先超时取消，再每日库存重置，再发货满 7 天自动确认收货。"""
-    return [cancel_expired_job(), reset_stock_job(), auto_complete_job()]
+    """run 每轮按顺序执行的任务：先超时取消，再每日库存重置，再发货满 7 天自动确认收货，再删除
+    满 30 天的短信验证记录。"""
+    return [
+        cancel_expired_job(),
+        reset_stock_job(),
+        auto_complete_job(),
+        delete_verifications_job(),
+    ]
 
 
 def utc_now() -> datetime:
@@ -379,6 +410,27 @@ def complete_shipped(
     return EXIT_OK
 
 
+def delete_verifications(
+    session_factory: SessionFactory | None,
+    *,
+    now: Callable[[], datetime] = utc_now,
+    limit: int = VERIFICATION_DELETE_BATCH_LIMIT,
+) -> int:
+    """执行一次删除创建满 30 天的短信验证记录，返回退出码。删除条数等于上限时
+    可能还有剩余，可再执行一次；重复执行不出错。"""
+    if session_factory is None:
+        logger.error("database is not configured")
+        return EXIT_NOT_CONFIGURED
+    job = delete_verifications_job(limit)
+    try:
+        count = run_job(job, session_factory, now())
+    except Exception as exc:
+        logger.error("job %s failed: %s", job.name, type(exc).__name__)
+        return EXIT_FAILED
+    logger.info("job %s done: %d changed", job.name, count)
+    return EXIT_OK
+
+
 def configured_session_factory() -> SessionFactory | None:
     """按 SHOP_DATABASE_URL 取会话工厂；未配置为空。引擎在第一次开会话时才建。"""
     database_url = get_settings().database_url
@@ -394,6 +446,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands.add_parser("cancel-expired", help="cancel overdue unpaid orders once and exit")
     commands.add_parser("reset-stock", help="reset today's stock (Malaysia date) once and exit")
     commands.add_parser("complete-shipped", help="complete orders shipped 7 days ago once and exit")
+    commands.add_parser(
+        "delete-verifications", help="delete SMS verifications older than 30 days once and exit"
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -404,6 +459,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return reset_stock(session_factory)
     if args.command == "complete-shipped":
         return complete_shipped(session_factory)
+    if args.command == "delete-verifications":
+        return delete_verifications(session_factory)
 
     runner = Runner(default_jobs(), session_factory, force_exit=force_exit)
     install_signal_handlers(runner)

@@ -663,6 +663,8 @@ def test_job_is_registered_after_existing_jobs_with_own_transactions() -> None:
         "cancel_expired_orders",
         "reset_daily_stock",
         "auto_complete_shipped",
+        # SHOP-TASK-072 在其后加了删除满 30 天短信验证记录（它同样以 own_transactions 注册）。
+        "delete_expired_verifications",
     ]
     assert default[-1].own_transactions is True
     assert jobs.auto_complete_job().own_transactions is True
