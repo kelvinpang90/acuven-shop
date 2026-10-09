@@ -2681,7 +2681,7 @@ tasks:
       把 SHOP-TASK-067 的适配器、068 的每日预算与 SHOP-TASK-026 的 Redis 限流组合成发送与核验两个规则函数，并写 SHOP-TASK-012 的短信验证记录。
       不做接口，不做登录、注册与认领（由之后的任务接上），不加表或迁移，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41、0.43（短信验证、个人资料与费用）。拆分：业务规则层（4 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-067
       - SHOP-TASK-068
