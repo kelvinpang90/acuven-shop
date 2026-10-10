@@ -2958,7 +2958,7 @@ tasks:
       与 0.44 记录的 Kelvin 2026-10-10 决定（短信验证通过后的一次性重设凭据存于 Redis，10 分钟有效、用一次即删，另配 CSRF 令牌），实现重设凭据的签发、CSRF、一次性取用与重设密码的规则函数。
       不做接口与 cookie，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41、0.44（会员密码与个人资料）。拆分：业务规则层（3 个允许路径）；接口留给 SHOP-TASK-079。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-071
     acceptance_criteria:

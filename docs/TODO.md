@@ -26,13 +26,12 @@
 
 <!-- openclaw:planning-v1:begin -->
 ### 当前计划
-1. `SHOP-TASK-078` 会员重设密码的一次性凭据与重设规则
-2. `SHOP-TASK-079` 会员重设密码接口
-3. `SHOP-TASK-080` 会员注销与注销批准的规则
-4. `SHOP-TASK-081` 发送与核验会员注销验证码的接口
-5. `SHOP-TASK-082` 确认会员注销的接口
-6. `SHOP-TASK-083` 优惠券与用券记录的数据模型
-7. `SHOP-TASK-084` 积分批次与积分流水的数据模型
+1. `SHOP-TASK-079` 会员重设密码接口
+2. `SHOP-TASK-080` 会员注销与注销批准的规则
+3. `SHOP-TASK-081` 发送与核验会员注销验证码的接口
+4. `SHOP-TASK-082` 确认会员注销的接口
+5. `SHOP-TASK-083` 优惠券与用券记录的数据模型
+6. `SHOP-TASK-084` 积分批次与积分流水的数据模型
 
 ### 已阻塞
 - 待登记：短信验证组件 V1 与结账会员路径（马新号码验证、自动注册或登录、优惠券与积分；会员访问 P06、P07）｜阻塞：依赖短信验证服务、会员注册登录接口、优惠券与积分账本
@@ -1757,3 +1756,21 @@
   - 计失败时 Redis 出错也回答 503 而不是 401（与 SHOP-TASK-036 的管理员登录相同）：这一次失败未计入，不能当作已处理的失败回答。
 - 留给之后的任务：重设密码（需另定短信验证通过到设新密码之间的凭据，SHOP-TASK-078、SHOP-TASK-079，重设后调用 `revoke_all_member_sessions`）；会员注销（SHOP-TASK-080 至 SHOP-TASK-082）；前端（登录、忘记密码 P12 与会员中心 P13 里的设置密码）。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.11 第 3 条与 HANDOFF 0.41 的 Kelvin 2026-10-08 决定原句自查。`tests/test_member_pw_api.py` 用 `TestClient`（`https://testserver`）与 SQLite 内存库（引擎设置同 `tests/test_member_auth_api.py`），会话依赖换成绑定同一内存库的会话（可换成提交即抛错的子类），Redis 用照 `tests/test_admin_auth_api.py` 写的内存替身 `FakeRedis`（另加可拨动的时钟模拟 EXPIRE NX 的过期），来源用 `X-Real-IP` 指定；结果都在另一个数据库会话里读；期望的令牌摘要、CSRF 令牌与锁定标识在测试里另算；每条测试的文档字符串写明守住的设计原句、Kelvin 决定或验收条目；未加依赖。覆盖：密码登录成功 204、cookie 属性同 sms-login、库里只有摘要且 30 天到期、cookie 可被 `GET /api/member/session` 读到（`has_password` 为真）、不认领游客订单；号码按地区规范化；号码未注册、未设密码、密码错误、已注销与锁定五种失败的状态码、响应体与响应头逐项相同且不设 cookie、不签发会话；登录时 7 个字符的密码为 401 而不是 422；第 5 次失败后正确密码也 401、差 1 秒到 15 分钟仍 401、满 15 分钟可登录；4 次失败不锁；另一来源对同一号码、同一来源对另一号码不受锁定影响；Redis 未配置、查锁定出错与计失败出错都 503 且不签发会话；提交失败 503 且不设 cookie；无设置行与短信验证开关关闭时密码登录照常；登录的 413（分块发送、三种 Content-Type、Redis 未配置也是 413，恰好 4 KB 放行）、415 先于 422 与 Redis、10 种结构错误与 5 种号码不成立为 422 且不回显密码；256 个非 ASCII 字符的密码可登录；设置密码成功后库里哈希可校验新密码、原会话仍有效且 `has_password` 为真、新密码可登录；8 与 256 个字符可设置、3 种不足 8 个字符为 422 `password_too_short` 且不写入；已设密码 409 且原哈希不变（原密码仍可登录、新密码不能）；以会员依赖读到旧值模拟并发设置先完成，409 且原哈希不变；短信验证开关关闭时设置密码照常；5 种会话不通过为 401（带正确 CSRF 也是）；3 种 CSRF 不通过为 403 且不改密码；设置密码请求体超限且没有会话为 413、不是 JSON 且没有会话为 415、没有会话且结构不对为 401、没有 CSRF 且结构不对为 403、恰好 4 KB 放行，7 种结构错误为 422 且不回显密码；两个路径方法不匹配的 405 不含请求内容；无 `app.` 日志，任何日志都不含号码、密码、令牌、CSRF 令牌与来源。未连真实 Redis 或 MySQL（并发设置只以旧值模拟，未在两个真实事务里并发），未在真实浏览器里验证。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-078 会员重设密码的一次性凭据与重设规则
+
+- [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「权限与资料保护」第 3 条（已有密码的重设再次短信验证；密码至少 8 位，安全哈希存储）、`docs/HANDOFF.md` 0.41 记录的 Kelvin 2026-10-08 决定（重设密码时撤销该会员的全部会话）与 0.44 记录的 Kelvin 2026-10-10 决定（短信验证通过后的一次性重设凭据存于 Redis，10 分钟有效、用一次即删，另配 CSRF 令牌；Redis 不可用时重设暂停），新增规则函数 `app/services/member_pw_reset.py`；测试见 `tests/test_member_pw_reset.py`。未加接口、cookie、表或迁移，未改 `app/services/member_auth.py`、`rate_limit.py`、`pw_hash.py`、`.platform/`、CI、部署配置或设计，未装依赖。设计闸门：DESIGN 1.11（提交 `2d13250`）与 HANDOFF 0.41、0.44（会员密码与个人资料）。
+- 凭据：`issue_pw_reset(client, member_id)` 生成 `secrets.token_urlsafe(32)`（43 个字符），Redis 键为 `acuven_shop:member_pw_reset:` 加原文的 SHA-256 十六进制摘要（原文不进 Redis），值为会员 ID，以一条 `SET key value EX 600` 写入（不分 SET 与 EXPIRE 两步）；返回 `IssuedPwReset(token, csrf_token)`，两个字段 `repr=False`。会员 ID 不是正整数时抛 `ValueError`（编程错误，不访问 Redis）。
+- CSRF：`csrf_token_for_reset(token)` = SHA-256(`acuven-shop/member-pw-reset/csrf\0` + 凭据原文)，不存储；前缀不同于会员会话（`member-session`）、后台会话（`admin-session`）与订单访问（`order-access`）。`check_reset_csrf(token, header_value)` 以 `hmac.compare_digest` 比较，凭据或请求头为 `None`、为空、格式不对或不一致都不通过。写法与 member_auth 相同。
+- 一次性取用：`consume_pw_reset(client, token)` 对格式不合法的凭据直接返回 `None`、不访问 Redis（客户端为 `None` 时也是）；否则在一个事务管道（MULTI / EXEC）里 `GET` 与 `DEL`，返回会员 ID；键不存在（从未签发、已过期、已被取用）返回 `None`。不用 `GETDEL`（需 Redis 6.2，共享 Redis 的版本未核实）。并发取用同一凭据时只有先执行的事务读到值。
+- Redis 不可用：客户端为 `None`（未配置）、连不上、超时或返回错误时，签发与取用都抛 SHOP-TASK-026 的 `RateLimitUnavailable`（`from None`，消息为固定文本，不含凭据、键与会员 ID），调用方必须拒绝重设。事务里任何一条命令出错（含 EXEC 被放弃、GET 读到值而 DEL 出错）、读到值而 DEL 未删到、或值不是正整数时也抛它，不把读到的会员 ID 当作取用成功。
+- 重设密码：`reset_password(db, member_id, new_password, now)` 先拒带时区的 `now`；新密码不满足 SHOP-TASK-071 的 `password_length_ok` 时抛 `ValueError`（消息不含密码），不写库；否则以 `pw_hash.hash_password` 算哈希，以一条条件 UPDATE（`id` 相同且 `status` 为 `active`）写入，更新不到（不存在或已注销）返回 `False`、不撤销任何会话；更新到时以 SHOP-TASK-071 的 `revoke_all_member_sessions` 撤销该会员全部尚未撤销的会话，返回 `True`。未设过密码的会员同样可设置（等同首次设密码，UX P12）。只 flush、不提交；不写日志。
+- 偏离与取舍，请审阅（未改设计，未发现须停下的设计问题）：
+  - 键前缀验收写作 `acuven_shop:member_pw_reset`，实际在其后加冒号再接摘要，与 `rate_limit` 的 `acuven_shop:rate_limit:<桶>:<摘要>` 写法一致。
+  - 签发结果除凭据外另带 `csrf_token`（同为 `repr=False`），与 member_auth 的签发结果写法相同；也可随时以 `csrf_token_for_reset` 重新算出。
+  - 签发时 SET 返回假值也按不可用处理（不带 NX 时正常不会发生）。凭据冲突概率可忽略，不用 NX。
+  - 取用后由调用方先校验 CSRF 再取用，还是先取用再校验，本任务不定；建议 SHOP-TASK-079 先校验 CSRF、通过后再取用，避免 CSRF 不通过的请求把凭据耗掉。
+  - 取用成功后若重设返回 `False`（期间会员已注销）或数据库提交失败，凭据已删除，访客须重新短信验证（Kelvin 2026-10-10「凭据丢失只需重新验证」）。
+  - 设计没有写密码长度上限，本任务不定；接口的请求体上限由 SHOP-TASK-079 按 SHOP-TASK-077 的写法另定。
+- 留给之后的任务：SHOP-TASK-079 负责重设密码接口与 cookie（短信核验 `reset_password` 用途通过且号码已注册时调用 `issue_pw_reset`，经 HttpOnly、Secure、SameSite=Lax 的 cookie 交给本浏览器、CSRF 令牌交给页面；提交新密码时校验 CSRF、调用 `consume_pw_reset` 与 `reset_password` 并提交；`RateLimitUnavailable` 转成暂不可用的回答）；前端忘记密码 P12。
+- 验证到什么程度：人工逐条对照验收标准、DESIGN 1.11 第 3、6 条与 HANDOFF 0.41、0.44 的 Kelvin 决定原句自查。`tests/test_member_pw_reset.py` 用 SQLite 内存库（每个连接开启外键检查）与照 `tests/test_member_auth.py` 另写的内存替身 `FakeRedis`（SET 带 EX、事务管道 GET 与 DEL、替身时钟、命令记录、可注入的连接 / 超时 / 响应错误、DEL 出错与执行前插入另一个取用的钩子；未加依赖）；期望的键与 CSRF 令牌在测试里另算；每条测试的文档字符串写明守住的设计原句、Kelvin 决定或验收条目。覆盖：签发后 Redis 里只有另算的摘要键、值为会员 ID、过期 600 秒、只有一条 SET 命令；凭据互不相同；5 种不合法的会员 ID 抛 `ValueError` 且不访问 Redis；取用一次后再取用为 `None`；差 1 秒到 10 分钟可取用、满 10 分钟为 `None`；从未签发的凭据为 `None`；8 种格式不合法的凭据返回 `None` 且不访问 Redis（客户端为 `None` 也是）；交错的两个取用只有一个得到会员 ID；签发时连不上、超时、返回错误与客户端为 `None` 都抛 `RateLimitUnavailable`，消息与异常链不含键与会员 ID；取用时连不上、超时与 EXEC 被放弃都抛它且消息不含凭据、键与会员 ID；GET 读到值而 DEL 出错时抛它；值不是会员 ID 时抛它；CSRF 等于另算的带前缀摘要、不进 Redis、与 member_auth、admin_auth、order_access 的令牌两两不同且它们不能用于重设，缺失、为空、错误、非 ASCII、另一凭据的令牌与凭据缺失或格式不合法都不通过；重设后旧密码不能、新密码能通过 `authenticate_member`，该会员全部会话撤销于 `now`、其他会员的会话与密码不受影响；未设密码的会员可重设；已注销会员返回 `False`、哈希仍为空且不撤销任何会话；不存在的会员返回 `False`；4 种不足 8 个字符或不是字符串的密码抛 `ValueError`、消息不含密码、不改密码不撤会话；8 个非 ASCII 字符可重设；调用方回滚时密码与撤销都不生效；带时区的时间被拒；签发结果 repr 不含凭据、CSRF 令牌与键；无 `app.` 日志。未连真实 Redis 或 MySQL（并发取用只以替身交错模拟，未在真实 Redis 上并发）。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
