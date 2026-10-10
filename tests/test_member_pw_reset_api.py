@@ -658,6 +658,24 @@ def test_verify_sms_disabled_wins_over_failing_redis(
     assert provider.check_calls == 0
 
 
+def test_verify_sms_disabled_wins_over_unconfigured_redis(
+    app: FastAPI, client: TestClient, engine: Engine, provider: FakeSmsProvider
+) -> None:
+    """第 3 条“短信验证开关关闭期间……密码重设暂停”。验收：先按当次读取的开关判定，关闭即 403
+    sms_disabled；Redis 未配置时也是 403 而不是 503——开关关闭时不取 Redis 客户端。
+    """
+    del app.dependency_overrides[get_redis_client]
+    attempt_id = add_attempt(engine)
+    set_switch(engine, False)
+
+    response = client.post(VERIFY_URL, json=verify_payload())
+
+    assert_error(response, 403, "sms_disabled")
+    assert_no_cookie(response)
+    assert provider.check_calls == 0
+    assert attempt_status(engine, attempt_id) == "sent"
+
+
 @pytest.mark.usefixtures("enabled")
 def test_verify_redis_not_configured_is_503_without_check(
     app: FastAPI, client: TestClient, engine: Engine, provider: FakeSmsProvider

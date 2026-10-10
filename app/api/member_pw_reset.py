@@ -13,8 +13,8 @@ docs/HANDOFF.md 0.44 记录的 Kelvin 2026-10-10 决定（一次性重设凭据�
 1. 请求体逐块读，超过 4 KB 即 413，先于一切；不是 JSON 415；请求体只有 phone、phone_region
    与 code（1 到 16 个字符的字符串），都必填、严格类型，多出字段 422；号码规范化与
    POST /api/member/sms-login 相同，不成立 422（类型 phone_invalid）。
-2. 取 Redis 客户端（只建客户端、不连 Redis；未配置时由路由类回答 503 service_unavailable）。
-3. 当次读取的短信验证开关关闭：403 sms_disabled，不 PING、不核验。
+2. 当次读取的短信验证开关关闭：403 sms_disabled，不取 Redis 客户端、不 PING、不核验。
+3. 取 Redis 客户端（只建客户端、不连 Redis；未配置时由路由类回答 503 service_unavailable）。
 4. PING 一次；出错由路由类回答 503 service_unavailable，不核验、不消耗验证码。
 5. 以用途 reset_password 调用 verify_code。不是 approved 时先提交再回答，状态码与错误码同
    sms-login（wrong_code 422 code_wrong，expired 与 no_pending 422 code_expired，unavailable
@@ -36,7 +36,8 @@ docs/HANDOFF.md 0.44 记录的 Kelvin 2026-10-10 决定（一次性重设凭据�
 7. 调用 reset_password：返回 False（会员已注销）401 reset_expired；否则提交，清除重设
    cookie，204 且响应体为空。取用之后数据库出错时回滚，503 service_unavailable（凭据已删，
    访客须重新验证）。重设撤销该会员的全部会话；不签发会员会话。
-2 到 5 写在依赖 _reset_request 里，Redis 客户端依赖排在它之后：FastAPI 按声明顺序解析依赖。
+验证的第 2 步写在依赖 _verify_enabled 里，提交的 2 到 5 写在依赖 _reset_request 里，Redis
+客户端依赖都排在它们之后：FastAPI 按声明顺序解析依赖。
 
 两个接口都不需要也不读会员会话。处理函数与依赖产生的全部响应（含错误）都带
 Cache-Control: no-store，由 SHOP-TASK-027 的路由类统一加上；路径存在但方法不匹配的 405 由
@@ -232,6 +233,21 @@ def _clear_reset_cookie(response: Response) -> None:
     )
 
 
+def _verify_enabled(session: SessionDep) -> None:
+    """验证在取 Redis 客户端之前的检查：当次读取的短信验证开关关闭时 403，不触及 Redis。"""
+    try:
+        enabled = is_sms_verification_enabled(session)
+    except SQLAlchemyError:
+        _rollback(session)
+        raise HTTPException(status_code=503, detail="sms_unavailable") from None
+    if not enabled:
+        raise _sms_disabled()
+
+
+# 排在 RedisDep 之前：开关关闭时不取 Redis 客户端，Redis 未配置也回答 403 而不是 503。
+VerifyEnabledDep = Annotated[None, Depends(_verify_enabled)]
+
+
 def _ping(client: redis.Redis) -> None:
     """核验之前确认 Redis 可用：之后签发凭据要用它，不可用时不消耗验证码。"""
     try:
@@ -244,6 +260,7 @@ def _ping(client: redis.Redis) -> None:
 @router.post("/password-reset/verify")
 def verify(
     body: VerifyInputDep,
+    _enabled: VerifyEnabledDep,
     client: RedisDep,
     session: SessionDep,
     provider: ProviderDep,
@@ -251,13 +268,6 @@ def verify(
     """号码已注册 200 {"registered": true, "csrf_token": …} 并设置重设 cookie；
     未注册 200 {"registered": false}，不设 cookie。不返回号码与会员 ID。
     """
-    try:
-        enabled = is_sms_verification_enabled(session)
-    except SQLAlchemyError:
-        _rollback(session)
-        raise HTTPException(status_code=503, detail="sms_unavailable") from None
-    if not enabled:
-        raise _sms_disabled()
     _ping(client)
 
     try:
