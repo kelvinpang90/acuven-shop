@@ -2924,7 +2924,7 @@ tasks:
       与 docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（同一号码加来源 15 分钟内密码登录失败 5 次即锁 15 分钟，失败一律通用提示），在 SHOP-TASK-071 的规则函数与 SHOP-TASK-076 的会员会话依赖之上提供密码登录与首次设置密码两个接口。
       不做重设密码（需另定验证通过到设新密码之间的凭据）、注销与前端，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41（会员登录与个人资料）。拆分：接口层（5 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-071
       - SHOP-TASK-076
