@@ -3254,7 +3254,7 @@ tasks:
     creates_pull_request: true
 
   # 优惠券与积分接入会员结账（Kelvin 2026-10-11 决定，HANDOFF 0.47）：会员下单时券或积分已不可用即整单拒绝；获得积分在下单时写快照、模拟支付成功时发放。
-  # SHOP-TASK-088、089 为会员下单的规则与接口，090、091 为支付与取消的接线及支付页的会员访问，092、093 为退款，094 为注销，095 为会员中心查询，096 为积分到期定时任务。
+  # SHOP-TASK-088、089 为会员下单的规则与接口，090、091 为支付与取消的接线及支付页的会员访问，092、093 为退款，094 为注销，095 为会员中心查询，096 为积分到期定时任务；097 让超时取消逐张提交，排在 090 之前。
   - id: SHOP-TASK-088
     title: 会员下单的计价与下单规则
     purpose: >-
@@ -3297,7 +3297,7 @@ tasks:
     acceptance_criteria:
       - 新文件 app/api/member_orders.py（app/main.py 挂上路由）提供 POST /api/member/checkout/quote 与 POST /api/member/orders；路由器用 SHOP-TASK-027 的 _NoStoreRoute，这两个接口的处理函数与依赖产生的响应（含错误）都带 no-store；路径存在但方法不匹配时由框架返回的 405 不在此列；本模块不写日志（限流在 Redis 出错时的一条只含桶名的警告除外），响应与错误不含收货资料、券代码原文、幂等键、令牌或 cookie 值
       - 两个接口的检查顺序，每一步不通过即停止——请求体按实际读到的字节逐块判断，超过 8 KB 即 413，先于一切校验；不是 JSON 415；按访客来源限流（计价与 POST /api/checkout/quote 共用桶 checkout_quote_source 及其上限，下单与 POST /api/orders/guest 共用桶 guest_order_source 及其上限，Redis 未配置或出错时放行，照 app/api/checkout.py 的 enforce_source_limit）；require_member（401 member_session_required）；只有下单再经 require_member_csrf（403 csrf_failed）；之后才校验请求体与 Idempotency-Key（规则同 POST /api/orders/guest），多出字段 422，422 每条错误只给位置、类型与固定消息、不回显请求内容（沿用 app/api/pay.py 的 _body_errors）
-      - 计价的请求体——lines（同计价接口，1 到 20 行，每行 1 到 99 件，SKU 不重复）、可省略的 country_code 与 state_code（规则同计价接口）、可省略的 coupon_code（1 到 64 个字符的字符串）、可省略的 points（0 到 100000000 的整数，默认 0）；lang 查询参数同计价接口；响应在计价接口的全部字段之外另给 coupon_applied（未给代码为 null，否则为布尔）、coupon_discount_sen、points_available、points_max、points_accepted、points_redeemed 与 points_earned，total_sen 与 fx_reference 为扣除券与积分之后的合计及其参考外币（未给收货国家时为 null）；运费缺失与无效目的地同计价接口（503 与 422）；两个接口在 MemberNotActive 时都为 401 member_session_required，数据库出错时回滚并 503 service_unavailable
+      - 计价的请求体——lines（同计价接口，1 到 20 行，每行 1 到 99 件，SKU 不重复）、可省略的 country_code 与 state_code（规则同计价接口）、可省略的 coupon_code（1 到 64 个字符的字符串）、可省略的 points（0 到 100000000 的整数，默认 0）；lang 查询参数同计价接口；响应在计价接口的全部字段之外另给 coupon_applied（未给代码或有不正常的行、券未判定时为 null，否则为布尔）、coupon_discount_sen、points_available、points_max、points_accepted、points_redeemed 与 points_earned，total_sen 与 fx_reference 为扣除券与积分之后的合计及其参考外币（未给收货国家时为 null）；运费缺失与无效目的地同计价接口（503 与 422）；两个接口在 MemberNotActive 时都为 401 member_session_required，数据库出错时回滚并 503 service_unavailable
       - 下单的请求体——lines、收货人 name、address、postal_code、country_code、state_code、region（规则同 POST /api/orders/guest）、必填的收货电话 phone（字符串；前端预填会员手机号，会员可改为其他号码或虚构号码），可省略的 coupon_code 与 points（规则同计价）；不收 phone_region，收货电话按 app/services/phone.py 的 normalize_phone 以收货国家为默认地区解析（以加号开头时以输入为准），规范化结果写入收货资料并计入请求指纹；收货国家不在 phonenumbers.SUPPORTED_REGIONS 里时，输入以加号开头则以 MY 作默认地区调用（以加号开头时默认地区不参与解析，结果只取决于输入），否则 422；不成立 422（类型 phone_invalid）；不读短信验证开关，不按白名单拒绝
       - 下单调用 SHOP-TASK-088 的会员下单函数——新订单 201、重放 200，响应为订单号、状态、商品小计、券折扣、积分抵扣、运费、合计、获得积分与支付到期时间（带 UTC 时区），不含收货资料与令牌，不设置任何 cookie；MemberNotActive 为 401 member_session_required；409 的 detail 为 idempotency_conflict、order_not_placeable、coupon_invalid（页面的 checkout.coupon_invalid）与 points_unavailable；运费缺失 503、无效目的地 422；数据库出错时回滚，503 service_unavailable
       - tests/test_member_orders_api.py 用 TestClient 与 SQLite 内存库（照 tests/test_guest_order.py 与 tests/test_member_pw_api.py 的写法，经 SHOP-TASK-076 的会话签发登录，不加依赖）验证意图——检查顺序（413 先于一切、415、未登录 401、下单缺 CSRF 403、多出字段 422 且不回显）；计价给出券与积分两行与扣除后的合计，券不可用时 coupon_applied 为 false 且不计入；下单 201 后重放 200、同键不同请求 409；券被用满后下单 409 coupon_invalid 且库存未扣；积分超过上限 409 points_unavailable；收货电话以收货国家为默认地区解析、以加号开头时以输入为准、格式不成立 422；开关开启时马新号码的会员也照常下单；所有响应（含错误）带 no-store；每条测试写明它守住的是设计、UX 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
@@ -3322,11 +3322,11 @@ tasks:
       设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46、0.47（优惠券与积分）。拆分：业务规则层（4 个允许路径）。
     status: ready
     depends_on:
-      - SHOP-TASK-085
-      - SHOP-TASK-086
+      - SHOP-TASK-088
+      - SHOP-TASK-097
     acceptance_criteria:
       - app/services/payment.py 的 submit_payment 与 cancel_order 增加关键字参数 actor（默认 guest，只接受 guest 与 member，其他值抛 ValueError），状态迁移的检查与写入的事件都用它；游客接口不传，行为不变；超时取消的操作者仍为 system
-      - 锁顺序与会员下单、注销一致（会员 → 订单）——支付成功、本人取消与超时取消在做带条件的 UPDATE 之前，先以普通读取得订单的 member_id，非空时以 SELECT … FOR UPDATE 锁住该会员的行（会员已注销也锁），为空（游客订单或会员已注销后被清空）时不预先锁；锁后再做现有的带条件 UPDATE，未命中时的回滚与重放处理不变；于是同一会员的下单（会员 → 库存，SHOP-TASK-088）、取消与超时取消（会员 → 订单 → 库存）、注销（会员 → 订单）都先取会员锁，不成环；会员 ID 已清空的订单在取消时由 SHOP-TASK-086 的释放函数在库存之后才锁会员行，此时该会员已注销，不会再下单或注销，也不成环；模块说明写明这个锁顺序
+      - 锁顺序与会员下单、注销一致（会员 → 订单）——支付成功、本人取消与超时取消在做带条件的 UPDATE 之前，先以普通读取得订单的 member_id，非空时以 SELECT … FOR UPDATE 锁住该会员的行（会员已注销也锁），为空（游客订单或会员已注销后被清空）时不预先锁；锁后再做现有的带条件 UPDATE，未命中时的回滚与重放处理不变；于是单张订单的下单（会员 → 库存，SHOP-TASK-088）、取消（会员 → 订单 → 库存）与注销（会员 → 订单）都先取会员锁；会员 ID 已清空的订单在取消时由 SHOP-TASK-086 的释放函数在库存之后才锁会员行，此时该会员已注销，不会再下单或注销。超时取消在 SHOP-TASK-097 之后逐张订单真实提交（定时任务与每日库存重置都不再在外层事务里连续取消多张订单），所以不会跨订单持有库存与券的锁；模块说明写明这个锁顺序，并写明它依赖超时取消逐张提交
       - 支付成功时，在同一事务里、带条件的 UPDATE 命中之后——调用 SHOP-TASK-085 的核销函数（该单没有用券记录时返回 False，不出错）；以加锁读重新读取订单的 member_id 与会员状态，非空且会员为 active 时调用 SHOP-TASK-086 的获得函数，获得积分取订单快照 points_earned（为 0 时不写记录），否则不发放；重放不再核销或发放
       - 本人取消与超时取消，在同一事务里、带条件的 UPDATE 命中并加回库存之后——调用 SHOP-TASK-085 的释放函数与 SHOP-TASK-086 的释放函数（游客订单没有用券记录与积分流水，两者都不写）；UPDATE 未命中时整个事务回滚，不释放；重复取消、重复运行超时取消不重复释放
       - pay_orders 的视图另给 coupon_discount_sen、points_redeemed 与 points_earned（取订单快照，游客订单为 0）；游客接口 GET /api/pay/orders 的响应随之多出这三个字段，其余字段不变
@@ -3433,6 +3433,7 @@ tasks:
     depends_on:
       - SHOP-TASK-080
       - SHOP-TASK-086
+      - SHOP-TASK-090
     acceptance_criteria:
       - app/services/member_deletion.py 的注销函数在条件更新命中（会员由 active 改为 deleted）之后、同一事务里调用 SHOP-TASK-086 的作废函数（入参为该会员 ID 与当前时间）；条件更新未命中（不存在或已注销）时不调用；其余步骤与返回值不变，只 flush、不提交，不写日志
       - 锁顺序——注销的条件更新已持有会员行锁，作废函数再锁同一行不另取其他会员的锁；已过期的批次由作废函数记为到期，待抵扣不作废（SHOP-TASK-086 的规则），用券记录不改
@@ -3503,6 +3504,34 @@ tasks:
       - tests/test_jobs.py
       - tests/test_auto_complete.py
       - tests/test_sms_retention.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-097
+    title: 超时取消逐张订单独立提交
+    purpose: >-
+      按 docs/DESIGN.md 1.11「计价、优惠、积分与库存」第 6 条（15 分钟未支付自动取消并释放；每天按马来西亚时间重建当日可用库存为初始库存减去仍有效的预留）与「失败、并发与重试」第 1、6 条（库存、券与积分预占在同一事务；定时任务可重复运行、只生效一次），
+      让定时任务与每日库存重置里的超时取消逐张订单真实提交，不再在一个外层事务里连续取消多张订单、跨订单持有库存行锁。起因：SHOP-TASK-090 让取消先锁会员行再加回库存，若前一张订单的库存锁持有到外层提交，再去锁下一张订单的会员行时会与会员下单（持会员锁、等库存）成环（登记时的预审与 Codex 审查指出，2026-10-11）；游客下单与这两处之间按库存顺序本来也有同类情形，随之消除。
+      只改事务边界，超时取消本身（app/services/payment.py 的 expire_overdue_orders）与库存重置的计算不变。不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250），订单状态迁移的执行方式。拆分：定时任务（5 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-032
+    acceptance_criteria:
+      - app/jobs.py 的超时取消任务改为 own_transactions（运行器给不在事务中的新会话），expire_overdue_orders 逐张提交即真实提交；任务名、每轮上限 CANCEL_BATCH_LIMIT、在任务列表中的位置与手动命令 cancel-expired 不变；某张订单取消失败抛异常时，之前已取消的订单保留（各自已提交），本轮记失败、下一轮继续；模块说明的事务说明随之改写
+      - app/services/stock_reset.py 的每日库存重置把超时取消从认领事务里移出——检查到该日期尚未完成并结束检查的事务之后、开始认领事务之前，直接在该会话上执行一次 expire_overdue_orders（逐张真实提交，不限张数），然后照旧开始认领事务（MySQL 上用 READ COMMITTED）、认领、加锁统计与写入；该日期已完成时不执行超时取消；认领事务里不再执行超时取消，去掉以保存点执行它的写法；统计规则不变（仍把所有 awaiting_demo_payment 订单的件数算作有效预留，所以在超时取消与认领之间新到期的订单不影响结果）；重置失败时认领事务回滚并记 failed，已提交的超时取消保留；模块说明的步骤与事务说明随之改写
+      - tests/test_jobs.py 与 tests/test_stock_reset.py 里断言旧事务边界的测试只为此随之修改——超时取消任务失败时已取消的订单保留而不是一起回滚（自定义的非 own_transactions 任务仍按旧语义回滚，那条测试不改）；库存重置失败时超时取消已生效、库存与明细回滚；超时取消发生在认领之前且已完成的日期不执行；新增测试验证运行器以 own_transactions 执行超时取消、同一轮的超时取消每张都已提交（之后再开会话可见）、重复运行只生效一次；每条测试写明它守住的是设计的哪一句或本任务的哪条约定；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-097 记录段（两处事务边界的改动、起因、失败时的行为变化、偏离、验证到什么程度），并在 SHOP-TASK-031、032 的记录段末尾各补一行指向本任务的说明（只追加，不改原文）；不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/payment.py、其他任务、部署配置与 docker-compose 文件、模型、迁移、.platform/、CI；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - app/jobs.py
+      - app/services/stock_reset.py
+      - tests/test_jobs.py
+      - tests/test_stock_reset.py
       - docs/TODO.md
     allowed_commands:
       - lint.check
