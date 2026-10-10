@@ -26,14 +26,13 @@
 
 <!-- openclaw:planning-v1:begin -->
 ### 当前计划
-1. `SHOP-TASK-077` 会员密码登录与首次设置密码接口
-2. `SHOP-TASK-078` 会员重设密码的一次性凭据与重设规则
-3. `SHOP-TASK-079` 会员重设密码接口
-4. `SHOP-TASK-080` 会员注销与注销批准的规则
-5. `SHOP-TASK-081` 发送与核验会员注销验证码的接口
-6. `SHOP-TASK-082` 确认会员注销的接口
-7. `SHOP-TASK-083` 优惠券与用券记录的数据模型
-8. `SHOP-TASK-084` 积分批次与积分流水的数据模型
+1. `SHOP-TASK-078` 会员重设密码的一次性凭据与重设规则
+2. `SHOP-TASK-079` 会员重设密码接口
+3. `SHOP-TASK-080` 会员注销与注销批准的规则
+4. `SHOP-TASK-081` 发送与核验会员注销验证码的接口
+5. `SHOP-TASK-082` 确认会员注销的接口
+6. `SHOP-TASK-083` 优惠券与用券记录的数据模型
+7. `SHOP-TASK-084` 积分批次与积分流水的数据模型
 
 ### 已阻塞
 - 待登记：短信验证组件 V1 与结账会员路径（马新号码验证、自动注册或登录、优惠券与积分；会员访问 P06、P07）｜阻塞：依赖短信验证服务、会员注册登录接口、优惠券与积分账本
@@ -1742,3 +1741,19 @@
   - 本接口不另做限流：错误验证码的尝试次数由 Twilio Verify 自身的上限兜底（用尽后核验归为 `expired`，回答 `code_expired`），发送侧的人机挑战与限流在 `POST /api/sms/send`。
 - 留给之后的任务：会员密码登录、设置与重设密码接口（之后登记，调用 SHOP-TASK-071 的 `password_login`、`password_length_ok` 与 `revoke_all_member_sessions`，可复用本模块的 cookie 写法与两个依赖）；会员注销；前端（注册 P11、登录 P12、会员中心 P13 与结账会员路径的短信验证组件 V1）。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.11 第 1、3、5、6 条与 HANDOFF 0.41 的决定原句自查。`tests/test_member_auth_api.py` 用 `TestClient`（`https://testserver`，cookie 带 Secure 才回送）与 SQLite 内存库（引擎设置与 `tests/test_sms_api.py` 相同，由引擎发 BEGIN），会话依赖换成绑定同一内存库的会话（可换成提交即抛错的子类），服务商用 SHOP-TASK-067 的 `FakeSmsProvider`（另加核验时抛异常的子类）；结果都在另一个数据库会话里读；期望的令牌摘要与 CSRF 令牌在测试里另算；每条测试的文档字符串写明它守住的设计原句、Kelvin 决定或验收条目。覆盖：三种用途登录已注册号码（`created` 为假、会员不变、记录 `approved`、认领与会话已提交）与注册新号码（`created` 为真、无密码 active 会员、认领与会话已提交）；cookie 名称、HttpOnly、Secure、SameSite=Lax、Path、无 Domain、Max-Age 30 天，库里只有摘要且到期为 30 天；已带 cookie 再登录以新会话覆盖；`wrong_code`、`expired`（记录已提交为 `rejected`）、`no_pending`、`unavailable` 与 `sms_disabled`（无设置行与关闭两例、不调用服务商）的状态码与错误体，都不设 cookie、不建会员、不签发会话、不认领；验证码错误时不登录已注册会员；格式不对的验证码为 `code_wrong` 且不调用服务商；服务商异常、认领时数据库异常与提交失败都回滚为 503 `sms_unavailable`、不设 cookie、记录仍为 `sent`；数据库未配置时三个接口都是 503；413 在 4 KB 恰好放行、多 1 字节拒绝，分块发送也先于 415 与 422；415 先于 422；14 种结构错误与 5 种号码不成立为 422 且不回显；号码按地区规范化；`session` 的四个字段、号码遮盖、`has_password` 真假、`expires_at` 带 `Z` 且等于库里、反复读取不延长；遮盖函数的边界；无 cookie、格式不合法、不存在、已到期、已撤销与会员已注销都 401（取会话与带正确 CSRF 的退出），会话行不变；短信验证开关关闭后会话仍可读取与退出；退出缺失、错误、重复与后台前缀的 CSRF 都 403 且会话仍有效；退出成功撤销当前会话、清除 cookie（属性同设置时、Max-Age 0），之后原 cookie 401，同一会员的另一会话仍有效；405 不含请求内容；无 `app.` 日志，任何日志都不含号码、验证码、令牌与 CSRF 令牌；响应体与错误不含号码原文、验证码与令牌。未连真实的 Twilio Verify 或 MySQL，未在真实浏览器里验证 `__Host-` cookie 的实际行为。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-077 会员密码登录与首次设置密码接口
+
+- [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「权限与资料保护」第 3 条（会员可用手机号加密码登录；未设密码的账号只能短信登录，密码登录对其与对错误密码返回相同的通用失败；首次设置密码在已登录会话内进行；密码至少 8 位、不强制复杂度；短信验证开关关闭期间已设密码的会员仍可密码登录，已登录会员首次设置密码不受影响）与 `docs/HANDOFF.md` 0.41 记录的 Kelvin 2026-10-08 决定（同一号码加来源 15 分钟内密码登录失败 5 次即锁 15 分钟，失败一律通用提示），在 SHOP-TASK-071 的规则函数与 SHOP-TASK-076 的会员会话依赖之上新增 `app/api/member_pw.py`（`app/main.py` 挂上路由），提供 `POST /api/member/password-login` 与 `POST /api/member/password`；测试见 `tests/test_member_pw_api.py`。`app/api/member_auth.py` 只把模块说明里「不做密码登录、设置与重设密码、注销」一句改为指向 `app/api/member_pw.py`。未改 `app/services/`、`tests/test_member_auth_api.py`、`.platform/`、CI、部署配置、前端或设计，未加表或迁移，未装依赖。设计闸门：DESIGN 1.11（提交 `2d13250`）与 HANDOFF 0.41（会员登录与个人资料）。
+- 接口：路由器 `prefix="/api/member"`，用 SHOP-TASK-027 的 `_NoStoreRoute`，处理函数与依赖产生的全部响应（含 413、415、422、401、403、409、503 与 `get_session` 的 503）都带 `Cache-Control: no-store`；路径存在但方法不匹配的 405 由框架在路由之外回答，不在此列（不含请求内容）。会话 cookie 的设置（`_set_session_cookie`）、`require_member`（经 `MemberDep`）与 `require_member_csrf` 都从 `app/api/member_auth.py` 引用，未另写。422 沿用 `app/api/pay.py` 的 `_body_errors`，只给位置、类型与固定消息，不回显请求内容。不写日志；号码原文、密码、令牌、cookie 值与来源不出现在响应体、错误与异常消息里。
+- 密码登录 `POST /api/member/password-login`：413（请求体逐块读，超过 4 KB，先于一切）→ 415（不是 JSON）→ 422（请求体只有 `phone`、`phone_region` 与 `password`，都必填、严格类型，多出字段 422；`password` 为 1 到 256 个字符的字符串；号码经 `normalize_phone` 规范化，与 sms-login 相同，不成立 422 类型 `phone_invalid`）。之后取 Redis 客户端（`get_redis_client`）与来源（`client_source`），调用 SHOP-TASK-071 的 `password_login`：返回会员时 `issue_member_session`、提交、设置 cookie，204 且响应体为空；返回 `None`（锁定、号码未注册、未设密码、密码错误与已注销）一律 401 `{"detail":"login_failed"}`，五者状态码、响应体与响应头完全相同，不设 cookie。Redis 未配置或查锁定、计失败时出错，由路由类回答 503 `service_unavailable`，不放行登录。数据库出错（含提交失败）时回滚，503 `service_unavailable`，不设 cookie。不认领游客订单，不读短信验证开关。登录时不按长度规则预先拒绝（7 个字符的密码照常 401）。
+- 锁定：完全沿用 SHOP-TASK-071 的 `password_login`（桶 `member_login_failures` 上限 4、窗口 900 秒；超过即在 `member_login_lock` 计一次、锁 900 秒；按 [来源, 规范化号码] 组合计数与锁定；锁定期间正确密码也拒绝、不校验密码、不计失败；成功不清零），本任务不另定阈值。
+- 首次设置密码 `POST /api/member/password`：413（同上，4 KB）→ 415 → 401 `member_session_required`（`require_member`）→ 403 `csrf_failed`（`require_member_csrf`，此时不改密码）→ 422（请求体只有 `password`，1 到 256 个字符的字符串，多出字段 422）→ 不满足 `password_length_ok` 时 422 `{"detail":"password_too_short"}`。之后会员已设密码即 409 `{"detail":"password_already_set"}`；否则以 `app/services/pw_hash.py` 的 `hash_password` 算哈希，以条件更新（`id` 相同、`status` 为 `active` 且 `password_hash` 为空）写入并提交，204 且响应体为空。不撤销会话，不设 cookie，不读短信验证开关。
+- 偏离与取舍，请审阅（未改设计，未发现须停下的设计问题）：
+  - 设置密码的请求体上限验收未写数值，取与密码登录相同的 4 KB。4 KB 逐块读取在本模块另写一份（写法同 sms-login）：`app/api/pay.py` 的 `_json_body` 固定 8 KB，`member_auth.py` 的读取与 `SmsLoginIn` 绑在一起，且该文件只许改说明一句。
+  - 设置密码先按 `require_member` 读到的会员判断已设密码即 409，不再算哈希；条件更新不成立时回滚，在新事务里重读会员状态：仍为 `active`（并发的另一次设置先完成）409 `password_already_set`，已不是 `active`（并发注销）401 `member_session_required`；两种情况原哈希都不变。后一种回答验收未写，按 `require_member` 对已注销会员的回答处理。
+  - 设置密码数据库出错时回滚并 503 `service_unavailable`（验收只对密码登录写了数据库出错的回答，这里取同一个）。
+  - 五种失败的响应完全相同，但耗时不完全相同：锁定时 `password_login` 不校验密码（SHOP-TASK-071 的既定顺序），比其他四种少一次 scrypt；能触发锁定的只有在同一来源对该号码连续失败的人，对他不构成新的信息。其余四种都恰好跑一次 scrypt。
+  - 计失败时 Redis 出错也回答 503 而不是 401（与 SHOP-TASK-036 的管理员登录相同）：这一次失败未计入，不能当作已处理的失败回答。
+- 留给之后的任务：重设密码（需另定短信验证通过到设新密码之间的凭据，SHOP-TASK-078、SHOP-TASK-079，重设后调用 `revoke_all_member_sessions`）；会员注销（SHOP-TASK-080 至 SHOP-TASK-082）；前端（登录、忘记密码 P12 与会员中心 P13 里的设置密码）。
+- 验证到什么程度：人工逐条对照验收标准、DESIGN 1.11 第 3 条与 HANDOFF 0.41 的 Kelvin 2026-10-08 决定原句自查。`tests/test_member_pw_api.py` 用 `TestClient`（`https://testserver`）与 SQLite 内存库（引擎设置同 `tests/test_member_auth_api.py`），会话依赖换成绑定同一内存库的会话（可换成提交即抛错的子类），Redis 用照 `tests/test_admin_auth_api.py` 写的内存替身 `FakeRedis`（另加可拨动的时钟模拟 EXPIRE NX 的过期），来源用 `X-Real-IP` 指定；结果都在另一个数据库会话里读；期望的令牌摘要、CSRF 令牌与锁定标识在测试里另算；每条测试的文档字符串写明守住的设计原句、Kelvin 决定或验收条目；未加依赖。覆盖：密码登录成功 204、cookie 属性同 sms-login、库里只有摘要且 30 天到期、cookie 可被 `GET /api/member/session` 读到（`has_password` 为真）、不认领游客订单；号码按地区规范化；号码未注册、未设密码、密码错误、已注销与锁定五种失败的状态码、响应体与响应头逐项相同且不设 cookie、不签发会话；登录时 7 个字符的密码为 401 而不是 422；第 5 次失败后正确密码也 401、差 1 秒到 15 分钟仍 401、满 15 分钟可登录；4 次失败不锁；另一来源对同一号码、同一来源对另一号码不受锁定影响；Redis 未配置、查锁定出错与计失败出错都 503 且不签发会话；提交失败 503 且不设 cookie；无设置行与短信验证开关关闭时密码登录照常；登录的 413（分块发送、三种 Content-Type、Redis 未配置也是 413，恰好 4 KB 放行）、415 先于 422 与 Redis、10 种结构错误与 5 种号码不成立为 422 且不回显密码；256 个非 ASCII 字符的密码可登录；设置密码成功后库里哈希可校验新密码、原会话仍有效且 `has_password` 为真、新密码可登录；8 与 256 个字符可设置、3 种不足 8 个字符为 422 `password_too_short` 且不写入；已设密码 409 且原哈希不变（原密码仍可登录、新密码不能）；以会员依赖读到旧值模拟并发设置先完成，409 且原哈希不变；短信验证开关关闭时设置密码照常；5 种会话不通过为 401（带正确 CSRF 也是）；3 种 CSRF 不通过为 403 且不改密码；设置密码请求体超限且没有会话为 413、不是 JSON 且没有会话为 415、没有会话且结构不对为 401、没有 CSRF 且结构不对为 403、恰好 4 KB 放行，7 种结构错误为 422 且不回显密码；两个路径方法不匹配的 405 不含请求内容；无 `app.` 日志，任何日志都不含号码、密码、令牌、CSRF 令牌与来源。未连真实 Redis 或 MySQL（并发设置只以旧值模拟，未在两个真实事务里并发），未在真实浏览器里验证。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
