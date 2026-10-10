@@ -2986,7 +2986,7 @@ tasks:
       按 docs/DESIGN.md 1.11「权限与资料保护」第 3 条与「边界与原则」第 4 条（短信验证开关关闭时密码重设暂停；开关在流程途中被关闭后不重设密码）、docs/UX.md 0.10 P12 忘记密码（验证通过后号码已注册才显示新密码输入，未注册不创建账号），
       以及 docs/HANDOFF.md 0.44 记录的 Kelvin 2026-10-10 决定，在 SHOP-TASK-069 的核验函数与 SHOP-TASK-078 的规则函数之上提供重设密码的验证与提交两个接口。不做前端，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41、0.44（会员密码与个人资料）。拆分：接口层（4 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-076
       - SHOP-TASK-077
