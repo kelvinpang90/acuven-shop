@@ -7,7 +7,7 @@ require_member_csrf。
 HttpOnly、Secure、SameSite=Lax 的 cookie 交给浏览器，写操作另须 CSRF 令牌），以及
 docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（会员会话 30 天、不随使用延长）。
 规则函数见 app/services/member_sms_login.py（SHOP-TASK-075）与 app/services/member_auth.py
-（SHOP-TASK-071）。不做密码登录、设置与重设密码、注销。
+（SHOP-TASK-071）。密码登录与首次设置密码见 app/api/member_pw.py（SHOP-TASK-077）。
 
 短信登录或注册的处理顺序，每一步不通过即停止：
 1. 请求体按实际读到的字节逐块判断，超过 4 KB 即 413，先于一切校验；不是 JSON 415。
