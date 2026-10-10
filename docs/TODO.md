@@ -26,15 +26,14 @@
 
 <!-- openclaw:planning-v1:begin -->
 ### 当前计划
-1. `SHOP-TASK-079` 会员重设密码接口
-2. `SHOP-TASK-080` 会员注销与注销批准的规则
-3. `SHOP-TASK-081` 发送与核验会员注销验证码的接口
-4. `SHOP-TASK-082` 确认会员注销的接口
-5. `SHOP-TASK-083` 优惠券与用券记录的数据模型
-6. `SHOP-TASK-084` 积分批次与积分流水的数据模型
-7. `SHOP-TASK-085` 优惠券的查券、预占、释放与核销规则
-8. `SHOP-TASK-086` 积分的获得、预占、释放、到期与作废规则
-9. `SHOP-TASK-087` 积分的退款返还与追回规则
+1. `SHOP-TASK-080` 会员注销与注销批准的规则
+2. `SHOP-TASK-081` 发送与核验会员注销验证码的接口
+3. `SHOP-TASK-082` 确认会员注销的接口
+4. `SHOP-TASK-083` 优惠券与用券记录的数据模型
+5. `SHOP-TASK-084` 积分批次与积分流水的数据模型
+6. `SHOP-TASK-085` 优惠券的查券、预占、释放与核销规则
+7. `SHOP-TASK-086` 积分的获得、预占、释放、到期与作废规则
+8. `SHOP-TASK-087` 积分的退款返还与追回规则
 
 ### 已阻塞
 - 待登记：短信验证组件 V1 与结账会员路径（马新号码验证、自动注册或登录、优惠券与积分；会员访问 P06、P07）｜阻塞：依赖短信验证服务、会员注册登录接口、优惠券与积分账本
@@ -1776,3 +1775,32 @@
   - 设计没有写密码长度上限，本任务不定；接口的请求体上限由 SHOP-TASK-079 按 SHOP-TASK-077 的写法另定。
 - 留给之后的任务：SHOP-TASK-079 负责重设密码接口与 cookie（短信核验 `reset_password` 用途通过且号码已注册时调用 `issue_pw_reset`，经 HttpOnly、Secure、SameSite=Lax 的 cookie 交给本浏览器、CSRF 令牌交给页面；提交新密码时校验 CSRF、调用 `consume_pw_reset` 与 `reset_password` 并提交；`RateLimitUnavailable` 转成暂不可用的回答）；前端忘记密码 P12。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.11 第 3、6 条与 HANDOFF 0.41、0.44 的 Kelvin 决定原句自查。`tests/test_member_pw_reset.py` 用 SQLite 内存库（每个连接开启外键检查）与照 `tests/test_member_auth.py` 另写的内存替身 `FakeRedis`（SET 带 EX、事务管道 GET 与 DEL、替身时钟、命令记录、可注入的连接 / 超时 / 响应错误、DEL 出错与执行前插入另一个取用的钩子；未加依赖）；期望的键与 CSRF 令牌在测试里另算；每条测试的文档字符串写明守住的设计原句、Kelvin 决定或验收条目。覆盖：签发后 Redis 里只有另算的摘要键、值为会员 ID、过期 600 秒、只有一条 SET 命令；凭据互不相同；5 种不合法的会员 ID 抛 `ValueError` 且不访问 Redis；取用一次后再取用为 `None`；差 1 秒到 10 分钟可取用、满 10 分钟为 `None`；从未签发的凭据为 `None`；8 种格式不合法的凭据返回 `None` 且不访问 Redis（客户端为 `None` 也是）；交错的两个取用只有一个得到会员 ID；签发时连不上、超时、返回错误与客户端为 `None` 都抛 `RateLimitUnavailable`，消息与异常链不含键与会员 ID；取用时连不上、超时与 EXEC 被放弃都抛它且消息不含凭据、键与会员 ID；GET 读到值而 DEL 出错时抛它；值不是会员 ID 时抛它；CSRF 等于另算的带前缀摘要、不进 Redis、与 member_auth、admin_auth、order_access 的令牌两两不同且它们不能用于重设，缺失、为空、错误、非 ASCII、另一凭据的令牌与凭据缺失或格式不合法都不通过；重设后旧密码不能、新密码能通过 `authenticate_member`，该会员全部会话撤销于 `now`、其他会员的会话与密码不受影响；未设密码的会员可重设；已注销会员返回 `False`、哈希仍为空且不撤销任何会话；不存在的会员返回 `False`；4 种不足 8 个字符或不是字符串的密码抛 `ValueError`、消息不含密码、不改密码不撤会话；8 个非 ASCII 字符可重设；调用方回滚时密码与撤销都不生效；带时区的时间被拒；签发结果 repr 不含凭据、CSRF 令牌与键；无 `app.` 日志。未连真实 Redis 或 MySQL（并发取用只以替身交错模拟，未在真实 Redis 上并发）。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-079 会员重设密码接口
+
+- [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「权限与资料保护」第 3 条（已有密码的重设再次短信验证；密码至少 8 位；短信验证开关关闭期间密码重设暂停）与「边界与原则」第 4 条（提交验证码时按当时读取的开关值判定，开关在流程途中被关闭后不重设密码）、`docs/UX.md` 0.10 P12 忘记密码（验证通过后号码已注册才显示新密码输入，未注册不创建账号；未设过密码的账号同样可设置；重设完成后去登录），以及 `docs/HANDOFF.md` 0.41 记录的 Kelvin 2026-10-08 决定（重设密码时撤销该会员的全部会话）与 0.44 记录的 Kelvin 2026-10-10 决定（一次性重设凭据存于 Redis，10 分钟有效、用一次即删，经 HttpOnly、Secure、SameSite=Lax 的 cookie 只交给本浏览器，提交新密码另须 CSRF 令牌；Redis 不可用时重设暂停），在 SHOP-TASK-069 的 `verify_code` 与 SHOP-TASK-078 的 `issue_pw_reset`、`consume_pw_reset`、`check_reset_csrf`、`reset_password` 之上新增 `app/api/member_pw_reset.py`（`app/main.py` 挂上路由），提供 `POST /api/member/password-reset/verify` 与 `POST /api/member/password-reset`；测试见 `tests/test_member_pw_reset_api.py`。未改 `app/services/`、`app/api/member_auth.py`、`.platform/`、CI、部署配置、前端或设计，未加表或迁移，未装依赖。设计闸门：DESIGN 1.11（提交 `2d13250`）与 HANDOFF 0.41、0.44（会员密码与个人资料）。
+- 接口：路由器 `prefix="/api/member"`，用 SHOP-TASK-027 的 `_NoStoreRoute`，处理函数与依赖产生的全部响应（含 413、415、422、401、403、503、`RateLimitUnavailable` 转成的 503 与 `get_session` 的 503）都带 `Cache-Control: no-store`；路径存在但方法不匹配的 405 由框架在路由之外回答，不在此列（不含请求内容）。两个接口都不需要也不读会员会话。422 沿用 `app/api/pay.py` 的 `_body_errors`，只给位置、类型与固定消息，不回显请求内容。不写日志；号码原文、验证码、凭据原文、密码与会员 ID 不出现在响应体与错误里。
+- cookie：名称 `__Host-shop_member_pw_reset`，值为 `issue_pw_reset` 签发的凭据原文，`HttpOnly`、`Secure`、`SameSite=Lax`、`Path=/`、不设 `Domain`，`Max-Age` 600（取 `RESET_TOKEN_TTL_SECONDS`）。清除照 `app/api/member_auth.py` 的 `_clear_session_cookie` 写法（`delete_cookie`，名称、Path、Secure、HttpOnly、SameSite 相同，不设 Domain，`Max-Age` 0）。
+- 验证 `POST /api/member/password-reset/verify`：413（请求体逐块读，超过 4 KB，先于一切）→ 415（不是 JSON）→ 422（请求体只有 `phone`、`phone_region` 与 `code`，都必填、严格类型，多出字段 422，含 `purpose`；`code` 为 1 到 16 个字符的字符串；号码经 `normalize_phone` 规范化，与 sms-login 相同，不成立 422 类型 `phone_invalid`）→ 当次从数据库读取的短信验证开关关闭（含无设置行）403 `sms_disabled`，不取 Redis 客户端、不 PING、不核验（写在依赖 `_verify_enabled` 里，声明在 Redis 客户端依赖之前）→ 取 Redis 客户端（`get_redis_client`，只建客户端、不连 Redis；未配置时路由类回答 503 `service_unavailable`）→ 一次 PING，`RedisError` 转为 `RateLimitUnavailable`（503 `service_unavailable`，不核验、不消耗验证码）→ 以用途 `reset_password` 调用 `verify_code`。结果与状态码：
+
+  | 核验结果 | 回答 |
+  |---|---|
+  | `approved`，号码有 `active` 会员 | 提交后签发凭据、设置 cookie，200 `{"registered":true,"csrf_token":"<由凭据算出>"}` |
+  | `approved`，号码没有 `active` 会员 | 提交，200 `{"registered":false}`，不建会员、不签发凭据、不设 cookie |
+  | `wrong_code` | 422 `code_wrong` |
+  | `expired`、`no_pending` | 422 `code_expired` |
+  | `unavailable` | 503 `sms_unavailable` |
+  | `sms_disabled` | 403 `sms_disabled` |
+
+  非 `approved` 时也先提交再回答（`expired` 时记录已提交为 `rejected`），不设 cookie。核验或找会员、提交时数据库出错（`SmsVerificationError`、`SQLAlchemyError`）回滚，503 `sms_unavailable`。提交之后签发凭据时 Redis 出错为 503 `service_unavailable`、不设 cookie（验证记录已为 `approved`，访客须重新发送验证码）。不签发会员会话、不认领订单。
+- 提交新密码 `POST /api/member/password-reset`：413 → 415 → 422（请求体只有 `password`，1 到 256 个字符的字符串，多出字段 422）→ 当次读取的短信验证开关关闭 403 `sms_disabled`（不取用凭据）→ 没有重设 cookie 或其格式不对 401 `{"detail":"reset_expired"}` → `X-CSRF-Token` 恰好一个且与由 cookie 里的凭据算出的值一致（`check_reset_csrf`），否则 403 `csrf_failed`（不取用凭据）→ 不满足 `password_length_ok` 时 422 `{"detail":"password_too_short"}`（不取用凭据，可改后重交）→ Redis 客户端（未配置 503 `service_unavailable`）→ `consume_pw_reset`（已过期或已被取用 401 `reset_expired`；Redis 出错 503 `service_unavailable`）→ `reset_password`（返回 `False`，即会员已注销，回滚后 401 `reset_expired`）→ 提交，清除重设 cookie，204 且响应体为空。取用之后数据库出错时回滚，503 `service_unavailable`（凭据已删，访客须重新验证）。重设由 `reset_password` 撤销该会员全部会员会话；本接口不签发会员会话（UX P12 重设完成后去登录）。开关、cookie、CSRF 与长度四项检查写在依赖 `_reset_request` 里，Redis 客户端依赖声明在它之后，FastAPI 按声明顺序解析，检查不通过时不取 Redis 客户端。
+- 偏离与取舍，请审阅（未改设计，未发现须停下的设计问题）：
+  - 验证接口先判开关、再取 Redis 客户端：Redis 未配置（`SHOP_REDIS_URL` 为空）或已取得客户端而 Redis 故障时，开关关闭都回答 403 `sms_disabled`，不触及 Redis；测试两种情形都验证。
+  - 读取开关时数据库出错：验证接口回滚后 503 `sms_unavailable`（与本接口其他数据库错误相同），提交接口回滚后 503 `service_unavailable`（与本接口其他数据库错误相同）。验收未单独写这一步。
+  - PING 只把 `RedisError` 转为不可用；PING 返回值不另判断（redis-py 成功时为真，失败时抛异常）。
+  - 401 `reset_expired`（凭据过期、已被取用或会员已注销）与 403、422、503 的回答都不清除重设 cookie，只有 204 清除；验收只对 204 写了清除。过期的 cookie 由浏览器按 `Max-Age` 自行丢弃。验证接口在未注册或核验不通过时也不碰已有的重设 cookie。
+  - 4 KB 逐块读取在本模块另写一份（写法同 `app/api/member_pw.py`）：`member_auth.py` 的读取与 `SmsLoginIn` 绑在一起，且该文件不在允许修改的路径里。核验结果到状态码的对应表 `_ERRORS`、`CODE_MAX_CHARS`、`CSRF_HEADER` 与 `_rollback` 从 `app/api/member_auth.py` 引用，未另写。
+  - 号码查会员只认 `status` 为 `active`：已注销会员的号码已清空，本来也查不到，回答 `{"registered":false}`。
+  - 本接口不另做限流：错误验证码的尝试次数由 Twilio Verify 自身的上限兜底（与 sms-login 相同），发送侧的人机挑战与限流在 `POST /api/sms/send`。
+- 留给之后的任务：前端忘记密码页（P12 的忘记密码步骤：V1 发送与核验、`registered` 为假时显示 `[auth.reset_not_registered]` 与去 P11、为真时显示新密码输入并以 `X-CSRF-Token` 提交、`reset_expired` 时提示重新验证、开关关闭时显示 `[auth.sms_paused]`、完成后去登录），随「注册 P11 与登录、忘记密码 P12」登记；会员注销（SHOP-TASK-080 至 SHOP-TASK-082）。
+- 验证到什么程度：人工逐条对照验收标准、DESIGN 1.11「权限与资料保护」第 3、6 条与「边界与原则」第 4 条、UX P12 与 HANDOFF 0.41、0.44 的 Kelvin 决定原句自查。`tests/test_member_pw_reset_api.py` 用 `TestClient`（`https://testserver`）与 SQLite 内存库（引擎设置同 `tests/test_member_auth_api.py`），会话依赖换成绑定同一内存库的会话（可换成提交即抛错的子类），服务商用 SHOP-TASK-067 的 `FakeSmsProvider`（另加核验时抛异常的子类），Redis 用本文件的内存替身 `FakeRedis`（PING、带 EX 的 SET、事务管道 GET 与 DEL、可拨动的时钟、按命令注入的连接错误；未加依赖）；结果都在另一个数据库会话里读；期望的 Redis 键与 CSRF 令牌在测试里另算；每条测试的文档字符串写明守住的设计原句、UX、Kelvin 决定或验收条目。覆盖：已注册号码 200 `registered` 为真、CSRF 令牌等于另算值、cookie 名称与各属性（Max-Age 600、无 Domain）、Redis 里只有该凭据的摘要键且值为会员 ID、过期 600 秒、记录已提交为 `approved`、不签发会员会话；未注册与已注销号码 200 `registered` 为假、不建会员、不签发凭据、不设 cookie、不签发会员会话；登录用途的记录不能用于重设；`wrong_code`、`expired`（记录已提交为 `rejected`）、`no_pending`、`unavailable` 的状态码与错误体；无设置行与开关关闭都 403 且不 PING、不调用服务商；开关关闭且 Redis 故障或 Redis 未配置都为 403；Redis 未配置与 PING 失败都 503 且不调用服务商、记录仍为 `sent`；签发凭据失败 503、不设 cookie、记录为 `approved`；服务商异常与提交失败 503 `sms_unavailable`；带不存在的会员会话 cookie 照常验证；两个接口的 413（分块发送、三种 Content-Type、开关关闭、无 cookie、Redis 未配置都是 413；验证接口恰好 4 KB 放行）与 415 先于 422，验证接口 11 种结构错误与 5 种号码不成立为 422 且不 PING、不回显，号码按地区规范化；提交成功 204、响应体为空、cookie 按原属性以 Max-Age 0 清除、旧密码不能新密码能经 `authenticate_member` 通过、该会员原有会员会话撤销（取当前会话 401）、其他会员不受影响、Redis 凭据已删、不签发会员会话；未设过密码的会员可经此设置；同一凭据第二次提交（重新附上已清除的 cookie 与原 CSRF 令牌）401；差 1 秒到 10 分钟可重设、满 10 分钟 401；验证后注销 401 且凭据已取用；开关关闭 403 后凭据仍可用；开关关闭且 Redis 故障为 403；没有 cookie（带或不带 CSRF）401 而不是 403；4 种格式不对的 cookie 401（Redis 未配置也是）；缺失、错误、重复与会员会话前缀的 CSRF 都 403 且凭据仍可用；3 种不足 8 个字符 422 `password_too_short` 且凭据仍可用、改为 8 个字符可重设；6 种结构错误先于开关与 cookie 为 422 且不回显；256 个字符可重设；开关 → cookie → CSRF → 长度 → Redis 的逐步顺序；取用时 Redis 出错 503 且密码不变；取用后提交失败 503、密码与会员会话不变、凭据已删、再交 401；两个路径方法不匹配的 405 不含请求内容；无 `app.` 日志，任何日志都不含号码、验证码、凭据、CSRF 令牌与密码；响应体与错误不含号码原文、验证码、凭据、密码与 Redis 主机。未连真实 Twilio Verify、Redis 或 MySQL，未在真实浏览器里验证 `__Host-` cookie 的实际行为。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
