@@ -3010,3 +3010,94 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 会员注销（Kelvin 2026-10-10 决定，HANDOFF 0.45）：开关开启时以短信验证码确认，核验通过后在 Redis 记一条绑定当前会员会话的一次性批准（10 分钟、用一次即删），确认注销时取用；
+  # 开关关闭时已设密码者以当前密码确认（与密码登录共用锁定计数），未设密码者凭已登录会话确认。积分与优惠券作废随优惠券与积分账本实现。
+  # SHOP-TASK-080 为规则层，SHOP-TASK-081 为发送与核验注销验证码的接口，SHOP-TASK-082 为确认注销的接口。
+  - id: SHOP-TASK-080
+    title: 会员注销与注销批准的规则
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 3 条（注销时撤销会话、删除手机号与密码，并把其订单上的会员 ID 清空以解除关联；已认领与不可认领的标记保留，重新注册不能恢复旧订单的访问）与「资料保留」（注销不删除订单收货资料），
+      以及 docs/HANDOFF.md 0.45 记录的 Kelvin 2026-10-10 决定（注销验证码核验通过后的一次性批准存于 Redis，绑定当前会员会话，10 分钟有效、用一次即删），实现注销与注销批准的规则函数。
+      积分余额与未用券作废、删除电话关联防套利索引随之后的优惠券与积分账本任务实现（这些表尚不存在）。不做接口，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41、0.45（会员注销与个人资料）。拆分：业务规则层（3 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-071
+    acceptance_criteria:
+      - 新文件 app/services/member_deletion.py 的注销函数——入参为数据库会话、会员 ID 与当前 UTC 时间（不带时区）；以条件更新（仅当该会员仍为 active）把状态改为 deleted、手机号与密码哈希置空、注销时间写为当前时间（满足 app/models/member.py 的 deleted_cleared 约束），更新不到（不存在或已注销）返回 False 且不做其他改动；更新到时用 SHOP-TASK-071 的 revoke_all_member_sessions 撤销该会员的全部会话，再把该会员所有订单的 member_id 置空（不论订单状态，claim_status 一律不改），返回 True；不删除、不改订单收货资料、订单状态、订单事件与短信验证记录；只 flush、不提交；不写日志
+      - 注销批准的签发——入参为 Redis 客户端、会员会话 ID 与会员 ID；键为 acuven_shop:member_delete_approval 前缀加会话 ID，值为会员 ID，以一条带 600 秒过期的 SET 写入（不分成 SET 与 EXPIRE 两步），同一会话再次签发即覆盖并重新计时
+      - 注销批准的取用——入参为 Redis 客户端、会员会话 ID 与会员 ID；以事务管道（MULTI 与 EXEC）原子地读取并删除该键，不用 GETDEL（共享 Redis 的版本未核实）；键存在且值等于该会员 ID 时返回 True，键不存在（含已过期、已被取用）或值不符时返回 False；并发取用同一批准时至多一次得到 True
+      - Redis 未配置、连不上、超时、返回错误或事务执行报错时，签发与取用都抛 app/services/rate_limit.py 的 RateLimitUnavailable（调用方必须拒绝，不得放行），不把读到的值当作取用成功；异常消息不含键、会话 ID 与会员 ID
+      - tests/test_member_deletion.py 用 SQLite 内存库与内存 Redis 替身（照 tests/test_member_auth.py 的 FakeRedis 写法另写一个支持本模块所用命令的替身，不加依赖）验证意图——注销后会员行保留、状态 deleted、手机号与密码哈希为空且注销时间已写；该会员的全部会话被撤销、其他会员的会话不受影响；其订单（含 claimed 与 not_claimable、各种订单状态）的 member_id 为空且 claim_status 不变，收货资料与订单事件不变，其他会员的订单不变；已注销或不存在的会员返回 False 且没有任何改动；注销后同号可经 SHOP-TASK-075 重新注册为新会员且旧订单不被再次认领；签发后键值与 600 秒过期由同一条命令写入；取用一次后再取用为 False，过期后、会员 ID 不符时为 False；两个取用交错时只有一个为 True；Redis 不可用与事务报错都抛 RateLimitUnavailable；注销函数返回后未提交（其数据库改动回滚后全部复原；Redis 里的批准不随数据库回滚）；每条测试写明它守住的是设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-080 记录段（注销、批准的签发与取用、偏离、验证到什么程度，并写明接口留给 SHOP-TASK-081 与 082、积分与优惠券作废留给优惠券与积分账本任务、注销失败告警留给运营告警邮件任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/member_auth.py、app/services/rate_limit.py、模型、.platform/、CI、部署配置；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41、0.45），不合并、不直推
+    allowed_change_paths:
+      - app/services/member_deletion.py
+      - tests/test_member_deletion.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-081
+    title: 发送与核验会员注销验证码的接口
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 3 条（账号注销须先以短信验证码确认）与「失败、并发与重试」、docs/UX.md 0.10 P13（V1 用途「注销确认」，号码固定为本账号；验证通过后才出现确认注销），
+      以及 docs/HANDOFF.md 0.45 记录的 Kelvin 2026-10-10 决定，在 SHOP-TASK-069 的发送与核验函数、SHOP-TASK-076 的会员会话依赖与 SHOP-TASK-080 的注销批准之上提供发送与核验注销验证码两个接口。不做确认注销与前端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41、0.45（会员注销与个人资料）。拆分：接口层（4 个允许路径）；确认注销留给 SHOP-TASK-082。
+    status: ready
+    depends_on:
+      - SHOP-TASK-070
+      - SHOP-TASK-076
+      - SHOP-TASK-079
+      - SHOP-TASK-080
+    acceptance_criteria:
+      - 新文件 app/api/member_deletion.py（app/main.py 挂上路由）提供 POST /api/member/delete/send-code 与 POST /api/member/delete/verify；路由器用 SHOP-TASK-027 的 _NoStoreRoute，处理函数与依赖产生的响应（含错误）都带 Cache-Control 为 no-store；路径存在但方法不匹配时由框架返回的 405 不含请求内容与个人资料，不在此列；require_member、require_member_csrf 从 app/api/member_auth.py 引用，不另写一份
+      - 两个接口的检查顺序照 app/api/admin_store_design.py 的保存接口——413（逐块读，超过 4 KB，先于一切）→ 415（不是 JSON）→ 401 member_session_required（require_member）→ 403 csrf_failed（require_member_csrf）→ 422（结构，严格类型，多出字段 422，不回显请求内容，沿用 app/api/pay.py 的 _body_errors）；号码一律取当前会员的手机号，请求体里不接受号码
+      - send-code 的请求体只有 captcha_token（1 到 2048 个字符的字符串）；Redis 客户端用 app/api/sms.py 的 get_sms_redis_client（不可用时为 None，交给发送函数按停发处理）；以用途 delete_account 调用 send_verification，结果到响应与 POST /api/sms/send 相同（沿用 app/api/sms.py 的 _ERRORS 映射；sent 为 200 {"status":"sent"}），SmsVerificationError 与 SmsBudgetError 时回滚，503 sms_suspended；不改 app/api/sms.py（公开发送接口仍不接受 delete_account）
+      - verify 的请求体只有 code（1 到 16 个字符的字符串）；先按当次从数据库读取的短信验证开关判定，关闭即 403 sms_disabled（不 PING、不核验）；开启时用 app/services/rate_limit.py 的 get_redis_client 取客户端并在核验前执行一次 PING，未配置或 PING 失败（RedisError 转为 RateLimitUnavailable）由路由类回答 503 service_unavailable，此时不核验、不消耗验证码
+      - verify 以用途 delete_account 调用 verify_code，非 approved 的结果到响应与 POST /api/member/sms-login 相同（wrong_code 为 422 code_wrong，expired 与 no_pending 为 422 code_expired，unavailable 为 503 sms_unavailable，sms_disabled 为 403 sms_disabled），都先提交再回答；approved 时提交后用 SHOP-TASK-080 的签发函数为当前会员会话记一条注销批准，204；提交之后签发时 Redis 出错为 503 service_unavailable（验证记录已为 approved，须重新发送验证码）；核验或提交时数据库出错回滚，503 sms_unavailable；两个接口都不注销、不改会员、不撤销会话
+      - tests/test_member_deletion_api.py 用 TestClient、SQLite 内存库、SHOP-TASK-067 的测试替身与内存 Redis 替身（照 tests/test_member_auth_api.py 与 tests/test_sms_api.py 的写法，不加依赖）验证意图——两个接口完整的检查顺序（含没有会话且请求体超限为 413、没有会话且结构不对为 401）；请求体里多出 phone 为 422；send-code 用的是会员自己的号码与用途 delete_account，各结果的状态码与错误体；verify 各个非 approved 结果、开关关闭时为 403 且即使 Redis 故障也不是 503、Redis 未配置与 PING 失败时 503 且不调用服务商；approved 后 Redis 里有绑定当前会话的批准、会员仍为 active 且会话仍有效；另一个会话的批准不能被本会话取用；no-store；响应与错误不含号码原文与验证码；每条测试写明它守住的是设计、UX 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-081 记录段（接口、字段、检查顺序、结果与状态码、偏离、验证到什么程度，并写明确认注销留给 SHOP-TASK-082、前端留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、app/api/sms.py、app/api/member_auth.py、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41、0.45），不合并、不直推
+    allowed_change_paths:
+      - app/api/member_deletion.py
+      - app/main.py
+      - tests/test_member_deletion_api.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-082
+    title: 确认会员注销的接口
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 3 条（注销须先以短信验证码确认；短信验证开关关闭期间改为已设密码的会员输入当前密码、未设密码的会员在已登录会话内经二次确认）与「边界与原则」第 4 条（确认注销时按当时读取的开关值判定），
+      以及 docs/HANDOFF.md 0.45 记录的 Kelvin 2026-10-10 决定（开关开启时取用注销批准；开关关闭时密码输错与密码登录共用锁定计数），在 SHOP-TASK-080 与 SHOP-TASK-081 之上提供确认注销接口。不做前端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41、0.45（会员注销与个人资料）。拆分：接口层（3 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-077
+      - SHOP-TASK-081
+    acceptance_criteria:
+      - 在 app/api/member_deletion.py 增加 POST /api/member/delete（同一路由器，响应同样带 no-store）；检查顺序与 SHOP-TASK-081 的两个接口相同——413 → 415 → 401 member_session_required → 403 csrf_failed → 422（结构）；请求体只有可省略的 password（给出时为 1 到 256 个字符的字符串），多出字段 422，422 不回显请求内容（尤其是密码）
+      - 之后按当次从数据库读取的短信验证开关判定确认方式（开关开启时只接受注销批准，关闭时只接受密码或会话确认）——开启时 password 不使用，用 app/services/rate_limit.py 的 get_redis_client（不可用时由路由类回答 503 service_unavailable）以 SHOP-TASK-080 的取用函数取用当前会话与会员的注销批准，取不到时 403 {"detail":"delete_not_verified"}
+      - 开关关闭且会员已设密码时——未给 password 为 422 {"detail":"password_required"}；Redis 客户端同上（不可用 503 service_unavailable）；访客来源取 app/services/rate_limit.py 的 client_source（与 SHOP-TASK-077 的密码登录相同，才能共用同一组计数）；SHOP-TASK-071 的 login_locked 对 [访客来源, 会员手机号] 为真时 429 {"detail":"rate_limited"}（不校验密码、不计失败）；否则以 authenticate_member 校验，不通过或得到的不是当前会员时用 record_login_failure 计一次失败（与密码登录共用计数，Kelvin 2026-10-10），403 {"detail":"password_wrong"}；开关关闭且会员未设密码时凭当前会话与 CSRF 即确认（二次确认由前台确认框完成），不需要 password，也不取 Redis 客户端（Redis 故障时照样可以注销）
+      - 确认通过后调用 SHOP-TASK-080 的注销函数，返回 False 时 401 member_session_required；提交后用 app/api/member_auth.py 的 _clear_session_cookie 清除会员会话 cookie，204；提交或注销时数据库出错回滚，503 service_unavailable（开关开启时批准已被取用，须重新验证）；不写日志，响应与错误不含号码原文与密码
+      - tests/test_member_delete_confirm_api.py 用 TestClient、SQLite 内存库、SHOP-TASK-067 的测试替身与内存 Redis 替身（照 tests/test_member_deletion_api.py 的写法，不加依赖）验证意图——检查顺序与不回显密码；开关开启时没有批准为 403 delete_not_verified、批准经 SHOP-TASK-081 的 verify 取得后可注销且只能用一次、给出正确密码也不能代替批准；开关在核验之后被关闭时批准不再被接受（已设密码者须输入密码）；开关关闭时已设密码者缺密码 422、密码错误 403、锁定后 429、正确密码可注销；与 SHOP-TASK-077 的 POST /api/member/password-login 交叉验证共用计数（从同一来源对同一号码，登录失败累计后注销被锁定，注销失败累计后登录被锁定）；未设密码者凭会话与 CSRF 注销；注销后会话失效、cookie 已清除、会员已为 deleted 且其订单的 member_id 为空；开关开启、或开关关闭且已设密码时，Redis 不可用为 503 且未注销；开关关闭且未设密码时 Redis 不可用照样注销；每条测试写明它守住的是设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-082 记录段（确认方式、检查顺序、结果与状态码、偏离、验证到什么程度，并写明前端注销入口留给之后的任务、积分与优惠券作废留给优惠券与积分账本任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；app/api/member_deletion.py 里 SHOP-TASK-081 的两个接口行为不变（模块说明可随之补充）；不改 app/services/ 下的文件、app/api/member_auth.py、tests/test_member_deletion_api.py、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41、0.45），不合并、不直推
+    allowed_change_paths:
+      - app/api/member_deletion.py
+      - tests/test_member_delete_confirm_api.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
