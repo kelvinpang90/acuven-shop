@@ -183,7 +183,8 @@ def reset_password(db: Session, member_id: int, new_password: str, now: datetime
     if now.tzinfo is not None:
         raise ValueError("now must be a naive UTC datetime")
     if not password_length_ok(new_password):
-        raise ValueError("password is too short")
+        # 不带消息：任何文字都可能恰好包含调用方传入的密码。
+        raise ValueError()
     encoded = pw_hash.hash_password(new_password)
     result = db.execute(
         update(Member)
