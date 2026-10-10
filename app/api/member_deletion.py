@@ -20,7 +20,7 @@ app/services/member_deletion.py（SHOP-TASK-080），密码校验与锁定见 ap
 3. require_member_csrf（403 csrf_failed）；
 4. 请求体结构（422，严格类型，多出字段 422，含 phone）：发送只有 captcha_token（1 到 2048 个
    字符的字符串），核验只有 code（1 到 16 个字符的字符串），确认注销只有可省略的 password
-   （给出时为 1 到 256 个字符的字符串）。号码一律取当前会员的手机号。
+   （给出时为 1 到 256 个字符的字符串，显式 null 也是 422）。号码一律取当前会员的手机号。
 
 发送：以用途 delete_account 调用 send_verification，Redis 客户端取自 app/api/sms.py 的
 get_sms_redis_client（未配置时为 None，由发送函数按停发处理）。结果与 POST /api/sms/send 相同：
@@ -71,7 +71,8 @@ from typing import Annotated, Literal
 import redis
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic_core import PydanticCustomError
 from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -142,6 +143,14 @@ class DeleteConfirmIn(BaseModel):
     password: str | None = Field(
         default=None, min_length=1, max_length=PASSWORD_MAX_CHARS, repr=False
     )
+
+    @field_validator("password", mode="before")
+    @classmethod
+    def _reject_null(cls, value: object) -> object:
+        # 只有省略才算没给：默认值不经校验，显式 null 到这里，与其他非字符串同为 string_type。
+        if value is None:
+            raise PydanticCustomError("string_type", "Input should be a valid string")
+        return value
 
 
 class DeleteSendOut(BaseModel):

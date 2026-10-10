@@ -15,8 +15,10 @@
   核验通过后，服务端……记一条绑定当前会员会话的一次性批准，10 分钟有效、使用一次即删除，确认
   注销时取用”；（2）“开关关闭时，已设密码的会员以当前密码确认注销，输错次数与密码登录共用同一
   组锁定计数……登录与注销互相计入”。
-每条测试（参数化的测试是每个用例）的文档字符串写明它守住的那一句；没有直接原句的，写明是
-SHOP-TASK-082 验收标准里的约定（下称「验收」）。
+- 「失败、并发与重试」第 4 条（下称「失败第 4 条」）：“查单和管理员登录等依赖 Redis 限流的敏感
+  接口也拒绝请求”。
+每条测试（参数化的测试是每个用例）的文档字符串先写明它守住的设计或 Kelvin 决定的原句，再写
+SHOP-TASK-082 验收标准里落实这一句的具体约定（下称「验收」）。
 
 照 tests/test_member_deletion_api.py 的写法：SQLite 内存库按模型建表，接口的会话依赖换成每个
 请求一个绑定同一内存库的会话（可换成提交即抛错的子类），检查结果一律在另一个数据库会话里读；
@@ -938,8 +940,8 @@ def test_switch_off_with_password_redis_unavailable_is_503(
     pw_member: int,
     trouble: str,
 ) -> None:
-    """Kelvin 10-08 的锁定计数在 Redis；rate_limit「Redis 不可用……调用方必须拒绝」。验收：开关
-    关闭且已设密码时 Redis 不可用为 503 service_unavailable，正确密码也不注销。
+    """失败第 4 条“依赖 Redis 限流的敏感接口也拒绝请求”；Kelvin 10-08 的锁定计数在 Redis。
+    验收：开关关闭且已设密码时 Redis 不可用为 503 service_unavailable，正确密码也不注销。
     """
     token, _ = login(engine, pw_member)
     _break_redis(fake, redis_getter, trouble)
@@ -1002,8 +1004,8 @@ def test_commit_failure_is_503_and_rolled_back(
 def test_delete_member_false_is_401(
     client: TestClient, engine: Engine, member: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """验收：SHOP-TASK-080 的注销函数返回 False（会员已不是 active）时 401
-    member_session_required，不清 cookie。
+    """第 3 条“会话到期、退出与服务端授权检查”。验收：SHOP-TASK-080 的注销函数返回 False（会员已
+    不是 active）时 401 member_session_required，不清 cookie。
     """
     token, _ = login(engine, member)
     monkeypatch.setattr(deletion_api, "delete_member", lambda *_args: False)
@@ -1030,8 +1032,9 @@ def test_oversized_body_is_413_before_everything(
     signed: bool,
     content_type: str | None,
 ) -> None:
-    """验收：413（逐块读，超过 4 KB）先于一切——没有会话、开关关闭、Redis 未配置时也是 413；分块
-    发送、不带 Content-Length 也按实际读到的字节判断；不回显请求内容（含密码）。
+    """第 6 条“应用日志与监控不记录……完整电话……密码”。验收：413（逐块读，超过 4 KB）先于一切
+    ——没有会话、开关关闭、Redis 未配置时也是 413；分块发送、不带 Content-Length 也按实际读到的
+    字节判断；不回显请求内容（含密码）。
     """
     redis_getter.configured = False
     headers = auth(login(engine, add_member(engine))[0]) if signed else {}
@@ -1048,7 +1051,9 @@ def test_oversized_body_is_413_before_everything(
 
 @pytest.mark.usefixtures("disabled")
 def test_body_at_4_kb_is_accepted(client: TestClient, engine: Engine, member: int) -> None:
-    """验收：超过 4 KB 才 413——恰好 4 KB 的合法请求体照常处理。"""
+    """第 3 条“未设密码的会员在已登录会话内经二次确认后注销”。验收：超过 4 KB 才 413——恰好
+    4 KB 的合法请求体照常处理，未设密码的会员凭会话与 CSRF 注销。
+    """
     token, _ = login(engine, member)
     raw = b"{}"
     padded = raw + b" " * (MAX_BODY_BYTES - len(raw))
@@ -1062,8 +1067,8 @@ def test_body_at_4_kb_is_accepted(client: TestClient, engine: Engine, member: in
     ["text/plain", None, "application/x-www-form-urlencoded", "application/jsonp"],
 )
 def test_not_json_is_415_before_session(client: TestClient, content_type: str | None) -> None:
-    """验收：不是 JSON 为 415，在 413 之后、401 之前——没有会话时合法与多出字段的请求体都是 415；
-    不回显请求内容。
+    """第 6 条“应用日志与监控不记录……完整电话……密码”。验收：不是 JSON 为 415，在 413 之后、
+    401 之前——没有会话时合法与多出字段的请求体都是 415；不回显请求内容（号码与密码）。
     """
     for body in ({"password": PASSWORD}, {"password": PASSWORD, "phone": PHONE_MY}):
         headers = {} if content_type is None else {"Content-Type": content_type}
@@ -1148,6 +1153,7 @@ STRUCTURE_CASES = [
         {"code": CODE, "password": PASSWORD}, ("body", "code"), "extra_forbidden", id="code"
     ),
     pytest.param({"password": 12345678}, ("body", "password"), "string_type", id="int"),
+    pytest.param({"password": None}, ("body", "password"), "string_type", id="null"),
     pytest.param({"password": ""}, ("body", "password"), "string_too_short", id="empty"),
     pytest.param(
         {"password": "SECRET-PW" + "x" * 248},
@@ -1198,8 +1204,10 @@ def test_structure_errors_are_422_without_echo(
 def test_password_of_256_chars_is_checked(
     client: TestClient, engine: Engine, fake: FakeRedis, pw_member: int
 ) -> None:
-    """验收：password 给出时为 1 到 256 个字符的字符串——256 个字符通过结构检查、照常校验（不是
-    当前密码即 403 password_wrong）；长度不足 8 个字符也照常校验，不按长度规则预先拒绝。
+    """第 3 条“已设密码的会员注销时输入当前密码确认”；Kelvin 10-10（2）“输错次数与密码登录共用
+    同一组锁定计数”（故与密码登录一样照常校验）。验收：password 给出时为 1 到 256 个字符的字符串
+    ——256 个字符通过结构检查、照常校验（不是当前密码即 403 password_wrong）；长度不足 8 个字符
+    也照常校验，不按长度规则预先拒绝。
     """
     token, _ = login(engine, pw_member)
 
@@ -1211,9 +1219,11 @@ def test_password_of_256_chars_is_checked(
 def test_check_order_step_by_step(
     client: TestClient, engine: Engine, redis_getter: RedisGetter
 ) -> None:
-    """验收：检查顺序与 SHOP-TASK-081 的两个接口相同——413 → 415 → 401 member_session_required →
-    403 csrf_failed → 422（结构），之后按开关判定（开启时 Redis 未配置为 503
-    service_unavailable）。每一步都以“本步不通过、其后各步也不通过”的请求验证。
+    """第 3 条“会话到期、退出与服务端授权检查”；第 5 条写操作另须 CSRF 令牌；边界第 4 条“确认
+    注销时，服务端都按当时读取的开关值判定”。验收：检查顺序与 SHOP-TASK-081 的两个接口相同——
+    413 → 415 → 401 member_session_required → 403 csrf_failed → 422（结构），之后按开关判定
+    （开启时 Redis 未配置为 503 service_unavailable）。每一步都以“本步不通过、其后各步也不通过”
+    的请求验证。
     """
     set_switch(engine, True)
     redis_getter.configured = False
@@ -1244,7 +1254,9 @@ def test_check_order_step_by_step(
 
 
 def test_wrong_method_is_405_without_request_content(client: TestClient) -> None:
-    """验收：路径存在但方法不匹配时由框架返回的 405 不含请求内容与个人资料。"""
+    """第 6 条“应用日志与监控不记录……完整电话……密码”。验收：路径存在但方法不匹配时由框架返回
+    的 405 不含请求内容与个人资料。
+    """
     response = client.get(DELETE_URL, params={"phone": PHONE_MY, "password": PASSWORD})
 
     assert response.status_code == 405
