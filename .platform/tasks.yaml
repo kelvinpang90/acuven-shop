@@ -3101,3 +3101,68 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 优惠券与积分账本（Kelvin 2026-10-10 决定，HANDOFF 0.46）：积分按批次记账，先用先到期的批次，退款按抵扣的相反顺序返还（后到期的先还）；
+  # 批次在取得日（马来西亚时间）加 12 个自然月那天的 23:59:59 到期；券的两个上限可留空表示不限，预占与核销都计次数；预占的积分以预占时为准。
+  # SHOP-TASK-083、084 为数据库层，规则、接口与下单、支付、取消、退款、注销的接线由之后的任务登记。
+  - id: SHOP-TASK-083
+    title: 优惠券与用券记录的数据模型
+    purpose: >-
+      按 docs/DESIGN.md 1.11「数据模型」Coupon / CouponUse 一行（固定金额或百分比、有效期、最低商品消费、总使用上限、每会员使用上限、启停状态；使用记录与订单关联）、
+      「计价、优惠、积分与库存」第 1 条（优惠券仅会员可用，使用额度在下单时预占，取消或支付超时释放）与 docs/HANDOFF.md 0.46 记录的 Kelvin 2026-10-10 决定（两个上限可留空表示不限，预占与核销都计次数，退款不恢复），
+      建优惠券表与用券记录表及迁移。只建表与约束，查券、预占、释放与核销由之后的规则任务实现。不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46（优惠券）。拆分：数据库层（5 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-012
+    acceptance_criteria:
+      - 新文件 app/models/coupon.py 定义两个模型，沿用 app/db/base.py 的基类、约束命名约定与 InnoDB、utf8mb4 表选项（写法照 app/models/member.py）；app/models/__init__.py 导出它们；时间一律不带时区的 UTC；外键删除行为一律 RESTRICT；除下面写明可空的列外全部非空（检查约束遇到空值会放行，非空约束不能省）；金额一律整数仙；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - 优惠券表 coupons——代码（String(20)，全表唯一；库里存大写，检查约束保证长度 4 到 20，字符集与大小写由写入方保证）、类型（只允许 fixed、percent）、固定金额（仙，可空）、百分比（整数，可空）、最低商品消费（仙，默认 0）、生效时间、截止时间（截止时间是仍有效的最后一刻）、总使用上限（可空即不限）、每会员使用上限（可空即不限）、启用状态、创建时间；检查约束保证 fixed 时固定金额大于 0 且百分比为空、percent 时百分比在 1 到 100 之间且固定金额为空、最低商品消费不小于 0、截止时间晚于生效时间、两个上限非空时不小于 1
+      - 用券记录表 coupon_uses——所属券（外键 coupons）、订单（外键 orders，全表唯一，一单至多一张券）、会员（外键 members，非空；会员注销后行保留，记录随之去标识化）、状态（只允许 reserved、used、released）、本单券折扣（仙，不小于 0，即订单快照 coupon_discount_sen）、创建时间、更新时间；按（券、状态）与（券、会员、状态）建索引，供之后按「预占与核销都计次数」计算总次数与每会员次数
+      - 新迁移文件 alembic/versions/20261010_0018_coupons.py，revision 为 0018、down_revision 为 0017，upgrade 建两张表，downgrade 按依赖倒序删除；约束名按命名约定逐个写出；迁移只在 MySQL 上执行（部署与 CI）；模型里的检查约束表达式须 SQLite 与 MySQL 都支持（只用比较、LENGTH、IN、IS NULL 与 AND / OR），因为测试在 SQLite 上按模型建表；PR 正文逐表列出检查约束与索引
+      - tests/test_coupon_models.py 用 SQLite 内存库（开启外键检查）按模型建表，先写入合法的固定金额券、百分比券与上限留空的券及其用券记录作对照，再验证每个检查约束、唯一约束与外键各至少一个被拒的反例（含每个非空列写入空值被拒、未知类型与状态、fixed 缺金额或带百分比、percent 为 0 或 101 或带金额、代码过短过长、重复代码、截止不晚于生效、上限为 0、负的最低消费与折扣、同一订单两条用券记录、指向不存在的券、订单或会员、删除被用券记录引用的券被拒）；每条测试写明它守住的是设计或 Kelvin 决定的哪一句
+      - 迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，alembic check 在它比较的范围内无差异；以上测试与已有后端测试都由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-083 记录段（两张表的列与关键约束、偏离、验证到什么程度，并写明查券、预占、释放、核销与后台维护留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改已有模型与迁移、.platform/、CI、部署配置；不装依赖；不加接口、不改 app/main.py 与前端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.46），不合并、不直推
+    allowed_change_paths:
+      - app/models/coupon.py
+      - app/models/__init__.py
+      - alembic/versions/20261010_0018_coupons.py
+      - tests/test_coupon_models.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-084
+    title: 积分批次与积分流水的数据模型
+    purpose: >-
+      按 docs/DESIGN.md 1.11「数据模型」PointLedger 一行（获得、抵扣、到期、退款追回、待抵扣积分的不可覆盖流水；每笔关联订单或退款，余额不得小于零）与「计价、优惠、积分与库存」第 3、5 条，
+      以及 docs/HANDOFF.md 0.46 记录的 Kelvin 2026-10-10 决定（积分按批次记账，先用先到期的批次，退款按抵扣的相反顺序返还；批次在取得日加 12 个自然月那天结束时到期；预占以预占时为准），
+      建积分批次表与积分流水表及迁移。只建表与约束，余额计算、预占、释放、到期、返还与追回由之后的规则任务实现。不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46（积分）。拆分：数据库层（5 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-083
+    acceptance_criteria:
+      - 新文件 app/models/points.py 定义两个模型，沿用 app/db/base.py 的基类、约束命名约定与 InnoDB、utf8mb4 表选项（写法照 app/models/member.py）；app/models/__init__.py 导出它们；时间一律不带时区的 UTC；外键删除行为一律 RESTRICT；除下面写明可空的列外全部非空；积分一律整数，不与仙混用；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - 积分批次表 point_lots（一单获得的积分为一个批次，行写入后不再修改）——会员（外键 members）、来源订单（外键 orders，全表唯一，一单至多一个批次）、获得积分（大于 0）、取得时间、到期时间（仍有效的最后一刻，由写入方按 Kelvin 的决定换算成 UTC）、创建时间；检查约束保证到期时间晚于取得时间；按（会员、到期时间）建索引；另有（id、会员）的唯一约束作为流水复合外键的目标
+      - 积分流水表 point_entries（只追加、不修改不删除）——会员（外键 members）、批次（可空）、类别、积分变动（有符号整数，不为 0）、订单（外键 orders，非空：获得、抵扣、释放、到期、偿还记来源或所用订单，返还、追回与待抵扣记被退款的订单）、退款申请（外键 refund_requests，可空）、创建时间；批次非空时以（批次、会员）复合外键指向 point_lots 的（id、会员），保证流水与批次属于同一会员；按（会员、创建时间）、批次与订单建索引
+      - 类别只允许 earn、redeem、release、expire、refund_return、refund_reversal、debt_add、debt_repay；检查约束逐条保证——earn、release、refund_return 的积分变动大于 0，redeem、expire、refund_reversal 小于 0；这六类的批次非空；debt_add 的批次为空且变动大于 0；debt_repay 的变动小于 0（批次非空的一条从批次扣出，批次为空的一条减少待抵扣，成对写入由规则任务保证）；refund_return、refund_reversal、debt_add 的退款申请非空，其余类别的退款申请为空；模块说明写明批次为空的流水构成该会员的待抵扣账户（合计为仍欠的积分），批次非空的流水合计为该批次剩余可用积分，二者不小于零由规则任务在会员行锁下保证
+      - 新迁移文件 alembic/versions/20261010_0019_points.py，revision 为 0019、down_revision 为 0018，upgrade 建两张表，downgrade 按依赖倒序删除；约束名按命名约定逐个写出；迁移只在 MySQL 上执行；模型里的检查约束表达式须 SQLite 与 MySQL 都支持（只用比较、IN、NOT IN、IS NULL 与 AND / OR）；PR 正文逐表列出检查约束、复合外键与索引
+      - tests/test_point_models.py 用 SQLite 内存库（开启外键检查）按模型建表，先写入合法的批次与八类流水各一条（含成对的 debt_repay）作对照，再验证每个检查约束、唯一约束与外键各至少一个被拒的反例（含每个非空列写入空值被拒、未知类别、变动为 0、每类变动符号相反、六类缺批次、debt_add 带批次、退款类缺退款申请、非退款类带退款申请、到期不晚于取得、获得积分为 0、同一订单两个批次、流水的批次属于另一会员被复合外键拒绝、删除被流水引用的批次被拒）；每条测试写明它守住的是设计或 Kelvin 决定的哪一句；迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，alembic check 无差异；这些都由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-084 记录段（两张表、八类流水的含义与约束、待抵扣账户的表示、偏离、验证到什么程度，并写明规则与接线留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改已有模型与迁移、.platform/、CI、部署配置；不装依赖；不加接口、不改 app/main.py 与前端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.46），不合并、不直推
+    allowed_change_paths:
+      - app/models/points.py
+      - app/models/__init__.py
+      - alembic/versions/20261010_0019_points.py
+      - tests/test_point_models.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
