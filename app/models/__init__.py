@@ -10,6 +10,7 @@ from app.models.catalog import (
     ProductVariant,
     VariantOptionValue,
 )
+from app.models.coupon import Coupon, CouponUse
 from app.models.member import Member, MemberSession, SmsDailyUsage, VerificationAttempt
 from app.models.order import (
     Order,
@@ -32,6 +33,8 @@ __all__ = [
     "AdminSession",
     "AuditEvent",
     "Category",
+    "Coupon",
+    "CouponUse",
     "DemoFxRate",
     "Member",
     "MemberSession",
