@@ -626,6 +626,43 @@ def test_order_needs_idempotency_key(client: TestClient, engine: Engine, token: 
     assert state(engine) == before
 
 
+def test_order_duplicate_sku_is_422(client: TestClient, engine: Engine, token: str) -> None:
+    """验收：下单的 lines 规则同 POST /api/orders/guest（与计价接口相同，SKU 不重复）；
+    重复 SKU 在请求校验即 422，不进入下单函数，不建订单、不扣库存。
+    """
+    before = state(engine)
+    lines = LINES + [{"sku": "A-SKU", "quantity": 1}]
+    response = client.post(ORDER_URL, json=order_body(lines=lines), headers=order_headers(token))
+    assert response.status_code == 422
+    assert_no_store(response)
+    errors = response.json()["detail"]
+    duplicate = {
+        "type": "value_error",
+        "loc": ["body", "lines"],
+        "msg": "each SKU may appear only once",
+    }
+    assert duplicate in errors
+    for error in errors:
+        assert set(error) == {"type", "loc", "msg"}
+    assert state(engine) == before
+
+
+def test_quote_invalid_lang_is_422_without_echo(client: TestClient, token: str) -> None:
+    """验收：“lang 查询参数同计价接口”，且“422 每条错误只给位置、类型与固定消息、
+    不回显请求内容”——不合法的 lang 不出现在响应里。
+    """
+    secret = "SECRET-LANG-VALUE"
+    response = client.post(
+        QUOTE_URL, params={"lang": secret}, json=quote_body(), headers=cookie_header(token)
+    )
+    assert response.status_code == 422
+    assert_no_store(response)
+    errors = response.json()["detail"]
+    msg = "Input should be 'en', 'zh' or 'ms'"
+    assert errors == [{"type": "literal_error", "loc": ["query", "lang"], "msg": msg}]
+    assert_not_echoed(response, secret)
+
+
 @pytest.mark.parametrize(
     ("url", "bucket", "limit"),
     [(QUOTE_URL, "checkout_quote_source", 300), (ORDER_URL, "guest_order_source", 60)],

@@ -76,9 +76,8 @@ from app.api.orders import (
     _error,
     _key_errors,
 )
-from app.api.pay import _body_errors, _json_body, _utcnow
+from app.api.pay import LanguageDep, _body_errors, _json_body, _utcnow
 from app.db.session import get_session
-from app.services.catalog import Language
 from app.services.checkout import MAX_CART_LINES, CartItem, PricedLine, UnavailableLine
 from app.services.member_ordering import (
     CouponUnavailable,
@@ -122,7 +121,8 @@ class MemberOrderIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    # 与计价接口相同：1 到 20 行，每行 1 到 99 件，SKU 不重复。
+    # 与计价接口相同：1 到 20 行，每行 1 到 99 件，SKU 不重复
+    # （重复 SKU 由 _destination_errors 报 422，见 _order_input，不进入下单函数）。
     lines: list[QuoteLineIn] = Field(min_length=1, max_length=MAX_CART_LINES)
     # 收货电话原文：前端预填会员手机号，会员可改为其他号码或虚构号码。
     # 没有 phone_region：以收货国家为默认地区解析，以加号开头时以输入为准。
@@ -237,6 +237,7 @@ def _order_input(request: Request, raw: bytes) -> MemberOrderInput:
         errors.extend(_body_errors(exc))
     phone = None
     if body is not None:
+        # SKU 不重复，以及国家、州属与地区的组合（规则同 POST /api/orders/guest）。
         errors.extend(_destination_errors(body))
         try:
             phone = _recipient_phone(body)
@@ -277,9 +278,13 @@ def quote(
     raw: QuoteBodyDep,
     member: MemberDep,
     session: SessionDep,
-    lang: Language = "en",
+    lang: LanguageDep,
 ) -> MemberQuoteOut:
-    """只读：不写库、不锁行；结果只供显示，下单时重新判定。"""
+    """只读：不写库、不锁行；结果只供显示，下单时重新判定。
+
+    lang 同计价接口（en、zh、ms，默认 en），在会话之后由 app/api/pay.py 的 _language
+    判断；不合法时 422 只给位置、类型与固定消息，不回显所给的值。
+    """
     try:
         body = MemberQuoteIn.model_validate_json(raw)
     except ValidationError as exc:
