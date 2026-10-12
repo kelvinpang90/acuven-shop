@@ -3176,7 +3176,7 @@ tasks:
       docs/UX.md 0.10 P05 与 P13（结账输入代码；我的优惠券列出所有启用中且在有效期内的券，对全部会员相同，Q19）以及 docs/HANDOFF.md 0.46 记录的 Kelvin 2026-10-10 决定（两个上限可留空表示不限，预占与核销都计次数，退款不恢复，每会员按会员账号计数），
       在 SHOP-TASK-083 的表上实现优惠券规则函数。不做接口，不接入下单与支付，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46（优惠券）。拆分：业务规则层（3 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-083
     acceptance_criteria:
