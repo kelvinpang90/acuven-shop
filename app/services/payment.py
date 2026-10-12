@@ -10,12 +10,38 @@
   原结果，同键不同内容报冲突。
 - 「数据模型」的 PaymentAttempt / OrderEvent 一行：事件不写收货资料原文。
 
-访问授权、CSRF 与请求格式由调用方（app/api/pay.py）先行校验；这里只按订单 ID 操作。
+券与积分依据 docs/DESIGN.md 1.11（提交 2d13250）「计价、优惠、积分与库存」
+第 1、3 条与「订单与退款状态」（取消或超时释放库存、券及积分预占；模拟支付
+成功后获得积分），以及 docs/HANDOFF.md 0.46、0.47 记录的 Kelvin 决定
+（预占与核销都计用券次数；已预占的积分以预占时为准；获得积分按下单时的快照
+在支付成功时发放）：
+- 支付成功：同一事务里、带条件的 UPDATE 命中之后，以 use_coupon 核销用券记录
+  （没有记录时不写），再以加锁读重新读取订单的会员 ID 与会员状态；会员 ID 非空、
+  会员为 active 且订单快照 points_earned 大于 0 时以 earn_points 按快照发放，
+  否则不发放。
+- 本人取消与超时取消：同一事务里、带条件的 UPDATE 命中并加回库存之后，以
+  release_coupon 与 release_points 释放（游客订单两者都不写；批次已过期或会员
+  已注销时 release_points 随即记为到期或作废）。UPDATE 未命中时整个事务回滚，
+  不释放。
+
+访问授权、CSRF 与请求格式由调用方（app/api/pay.py，以后的会员接口）先行校验；
+这里只按订单 ID 操作。支付与本人取消的操作者由调用方以 actor 给出（guest 或
+member，默认 guest），状态迁移的检查与事件都用它；超时取消的操作者为 system。
 状态改动一律用带条件的 UPDATE（状态仍为 awaiting_demo_payment 才改），未命中即回滚，
-所以并发的支付、取消与超时取消对同一订单只有一个生效，库存至多加回一次。加回库存时同一
-规格的多行先合并件数，再按 SKU 规格 ID 从小到大逐个更新，与下单扣库存的顺序一致。
-券与积分预占的释放由之后的优惠券与积分任务扩展取消与超时路径；
-会员访问由之后的会员任务扩展。
+所以并发的支付、取消与超时取消对同一订单只有一个生效，库存、券与积分至多释放
+一次。加回库存时同一规格的多行先合并件数，再按 SKU 规格 ID 从小到大逐个更新，
+与下单扣库存的顺序一致。
+
+锁顺序（只在 MySQL 上成立：SQLite 不支持行锁，SQLAlchemy 在 SQLite 上不生成
+FOR UPDATE）：支付成功、本人取消与超时取消在带条件的 UPDATE 之前，先以普通读
+取得订单的会员 ID，非空时以 SELECT … FOR UPDATE 锁住该会员的行（会员已注销
+也锁），为空（游客订单或会员注销后已清空）时不预先锁；之后才由 UPDATE 锁订单行。
+于是单张订单的会员下单（会员 → 库存）、取消（会员 → 订单 → 库存 → 用券记录 →
+积分）、支付成功（会员 → 订单 → 用券记录 → 积分）与注销（会员 → 订单）都先取
+会员锁。会员 ID 已清空的订单在取消时由 release_points 在库存之后才锁会员行，
+这时该会员已注销，不会再下单或注销。这依赖超时取消逐张订单真实提交
+（SHOP-TASK-097 之后，定时任务与每日库存重置都不再在外层事务里连续取消多张
+订单），所以不会跨订单持有库存与券的锁。
 
 本模块不写日志；异常消息不含个人资料、订单号、幂等键或令牌。库里的时间一律是不带时区的
 UTC，返回的视图里换成带 UTC 时区的时间。
@@ -36,6 +62,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import (
+    Member,
     Order,
     OrderEvent,
     OrderItem,
@@ -43,8 +70,10 @@ from app.models import (
     PaymentAttempt,
     ProductVariant,
 )
+from app.models.member import MEMBER_ACTIVE
 from app.models.order import (
     ACTOR_GUEST,
+    ACTOR_MEMBER,
     ACTOR_SYSTEM,
     PAYMENT_FAILED,
     PAYMENT_METHOD_BANK,
@@ -56,11 +85,16 @@ from app.models.order import (
     STATUS_PAID,
 )
 from app.services.catalog import Language
+from app.services.coupons import release_coupon, use_coupon
 from app.services.order_rules import is_transition_allowed
+from app.services.points import earn_points, release_points
 
 PaymentMethod = Literal["card", "bank", "ewallet"]
 PaymentResult = Literal["success", "failure"]
 CancelledBy = Literal["self", "timeout"]
+# 支付与本人取消的操作者：游客或会员（超时取消固定为 system，不由调用方给出）。
+PayActor = Literal["guest", "member"]
+_PAY_ACTORS = (ACTOR_GUEST, ACTOR_MEMBER)
 
 # 接口里的支付方式与结果 → 库里的值。card、bank、ewallet 对应 pay.method_card、
 # pay.method_bank、pay.method_ewallet。
@@ -135,8 +169,12 @@ class PayOrder(BaseModel):
     server_time: datetime
     lines: list[PayLine]
     subtotal_sen: int
+    # 券折扣、积分抵扣与获得积分取订单快照；游客订单都为 0。
+    coupon_discount_sen: int
+    points_redeemed: int
     shipping_fee_sen: int
     total_sen: int
+    points_earned: int
     # 订单摘要不依赖收货资料记录存在：没有那一条时为空。
     recipient: PayRecipient | None
     # 最近一次模拟支付；没有为空。
@@ -176,18 +214,23 @@ def submit_payment(
     result: PaymentResult,
     idempotency_key: str,
     now: datetime,
+    *,
+    actor: PayActor = "guest",
 ) -> tuple[PaymentOutcome, bool]:
     """提交一次模拟支付，返回结果与是否新写了支付尝试（重放为假）。
 
+    actor 为操作者（guest 或 member，其他值抛 ValueError，先于访问数据库）。
     1. 按幂等键查支付尝试：指纹相同返回原结果，不同抛 IdempotencyConflict；都不改订单。
     2. 订单已模拟支付或已取消：抛 OrderNotPayable，不写支付尝试。
     3. 已过支付到期时间：先按超时取消处理，再抛 OrderExpired，不写支付尝试。
-    4. 失败：只写支付尝试，订单状态、库存与事件都不变，可再次提交。
-    5. 成功：同一事务里用带条件的 UPDATE（状态仍为 awaiting_demo_payment 且未到期）改为
-       demo_paid 并写支付时间，写支付尝试与一条操作者为 guest 的事件；库存不变（预留即被
-       消耗）。UPDATE 未命中时回滚：同键的并发请求已提交则按 1 处理，否则抛 OrderNotPayable。
-    写支付尝试撞上幂等键唯一约束时回滚，按 1 处理。
+    4. 失败：只写支付尝试，订单状态、库存、券、积分与事件都不变，可再次提交。
+    5. 成功：先锁订单的会员行（会员 ID 非空时），再在同一事务里用带条件的 UPDATE（状态仍为
+       awaiting_demo_payment 且未到期）改为 demo_paid 并写支付时间，写支付尝试与一条操作者
+       为 actor 的事件，核销用券记录、按订单快照发放获得积分（见模块说明）；库存不变（预留即
+       被消耗）。UPDATE 未命中时回滚：同键的并发请求已提交则按 1 处理，否则抛 OrderNotPayable。
+    写支付尝试撞上幂等键唯一约束时回滚，按 1 处理。重放不再核销或发放。
     """
+    _check_actor(actor)
     fingerprint = payment_fingerprint(order_id, method, result)
     existing = _attempt_by_key(db, idempotency_key)
     if existing is not None:
@@ -205,7 +248,8 @@ def submit_payment(
 
     succeeded = result == "success"
     if succeeded:
-        _require_transition(STATUS_PAID, ACTOR_GUEST)
+        _require_transition(STATUS_PAID, actor)
+        _lock_order_member(db, order_id)
         not_due = Order.payment_expires_at > now
         if not _update_awaiting(db, order_id, not_due, status=STATUS_PAID, paid_at=now):
             db.rollback()
@@ -236,28 +280,33 @@ def submit_payment(
     status = STATUS_AWAITING_PAYMENT
     paid_at = None
     if succeeded:
-        db.add(_event(order_id, STATUS_PAID, ACTOR_GUEST, now))
+        db.add(_event(order_id, STATUS_PAID, actor, now))
+        _settle_paid(db, order_id, now)
         status = STATUS_PAID
         paid_at = now.replace(tzinfo=UTC)
     db.commit()
     return PaymentOutcome(method=method, result=result, status=status, paid_at=paid_at), True
 
 
-def cancel_order(db: Session, order_id: int, now: datetime) -> CancelOutcome:
+def cancel_order(
+    db: Session, order_id: int, now: datetime, *, actor: PayActor = "guest"
+) -> CancelOutcome:
     """下单者在支付页取消待支付订单。
 
-    已过支付到期时间的待支付订单先按超时取消处理。仍待支付时同一事务里用带条件的 UPDATE
-    （状态仍为 awaiting_demo_payment 且未到期）改为 demo_cancelled、加回库存、写一条操作者
-    为 guest 的事件；未命中（并发的支付、取消或超时取消先提交）时回滚。之后订单已取消
-    即返回当前状态（重复取消不再写事件或加回库存）；已模拟支付及之后的状态抛
-    OrderNotCancellable。
+    actor 为操作者（guest 或 member，其他值抛 ValueError，先于访问数据库）。
+    已过支付到期时间的待支付订单先按超时取消处理。仍待支付时先锁订单的会员行（会员 ID 非空
+    时），再在同一事务里用带条件的 UPDATE（状态仍为 awaiting_demo_payment 且未到期）改为
+    demo_cancelled、加回库存、释放券与积分预占、写一条操作者为 actor 的事件；未命中（并发的
+    支付、取消或超时取消先提交）时回滚。之后订单已取消即返回当前状态（重复取消不再写事件、
+    加回库存或释放）；已模拟支付及之后的状态抛 OrderNotCancellable。
     """
+    _check_actor(actor)
     order = _load_order(db, order_id)
     if order.status == STATUS_AWAITING_PAYMENT and now >= order.payment_expires_at:
         expire_overdue_orders(db, now, order_ids=[order_id])
         order = _load_order(db, order_id)
     if order.status == STATUS_AWAITING_PAYMENT:
-        if _cancel(db, order_id, ACTOR_GUEST, now, overdue=False):
+        if _cancel(db, order_id, actor, now, overdue=False):
             db.commit()
         else:
             db.rollback()
@@ -275,14 +324,15 @@ def expire_overdue_orders(
     order_ids: Collection[int] | None = None,
     limit: int | None = None,
 ) -> int:
-    """把超过支付到期时间仍未支付的订单取消并释放库存，返回本次取消的张数。
+    """把超过支付到期时间仍未支付的订单取消并释放库存、券与积分，返回本次取消的张数。
 
     选出状态为 awaiting_demo_payment 且支付到期时间不晚于 now 的订单（order_ids 可限定
-    范围，limit 可限定单次上限；按到期时间从早到晚），逐张在各自的事务里用带条件的 UPDATE
-    （状态仍为 awaiting_demo_payment 且已到期才改）改为 demo_cancelled、按订单行加回当日
-    可用库存（规格已删除的行跳过；同一规格先合并件数，按 SKU 规格 ID 从小到大）、写一条
-    操作者为 system 的事件，然后提交。UPDATE 未命中（并发的支付、取消或另一次超时取消
-    先提交）时回滚并跳过这张，所以同一订单只生效一次，重复运行不重复加回库存。
+    范围，limit 可限定单次上限；按到期时间从早到晚），逐张在各自的事务里先锁订单的会员行
+    （会员 ID 非空时），再用带条件的 UPDATE（状态仍为 awaiting_demo_payment 且已到期才改）
+    改为 demo_cancelled、按订单行加回当日可用库存（规格已删除的行跳过；同一规格先合并件数，
+    按 SKU 规格 ID 从小到大）、释放券与积分预占、写一条操作者为 system 的事件，然后提交。
+    UPDATE 未命中（并发的支付、取消或另一次超时取消先提交）时回滚并跳过这张，所以同一订单
+    只生效一次，重复运行不重复加回库存或释放。逐张提交是模块说明里锁顺序的前提。
 
     可重复运行。按分钟定时运行由之后的定时任务负责；本任务只在查看与支付、取消接口里
     对涉及的订单调用它。
@@ -360,8 +410,11 @@ def pay_orders(
             server_time=_utc(now),
             lines=lines[order_id],
             subtotal_sen=order.subtotal_sen,
+            coupon_discount_sen=order.coupon_discount_sen,
+            points_redeemed=order.points_redeemed,
             shipping_fee_sen=order.shipping_fee_sen,
             total_sen=order.total_sen,
+            points_earned=order.points_earned,
             recipient=None if recipient is None else _recipient(recipient),
             last_payment=None if attempt is None else _last_payment(attempt),
             cancelled_by=cancelled_by[order_id],
@@ -398,10 +451,53 @@ def _replay(db: Session, attempt: PaymentAttempt, fingerprint: str) -> PaymentOu
     )
 
 
+def _check_actor(actor: object) -> None:
+    if actor not in _PAY_ACTORS:
+        raise ValueError("actor must be guest or member")
+
+
 def _require_transition(target: str, actor: str) -> None:
     # 经 SHOP-TASK-010 的迁移判定函数检查；这里用到的迁移都在表里，不通过即编程错误。
     if not is_transition_allowed(STATUS_AWAITING_PAYMENT, target, actor):
         raise RuntimeError("order status transition is not allowed")
+
+
+def _lock_order_member(db: Session, order_id: int) -> None:
+    """带条件的 UPDATE 之前：以普通读取得订单的会员 ID，非空时锁住该会员的行。
+
+    会员已注销也锁；会员 ID 为空（游客订单或注销后已清空）时不预先锁。
+    """
+    member_id = db.scalar(select(Order.member_id).where(Order.id == order_id))
+    if member_id is None:
+        return
+    db.execute(select(Member.id).where(Member.id == member_id).with_for_update())
+
+
+def _settle_paid(db: Session, order_id: int, now: datetime) -> None:
+    """支付成功的 UPDATE 命中之后：核销用券记录，按订单快照发放获得积分；只 flush、不提交。
+
+    没有用券记录时 use_coupon 不写。订单的会员 ID 与会员状态以加锁读重新读取：会员 ID 为空
+    （游客订单或会员已注销）或会员不是 active 时不发放；快照 points_earned 为 0 时不写记录，
+    也不再去锁会员行（会员 ID 非空的会员订单已在 UPDATE 之前锁过）。
+    """
+    use_coupon(db, order_id, now)
+    order = db.scalars(
+        select(Order)
+        .where(Order.id == order_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).one()
+    if order.member_id is None or order.points_earned == 0:
+        return
+    member = db.scalars(
+        select(Member)
+        .where(Member.id == order.member_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).one_or_none()
+    if member is None or member.status != MEMBER_ACTIVE:
+        return
+    earn_points(db, member.id, order_id, order.points_earned, now)
 
 
 def _update_awaiting(
@@ -421,12 +517,14 @@ def _update_awaiting(
 
 
 def _cancel(db: Session, order_id: int, actor: str, now: datetime, *, overdue: bool) -> bool:
-    """带条件地把待支付订单改为已取消、加回库存、写事件；只 flush、不提交。
+    """先锁会员行，再带条件地把待支付订单改为已取消、加回库存、释放券与积分预占、写事件；
+    只 flush、不提交。
 
     overdue 为真（超时取消）时只改已到期的订单，为假（本人取消）时只改未到期的订单。
     UPDATE 未命中返回假，此时本函数没有写任何东西，由调用方回滚。
     """
     _require_transition(STATUS_CANCELLED, actor)
+    _lock_order_member(db, order_id)
     if overdue:
         due = Order.payment_expires_at <= now
     else:
@@ -434,6 +532,9 @@ def _cancel(db: Session, order_id: int, actor: str, now: datetime, *, overdue: b
     if not _update_awaiting(db, order_id, due, status=STATUS_CANCELLED):
         return False
     _release_stock(db, order_id)
+    # 游客订单没有用券记录与 redeem 流水，两者都不写。
+    release_coupon(db, order_id, now)
+    release_points(db, order_id, now)
     db.add(_event(order_id, STATUS_CANCELLED, actor, now))
     db.flush()
     return True
@@ -473,7 +574,7 @@ def _event(order_id: int, to_status: str, actor: str, now: datetime) -> OrderEve
 
 
 def _cancelled_by(db: Session, order_ids: list[int]) -> dict[int, CancelledBy | None]:
-    """按取消事件的操作者：system 为超时，其余（guest，以后的 member）为本人。"""
+    """按取消事件的操作者：system 为超时，其余（guest、member）为本人。"""
     found: dict[int, CancelledBy | None] = dict.fromkeys(order_ids)
     stmt = (
         select(OrderEvent.order_id, OrderEvent.actor_type)
