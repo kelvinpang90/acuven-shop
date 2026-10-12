@@ -3538,3 +3538,160 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 后台优惠券 A05（Kelvin 2026-10-12 决定，HANDOFF 0.48）：只新建与停用（不编辑、不重新启用、不删除）；有效期只录日期，按马来西亚时间从起始日 00:00:00 到截止日 23:59:59；
+  # 「已用」按预占加核销计（与上限口径一致）；新建被拒时显示 UX-COPY 0.11 的 admin.coupon_code_taken 或 admin.coupon_invalid。
+  # SHOP-TASK-098 为规则，099 为接口，100 为路由与导航，101 为请求模块，102 为列表、新建与停用。
+  - id: SHOP-TASK-098
+    title: 后台优惠券的列表、新建与停用规则
+    purpose: >-
+      按 docs/DESIGN.md 1.11「数据模型」Coupon / CouponUse 一行与「计价、优惠、积分与库存」第 1、7 条（使用额度在下单时预占；后台修改只影响新订单）、「权限与资料保护」第 5 条（仅管理员维护优惠，后台操作留审计记录），
+      docs/UX.md 0.10 的 A05（创建、停用固定金额或百分比券，设置有效期、最低商品消费、总次数与每会员次数上限；列表显示已用与上限），以及 docs/HANDOFF.md 0.48 记录的 Kelvin 2026-10-12 决定（只新建与停用；有效期只录日期，按马来西亚时间；已用按预占加核销计），
+      在 SHOP-TASK-083 的表与 SHOP-TASK-085 的代码规范化之上实现后台优惠券的规则函数。不做接口与页面，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.48（优惠券）。拆分：业务规则层（3 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-083
+      - SHOP-TASK-085
+    acceptance_criteria:
+      - 新文件 app/services/admin_coupons.py 的列表函数——入参为数据库会话与页码（从 1 起）；每页 30 张，按创建时间从新到旧、同时刻按 ID 从大到小；返回总数与该页各券的 ID、代码、类型、固定金额（仙）或百分比、最低商品消费（仙）、起始日与截止日（把 starts_at、ends_at 按固定 UTC+8 换算成马来西亚日期，写法同 app/services/sms_budget.py 的 MALAYSIA_UTC_OFFSET）、总使用上限、每会员使用上限（为空即不限）、已用次数（该券状态为 reserved 或 used 的用券记录数，即 app/models/coupon.py 的 COUNTED_USE_STATUSES，用一条分组查询取得，不逐张查询）与是否启用；页码超出时该页为空、总数照常；只读，不写审计
+      - 新建函数——入参为数据库会话、管理员 ID、新建请求（代码原文、类型、固定金额或百分比、最低商品消费、起始日与截止日两个日期、两个可空的上限）与当前时间（不带时区的 UTC）；代码经 SHOP-TASK-085 的代码规范化（去掉首尾空白、转大写、只由 A 到 Z 与 0 到 9 组成且长 4 到 20），不成立即抛 CouponInvalid；类型只能是 fixed 或 percent，fixed 时固定金额为 1 到 10000000 的整数仙且百分比为空，percent 时百分比为 1 到 100 的整数且固定金额为空；最低商品消费为 0 到 10000000 的整数仙；起始日不晚于截止日，截止日不早于当前时间的马来西亚日期；两个上限为空或 1 到 1000000 的整数；任一不满足抛 CouponInvalid（异常不带输入值）
+      - 新建通过时——starts_at 为起始日 00:00:00 马来西亚时间、ends_at 为截止日 23:59:59 马来西亚时间，都换成不带时区的 UTC 写入（同一天起止也满足 ends_at 晚于 starts_at）；启用状态为启用；在保存点里插入，撞上代码的唯一约束即回滚该保存点并抛 CouponCodeTaken（代码库里存大写，所以大小写不同的同一代码也算重复）；成功后用 SHOP-TASK-035 的 record_audit 写一条 admin_coupon_created（对象类别 coupon、对象 ID 为新券 ID、new_value 为规范化后的代码，不写其他字段）；只 flush、不提交；返回新券（字段同列表，已用为 0）
+      - 停用函数——入参为数据库会话、管理员 ID、券 ID 与当前时间；以条件更新（该券仍为启用）改为停用，改到时写一条 admin_coupon_disabled（对象类别 coupon、old_value 为 active、new_value 为 disabled）并返回该券；没改到时该券不存在抛 CouponNotFound，已停用则返回当前状态、不写审计（重复停用不出错）；只 flush、不提交；停用不改任何用券记录——已预占的订单照常支付与核销（后台修改只影响新订单），查券与预占由 SHOP-TASK-085 按启用状态拒绝之后的订单；不提供编辑、重新启用与删除
+      - tests/test_admin_coupons.py 用 SQLite 内存库按模型建表（开启外键检查）、自建管理员，验证意图——列表的排序、每页 30 张与第 2 页、页码超出、已用次数只计 reserved 与 used（released 不计）且不随其他券变化、起止日按马来西亚日期显示（含 UTC 跨日的时刻）；新建的代码规范化（小写与首尾空白被接受、非法字符与长度被拒）、fixed 与 percent 的取值边界、两种类型带错字段被拒、起止日（同一天可以、截止早于起始被拒、截止早于今天被拒、马来西亚午夜前后的今天）、上限为空与边界、starts_at 与 ends_at 的 UTC 值、大小写不同的重复代码抛 CouponCodeTaken 且不写审计、审计只含代码；停用写审计、重复停用不写、不存在抛错、停用后已预占的用券记录不变；函数返回后未提交；每条测试写明它守住的是设计、UX 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-098 记录段（列表、新建的校验与换算、停用、审计、偏离、验证到什么程度，并写明接口留给 SHOP-TASK-099），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/coupons.py、app/services/admin_auth.py、模型、迁移、.platform/、CI、部署配置；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.48），不合并、不直推
+    allowed_change_paths:
+      - app/services/admin_coupons.py
+      - tests/test_admin_coupons.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-099
+    title: 后台优惠券的列表、新建与停用接口
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 5 条（仅管理员维护优惠，后台单一管理员须服务端授权）与 docs/UX.md 0.10 的 A05，以及 docs/HANDOFF.md 0.48 记录的 Kelvin 2026-10-12 决定，
+      在 SHOP-TASK-098 之上提供后台优惠券的三个接口（A05 的后端）。不做页面，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.48（优惠券）。拆分：接口层（4 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-098
+    acceptance_criteria:
+      - 新文件 app/api/admin_coupons.py（app/main.py 挂上路由）提供 GET /api/admin/coupons、POST /api/admin/coupons 与 POST /api/admin/coupons/{coupon_id}/disable；路由器用 SHOP-TASK-027 的 _NoStoreRoute，这三个接口的处理函数与依赖产生的响应（含错误）都带 no-store；路径存在但方法不匹配时由框架返回的 405 不在此列；都经 SHOP-TASK-036 的 require_admin（无有效后台会话 401 admin_session_required）；不写日志
+      - GET /api/admin/coupons?page=N（1 到 10000 的整数，默认 1；不合法时 422，写法同 app/api/admin_stock_resets.py）返回 {total, page, page_size（30）, coupons, csrf_token}，coupons 每项为 id、code、type、amount_off_sen（percent 时 null）、percent_off（fixed 时 null）、min_subtotal_sen、starts_on 与 ends_on（YYYY-MM-DD 的马来西亚日期）、total_use_limit、per_member_use_limit（不限时 null）、used_count 与 active（布尔），csrf_token 由 cookie 算出（同 GET /api/admin/store-design）；不写审计
+      - POST /api/admin/coupons 的检查顺序为 413（请求体逐块读，超过 8 KB，先于一切）→ 415（不是 JSON）→ 401 → 403 csrf_failed（经 require_admin_csrf）→ 422（结构）→ 业务校验；请求体只有 code（1 到 64 个字符的字符串）、type（fixed 或 percent）、amount_off_sen 与 percent_off（整数或 null）、min_subtotal_sen（整数）、starts_on 与 ends_on（YYYY-MM-DD 的日期字符串）、total_use_limit 与 per_member_use_limit（整数或 null），都必填、严格类型，多出字段 422，422 每条错误只给位置、类型与固定消息、不回显请求内容（沿用 app/api/pay.py 的 _body_errors）；CouponInvalid 为 422 {"detail":"coupon_invalid"}，CouponCodeTaken 为 409 {"detail":"coupon_code_taken"}，都不写入；成功时提交，201 与新券（字段同列表项）
+      - POST /api/admin/coupons/{coupon_id}/disable 的检查顺序为 401 → 403 csrf_failed → 路径 ID（只接受不带符号与前导零、不超过 2147483647 的十进制整数，否则 422，写法同 GET /api/admin/stock-resets/{reset_id}）→ 不存在 404 {"detail":"not_found"}；不读请求体；成功或已停用都是 200 与该券（字段同列表项），只有实际停用时提交审计；数据库出错时回滚，503 service_unavailable
+      - tests/test_admin_coupons_api.py 用 TestClient 与 SQLite 内存库（开启外键检查，覆盖会话依赖，照 tests/test_admin_stock_resets.py 与 tests/test_admin_store_design.py 的写法）自建管理员、后台会话、券与用券记录，验证意图——无会话时三个接口都 401；列表的字段、分页、used_count 与马来西亚日期；新建成功 201 且写一条审计、另一会话读得到；coupon_invalid 与 coupon_code_taken 不写入；缺或错 CSRF 403 且不写入；非 JSON 415、超过 8 KB 413、多余字段与类型不对 422 且不回显；停用 200 且写审计、重复停用 200 不再写、不存在 404、路径 ID 不合法 422；所有响应（含错误）带 no-store；每条测试写明它守住的是设计、UX 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-099 记录段（三个接口、字段、检查顺序与错误码、偏离、验证到什么程度，并写明 A05 页面留给 SHOP-TASK-100 至 102），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、app/api/admin_auth.py、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.48），不合并、不直推
+    allowed_change_paths:
+      - app/api/admin_coupons.py
+      - app/main.py
+      - tests/test_admin_coupons_api.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-100
+    title: 后台优惠券页的路由与导航 A05
+    purpose: >-
+      按 docs/UX.md 0.10 的 A05 加上后台优惠券页：路由 /admin/coupons，用后台框架渲染，当前导航项为优惠券，内容区只有页标题与列在会员中心的说明；
+      后台导航按 UX 顺序在退款之后加上优惠券。请求模块与列表、新建、停用由 SHOP-TASK-101、102 接上。不调用接口，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只加路由、导航与静态文字）。
+      拆分：A05 拆成路由与导航（本任务）、请求模块（SHOP-TASK-101）与列表、新建与停用（SHOP-TASK-102）；本任务 13 个允许路径，超过 12 个但拆不开——导航加一项要同时改后台框架与退款、库存重置、店铺装修三页已有的导航断言，任何一处不改 CI 就不通过（A08 的 SHOP-TASK-062 同理为 12 个，当时只有两页）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-062
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.10 的 A05、docs/UX-COPY.md 0.11 与 docs/HANDOFF.md 0.48 为准，样式以 docs/design/pages/ 的 A05-desktop 与 A05-phone-list 的页头部分为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入 docs/TODO.md 的偏离（评审不以此要求修改），不借用其他组件的类来取颜色
+      - 路由 /admin/coupons（frontend/src/router.tsx、frontend/src/App.tsx 与 frontend/src/router.test.tsx 各加一项），新文件 frontend/src/pages/AdminCouponsPage.tsx 用后台框架渲染，当前导航项为优惠券（手机顶栏标题为 admin.nav_coupons），内容区为 h1 admin.nav_coupons 与其下的 admin.coupon_listed_note；frontend/src/i18n/copy.ts 按 UX-COPY 0.11 加入本任务用到的键；页面不发起自己的请求（列表由 SHOP-TASK-102 接上）
+      - frontend/src/components/AdminFrame.tsx 的导航按 UX 顺序只含已上线的订单、退款、优惠券、库存重置与店铺装修五项（桌面导航与 ☰ 菜单同样）；frontend/src/components/AdminFrame.test.tsx 只许把「只含订单、退款、库存重置与店铺装修四项」的断言（桌面导航与手机菜单）改为按 UX 顺序只含这五项、其他 admin.nav_* 不出现；frontend/src/pages/AdminRefundsPage.test.tsx、frontend/src/pages/AdminStockResetsPage.test.tsx 与 frontend/src/pages/AdminStoreDesignPage.test.tsx 只许把 navigation 一组里「依次为这四项」的断言改为依次为这五项（各自的当前项与手机顶栏名称不变）；四个文件的其余断言不动
+      - 用 vitest 与 react-dom/server（不加测试依赖，路由以替身代替）在 frontend/src/pages/AdminCouponsPage.test.tsx 验证意图——经路由打开页面渲染后台框架、不套前台框架；当前导航项为优惠券且五项顺序正确；标题与说明；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-100 记录段（路由、导航变化、改动的现有测试、偏离、验证到什么程度，并写明未做浏览器验收、请求模块与列表、新建、停用留给 SHOP-TASK-101、102），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/AdminCouponsPage.tsx
+      - frontend/src/pages/AdminCouponsPage.test.tsx
+      - frontend/src/components/AdminFrame.tsx
+      - frontend/src/components/AdminFrame.test.tsx
+      - frontend/src/pages/AdminRefundsPage.test.tsx
+      - frontend/src/pages/AdminStockResetsPage.test.tsx
+      - frontend/src/pages/AdminStoreDesignPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-101
+    title: 后台优惠券的请求模块 A05
+    purpose: >-
+      为 A05 页面新建调用 SHOP-TASK-099 三个接口的请求模块与测试，供 SHOP-TASK-102 使用；不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（金额规则与校验在 SHOP-TASK-098、099 的服务端，请求模块只传递与校验字段）。
+      拆分：A05 页面的请求层（3 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-099
+    acceptance_criteria:
+      - 新文件 frontend/src/api/adminCoupons.ts 调用 GET /api/admin/coupons?page=N、POST /api/admin/coupons 与 POST /api/admin/coupons/{内部 ID}/disable（同源 cookie，cache 为 no-store；两个 POST 带 X-CSRF-Token 为调用方给出的 csrf_token；新建的 Content-Type 为 application/json，JSON 请求体只有 SHOP-TASK-099 列出的九个字段；停用不带请求体），写法沿用 frontend/src/api/adminStockResets.ts 与 frontend/src/api/adminStoreDesign.ts 的现有做法
+      - 只取 SHOP-TASK-099 记录段列出的字段；响应体不合格算失败——total、page、page_size 不是非负整数，id 不是正整数，code 不是非空字符串，type 不是 fixed 或 percent，fixed 时 amount_off_sen 不是正整数或 percent_off 不为 null，percent 时 percent_off 不是 1 到 100 的整数或 amount_off_sen 不为 null，min_subtotal_sen 与 used_count 不是非负整数，starts_on 与 ends_on 不是 YYYY-MM-DD，两个上限不是正整数或 null，active 不是布尔值，列表的 csrf_token 不是非空字符串，字段缺少或类型不对都算不合格
+      - 列表结果归为 ok、none（401）、failed 与 network；新建结果归为 ok、none（401）、csrf（403）、code_taken（409 且 detail 为 coupon_code_taken）、invalid（422）、failed（其他状态）与 network；停用结果归为 ok、none（401）、csrf（403）、not_found（404）、failed 与 network；调用方可传入 AbortSignal，中止时按现有模块的做法处理
+      - 用 vitest（不加测试依赖，fetch 以替身代替）在 frontend/src/api/adminCoupons.test.ts 验证意图——请求地址、方法、页码、请求头与请求体（只有九个字段，停用不带请求体）；字段与响应体不合格算失败（含两种类型带错字段、百分比越界、日期格式不对、上限为 0）；各状态码的归类（409 的 detail 不是 coupon_code_taken 时归 failed）与网络中断；每条测试写明它守住的是 SHOP-TASK-099 记录段或 UX 的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-101 记录段（请求、字段与归类、偏离、验证到什么程度，并写明页面留给 SHOP-TASK-102），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths（不改页面、路由与导航）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/adminCoupons.ts
+      - frontend/src/api/adminCoupons.test.ts
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-102
+    title: 后台优惠券的列表、新建与停用 A05
+    purpose: >-
+      在 SHOP-TASK-100 的优惠券页上实现 A05 的列表、新建与停用：经 SHOP-TASK-101 的请求模块调用 SHOP-TASK-099 的接口，按 docs/HANDOFF.md 0.48 记录的 Kelvin 2026-10-12 决定（只新建与停用；有效期只录日期；新建被拒时显示 admin.coupon_code_taken 或 admin.coupon_invalid）。
+      不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（金额规则与校验在 SHOP-TASK-098、099 的服务端，页面只收集与显示）。
+      拆分：见 SHOP-TASK-100，本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+    status: ready
+    depends_on:
+      - SHOP-TASK-100
+      - SHOP-TASK-101
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.10 的 A05、docs/UX-COPY.md 0.11 与 docs/HANDOFF.md 0.48 为准，样式以 docs/design/pages/ 的 A05-desktop、A05-phone-list 与 A05-phone-new 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入 docs/TODO.md 的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.11 加入本任务用到的键
+      - 列表——SHOP-TASK-100 的标题与说明之下，标题行右侧为 common.create 按钮；桌面表格列头 admin.coupon_code、admin.coupon_type、admin.coupon_value、admin.coupon_valid、admin.coupon_usage 与 admin.filter_status，手机为卡片（照 A05-phone-list）；类型显示 admin.coupon_fixed 或 admin.coupon_percent；面额 fixed 用 frontend/src/format.ts 的 formatSen，percent 显示百分数；有效期按界面语言显示起始日与截止日本身（不按访客时区换算，写法同 A07 的营业日期）；已用与上限显示为「已用 / 上限」，上限为 null 时显示不限的符号「—」（不是文字，记入偏离）；状态为 admin.coupon_enabled 或 admin.coupon_disabled 标签，启用的券另有 admin.coupon_disable 按钮；翻页与没有券时的显示沿用 SHOP-TASK-060 的做法（每页 30 张）
+      - 新建——点 common.create 显示新建表单（h2 为 common.create；桌面在列表下方，手机隐藏列表只显示表单，表单上方有 common.back 按钮回到列表，照 A05-phone-new）：admin.coupon_code（文本，必填）、admin.coupon_type（admin.coupon_fixed 与 admin.coupon_percent 两个单选，默认 fixed）、admin.coupon_value（fixed 时以 RM 输入、最多两位小数、大于 0，提交时换成整数仙；percent 时为 1 到 100 的整数）、admin.coupon_valid（两个原生日期输入）、admin.coupon_min_spend（RM，默认 0，换成整数仙）、admin.coupon_total_limit 与 admin.coupon_member_limit（正整数，留空即不限、提交 null），其下 admin.rules_apply_new 与 common.save；用浏览器自带的必填、最小值、最大值与步长约束，不另写文案
+      - 提交（经 SHOP-TASK-101 的请求模块，csrf_token 取自列表结果）——进行中按钮禁用并标 aria-busy；ok 时清空并收起表单、重新读取第 1 页；code_taken 显示 admin.coupon_code_taken、invalid 显示 admin.coupon_invalid，都保留表单内容；csrf 时重新读取列表取得新令牌并显示 common.error_retry、保留表单；none 用路由的 replace 进入 /admin/login；network 显示 common.network_check；failed 显示 common.error_retry。停用——点 admin.coupon_disable 以该券内部 ID 调用停用，进行中该按钮禁用并标 aria-busy；ok 时以返回的券更新该行（不再显示停用按钮）；not_found 与 csrf 时重新读取当前页并显示 common.error_retry；none、network 与 failed 同上；不加确认框（UX 没有）
+      - 读取——打开页面读取第 1 页，进行中标 aria-busy；none 用路由的 replace 进入 /admin/login；network 显示 common.network_check，其他失败显示 common.error_retry；离开页面或翻页时中止旧请求，旧请求的结果不再更新页面
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AdminCouponsPage.test.tsx 验证意图——表头与卡片、类型与面额、日期不随时区偏移、已用与上限（含不限）、状态与停用按钮只在启用的券上；新建表单的字段、默认值与约束、RM 换成整数仙（含 0.1 与 12.34）、留空上限提交 null；提交成功收起并重新读取、code_taken 与 invalid 的文案且保留表单、csrf、401、网络中断；停用成功更新该行、not_found 重新读取；翻页；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；SHOP-TASK-100 写的现有断言只按需要改并写明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-102 记录段（列表、新建、停用、偏离、验证到什么程度，并写明未做浏览器验收），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths（不新增路由，不改导航，不改 frontend/src/api/adminCoupons.ts）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/AdminCouponsPage.tsx
+      - frontend/src/pages/AdminCouponsPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
