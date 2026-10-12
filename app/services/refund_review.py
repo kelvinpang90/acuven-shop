@@ -48,8 +48,22 @@ MySQL 默认的 REPEATABLE READ 下，读取快照在事务的第一条非锁定
 本模块只 flush、不提交，由调用方提交；
 抛出异常时尚未写入任何数据，由调用方回滚并释放锁。
 
-积分返还与追回、会员订单（申请方 member）由之后的会员与积分账本任务接入；
-现有订单都是游客订单。后台接口由 SHOP-TASK-041 交付，
+积分返还与追回（SHOP-TASK-092）依据 DESIGN 1.11「计价、优惠、积分与库存」第 4、5 条与
+「订单与退款状态」（批准模拟退款时按原计价分摊回退未过期的已抵扣积分，并追回该商品产生的积分；
+余额不足扣至 0，剩余记待抵扣），以及 docs/HANDOFF.md 0.46 记录的 Kelvin 2026-10-10 决定
+（返还以整单为单位，从后到期的批次起返还）：
+- 只在批准时、保存点里写好申请的审核各列之后、写审计之前处理；拒绝不处理。
+- 应返还的抵扣积分为该申请各件对应的逐件分摊快照 points_discount 之和，
+  应追回的获得积分为这些件 points_earned 之和。
+- 锁定后读到的订单 member_id 非空时，以订单 ID、申请 ID、这两个数与当前时间调用
+  SHOP-TASK-087 的 apply_refund_points（返还、追回与待抵扣的规则都在那里）；
+  为空（游客订单或会员已注销）时不调用。
+- 锁顺序为订单行（本模块）→ 会员行（apply_refund_points）。与会员注销（会员 → 订单）
+  并发时 MySQL 可能判定死锁并回滚其中一方，异常原样交给调用方的数据库错误处理，这里不重试。
+- apply_refund_points 抛 ValueError（累计追回超过该单实际获得，即数据有误）时原样抛出，
+  保存点回滚，申请仍为 requested，由调用方回滚整个事务。
+- 按审核幂等键重放时在这之前已返回，不再调用；审计的旧值与新值不变，不写积分数。
+会员订单的退款申请由之后的任务接入（申请方仍只有 guest）。后台接口由 SHOP-TASK-041 交付，
 管理员授权、CSRF 与请求格式由它先行校验。
 
 本模块不写日志；异常消息不含理由、幂等键或个人资料。
@@ -69,7 +83,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import Order, RefundLine, RefundLineUnit, RefundRequest
+from app.models import Order, OrderItemUnit, RefundLine, RefundLineUnit, RefundRequest
 from app.models.refund import (
     REFUND_APPROVED,
     REFUND_REJECTED,
@@ -78,6 +92,7 @@ from app.models.refund import (
     UNIT_OCCUPIED,
 )
 from app.services.admin_auth import record_audit
+from app.services.points_refund import apply_refund_points
 
 # 审计操作名与对象类别。
 ADMIN_REFUND_APPROVED = "admin_refund_approved"
@@ -207,16 +222,18 @@ def _review(
        不同抛 IdempotencyConflict；都不写入。
     3. 读取申请：不是 requested 抛 RefundAlreadyReviewed 与当前状态。
     4. 读取该申请各件的占用；在保存点里写申请的审核各列、
-       拒绝时置空各件的占用标记，写一条审计。
+       拒绝时置空各件的占用标记；批准且订单 member_id 非空时返还与追回积分；
+       写一条审计。
     写入遇唯一约束冲突时只回滚保存点（锁保持），按键重新查询：
-    查到时按第 2 步返回，查不到原样抛出。
+    查到时按第 2 步返回，查不到原样抛出。积分函数抛 ValueError 时原样抛出。
     """
     if now.tzinfo is not None:
         raise ValueError("now must be a naive UTC datetime")
     fingerprint = review_fingerprint(refund_request_id, review.result, review.reason or "")
 
     db.rollback()
-    if db.scalars(lock_order_for_request_statement(refund_request_id)).one_or_none() is None:
+    order = db.scalars(lock_order_for_request_statement(refund_request_id)).one_or_none()
+    if order is None:
         raise RefundRequestNotFound
 
     existing = _request_by_review_key(db, review_idempotency_key)
@@ -244,6 +261,12 @@ def _review(
                 for unit in units:
                     unit.occupied = None
             db.flush()
+            # 订单行已锁，member_id 是锁后读到的（populate_existing）。
+            if review.result == REFUND_APPROVED and order.member_id is not None:
+                points_back, points_reversed = _unit_points(db, units)
+                apply_refund_points(
+                    db, order.id, refund_request_id, points_back, points_reversed, now
+                )
             record_audit(
                 db,
                 review.action,
@@ -297,6 +320,17 @@ def _request_units(db: Session, refund_request_id: int) -> list[RefundLineUnit]:
         .execution_options(populate_existing=True)
     )
     return list(db.scalars(stmt))
+
+
+def _unit_points(db: Session, units: list[RefundLineUnit]) -> tuple[int, int]:
+    """这些件对应的逐件分摊快照的 points_discount 之和与 points_earned 之和。"""
+    if not units:
+        return 0, 0
+    stmt = select(OrderItemUnit.points_discount, OrderItemUnit.points_earned).where(
+        OrderItemUnit.id.in_([unit.order_item_unit_id for unit in units])
+    )
+    rows = db.execute(stmt).all()
+    return sum(row.points_discount for row in rows), sum(row.points_earned for row in rows)
 
 
 def _replay(request: RefundRequest, fingerprint: str) -> ReviewOutcome:
