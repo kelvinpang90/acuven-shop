@@ -429,6 +429,33 @@ def test_second_lot_for_same_order_is_rejected(session: Session) -> None:
         _lot(session, ledger.member_id, ledger.source_order_id, points=5)
 
 
+def test_duplicate_lot_id_and_member_is_rejected(session: Session) -> None:
+    """Kelvin 2026-10-10「积分按批次记账」：（id、会员）唯一是流水复合外键的目标，库里须真有这个
+    唯一索引（SQLite 的外键目标没有唯一索引时会报 foreign key mismatch，复合外键就无从检查），
+    且同一（id、会员）不能写入第二个批次。第二个批次用另一张来源订单，只与已有批次的（id、会员）
+    重复；id 同时是主键，SQLite 先查主键时只报 point_lots.id，故匹配两种报法。
+    """
+    ledger = _ledger(session)
+    other_order = _order(session, ledger.member_id)
+    unique_indexes = [
+        row.name
+        for row in session.execute(text("PRAGMA index_list('point_lots')"))
+        if row.unique and row.origin == "u"
+    ]
+    unique_columns = [
+        [info.name for info in session.execute(text(f"PRAGMA index_info('{name}')"))]
+        for name in unique_indexes
+    ]
+    assert sorted(unique_columns) == [["id", "member_id"], ["order_id"]]
+
+    values = _lot_values(ledger.member_id, other_order.id, id=ledger.lot_id)
+    assert _failing_checks(PointLot, values) == []
+    message = r"UNIQUE constraint failed: point_lots\.id\b"
+
+    with pytest.raises(IntegrityError, match=message):
+        session.execute(insert(PointLot).values(**values))
+
+
 def test_only_lot_has_no_nullable_columns() -> None:
     """验收「除下面写明可空的列外全部非空」：批次没有可空的列。"""
     assert [column.name for column in PointLot.__table__.columns if column.nullable] == []
