@@ -9,8 +9,8 @@ reset-stock 子命令里的接入（app/jobs.py）。
 每条测试的文档字符串写明它守住的设计原句；没有直接原句的，写明是 SHOP-TASK-032 验收标准里的约定。
 
 用 SQLite 内存库按模型建表，每个连接打开外键检查（并断言已打开）；商品规格与订单在测试里直接写库
-建立。引擎设置与 tests/test_jobs.py 相同（关掉驱动的事务处理、由引擎发 BEGIN），保存点才和 MySQL
-上一样：重置在认领事务里以保存点执行超时取消。
+建立。引擎设置与 tests/test_jobs.py 相同（关掉驱动的事务处理、由引擎发 BEGIN），事务边界才和
+MySQL 上一样：SHOP-TASK-097 起重置在认领之前、不在任何事务里执行超时取消，它逐张真实提交。
 
 并发：内存库经 StaticPool 只有一个连接，SQLite 不复现 MySQL 的阻塞等待。用两个数据库会话按可控的
 先后顺序模拟：后到者检查到「尚未完成」并结束检查的事务之后、执行认领写入之前（monkeypatch 包住
@@ -54,7 +54,7 @@ from app.models.order import (
     STATUS_SHIPPED,
 )
 from app.models.stock_reset import RESET_FAILED, RESET_SUCCEEDED
-from app.services import stock_reset
+from app.services import payment, stock_reset
 from app.services.order_rules import generate_order_number
 from app.services.payment import expire_overdue_orders
 
@@ -330,6 +330,17 @@ def _before_claim(monkeypatch: pytest.MonkeyPatch, action: Callable[[], Any]) ->
     monkeypatch.setattr(stock_reset, "_claim", wrapper)
 
 
+def _before_begin(monkeypatch: pytest.MonkeyPatch, action: Callable[[Session], Any]) -> None:
+    """每次开始认领事务（_begin）之前，以执行重置的会话调用一段操作；之后照常开始。"""
+    real = stock_reset._begin
+
+    def wrapper(session: Session) -> None:
+        action(session)
+        real(session)
+
+    monkeypatch.setattr(stock_reset, "_begin", wrapper)
+
+
 def _fail_reset_variants(monkeypatch: pytest.MonkeyPatch, *errors: Exception) -> None:
     """前 len(errors) 次重建库存时先照常写库、再依次抛出 errors；之后照常。"""
     real = stock_reset._reset_variants
@@ -468,19 +479,24 @@ def test_second_run_on_the_same_date_changes_nothing(engine: Engine, db: Session
 def test_failure_is_recorded_and_retry_succeeds_once(
     engine: Engine, db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """重试第 6 条：可重复运行、只生效一次；失败有人工补跑办法。SHOP-TASK-032 验收：失败时整个
-    事务回滚（库存、超时取消与明细都不留下），独立事务里记为 failed（尝试 1 次、只记异常类名）
-    并把原异常交给调用方；再次执行成功后改为 succeeded、尝试次数为 2，明细只有一份。"""
+    """重试第 6 条：可重复运行、只生效一次；失败有人工补跑办法。SHOP-TASK-032 验收：失败时认领
+    事务回滚，独立事务里记为 failed（尝试 1 次、只记异常类名）并把原异常交给调用方；再次执行成功后
+    改为 succeeded、尝试次数为 2，明细只有一份。SHOP-TASK-097 约定（随之修改）：超时取消在认领之前
+    逐张真实提交，重置失败时已生效的取消保留（状态、加回的库存与 system 事件），重置写的库存与明细
+    回滚。"""
     tee = _variant(db, initial=10, available=2, sku="TEE-L")
     overdue = _order(db, [(tee, 3)], expires_at=NOW - timedelta(minutes=1))
-    _order(db, [(tee, 1)])
-    before = [_rows(db, model) for model in (ProductVariant, Order, OrderEvent)]
+    fresh = _order(db, [(tee, 1)])
     _fail_reset_variants(monkeypatch, RuntimeError(SECRET))
 
     with pytest.raises(RuntimeError):
         _run(engine)
 
-    assert [_rows(db, model) for model in (ProductVariant, Order, OrderEvent)] == before
+    # 超时取消已生效：加回 3 件；重置写的当日可用（9）与明细回滚。
+    assert _status(db, overdue) == STATUS_CANCELLED
+    assert _cancel_events(db, overdue) == [ACTOR_SYSTEM]
+    assert _status(db, fresh) == STATUS_AWAITING_PAYMENT
+    assert _stock(db, tee) == 5
     assert _lines(db) == []
     record = _record(db)
     assert record["result"] == RESET_FAILED
@@ -502,6 +518,7 @@ def test_failure_is_recorded_and_retry_succeeds_once(
     assert record["error_class"] is None
     assert _lines(db) == [(tee, "TEE-L", 10, 1, 9)]
     assert _status(db, overdue) == STATUS_CANCELLED
+    assert _cancel_events(db, overdue) == [ACTOR_SYSTEM]
     assert _stock(db, tee) == 9
 
 
@@ -522,15 +539,26 @@ def test_repeated_failures_count_attempts_and_keep_the_latest_class(
     assert _record(db)["started_at"] == NOW
 
 
-def test_overdue_orders_are_cancelled_before_counting(engine: Engine, db: Session) -> None:
+def test_overdue_orders_are_cancelled_before_counting(
+    engine: Engine, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """第 6 条：“15 分钟未支付自动取消并释放”；当日可用库存为初始库存减去仍有效的预留。
-    SHOP-TASK-032 验收：认领之后先执行超时取消再统计；重置后再取消订单加回的件数不会重复。"""
+    SHOP-TASK-032 验收：先执行超时取消再统计；重置后再取消订单加回的件数不会重复。SHOP-TASK-097
+    约定（随之修改）：超时取消在认领之前执行——开始认领事务时这张订单已取消且已提交，会话不在
+    事务中。"""
     tee = _variant(db, initial=10, available=5)
     overdue = _order(db, [(tee, 2)], expires_at=NOW - timedelta(seconds=1))
     fresh = _order(db, [(tee, 3)], expires_at=NOW + timedelta(minutes=5))
+    at_begin: list[tuple[bool, str]] = []
+
+    def observe(session: Session) -> None:
+        at_begin.append((session.in_transaction(), _status(db, overdue)))
+
+    _before_begin(monkeypatch, observe)
 
     assert _run(engine).performed
 
+    assert at_begin == [(False, STATUS_CANCELLED)]
     assert _status(db, overdue) == STATUS_CANCELLED
     assert _cancel_events(db, overdue) == [ACTOR_SYSTEM]
     assert _lines(db)[0][2:] == (10, 3, 7)
@@ -545,6 +573,95 @@ def test_overdue_orders_are_cancelled_before_counting(engine: Engine, db: Sessio
     assert _status(db, fresh) == STATUS_CANCELLED
     assert _stock(db, tee) == 10
     assert not _run(engine, NOW + timedelta(minutes=10)).performed
+    assert _stock(db, tee) == 10
+
+
+def test_completed_date_does_not_cancel_overdue_orders(
+    engine: Engine, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """重试第 6 条：可重复运行、使用操作标识保证只生效一次。SHOP-TASK-097 约定：该日期已完成时
+    不执行超时取消（由运行器自己的超时取消任务处理），不改动任何东西。"""
+    tee = _variant(db, initial=10, available=5)
+    assert _run(engine).performed
+    overdue = _order(db, [(tee, 2)], expires_at=NOW - timedelta(seconds=1))
+    calls: list[int] = []
+
+    def counted(session: Session, now: datetime) -> int:
+        calls.append(1)
+        return expire_overdue_orders(session, now)
+
+    monkeypatch.setattr(stock_reset, "expire_overdue_orders", counted)
+
+    assert not _run(engine, NOW + timedelta(hours=1)).performed
+
+    assert calls == []
+    assert _status(db, overdue) == STATUS_AWAITING_PAYMENT
+    assert _cancel_events(db, overdue) == []
+    assert _stock(db, tee) == 10
+
+
+def test_no_overdue_orders_leaves_no_transaction_before_claiming(
+    engine: Engine, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """第 6 条：每天重建当日可用库存。SHOP-TASK-097 约定：超时取消返回后不论取消了几张都先回滚——
+    没有到期订单时它只做了 SELECT、不会自己结束事务，开始认领事务（MySQL 上要为它设 READ
+    COMMITTED）之前会话已不在事务中；超时取消照常执行了一次。"""
+    tee = _variant(db, initial=4)
+    _order(db, [(tee, 1)])
+    calls: list[int] = []
+
+    def counted(session: Session, now: datetime) -> int:
+        calls.append(1)
+        return expire_overdue_orders(session, now)
+
+    monkeypatch.setattr(stock_reset, "expire_overdue_orders", counted)
+    at_begin: list[bool] = []
+    _before_begin(monkeypatch, lambda session: at_begin.append(session.in_transaction()))
+
+    assert _run(engine).performed
+
+    assert calls == [1]
+    assert at_begin == [False]
+    assert _lines(db)[0][2:] == (4, 1, 3)
+
+
+def test_error_while_cancelling_is_recorded_and_keeps_earlier_cancellations(
+    engine: Engine, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """重试第 6 条：可重复运行、只生效一次；失败有告警与人工补跑办法。SHOP-TASK-097 约定：超时取消
+    这一段抛异常时回滚并记为 failed（只记异常类名），把原异常交给调用方；此前已逐张提交的取消保留，
+    不认领、不写库存与明细；再次执行时取消其余到期订单并完成重置，每张只取消一次。"""
+    tee = _variant(db, initial=10, available=4)
+    first = _order(db, [(tee, 2)], expires_at=NOW - timedelta(minutes=2))
+    second = _order(db, [(tee, 3)], expires_at=NOW - timedelta(minutes=1))
+    real_cancel = payment._cancel
+    cancels: list[int] = []
+
+    def fail_second(*args: Any, **kwargs: Any) -> bool:
+        cancels.append(1)
+        if len(cancels) == 2:
+            raise _lock_timeout()
+        return real_cancel(*args, **kwargs)
+
+    monkeypatch.setattr(payment, "_cancel", fail_second)
+
+    with pytest.raises(OperationalError):
+        _run(engine)
+
+    assert _state(db) == (RESET_FAILED, 1, "OperationalError")
+    assert SECRET not in str(_rows(db, StockReset))
+    assert _status(db, first) == STATUS_CANCELLED
+    assert _status(db, second) == STATUS_AWAITING_PAYMENT
+    assert _stock(db, tee) == 6
+    assert _lines(db) == []
+
+    assert _run(engine, NOW + timedelta(minutes=1)).performed
+
+    assert _state(db) == (RESET_SUCCEEDED, 2, None)
+    assert _status(db, second) == STATUS_CANCELLED
+    assert _cancel_events(db, first) == [ACTOR_SYSTEM]
+    assert _cancel_events(db, second) == [ACTOR_SYSTEM]
+    assert _lines(db)[0][2:] == (10, 0, 10)
     assert _stock(db, tee) == 10
 
 

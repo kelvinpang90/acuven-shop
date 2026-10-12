@@ -10,6 +10,9 @@
 SHOP-TASK-032 在默认任务列表的超时取消之后加入了每日库存重置，它会把当日可用库存重建为初始
 库存减有效预留。检查超时取消加回库存件数的用例因此只运行超时取消任务（_cancel_only），断言不变；
 库存重置在运行器里的行为见 tests/test_stock_reset.py。
+
+SHOP-TASK-097 起超时取消任务自己管理事务（own_transactions），逐张订单真实提交；新增的用例写明
+它守住的是本任务的哪条约定。自定义的非 own_transactions 任务仍以保存点执行、失败时整次回滚。
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ import threading
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import Engine, create_engine, event, select, text
@@ -32,6 +36,7 @@ from app.core.config import Settings
 from app.db.base import Base
 from app.models import Category, Order, OrderEvent, OrderItem, Product, ProductVariant
 from app.models.order import ACTOR_SYSTEM, STATUS_AWAITING_PAYMENT, STATUS_CANCELLED
+from app.services import payment
 from app.services.order_rules import generate_order_number
 
 START = datetime(2026, 10, 5, 3, 0, 0)
@@ -436,6 +441,120 @@ def test_failure_after_committed_cancellations_rolls_back_the_whole_run(
     assert [_status(db, i) for i in (first, second)] == [STATUS_CANCELLED] * 2
     assert _stock(db, variant_id) == STOCK + 4
     assert _cancel_events(db, first) == [ACTOR_SYSTEM]
+
+
+def test_cancel_job_runs_in_its_own_transactions(
+    factory: jobs.SessionFactory,
+    heartbeat: Path,
+    clock: FakeClock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SHOP-TASK-097 约定：超时取消任务改为 own_transactions——运行器（与 cancel-expired 命令）
+    给它不在事务中的新会话，expire_overdue_orders 的逐张提交即真实提交；任务名与每轮上限不变。"""
+    seen: list[tuple[bool, int | None]] = []
+
+    def spy(session: Session, now: datetime, *, limit: int | None = None) -> int:
+        seen.append((session.in_transaction(), limit))
+        return 0
+
+    monkeypatch.setattr(jobs, "expire_overdue_orders", spy)
+    job = _cancel_only()[0]
+    assert job.own_transactions
+    assert job.name == "cancel_expired_orders"
+
+    _runner([job], factory, heartbeat, clock).run_round()
+    assert jobs.cancel_expired(factory, now=lambda: START) == jobs.EXIT_OK
+
+    assert seen == [(False, jobs.CANCEL_BATCH_LIMIT)] * 2
+
+
+def test_each_cancellation_in_a_round_is_committed(
+    engine: Engine,
+    db: Session,
+    factory: jobs.SessionFactory,
+    heartbeat: Path,
+    clock: FakeClock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """「失败、并发与重试」第 1 条：库存预占在同一事务——每张订单的取消与加回库存在它自己的事务里。
+    SHOP-TASK-097 约定：同一轮里每张订单取消后即已提交，取消下一张之前另开会话就能读到（内存库
+    只有一条共享连接：若仍有未提交的外层事务，另开会话的 BEGIN 会出错）。第一张之前不读：候选
+    扫描与第一张的取消本来就在同一个事务里。「失败、并发与重试」第 6 条：重复运行只生效一次。"""
+    variant_id = _variant(db)
+    order_ids = [
+        _order(db, variant_id, START - timedelta(minutes=3 - i), quantity=1) for i in range(3)
+    ]
+    real_cancel = payment._cancel
+    calls: list[int] = []
+    observed: list[list[str]] = []
+
+    def observe_then_cancel(*args: Any, **kwargs: Any) -> bool:
+        calls.append(1)
+        if len(calls) > 1:
+            with Session(engine) as other:
+                stmt = select(Order.status).where(Order.id.in_(order_ids)).order_by(Order.id)
+                observed.append(list(other.scalars(stmt)))
+        return real_cancel(*args, **kwargs)
+
+    monkeypatch.setattr(payment, "_cancel", observe_then_cancel)
+    runner = _runner(_cancel_only(), factory, heartbeat, clock)
+
+    runner.run_round()
+    runner.run_round()
+
+    a, c = STATUS_AWAITING_PAYMENT, STATUS_CANCELLED
+    assert len(calls) == 3
+    assert observed == [[c, a, a], [c, c, a]]
+    assert [_status(db, i) for i in order_ids] == [c] * 3
+    assert _stock(db, variant_id) == STOCK + 3
+    assert all(_cancel_events(db, i) == [ACTOR_SYSTEM] for i in order_ids)
+
+
+def test_cancel_job_failure_keeps_earlier_cancellations(
+    db: Session,
+    factory: jobs.SessionFactory,
+    heartbeat: Path,
+    clock: FakeClock,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """SHOP-TASK-097 约定（取代 SHOP-TASK-031 里超时取消任务失败时整次回滚的语义）：某张订单取消
+    失败抛异常时，之前已取消的订单保留（各自已提交），本轮记失败（只含任务名与异常类名）、下一轮
+    继续；「失败、并发与重试」第 6 条：只生效一次。"""
+    caplog.set_level(logging.INFO, logger="app.jobs")
+    variant_id = _variant(db)
+    first = _order(db, variant_id, START - timedelta(minutes=2))
+    second = _order(db, variant_id, START - timedelta(minutes=1))
+    real_cancel = payment._cancel
+    calls: list[int] = []
+
+    def fail_second(*args: Any, **kwargs: Any) -> bool:
+        calls.append(1)
+        if len(calls) == 2:
+            raise RuntimeError(f"boom {SECRET}")
+        return real_cancel(*args, **kwargs)
+
+    monkeypatch.setattr(payment, "_cancel", fail_second)
+    runner = _runner(_cancel_only(), factory, heartbeat, clock)
+
+    runner.run_round()
+
+    assert _status(db, first) == STATUS_CANCELLED
+    assert _status(db, second) == STATUS_AWAITING_PAYMENT
+    assert _stock(db, variant_id) == STOCK + 2
+    assert _cancel_events(db, first) == [ACTOR_SYSTEM]
+    assert "cancel_expired_orders" not in runner.last_success
+    assert _job_messages(caplog) == ["job cancel_expired_orders failed: RuntimeError"]
+    assert all(SECRET not in message for message in caplog.messages)
+
+    clock.advance(60)
+    runner.run_round()
+
+    assert _status(db, second) == STATUS_CANCELLED
+    assert _stock(db, variant_id) == STOCK + 4
+    assert _cancel_events(db, first) == [ACTOR_SYSTEM]
+    assert _cancel_events(db, second) == [ACTOR_SYSTEM]
+    assert runner.last_success["cancel_expired_orders"] == clock.monotonic()
 
 
 def test_database_unavailable_is_logged_by_class_name_only(

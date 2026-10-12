@@ -25,10 +25,11 @@
 数据库连接沿用 SHOP_DATABASE_URL 与 app/db/session.py 的会话工厂。
 
 每一轮：
-1. 按任务列表逐个执行任务，每个任务一个新会话、一个独立事务，任务返回后提交，任务里的提交
-   只结束一个保存点（见 run_job）。时间取当前 UTC（与库里一样不带时区）。任务抛异常（含数据库
-   不可用）时整个事务回滚，只记一条含任务名与异常类名的日志，不退出，也不影响同一轮的其他
-   任务与下一轮。
+1. 按任务列表逐个执行任务，每个任务一个新会话。默认任务里的每一个都自己管理事务
+   （own_transactions，见下文）；没有设 own_transactions 的任务在一个独立事务里执行，任务返回
+   后提交，任务里的提交只结束一个保存点（见 run_job）。时间取当前 UTC（与库里一样不带时区）。
+   任务抛异常（含数据库不可用）时回滚未提交的部分，只记一条含任务名与异常类名的日志，不退出，
+   也不影响同一轮的其他任务与下一轮。
 2. 写心跳文件 HEARTBEAT_PATH（容器的健康检查看它的修改时间）。任一任务已连续失败、且距它
    最近一次成功（从未成功过则距进程启动）满 UNHEALTHY_AFTER_SECONDS 时不写，容器因此变为
    不健康；该任务再次成功后恢复写心跳。
@@ -44,9 +45,14 @@
 可重复运行且只生效一次（一轮执行到一半失败或运营者手动补跑都会再次运行它），判定本次无需
 执行而跳过也算成功、正常返回，只有真正出错才抛异常。
 
-库存重置自己管理事务（Job.own_transactions）：它要在独立事务里记下失败，不能放进运行器的
-事务里随失败一起回滚。自动确认收货也自己管理事务：每张订单锁定订单行之前先结束此前的事务，
-使锁定成为新事务的第一条语句（SHOP-TASK-040 的锁定协议）；放进运行器的外层事务以保存点执行时，
+超时取消自己管理事务（Job.own_transactions，SHOP-TASK-097）：expire_overdue_orders 逐张订单
+在各自的事务里取消并提交，提交即真实提交并释放这张订单加的行锁，不会把前一张订单的库存行锁
+带到下一张订单的加锁里（否则 SHOP-TASK-090 让取消先锁会员行之后，会与持会员锁、等库存的会员
+下单成环；与按库存顺序加锁的游客下单之间也有同类情形）。某张订单取消时抛异常，只回滚这一张，
+之前已取消的订单保留，本轮记失败、下一轮继续；同一订单只生效一次由它带条件的 UPDATE 保证。
+库存重置自己管理事务：它要在独立事务里记下失败，不能放进运行器的事务里随失败一起回滚。
+自动确认收货也自己管理事务：每张订单锁定订单行之前先结束此前的事务，使锁定成为新事务的
+第一条语句（SHOP-TASK-040 的锁定协议）；放进运行器的外层事务以保存点执行时，
 外层事务的读取快照会让锁定之后的读取看不到等锁期间别人提交的审核、发货或确认。删除短信验证
 记录也自己管理事务：服务删除一批后自己提交，没有到期记录时回滚只读事务。
 
@@ -129,12 +135,13 @@ class Job:
 
 
 def cancel_expired_job(limit: int = CANCEL_BATCH_LIMIT) -> Job:
-    """超时取消：SHOP-TASK-021 的 expire_overdue_orders，每次最多 limit 张。"""
+    """超时取消：SHOP-TASK-021 的 expire_overdue_orders，每次最多 limit 张。它逐张提交（未命中
+    时回滚），所以 own_transactions；没有到期订单时只读的事务随运行器关闭会话回滚。"""
 
     def run(db: Session, now: datetime) -> int:
         return expire_overdue_orders(db, now, limit=limit)
 
-    return Job(name="cancel_expired_orders", run=run)
+    return Job(name="cancel_expired_orders", run=run, own_transactions=True)
 
 
 def reset_stock_job() -> Job:
@@ -200,10 +207,11 @@ def run_job(job: Job, session_factory: SessionFactory, now: datetime) -> int:
     """在新会话的独立事务里执行一个任务并提交，返回生效条数；出错时整个事务回滚后原样抛出。
 
     外层会话开启事务并占住连接；任务拿到的是绑在这条连接上、以保存点加入事务的会话。
-    expire_overdue_orders 逐张 commit（未命中时 rollback）在这里只释放（或回滚）各自的
-    保存点，所以同一次运行里后面失败时，前面已取消的订单也一起回滚。
+    任务里的 commit（与 rollback）在这里只释放（或回滚）一个保存点，所以同一次运行里后面
+    失败时，前面“提交”的部分也一起回滚。
 
-    own_transactions 的任务直接拿新会话，自己提交与回滚。
+    own_transactions 的任务（含默认列表里的全部任务）直接拿新会话，自己提交与回滚；
+    会话关闭时未提交的部分回滚。
     """
     if job.own_transactions:
         with session_factory() as db:

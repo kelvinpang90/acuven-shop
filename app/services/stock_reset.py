@@ -11,25 +11,29 @@
 即马来西亚的下一天。
 
 reset_daily_stock 的步骤：
-1. 该日期已有 succeeded 记录：不做任何改动，返回未执行（已完成）。
-2. 否则结束检查的事务，另开一个事务（MySQL 上用 READ COMMITTED，见 _begin）先认领，按检查时
-   看到的记录决定怎么认领：没有记录时插入该日期的
-   succeeded 记录（完成时间取当前时间、SKU 数暂为 0、尝试次数 1；未提交前对其他执行者不可见）；
+1. 该日期已有 succeeded 记录：不做任何改动（也不执行超时取消），返回未执行（已完成）。
+2. 否则结束检查的事务，在认领之前直接在本会话上执行 SHOP-TASK-021 的超时取消
+   （expire_overdue_orders，不限张数）：它逐张在各自的事务里提交（未命中时回滚），提交即真实
+   提交，不在任何外层事务或保存点里，所以不跨订单持有行锁（SHOP-TASK-097）。它返回后不论取消了
+   几张都先回滚一次：没有到期订单时它只做了 SELECT，留下的只读事务要在这里结束。
+3. 然后另开一个事务（MySQL 上用 READ COMMITTED，见 _begin）认领，按检查时看到的记录决定怎么
+   认领：没有记录时插入该日期的 succeeded 记录（完成时间取当前时间、SKU 数暂为 0、
+   尝试次数 1；未提交前对其他执行者不可见）；
    已有 failed 记录时用带条件的 UPDATE（只在结果仍为 failed 时命中）改为 succeeded、写完成时间、
    清空异常类名并把尝试次数加一。插入遇唯一约束冲突或 UPDATE 未命中即回滚，返回已完成。
    MySQL 上并发的后到者阻塞在同一唯一键（插入）或同一记录的行锁（UPDATE）上：前者提交后插入
    冲突或 UPDATE 未命中，前者回滚时后到者继续认领，所以同一日期只有一次生效。
-3. 认领之后执行 SHOP-TASK-021 的超时取消（expire_overdue_orders，不限张数），它逐张提交与
-   回滚，这里让它在绑同一连接、以保存点加入本事务的会话里执行，它的提交只释放保存点。
-4. 按 SKU 规格 ID 从小到大对全部规格加锁读取（与 SHOP-TASK-020 扣库存、SHOP-TASK-021 加回库存
-   的顺序一致，避免死锁），统计每个规格所有 awaiting_demo_payment 订单（含已过支付到期时间但
-   尚未取消的）订单行件数之和作为有效预留，当日可用库存 = max(初始库存 − 有效预留, 0)，写入
-   逐 SKU 明细，再把 SKU 数更新为实际值后提交。
-5. 任一步出错（含认领时的锁等待超时与锁错误）：回滚，再在独立事务里记录失败（见
-   _record_failure），然后把原异常交给调用方。永远不把 succeeded 改回 failed。
+4. 在认领事务里按 SKU 规格 ID 从小到大对全部规格加锁读取（与 SHOP-TASK-020 扣库存、
+   SHOP-TASK-021 加回库存的顺序一致，避免死锁），统计每个规格所有 awaiting_demo_payment 订单
+   （含已过支付到期时间但尚未取消的，例如超时取消之后、认领之前才到期的）订单行件数之和作为
+   有效预留，当日可用库存 = max(初始库存 − 有效预留, 0)，写入逐 SKU 明细，再把 SKU 数更新为
+   实际值后提交。
+5. 任一步出错（含超时取消出错、认领时的锁等待超时与锁错误）：回滚，再在独立事务里记录失败
+   （见 _record_failure），然后把原异常交给调用方。超时取消已逐张提交的取消保留，认领事务里的
+   重置记录、库存与明细回滚。永远不把 succeeded 改回 failed。
 
 调用方须传入不在事务中的会话（函数自己提交与回滚），不能是以保存点加入外层事务的会话：
-那样记录失败的“独立事务”会随外层回滚一起消失。
+那样记录失败的“独立事务”与超时取消的逐张提交都会随外层回滚一起消失。
 
 不改订单、退款与积分记录（超时取消除外，它本来就会取消已到期的待支付订单），不改初始库存。
 本模块不写日志；只记异常类名，不存异常消息原文。时间一律是不带时区的 UTC。
@@ -85,12 +89,14 @@ def reset_daily_stock(db: Session, now: datetime) -> ResetOutcome:
         return ResetOutcome(business_date=day, performed=False, sku_count=0)
 
     try:
+        # 认领之前：超时取消逐张真实提交；没有到期订单时结束它留下的只读事务。
+        expire_overdue_orders(db, now)
+        db.rollback()
         _begin(db)
         reset_id = _claim(db, day, now, None if existing is None else existing.id)
         if reset_id is None:
             db.rollback()
             return ResetOutcome(business_date=day, performed=False, sku_count=0)
-        _expire_overdue(db, now)
         sku_count = _reset_variants(db, reset_id)
         db.commit()
     except Exception as exc:
@@ -103,7 +109,7 @@ def reset_daily_stock(db: Session, now: datetime) -> ResetOutcome:
 def _begin(db: Session) -> None:
     """开始认领事务。
 
-    MySQL 上用 READ COMMITTED：默认的 REPEATABLE READ 在超时取消的第一次查询时取快照，之后统计
+    MySQL 上用 READ COMMITTED：默认的 REPEATABLE READ 在本事务的第一次读取时取快照，之后统计
     有效预留的普通查询仍读那个快照，会漏掉加锁等待期间已提交的下单。READ COMMITTED 下每条语句
     读最新已提交的数据，统计在锁住全部规格之后进行，所以凡已扣过库存的订单都已提交、都被看到；
     还没扣库存的下单排在规格锁之后，从重置后的值上扣。SQLite 不支持这个级别，也不需要。
@@ -149,14 +155,6 @@ def _claim(db: Session, day: date, now: datetime, reset_id: int | None) -> int |
     if db.execute(stmt).rowcount != 1:
         return None
     return reset_id
-
-
-def _expire_overdue(db: Session, now: datetime) -> None:
-    """在本事务里执行超时取消：它逐张 commit（未命中时 rollback），这里只作用于保存点。"""
-    connection = db.connection()
-    with Session(bind=connection, join_transaction_mode="create_savepoint") as nested:
-        expire_overdue_orders(nested, now)
-        nested.commit()
 
 
 def _reset_variants(db: Session, reset_id: int) -> int:
