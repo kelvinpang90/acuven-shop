@@ -5,7 +5,7 @@
 
 ## 0.11 修订要点
 
-- 新增 `admin.coupon_code_taken` 与 `admin.coupon_invalid`（A05 新建优惠券被服务端拒绝时显示：代码已被使用；代码、面额或日期不合格。Kelvin 2026-10-12 决定补这两条，其余失败仍用 `common.error_retry`）。其余已有键未改动、未删除。马来文随其他文案在上线后母语审校。
+- 新增 `admin.coupon_code_taken` 与 `admin.coupon_invalid`（A05 新建优惠券被服务端拒绝时显示：代码已被使用；代码、面额、最低消费、次数上限或日期不合格。Kelvin 2026-10-12 决定补这两条，其余失败仍用 `common.error_retry`）。其余已有键未改动、未删除。马来文随其他文案在上线后母语审校。
 
 ## 0.10 修订要点
 
@@ -521,7 +521,7 @@
 | `admin.coupon_member_limit` | Uses per member | 每会员使用次数上限 | Had penggunaan setiap ahli | — |
 | `admin.coupon_disable` | Disable | 停用 | Nyahaktifkan | — |
 | `admin.coupon_code_taken` | This coupon code is already in use. Choose another code. | 此优惠券代码已被使用，请换一个代码。 | Kod kupon ini sudah digunakan. Sila pilih kod lain. | A05 新建被拒：代码重复（0.11） |
-| `admin.coupon_invalid` | Check the code (4–20 letters or digits), the value and the dates. | 请检查代码（4 到 20 位字母或数字）、面额与日期。 | Semak kod (4–20 huruf atau digit), nilai dan tarikh. | A05 新建被拒：代码、面额或日期不合格（0.11） |
+| `admin.coupon_invalid` | Check the code (4–20 letters or digits), value, minimum spend, usage limits and dates. | 请检查代码（4 到 20 位字母或数字）、面额、最低消费、次数上限与日期。 | Semak kod (4–20 huruf atau digit), nilai, perbelanjaan minimum, had penggunaan dan tarikh. | A05 新建被拒：代码、面额、最低消费、次数上限或日期不合格（0.11） |
 | `admin.shipping_title` | Sample shipping fees | 示例运费 | Kos penghantaran contoh | 区块标题 |
 | `admin.shipping_by_country` | By country | 按国家 | Mengikut negara | — |
 | `admin.add_country` | Add country | 新增国家 | Tambah negara | — |
