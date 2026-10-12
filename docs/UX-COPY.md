@@ -1,7 +1,11 @@
 # Acuven Shop 三语文案与演示提示（审阅稿）
 
-> **审阅稿。0.7 已于 2026-10-05 经 Kelvin 认可（记录见 `docs/HANDOFF.md`）；0.8 只新增后台登录页过渡状态的文案键 `admin.logged_in`，其余各键与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只新增 `admin.reviewed_by`，其余各键与 0.8 相同，Kelvin 已于 2026-10-06 认可；0.10 只新增 `admin.email` 并停用 `admin.username`，Kelvin 已于 2026-10-07 批准（记录见 `docs/HANDOFF.md`）。**
-> 版本 0.10（2026-10-07），运营者修订（Claude Code），在 0.9（提交 `1a65f6b`）上新增 `admin.email`；0.9（2026-10-06）在 0.8（提交 `f333b19`）上新增 `admin.reviewed_by`；0.8（2026-10-05）在 0.7（提交 `61f7b8a`）上新增 `admin.logged_in`；0.7 在 0.6（提交 `2d13250`）上新增 `admin.logout`；0.6（2026-10-01）在 0.5（提交 `e3b3505`）上增补短信验证开关所需的文案键，并修改 `privacy.fictional`、`privacy.sms` 两键。页面结构与线框见 [UX.md](UX.md)（0.10）；依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；「提示」列中依据 DESIGN 的小节除特别注明外仍指 1.9。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
+> **审阅稿。0.7 已于 2026-10-05 经 Kelvin 认可（记录见 `docs/HANDOFF.md`）；0.8 只新增后台登录页过渡状态的文案键 `admin.logged_in`，其余各键与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只新增 `admin.reviewed_by`，其余各键与 0.8 相同，Kelvin 已于 2026-10-06 认可；0.10 只新增 `admin.email` 并停用 `admin.username`，Kelvin 已于 2026-10-07 批准（记录见 `docs/HANDOFF.md`）；0.11 只新增 A05 新建优惠券被拒时的 `admin.coupon_code_taken` 与 `admin.coupon_invalid`，Kelvin 已于 2026-10-12 认可（记录见 `docs/HANDOFF.md`）。**
+> 版本 0.11（2026-10-12），运营者修订（Claude Code），在 0.10（提交 `eb2bdc4`）上新增 `admin.coupon_code_taken` 与 `admin.coupon_invalid`；0.10（2026-10-07）在 0.9（提交 `1a65f6b`）上新增 `admin.email`；0.9（2026-10-06）在 0.8（提交 `f333b19`）上新增 `admin.reviewed_by`；0.8（2026-10-05）在 0.7（提交 `61f7b8a`）上新增 `admin.logged_in`；0.7 在 0.6（提交 `2d13250`）上新增 `admin.logout`；0.6（2026-10-01）在 0.5（提交 `e3b3505`）上增补短信验证开关所需的文案键，并修改 `privacy.fictional`、`privacy.sms` 两键。页面结构与线框见 [UX.md](UX.md)（0.10）；依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；「提示」列中依据 DESIGN 的小节除特别注明外仍指 1.9。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
+
+## 0.11 修订要点
+
+- 新增 `admin.coupon_code_taken` 与 `admin.coupon_invalid`（A05 新建优惠券被服务端拒绝时显示：代码已被使用；代码、面额、最低消费、次数上限或日期不合格。Kelvin 2026-10-12 决定补这两条，其余失败仍用 `common.error_retry`）。其余已有键未改动、未删除。马来文随其他文案在上线后母语审校。
 
 ## 0.10 修订要点
 
@@ -516,6 +520,8 @@
 | `admin.coupon_total_limit` | Total uses allowed | 总使用次数上限 | Had jumlah penggunaan | — |
 | `admin.coupon_member_limit` | Uses per member | 每会员使用次数上限 | Had penggunaan setiap ahli | — |
 | `admin.coupon_disable` | Disable | 停用 | Nyahaktifkan | — |
+| `admin.coupon_code_taken` | This coupon code is already in use. Choose another code. | 此优惠券代码已被使用，请换一个代码。 | Kod kupon ini sudah digunakan. Sila pilih kod lain. | A05 新建被拒：代码重复（0.11） |
+| `admin.coupon_invalid` | Check the code (4–20 letters or digits), value, minimum spend, usage limits and dates. | 请检查代码（4 到 20 位字母或数字）、面额、最低消费、次数上限与日期。 | Semak kod (4–20 huruf atau digit), nilai, perbelanjaan minimum, had penggunaan dan tarikh. | A05 新建被拒：代码、面额、最低消费、次数上限或日期不合格（0.11） |
 | `admin.shipping_title` | Sample shipping fees | 示例运费 | Kos penghantaran contoh | 区块标题 |
 | `admin.shipping_by_country` | By country | 按国家 | Mengikut negara | — |
 | `admin.add_country` | Add country | 新增国家 | Tambah negara | — |
