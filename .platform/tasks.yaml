@@ -3695,3 +3695,152 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 会员订单接口与 A03 积分显示（Kelvin 2026-10-12 同意的下一批）：SHOP-TASK-103 为订单视图补券与积分、确认收货与退款申请可由会员操作、我的订单查询；
+  # 104 为我的订单列表、详情与确认收货接口，105 为会员模式的退款申请与积分预估接口；106 为后台退款详情的积分，107 为 A03 页面显示积分一行。
+  - id: SHOP-TASK-103
+    title: 订单视图补券与积分，确认收货与退款申请可由会员操作
+    purpose: >-
+      按 docs/DESIGN.md 1.11「订单与退款状态」（会员在「我的订单」确认收货、申请退款，规则与查单页相同）、「权限与资料保护」第 6 条（会员仅能访问自己认领或下单的订单）与「数据模型」Order 一行（优惠、积分快照），
+      以及 docs/UX.md 0.10 的 P09 与 P13（会员下单的订单在查单模式与会员模式都显示优惠与积分两行，游客订单含之后被认领的不显示；我的订单含自动认领的游客订单），
+      扩展查单视图、确认收货与退款申请，并新增我的订单的查询函数，供 SHOP-TASK-104、105 的会员接口使用。不做接口，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250），订单金额快照的展示与订单状态迁移的操作者。拆分：业务规则层（7 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-088
+    acceptance_criteria:
+      - app/services/order_lookup.py 的查单视图 LookupOrder 另给 placed_by_member（订单的 claim_status 为 not_claimable 即下单时是会员，会员注销后 member_id 清空也仍为真）、coupon_discount_sen 与 points_redeemed（取订单快照）；查单接口 GET /api/orders/lookup 的响应随之多出这三个字段，其余字段与行为不变；模块说明里「不含优惠券与积分两项」的说法随之改写
+      - app/services/order_lookup.py 的 confirm_receipt 与 app/services/refunds.py 的 submit_refund 各增加关键字参数 actor（默认 guest，只接受 guest 与 member，其他值抛 ValueError），确认收货记录、事件与退款申请的操作者都用它；游客接口不传，行为不变
+      - 新文件 app/services/account_orders.py——我的订单列表函数（入参为数据库会话、会员 ID 与页码，每页 20 张，只含 member_id 等于该会员的订单，即本人下单与已认领的订单，按创建时间从新到旧、同时刻按 ID 从大到小；每项为订单号、创建时间、状态与合计；返回总数，页码超出时该页为空）与本人订单定位函数（入参为数据库会话、会员 ID 与订单号原文，订单号格式不合法、不存在或 member_id 不等于该会员都返回 None，否则返回订单 ID）；只读，不写日志
+      - 测试验证意图——tests/test_account_orders.py 用 SQLite 内存库按模型建表：列表只含本人下单与已认领的订单（不含他人、游客与已注销会员的订单）、排序、每页 20 张与页码超出；定位函数对他人订单、游客订单与不合法订单号返回 None；以 member 为操作者确认收货与申请退款时记录、事件与申请的操作者为 member，actor 取其他值抛错；查单视图对会员下单的订单 placed_by_member 为真并给出券与积分快照，对游客订单与已认领的游客订单为假；tests/test_order_lookup.py 与 tests/test_refunds.py 只在现有断言因视图多出三个字段或新增参数而失效时随之修改；每条测试写明它守住的是设计或 UX 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-103 记录段（视图字段、操作者参数、我的订单查询、偏离、验证到什么程度，并写明会员接口留给 SHOP-TASK-104、105，查单页 P09 显示券与积分两行留给之后的前端任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/api/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - app/services/order_lookup.py
+      - app/services/refunds.py
+      - app/services/account_orders.py
+      - tests/test_account_orders.py
+      - tests/test_order_lookup.py
+      - tests/test_refunds.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-104
+    title: 我的订单的列表、详情与确认收货接口
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 6 条（会员仅能访问自己认领或下单的订单，可在「我的订单」对这些订单确认收货，规则与查单页相同；写操作另须 CSRF 令牌）与「订单与退款状态」，
+      以及 docs/UX.md 0.10 的 P13「我的订单」与 P09 会员模式，在 SHOP-TASK-103 之上提供我的订单列表、订单详情与确认收货三个接口。不做前端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250），会员访问订单与个人资料（收货资料）。拆分：接口层（4 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-103
+    acceptance_criteria:
+      - 新文件 app/api/account_orders.py（app/main.py 挂上路由）提供 GET /api/member/orders、POST /api/member/orders/view 与 POST /api/member/orders/confirm-receipt；路由器用 SHOP-TASK-027 的 _NoStoreRoute，这三个接口的处理函数与依赖产生的响应（含错误）都带 no-store；路径存在但方法不匹配时由框架返回的 405 不在此列（POST /api/member/orders 由 SHOP-TASK-089 的会员下单占用，GET 不与之冲突）；都只凭会员会话（require_member，401 member_session_required），不读订单访问 cookie；订单号只在请求体里，不进任何路径或查询参数；不写日志
+      - GET /api/member/orders?page=N（1 到 10000 的整数，默认 1，不合法 422，写法同 app/api/admin_stock_resets.py）返回 {total, page, page_size（20）, orders}，每项为 order_number、created_at（带 UTC 时区）、status 与 total_sen，取自 SHOP-TASK-103 的列表函数；只读
+      - POST /api/member/orders/view（语言参数同 GET /api/orders/lookup）的检查顺序为 413（8 KB，逐块，沿用 app/api/pay.py 的 _json_body）→ 415 → require_member → 422（请求体只有订单号，多出字段 422，422 不回显，沿用 app/api/pay.py 的 _body_errors）；以 SHOP-TASK-103 的定位函数找本人订单，找不到一律 404 {"detail":"order_not_found"}；订单待支付且已过支付到期时间时先对它执行 app/services/payment.py 的 expire_overdue_orders；返回 SHOP-TASK-103 扩展后的查单视图（含收货资料、券与积分快照与退款部分）；不要求 CSRF 与幂等键
+      - POST /api/member/orders/confirm-receipt 的请求体、幂等键与 409 的 detail 与 POST /api/orders/confirm-receipt 相同，检查顺序为 413（8 KB，逐块，与查单模式相同沿用 app/api/pay.py 的 _json_body）→ 415 → require_member → require_member_csrf（403 csrf_failed）→ 422 → 定位本人订单（404 order_not_found）；之后调用 confirm_receipt，actor 为 member；成功与重放的状态码与响应体和查单模式相同
+      - tests/test_account_orders_api.py 用 TestClient 与 SQLite 内存库（照 tests/test_order_lookup.py 与 tests/test_member_pw_api.py 的写法，经 SHOP-TASK-076 的会话签发登录，不加依赖）验证意图——未登录 401；列表只含本人订单、分页与字段；详情对本人下单的订单给出券与积分快照与 placed_by_member 为真、对已认领的游客订单为假，对他人与游客订单 404 且不泄露是否存在；超时的待支付订单查看时已为 demo_cancelled；确认收货写 member 事件、缺 CSRF 403、他人订单 404、重放与 409 和查单模式一致、全部已退时冻结；查单 cookie 不能用于这些接口；所有响应（含错误）带 no-store；每条测试写明它守住的是设计或 UX 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-104 记录段（三个接口、授权、字段、偏离、验证到什么程度，并写明退款接口留给 SHOP-TASK-105、前端 P13 与 P09 会员模式留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、app/api/order_lookup.py、app/api/member_auth.py、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250），不合并、不直推
+    allowed_change_paths:
+      - app/api/account_orders.py
+      - app/main.py
+      - tests/test_account_orders_api.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-105
+    title: 会员模式的退款申请与积分预估接口
+    purpose: >-
+      按 docs/DESIGN.md 1.11「订单与退款状态」（会员在「我的订单」提交退款申请，规则与查单页相同）、「计价、优惠、积分与库存」第 5 条与「权限与资料保护」第 6 条，
+      以及 docs/UX.md 0.10 的 P10 会员模式（凭会员会话；会员订单另见积分返还与追回），在 SHOP-TASK-104 的路由器上提供会员模式的退款申请与积分预估接口。不做前端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46（积分）。拆分：接口层（3 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-093
+      - SHOP-TASK-104
+    acceptance_criteria:
+      - 在 app/api/account_orders.py 增加 POST /api/member/orders/refunds 与 POST /api/member/orders/refunds/points-estimate（同一路由器，响应同样带 no-store）；都只凭会员会话（require_member，401 member_session_required），不读订单访问 cookie；不写日志
+      - POST /api/member/orders/refunds 的请求体、幂等键、成功与重放的状态码与响应体、409 与 422 的 detail 都与 POST /api/orders/refunds 相同，检查顺序为 413（8 KB，逐块）→ 415 → require_member → require_member_csrf（403 csrf_failed）→ 422 → 以 SHOP-TASK-103 的定位函数找本人订单（找不到一律 404 {"detail":"order_not_found"}）；之后调用 submit_refund，actor 为 member
+      - POST /api/member/orders/refunds/points-estimate 的请求体、选件规则、计算、响应字段（member_order、points_back、points_reversed）与错误都与 SHOP-TASK-093 的 POST /api/orders/refunds/points-estimate 相同（可直接复用 app/api/refunds.py 里 SHOP-TASK-093 写的选件与计算函数，不改那个文件），只是授权改为 require_member 与本人订单定位（404 order_not_found），检查顺序为 413 → 415 → require_member → 422 → 404；只读，不要求 CSRF 与幂等键
+      - tests/test_account_order_refunds_api.py 用 TestClient 与 SQLite 内存库（照 tests/test_refunds.py 与 SHOP-TASK-104 的测试写法，经 SHOP-TASK-086 的函数准备会员订单的积分，不加依赖）验证意图——未登录 401；会员申请退款写 member 申请、缺 CSRF 403、他人与游客订单 404、重放与 409 和查单模式一致；积分预估对 DESIGN 第 4 条算例给出返还 120、追回 8，对已认领的游客订单 member_order 为真但两数为 0（下单时没有抵扣与获得），不写库；查单 cookie 不能用于这些接口；所有响应（含错误）带 no-store；每条测试写明它守住的是设计或 UX 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-105 记录段（两个接口、授权、与查单模式的异同、偏离、验证到什么程度，并写明前端 P10 会员模式留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；SHOP-TASK-104 的三个接口行为不变（模块说明可随之补充）；不改 app/services/ 下的文件、app/api/refunds.py、tests/test_account_orders_api.py、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.46），不合并、不直推
+    allowed_change_paths:
+      - app/api/account_orders.py
+      - tests/test_account_order_refunds_api.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-106
+    title: 后台退款详情给出积分返还与追回
+    purpose: >-
+      按 docs/DESIGN.md 1.11「计价、优惠、积分与库存」第 5 条（退款批准时返还未过期的抵扣积分并追回获得积分，余额不足记待抵扣）与 docs/UX.md 0.10 的 A03（详情显示 admin.refund_points；首版不显示这一行由 Kelvin 2026-10-06 决定，待会员与积分账本任务接入积分字段时加回），
+      在后台退款详情接口加入积分返还与追回。不做前端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46（积分）。拆分：业务规则层与接口（5 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-092
+    acceptance_criteria:
+      - app/services/admin_refunds.py 的 AdminRefundDetail 另给 placed_by_member（订单的 claim_status 为 not_claimable）、points_returned、points_reversed 与 points_estimated；refund_detail 增加当前时间入参（不带时区的 UTC）；只读，不写审计、不锁行
+      - 取值——申请为 approved 时取该申请的实际积分流水：points_returned 为该申请 refund_return 流水之和，points_reversed 为该申请 refund_reversal 流水之和取负加上 debt_add 流水之和（即从余额追回与记入待抵扣之和），points_estimated 为假；申请为 requested 时按该申请各件逐件快照的 points_discount 与 points_earned 之和调用 SHOP-TASK-087 的预估函数，points_returned 与 points_reversed 为预估的实际返还与「从余额追回加记入待抵扣」，points_estimated 为真；申请为 rejected 时两个数与 points_estimated 都为 null；订单 member_id 为空时预估按 SHOP-TASK-087 的规则为零
+      - app/api/admin_refunds.py 的 GET /api/admin/refunds/{refund_id} 把当前时间传给 refund_detail，响应随之多出这四个字段，其余字段、检查顺序与错误不变
+      - tests/test_admin_refund_points.py 用 SQLite 内存库与 TestClient（照 tests/test_admin_refunds.py 的写法，经 SHOP-TASK-086、087 的函数准备会员订单的积分与已批准的退款）验证意图——已批准的申请给出实际返还与追回（含记入待抵扣的部分）且 points_estimated 为假；审核中的申请给出预估（DESIGN 第 4 条算例只退第一件 A 为返还 120、追回 8）且为真、读取不写库；已拒绝为 null；游客订单 placed_by_member 为假；tests/test_admin_refunds.py 只在现有断言因多出字段或新增入参而失效时随之修改；每条测试写明它守住的是设计或 UX 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-106 记录段（字段、三种状态的取值、偏离、验证到什么程度，并写明 A03 页面显示留给 SHOP-TASK-107），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/points.py、app/services/points_refund.py、app/services/refund_review.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.46），不合并、不直推
+    allowed_change_paths:
+      - app/services/admin_refunds.py
+      - app/api/admin_refunds.py
+      - tests/test_admin_refund_points.py
+      - tests/test_admin_refunds.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-107
+    title: 后台退款详情显示积分一行 A03
+    purpose: >-
+      按 docs/UX.md 0.10 的 A03（详情在退款金额之下显示 admin.refund_points；首版不显示这一行，待积分字段接入时加回，Kelvin 2026-10-06 决定）与 docs/UX-COPY.md 0.11，在后台退款详情页显示 SHOP-TASK-106 给出的积分返还与追回。
+      不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（金额与积分由服务端按快照与流水算出，页面只显示）。
+      拆分：A03 页面的一行显示（9 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-106
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.10 的 A03、docs/UX-COPY.md 0.11 为准，样式以 docs/design/pages/ 的 A03 桌面与手机画板为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入 docs/TODO.md 的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 加入 admin.refund_points
+      - frontend/src/api/adminRefunds.ts 的详情另取 placed_by_member（布尔）、points_returned、points_reversed（非负整数或 null）与 points_estimated（布尔或 null），三个积分字段要么都为 null、要么都不为 null，否则算响应体不合格；frontend/src/api/adminRefunds.test.ts 补对应测试；其余字段与归类不变
+      - frontend/src/pages/AdminRefundDetail.tsx 在退款金额（admin.refund_amount）之下显示一行 admin.refund_points（{returned} 与 {reversed} 为两个积分数），只在 placed_by_member 为真且积分字段不为 null 时显示；审核中的申请显示的是预估（points_estimated 为真），UX-COPY 没有「预估」的文案，照样显示这一行并记入偏离；删去「首版不显示 admin.refund_points」的注释与相应断言
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AdminRefundDetail.test.tsx 验证意图——会员订单已批准与审核中的申请显示这一行与两个数、已拒绝与游客订单不显示；三个积分字段不一致时归为失败；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；现有断言只按需要改并写明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-107 记录段（字段、显示条件、偏离、验证到什么程度，并写明未做浏览器验收），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths（不新增路由，不改导航）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/adminRefunds.ts
+      - frontend/src/api/adminRefunds.test.ts
+      - frontend/src/pages/AdminRefundDetail.tsx
+      - frontend/src/pages/AdminRefundDetail.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
