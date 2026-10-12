@@ -22,6 +22,7 @@ from app.models.order import (
     ReceiptConfirmation,
 )
 from app.models.order_access import OrderAccessGrant, OrderAccessSession
+from app.models.points import PointEntry, PointLot
 from app.models.refund import RefundLine, RefundLineUnit, RefundRequest
 from app.models.shipping import DemoFxRate, ShippingRate
 from app.models.site import SiteSetting
@@ -46,6 +47,8 @@ __all__ = [
     "OrderItemUnit",
     "OrderRecipient",
     "PaymentAttempt",
+    "PointEntry",
+    "PointLot",
     "Product",
     "ProductImage",
     "ProductOption",
