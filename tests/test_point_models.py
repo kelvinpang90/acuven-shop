@@ -481,7 +481,7 @@ def test_entry_with_zero_points_is_rejected(session: Session, kind: str) -> None
 def test_unknown_entry_kind_is_rejected(session: Session) -> None:
     """PointLedger「获得、抵扣、到期、退款追回、待抵扣积分」：类别只能是九类之一。"""
     ledger = _ledger(session)
-    values = _entry_values(ledger, KIND_EARN, kind="bonus")
+    values = _entry_values(ledger, KIND_EARN) | {"kind": "bonus"}
     _assert_check_rejects(session, PointEntry, "ck_point_entries_kind_valid", values)
 
 
