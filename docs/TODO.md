@@ -2139,3 +2139,11 @@
   - 删除电话关联防套利索引仍留给之后的任务（不在本任务验收内）。
 - 留给之后的任务：会员中心的积分与优惠券查询（SHOP-TASK-095）；积分到期的定时任务（SHOP-TASK-096）；注销删除失败向运营告警邮件报告，留给运营告警邮件任务。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.11 第 3 条原句、UX 0.10 的 Q19 与 HANDOFF 0.46 的 Kelvin 决定自查，人工核对 `tests/test_member_deletion.py` 的既有用例（没有积分时 `forfeit_points` 不写记录）与 `tests/test_payment_coupons_points.py` 中其他调用 `delete_member` 的用例（只看该订单的流水或只在超时取消期间记录语句）不受接入影响。`tests/test_member_deletion_points.py` 用 SQLite 内存库（引擎设置同 `tests/test_member_deletion.py`：由引擎发 BEGIN，每个连接打开外键检查并断言已打开），积分经 `earn_points`、`reserve_points`、`release_points` 准备，用券记录经 `reserve_coupon`、`use_coupon`，待抵扣照 `tests/test_points.py` 直接写一条 `debt_add`；覆盖：注销后可用余额为 0、有余额的批次各一条 `forfeit`、已过期的记为 `expire`、剩余为 0 的批次不写、待抵扣不变、原有流水保留；其他会员的批次、流水、余额与待抵扣不变；以替身包住 `forfeit_points` 断言命中时入参为该会员 ID 与当前时间、未命中（已注销、不存在）时不调用且不写流水；已注销会员再注销不写积分流水；同号经 `sms_login_or_register` 重新注册为新会员，余额与待抵扣从 0 开始；注销时有预占积分的待支付订单在 `release_points` 释放时随即 `forfeit`；用券记录（`used` 与 `reserved`）与券在注销后不变；注销函数返回后回滚，会员、订单、积分批次、积分流水与用券记录全部复原；以 SQL 执行事件钩子断言注销期间读取会员、积分批次与流水的语句的整数参数只有该会员的 ID；没有 `app.` 日志。每条测试写明它守住的是设计或 Kelvin 决定的哪一句，只出自本任务验收标准的约束注明「验收：」。SQLite 不支持行锁、不生成 FOR UPDATE，锁下的排队只能在真 MySQL 上体现，未在真 MySQL 上做并发验证。这些测试与已有后端测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-095 会员中心的积分概览与积分明细查询
+
+- [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）的积分批次 12 个月到期、以后获得积分先偿还待抵扣，以及「权限与资料保护」第 6 条的会员只能访问自己的资料，新增 `app/services/member_account.py` 的 `points_overview` 与 `points_history`。不做接口与页面，不改设计。设计闸门：DESIGN 1.11（提交 `2d13250`）与 HANDOFF 0.46（积分）。拆分：接口留给 SHOP-TASK-108，前端 P13 留给之后的任务。
+- 概览返回 SHOP-TASK-086 的可用余额与待抵扣；最近到期只计入剩余大于 0 且未过期的批次，按 UTC+8 合并同一马来西亚日期的剩余。
+- 明细按订单和显示类型合并：`earned`=earn，`redeemed`=redeem+release，`expired`=expire，`returned`=refund_return，`reversed`=refund_reversal+debt_add（debt_add 按负数显示）；`debt_repay` 与 `forfeit` 不显示，取消后为 0 的抵扣不显示。按最晚流水时间、订单 ID 和固定类型顺序排序，最多 100 行。
+- 偏离：无。`tests/test_member_account.py` 以 SQLite 内存库开启外键检查，用 SHOP-TASK-085、086、087 的函数准备账本，覆盖综合退款/待抵扣流水、马来西亚日期合并、过期/用完/无批次、明细顺序、100 行上限、其他会员隔离和只读。
+- 验证到什么程度：人工对照 DESIGN 1.11、UX 0.10 P13、UX-COPY 0.10 和 HANDOFF 0.46；新增测试由 PR 的必需 CI 检查 backend 执行。
