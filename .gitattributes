@@ -1,0 +1,4 @@
+# 工作区一律按 LF 检出，不受本机 core.autocrlf 影响（仓库里已全是 LF）。
+# 起因：Worker 主机 autocrlf=true，run 里已有文件按 CRLF 检出、模型新插入的行是 LF，
+# ruff format --check 判混合换行未格式化（SHOP-TASK-095 run ade916f0 以 checks_failed 失败）。
+* text=auto eol=lf
