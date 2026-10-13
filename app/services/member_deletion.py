@@ -6,14 +6,19 @@
 记录的 Kelvin 2026-10-08 决定（3）：「重设密码与注销时撤销该会员的全部会话」；0.45 记录的
 Kelvin 2026-10-10 决定（1）：注销验证码核验通过后，服务端在共享 Redis 本项目的库编号里记一条
 绑定当前会员会话的一次性批准，10 分钟有效、使用一次即删除，确认注销时取用。
-本模块只提供规则函数，接口留给 SHOP-TASK-081 与 082。积分余额与未用券作废、删除电话关联
-防套利索引随之后的优惠券与积分账本任务实现（这些表尚不存在）。
+本模块只提供规则函数，接口留给 SHOP-TASK-081 与 082。第 3 条还规定「积分余额与未用券作废，
+积分和券使用流水保留去标识化审计记录」：积分余额由 SHOP-TASK-086 的 forfeit_points 作废
+（SHOP-TASK-094）；优惠券对全部会员相同、不发给个人（docs/UX.md 0.10 的 Q19），没有持有的
+未用券可作废，用券记录不改。删除电话关联防套利索引随之后的任务实现。
 
 注销：以一条条件更新（仅当会员仍为 active）把状态改为 deleted、清空手机号与密码哈希、写注销
 时间（满足 app/models/member.py 的 deleted_cleared 约束）；更新到时再以 SHOP-TASK-071 的
-revoke_all_member_sessions 撤销该会员全部会话，并把该会员所有订单的 member_id 置空，
-claim_status 一律不改（已认领与不可认领的标记保留，同号重注册不会再次认领）。会员行、收货资料、
-订单状态、订单事件与短信验证记录都不删不改。只 flush、不提交，由调用方提交。
+revoke_all_member_sessions 撤销该会员全部会话，把该会员所有订单的 member_id 置空，
+claim_status 一律不改（已认领与不可认领的标记保留，同号重注册不会再次认领），再以 forfeit_points
+作废该会员的积分余额（未过期批次的剩余记为 forfeit，已过期的记为 expire，待抵扣不作废）。
+条件更新已持有该会员的行锁，forfeit_points 再锁同一行与该会员的批次和流水，不取其他会员的锁。
+注销时尚未支付的订单已预占的积分不在余额里，超时取消时由 release_points 释放并随即作废。
+会员行、收货资料、订单状态、订单事件与短信验证记录都不删不改。只 flush、不提交，由调用方提交。
 时间一律是不带时区的 UTC。
 
 注销批准：键为固定前缀加会员会话 ID，值为会员 ID，以一条 SET … EX 600 写入，不分成 SET 与
@@ -39,6 +44,7 @@ from sqlalchemy.orm import Session
 from app.models import Order
 from app.models.member import MEMBER_ACTIVE, MEMBER_DELETED, Member
 from app.services.member_auth import revoke_all_member_sessions
+from app.services.points import forfeit_points
 from app.services.rate_limit import RateLimitUnavailable
 
 # Kelvin 2026-10-10：注销批准 10 分钟有效。
@@ -123,10 +129,11 @@ def consume_delete_approval(client: redis.Redis | None, session_id: int, member_
 
 def delete_member(db: Session, member_id: int, now: datetime) -> bool:
     """注销 active 会员：清空手机号与密码哈希、改为 deleted、写注销时间，撤销其全部会话，
-    并把其全部订单的会员 ID 置空；会员不存在或已注销时为假，且不做任何改动。
+    把其全部订单的会员 ID 置空，并作废其积分余额；会员不存在或已注销时为假，且不做任何改动。
 
-    订单不论状态都解除关联，claim_status 不改；收货资料、订单状态、订单事件与短信验证记录
-    不删不改。只 flush、不提交：调用方在同一事务里提交。
+    订单不论状态都解除关联，claim_status 不改；积分余额以 forfeit_points（入参为该会员 ID 与
+    当前时间）作废，待抵扣与用券记录不改；收货资料、订单状态、订单事件与短信验证记录不删不改。
+    只 flush、不提交：调用方在同一事务里提交。
     """
     if now.tzinfo is not None:
         raise ValueError("now must be a naive UTC datetime")
@@ -145,5 +152,6 @@ def delete_member(db: Session, member_id: int, now: datetime) -> bool:
         .values(member_id=None)
         .execution_options(synchronize_session="fetch")
     )
+    forfeit_points(db, member_id, now)
     db.flush()
     return True
