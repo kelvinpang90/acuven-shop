@@ -2126,6 +2126,11 @@
 - 留给之后的任务：会员模式（凭会员会话的积分预估）随会员订单接口（SHOP-TASK-105）提供；P10 前端显示 `refund.points_back`、`refund.points_reversed` 留给之后的前端任务（规划块「已阻塞」里的会员中心 P13 与退款申请会员模式那一项）。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.11 原句、UX 0.10 P10 与 HANDOFF 0.46 自查，人工核对提交申请接口的代码路径未改。`tests/test_refund_points_estimate_api.py` 用 `TestClient`（`https://testserver`）与 SQLite 内存库（StaticPool，每个连接打开外键检查并断言已打开；写法照 `tests/test_refunds.py`），会员、订单与逐件快照按模型写入，积分批次与流水经 SHOP-TASK-086 的 `earn_points`、`reserve_points` 准备，已有申请经 `submit_refund` 提交，查单授权经 `issue_order_access` 签发，以外包原函数的替身记录 `estimate_refund_points` 的入参；未加依赖。每条测试写明它守住的是设计或 UX 的哪一句。覆盖：DESIGN 第 4 条算例选第一件 A 得返还 120、追回 8；全部三件得 300、19；抵扣批次已过期时返还为 0、追回仍为 8；第一件 A 被审核中的申请占用时选的是第二件 A（追回 7）；游客订单 `member_order` 为 false、两个数为 0 且不调用预估函数；接口前后积分批次、积分流水、申请、申请行与逐件记录都不变；件数超过购买数或剩余可退件 409；待支付订单 409 `order_not_refundable`；退款期已过 409 `refund_window_closed`；行序不属于该订单 422 不回显；没有 cookie、只有 `guest_checkout` 授权、只有另一张订单的授权都 401；413 先于 415、422 与 401，415 先于 401，422（多出字段、行序重复、件数 0 或 100、21 行、没有行）先于 401 且不回显；各响应带 no-store；没有 `app.` 日志。未在真实浏览器或真 MySQL 上验证。这些测试与已有后端测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
 
+### SHOP-TASK-095 会员中心的积分与优惠券查询接口
+
+- [x] 在 SHOP-TASK-085 至 087 之上新增会员中心的只读积分与优惠券接口，不做前端 P13。积分概览返回可用余额、待抵扣、最近到期（同一马来西亚日期合并）与最多 100 条明细；明细按订单和显示类型合并：`earned` 为 earn、`redeemed` 为 redeem 与 release、`expired` 为 expire、`returned` 为 refund_return、`reversed` 为 refund_reversal 与按负数显示的 debt_add，debt_repay 与 forfeit 不显示。优惠券返回所有会员相同的可用券和本人的已核销记录。接口为 `GET /api/member/points` 与 `GET /api/member/coupons`，均要求会员会话并带 no-store。
+- 偏离：无。验证：由 PR 必需 CI 的 backend 执行 SQLite 单元与 TestClient 测试；Worker 沙箱不运行 pytest。
+
 ### SHOP-TASK-094 会员注销时作废积分余额
 
 - [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「权限与资料保护」第 3 条（注销时积分余额与未用券作废，积分和券使用流水保留去标识化审计记录），把 SHOP-TASK-086 的 `forfeit_points` 接入 SHOP-TASK-080 的 `delete_member`（`app/services/member_deletion.py`）；测试见 `tests/test_member_deletion_points.py`，`tests/test_payment_coupons_points.py` 只改了 `test_timeout_after_member_deleted_forfeits`。不做接口；未改 `app/services/points.py`、`app/api/member_deletion.py`、`tests/test_member_deletion.py`、模型、迁移、`.platform/`、CI、部署配置与设计，未加表或迁移，未装依赖。设计闸门：DESIGN 1.11（提交 `2d13250`）与 HANDOFF 0.45、0.46（会员注销与积分）。拆分：业务规则层（4 个允许路径）。
