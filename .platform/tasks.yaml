@@ -3453,31 +3453,25 @@ tasks:
     creates_pull_request: true
 
   - id: SHOP-TASK-095
-    title: 会员中心的积分与优惠券查询接口
+    title: 会员中心的积分概览与积分明细查询
     purpose: >-
       按 docs/DESIGN.md 1.11「计价、优惠、积分与库存」第 3、5 条（积分批次 12 个月到期；待抵扣积分以后获得积分先偿还）与「权限与资料保护」第 6 条（会员仅能访问自己的资料），
-      以及 docs/UX.md 0.10 P13 与 docs/UX-COPY.md 0.10（我的积分：余额、退款后尚欠积分、最近到期、积分明细的五种类型；我的优惠券：可用券对全部会员相同、使用记录，Q19），在 SHOP-TASK-085 至 087 之上提供会员中心的两个只读接口。不做前端，不改设计。
-      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46（优惠券与积分）。拆分：接口层与它用到的查询（6 个允许路径）。
+      以及 docs/UX.md 0.10 P13 与 docs/UX-COPY.md 0.10（我的积分：余额、退款后尚欠积分、最近到期、积分明细的五种类型），在 SHOP-TASK-085 至 087 之上实现会员中心「我的积分」用到的两个只读查询函数。不做接口与页面，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46（积分）。拆分：查询层（3 个允许路径）；接口留给 SHOP-TASK-108（原 095 一并做查询与接口，三个 run 都以 checks_failed 失败，2026-10-13 拆开）。
     status: ready
     depends_on:
       - SHOP-TASK-085
       - SHOP-TASK-086
       - SHOP-TASK-087
     acceptance_criteria:
-      - 新文件 app/services/member_account.py 的积分概览函数（只读，入参为数据库会话、会员 ID 与当前时间）——余额为 SHOP-TASK-086 的可用余额，尚欠为待抵扣；最近到期为剩余大于 0 且未过期的批次中到期时刻最早的那个马来西亚日期（按 UTC+8 换算，写法同 app/services/sms_budget.py 的 MALAYSIA_UTC_OFFSET）及该日到期的剩余之和，没有则为空
-      - 积分明细——按订单与显示类型合并流水，每行为显示类型、积分（正负号按余额增减）、订单号与该组最晚的流水时间：earned 为 earn；redeemed 为该单 redeem 与 release 之和（为 0 时不显示，即取消的订单不出现）；expired 为 expire；returned 为 refund_return；reversed 为 refund_reversal 与 debt_add 之和（debt_add 记为负）；debt_repay 与 forfeit 不显示（偿还体现在余额与尚欠里）；按时间从晚到早、同时刻按订单 ID 从大到小、同一订单再按显示类型的固定顺序（reversed、returned、expired、redeemed、earned），最多 100 行；只含该会员的流水
-      - 新文件 app/api/member_account.py（app/main.py 挂上路由）提供 GET /api/member/points 与 GET /api/member/coupons；路由器用 SHOP-TASK-027 的 _NoStoreRoute，这两个接口的处理函数与依赖产生的响应（含错误）都带 no-store；路径存在但方法不匹配时由框架返回的 405 不在此列；require_member（401 member_session_required），只读、不写库、不要 CSRF；不写日志
-      - GET /api/member/points 返回 balance、pending、next_expiry（为 null 或 points 与 date，日期为 YYYY-MM-DD 的马来西亚日期）与 history（每项 type 取 earned、redeemed、expired、returned、reversed 之一，points、order_number、created_at 带 UTC 时区）；GET /api/member/coupons 返回 available（SHOP-TASK-085 的可用券列表，每项 code、type、amount_sen 或 percent、min_spend_sen、valid_until 带 UTC 时区）与 used（SHOP-TASK-085 的使用记录，每项 code、order_number、discount_sen）
-      - tests/test_member_account.py 用 SQLite 内存库、经 SHOP-TASK-085、086 的函数与 SHOP-TASK-087 的退款积分函数（退款返还、追回与记入待抵扣）准备数据，验证意图——余额、尚欠与最近到期（同一马来西亚日期的两个批次合并、已过期与已用完的批次不计）；明细的五种类型与合并规则（取消的订单不出现、退款追回含记入待抵扣的部分、偿还不显示）、顺序（含同一订单同一时刻的返还与追回按固定类型顺序）、100 行上限、不含其他会员；每条测试写明它守住的是设计、UX 或 Kelvin 决定的哪一句
-      - tests/test_member_account_api.py 用 TestClient 与 SQLite 内存库（照 tests/test_member_pw_api.py 的写法，不加依赖）验证意图——未登录 401；字段与上面一致；可用券对两个会员相同且含已用满的券；使用记录只含本人的已核销券；所有响应（含错误）带 no-store；两个测试文件都由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
-      - docs/TODO.md 新增 SHOP-TASK-095 记录段（概览、明细的合并规则与显示类型对应、两个接口的字段、偏离、验证到什么程度，并写明前端 P13 留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
-      - 改动只落在 allowed_change_paths；不改 app/services/coupons.py、app/services/points.py、app/api/member_auth.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.46），不合并、不直推
+      - 新文件 app/services/member_account.py 的积分概览函数（只读，不写库、不 flush，入参为数据库会话、会员 ID 与当前时间）——余额为 SHOP-TASK-086 的可用余额，尚欠为待抵扣；最近到期为剩余大于 0 且未过期的批次中到期时刻最早的那个马来西亚日期（按 UTC+8 换算，写法同 app/services/sms_budget.py 的 MALAYSIA_UTC_OFFSET）及该日到期的剩余之和，没有则为空
+      - 同一文件的积分明细函数（只读，入参为数据库会话与会员 ID）——按订单与显示类型合并流水，每行为显示类型、积分（正负号按余额增减）、订单号与该组最晚的流水时间；earned 为 earn；redeemed 为该单 redeem 与 release 之和（为 0 时不显示，即取消的订单不出现）；expired 为 expire；returned 为 refund_return；reversed 为 refund_reversal 与 debt_add 之和（debt_add 记为负）；debt_repay 与 forfeit 不显示（偿还体现在余额与尚欠里）；按时间从晚到早、同时刻按订单 ID 从大到小、同一订单再按显示类型的固定顺序（reversed、returned、expired、redeemed、earned），最多 100 行；只含该会员的流水
+      - tests/test_member_account.py 用 SQLite 内存库按模型建表（开启外键检查）、经 SHOP-TASK-085、086 的函数与 SHOP-TASK-087 的退款积分函数（退款返还、追回与记入待抵扣）准备数据，验证意图——余额、尚欠与最近到期（同一马来西亚日期的两个批次合并、已过期与已用完的批次不计、没有批次时为空）；明细的五种类型与合并规则（取消的订单不出现、退款追回含记入待抵扣的部分、偿还不显示）、顺序（含同一订单同一时刻的返还与追回按固定类型顺序）、100 行上限、不含其他会员；两个函数都不写库；每条测试写明它守住的是设计、UX 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-095 记录段（概览、明细的合并规则与显示类型对应、偏离、验证到什么程度，并写明两个接口留给 SHOP-TASK-108、前端 P13 留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/coupons.py、app/services/points.py、app/services/points_refund.py、app/api/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.46），不合并、不直推
     allowed_change_paths:
       - app/services/member_account.py
-      - app/api/member_account.py
-      - app/main.py
       - tests/test_member_account.py
-      - tests/test_member_account_api.py
       - docs/TODO.md
     allowed_commands:
       - lint.check
@@ -3840,6 +3834,34 @@ tasks:
       - frontend/src/App.tsx
       - frontend/src/i18n/copy.ts
       - frontend/src/styles/site.css
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-108
+    title: 会员中心的积分与优惠券查询接口
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 6 条（会员仅能访问自己的资料）与 docs/UX.md 0.10 P13、docs/UX-COPY.md 0.10（我的积分；我的优惠券：可用券对全部会员相同、使用记录，Q19），
+      在 SHOP-TASK-095 的查询函数与 SHOP-TASK-085 的可用券、使用记录函数之上提供会员中心的两个只读接口。不做页面，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46（优惠券与积分）。拆分：接口层（4 个允许路径），2026-10-13 由原 SHOP-TASK-095 拆出。
+    status: ready
+    depends_on:
+      - SHOP-TASK-095
+    acceptance_criteria:
+      - 新文件 app/api/member_account.py（app/main.py 挂上路由）提供 GET /api/member/points 与 GET /api/member/coupons；路由器用 SHOP-TASK-027 的 _NoStoreRoute，这两个接口的处理函数与依赖产生的响应（含错误）都带 no-store；路径存在但方法不匹配时由框架返回的 405 不在此列；都经 require_member（无有效会员会话 401 member_session_required），只读、不写库、不提交、不要 CSRF；不写日志
+      - GET /api/member/points 调用 SHOP-TASK-095 的积分概览与积分明细函数，返回 balance、pending、next_expiry（为 null 或含 points 与 date，date 为 YYYY-MM-DD 的马来西亚日期）与 history（每项 type 取 earned、redeemed、expired、returned、reversed 之一，以及 points、order_number、created_at，created_at 带 UTC 时区）
+      - GET /api/member/coupons 返回 available（app/services/coupons.py 的 list_available_coupons，每项 code、type、amount_sen（percent 时为 null）、percent（fixed 时为 null）、min_spend_sen、valid_until，valid_until 带 UTC 时区）与 used（list_member_used_coupons，每项 code、order_number、discount_sen）；当前时间取不带时区的 UTC
+      - tests/test_member_account_api.py 用 TestClient 与 SQLite 内存库，引擎、会话依赖与客户端照 tests/test_member_pw_api.py 的 engine、app、client 夹具（StaticPool 加 connect_args 关闭 check_same_thread、开启外键检查、base_url 为 https 的测试主机），不加依赖；已登录用 app/services/member_auth.py 的 issue_member_session 按当前时间签发真实会话、把 cookie 交给客户端，不覆盖 require_member
+      - 上一条的测试验证意图——未登录与会话已撤销时两个接口都 401；积分接口的字段与类型、next_expiry 为 null 的情形、history 的 created_at 带时区且只含本人的流水；可用券对两个会员相同且含已用满的券；使用记录只含本人的已核销券；所有响应（含 401）带 no-store；两个接口都不写库；每条测试写明它守住的是设计、UX 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-108 记录段（两个接口的字段、偏离、验证到什么程度，并写明前端 P13 留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、app/api/member_auth.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.46），不合并、不直推
+    allowed_change_paths:
+      - app/api/member_account.py
+      - app/main.py
+      - tests/test_member_account_api.py
       - docs/TODO.md
     allowed_commands:
       - lint.check
