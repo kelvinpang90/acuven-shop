@@ -2127,6 +2127,14 @@
 - 留给之后的任务：会员模式（凭会员会话的积分预估）随会员订单接口（SHOP-TASK-105）提供；P10 前端显示 `refund.points_back`、`refund.points_reversed` 留给之后的前端任务（规划块「已阻塞」里的会员中心 P13 与退款申请会员模式那一项）。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.11 原句、UX 0.10 P10 与 HANDOFF 0.46 自查，人工核对提交申请接口的代码路径未改。`tests/test_refund_points_estimate_api.py` 用 `TestClient`（`https://testserver`）与 SQLite 内存库（StaticPool，每个连接打开外键检查并断言已打开；写法照 `tests/test_refunds.py`），会员、订单与逐件快照按模型写入，积分批次与流水经 SHOP-TASK-086 的 `earn_points`、`reserve_points` 准备，已有申请经 `submit_refund` 提交，查单授权经 `issue_order_access` 签发，以外包原函数的替身记录 `estimate_refund_points` 的入参；未加依赖。每条测试写明它守住的是设计或 UX 的哪一句。覆盖：DESIGN 第 4 条算例选第一件 A 得返还 120、追回 8；全部三件得 300、19；抵扣批次已过期时返还为 0、追回仍为 8；第一件 A 被审核中的申请占用时选的是第二件 A（追回 7）；游客订单 `member_order` 为 false、两个数为 0 且不调用预估函数；接口前后积分批次、积分流水、申请、申请行与逐件记录都不变；件数超过购买数或剩余可退件 409；待支付订单 409 `order_not_refundable`；退款期已过 409 `refund_window_closed`；行序不属于该订单 422 不回显；没有 cookie、只有 `guest_checkout` 授权、只有另一张订单的授权都 401；413 先于 415、422 与 401，415 先于 401，422（多出字段、行序重复、件数 0 或 100、21 行、没有行）先于 401 且不回显；各响应带 no-store；没有 `app.` 日志。未在真实浏览器或真 MySQL 上验证。这些测试与已有后端测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
 
+### SHOP-TASK-095 会员中心的积分概览与积分明细查询
+
+- [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「计价、优惠、积分与库存」第 3、5 条与「权限与资料保护」第 6 条、`docs/UX.md` 0.10 P13、`docs/UX-COPY.md` 0.10 及 `docs/HANDOFF.md` 0.46（积分），新增 `app/services/member_account.py` 的只读积分概览与明细查询；不做接口或页面，不改积分规则、模型、迁移或设计。设计闸门：DESIGN 1.11（提交 `2d13250`）与 HANDOFF 0.46；拆分：查询层。
+- 概览：余额与尚欠分别沿用 `available_points`、`debt_points` 的批次流水与无批次流水口径；最近到期只取剩余大于 0、未过期批次的最早马来西亚日期（UTC+8），同一日期的剩余积分合并，无符合批次时为空。
+- 明细：按订单和显示类型合并，`earned` 对应 `earn`，`redeemed` 合并 `redeem` 与 `release`（合计为 0 的取消订单不显示），`expired` 对应 `expire`，`returned` 对应 `refund_return`，`reversed` 合并 `refund_reversal` 与反号的 `debt_add`；`debt_repay`、`forfeit` 不显示。每组取最晚流水时间，按时间倒序、订单 ID 倒序、再按 reversed、returned、expired、redeemed、earned 的固定顺序，最多 100 行；查询先限于该会员流水，订单号只随该会员的组返回。
+- 偏离与取舍：无；查询不 flush、不写库。两个会员积分接口留给 SHOP-TASK-108，前端 P13 留给之后的任务。
+- 验证到什么程度：`tests/test_member_account.py` 用开启外键检查的 SQLite 内存库按模型建表，经既有积分获得、预占、释放、到期与退款积分函数准备批次和流水；覆盖概览的余额、尚欠、同一马来西亚日期合并、过期和用完批次排除、空最近到期，以及明细的五种类型、取消订单隐藏、退款追回含待抵扣、偿还隐藏、固定顺序、100 行上限、其他会员排除与两个查询不写库。每条测试说明所守住的 DESIGN、UX 或 Kelvin 决定原句；由 PR 的必需 CI 检查 backend 执行。
+
 ### SHOP-TASK-094 会员注销时作废积分余额
 
 - [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「权限与资料保护」第 3 条（注销时积分余额与未用券作废，积分和券使用流水保留去标识化审计记录），把 SHOP-TASK-086 的 `forfeit_points` 接入 SHOP-TASK-080 的 `delete_member`（`app/services/member_deletion.py`）；测试见 `tests/test_member_deletion_points.py`，`tests/test_payment_coupons_points.py` 只改了 `test_timeout_after_member_deleted_forfeits`。不做接口；未改 `app/services/points.py`、`app/api/member_deletion.py`、`tests/test_member_deletion.py`、模型、迁移、`.platform/`、CI、部署配置与设计，未加表或迁移，未装依赖。设计闸门：DESIGN 1.11（提交 `2d13250`）与 HANDOFF 0.45、0.46（会员注销与积分）。拆分：业务规则层（4 个允许路径）。
