@@ -174,18 +174,8 @@ def test_history_groups_display_types_orders_and_excludes_other_members(db: Sess
     """
     member = _member(db)
     other = _member(db)
-    _earn(db, member, 10, NOW - timedelta(days=5))
-    source = _order(db, member)
-    reserve_points(db, member.id, source.id, 5, NOW - timedelta(seconds=3))
-    assert earn_points(db, member.id, source.id, 20, NOW - timedelta(days=2)) is not None
-    cancelled = _order(db, member)
-    reserve_points(db, member.id, cancelled.id, 8, NOW - timedelta(seconds=2))
-    release_points(db, cancelled.id, NOW - timedelta(seconds=2))
-    redeemed = _order(db, member)
-    reserve_points(db, member.id, redeemed.id, 20, NOW - timedelta(seconds=4))
-    refunded = _refund(db, source)
-    # Recovery exceeds the source lot: the refund rule writes refund_reversal and debt_add.
-    apply_refund_points(db, source.id, refunded.id, 5, 20, NOW)
+    # Expire this lot before the refund creates debt: later earnings must repay
+    # that debt first under DESIGN 1.11 §5 and would leave no lot to expire.
     old = _earn(db, member, 4, NOW - timedelta(days=400))
     expiry_time = NOW - timedelta(seconds=1)
     assert expire_points(db, expiry_time, 100) == 1
@@ -198,6 +188,18 @@ def test_history_groups_display_types_orders_and_excludes_other_members(db: Sess
         )
         == expiry_time
     )
+    _earn(db, member, 10, NOW - timedelta(days=5))
+    source = _order(db, member)
+    reserve_points(db, member.id, source.id, 5, NOW - timedelta(seconds=3))
+    assert earn_points(db, member.id, source.id, 20, NOW - timedelta(days=2)) is not None
+    cancelled = _order(db, member)
+    reserve_points(db, member.id, cancelled.id, 8, NOW - timedelta(seconds=2))
+    release_points(db, cancelled.id, NOW - timedelta(seconds=2))
+    redeemed = _order(db, member)
+    reserve_points(db, member.id, redeemed.id, 20, NOW - timedelta(seconds=4))
+    refunded = _refund(db, source)
+    # Recovery exceeds the source lot: the refund rule writes refund_reversal and debt_add.
+    apply_refund_points(db, source.id, refunded.id, 5, 20, NOW)
     # This later earning repays debt first; its debt_repay entries must stay hidden.
     _earn(db, member, 7, NOW + timedelta(seconds=1))
     other_order = _earn(db, other, 99, NOW)
