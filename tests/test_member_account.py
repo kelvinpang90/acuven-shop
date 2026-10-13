@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import itertools
 from collections.abc import Iterator
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 from sqlalchemy import create_engine, event, text
@@ -40,7 +40,7 @@ def db() -> Iterator[Session]:
     engine.dispose()
 
 
-def _add[T](db: Session, value: T) -> T:
+def _add[Value](db: Session, value: Value) -> Value:
     db.add(value)
     db.flush()
     return value
@@ -51,34 +51,41 @@ def _member(db: Session) -> Member:
     return _add(db, Member(phone=f"+6010000{n:04d}", status=MEMBER_ACTIVE, created_at=T))
 
 
-def _order(db: Session, member: Member) -> Order:
+def _new_order(member: Member) -> Order:
     n = next(_numbers)
-    return _add(
-        db,
-        Order(
-            order_number=f"{n:016d}",
-            status=STATUS_AWAITING_PAYMENT,
-            subtotal_sen=1000,
-            coupon_discount_sen=0,
-            points_redeemed=0,
-            shipping_fee_sen=0,
-            total_sen=1000,
-            points_earned=0,
-            shipping_zone_code="MY-10",
-            shipping_rate_version=1,
-            idempotency_key=f"key-{n}",
-            request_fingerprint="ab" * 32,
-            created_at=T,
-            payment_expires_at=T + timedelta(minutes=15),
-            paid_at=None,
-            member_id=member.id,
-            claim_status=CLAIM_NOT_CLAIMABLE,
-        ),
+    return Order(
+        order_number=f"{n:016d}",
+        status=STATUS_AWAITING_PAYMENT,
+        subtotal_sen=1000,
+        coupon_discount_sen=0,
+        points_redeemed=0,
+        shipping_fee_sen=0,
+        total_sen=1000,
+        points_earned=0,
+        shipping_zone_code="MY-10",
+        shipping_rate_version=1,
+        idempotency_key=f"key-{n}",
+        request_fingerprint="ab" * 32,
+        created_at=T,
+        payment_expires_at=T + timedelta(minutes=15),
+        paid_at=None,
+        member_id=member.id,
+        claim_status=CLAIM_NOT_CLAIMABLE,
     )
 
 
-def _earn(db: Session, member: Member, points: int, when: datetime) -> Order:
-    order = _order(db, member)
+def _order(db: Session, member: Member) -> Order:
+    return _add(db, _new_order(member))
+
+
+def _earn(
+    db: Session,
+    member: Member,
+    points: int,
+    when: datetime,
+    order: Order | None = None,
+) -> Order:
+    order = order or _order(db, member)
     assert earn_points(db, member.id, order.id, points, when) is not None
     return order
 
@@ -108,8 +115,9 @@ def test_history_matches_the_registered_refund_and_debt_scenario(db: Session) ->
     member, other = _member(db), _member(db)
     old = _earn(db, member, 4, T - timedelta(days=400))
     earned = _earn(db, member, 10, T - timedelta(days=5))
-    source = _earn(db, member, 20, T - timedelta(days=2))
+    source = _order(db, member)
     reserve_points(db, member.id, source.id, 5, T - timedelta(days=3))
+    _earn(db, member, 20, T - timedelta(days=2), source)
     cancelled = _order(db, member)
     reserve_points(db, member.id, cancelled.id, 8, T - timedelta(seconds=3))
     release_points(db, cancelled.id, T - timedelta(seconds=3))
@@ -148,24 +156,24 @@ def test_overview_groups_next_expiry_by_malaysia_date_and_ignores_ineligible_lot
     只显示未过期且剩余大于零的最近到期积分。
     """
     member = _member(db)
-    used = _earn(db, member, 4, datetime(2025, 10, 14, 0, 0))
-    first = _earn(db, member, 7, datetime(2025, 10, 14, 4, 0))
-    second = _earn(db, member, 3, datetime(2025, 10, 14, 8, 0))
+    _earn(db, member, 4, T - timedelta(days=10))
     reserve_points(db, member.id, _order(db, member).id, 4, T)
     _earn(db, member, 9, T - timedelta(days=400))
+    _earn(db, member, 7, datetime(2025, 10, 14, 0, 0))
+    _earn(db, member, 3, datetime(2025, 10, 14, 12, 0))
+    _earn(db, member, 6, T)
     overview = points_overview(db, member.id, T)
     assert (overview.next_expiry_date, overview.next_expiry_points) == (
-        (first.expires_at + timedelta(hours=8)).date(),
+        date(2026, 10, 15),
         10,
     )
-    assert second.id != used.id
     empty = _member(db)
     assert points_overview(db, empty.id, T).next_expiry_date is None
     assert points_overview(db, empty.id, T).next_expiry_points is None
 
 
 def test_history_is_limited_to_100_rows_and_own_entries(db: Session) -> None:
-    """守住验收的 100 行上限与 DESIGN 权限与资料保护第 6 条。"""
+    """守住验收登记的 100 行上限（设计未规定行数）与 DESIGN 权限与资料保护第 6 条。"""
     member, other = _member(db), _member(db)
     orders = [_earn(db, member, 1, T + timedelta(seconds=n)) for n in range(101)]
     other_order = _earn(db, other, 99, T + timedelta(days=1))
@@ -179,6 +187,23 @@ def test_queries_do_not_write_or_flush(db: Session, monkeypatch: pytest.MonkeyPa
     """守住验收：两个会员查询函数只读，不写库、不 flush。"""
     member = _member(db)
     _earn(db, member, 1, T)
+    pending = _new_order(member)
+    db.add(pending)
+    before = (tuple(db.new), tuple(db.dirty), tuple(db.deleted))
+    statements: list[str] = []
+
+    def _record_statement(_connection: object, statement: str, *_args: object) -> None:
+        statements.append(statement)
+
+    bind = db.get_bind()
+    event.listen(bind, "before_cursor_execute", _record_statement)
     monkeypatch.setattr(db, "flush", lambda: pytest.fail("query must not flush"))
-    points_overview(db, member.id, T)
-    points_history(db, member.id)
+    try:
+        points_overview(db, member.id, T)
+        points_history(db, member.id)
+    finally:
+        event.remove(bind, "before_cursor_execute", _record_statement)
+
+    assert statements
+    assert all(statement.lstrip().upper().startswith("SELECT") for statement in statements)
+    assert (tuple(db.new), tuple(db.dirty), tuple(db.deleted)) == before
