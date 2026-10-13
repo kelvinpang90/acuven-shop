@@ -3428,7 +3428,7 @@ tasks:
     purpose: >-
       按 docs/DESIGN.md 1.11「权限与资料保护」第 3 条（注销时积分余额与未用券作废，积分和券使用流水保留去标识化审计记录），把 SHOP-TASK-086 的作废函数接入 SHOP-TASK-080 的注销函数。
       优惠券对全部会员相同、不发给个人（docs/UX.md 0.10 的 Q19），没有「持有的未用券」可作废；注销时尚未支付的订单无人可再访问，超时取消时由 SHOP-TASK-090 释放券与积分，SHOP-TASK-086 的释放对已注销会员随即作废。不改设计。
-      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.45、0.46（会员注销与积分）。拆分：业务规则层（3 个允许路径）。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.45、0.46（会员注销与积分）。拆分：业务规则层（4 个允许路径）。
     status: ready
     depends_on:
       - SHOP-TASK-080
@@ -3437,12 +3437,14 @@ tasks:
     acceptance_criteria:
       - app/services/member_deletion.py 的注销函数在条件更新命中（会员由 active 改为 deleted）之后、同一事务里调用 SHOP-TASK-086 的作废函数（入参为该会员 ID 与当前时间）；条件更新未命中（不存在或已注销）时不调用；其余步骤与返回值不变，只 flush、不提交，不写日志
       - 锁顺序——注销的条件更新已持有会员行锁，作废函数再锁同一行不另取其他会员的锁；已过期的批次由作废函数记为到期，待抵扣不作废（SHOP-TASK-086 的规则），用券记录不改
-      - tests/test_member_deletion_points.py 用 SQLite 内存库与 tests/test_member_deletion.py 相同写法的替身，经 SHOP-TASK-086 的函数准备积分，验证意图——注销后该会员的可用余额为 0、有余额的批次各有一条 forfeit、已过期的记为 expire、待抵扣不变、其他会员的积分不变；已注销的会员再注销不写积分流水；注销后同号重新注册为新会员，余额从 0 开始；注销时有已预占积分的待支付订单，超时释放时随即作废（经 SHOP-TASK-086 的释放函数）；用券记录在注销后保留且状态不变；注销函数返回后未提交（回滚后积分流水全部复原）；每条测试写明它守住的是设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - tests/test_member_deletion_points.py 用 SQLite 内存库与 tests/test_member_deletion.py 相同写法的替身，经 SHOP-TASK-086 的函数准备积分，验证意图——注销后该会员的可用余额为 0、有余额的批次各有一条 forfeit、已过期的记为 expire、待抵扣不变、其他会员的积分不变；已注销的会员再注销不写积分流水；注销后同号重新注册为新会员，余额从 0 开始；注销时有已预占积分的待支付订单，超时释放时随即作废（经 SHOP-TASK-086 的释放函数）；用券记录在注销后保留且状态不变；注销函数返回后未提交（回滚后积分流水全部复原）；每条测试写明它守住的是设计或 Kelvin 决定的哪一句；只出自本任务验收标准的实现约束（调用条件与入参、只 flush、不写日志、锁的范围）没有设计原句的，照 tests/test_member_deletion.py 的写法以「验收：」加该条约束注明，评审不以此要求修改；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - tests/test_payment_coupons_points.py 只为 test_timeout_after_member_deleted_forfeits 而改——注销现在先作废未预占的余额，所以流水期望在 redeem 与 release 之间加一条 forfeit（数量为负的 SOURCE_POINTS 减 REDEEMED），超时释放后的 release 与等量 forfeit 照旧，说明里补一句注销时先作废未预占余额；该文件其他测试与断言不增不删不改；这是本任务接入后唯一失效的既有断言（上一次 run 的 backend CI 只此一条失败）
       - docs/TODO.md 新增 SHOP-TASK-094 记录段（接入位置、未用券的含义、待支付订单的处理、偏离、验证到什么程度），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/points.py、app/api/member_deletion.py、tests/test_member_deletion.py、模型、迁移、.platform/、CI、部署配置；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.45、0.46），不合并、不直推
     allowed_change_paths:
       - app/services/member_deletion.py
       - tests/test_member_deletion_points.py
+      - tests/test_payment_coupons_points.py
       - docs/TODO.md
     allowed_commands:
       - lint.check
