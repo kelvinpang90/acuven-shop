@@ -3429,7 +3429,7 @@ tasks:
       按 docs/DESIGN.md 1.11「权限与资料保护」第 3 条（注销时积分余额与未用券作废，积分和券使用流水保留去标识化审计记录），把 SHOP-TASK-086 的作废函数接入 SHOP-TASK-080 的注销函数。
       优惠券对全部会员相同、不发给个人（docs/UX.md 0.10 的 Q19），没有「持有的未用券」可作废；注销时尚未支付的订单无人可再访问，超时取消时由 SHOP-TASK-090 释放券与积分，SHOP-TASK-086 的释放对已注销会员随即作废。不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.45、0.46（会员注销与积分）。拆分：业务规则层（4 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-080
       - SHOP-TASK-086
