@@ -3403,7 +3403,7 @@ tasks:
       按 docs/DESIGN.md 1.11「计价、优惠、积分与库存」第 5 条与「权限与资料保护」第 6 条（访客仅能访问已通过查询验证的订单），以及 docs/UX.md 0.10 P10（会员订单另见积分返还与追回 refund.points_back、refund.points_reversed，已过期的抵扣积分不返还），
       在 SHOP-TASK-087 的预估函数之上提供查单模式的积分预估接口，供退款申请页在提交前显示。会员模式随之后的会员订单接口提供。不做前端，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46（积分）。拆分：接口层（3 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-087
     acceptance_criteria:
