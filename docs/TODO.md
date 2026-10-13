@@ -2133,7 +2133,7 @@
 - 概览：余额与尚欠分别沿用 `available_points`、`debt_points` 的批次流水与无批次流水口径；最近到期只取剩余大于 0、未过期批次的最早马来西亚日期（UTC+8），同一日期的剩余积分合并，无符合批次时为空。
 - 明细：按订单和显示类型合并，`earned` 对应 `earn`，`redeemed` 合并 `redeem` 与 `release`（合计为 0 的取消订单不显示），`expired` 对应 `expire`，`returned` 对应 `refund_return`，`reversed` 合并 `refund_reversal` 与反号的 `debt_add`；`debt_repay`、`forfeit` 不显示。每组取最晚流水时间，按时间倒序、订单 ID 倒序、再按 reversed、returned、expired、redeemed、earned 的固定顺序，最多 100 行；查询先限于该会员流水，订单号只随该会员的组返回。
 - 偏离与取舍：无；查询不 flush、不写库。两个会员积分接口留给 SHOP-TASK-108，前端 P13 留给之后的任务。
-- 验证到什么程度：`tests/test_member_account.py` 用开启外键检查的 SQLite 内存库按模型建表，经既有积分获得、预占、释放、到期与退款积分函数准备批次和流水；覆盖概览的余额、尚欠、同一马来西亚日期合并、过期和用完批次排除、空最近到期，以及明细的五种类型、取消订单隐藏、退款追回含待抵扣、偿还隐藏、固定顺序、100 行上限、其他会员排除与两个查询不写库。每条测试说明所守住的 DESIGN、UX 或 Kelvin 决定原句；由 PR 的必需 CI 检查 backend 执行。
+- 验证到什么程度：`tests/test_member_account.py` 用开启外键检查的 SQLite 内存库按模型建表，经既有积分获得、预占、释放、到期与退款积分函数准备批次和流水；覆盖概览的余额、退款后尚欠、同一马来西亚日期合并（含跨 UTC 日界）、过期和用完批次排除、空最近到期，以及明细的五种类型、取消订单隐藏、退款追回含待抵扣、获得积分先偿还且偿还隐藏、固定顺序、100 行上限、其他会员排除与两个查询不写库。每条测试说明所守住的 DESIGN、UX 或 Kelvin 决定原句；由 PR 的必需 CI 检查 backend 执行。
 
 ### SHOP-TASK-094 会员注销时作废积分余额
 

@@ -12,9 +12,10 @@ from sqlalchemy import create_engine, event, select, text
 from sqlalchemy.orm import Session
 
 from app.db.base import Base
-from app.models import Member, Order, PointEntry, RefundRequest
+from app.models import Member, Order, PointEntry, PointLot, RefundRequest
 from app.models.member import MEMBER_ACTIVE
 from app.models.order import ACTOR_MEMBER, CLAIM_NOT_CLAIMABLE, STATUS_AWAITING_PAYMENT
+from app.models.points import KIND_DEBT_REPAY, KIND_EXPIRE
 from app.models.refund import REFUND_REQUESTED
 from app.services.member_account import get_points_history, get_points_overview
 from app.services.points import earn_points, expire_points, release_points, reserve_points
@@ -100,31 +101,38 @@ def _refund(db: Session, order: Order) -> RefundRequest:
     )
 
 
-def _ledger_count(db: Session) -> int:
-    return len(db.scalars(select(PointEntry.id)).all())
+def _points_state(db: Session) -> tuple[list[tuple[int, int]], list[tuple[int, int]]]:
+    return (
+        list(db.execute(select(PointEntry.id, PointEntry.points)).all()),
+        list(db.execute(select(PointLot.id, PointLot.points)).all()),
+    )
 
 
 def test_overview_combines_next_malaysia_day_and_does_not_write(db: Session) -> None:
-    """UX P13 says to show balance, refund debt, and the nearest expiry together."""
+    """UX 0.10 P13 requires \"积分余额/到期/待抵扣与明细\" in the member centre."""
     member = _member(db)
-    _earn(db, member, 30, NOW)
-    _earn(db, member, 20, NOW + timedelta(seconds=1))
-    before = _ledger_count(db)
+    # These UTC instants cross midnight but are both 13 October in Malaysia.
+    _earn(db, member, 30, datetime(2026, 10, 12, 16, 30))
+    _earn(db, member, 20, datetime(2026, 10, 13, 15, 0))
+    _earn(db, member, 40, datetime(2026, 10, 13, 16, 0))
+    before = _points_state(db)
 
     overview = get_points_overview(db, member.id, NOW)
 
-    assert overview.balance == 50
+    assert overview.balance == 90
     assert overview.pending == 0
     assert overview.next_expiry is not None
     assert (overview.next_expiry.date.isoformat(), overview.next_expiry.points) == (
-        "2027-10-12",
+        "2027-10-13",
         50,
     )
-    assert _ledger_count(db) == before
+    assert _points_state(db) == before
+    assert not db.new
+    assert not db.dirty
 
 
 def test_overview_ignores_expired_and_empty_lots_and_returns_no_expiry(db: Session) -> None:
-    """DESIGN 1.11 says only remaining, unexpired batch points are available."""
+    """DESIGN 1.11 §3 says batches expire after 12 months and are used by expiry."""
     member = _member(db)
     expired = _earn(db, member, 10, NOW - timedelta(days=400))
     usable = _earn(db, member, 10, NOW)
@@ -137,8 +145,33 @@ def test_overview_ignores_expired_and_empty_lots_and_returns_no_expiry(db: Sessi
     assert usable.id != expired.id
 
 
+def test_overview_reports_refund_debt_without_making_balance_negative(db: Session) -> None:
+    """DESIGN 1.11 §5 says an insufficient refund recovery becomes debt, never negative balance."""
+    member = _member(db)
+    _earn(db, member, 10, NOW - timedelta(days=5))
+    source = _order(db, member)
+    reserve_points(db, member.id, source.id, 5, NOW - timedelta(seconds=4))
+    assert earn_points(db, member.id, source.id, 20, NOW - timedelta(days=2)) is not None
+    reserve_points(db, member.id, _order(db, member).id, 20, NOW - timedelta(seconds=3))
+    refund = _refund(db, source)
+    apply_refund_points(db, source.id, refund.id, 5, 20, NOW)
+    before = _points_state(db)
+
+    overview = get_points_overview(db, member.id, NOW)
+
+    assert overview.balance == 0
+    assert overview.pending == 10
+    assert overview.next_expiry is None
+    assert _points_state(db) == before
+    assert not db.new
+    assert not db.dirty
+
+
 def test_history_groups_display_types_orders_and_excludes_other_members(db: Session) -> None:
-    """UX-COPY's five history types exclude cancelled checkout and debt repayment."""
+    """UX 0.10 lists "获得、抵扣、到期、退款返还、退款追回".
+
+    DESIGN 1.11 §5 says later earnings repay debt first.
+    """
     member = _member(db)
     other = _member(db)
     _earn(db, member, 10, NOW - timedelta(days=5))
@@ -154,13 +187,27 @@ def test_history_groups_display_types_orders_and_excludes_other_members(db: Sess
     # Recovery exceeds the source lot: the refund rule writes refund_reversal and debt_add.
     apply_refund_points(db, source.id, refunded.id, 5, 20, NOW)
     old = _earn(db, member, 4, NOW - timedelta(days=400))
-    expire_points(db, NOW - timedelta(seconds=1), 100)
+    expiry_time = NOW - timedelta(seconds=1)
+    assert expire_points(db, expiry_time, 100) == 1
+    assert (
+        db.scalar(
+            select(PointEntry.created_at).where(
+                PointEntry.kind == KIND_EXPIRE,
+                PointEntry.order_id == old.id,
+            )
+        )
+        == expiry_time
+    )
+    # This later earning repays debt first; its debt_repay entries must stay hidden.
+    _earn(db, member, 7, NOW + timedelta(seconds=1))
     other_order = _earn(db, other, 99, NOW)
-    before = _ledger_count(db)
+    assert db.scalars(select(PointEntry).where(PointEntry.kind == KIND_DEBT_REPAY)).all()
+    before = _points_state(db)
 
     history = get_points_history(db, member.id)
 
-    assert [(item.type, item.points) for item in history[:3]] == [
+    assert [(item.type, item.points) for item in history[:4]] == [
+        ("earned", 7),
         ("reversed", -20),
         ("returned", 5),
         ("expired", -4),
@@ -172,13 +219,18 @@ def test_history_groups_display_types_orders_and_excludes_other_members(db: Sess
         "returned",
         "reversed",
     }
+    assert all(item.order_number != cancelled.order_number for item in history)
     assert all(item.order_number != other_order.order_number for item in history)
-    assert _ledger_count(db) == before
+    overview = get_points_overview(db, member.id, NOW + timedelta(seconds=1))
+    assert (overview.balance, overview.pending) == (2, 0)
+    assert _points_state(db) == before
+    assert not db.new
+    assert not db.dirty
     assert old.id != source.id
 
 
 def test_history_limits_to_100_newest_groups(db: Session) -> None:
-    """Acceptance: the member-centre history is bounded at 100 rows."""
+    """Kelvin's SHOP-TASK-095 decision says the member-centre history has \"最多 100 行\"."""
     member = _member(db)
     for offset in range(101):
         _earn(db, member, 1, NOW + timedelta(seconds=offset))
