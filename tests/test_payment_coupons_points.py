@@ -573,7 +573,8 @@ def test_repeated_timeout_runs_do_not_release_twice(db: Session) -> None:
 def test_timeout_after_member_deleted_forfeits(db: Session) -> None:
     """「权限与资料保护」第 3 条「注销时积分余额作废」；「订单与退款状态」超时释放券及积分预占。
     SHOP-TASK-090 验收：会员已注销（订单 member_id 已清空）后超时取消，释放的积分随即作废
-    （release 后紧接着等量的 forfeit），用券记录为 released，库存加回。
+    （release 后紧接着等量的 forfeit），用券记录为 released，库存加回。注销时先作废未预占的
+    余额（SHOP-TASK-094），所以 redeem 与 release 之间另有一条 forfeit。
     """
     placed = _member_order(db)
     assert delete_member(db, placed.member_id, PAY_AT)
@@ -586,6 +587,7 @@ def test_timeout_after_member_deleted_forfeits(db: Session) -> None:
         placed,
         (KIND_EARN, SOURCE_POINTS),
         (KIND_REDEEM, -REDEEMED),
+        (KIND_FORFEIT, -(SOURCE_POINTS - REDEEMED)),
         (KIND_RELEASE, REDEEMED),
         (KIND_FORFEIT, -REDEEMED),
     )
