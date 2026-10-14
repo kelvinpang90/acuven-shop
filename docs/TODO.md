@@ -56,6 +56,12 @@
 
 ## 任务记录
 
+### SHOP-TASK-098 后台优惠券的列表、新建与停用规则
+
+- [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）Coupon / CouponUse、计价第 1、7 条和权限与资料保护第 5 条，以及 HANDOFF 0.48 的 Kelvin 决定，在 `app/services/admin_coupons.py` 增加 A05 所需的业务规则：列表每页 30 张、按创建时间与 ID 倒序，已用仅计 reserved 与 used；新建统一规范化代码并校验类型、金额、日期与两个可空上限，将马来西亚日期换成 UTC 存储；停用只改启用状态，重复停用幂等。创建与首次停用均留管理员审计，均只 flush、不提交。
+- [x] 偏离：无设计偏离；不提供编辑、重新启用或删除，不修改既有 CouponUse，故已预占订单照常可支付与核销；接口留给 SHOP-TASK-099。
+- [x] 验证到什么程度：新增 `tests/test_admin_coupons.py` 以开启外键检查的 SQLite 内存库覆盖创建规范化、日期换算、边界及拒绝、重复代码、分页排序和停用审计与幂等；由 PR 的必需 CI backend 执行。
+
 ### SHOP-TASK-001 前端页面结构、线框与三语文案审阅稿
 
 - [x] 交付审阅稿 `docs/UX.md` 与 `docs/UX-COPY.md`（Kelvin 审阅尚未进行；审阅通过前不实现任何页面）
