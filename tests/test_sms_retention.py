@@ -336,14 +336,15 @@ def test_job_is_registered_last_with_own_transactions() -> None:
     加 delete_expired_verifications，以 own_transactions=True 注册（服务自己提交）。"""
     default = jobs.default_jobs()
 
-    assert [job.name for job in default][:3] == [
+    assert [job.name for job in default][:4] == [
         "cancel_expired_orders",
         "reset_daily_stock",
         "auto_complete_shipped",
+        "delete_expired_verifications",
     ]
-    assert default[3].name == "delete_expired_verifications"
-    assert len(default) == 4
+    assert len(default) == 5
     assert default[3].own_transactions is True
+    assert default[4].name == "expire_points"
     assert jobs.delete_verifications_job().own_transactions is True
 
 

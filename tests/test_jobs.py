@@ -22,6 +22,7 @@ import signal
 import threading
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
+from itertools import count
 from pathlib import Path
 from typing import Any
 
@@ -34,10 +35,23 @@ from sqlalchemy.pool import StaticPool
 from app import jobs
 from app.core.config import Settings
 from app.db.base import Base
-from app.models import Category, Order, OrderEvent, OrderItem, Product, ProductVariant
+from app.models import (
+    Category,
+    Member,
+    Order,
+    OrderEvent,
+    OrderItem,
+    PointEntry,
+    PointLot,
+    Product,
+    ProductVariant,
+)
+from app.models.member import MEMBER_ACTIVE
 from app.models.order import ACTOR_SYSTEM, STATUS_AWAITING_PAYMENT, STATUS_CANCELLED
+from app.models.points import KIND_EXPIRE
 from app.services import payment
 from app.services.order_rules import generate_order_number
+from app.services.points import earn_points
 
 START = datetime(2026, 10, 5, 3, 0, 0)
 PRICE = 1500
@@ -45,11 +59,32 @@ SHIPPING = 800
 STOCK = 5
 # 代替连接信息与异常消息原文的标记串（不是真实的连接串），用来断言它们不进日志。
 SECRET = "sentinel-connection-detail"
+_POINT_PHONE = count(100_000_000)
 
 
 def _cancel_only() -> list[jobs.Job]:
     """默认任务列表里的超时取消任务（不含之后的每日库存重置）。"""
     return [job for job in jobs.default_jobs() if job.name == "cancel_expired_orders"]
+
+
+def _earned_lot(db: Session, variant_id: int, acquired_at: datetime, points: int = 10) -> PointLot:
+    """为任务测试建立一个带来源订单的积分批次。"""
+    member = Member(phone=f"+601{next(_POINT_PHONE)}", status=MEMBER_ACTIVE, created_at=acquired_at)
+    db.add(member)
+    db.flush()
+    order_id = _order(db, variant_id, acquired_at + timedelta(minutes=15), quantity=1)
+    order = db.get(Order, order_id)
+    assert order is not None
+    order.member_id = member.id
+    db.flush()
+    lot = earn_points(db, member.id, order_id, points, acquired_at)
+    assert lot is not None
+    db.commit()
+    return lot
+
+
+def _expired_entries(db: Session) -> list[PointEntry]:
+    return list(db.scalars(select(PointEntry).where(PointEntry.kind == KIND_EXPIRE)))
 
 
 # ---------------------------------------------------------------------------
@@ -348,7 +383,8 @@ def test_default_jobs_use_the_fixed_round_limit(
 ) -> None:
     """SHOP-TASK-031 验收约定：run 每轮最多处理一个固定上限的订单数（CANCEL_BATCH_LIMIT）。
     SHOP-TASK-032 验收约定：每轮在超时取消之后执行每日库存重置（它本身会取消全部到期订单，
-    所以这里只运行默认列表里的超时取消任务）。"""
+    所以这里只运行默认列表里的超时取消任务）。SHOP-TASK-096 验收：前四项顺序不变，积分到期
+    任务最后加入且由运行器事务提交。"""
     variant_id = _variant(db, stock=0)
     limit = jobs.CANCEL_BATCH_LIMIT
     order_ids = [
@@ -361,12 +397,78 @@ def test_default_jobs_use_the_fixed_round_limit(
     statuses = [_status(db, i) for i in order_ids]
     assert statuses.count(STATUS_CANCELLED) == limit
     assert statuses[-1] == STATUS_AWAITING_PAYMENT
-    assert [job.name for job in jobs.default_jobs()] == [
+    default = jobs.default_jobs()
+    assert [job.name for job in default][:4] == [
         "cancel_expired_orders",
         "reset_daily_stock",
         "auto_complete_shipped",
         "delete_expired_verifications",
     ]
+    assert len(default) == 5
+    assert default[4].name == "expire_points"
+    assert default[4].own_transactions is False
+    assert jobs.POINTS_EXPIRE_BATCH_LIMIT == jobs.CANCEL_BATCH_LIMIT
+
+
+def test_expire_points_job_expires_only_due_lots_and_is_idempotent(
+    db: Session, factory: jobs.SessionFactory, heartbeat: Path, clock: FakeClock
+) -> None:
+    """DESIGN 1.11 第 3 条「积分批次在取得后 12 个月到期」及 Kelvin 0.46 的到期时刻决定：
+    到期批次写 expire，未到期批次不写；「失败、并发与重试」第 6 条要求重复运行只生效一次。"""
+    variant_id = _variant(db)
+    due = _earned_lot(db, variant_id, START - timedelta(days=400), points=12)
+    kept = _earned_lot(db, variant_id, START, points=9)
+    runner = _runner([jobs.expire_points_job()], factory, heartbeat, clock)
+
+    runner.run_round()
+    assert [(entry.lot_id, entry.points) for entry in _expired_entries(db)] == [(due.id, -12)]
+    assert kept.id not in [entry.lot_id for entry in _expired_entries(db)]
+
+    runner.run_round()
+    assert [(entry.lot_id, entry.points) for entry in _expired_entries(db)] == [(due.id, -12)]
+
+
+def test_expire_points_job_leaves_over_limit_lots_for_next_round(
+    db: Session, factory: jobs.SessionFactory, heartbeat: Path, clock: FakeClock
+) -> None:
+    """「失败、并发与重试」第 6 条「可重复运行」：超过每批上限的到期积分由下一轮继续，
+    直到所有批次各写一次 expire。"""
+    variant_id = _variant(db)
+    limit = jobs.POINTS_EXPIRE_BATCH_LIMIT
+    for _ in range(limit + 1):
+        _earned_lot(db, variant_id, START - timedelta(days=400))
+    runner = _runner([jobs.expire_points_job()], factory, heartbeat, clock)
+
+    runner.run_round()
+    assert len(_expired_entries(db)) == limit
+    runner.run_round()
+    assert len(_expired_entries(db)) == limit + 1
+
+
+def test_expire_points_failure_rolls_back_and_logs_only_task_and_class(
+    db: Session,
+    factory: jobs.SessionFactory,
+    heartbeat: Path,
+    clock: FakeClock,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """「失败、并发与重试」第 6 条「失败有告警与人工补跑办法」：异常回滚本轮积分流水，
+    运行器只记录任务名与异常类名，且继续完成本轮。"""
+    caplog.set_level(logging.INFO, logger="app.jobs")
+    variant_id = _variant(db)
+    _earned_lot(db, variant_id, START - timedelta(days=400))
+    real_expire = jobs.expire_point_lots
+
+    def expire_then_fail(session: Session, now: datetime, limit: int) -> int:
+        real_expire(session, now, limit)
+        raise RuntimeError("do not log details")
+
+    monkeypatch.setattr(jobs, "expire_point_lots", expire_then_fail)
+    _runner([jobs.expire_points_job()], factory, heartbeat, clock).run_round()
+
+    assert _expired_entries(db) == []
+    assert _job_messages(caplog) == ["job expire_points failed: RuntimeError"]
 
 
 def test_default_clock_is_naive_utc() -> None:
@@ -878,6 +980,24 @@ def test_run_forever_removes_a_stale_heartbeat(heartbeat: Path, clock: FakeClock
 # ---------------------------------------------------------------------------
 # 手动补跑命令
 # ---------------------------------------------------------------------------
+
+
+def test_main_expire_points_command_runs_once_and_exits_zero(
+    db: Session,
+    factory: jobs.SessionFactory,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """「失败、并发与重试」第 6 条「失败有告警与人工补跑办法」：expire-points 手动补跑一次后
+    以 0 退出；DESIGN 1.11 第 3 条的到期批次只写一次 expire。"""
+    caplog.set_level(logging.INFO, logger="app.jobs")
+    variant_id = _variant(db)
+    lot = _earned_lot(db, variant_id, START - timedelta(days=400), points=13)
+    monkeypatch.setattr(jobs, "configured_session_factory", lambda: factory)
+
+    assert jobs.main(["expire-points"]) == jobs.EXIT_OK
+    assert [(entry.lot_id, entry.points) for entry in _expired_entries(db)] == [(lot.id, -13)]
+    assert _job_messages(caplog) == ["job expire_points done: 1 changed"]
 
 
 def test_cancel_expired_command_succeeds(

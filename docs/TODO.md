@@ -2137,6 +2137,12 @@
 - 偏离与取舍：无设计偏离；查询不判断会员状态、不加锁也不写库，会员中心的两个接口（积分与优惠券，含会员会话校验与响应）留给 SHOP-TASK-108，前端 P13 留给之后的任务。
 - 验证到什么程度：`tests/test_member_account.py` 以开启外键检查的 SQLite 内存库，经既有积分获得、抵扣、释放、到期和退款函数准备数据，覆盖登记的退款综合场景、马来西亚日期合并、空/过期/用完批次、100 行上限、其他会员隔离与不写库。每条测试说明守住的设计、UX 或本任务登记约束；由 PR 必需 CI 的 backend 执行。综合场景与概览其他情形的数值照登记写明的流水与期望编写。由运营者接手完成：Worker run c8b78cfe 的实现与测试正确，只因 `ruff check`（import 排序）与 `ruff format` 未过以 checks_failed 失败；运营者以 ruff 修正格式，并在综合场景的三个检查点同时断言余额与尚欠（原先各只断言其一）、在不写库测试里断言确实记录到了语句；按 Codex 审查，两个查询改在 `no_autoflush` 下执行（会话有待写对象时原先会被自动 flush），并补测试：调用后待写对象仍未 flush、100 行上限保留的是最新的 100 行、同一时刻不同订单按订单 ID 从大到小、最早到期但已用完的批次不计入最近到期。本地以 SQLite 跑过本文件的测试；未在真 MySQL 上验证。
 
+### SHOP-TASK-096 积分到期的定时任务
+
+- [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「计价、优惠、积分与库存」第 3 条与「失败、并发与重试」第 6 条，并按 HANDOFF 0.46 的 Kelvin 决定，把 SHOP-TASK-086 的 `expire_points` 加入 `app/jobs.py` 默认任务的最后一项。每轮及 `python -m app.jobs expire-points` 手动补跑最多处理 `POINTS_EXPIRE_BATCH_LIMIT` 个批次；该常量取 `CANCEL_BATCH_LIMIT` 的值，服务只 flush，由运行器提交事务。设计闸门：DESIGN 1.11（提交 `2d13250`）与 HANDOFF 0.46（积分）。
+- 偏离与取舍：未改积分服务、模型、迁移、部署配置或设计；运营告警邮件仍留给运营告警邮件任务接入，在此之前沿用运行器的连续失败停写心跳机制。
+- 验证到什么程度：`tests/test_jobs.py` 覆盖任务排序、非自管事务、到期/未到期批次、重复运行、跨轮批次上限、异常回滚与只记录任务名和异常类名，以及 `expire-points` 以 0 退出；`tests/test_auto_complete.py`、`tests/test_sms_retention.py` 仅将默认任务列表断言扩至第五项。后端测试由 PR 必需 CI 的 backend 执行；未在真实 MySQL 上验证，未新增依赖。
+
 ### SHOP-TASK-094 会员注销时作废积分余额
 
 - [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「权限与资料保护」第 3 条（注销时积分余额与未用券作废，积分和券使用流水保留去标识化审计记录），把 SHOP-TASK-086 的 `forfeit_points` 接入 SHOP-TASK-080 的 `delete_member`（`app/services/member_deletion.py`）；测试见 `tests/test_member_deletion_points.py`，`tests/test_payment_coupons_points.py` 只改了 `test_timeout_after_member_deleted_forfeits`。不做接口；未改 `app/services/points.py`、`app/api/member_deletion.py`、`tests/test_member_deletion.py`、模型、迁移、`.platform/`、CI、部署配置与设计，未加表或迁移，未装依赖。设计闸门：DESIGN 1.11（提交 `2d13250`）与 HANDOFF 0.45、0.46（会员注销与积分）。拆分：业务规则层（4 个允许路径）。

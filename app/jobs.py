@@ -1,5 +1,5 @@
 """定时任务运行器：常驻进程每分钟执行一轮任务；另有手动执行一次超时取消、当日库存重置、
-发货满 7 天自动确认收货或删除满 30 天短信验证记录的命令。
+发货满 7 天自动确认收货、删除满 30 天短信验证记录或让积分到期的命令。
 
 依据 docs/DESIGN.md 1.11（提交 2d13250）：
 - 「计价、优惠、积分与库存」第 6 条：15 分钟未支付自动取消并释放；每天按马来西亚时间重建当日
@@ -21,13 +21,16 @@
     python -m app.jobs delete-verifications
                                         执行一次删除满 30 天的短信验证记录后退出（运营者手动
                                         补跑用；每次最多 CANCEL_BATCH_LIMIT 条）
+    python -m app.jobs expire-points    执行一次积分到期后退出（运营者手动补跑用；每次
+                                        最多 POINTS_EXPIRE_BATCH_LIMIT 个批次）
 
 数据库连接沿用 SHOP_DATABASE_URL 与 app/db/session.py 的会话工厂。
 
 每一轮：
-1. 按任务列表逐个执行任务，每个任务一个新会话。默认任务里的每一个都自己管理事务
-   （own_transactions，见下文）；没有设 own_transactions 的任务在一个独立事务里执行，任务返回
-   后提交，任务里的提交只结束一个保存点（见 run_job）。时间取当前 UTC（与库里一样不带时区）。
+1. 按任务列表逐个执行任务，每个任务一个新会话。默认任务中除积分到期外都自己管理事务
+   （own_transactions，见下文）；积分到期与其他没有设 own_transactions 的任务在一个独立事务里
+   执行，任务返回后提交，任务里的提交只结束一个保存点（见 run_job）。
+   时间取当前 UTC（与库里一样不带时区）。
    任务抛异常（含数据库不可用）时回滚未提交的部分，只记一条含任务名与异常类名的日志，不退出，
    也不影响同一轮的其他任务与下一轮。
 2. 写心跳文件 HEARTBEAT_PATH（容器的健康检查看它的修改时间）。任一任务已连续失败、且距它
@@ -40,7 +43,8 @@
 任务列表：先超时取消（每轮最多 CANCEL_BATCH_LIMIT 张，剩余的下一轮继续），再每日库存重置
 （当前马来西亚营业日期已有 succeeded 记录时跳过，否则执行；失败只记日志、下一轮重试），再发货
 满 7 天自动确认收货（每轮最多完成 AUTO_COMPLETE_BATCH_LIMIT 张，与超时取消相同），再删除满
-30 天的短信验证记录（每轮最多 VERIFICATION_DELETE_BATCH_LIMIT 条，与超时取消相同）。之后的
+30 天的短信验证记录（每轮最多 VERIFICATION_DELETE_BATCH_LIMIT 条，与超时取消相同），再积分到期
+（每轮最多 POINTS_EXPIRE_BATCH_LIMIT 个批次，与超时取消相同）。之后的
 任务按同样方式加入 default_jobs()：写一个 Job（名称与执行函数）。每个任务必须
 可重复运行且只生效一次（一轮执行到一半失败或运营者手动补跑都会再次运行它），判定本次无需
 执行而跳过也算成功、正常返回，只有真正出错才抛异常。
@@ -83,6 +87,7 @@ from app.core.config import get_settings
 from app.db.session import _session_factory
 from app.services.auto_complete import auto_complete_shipped_orders
 from app.services.payment import expire_overdue_orders
+from app.services.points import expire_points as expire_point_lots
 from app.services.sms_retention import delete_expired_verifications
 from app.services.stock_reset import business_date, reset_completed, reset_daily_stock
 
@@ -98,6 +103,8 @@ CANCEL_BATCH_LIMIT = 100
 AUTO_COMPLETE_BATCH_LIMIT = CANCEL_BATCH_LIMIT
 # 删除满 30 天的短信验证记录每轮最多删除的条数；剩余的下一轮继续。
 VERIFICATION_DELETE_BATCH_LIMIT = CANCEL_BATCH_LIMIT
+# 积分到期每轮最多处理的批次数；剩余的下一轮继续。
+POINTS_EXPIRE_BATCH_LIMIT = CANCEL_BATCH_LIMIT
 # 容器内固定的临时目录路径；docker-compose.yml 里 shop_jobs 的健康检查用同一路径。
 HEARTBEAT_PATH = Path("/tmp/acuven_shop_jobs_heartbeat")
 # 收到停止信号时一轮仍在执行，最多再等这么久；须短于验收的 10 秒。
@@ -188,14 +195,27 @@ def delete_verifications_job(limit: int = VERIFICATION_DELETE_BATCH_LIMIT) -> Jo
     return Job(name="delete_expired_verifications", run=run, own_transactions=True)
 
 
+def expire_points_job(limit: int = POINTS_EXPIRE_BATCH_LIMIT) -> Job:
+    """积分到期：SHOP-TASK-086 的 expire_points，每次最多处理 limit 个批次。
+
+    服务只 flush，由运行器的事务提交；重复运行时，已写入 expire 流水的批次不会再生效。
+    """
+
+    def run(db: Session, now: datetime) -> int:
+        return expire_point_lots(db, now, limit)
+
+    return Job(name="expire_points", run=run)
+
+
 def default_jobs() -> list[Job]:
     """run 每轮按顺序执行的任务：先超时取消，再每日库存重置，再发货满 7 天自动确认收货，
-    再删除满 30 天的短信验证记录。"""
+    再删除满 30 天的短信验证记录，最后处理过期积分。"""
     return [
         cancel_expired_job(),
         reset_stock_job(),
         auto_complete_job(),
         delete_verifications_job(),
+        expire_points_job(),
     ]
 
 
@@ -210,7 +230,7 @@ def run_job(job: Job, session_factory: SessionFactory, now: datetime) -> int:
     任务里的 commit（与 rollback）在这里只释放（或回滚）一个保存点，所以同一次运行里后面
     失败时，前面“提交”的部分也一起回滚。
 
-    own_transactions 的任务（含默认列表里的全部任务）直接拿新会话，自己提交与回滚；
+    own_transactions 的任务直接拿新会话，自己提交与回滚；
     会话关闭时未提交的部分回滚。
     """
     if job.own_transactions:
@@ -435,6 +455,27 @@ def delete_verifications(
     return EXIT_OK
 
 
+def expire_points(
+    session_factory: SessionFactory | None,
+    *,
+    now: Callable[[], datetime] = utc_now,
+    limit: int = POINTS_EXPIRE_BATCH_LIMIT,
+) -> int:
+    """执行一次积分到期，返回退出码。处理批次等于上限时可能还有剩余，可再执行一次；
+    重复执行不重复生效。日志只含任务名、处理批次数与异常类名。"""
+    if session_factory is None:
+        logger.error("database is not configured")
+        return EXIT_NOT_CONFIGURED
+    job = expire_points_job(limit)
+    try:
+        count = run_job(job, session_factory, now())
+    except Exception as exc:
+        logger.error("job %s failed: %s", job.name, type(exc).__name__)
+        return EXIT_FAILED
+    logger.info("job %s done: %d changed", job.name, count)
+    return EXIT_OK
+
+
 def configured_session_factory() -> SessionFactory | None:
     """按 SHOP_DATABASE_URL 取会话工厂；未配置为空。引擎在第一次开会话时才建。"""
     database_url = get_settings().database_url
@@ -453,6 +494,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands.add_parser(
         "delete-verifications", help="delete SMS verification records 30 days old once and exit"
     )
+    commands.add_parser("expire-points", help="expire points once and exit")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -465,6 +507,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return complete_shipped(session_factory)
     if args.command == "delete-verifications":
         return delete_verifications(session_factory)
+    if args.command == "expire-points":
+        return expire_points(session_factory)
 
     runner = Runner(default_jobs(), session_factory, force_exit=force_exit)
     install_signal_handlers(runner)
