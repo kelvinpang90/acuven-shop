@@ -1,6 +1,6 @@
 """后台优惠券规则；每项测试说明所守住的已批准设计或 Kelvin 决定。"""
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pytest
 from sqlalchemy import create_engine, event, select
@@ -267,7 +267,9 @@ def test_duplicate_normalized_code_rolls_back_savepoint_without_audit(db: Sessio
     create_coupon(db, admin_id(db), request(), NOW)
     with pytest.raises(CouponCodeTaken):
         create_coupon(db, admin_id(db), request(code="save10"), NOW)
-    assert db.scalars(select(AuditEvent)).all()[0].action == ADMIN_COUPON_CREATED
+    audits = db.scalars(select(AuditEvent)).all()
+    assert len(audits) == 1
+    assert audits[0].action == ADMIN_COUPON_CREATED
     assert len(db.scalars(select(Coupon)).all()) == 1
 
 
@@ -275,8 +277,9 @@ def test_list_is_newest_first_paginated_ties_by_id_and_converts_utc_cross_day(
     db: Session,
 ) -> None:
     """A05 列表按创建时间倒序，每页 30 张；日期显示马来西亚日期。"""
+    coupon_ids = []
     for number in range(31):
-        create_coupon(
+        coupon = create_coupon(
             db,
             admin_id(db),
             request(
@@ -284,13 +287,21 @@ def test_list_is_newest_first_paginated_ties_by_id_and_converts_utc_cross_day(
                 start_date=date(2026, 10, 15),
                 end_date=date(2026, 10, 15),
             ),
-            NOW if number < 2 else NOW.replace(second=number),
+            NOW + timedelta(seconds=100 if number < 2 else 200 - number),
         )
+        coupon_ids.append(coupon.id)
     first = list_coupons(db, 1)
     second = list_coupons(db, 2)
     assert (first.total, len(first.coupons), len(second.coupons)) == (31, 30, 1)
-    assert first.coupons[0].id > first.coupons[1].id
-    assert second.coupons[0].start_date == date(2026, 10, 15)
+    assert [coupon.id for coupon in first.coupons] == [
+        coupon_ids[1],
+        coupon_ids[0],
+        *coupon_ids[2:30],
+    ]
+    assert (second.coupons[0].id, second.coupons[0].start_date) == (
+        coupon_ids[30],
+        date(2026, 10, 15),
+    )
     assert list_coupons(db, 3).coupons == []
 
 
@@ -331,7 +342,8 @@ def test_disable_leaves_reserved_use_unchanged_and_does_not_commit(db: Session) 
     coupon = create_coupon(db, admin_id(db), request(), NOW)
     add_use(db, coupon.id, 1, USE_RESERVED)
     db.commit()
-    disable_coupon(db, admin_id(db), coupon.id, NOW)
+    disabled = disable_coupon(db, admin_id(db), coupon.id, NOW)
     assert db.scalar(select(CouponUse.status)) == USE_RESERVED
+    assert disabled.used_count == 1
     db.rollback()
     assert db.get(Coupon, coupon.id).is_active is True

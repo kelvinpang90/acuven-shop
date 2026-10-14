@@ -247,6 +247,13 @@ def disable_coupon(
             old_value="active",
             new_value="disabled",
         )
-    else:
-        db.flush()
-    return _row(coupon)
+    used_count = int(
+        db.scalar(
+            select(func.count(CouponUse.id)).where(
+                CouponUse.coupon_id == coupon.id,
+                CouponUse.status.in_(COUNTED_USE_STATUSES),
+            )
+        )
+        or 0
+    )
+    return _row(coupon, used_count)
