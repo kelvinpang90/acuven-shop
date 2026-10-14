@@ -56,6 +56,12 @@
 
 ## 任务记录
 
+### SHOP-TASK-098 后台优惠券的列表、新建与停用规则
+
+- [x] 在 `app/services/admin_coupons.py` 实现后台券的分页列表、新建和幂等停用：列表按创建时间、ID 倒序，每页 30 张，以一条分组查询统计 reserved 与 used 的已用次数；新建按 SHOP-TASK-085 规范化代码，校验固定金额/百分比、最低商品消费、日期与次数上限，并在马来西亚日期与 UTC 之间换算；停用只改启用状态，已预占和已核销的用券记录不变。
+- 审计与偏离：成功新建写 `admin_coupon_created`，实际停用写 `admin_coupon_disabled`；重复停用不写审计。无设计偏离；未改模型、迁移、既有查券服务或接口页面，也没有提供编辑、重新启用或删除。
+- 验证到什么程度：`tests/test_admin_coupons.py` 以开启外键检查的 SQLite 内存库覆盖规范化、日期边界、拒绝和边界值、重复代码、30 条分页及排序、预占/核销计次、审计、停用幂等和回滚。接口留给 SHOP-TASK-099。
+
 ### SHOP-TASK-001 前端页面结构、线框与三语文案审阅稿
 
 - [x] 交付审阅稿 `docs/UX.md` 与 `docs/UX-COPY.md`（Kelvin 审阅尚未进行；审阅通过前不实现任何页面）
@@ -2068,6 +2074,7 @@
 - [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「计价、优惠、积分与库存」第 1、3 条（券与积分在取消或支付超时时释放；模拟支付成功后获得积分）、「订单与退款状态」（待支付订单可由下单者取消或超时为 demo_cancelled，释放库存、券及积分预占）与「失败、并发与重试」第 1 条，以及 `docs/HANDOFF.md` 0.46、0.47 记录的 Kelvin 决定（预占与核销都计用券次数；预占的积分以预占时为准；获得积分按下单时的快照在支付成功时发放），把 SHOP-TASK-085、086 的函数接入 `app/services/payment.py` 的支付成功、本人取消与超时取消，并让支付与取消可以由会员操作；测试见 `tests/test_payment_coupons_points.py`，`tests/test_demo_payment.py` 只把视图字段集合补上三个新字段。不做接口；未改 `app/api/pay.py`、`app/jobs.py`、`app/services/coupons.py`、`app/services/points.py`、模型、迁移、`.platform/`、CI、部署配置与设计，未加表或迁移，未装依赖。设计闸门：DESIGN 1.11（提交 `2d13250`）与 HANDOFF 0.46、0.47（优惠券与积分）。拆分：业务规则层（4 个允许路径）。
 - 操作者：`submit_payment` 与 `cancel_order` 增加仅限关键字的 `actor`（默认 `guest`，只接受 `guest` 与 `member`，其他值在访问数据库之前抛 `ValueError`），状态迁移的检查（`is_transition_allowed`）与写入的事件都用它；游客接口不传，行为不变。超时取消（含支付与取消时对已到期订单先做的超时取消）的操作者仍为 `system`。取消方的显示照旧：`system` 为超时，`guest` 与 `member` 为本人。
 - 锁顺序（会员 → 订单，与会员下单、注销一致）：支付成功、本人取消与超时取消在带条件的 UPDATE 之前，先以普通读取得订单的 `member_id`，非空时以 `SELECT … FOR UPDATE` 锁住该会员的行（会员已注销也锁），为空（游客订单或会员注销后已清空）时不预先锁；锁后再做现有的带条件 UPDATE，未命中时的回滚与重放处理不变。于是单张订单的下单（会员 → 库存）、取消（会员 → 订单 → 库存 → 用券记录 → 积分）、支付成功（会员 → 订单 → 用券记录 → 积分）与注销（会员 → 订单）都先取会员锁；会员 ID 已清空的订单在取消时由 `release_points` 在库存之后才锁会员行，此时该会员已注销，不会再下单或注销。这依赖 SHOP-TASK-097 之后超时取消逐张订单真实提交（定时任务与每日库存重置都不再在外层事务里连续取消多张订单），不跨订单持有库存与券的锁；模块说明写明了这个锁顺序与这一前提。
+
 - 支付成功：同一事务里、带条件的 UPDATE 命中并写入支付尝试与操作者为 `actor` 的事件之后，调用 `use_coupon`（该单没有用券记录时返回 False，不出错）；再以加锁读（`populate_existing`）重新读取订单的 `member_id`，非空时以加锁读读取会员状态，会员为 active 时调用 `earn_points`，获得积分取订单快照 `points_earned`；会员 ID 为空或会员不是 active 时不发放。重放（同键同请求）在这之前返回，不再核销或发放；支付失败不核销、不发放。
 - 本人取消与超时取消：同一事务里、带条件的 UPDATE 命中并加回库存之后，调用 `release_coupon` 与 `release_points`（游客订单没有用券记录与 redeem 流水，两者都不写；批次已过期时 `release_points` 紧接着写等量的 `expire`，会员已注销时写等量的 `forfeit`），再写事件。UPDATE 未命中时整个事务回滚，不释放；重复取消与重复运行超时取消不重复释放。
 - 视图：`PayOrder`（`pay_orders`）另给 `coupon_discount_sen`、`points_redeemed` 与 `points_earned`，取订单快照（游客订单的快照都为 0）。游客接口 `GET /api/pay/orders` 的每张订单随之多出这三个字段，其余字段不变。
