@@ -247,8 +247,9 @@ def _points_lot(db: Session, acquired_at: datetime) -> int:
     db.flush()
     lot = earn_points(db, member.id, order_id, 10, acquired_at)
     assert lot is not None
+    lot_id = lot.id
     db.commit()
-    return lot.id
+    return lot_id
 
 
 def _expired_entries(db: Session) -> list[int]:
@@ -415,8 +416,7 @@ def test_default_jobs_use_the_fixed_round_limit(
 
 
 def test_points_expiry_job_is_registered_after_existing_jobs() -> None:
-    """ "Failure, concurrency and retry" item 6 requires repeatable,
-    once-effective scheduled jobs."""
+    """DESIGN 1.11「失败、并发与重试」第 6 条：定时任务可重复运行、只生效一次。"""
     default = jobs.default_jobs()
 
     assert [job.name for job in default] == [
@@ -433,7 +433,7 @@ def test_points_expiry_job_is_registered_after_existing_jobs() -> None:
 def test_points_expiry_job_expires_overdue_lots_once(
     db: Session, factory: jobs.SessionFactory, heartbeat: Path, clock: FakeClock
 ) -> None:
-    """DESIGN 1.11 item 3: points lots expire 12 months after being earned, once only."""
+    """DESIGN 1.11「计价、优惠、积分与库存」第 3 条：积分批次取得后 12 个月到期且只生效一次。"""
     overdue = _points_lot(db, START - timedelta(days=400))
     current = _points_lot(db, START)
     runner = _runner([jobs.expire_points_job()], factory, heartbeat, clock)
@@ -453,7 +453,7 @@ def test_points_expiry_job_continues_remaining_lots_next_round(
     clock: FakeClock,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """DESIGN 1.11 item 3: expiry processes overdue lots; remaining lots continue next round."""
+    """DESIGN 1.11「计价、优惠、积分与库存」第 3 条：到期批次分轮处理，余下留给下一轮。"""
     caplog.set_level(logging.INFO, logger="app.jobs")
     lot_ids = [_points_lot(db, START - timedelta(days=400)) for _ in range(3)]
     runner = _runner([jobs.expire_points_job(limit=2)], factory, heartbeat, clock)
@@ -477,27 +477,26 @@ def test_points_expiry_failure_rolls_back_the_round(
     caplog: pytest.LogCaptureFixture,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """DESIGN 1.11 item 3: a failed expiry run does not partially expire a lot."""
-    lot_id = _points_lot(db, START - timedelta(days=400))
+    """DESIGN 1.11「失败、并发与重试」第 6 条：失败的一轮不部分生效。"""
+    _points_lot(db, START - timedelta(days=400))
     caplog.set_level(logging.INFO, logger="app.jobs")
     real = jobs.expire_points
 
     def broken(session: Session, now: datetime, *, batch_size: int) -> int:
-        real(session, now, batch_size)
+        real(session, now, batch_size=batch_size)
         raise RuntimeError("boom")
 
     monkeypatch.setattr(jobs, "expire_points", broken)
     _runner([jobs.expire_points_job()], factory, heartbeat, clock).run_round()
 
     assert _expired_entries(db) == []
-    assert lot_id not in _expired_entries(db)
     assert _job_messages(caplog) == ["job expire_points failed: RuntimeError"]
 
 
 def test_main_expire_points_command_succeeds(
     db: Session, factory: jobs.SessionFactory, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """DESIGN 1.11 item 3: manual expiry provides an operator rerun path."""
+    """DESIGN 1.11「失败、并发与重试」第 6 条：手动命令提供失败后的补跑办法。"""
     lot_id = _points_lot(db, START - timedelta(days=400))
     monkeypatch.setattr(jobs, "configured_session_factory", lambda: factory)
 
@@ -709,9 +708,9 @@ def test_database_unavailable_is_logged_by_class_name_only(
     clock.advance(60)
     runner.run_round()
 
-    # 每轮四个任务（超时取消、SHOP-TASK-032 的每日库存重置、SHOP-TASK-042 的发货满 7 天
-    # 自动确认收货与 SHOP-TASK-072 的删除满 30 天短信验证记录）各开一次会话、各记一条失败；
-    # SHOP-TASK-042 在默认列表末尾加了第三个任务，SHOP-TASK-072 又在其后加了第四个。
+    # 每轮五个任务（超时取消、SHOP-TASK-032 的每日库存重置、SHOP-TASK-042 的发货满 7 天
+    # 自动确认收货、SHOP-TASK-072 的删除满 30 天短信验证记录与 SHOP-TASK-096 的积分到期）
+    # 各开一次会话、各记一条失败；后三项依次在默认列表末尾加入。
     assert len(calls) == 10
     each_round = [
         "job cancel_expired_orders failed: OperationalError",

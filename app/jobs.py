@@ -1,5 +1,5 @@
 """定时任务运行器：常驻进程每分钟执行一轮任务；另有手动执行一次超时取消、当日库存重置、
-发货满 7 天自动确认收货或删除满 30 天短信验证记录的命令。
+发货满 7 天自动确认收货、删除满 30 天短信验证记录或积分到期的命令。
 
 依据 docs/DESIGN.md 1.11（提交 2d13250）：
 - 「计价、优惠、积分与库存」第 6 条：15 分钟未支付自动取消并释放；每天按马来西亚时间重建当日
@@ -7,6 +7,8 @@
 - 「订单与退款状态」第 3 条：待支付订单超时为 demo_cancelled，释放库存（券与积分预占的释放
   由之后的优惠券与积分任务扩展 SHOP-TASK-021 的超时取消路径，这里不变）。若访客不操作，模拟
   发货满 7 天自动确认收货；全部已退的订单冻结（SHOP-TASK-042，见 app/services/auto_complete.py）。
+- 「计价、优惠、积分与库存」第 3 条：积分批次在取得后 12 个月到期（SHOP-TASK-096，见
+  app/services/points.py）。
 - 「失败、并发与重试」第 6 条：定时任务可重复运行、只生效一次；失败有告警与人工补跑办法。
   运营告警邮件接入之前，以容器不健康代替告警（见下文心跳）。
 - 「资料保留」第 4 条：短信验证请求及发送记录短期保留用于防滥用；保留期按 docs/HANDOFF.md 0.41
@@ -18,8 +20,8 @@
     python -m app.jobs reset-stock      执行一次当日库存重置后退出（运营者手动补跑用；只重置当前
                                         马来西亚营业日期，不补过去的日期；已完成也以 0 退出）
     python -m app.jobs complete-shipped 执行一次发货满 7 天自动确认收货后退出（运营者手动补跑用）
-    python -m app.jobs expire-points    expires points once and exits (manual rerun; at most
-                                        POINTS_EXPIRE_BATCH_LIMIT lots)
+    python -m app.jobs expire-points    执行一次积分到期后退出（运营者手动补跑用；每次最多
+                                        POINTS_EXPIRE_BATCH_LIMIT 个批次）
     python -m app.jobs delete-verifications
                                         执行一次删除满 30 天的短信验证记录后退出（运营者手动
                                         补跑用；每次最多 CANCEL_BATCH_LIMIT 条）
@@ -27,9 +29,10 @@
 数据库连接沿用 SHOP_DATABASE_URL 与 app/db/session.py 的会话工厂。
 
 每一轮：
-1. 按任务列表逐个执行任务，每个任务一个新会话。默认任务里的每一个都自己管理事务
-   （own_transactions，见下文）；没有设 own_transactions 的任务在一个独立事务里执行，任务返回
-   后提交，任务里的提交只结束一个保存点（见 run_job）。时间取当前 UTC（与库里一样不带时区）。
+1. 按任务列表逐个执行任务，每个任务一个新会话。除积分到期外的默认任务都自己管理事务
+   （own_transactions，见下文）；积分到期没有设 own_transactions，在一个独立事务里执行，任务返回
+   后由运行器提交，任务里的提交只结束一个保存点（见 run_job）。时间取当前 UTC（与库里一样不带
+   时区）。
    任务抛异常（含数据库不可用）时回滚未提交的部分，只记一条含任务名与异常类名的日志，不退出，
    也不影响同一轮的其他任务与下一轮。
 2. 写心跳文件 HEARTBEAT_PATH（容器的健康检查看它的修改时间）。任一任务已连续失败、且距它
@@ -42,8 +45,10 @@
 任务列表：先超时取消（每轮最多 CANCEL_BATCH_LIMIT 张，剩余的下一轮继续），再每日库存重置
 （当前马来西亚营业日期已有 succeeded 记录时跳过，否则执行；失败只记日志、下一轮重试），再发货
 满 7 天自动确认收货（每轮最多完成 AUTO_COMPLETE_BATCH_LIMIT 张，与超时取消相同），再删除满
-30 天的短信验证记录（每轮最多 VERIFICATION_DELETE_BATCH_LIMIT 条，与超时取消相同）。之后的
-任务按同样方式加入 default_jobs()：写一个 Job（名称与执行函数）。每个任务必须
+30 天的短信验证记录（每轮最多 VERIFICATION_DELETE_BATCH_LIMIT 条，与超时取消相同），最后处理
+积分到期（每轮最多 POINTS_EXPIRE_BATCH_LIMIT 个批次，与超时取消相同）。之后的任务按同样方式加入
+default_jobs()：
+写一个 Job（名称与执行函数）。每个任务必须
 可重复运行且只生效一次（一轮执行到一半失败或运营者手动补跑都会再次运行它），判定本次无需
 执行而跳过也算成功、正常返回，只有真正出错才抛异常。
 
@@ -56,10 +61,11 @@
 自动确认收货也自己管理事务：每张订单锁定订单行之前先结束此前的事务，使锁定成为新事务的
 第一条语句（SHOP-TASK-040 的锁定协议）；放进运行器的外层事务以保存点执行时，
 外层事务的读取快照会让锁定之后的读取看不到等锁期间别人提交的审核、发货或确认。删除短信验证
-记录也自己管理事务：服务删除一批后自己提交，没有到期记录时回滚只读事务。
+记录也自己管理事务：服务删除一批后自己提交，没有到期记录时回滚只读事务。积分到期不自己管理事务：
+服务只 flush，运行器在任务正常返回后提交，异常时回滚整批。
 
 日志只记录任务名、生效条数（超时取消即取消张数，库存重置即 SKU 数，自动确认收货即完成张数，
-删除短信验证记录即删除条数）、营业日期、结果与异常类名，不记录订单号、手机号等个人资料、
+删除短信验证记录即删除条数，积分到期即到期批次数）、营业日期、结果与异常类名，不记录订单号、手机号等个人资料、
 连接串或异常消息原文。
 """
 
@@ -101,7 +107,7 @@ CANCEL_BATCH_LIMIT = 100
 AUTO_COMPLETE_BATCH_LIMIT = CANCEL_BATCH_LIMIT
 # 删除满 30 天的短信验证记录每轮最多删除的条数；剩余的下一轮继续。
 VERIFICATION_DELETE_BATCH_LIMIT = CANCEL_BATCH_LIMIT
-# Points expiry batches processed in each round; remaining batches continue next round.
+# 积分到期每轮最多处理的批次数；剩余的下一轮继续。
 POINTS_EXPIRE_BATCH_LIMIT = CANCEL_BATCH_LIMIT
 # 容器内固定的临时目录路径；docker-compose.yml 里 shop_jobs 的健康检查用同一路径。
 HEARTBEAT_PATH = Path("/tmp/acuven_shop_jobs_heartbeat")
@@ -194,7 +200,7 @@ def delete_verifications_job(limit: int = VERIFICATION_DELETE_BATCH_LIMIT) -> Jo
 
 
 def expire_points_job(limit: int = POINTS_EXPIRE_BATCH_LIMIT) -> Job:
-    """Expire up to limit points lots; the service flushes and the runner commits."""
+    """积分到期：每次最多处理 limit 个批次；服务只 flush，由运行器提交。"""
 
     def run(db: Session, now: datetime) -> int:
         return expire_points(db, now, batch_size=limit)
@@ -204,8 +210,7 @@ def expire_points_job(limit: int = POINTS_EXPIRE_BATCH_LIMIT) -> Job:
 
 def default_jobs() -> list[Job]:
     """run 每轮按顺序执行的任务：先超时取消，再每日库存重置，再发货满 7 天自动确认收货，
-    再删除满 30 天的短信验证记录。"""
-    # The fifth task expires overdue points lots after the existing four jobs.
+    再删除满 30 天的短信验证记录，最后处理积分到期。"""
     return [
         cancel_expired_job(),
         reset_stock_job(),
@@ -457,7 +462,7 @@ def expire_points_once(
     now: Callable[[], datetime] = utc_now,
     limit: int = POINTS_EXPIRE_BATCH_LIMIT,
 ) -> int:
-    """Run points expiry once and return an exit code."""
+    """执行一次积分到期并返回退出码。"""
     if session_factory is None:
         logger.error("database is not configured")
         return EXIT_NOT_CONFIGURED
