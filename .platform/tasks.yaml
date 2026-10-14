@@ -3849,7 +3849,7 @@ tasks:
       按 docs/DESIGN.md 1.11「权限与资料保护」第 6 条（会员仅能访问自己的资料）与 docs/UX.md 0.10 P13、docs/UX-COPY.md 0.10（我的积分；我的优惠券：可用券对全部会员相同、使用记录，Q19），
       在 SHOP-TASK-095 的查询函数与 SHOP-TASK-085 的可用券、使用记录函数之上提供会员中心的两个只读接口。不做页面，不改设计。
       设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46（优惠券与积分）。拆分：接口层（4 个允许路径），2026-10-13 由原 SHOP-TASK-095 拆出。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-095
     acceptance_criteria:
