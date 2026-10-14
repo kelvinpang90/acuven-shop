@@ -90,7 +90,11 @@ def _earned_lot(db: Session, variant_id: int, acquired_at: datetime, points: int
 
 
 def _expired_entries(db: Session) -> list[PointEntry]:
-    return list(db.scalars(select(PointEntry).where(PointEntry.kind == KIND_EXPIRE)))
+    entries = list(db.scalars(select(PointEntry).where(PointEntry.kind == KIND_EXPIRE)))
+    # This read starts a transaction.  End it so a following job round observes
+    # the transaction committed by its separate runner session.
+    db.rollback()
+    return entries
 
 
 # ---------------------------------------------------------------------------
@@ -435,10 +439,15 @@ def test_expire_points_job_expires_only_due_lots_and_is_idempotent(
 
 
 def test_expire_points_job_leaves_over_limit_lots_for_next_round(
-    db: Session, factory: jobs.SessionFactory, heartbeat: Path, clock: FakeClock
+    db: Session,
+    factory: jobs.SessionFactory,
+    heartbeat: Path,
+    clock: FakeClock,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     """「失败、并发与重试」第 6 条「可重复运行」：超过每批上限的到期积分由下一轮继续，
     直到所有批次各写一次 expire。"""
+    caplog.set_level(logging.INFO, logger="app.jobs")
     variant_id = _variant(db)
     limit = jobs.POINTS_EXPIRE_BATCH_LIMIT
     for _ in range(limit + 1):
@@ -447,8 +456,13 @@ def test_expire_points_job_leaves_over_limit_lots_for_next_round(
 
     runner.run_round()
     assert len(_expired_entries(db)) == limit
+    clock.advance(60)
     runner.run_round()
     assert len(_expired_entries(db)) == limit + 1
+    assert _job_messages(caplog) == [
+        f"job expire_points done: {limit} changed",
+        "job expire_points done: 1 changed",
+    ]
 
 
 def test_expire_points_failure_rolls_back_and_logs_only_task_and_class(
