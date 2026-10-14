@@ -2126,6 +2126,12 @@
 - 留给之后的任务：会员模式（凭会员会话的积分预估）随会员订单接口（SHOP-TASK-105）提供；P10 前端显示 `refund.points_back`、`refund.points_reversed` 留给之后的前端任务（规划块「已阻塞」里的会员中心 P13 与退款申请会员模式那一项）。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.11 原句、UX 0.10 P10 与 HANDOFF 0.46 自查，人工核对提交申请接口的代码路径未改。`tests/test_refund_points_estimate_api.py` 用 `TestClient`（`https://testserver`）与 SQLite 内存库（StaticPool，每个连接打开外键检查并断言已打开；写法照 `tests/test_refunds.py`），会员、订单与逐件快照按模型写入，积分批次与流水经 SHOP-TASK-086 的 `earn_points`、`reserve_points` 准备，已有申请经 `submit_refund` 提交，查单授权经 `issue_order_access` 签发，以外包原函数的替身记录 `estimate_refund_points` 的入参；未加依赖。每条测试写明它守住的是设计或 UX 的哪一句。覆盖：DESIGN 第 4 条算例选第一件 A 得返还 120、追回 8；全部三件得 300、19；抵扣批次已过期时返还为 0、追回仍为 8；第一件 A 被审核中的申请占用时选的是第二件 A（追回 7）；游客订单 `member_order` 为 false、两个数为 0 且不调用预估函数；接口前后积分批次、积分流水、申请、申请行与逐件记录都不变；件数超过购买数或剩余可退件 409；待支付订单 409 `order_not_refundable`；退款期已过 409 `refund_window_closed`；行序不属于该订单 422 不回显；没有 cookie、只有 `guest_checkout` 授权、只有另一张订单的授权都 401；413 先于 415、422 与 401，415 先于 401，422（多出字段、行序重复、件数 0 或 100、21 行、没有行）先于 401 且不回显；各响应带 no-store；没有 `app.` 日志。未在真实浏览器或真 MySQL 上验证。这些测试与已有后端测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
 
+### SHOP-TASK-108 会员中心的积分与优惠券查询接口
+
+- [x] 提供 `GET /api/member/points` 与 `GET /api/member/coupons`：均以会员会话授权、只读且响应带 no-store。积分返回 `balance`、`pending`、`next_expiry` 与 `history`；优惠券返回全体会员相同的可用券（`code`、类型、金额或百分比、最低消费与有效截止时间）及仅当前会员的已核销记录（`code`、订单号、折扣）。内部无时区 UTC 时间在响应中明确为 UTC；最近积分到期日沿用 SHOP-TASK-095 的马来西亚日期。
+- 偏离与取舍：无设计偏离；可用券不因总次数或当前会员已用次数耗尽而隐藏，符合 UX 0.10 Q19；不做 P13 前端页面，留给之后的前端任务。
+- 验证到什么程度：`tests/test_member_account_api.py` 按 `tests/test_member_pw_api.py` 的 SQLite 内存库、StaticPool、外键检查、会话依赖与 HTTPS TestClient 方式准备真实会员会话；覆盖未登录与已撤销会话、仅本人积分流水与已核销券（排除本人的预占券）、空到期、共享且即使用尽仍可见的券、UTC 时间、no-store 与读取不写库（读取的会员、会话、订单、积分批次和流水、优惠券及用券记录全部列值不变）。每条测试说明守住的 DESIGN、UX 或 Kelvin 决定；由 PR 必需 CI 的 backend 执行，未在真实 MySQL 上验证。未加依赖。
+
 ### SHOP-TASK-095 会员中心的积分概览与积分明细查询
 
 - [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「计价、优惠、积分与库存」第 3、5 条及「权限与资料保护」第 6 条，在 `app/services/member_account.py` 增加会员积分的只读查询；设计闸门为 DESIGN 1.11 与 HANDOFF 0.46。概览复用可用余额与待抵扣的账本口径，最近到期按马来西亚日期合并，排除已过期和余额为零的批次。明细按订单与显示类型合并：`earned` 对应 earn，`redeemed` 对应 redeem 与 release，`expired` 对应 expire，`returned` 对应 refund_return，`reversed` 对应 refund_reversal 与 debt_add（后者按负数显示）；debt_repay 与 forfeit 不显示。按最近流水、订单 ID 与固定显示类型顺序倒排，最多 100 行。
