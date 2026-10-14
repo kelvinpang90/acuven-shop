@@ -18,6 +18,8 @@
     python -m app.jobs reset-stock      执行一次当日库存重置后退出（运营者手动补跑用；只重置当前
                                         马来西亚营业日期，不补过去的日期；已完成也以 0 退出）
     python -m app.jobs complete-shipped 执行一次发货满 7 天自动确认收货后退出（运营者手动补跑用）
+    python -m app.jobs expire-points    expires points once and exits (manual rerun; at most
+                                        POINTS_EXPIRE_BATCH_LIMIT lots)
     python -m app.jobs delete-verifications
                                         执行一次删除满 30 天的短信验证记录后退出（运营者手动
                                         补跑用；每次最多 CANCEL_BATCH_LIMIT 条）
@@ -83,6 +85,7 @@ from app.core.config import get_settings
 from app.db.session import _session_factory
 from app.services.auto_complete import auto_complete_shipped_orders
 from app.services.payment import expire_overdue_orders
+from app.services.points import expire_points
 from app.services.sms_retention import delete_expired_verifications
 from app.services.stock_reset import business_date, reset_completed, reset_daily_stock
 
@@ -98,6 +101,8 @@ CANCEL_BATCH_LIMIT = 100
 AUTO_COMPLETE_BATCH_LIMIT = CANCEL_BATCH_LIMIT
 # 删除满 30 天的短信验证记录每轮最多删除的条数；剩余的下一轮继续。
 VERIFICATION_DELETE_BATCH_LIMIT = CANCEL_BATCH_LIMIT
+# Points expiry batches processed in each round; remaining batches continue next round.
+POINTS_EXPIRE_BATCH_LIMIT = CANCEL_BATCH_LIMIT
 # 容器内固定的临时目录路径；docker-compose.yml 里 shop_jobs 的健康检查用同一路径。
 HEARTBEAT_PATH = Path("/tmp/acuven_shop_jobs_heartbeat")
 # 收到停止信号时一轮仍在执行，最多再等这么久；须短于验收的 10 秒。
@@ -188,14 +193,25 @@ def delete_verifications_job(limit: int = VERIFICATION_DELETE_BATCH_LIMIT) -> Jo
     return Job(name="delete_expired_verifications", run=run, own_transactions=True)
 
 
+def expire_points_job(limit: int = POINTS_EXPIRE_BATCH_LIMIT) -> Job:
+    """Expire up to limit points lots; the service flushes and the runner commits."""
+
+    def run(db: Session, now: datetime) -> int:
+        return expire_points(db, now, batch_size=limit)
+
+    return Job(name="expire_points", run=run)
+
+
 def default_jobs() -> list[Job]:
     """run 每轮按顺序执行的任务：先超时取消，再每日库存重置，再发货满 7 天自动确认收货，
     再删除满 30 天的短信验证记录。"""
+    # The fifth task expires overdue points lots after the existing four jobs.
     return [
         cancel_expired_job(),
         reset_stock_job(),
         auto_complete_job(),
         delete_verifications_job(),
+        expire_points_job(),
     ]
 
 
@@ -435,6 +451,26 @@ def delete_verifications(
     return EXIT_OK
 
 
+def expire_points_once(
+    session_factory: SessionFactory | None,
+    *,
+    now: Callable[[], datetime] = utc_now,
+    limit: int = POINTS_EXPIRE_BATCH_LIMIT,
+) -> int:
+    """Run points expiry once and return an exit code."""
+    if session_factory is None:
+        logger.error("database is not configured")
+        return EXIT_NOT_CONFIGURED
+    job = expire_points_job(limit)
+    try:
+        count = run_job(job, session_factory, now())
+    except Exception as exc:
+        logger.error("job %s failed: %s", job.name, type(exc).__name__)
+        return EXIT_FAILED
+    logger.info("job %s done: %d changed", job.name, count)
+    return EXIT_OK
+
+
 def configured_session_factory() -> SessionFactory | None:
     """按 SHOP_DATABASE_URL 取会话工厂；未配置为空。引擎在第一次开会话时才建。"""
     database_url = get_settings().database_url
@@ -453,6 +489,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands.add_parser(
         "delete-verifications", help="delete SMS verification records 30 days old once and exit"
     )
+    commands.add_parser("expire-points", help="expire points once and exit")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -465,6 +502,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return complete_shipped(session_factory)
     if args.command == "delete-verifications":
         return delete_verifications(session_factory)
+    if args.command == "expire-points":
+        return expire_points_once(session_factory)
 
     runner = Runner(default_jobs(), session_factory, force_exit=force_exit)
     install_signal_handlers(runner)

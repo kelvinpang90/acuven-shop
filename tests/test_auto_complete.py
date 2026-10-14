@@ -667,7 +667,9 @@ def test_job_is_registered_after_existing_jobs_with_own_transactions() -> None:
         # 注册，所以下一行的 default[-1] 现在检查的是它，auto_complete_shipped 由再下一行检查。
         "delete_expired_verifications",
     ]
-    assert default[-1].own_transactions is True
+    assert default[3].own_transactions is True
+    assert len(default) == 5
+    assert default[4].name == "expire_points"
     assert jobs.auto_complete_job().own_transactions is True
     assert jobs.AUTO_COMPLETE_BATCH_LIMIT == jobs.CANCEL_BATCH_LIMIT
 
