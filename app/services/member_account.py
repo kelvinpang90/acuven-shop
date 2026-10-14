@@ -81,17 +81,19 @@ def points_overview(db: Session, member_id: int, now: datetime) -> PointsOvervie
     member_id = _positive_id(member_id, "member_id")
     now = _naive_second(now)
 
-    available = available_points(db, member_id, now)
-    debt = debt_points(db, member_id)
     remaining = func.sum(PointEntry.points).label("remaining")
-    lots = db.execute(
-        select(PointLot.expires_at, remaining)
-        .join(PointEntry, PointEntry.lot_id == PointLot.id)
-        .where(PointLot.member_id == member_id, PointLot.expires_at >= now)
-        .group_by(PointLot.id, PointLot.expires_at)
-        .having(remaining > 0)
-        .order_by(PointLot.expires_at)
-    ).all()
+    # 只读：不让查询把会话里待写的对象自动 flush 出去。
+    with db.no_autoflush:
+        available = available_points(db, member_id, now)
+        debt = debt_points(db, member_id)
+        lots = db.execute(
+            select(PointLot.expires_at, remaining)
+            .join(PointEntry, PointEntry.lot_id == PointLot.id)
+            .where(PointLot.member_id == member_id, PointLot.expires_at >= now)
+            .group_by(PointLot.id, PointLot.expires_at)
+            .having(remaining > 0)
+            .order_by(PointLot.expires_at)
+        ).all()
     if not lots:
         return PointsOverview(available, debt, None, None)
 
@@ -108,17 +110,18 @@ def points_overview(db: Session, member_id: int, now: datetime) -> PointsOvervie
 def point_activity(db: Session, member_id: int) -> list[PointActivity]:
     """Return at most 100 displayable point groups for a single member."""
     member_id = _positive_id(member_id, "member_id")
-    rows = db.execute(
-        select(
-            PointEntry.order_id,
-            Order.order_number,
-            PointEntry.kind,
-            PointEntry.points,
-            PointEntry.created_at,
-        )
-        .join(Order, Order.id == PointEntry.order_id)
-        .where(PointEntry.member_id == member_id)
-    ).all()
+    with db.no_autoflush:
+        rows = db.execute(
+            select(
+                PointEntry.order_id,
+                Order.order_number,
+                PointEntry.kind,
+                PointEntry.points,
+                PointEntry.created_at,
+            )
+            .join(Order, Order.id == PointEntry.order_id)
+            .where(PointEntry.member_id == member_id)
+        ).all()
 
     grouped: dict[tuple[int, str], list[object]] = {}
     for row in rows:

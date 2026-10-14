@@ -168,9 +168,11 @@ def test_overview_groups_the_nearest_malaysia_expiry_and_omits_empty_lots(
 def test_queries_do_not_flush_or_write_and_activity_is_limited(db: Session) -> None:
     """Task acceptance caps activity at 100 rows and requires both queries to be read-only."""
     member = _member(db)
+    orders = []
     for index in range(101):
         order = _order(db, member, f"limit-{index}")
         earn_points(db, member.id, order.id, 1, T + timedelta(seconds=index))
+        orders.append(order)
     before = db.execute(text("SELECT COUNT(*) FROM point_entries")).scalar_one()
     statements: list[str] = []
 
@@ -179,7 +181,7 @@ def test_queries_do_not_flush_or_write_and_activity_is_limited(db: Session) -> N
 
     event.listen(db.bind, "before_cursor_execute", record_statement)
     try:
-        assert len(point_activity(db, member.id)) == 100
+        activity = point_activity(db, member.id)
         points_overview(db, member.id, T)
     finally:
         event.remove(db.bind, "before_cursor_execute", record_statement)
@@ -190,3 +192,50 @@ def test_queries_do_not_flush_or_write_and_activity_is_limited(db: Session) -> N
         for statement in statements
     )
     assert db.execute(text("SELECT COUNT(*) FROM point_entries")).scalar_one() == before
+    # The cap keeps the newest 100 groups; the oldest one is the row that drops off.
+    assert [row.order_number for row in activity] == [
+        order.order_number for order in reversed(orders[1:])
+    ]
+
+
+def test_queries_leave_pending_session_objects_unflushed(db: Session) -> None:
+    """Task acceptance says both queries neither write nor flush the caller's session."""
+    member = _member(db)
+    earn_points(db, member.id, _order(db, member, "flush").id, 3, T)
+    pending = Member(phone="+60129999999", status=MEMBER_ACTIVE, created_at=T)
+    db.add(pending)
+
+    point_activity(db, member.id)
+    points_overview(db, member.id, T)
+
+    assert pending in db.new
+    assert pending.id is None
+
+
+def test_activity_orders_same_moment_groups_by_order_id_descending(db: Session) -> None:
+    """Task acceptance orders groups at the same moment by order ID from largest to smallest."""
+    member = _member(db)
+    first, second = _order(db, member, "same-1"), _order(db, member, "same-2")
+    earn_points(db, member.id, first.id, 1, T)
+    earn_points(db, member.id, second.id, 2, T)
+
+    assert [row.order_number for row in point_activity(db, member.id)] == [
+        second.order_number,
+        first.order_number,
+    ]
+
+
+def test_overview_skips_a_used_up_lot_even_when_it_expires_first(db: Session) -> None:
+    """UX P13 shows the nearest expiry of points the member can still use, not spent lots."""
+    member = _member(db)
+    earn_points(db, member.id, _order(db, member, "early").id, 7, datetime(2025, 10, 14, 0, 0))
+    earn_points(db, member.id, _order(db, member, "late").id, 4, T - timedelta(days=10))
+    # Redeeming takes the earliest-expiring lot first, which uses up the 2026-10-14 lot.
+    reserve_points(db, member.id, _order(db, member, "spend").id, 7, T)
+
+    overview = points_overview(db, member.id, T)
+    assert (
+        overview.available_points,
+        overview.nearest_expiry_date.isoformat(),
+        overview.nearest_expiry_points,
+    ) == (4, "2027-10-04", 4)
