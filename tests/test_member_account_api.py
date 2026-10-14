@@ -18,7 +18,7 @@ from app.db.base import Base
 from app.db.session import get_session
 from app.main import create_app
 from app.models import Coupon, CouponUse, Member, MemberSession, Order, PointEntry, PointLot
-from app.models.coupon import TYPE_FIXED, TYPE_PERCENT, USE_USED
+from app.models.coupon import TYPE_FIXED, TYPE_PERCENT, USE_RESERVED, USE_USED
 from app.models.order import CLAIM_NOT_CLAIMABLE, STATUS_PAID
 from app.models.points import KIND_EARN
 from app.services.member_auth import issue_member_session, revoke_member_session
@@ -123,18 +123,19 @@ def add_order(session: Session, member_id: int, number: str) -> Order:
     return order
 
 
-def count_rows(engine: Engine) -> tuple[int, ...]:
+def read_table_contents(engine: Engine) -> tuple[tuple[tuple[object, ...], ...], ...]:
+    """Read every table these endpoints may inspect, preserving all column values."""
     with Session(engine) as session:
         return tuple(
-            len(session.scalars(statement).all())
-            for statement in (
-                select(Member),
-                select(MemberSession),
-                select(Order),
-                select(PointLot),
-                select(PointEntry),
-                select(Coupon),
-                select(CouponUse),
+            tuple(session.execute(select(*model.__table__.c).order_by(model.id)).tuples())
+            for model in (
+                Member,
+                MemberSession,
+                Order,
+                PointLot,
+                PointEntry,
+                Coupon,
+                CouponUse,
             )
         )
 
@@ -203,7 +204,7 @@ def test_points_are_member_scoped_typed_and_read_only(client: TestClient, engine
         )
         session.commit()
     token = session_cookie(engine, first)
-    before = count_rows(engine)
+    before = read_table_contents(engine)
     response = client.get(POINTS_URL, cookies={COOKIE_NAME: token})
     assert response.status_code == 200
     assert response.headers["cache-control"] == NO_STORE
@@ -221,31 +222,32 @@ def test_points_are_member_scoped_typed_and_read_only(client: TestClient, engine
             "created_at": stamp.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z"),
         }
     ]
-    assert count_rows(engine) == before
+    assert read_table_contents(engine) == before
 
 
 def test_points_next_expiry_is_null_when_no_usable_lots(client: TestClient, engine: Engine) -> None:
     """UX 0.10 P13：没有可显示的积分到期批次时不虚构到期信息。"""
     member_id = add_member(engine, "+60123456789")
     token = session_cookie(engine, member_id)
-    before = count_rows(engine)
+    before = read_table_contents(engine)
     response = client.get(POINTS_URL, cookies={COOKIE_NAME: token})
     assert response.status_code == 200
     assert response.headers["cache-control"] == NO_STORE
     assert response.json() == {"balance": 0, "pending": 0, "next_expiry": None, "history": []}
-    assert count_rows(engine) == before
+    assert read_table_contents(engine) == before
 
 
 def test_coupons_are_shared_but_used_history_is_member_scoped_and_read_only(
     client: TestClient, engine: Engine, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """UX 0.10 P13、Q19：可用券全员相同，使用记录仅属于当前会员。"""
+    """UX 0.10 P13、Q19：可用券全员相同，使用记录仅列当前会员的已核销券。"""
     first = add_member(engine, "+60123456789")
     second = add_member(engine, "+60123456780")
     stamp = now()
     with Session(engine) as session:
         mine = add_order(session, first, "0000000000000001")
         other = add_order(session, second, "0000000000000002")
+        reserved = add_order(session, first, "0000000000000003")
         fixed = Coupon(
             code="SAVE10",
             coupon_type=TYPE_FIXED,
@@ -292,12 +294,21 @@ def test_coupons_are_shared_but_used_history_is_member_scoped_and_read_only(
                     created_at=stamp,
                     updated_at=stamp,
                 ),
+                CouponUse(
+                    coupon_id=percent.id,
+                    order_id=reserved.id,
+                    member_id=first,
+                    status=USE_RESERVED,
+                    coupon_discount_sen=200,
+                    created_at=stamp,
+                    updated_at=stamp,
+                ),
             ]
         )
         session.commit()
     first_token = session_cookie(engine, first)
     second_token = session_cookie(engine, second)
-    before = count_rows(engine)
+    before = read_table_contents(engine)
     caplog.set_level(logging.DEBUG)
     first_response = client.get(COUPONS_URL, cookies={COOKIE_NAME: first_token})
     second_response = client.get(COUPONS_URL, cookies={COOKIE_NAME: second_token})
@@ -325,8 +336,9 @@ def test_coupons_are_shared_but_used_history_is_member_scoped_and_read_only(
     assert first_response.json()["used"] == [
         {"code": "SAVE10", "order_number": "0000000000000001", "discount_sen": 100}
     ]
+    assert all(item["order_number"] != "0000000000000003" for item in first_response.json()["used"])
     assert second_response.json()["used"] == [
         {"code": "SAVE20", "order_number": "0000000000000002", "discount_sen": 200}
     ]
-    assert count_rows(engine) == before
+    assert read_table_contents(engine) == before
     assert [record for record in caplog.records if record.name.startswith("app")] == []
