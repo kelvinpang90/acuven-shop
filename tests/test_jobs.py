@@ -47,7 +47,12 @@ from app.models import (
     ProductVariant,
 )
 from app.models.member import MEMBER_ACTIVE
-from app.models.order import ACTOR_SYSTEM, STATUS_AWAITING_PAYMENT, STATUS_CANCELLED
+from app.models.order import (
+    ACTOR_SYSTEM,
+    CLAIM_NOT_CLAIMABLE,
+    STATUS_AWAITING_PAYMENT,
+    STATUS_CANCELLED,
+)
 from app.models.points import KIND_EXPIRE
 from app.services import payment
 from app.services.order_rules import generate_order_number
@@ -68,7 +73,7 @@ def _cancel_only() -> list[jobs.Job]:
 
 
 def _earned_lot(db: Session, variant_id: int, acquired_at: datetime, points: int = 10) -> PointLot:
-    """为任务测试建立一个带来源订单的积分批次。"""
+    """为任务测试建立一个带会员来源订单的积分批次。"""
     member = Member(phone=f"+601{next(_POINT_PHONE)}", status=MEMBER_ACTIVE, created_at=acquired_at)
     db.add(member)
     db.flush()
@@ -76,6 +81,7 @@ def _earned_lot(db: Session, variant_id: int, acquired_at: datetime, points: int
     order = db.get(Order, order_id)
     assert order is not None
     order.member_id = member.id
+    order.claim_status = CLAIM_NOT_CLAIMABLE
     db.flush()
     lot = earn_points(db, member.id, order_id, points, acquired_at)
     assert lot is not None
@@ -675,15 +681,16 @@ def test_database_unavailable_is_logged_by_class_name_only(
     clock.advance(60)
     runner.run_round()
 
-    # 每轮四个任务（超时取消、SHOP-TASK-032 的每日库存重置、SHOP-TASK-042 的发货满 7 天
-    # 自动确认收货与 SHOP-TASK-072 的删除满 30 天短信验证记录）各开一次会话、各记一条失败；
-    # SHOP-TASK-042 在默认列表末尾加了第三个任务，SHOP-TASK-072 又在其后加了第四个。
-    assert len(calls) == 8
+    # 每轮五个任务（超时取消、SHOP-TASK-032 的每日库存重置、SHOP-TASK-042 的发货满 7 天
+    # 自动确认收货、SHOP-TASK-072 的删除满 30 天短信验证记录与 SHOP-TASK-096 的积分到期）各开
+    # 一次会话、各记一条失败；SHOP-TASK-096 在默认列表末尾加入第五项。
+    assert len(calls) == 10
     each_round = [
         "job cancel_expired_orders failed: OperationalError",
         "job reset_daily_stock failed: OperationalError",
         "job auto_complete_shipped failed: OperationalError",
         "job delete_expired_verifications failed: OperationalError",
+        "job expire_points failed: OperationalError",
     ]
     assert _job_messages(caplog) == each_round * 2
     assert all(SECRET not in message for message in caplog.messages)

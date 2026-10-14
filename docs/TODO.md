@@ -2141,7 +2141,7 @@
 
 - [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「计价、优惠、积分与库存」第 3 条与「失败、并发与重试」第 6 条，并按 HANDOFF 0.46 的 Kelvin 决定，把 SHOP-TASK-086 的 `expire_points` 加入 `app/jobs.py` 默认任务的最后一项。每轮及 `python -m app.jobs expire-points` 手动补跑最多处理 `POINTS_EXPIRE_BATCH_LIMIT` 个批次；该常量取 `CANCEL_BATCH_LIMIT` 的值，服务只 flush，由运行器提交事务。设计闸门：DESIGN 1.11（提交 `2d13250`）与 HANDOFF 0.46（积分）。
 - 偏离与取舍：未改积分服务、模型、迁移、部署配置或设计；运营告警邮件仍留给运营告警邮件任务接入，在此之前沿用运行器的连续失败停写心跳机制。
-- 验证到什么程度：`tests/test_jobs.py` 覆盖任务排序、非自管事务、到期/未到期批次、重复运行、跨轮批次上限、异常回滚与只记录任务名和异常类名，以及 `expire-points` 以 0 退出；`tests/test_auto_complete.py`、`tests/test_sms_retention.py` 仅将默认任务列表断言扩至第五项。后端测试由 PR 必需 CI 的 backend 执行；未在真实 MySQL 上验证，未新增依赖。
+- 验证到什么程度：`tests/test_jobs.py` 覆盖任务排序、非自管事务、到期/未到期批次、重复运行、跨轮批次上限、异常回滚与只记录任务名和异常类名，以及 `expire-points` 以 0 退出；其中积分批次的准备使用符合认领状态约束的会员订单，数据库不可用的既有默认任务失败日志断言随第五项任务调整。`tests/test_auto_complete.py`、`tests/test_sms_retention.py` 仅将默认任务列表断言扩至第五项。后端测试由 PR 必需 CI 的 backend 执行；未在真实 MySQL 上验证，未新增依赖。
 
 ### SHOP-TASK-094 会员注销时作废积分余额
 
