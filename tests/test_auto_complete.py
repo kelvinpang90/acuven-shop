@@ -659,15 +659,17 @@ def test_job_is_registered_after_existing_jobs_with_own_transactions() -> None:
     事务与保存点），单轮上限与超时取消相同。"""
     default = jobs.default_jobs()
 
-    assert [job.name for job in default] == [
+    assert [job.name for job in default][:4] == [
         "cancel_expired_orders",
         "reset_daily_stock",
         "auto_complete_shipped",
         # SHOP-TASK-072 在其后加了删除满 30 天的短信验证记录；它同样以 own_transactions=True
-        # 注册，所以下一行的 default[-1] 现在检查的是它，auto_complete_shipped 由再下一行检查。
+        # 注册，以下一行检查它；auto_complete_shipped 由再下一行检查。
         "delete_expired_verifications",
     ]
-    assert default[-1].own_transactions is True
+    assert default[3].own_transactions is True
+    assert len(default) == 5
+    assert default[4].name == "expire_points"
     assert jobs.auto_complete_job().own_transactions is True
     assert jobs.AUTO_COMPLETE_BATCH_LIMIT == jobs.CANCEL_BATCH_LIMIT
 

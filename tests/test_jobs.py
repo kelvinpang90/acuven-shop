@@ -34,10 +34,27 @@ from sqlalchemy.pool import StaticPool
 from app import jobs
 from app.core.config import Settings
 from app.db.base import Base
-from app.models import Category, Order, OrderEvent, OrderItem, Product, ProductVariant
-from app.models.order import ACTOR_SYSTEM, STATUS_AWAITING_PAYMENT, STATUS_CANCELLED
+from app.models import (
+    Category,
+    Member,
+    Order,
+    OrderEvent,
+    OrderItem,
+    PointEntry,
+    Product,
+    ProductVariant,
+)
+from app.models.member import MEMBER_ACTIVE
+from app.models.order import (
+    ACTOR_SYSTEM,
+    CLAIM_NOT_CLAIMABLE,
+    STATUS_AWAITING_PAYMENT,
+    STATUS_CANCELLED,
+)
+from app.models.points import KIND_EXPIRE
 from app.services import payment
 from app.services.order_rules import generate_order_number
+from app.services.points import earn_points
 
 START = datetime(2026, 10, 5, 3, 0, 0)
 PRICE = 1500
@@ -215,6 +232,32 @@ def _order(db: Session, variant_id: int, expires_at: datetime, quantity: int = 2
     return order_id
 
 
+def _points_lot(db: Session, acquired_at: datetime) -> int:
+    """Create an active member's non-claimable order and its earned-points lot."""
+    member = Member(
+        phone=f"+601{generate_order_number()[-8:]}", status=MEMBER_ACTIVE, created_at=START
+    )
+    db.add(member)
+    db.flush()
+    order_id = _order(db, _variant(db), START)
+    order = db.get(Order, order_id)
+    assert order is not None
+    order.member_id = member.id
+    order.claim_status = CLAIM_NOT_CLAIMABLE
+    db.flush()
+    lot = earn_points(db, member.id, order_id, 10, acquired_at)
+    assert lot is not None
+    lot_id = lot.id
+    db.commit()
+    return lot_id
+
+
+def _expired_entries(db: Session) -> list[int]:
+    values = list(db.scalars(select(PointEntry.lot_id).where(PointEntry.kind == KIND_EXPIRE)))
+    db.rollback()
+    return values
+
+
 def _status(db: Session, order_id: int) -> str:
     db.expire_all()
     status = db.get(Order, order_id).status
@@ -361,12 +404,104 @@ def test_default_jobs_use_the_fixed_round_limit(
     statuses = [_status(db, i) for i in order_ids]
     assert statuses.count(STATUS_CANCELLED) == limit
     assert statuses[-1] == STATUS_AWAITING_PAYMENT
-    assert [job.name for job in jobs.default_jobs()] == [
+    default = jobs.default_jobs()
+    assert [job.name for job in default][:4] == [
         "cancel_expired_orders",
         "reset_daily_stock",
         "auto_complete_shipped",
         "delete_expired_verifications",
     ]
+    assert len(default) == 5
+    assert default[4].name == "expire_points"
+
+
+def test_points_expiry_job_is_registered_after_existing_jobs() -> None:
+    """DESIGN 1.11「失败、并发与重试」第 6 条：定时任务可重复运行、只生效一次。"""
+    default = jobs.default_jobs()
+
+    assert [job.name for job in default] == [
+        "cancel_expired_orders",
+        "reset_daily_stock",
+        "auto_complete_shipped",
+        "delete_expired_verifications",
+        "expire_points",
+    ]
+    assert default[4].own_transactions is False
+    assert jobs.POINTS_EXPIRE_BATCH_LIMIT == jobs.CANCEL_BATCH_LIMIT
+
+
+def test_points_expiry_job_expires_overdue_lots_once(
+    db: Session, factory: jobs.SessionFactory, heartbeat: Path, clock: FakeClock
+) -> None:
+    """DESIGN 1.11「计价、优惠、积分与库存」第 3 条：积分批次取得后 12 个月到期且只生效一次。"""
+    overdue = _points_lot(db, START - timedelta(days=400))
+    current = _points_lot(db, START)
+    runner = _runner([jobs.expire_points_job()], factory, heartbeat, clock)
+
+    runner.run_round()
+    assert _expired_entries(db) == [overdue]
+    clock.advance(60)
+    runner.run_round()
+    assert _expired_entries(db) == [overdue]
+    assert current not in _expired_entries(db)
+
+
+def test_points_expiry_job_continues_remaining_lots_next_round(
+    db: Session,
+    factory: jobs.SessionFactory,
+    heartbeat: Path,
+    clock: FakeClock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """DESIGN 1.11「计价、优惠、积分与库存」第 3 条：到期批次分轮处理，余下留给下一轮。"""
+    caplog.set_level(logging.INFO, logger="app.jobs")
+    lot_ids = [_points_lot(db, START - timedelta(days=400)) for _ in range(3)]
+    runner = _runner([jobs.expire_points_job(limit=2)], factory, heartbeat, clock)
+
+    runner.run_round()
+    assert _expired_entries(db) == lot_ids[:2]
+    clock.advance(60)
+    runner.run_round()
+    assert _expired_entries(db) == lot_ids
+    assert _job_messages(caplog) == [
+        "job expire_points done: 2 changed",
+        "job expire_points done: 1 changed",
+    ]
+
+
+def test_points_expiry_failure_rolls_back_the_round(
+    db: Session,
+    factory: jobs.SessionFactory,
+    heartbeat: Path,
+    clock: FakeClock,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """DESIGN 1.11「失败、并发与重试」第 6 条：失败的一轮不部分生效。"""
+    _points_lot(db, START - timedelta(days=400))
+    caplog.set_level(logging.INFO, logger="app.jobs")
+    real = jobs.expire_points
+
+    def broken(session: Session, now: datetime, *, batch_size: int) -> int:
+        real(session, now, batch_size=batch_size)
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(jobs, "expire_points", broken)
+    _runner([jobs.expire_points_job()], factory, heartbeat, clock).run_round()
+
+    assert _expired_entries(db) == []
+    assert _job_messages(caplog) == ["job expire_points failed: RuntimeError"]
+
+
+def test_main_expire_points_command_succeeds(
+    db: Session, factory: jobs.SessionFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """DESIGN 1.11「失败、并发与重试」第 6 条：手动命令提供失败后的补跑办法。"""
+    lot_id = _points_lot(db, START - timedelta(days=400))
+    monkeypatch.setattr(jobs, "configured_session_factory", lambda: factory)
+
+    assert jobs.main(["expire-points"]) == jobs.EXIT_OK
+    assert _expired_entries(db) == [lot_id]
 
 
 def test_default_clock_is_naive_utc() -> None:
@@ -573,15 +708,16 @@ def test_database_unavailable_is_logged_by_class_name_only(
     clock.advance(60)
     runner.run_round()
 
-    # 每轮四个任务（超时取消、SHOP-TASK-032 的每日库存重置、SHOP-TASK-042 的发货满 7 天
-    # 自动确认收货与 SHOP-TASK-072 的删除满 30 天短信验证记录）各开一次会话、各记一条失败；
-    # SHOP-TASK-042 在默认列表末尾加了第三个任务，SHOP-TASK-072 又在其后加了第四个。
-    assert len(calls) == 8
+    # 每轮五个任务（超时取消、SHOP-TASK-032 的每日库存重置、SHOP-TASK-042 的发货满 7 天
+    # 自动确认收货、SHOP-TASK-072 的删除满 30 天短信验证记录与 SHOP-TASK-096 的积分到期）
+    # 各开一次会话、各记一条失败；后三项依次在默认列表末尾加入。
+    assert len(calls) == 10
     each_round = [
         "job cancel_expired_orders failed: OperationalError",
         "job reset_daily_stock failed: OperationalError",
         "job auto_complete_shipped failed: OperationalError",
         "job delete_expired_verifications failed: OperationalError",
+        "job expire_points failed: OperationalError",
     ]
     assert _job_messages(caplog) == each_round * 2
     assert all(SECRET not in message for message in caplog.messages)

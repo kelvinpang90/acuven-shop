@@ -2131,6 +2131,13 @@
 - 偏离与取舍：无设计偏离；可用券不因总次数或当前会员已用次数耗尽而隐藏，符合 UX 0.10 Q19；不做 P13 前端页面，留给之后的前端任务。
 - 验证到什么程度：`tests/test_member_account_api.py` 按 `tests/test_member_pw_api.py` 的 SQLite 内存库、StaticPool、外键检查、会话依赖与 HTTPS TestClient 方式准备真实会员会话；覆盖未登录与已撤销会话、仅本人积分流水与已核销券（排除本人的预占券）、空到期、共享且即使用尽仍可见的券、UTC 时间、no-store 与读取不写库（读取的会员、会话、订单、积分批次和流水、优惠券及用券记录全部列值不变）。每条测试说明守住的 DESIGN、UX 或 Kelvin 决定；由 PR 必需 CI 的 backend 执行，未在真实 MySQL 上验证。未加依赖。
 
+### SHOP-TASK-096 积分到期的定时任务
+
+- [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「计价、优惠、积分与库存」第 3 条（积分批次在取得后 12 个月到期）及「失败、并发与重试」第 6 条（可重复运行、只生效一次，失败有告警与人工补跑办法），以及 HANDOFF 0.46 的 Kelvin 决定，把 SHOP-TASK-086 的 `expire_points` 接入 `app/jobs.py`。设计闸门：DESIGN 1.11（提交 `2d13250`）与 HANDOFF 0.46。拆分：定时任务（3 个允许路径）。
+- 任务与命令：`default_jobs()` 在既有四项后加入非 `own_transactions` 的 `expire_points`，运行器提交服务的 flush；每轮最多 `POINTS_EXPIRE_BATCH_LIMIT` 个批次，值与 `CANCEL_BATCH_LIMIT` 相同，余下留给下一轮。运营者可用 `python -m app.jobs expire-points` 手动补跑一次；失败仅记录任务名与异常类名，运行器照既有规则在连续失败满 `UNHEALTHY_AFTER_SECONDS` 后停止写心跳。
+- 偏离与取舍：不改积分到期函数、模型、迁移、部署配置或设计；到期时刻边界仍由 `tests/test_points.py` 覆盖。运营告警邮件留给之后的运营告警邮件任务接入。
+- 测试：`tests/test_jobs.py` 新增默认任务结构、到期一次性、分批续跑、失败回滚和手动命令的覆盖；每项说明对应 DESIGN 1.11 的句子。既有测试仅为第五项任务作机械修改：`tests/test_jobs.py` 的固定上限与数据库失败断言、`tests/test_auto_complete.py` 的注册顺序断言，以及 `tests/test_sms_retention.py` 的注册顺序断言。
+
 ### SHOP-TASK-095 会员中心的积分概览与积分明细查询
 
 - [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「计价、优惠、积分与库存」第 3、5 条及「权限与资料保护」第 6 条，在 `app/services/member_account.py` 增加会员积分的只读查询；设计闸门为 DESIGN 1.11 与 HANDOFF 0.46。概览复用可用余额与待抵扣的账本口径，最近到期按马来西亚日期合并，排除已过期和余额为零的批次。明细按订单与显示类型合并：`earned` 对应 earn，`redeemed` 对应 redeem 与 release，`expired` 对应 expire，`returned` 对应 refund_return，`reversed` 对应 refund_reversal 与 debt_add（后者按负数显示）；debt_repay 与 forfeit 不显示。按最近流水、订单 ID 与固定显示类型顺序倒排，最多 100 行。

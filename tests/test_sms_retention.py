@@ -342,8 +342,9 @@ def test_job_is_registered_last_with_own_transactions() -> None:
         "auto_complete_shipped",
     ]
     assert default[3].name == "delete_expired_verifications"
-    assert len(default) == 4
+    assert len(default) == 5
     assert default[3].own_transactions is True
+    assert default[4].name == "expire_points"
     assert jobs.delete_verifications_job().own_transactions is True
 
 
