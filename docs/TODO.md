@@ -2046,6 +2046,16 @@
 - 留给之后的任务：前端会员表单（P05 第 3 步的会员表单：收货电话预填会员手机号、优惠券代码与使用积分输入、摘要的券与积分两行、`checkout.coupon_invalid` 等提示，以及 V1 短信验证后以会员身份继续）留给之后的前端任务（规划块「已阻塞」里的「短信验证组件 V1 与结账会员路径」）；会员订单的支付、取消与超时接入券与积分留给 SHOP-TASK-090；支付页与结果页的会员接口留给 SHOP-TASK-091。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.11 原句、UX 0.10 P05 与 HANDOFF 0.47 的 Kelvin 决定自查。`tests/test_member_orders_api.py` 用 `TestClient`（`https://testserver`）与 SQLite 内存库（引擎设置同 `tests/test_guest_order.py`），会话依赖换成绑定同一内存库的会话（可换成提交即抛错的子类）；会员会话经 `issue_member_session` 签发并提交，cookie 与 CSRF 令牌放进请求头（写法同 `tests/test_member_pw_api.py`）；积分经 `earn_points` 发放，用满的券经另一会员的 `reserve_coupon` 预占；结果都在另一个数据库会话里读；限流用可选 Redis 依赖的内存替身；未加依赖。每条测试的文档字符串写明它守住的设计、UX、Kelvin 决定或验收条目。覆盖：两个接口超过 8 KB 为 413（不是 JSON、没有会话也是）、不是 JSON 为 415（没有会话也是）、恰好 8 KB 且没有会话为 401；限流按来源计入与游客接口相同的桶，达到上限后 429 先于 401；下单缺少或错误的 CSRF 为 403 且不写库，计价不要 CSRF；两个接口多出字段（含 `phone_region`）422 且错误只有位置、类型与消息、不回显；计价的券代码与积分字段规则；计价不合法的 `lang` 422 且不回显；下单重复 SKU 422 且不写库；缺少或不合的幂等键 422；计价给出券与积分两行与扣除后的合计且不写库，券过期时 `coupon_applied` 为 false 且不计入，未给代码为 null、积分默认 0，积分超过余额不接受，参考外币按扣除后的合计换算，未给收货国家时合计为 null 而券与积分照样判定，无效目的地 422、运费缺失 503；下单 201 的字段、金额、带 UTC 时区的到期时间、不设 cookie 与不回显，库存、用券记录各增一次，收货电话为规范化结果，重放 200 且不再改库；同一号码换写法重放 200、另一号码 409；同键不同积分 409；券被用满 409 `coupon_invalid` 且库存与各表不变；积分超过余额 409 `points_unavailable` 且不变；超出限购 409 `order_not_placeable`；运费缺失 503；提交失败 503 `service_unavailable` 且全部回滚；收货电话按收货国家解析（MY、SG）、以加号开头时以输入为准、收货国家不受 phonenumbers 支持时须以加号开头、5 种格式不成立为 422 `phone_invalid` 且不回显；短信验证开关开启时马新号码的会员照常下单；会员注销后两个接口都 401；无 `app.` 日志，日志不含收货资料、券代码、幂等键与令牌。未连真实 Redis 或 MySQL，并发下单（会员行锁）未在真 MySQL 上验证，未在真实浏览器里验证。这些测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
 
+### SHOP-TASK-098 后台优惠券的列表、新建与停用规则
+
+- [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）Coupon / CouponUse 与「计价、优惠、积分与库存」第 1、7 条、`docs/UX.md` 0.10 A05，以及 `docs/HANDOFF.md` 0.48 的 Kelvin 决定，实现 `app/services/admin_coupons.py` 的后台业务规则。只新增、停用和列表，不做接口或页面，不改模型、迁移、`app/services/coupons.py`、`app/services/admin_auth.py`、设计或部署配置；未加表或依赖。设计闸门：DESIGN 1.11（提交 `2d13250`）与 HANDOFF 0.48（优惠券）。拆分：业务规则层（3 个允许路径）。
+- 列表：每页 30 张，按创建时间和 ID 倒序；使用单个按券分组的查询统计 `reserved` 与 `used`，不把 `released` 计入。页外返回空页但保留总数；把保存的 UTC 起止时刻按固定 UTC+8 显示为马来西亚日期，只读且不写审计。
+- 新建：代码沿用 SHOP-TASK-085 的去首尾空白、ASCII 字母数字与大写规范化；校验 fixed / percent 的互斥金额、最低商品消费、日期和可空次数上限。日期保存为马来西亚日的首秒与末秒换算后的无时区 UTC；唯一代码冲突回滚保存点并报 `CouponCodeTaken`。成功时只 flush，写 `admin_coupon_created` 审计及规范化代码。
+- 停用：条件更新仍启用的券，写 `admin_coupon_disabled` 审计；重复停用幂等且不另写审计，不存在报 `CouponNotFound`。不编辑、重新启用或删除，也不改既有用券记录；返回值的已用数照 `COUNTED_USE_STATUSES` 计，故后台修改只影响之后的新订单。
+- 偏离：未改设计；服务层的请求、列表页和行值对象为后续接口提供显式边界，未增加接口字段或路由。
+- 留给之后的任务：SHOP-TASK-099 负责后台优惠券的列表、新建与停用接口。
+- 验证到什么程度：`tests/test_admin_coupons.py` 以 SQLite 内存库按模型建表、每条连接打开外键检查，自建管理员；覆盖代码与日期换算和创建审计、回滚、全部校验拒绝与边界、规范化重复、30 张分页和排序、reserved / used 计数、停用审计与幂等、以及停用后预占记录不变和 rollback 恢复启用。每条测试说明守住的设计、UX、Kelvin 决定或本任务契约；由 PR 必需 CI 的 backend 执行。
+
 ### SHOP-TASK-097 超时取消逐张订单独立提交
 
 - [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「计价、优惠、积分与库存」第 6 条（15 分钟未支付自动取消并释放；每天按马来西亚时间重建当日可用库存为初始库存减去仍有效的预留）与「失败、并发与重试」第 1、6 条（库存、券与积分预占在同一事务；定时任务可重复运行、只生效一次），让定时任务与每日库存重置里的超时取消逐张订单真实提交：`app/jobs.py`、`app/services/stock_reset.py`；测试见 `tests/test_jobs.py`、`tests/test_stock_reset.py`。只改事务边界：超时取消本身（`app/services/payment.py` 的 `expire_overdue_orders`）与库存重置的计算不变；未改模型、迁移、其他任务、部署配置与 docker-compose 文件、`.platform/`、CI 或设计，未加表，未装依赖。设计闸门：DESIGN 1.11（提交 `2d13250`），订单状态迁移的执行方式。拆分：定时任务（5 个允许路径）。
