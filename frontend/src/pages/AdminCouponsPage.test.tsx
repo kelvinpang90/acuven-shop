@@ -17,6 +17,7 @@ import AdminCouponsPage, {
   listStep,
   loadCoupons,
   pagerOf,
+  reloadedState,
   replaceCoupon,
 } from "./AdminCouponsPage";
 
@@ -111,13 +112,17 @@ function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 }
 
-interface Call { url: string; init: RequestInit; }
+interface Call {
+  url: string;
+  init: RequestInit;
+}
 
 function stubFetch(...replies: (Response | (() => never))[]): Call[] {
   const calls: Call[] = [];
   const queue = [...replies];
   vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-    calls.push({ url: String(input), init: init ?? {} });
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    calls.push({ url, init: init ?? {} });
     const reply = queue.shift();
     if (reply === undefined) return Promise.reject(new Error("unexpected request"));
     return typeof reply === "function" ? Promise.reject(new TypeError("Failed to fetch")) : Promise.resolve(reply);
@@ -178,7 +183,9 @@ describe("AdminCouponsPage", () => {
       </LanguageProvider>,
     );
     expect(html).toContain('class="site-admin-coupons__list" aria-busy="true"');
-    expect(html).toContain("<th>Coupon code</th>");
+    for (const key of ["admin.coupon_code", "admin.coupon_type", "admin.coupon_value", "admin.coupon_valid", "admin.coupon_usage", "admin.filter_status"] as const) {
+      expect(html).toContain(`<th>${COPY[key].en}</th>`);
+    }
     expect(html).not.toContain("site-admin-coupons__card");
   });
 
@@ -202,6 +209,9 @@ describe("AdminCouponsPage", () => {
     expect(html).toContain("RM 10.00");
     expect(html).toContain("15%");
     expect(html).toContain("12 / 100");
+    const card = element(html, "li", "site-admin-coupons__card");
+    expect(card).not.toContain(COPY["admin.coupon_fixed"].en);
+    expect(card).not.toContain(COPY["admin.coupon_percent"].en);
   });
 
   // 本任务验收的翻页规则：不足一页不显示翻页；第二页有上一页而最后一页没有下一页。
@@ -214,7 +224,7 @@ describe("AdminCouponsPage", () => {
   it("loads the requested page and ignores an aborted reply", async () => {
     const calls = stubFetch(json(200, { ...PAGE, page: 2 }), json(500, {}), json(200, PAGE));
     const states: unknown[] = [];
-    const moves = { show: (state: unknown) => states.push(state), replace: (_path: string) => undefined };
+    const moves = { show: (state: unknown) => states.push(state), replace: () => undefined };
     await loadCoupons(2, new AbortController().signal, moves);
     await loadCoupons(3, new AbortController().signal, moves);
     const aborted = new AbortController();
@@ -223,6 +233,17 @@ describe("AdminCouponsPage", () => {
     await pending;
     expect(calls.map((call) => call.url)).toEqual(["/api/admin/coupons?page=2", "/api/admin/coupons?page=3", "/api/admin/coupons?page=4"]);
     expect(states).toEqual([{ busy: false, list: { ...PAGE, page: 2 }, error: null }, { busy: false, list: null, error: "common.error_retry" }]);
+  });
+
+  // 本任务验收「none 用路由的 replace 进入 /admin/login」：列表读取的未登录结果只替换路由。
+  it("replaces the route when a list read has no session", async () => {
+    stubFetch(json(401, {}));
+    const replacements: string[] = [];
+    await loadCoupons(1, new AbortController().signal, {
+      show: () => undefined,
+      replace: (path) => replacements.push(path),
+    });
+    expect(replacements).toEqual(["/admin/login"]);
   });
 
   // 本任务验收的停用进行中状态：所有可停用按钮禁用，且只有被点的券向读屏器标明忙碌。
@@ -239,10 +260,9 @@ describe("AdminCouponsPage", () => {
     const updated = { ...ACTIVE, active: false };
     const calls = stubFetch(json(200, updated), json(404, {}), json(403, {}), json(401, {}), (() => { throw new Error("network"); }), json(500, {}), json(200, updated));
     const events: string[] = [];
-    let retryAfterReload: string | null = null;
     const moves = {
       show: (coupon: AdminCoupon) => events.push(`show ${coupon.id}`),
-      reload: () => { events.push("reload"); retryAfterReload = "common.error_retry"; },
+      reload: () => { events.push("reload"); },
       replace: (path: string) => events.push(`replace ${path}`),
       error: (error: string) => events.push(`error ${error}`),
     };
@@ -253,7 +273,8 @@ describe("AdminCouponsPage", () => {
     await pending;
     expect(calls).toHaveLength(7);
     expect(events).toEqual(["show 7", "reload", "reload", "replace /admin/login", "error common.network_check", "error common.error_retry"]);
-    expect(retryAfterReload).toBe("common.error_retry");
+    expect(reloadedState({ busy: false, list: PAGE, error: null })).toEqual({ busy: false, list: PAGE, error: "common.error_retry" });
+    expect(reloadedState({ busy: false, list: null, error: "common.network_check" })).toEqual({ busy: false, list: null, error: "common.error_retry" });
   });
 
   // 本任务验收「页面文字全部来自字典」：可见文本（包括还原的 &quot;）仅为字典、接口数据、格式化日期或视觉稿符号。
@@ -268,6 +289,7 @@ describe("AdminCouponsPage", () => {
       allowed.add("RM 10.00");
       allowed.add("12 / 100");
       allowed.add(`${COPY["admin.coupon_usage"][language]} 12 / 100 · ${formatBusinessDate(coupon.starts_on, language)} – ${formatBusinessDate(coupon.ends_on, language)}`);
+      allowed.add(`${formatBusinessDate(coupon.starts_on, language)} – ${formatBusinessDate(coupon.ends_on, language)}`);
     }
     allowed.add("‹"); allowed.add("›");
     for (const value of visibleTexts(renderView(language))) expect(allowed.has(value), value).toBe(true);
