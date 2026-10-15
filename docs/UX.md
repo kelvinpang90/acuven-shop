@@ -799,6 +799,7 @@ V1 金额与个人资料元素：
 |  ◆ [pay.stripe_notice]                                                |
 |    [pay.stripe_test_card]                                             |
 |  未发起、创建结果未定：( [pay.stripe_go] )                              |
+|  创建结果转人工核对：[pay.stripe_under_review]（无跳转按钮）              |
 |  有进行中的会话：( [pay.stripe_continue] )                             |
 |                                                                       |
 |  ([pay.cancel_order])                                                 |
@@ -843,7 +844,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 说明：
 
 - **未发起**（本单没有 Stripe 记录或只有已作废的）：显示 `[pay.expires]` 倒计时；点 `[pay.stripe_go]` 由服务端按 Stripe 节第 3 条创建会话并返回付款页地址，页面只跳转到服务端返回的地址。
-- **创建结果未定**（记录为创建中、服务端还没有付款页地址）：与「未发起」相同显示 `[pay.stripe_go]`，但不显示 `[pay.expires]`（这时订单要等对账才会取消，Stripe 节第 3、5 条）；点按钮由服务端以同一幂等键重试，取得同一个会话就跳转，仍无法确定则显示 `[pay.stripe_unavailable]`。页面不另建会话。
+- **创建结果未定**（记录为创建中、服务端还没有付款页地址）：与「未发起」相同显示 `[pay.stripe_go]`，但不显示 `[pay.expires]`（这时订单要等对账才会取消，Stripe 节第 3、5 条）；点按钮由服务端以同一幂等键重试，取得同一个会话就跳转，仍无法确定则显示 `[pay.stripe_unavailable]`。页面不另建会话。服务端告知该记录已超过 24 小时仍无法确定、转人工核对时，不显示 `[pay.stripe_go]`，改显示 `[pay.stripe_under_review]`（订单不取消、库存继续预留；取消按钮照常显示，点后按 Stripe 节第 5 条由服务端处理）。
 - **有进行中的会话**（会话已建成、未付款，服务端有付款页地址）：不显示 `[pay.expires]`，改显示 `[pay.stripe_in_progress]`（会话结束前订单不会因 15 分钟到期被取消，Stripe 节第 5 条）；`[pay.stripe_continue]` 打开同一会话，不另建会话。从 Stripe 页点返回（取消返回地址 `/pay`）回到本页即此状态。
 - 跳转在当前标签页进行，不开新窗口。Stripe 的成功返回地址是 P07 的 `/pay/result`，取消返回地址是本页 `/pay`；两者都不带订单号、会话 ID 或任何凭据，返回后页面照旧凭服务端会话读取订单（Stripe 节第 3 条）。游客在 Stripe 页停留超过短期凭据的 30 分钟时，返回后看到 `[pay.session_expired]`，凭订单号和电话查单；付款仍由服务端按 Stripe 节第 4 条确认。
 - ◆ `[pay.stripe_notice]` 与 `[pay.stripe_test_card]` 在每次跳转前都显示，无勾选框（Stripe 节第 1、10 条）。测试卡号是 Stripe 公布的测试卡号；FPX、GrabPay 测试授权页的呈现以实现前的测试环境核验为准，与 `[pay.stripe_test_card]` 不符时先改文案。
@@ -951,9 +952,9 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 
 - 页面照旧凭服务端会话读取订单。订单仍待支付且本单有 Stripe 会话时，页面调用本站的确认接口一次（须 CSRF），服务端向 Stripe 查询并按 Stripe 节第 4 条确认；返回地址本身不作依据。
 - **成功**：同上成功区（`[result.success_body]` 照旧写明未扣真实款项）。从 P06 取消时会话已付款进入的，成功区顶部另显示 `[result.paid_not_cancelled]`。
-- **确认中**：服务端尚未确认（付款结果未定，或查询时 Stripe 暂不可用）。显示 `[result.confirming_title]` 与 `[result.confirming_body]`，页面每 5 秒自动重查一次、最多 12 次（约 1 分钟；间隔与次数为本稿提议）；用完后停止自动重查，显示 `[result.confirming_slow]` 与 `( [result.check_again] )`，每点一次重查一次，提交期间按钮禁用。
+- **确认中**：服务端尚未确认（付款结果未定，或查询时 Stripe 暂不可用）。不显示 `[result.demo_hint]`（它说的是付款之后的模拟发货），演示性质由常驻横幅提示。显示 `[result.confirming_title]` 与 `[result.confirming_body]`，页面每 5 秒自动重查一次、最多 12 次（约 1 分钟；间隔与次数为本稿提议）；用完后停止自动重查，显示 `[result.confirming_slow]` 与 `( [result.check_again] )`，每点一次重查一次，提交期间按钮禁用。
 - **尚未付款**：本单的会话仍进行中、未付款（例如直接打开本页）。显示 `[result.stripe_not_paid]` 与 `( [result.stripe_back_to_pay] )` 回到 P06。
-- **已取消、已发起退款**：极少数情形下 Stripe 付款到达时订单已取消（Stripe 节第 6 条），订单保持已取消，服务端在 Stripe 测试环境发起全额退款并跟进结果，不保证成功。服务端告知本单有来源为会话的 Stripe 退款尝试时（不论该尝试当前状态），以 `[result.stripe_late_refund]` 代替 `[result.cancelled]` 或 `[result.cancelled_by_you]`。
+- **已取消、已发起退款**：极少数情形下 Stripe 付款到达时订单已取消（Stripe 节第 6 条），订单保持已取消，服务端在 Stripe 测试环境发起全额退款并跟进结果，不保证成功。服务端告知本单有来源为会话的 Stripe 退款尝试时（不论该尝试当前状态；文案不说退款进行到哪一步），以 `[result.stripe_late_refund]` 代替 `[result.cancelled]` 或 `[result.cancelled_by_you]`。
 - Stripe 支付途径没有「失败」状态：卡被拒、FPX 或 GrabPay 授权失败由访客在 Stripe 页重试（Stripe 节第 4 条）；从 Stripe 页取消返回的是 P06，不是本页。
 
 桌面：
@@ -967,7 +968,6 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 | [pay.amount_due] [M1]                                                 |
 | 游客：[G] [result.guest_next]                                          |
 | 自动重查用完后：[result.confirming_slow]  ( [result.check_again] )      |
-| ★ [result.demo_hint]                                                  |
 +---------------------------- 尚未付款 --------------------------------+
 | [result.stripe_not_paid]   ( [result.stripe_back_to_pay] ) → P06      |
 +---------------------------- 成功 ------------------------------------+
@@ -992,7 +992,6 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 | 游客：[result.guest_next]        |
 | 用完后：[result.confirming_slow] |
 |  ( [result.check_again] )      |
-| ★ [result.demo_hint]           |
 --- 尚未付款时替换为 ---
 | [result.stripe_not_paid]       |
 | ( [result.stripe_back_to_pay] ) |
@@ -2253,7 +2252,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 | 位置 | 提示 |
 | --- | --- |
 | 所有前台页 | 常驻 `[common.demo_banner]` / `[common.demo_banner_short]`；页脚 `[common.footer_demo]` |
-| 每页 ★ | P01 `home.demo_hint`；P02 `list.demo_hint`；P03 `detail.demo_hint`；P04 `cart.demo_hint`；P05 `checkout.demo_hint`；P06 `pay.demo_hint`；P07 `result.demo_hint`；P08 `lookup.demo_hint`；P09 `order.demo_hint`；P10 `refund.demo_hint`；P11 `auth.register_demo_hint`；P12 `auth.login_demo_hint`；P13 `account.demo_hint`；P14 `privacy.demo_hint`；A01–A08 `admin.demo_banner`；A08 另有 `admin.design_demo_note` |
+| 每页 ★ | P01 `home.demo_hint`；P02 `list.demo_hint`；P03 `detail.demo_hint`；P04 `cart.demo_hint`；P05 `checkout.demo_hint`；P06 `pay.demo_hint`（支付途径为 Stripe 测试时 `pay.stripe_demo_hint`，0.11）；P07 `result.demo_hint`；P08 `lookup.demo_hint`；P09 `order.demo_hint`；P10 `refund.demo_hint`；P11 `auth.register_demo_hint`；P12 `auth.login_demo_hint`；P13 `account.demo_hint`；P14 `privacy.demo_hint`；A01–A08 `admin.demo_banner`；A08 另有 `admin.design_demo_note` |
 | 店铺装修（0.4） | 演示横幅、每页 ★ 与 ◆ 提示、结账两处告知在所有主题与深浅色下照常显示，A08 不能隐藏或弱化；P01 的 ★ `home.demo_hint` 固定在所有区块之前 |
 | ◆ 下单 | P05 下单按钮旁 `[checkout.place_order_hint]` |
 | ◆ 模拟支付 | P06 成功/失败按钮旁 `[pay.action_hint]`；支付途径为 Stripe 测试时，跳转按钮旁 `[pay.stripe_notice]` 与 `[pay.stripe_test_card]`，★ 改为 `[pay.stripe_demo_hint]`（0.11） |
