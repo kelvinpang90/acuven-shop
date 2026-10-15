@@ -2055,6 +2055,13 @@
 - 留给之后的任务：SHOP-TASK-099 负责后台优惠券的列表、新建与停用接口。
 - 验证到什么程度：`tests/test_admin_coupons.py` 以 SQLite 内存库按模型建表、每条连接打开外键检查，自建管理员；覆盖代码与日期换算和创建审计、回滚、全部校验拒绝与边界、规范化重复、30 张分页和排序、reserved / used 计数、停用审计与幂等、以及停用后预占记录不变和 rollback 恢复启用。每条测试说明守住的设计、UX、Kelvin 决定或本任务契约；由 PR 必需 CI 的 backend 执行。
 
+### SHOP-TASK-099 后台优惠券的列表、新建与停用接口
+
+- [x] 提供 `GET /api/admin/coupons`、`POST /api/admin/coupons` 与 `POST /api/admin/coupons/{coupon_id}/disable`。三者均由后台会话授权并经 `_NoStoreRoute` 返回 no-store；列表返回分页（每页 30）、由 cookie 算出的 CSRF、券的代码、类型、固定金额或百分比、最低消费、马来西亚起止日期、两个使用上限、已用次数与启停状态。新建严格接收券字段并提交审计；停用为幂等，只有实际停用写审计。
+- 检查顺序与错误码：新建依次为逐块读取超过 8 KB 的 413、非 JSON 的 415、后台会话 401、CSRF 403、结构 422、业务校验；业务无效为 `coupon_invalid` 的 422、重复代码为 `coupon_code_taken` 的 409。停用依次为 401、403、无符号无前导零且不超过 INT 上限的路径 ID 422、不存在的 `not_found` 404；数据库故障回滚并为 `service_unavailable` 503。422 不回显请求内容。
+- 偏离与取舍：无设计偏离；复用 SHOP-TASK-098 的规则服务，不修改服务、模型或迁移。A05 页面留给 SHOP-TASK-100 至 102。
+- 验证到什么程度：`tests/test_admin_coupons_api.py` 以开启外键检查的 SQLite 内存库和 TestClient 建立管理员及后台会话，覆盖无会话、列表字段与分页、马来西亚日期、新建提交与审计、业务与 CSRF 拒绝不写入、413/415/私密 422、停用幂等审计、路径与不存在错误，以及所有响应 no-store；由 PR 必需 CI 的 backend 执行。
+
 ### SHOP-TASK-097 超时取消逐张订单独立提交
 
 - [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「计价、优惠、积分与库存」第 6 条（15 分钟未支付自动取消并释放；每天按马来西亚时间重建当日可用库存为初始库存减去仍有效的预留）与「失败、并发与重试」第 1、6 条（库存、券与积分预占在同一事务；定时任务可重复运行、只生效一次），让定时任务与每日库存重置里的超时取消逐张订单真实提交：`app/jobs.py`、`app/services/stock_reset.py`；测试见 `tests/test_jobs.py`、`tests/test_stock_reset.py`。只改事务边界：超时取消本身（`app/services/payment.py` 的 `expire_overdue_orders`）与库存重置的计算不变；未改模型、迁移、其他任务、部署配置与 docker-compose 文件、`.platform/`、CI 或设计，未加表，未装依赖。设计闸门：DESIGN 1.11（提交 `2d13250`），订单状态迁移的执行方式。拆分：定时任务（5 个允许路径）。
