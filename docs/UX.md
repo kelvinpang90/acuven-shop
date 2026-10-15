@@ -835,6 +835,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 |   [pay.stripe_test_card]       |
 | ( [pay.stripe_go] ) 或          |
 | ( [pay.stripe_continue] )      |
+| 转人工核对：[pay.stripe_under_review]（无跳转按钮） |
 | ([pay.cancel_order])           |
 --- 过期时 ---
 | [pay.session_expired]          |
@@ -1825,7 +1826,8 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 | [admin.refund_detail] [K]<订单号> |
 | …（同上）                        |
 | [admin.paid_via_stripe]        |
-| [admin.stripe_method]          |
+| [admin.stripe_method] 或       |
+|  [admin.stripe_method_unknown] |
 | 期限提示（三选一，同桌面）       |
 --- 审核中 ---
 | [admin.refund_reason] [____]   |
@@ -1841,6 +1843,8 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 | [admin.stripe_refund_pending_hint] 或 |
 | [admin.stripe_refund_failed_hint] |
 | ( [admin.stripe_refund_retry] ) |
+| 重试被拒：[admin.stripe_refund_blocked] |
+| 现金退款额为 0：[admin.stripe_refund_none]（不显示尝试） |
 ```
 
 说明：
