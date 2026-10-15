@@ -3,6 +3,7 @@
 > 2026-09-30 导出。Kelvin 已于 2026-09-30 认可视觉稿；本导出合并后，由后续运营者 PR 在 `docs/HANDOFF.md` 记录审阅与提交号。
 > 2026-10-05 补充后台画板：全部后台页面的手机稿，A03、A05、A06、A07、A09 的桌面稿，后台 ☰ 菜单；各后台页面右上角加退出按钮（`admin.logout`），已画的 A02、A04、A08 桌面导航补上站点设置。Kelvin 已于 2026-10-05 认可，记录见 `docs/HANDOFF.md`。
 > 2026-10-06 补充 A02、A03 的 8 张状态画板：A02 未选订单与翻页、全部已退冻结、搜索无结果、手机翻页；A03 按订单筛选（桌面、手机）、已批准（桌面）、已拒绝（手机）。Kelvin 已于 2026-10-06 认可，记录见 `docs/HANDOFF.md`。
+> 2026-10-15 补充 Stripe 测试环境支付的 15 张画板（落实 `docs/UX.md` 0.11 与 `docs/UX-COPY.md` 0.12；Claude Design 画布「Acuven Shop 视觉稿」版本 37 的「Stripe 测试（UX 0.11）」页）：P06 未发起、有进行中的会话、各状态与取消确认框；P07 确认中与重查用完、尚未付款、迟到付款、取消时已付款；P14「收集什么」段；A03 审核中、已批准（退款处理中）、手机版最新一次失败可重试与其他状态；A09 支付方式与凭据未配置。原有画板未改。Kelvin 已于 2026-10-15 认可，记录见 `docs/HANDOFF.md`。
 
 页面的内容、流程、去向与文案以 [UX.md](../UX.md) 与 [UX-COPY.md](../UX-COPY.md) 为准；本目录只规定样式。二者冲突时以 UX 文档为准，并把冲突报给运营者。
 
@@ -47,6 +48,7 @@
 - 商品、分类、规格与价格取自示例目录迁移 `0003`；运费与汇率为示例数值。
 - 会员下单的订单 `K7Q2-9MXA`（小计 RM 110.00、券 RM 10.00、积分 500 抵 RM 5.00、运费 RM 8.00、合计 RM 103.00）的逐件实付、获得积分与退款预估，均按 `docs/DESIGN.md` 1.9「计价、优惠、积分与库存」第 2–5 条的最大余数分摊算出：两件 T 恤实付 RM 67.37、蜡烛 RM 27.63，获得 95 积分；退蜡烛预计 RM 27.63，返还 146 积分、追回 27 积分。P09、P10 画板用订单号与电话以查单模式查看这张会员订单，所以照常显示优惠与积分行；游客订单（如 `B6TN-2RJD`）的订单详情按 REQUIREMENTS 1.10 不显示这两行，退款页也没有积分行。
 - 订单号（如 `K7Q2-9MXA`）只是示意，真实格式尚未定义。人名与地址为虚构。马来西亚、新加坡没有保留给虚构用途的号段，这两国手机号一律用 X 占位（如 `+60 12-XXX XXXX`、遮盖后 `+60 12•••• XXX`）；英国号码取自保留给虚构用途的号段。
+- Stripe 画板沿用游客订单 `B6TN-2RJD`（RM 135.00）；后台的 `M4RT-7KCB`（FPX 付款）、`P9DS-6HWN`（GrabPay 付款）与 Stripe 退款 ID（只显示前后几位）均为虚构。测试卡号 4242 4242 4242 4242 是 Stripe 公布的测试卡号。
 - 商品图、分类图是占位图形；图片上传的格式与大小限制尚未确定，画板显示为 `[TYPES]`、`[SIZE]`，实现时再定。
 - 人机验证框是占位，实际由托管服务渲染。
 
@@ -88,10 +90,17 @@
 | P06 模拟支付（游客）· 手机 | [P06-phone.html](pages/P06-phone.html) | [P06-phone.png](reference/P06-phone.png) | 390 × 1670 |
 | P06 取消确认框 | [P06-cancel-confirm.html](pages/P06-cancel-confirm.html) | [P06-cancel-confirm.png](reference/P06-cancel-confirm.png) | 640 × 240 |
 | P06 / P07 游客凭据过期 | [P06-expired.html](pages/P06-expired.html) | [P06-expired.png](reference/P06-expired.png) | 640 × 240 |
+| P06 Stripe 测试 · 未发起 · 桌面 | [P06-stripe-desktop.html](pages/P06-stripe-desktop.html) | [P06-stripe-desktop.png](reference/P06-stripe-desktop.png) | 1440 × 1640 |
+| P06 Stripe 测试 · 有进行中的会话 · 手机 | [P06-stripe-phone-open.html](pages/P06-stripe-phone-open.html) | [P06-stripe-phone-open.png](reference/P06-stripe-phone-open.png) | 390 × 1760 |
+| P06 Stripe 状态（跳转中 / 不可用 / 途径已改变 / 转人工核对 / 取消未成） | [P06-stripe-states.html](pages/P06-stripe-states.html) | [P06-stripe-states.png](reference/P06-stripe-states.png) | 640 × 760 |
+| P06 取消确认框（有进行中的会话） | [P06-stripe-cancel-confirm.html](pages/P06-stripe-cancel-confirm.html) | [P06-stripe-cancel-confirm.png](reference/P06-stripe-cancel-confirm.png) | 640 × 280 |
 | P07 成功（会员）· 桌面 | [P07-desktop-member.html](pages/P07-desktop-member.html) | [P07-desktop-member.png](reference/P07-desktop-member.png) | 1440 × 1220 |
 | P07 成功（游客）· 手机 | [P07-phone-guest.html](pages/P07-phone-guest.html) | [P07-phone-guest.png](reference/P07-phone-guest.png) | 390 × 1340 |
 | P07 失败 | [P07-failure.html](pages/P07-failure.html) | [P07-failure.png](reference/P07-failure.png) | 640 × 370 |
 | P07 已取消（上：超时；下：本人取消，二选一） | [P07-cancelled.html](pages/P07-cancelled.html) | [P07-cancelled.png](reference/P07-cancelled.png) | 640 × 280 |
+| P07 Stripe 确认中（游客）· 桌面 | [P07-stripe-confirming.html](pages/P07-stripe-confirming.html) | [P07-stripe-confirming.png](reference/P07-stripe-confirming.png) | 1440 × 1180 |
+| P07 Stripe 确认中 · 重查用完 · 手机 | [P07-stripe-phone-slow.html](pages/P07-stripe-phone-slow.html) | [P07-stripe-phone-slow.png](reference/P07-stripe-phone-slow.png) | 390 × 1180 |
+| P07 尚未付款 / 迟到付款 / 取消时已付款 | [P07-stripe-states.html](pages/P07-stripe-states.html) | [P07-stripe-states.png](reference/P07-stripe-states.png) | 640 × 560 |
 | P08 订单查询 · 桌面 | [P08-desktop.html](pages/P08-desktop.html) | [P08-desktop.png](reference/P08-desktop.png) | 1440 × 1170 |
 | P08 查不到订单 · 手机 | [P08-phone.html](pages/P08-phone.html) | [P08-phone.png](reference/P08-phone.png) | 390 × 1210 |
 | P09 查单模式 · 会员下单的订单（已发货）· 桌面 | [P09-desktop.html](pages/P09-desktop.html) | [P09-desktop.png](reference/P09-desktop.png) | 1440 × 1450 |
@@ -109,6 +118,8 @@
 | P13 我的订单 · 手机 | [P13-phone.html](pages/P13-phone.html) | [P13-phone.png](reference/P13-phone.png) | 390 × 950 |
 | P14 隐私说明 · 桌面 | [P14-desktop.html](pages/P14-desktop.html) | [P14-desktop.png](reference/P14-desktop.png) | 1440 × 1710 |
 | P14 隐私说明 · 手机 | [P14-phone.html](pages/P14-phone.html) | [P14-phone.png](reference/P14-phone.png) | 390 × 2220 |
+| P14「收集什么」段（含 Stripe 说明）· 桌面 | [P14-stripe-desktop.html](pages/P14-stripe-desktop.html) | [P14-stripe-desktop.png](reference/P14-stripe-desktop.png) | 1440 × 760 |
+| P14「收集什么」段（含 Stripe 说明）· 手机 | [P14-stripe-phone.html](pages/P14-stripe-phone.html) | [P14-stripe-phone.png](reference/P14-stripe-phone.png) | 390 × 1040 |
 | 后台 ☰ 菜单展开 · 手机 | [A00-phone-menu.html](pages/A00-phone-menu.html) | [A00-phone-menu.png](reference/A00-phone-menu.png) | 390 × 844 |
 | A01 后台登录 · 桌面 | [A01-desktop.html](pages/A01-desktop.html) | [A01-desktop.png](reference/A01-desktop.png) | 1440 × 720 |
 | A01 后台登录 · 手机（锁定提示） | [A01-phone.html](pages/A01-phone.html) | [A01-phone.png](reference/A01-phone.png) | 390 × 844 |
@@ -126,6 +137,10 @@
 | A03 已批准 · 桌面 | [A03-desktop-reviewed.html](pages/A03-desktop-reviewed.html) | [A03-desktop-reviewed.png](reference/A03-desktop-reviewed.png) | 1440 × 900 |
 | A03 只看一张订单 · 手机 | [A03-phone-list-order.html](pages/A03-phone-list-order.html) | [A03-phone-list-order.png](reference/A03-phone-list-order.png) | 390 × 700 |
 | A03 已拒绝 · 手机 | [A03-phone-detail-rejected.html](pages/A03-phone-detail-rejected.html) | [A03-phone-detail-rejected.png](reference/A03-phone-detail-rejected.png) | 390 × 844 |
+| A03 审核中 · Stripe 付款（FPX）· 桌面 | [A03-stripe-review.html](pages/A03-stripe-review.html) | [A03-stripe-review.png](reference/A03-stripe-review.png) | 1440 × 960 |
+| A03 已批准 · Stripe 退款处理中 · 桌面 | [A03-stripe-approved.html](pages/A03-stripe-approved.html) | [A03-stripe-approved.png](reference/A03-stripe-approved.png) | 1440 × 960 |
+| A03 已批准 · 最新一次失败可重试 · 手机 | [A03-stripe-phone-failed.html](pages/A03-stripe-phone-failed.html) | [A03-stripe-phone-failed.png](reference/A03-stripe-phone-failed.png) | 390 × 1160 |
+| A03 其他状态（类型未知 / 现金为 0 / 重试被拒） | [A03-stripe-states.html](pages/A03-stripe-states.html) | [A03-stripe-states.png](reference/A03-stripe-states.png) | 640 × 520 |
 | A04 商品、规格与库存 · 桌面 | [A04-desktop.html](pages/A04-desktop.html) | [A04-desktop.png](reference/A04-desktop.png) | 1440 × 1080 |
 | A04 编辑商品 · 手机 | [A04-phone-edit.html](pages/A04-phone-edit.html) | [A04-phone-edit.png](reference/A04-phone-edit.png) | 390 × 1700 |
 | A05 优惠券 · 桌面 | [A05-desktop.html](pages/A05-desktop.html) | [A05-desktop.png](reference/A05-desktop.png) | 1440 × 900 |
@@ -139,3 +154,5 @@
 | A08 店铺装修 · 手机 | [A08-phone.html](pages/A08-phone.html) | [A08-phone.png](reference/A08-phone.png) | 390 × 1640 |
 | A09 站点设置 · 桌面（含已保存提示） | [A09-desktop.html](pages/A09-desktop.html) | [A09-desktop.png](reference/A09-desktop.png) | 1440 × 640 |
 | A09 站点设置 · 手机 | [A09-phone.html](pages/A09-phone.html) | [A09-phone.png](reference/A09-phone.png) | 390 × 844 |
+| A09 支付方式 · 桌面（Stripe 测试，已保存） | [A09-stripe-desktop.html](pages/A09-stripe-desktop.html) | [A09-stripe-desktop.png](reference/A09-stripe-desktop.png) | 1440 × 900 |
+| A09 支付方式 · 凭据未配置 · 手机 | [A09-stripe-phone.html](pages/A09-stripe-phone.html) | [A09-stripe-phone.png](reference/A09-stripe-phone.png) | 390 × 1180 |
