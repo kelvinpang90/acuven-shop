@@ -1160,6 +1160,56 @@ export const COPY = {
     zh: "所有启用中且在有效期内的优惠券都会列在会员中心「我的优惠券」中，对全部会员相同，不因总次数或每会员次数上限而不列出。",
     ms: "Semua kupon aktif dalam tempoh sah disenaraikan di bawah \"Kupon saya\", sama bagi setiap ahli, tanpa mengira had jumlah penggunaan atau had setiap ahli.",
   },
+  "admin.coupon_code": {
+    en: "Coupon code",
+    zh: "优惠券代码",
+    ms: "Kod kupon",
+  },
+  "admin.coupon_type": {
+    en: "Type",
+    zh: "类型",
+    ms: "Jenis",
+  },
+  "admin.coupon_value": {
+    en: "Value",
+    zh: "面额",
+    ms: "Nilai",
+  },
+  "admin.coupon_valid": {
+    en: "Valid from / until",
+    zh: "有效期起止",
+    ms: "Sah dari / hingga",
+  },
+  "admin.coupon_usage": {
+    en: "Used / limit",
+    zh: "已用 / 上限",
+    ms: "Digunakan / had",
+  },
+  "admin.coupon_enabled": {
+    en: "Active",
+    zh: "启用",
+    ms: "Aktif",
+  },
+  "admin.coupon_disabled": {
+    en: "Disabled",
+    zh: "已停用",
+    ms: "Dinyahaktifkan",
+  },
+  "admin.coupon_fixed": {
+    en: "Fixed amount (RM)",
+    zh: "固定金额（RM）",
+    ms: "Jumlah tetap (RM)",
+  },
+  "admin.coupon_percent": {
+    en: "Percentage (%)",
+    zh: "百分比（%）",
+    ms: "Peratusan (%)",
+  },
+  "admin.coupon_disable": {
+    en: "Disable",
+    zh: "停用",
+    ms: "Nyahaktifkan",
+  },
   "admin.nav_stock_resets": {
     en: "Stock resets",
     zh: "库存重置",
