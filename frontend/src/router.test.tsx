@@ -81,6 +81,7 @@ describe("route table", () => {
   // 库存重置结果进表，在退款详情之后；
   // SHOP-TASK-062 验收第 2 条「路由 /admin/store-design（frontend/src/router.tsx、frontend/src/App.tsx 与 frontend/src/router.test.tsx 各加一项）」：
   // 店铺装修进表，在库存重置结果之后；其余页面尚未实现，不在表里。
+  // SHOP-TASK-100 验收第 2 条：优惠券页进表，在退款详情之后。
   it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
@@ -100,9 +101,11 @@ describe("route table", () => {
       "/admin/refunds",
       "/admin/refunds/order/:orderId",
       "/admin/refunds/:id",
+      "/admin/coupons",
       "/admin/stock-resets",
       "/admin/store-design",
     ]);
+    expect(isRoutePath("/admin/coupons")).toBe(true);
     expect(isRoutePath("/admin/store-design")).toBe(true);
     expect(isRoutePath("/admin/stock-resets")).toBe(true);
     expect(isRoutePath("/admin/refunds/7")).toBe(true);
@@ -123,6 +126,15 @@ describe("route table", () => {
     expect(isRoutePath("/track/order/refund")).toBe(true);
     expect(isRoutePath("/account/order/refund")).toBe(false);
     expect(isRoutePath("/login")).toBe(false);
+  });
+
+  // SHOP-TASK-100 验收第 2 条：/admin/coupons 用后台框架渲染，当前项为优惠券，不套前台框架。
+  it("renders the admin coupons page", () => {
+    const html = render("/admin/coupons");
+    expect(html).toContain(COPY["admin.demo_banner"].en);
+    expect(html).toContain(`<main class="acs-admin__main" aria-busy="true"></main>`);
+    expect(html).toMatch(new RegExp(`aria-current="page"[^>]*>${COPY["admin.nav_coupons"].en}</a>`));
+    expect(html).not.toContain(COPY["common.demo_banner"].en);
   });
 
   // SHOP-TASK-030 验收第 2 条「订单号与 CSRF 令牌不进任何路径、查询参数」：退款申请页的路径不带任何段值，多出一段（如把订单号放进路径）不匹配、按未知路径落到首页。

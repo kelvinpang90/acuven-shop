@@ -37,6 +37,7 @@ export const ROUTE_PATHS = [
   "/admin/refunds",
   "/admin/refunds/order/:orderId",
   "/admin/refunds/:id",
+  "/admin/coupons",
   "/admin/stock-resets",
   "/admin/store-design",
 ] as const;
@@ -51,6 +52,7 @@ export const PRODUCTS_PATH: RoutePath = "/products";
 export const ADMIN_LOGIN_PATH: RoutePath = "/admin/login";
 export const ADMIN_ORDERS_PATH: RoutePath = "/admin/orders";
 export const ADMIN_REFUNDS_PATH: RoutePath = "/admin/refunds";
+export const ADMIN_COUPONS_PATH: RoutePath = "/admin/coupons";
 export const ADMIN_STOCK_RESETS_PATH: RoutePath = "/admin/stock-resets";
 export const ADMIN_STORE_DESIGN_PATH: RoutePath = "/admin/store-design";
 

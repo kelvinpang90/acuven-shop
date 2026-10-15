@@ -2054,6 +2054,13 @@
 - 留给之后的任务：SHOP-TASK-099 负责后台优惠券的列表、新建与停用接口。
 - 验证到什么程度：`tests/test_admin_coupons.py` 以 SQLite 内存库按模型建表、每条连接打开外键检查，自建管理员；覆盖代码与日期换算和创建审计、回滚、全部校验拒绝与边界、规范化重复、30 张分页和排序、reserved / used 计数、停用审计与幂等、以及停用后预占记录不变和 rollback 恢复启用。每条测试说明守住的设计、UX、Kelvin 决定或本任务契约；由 PR 必需 CI 的 backend 执行。
 
+### SHOP-TASK-100 后台优惠券页的路由与导航 A05
+
+- [x] 按 `docs/UX.md` 0.10 A05、`docs/UX-COPY.md` 0.11 与 `docs/HANDOFF.md` 0.48 增加 `/admin/coupons`：用后台框架渲染，当前导航项为优惠券，内容区仅有 `admin.nav_coupons` 标题和 `admin.coupon_listed_note`。后台导航按 UX 顺序改为订单、退款、优惠券、库存重置、店铺装修；同步修改后台框架、退款、库存重置、店铺装修页既有导航断言，以及路由表断言。本任务不调用接口、不装依赖、不改后端或设计。设计闸门：不适用（只加路由、导航与静态文字）。
+- 偏离：视觉稿中 site.css 无法声明的颜色、字号、字重与底色没有搬入，也没有借用其他组件的类取得这些属性；本页只实现 A05-desktop 与 A05-phone-list 的页头部分，列表、新建和停用不在本任务范围。
+- 留给之后的任务：请求模块由 SHOP-TASK-101 实现；列表、新建与停用由 SHOP-TASK-102 实现。未做浏览器验收。
+- 验证到什么程度：人工逐条对照 A05、UX-COPY 与 HANDOFF 的导航顺序、标题和会员中心说明；新增页面测试以 vitest 与 react-dom/server 覆盖后台框架、五项导航顺序及当前项、标题和说明均来自字典；前端检查由 PR 的必需 CI `frontend` 执行。
+
 ### SHOP-TASK-099 后台优惠券的列表、新建与停用接口
 
 - [x] 提供 `GET /api/admin/coupons`、`POST /api/admin/coupons` 与 `POST /api/admin/coupons/{coupon_id}/disable`。三者均由后台会话授权并经 `_NoStoreRoute` 返回 no-store；列表返回分页（每页 30）、由 cookie 算出的 CSRF、券的代码、类型、固定金额或百分比、最低消费、马来西亚起止日期、两个使用上限、已用次数与启停状态。新建严格接收券字段并提交审计；停用为幂等，只有实际停用写审计。
