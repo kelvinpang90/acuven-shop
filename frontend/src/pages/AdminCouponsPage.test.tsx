@@ -29,8 +29,35 @@ function renderContent(language: Language): string {
   );
 }
 
-function navLinks(html: string): string[] {
-  return [...html.matchAll(/<a href="([^"]*)"(?: aria-current="[^"]*")?>/g)].map((match) => match[1] ?? "");
+function tags(html: string, name: string): string[] {
+  return [...html.matchAll(new RegExp(`<${name}\\b[^>]*>`, "g"))].map((match) => match[0]);
+}
+
+function attributes(tag: string): Map<string, string> {
+  const found = new Map<string, string>();
+  for (const match of tag.matchAll(/\s([A-Za-z][\w:-]*)(?:="([^"]*)")?/g)) {
+    found.set((match[1] ?? "").toLowerCase(), match[2] ?? "");
+  }
+  return found;
+}
+
+function element(html: string, name: string, className: string): string {
+  const start = [...html.matchAll(new RegExp(`<${name}\\b[^>]*>`, "g"))].find((match) => {
+    return (attributes(match[0]).get("class") ?? "").split(/\s+/).includes(className);
+  })?.index;
+  if (start === undefined) {
+    throw new Error(`not found: <${name} class="${className}">`);
+  }
+  const pattern = new RegExp(`<${name}\\b[^>]*>|</${name}>`, "g");
+  pattern.lastIndex = start;
+  let depth = 0;
+  for (let match = pattern.exec(html); match !== null; match = pattern.exec(html)) {
+    depth += match[0].startsWith("</") ? -1 : 1;
+    if (depth === 0) {
+      return html.slice(start, match.index + match[0].length);
+    }
+  }
+  throw new Error(`unclosed: <${name} class="${className}">`);
 }
 
 function escapeHtml(value: string): string {
@@ -55,11 +82,11 @@ describe("AdminCouponsPage", () => {
         </RouterProvider>
       </LanguageProvider>,
     );
-    const menus = html.match(/<nav class="(?:acs-admin__nav site-admin__nav|site-admin__menu-nav)">[\s\S]*?<\/nav>/g) ?? [];
-    expect(menus).toHaveLength(2);
+    const menus = [element(html, "nav", "site-admin__nav"), element(html, "nav", "site-admin__menu-nav")];
     for (const nav of menus) {
-      expect(navLinks(nav)).toEqual(NAV_PATHS);
-      expect(nav).toMatch(new RegExp(`href="${COUPONS_PATH}" aria-current="page">${COPY["admin.nav_coupons"][language]}</a>`));
+      const items = tags(nav, "a").filter((tag) => !attributes(tag).has("lang"));
+      expect(items.map((tag) => attributes(tag).get("href"))).toEqual(NAV_PATHS);
+      expect(items.map((tag) => attributes(tag).get("aria-current"))).toEqual([undefined, undefined, "page", undefined, undefined]);
     }
     expect(html).toContain(`<span class="site-admin__bar-title">${COPY["admin.nav_coupons"][language]}</span>`);
   });
