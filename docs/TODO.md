@@ -2182,3 +2182,8 @@
   - 删除电话关联防套利索引仍留给之后的任务（不在本任务验收内）。
 - 留给之后的任务：会员中心的积分与优惠券查询（SHOP-TASK-095）；积分到期的定时任务（SHOP-TASK-096）；注销删除失败向运营告警邮件报告，留给运营告警邮件任务。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.11 第 3 条原句、UX 0.10 的 Q19 与 HANDOFF 0.46 的 Kelvin 决定自查，人工核对 `tests/test_member_deletion.py` 的既有用例（没有积分时 `forfeit_points` 不写记录）与 `tests/test_payment_coupons_points.py` 中其他调用 `delete_member` 的用例（只看该订单的流水或只在超时取消期间记录语句）不受接入影响。`tests/test_member_deletion_points.py` 用 SQLite 内存库（引擎设置同 `tests/test_member_deletion.py`：由引擎发 BEGIN，每个连接打开外键检查并断言已打开），积分经 `earn_points`、`reserve_points`、`release_points` 准备，用券记录经 `reserve_coupon`、`use_coupon`，待抵扣照 `tests/test_points.py` 直接写一条 `debt_add`；覆盖：注销后可用余额为 0、有余额的批次各一条 `forfeit`、已过期的记为 `expire`、剩余为 0 的批次不写、待抵扣不变、原有流水保留；其他会员的批次、流水、余额与待抵扣不变；以替身包住 `forfeit_points` 断言命中时入参为该会员 ID 与当前时间、未命中（已注销、不存在）时不调用且不写流水；已注销会员再注销不写积分流水；同号经 `sms_login_or_register` 重新注册为新会员，余额与待抵扣从 0 开始；注销时有预占积分的待支付订单在 `release_points` 释放时随即 `forfeit`；用券记录（`used` 与 `reserved`）与券在注销后不变；注销函数返回后回滚，会员、订单、积分批次、积分流水与用券记录全部复原；以 SQL 执行事件钩子断言注销期间读取会员、积分批次与流水的语句的整数参数只有该会员的 ID；没有 `app.` 日志。每条测试写明它守住的是设计或 Kelvin 决定的哪一句，只出自本任务验收标准的约束注明「验收：」。SQLite 不支持行锁、不生成 FOR UPDATE，锁下的排队只能在真 MySQL 上体现，未在真 MySQL 上做并发验证。这些测试与已有后端测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
+### SHOP-TASK-102 后台优惠券的列表、新建与停用 A05
+
+- [x] 在 SHOP-TASK-100 的 A05 页面接入 SHOP-TASK-101 的优惠券请求模块：读取每页 30 张优惠券，桌面显示表格、手机显示卡片；支持新建固定金额或百分比券，以及停用已启用的券。创建、停用、翻页和离开页面时按接口结果处理登录失效、CSRF、网络中断与其他失败；不改路由、导航、后端或设计，未加依赖。
+- 偏离与取舍：完整有效日期以「 – 」连接，不合并同年或同月；无上限显示「—」而非文字；手机新建时沿用后台顶栏的 `admin.nav_coupons`，不采用视觉稿的 New；有效期的两个原生日期输入共用 `admin.coupon_valid` 作为可访问名称。视觉稿中的颜色、字号、字重与底色没有搬入 `site.css`。
+- 验证到什么程度：新增服务端渲染测试覆盖整数仙转换、日期不按时区偏移、初始读取前禁用新建与字典文案；其余交互分支由 PR 必需 CI 的 frontend 检查执行。未做浏览器验收。
