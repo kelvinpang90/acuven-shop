@@ -340,14 +340,12 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-coupons__head > div { display: grid; gap: 16px; }
 .site-admin-coupons__list, .site-admin-coupons__form { display: grid; gap: 16px; }
 .site-admin-coupons__table { overflow-x: auto; }
-.site-admin-coupons__table td:last-child { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.site-admin-coupons__status { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .site-admin-coupons__cards { display: none; margin: 0; padding: 0; list-style: none; }
 .site-admin-coupons__pager { display: flex; justify-content: flex-end; gap: 8px; }
 .site-admin-coupons__form { max-width: 620px; padding: 20px; }
 .site-admin-coupons__form fieldset { display: flex; flex-wrap: wrap; gap: 8px; }
 .site-admin-coupons__form fieldset label { display: flex; gap: 4px; align-items: center; }
-.site-admin-coupons__money { display: flex; gap: 8px; align-items: center; }
-.site-admin-coupons__money .acs-admin__input { width: 180px; }
 .site-admin-coupons__back { display: none; }
 
 /* A07 的每日结果（A07-desktop）：表格在可横向滚动的面板里，SKU 数靠右；每天的展开处在该日下方另起一行（单元格不留内边距，
