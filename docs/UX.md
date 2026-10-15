@@ -7,7 +7,7 @@
 
 - **Stripe 测试环境支付**（Kelvin 2026-10-15 批准 DESIGN 1.12 / REQUIREMENTS 1.13，四个选择：托管付款页 Checkout、后台支付方式开关默认模拟、批准退款时同时在 Stripe 测试环境退款、Stripe 页预填固定演示邮箱；记录见 `docs/HANDOFF.md` 0.50）。只改下面五页，其余各页、V1 与全局框架不变：
   - **P06**：服务端给出本单的支付途径。为「Stripe 测试」时不显示模拟支付的方式与成功/失败按钮，改为跳转按钮 `[pay.stripe_go]`，按钮旁显示测试卡号与虚构资料提示；本单有进行中的 Stripe 会话时显示 `[pay.stripe_in_progress]` 与 `[pay.stripe_continue]`，不显示 15 分钟倒计时；另有跳转中、Stripe 暂不可用、支付途径已改变、取消时会话已付款等状态。订单应付低于 Stripe 最低收款额时照旧显示模拟支付。见 P06「Stripe 测试（0.11）」。
-  - **P07**：从 Stripe 返回后先向服务端确认；尚未确认时显示「确认中」并自动重查，重查用完后显示手动重查按钮；本单尚未付款时引导回 P06 继续；极少数迟到付款被自动退款时另有说明。见 P07「Stripe 测试（0.11）」。
+  - **P07**：从 Stripe 返回后先向服务端确认；尚未确认时显示「确认中」并自动重查，重查用完后显示手动重查按钮；本单尚未付款时引导回 P06 继续；极少数迟到付款由服务端发起退款时另有说明。见 P07「Stripe 测试（0.11）」。
   - **P14**：新增 `[privacy.stripe]`，告知本站发给 Stripe 的内容、访客在 Stripe 页输入的资料由 Stripe 测试环境保存、本站不读取也无法逐条删除，只用测试卡号与虚构资料。
   - **A03**：经 Stripe 测试付款的订单，退款详情显示付款方式与按付款方式的退款期限提示；批准后显示各次 Stripe 退款尝试的状态（处理中 / 已退 / 失败），最新一次失败时可手动重试。见 A03「Stripe 测试（0.11）」。
   - **A09**：新增支付方式开关（模拟 / Stripe 测试，默认模拟）；Stripe 测试凭据未配置时该选项禁用并显示原因。
@@ -771,8 +771,13 @@ V1 金额与个人资料元素：
 
 依据 DESIGN 1.12「Stripe 测试环境支付」（下称「Stripe 节」）。服务端读取订单时一并给出本单的**支付途径**与 Stripe 状态，页面只按它显示：
 
-- **模拟**：开关为「模拟」且本单没有 Stripe 记录（或只有已作废的），或订单应付低于 Stripe 最低收款额（Stripe 节第 2 条）。页面与上面的线框完全相同，不显示任何 Stripe 文字。
-- **Stripe 测试**：本单有进行中的 Stripe 会话（不论开关当前取值），或开关为「Stripe 测试」且应付达到最低收款额。显示下面的线框：标题、★ 提示与操作区换成 Stripe 的，订单号、应付金额、游客授权说明、收货资料与取消按钮同上。
+按 Stripe 节第 2 条依次判定：
+
+1. 本单有没作废的 Stripe 记录（创建中、进行中或已完成），不论开关当前取值与订单金额，一律是 **Stripe 测试**，不接受模拟支付。
+2. 否则（没有记录或只有已作废的）：开关为「Stripe 测试」且应付达到 Stripe 最低收款额时是 **Stripe 测试**；开关为「模拟」，或应付低于最低收款额时是 **模拟**。
+
+- **模拟**：页面与上面的线框完全相同，不显示任何 Stripe 文字。
+- **Stripe 测试**：显示下面的线框：标题、★ 提示与操作区换成 Stripe 的，订单号、应付金额、游客授权说明、收货资料与取消按钮同上。
 - 打开本页时，本单若已有付款完成的会话，服务端先按 Stripe 节第 4 条向 Stripe 确认；已付款则本页直接转到 P07 成功，不显示下面的线框。
 
 桌面：
@@ -793,7 +798,8 @@ V1 金额与个人资料元素：
 | 有进行中的会话：[pay.stripe_in_progress]                                |
 |  ◆ [pay.stripe_notice]                                                |
 |    [pay.stripe_test_card]                                             |
-|  未发起：( [pay.stripe_go] )   有进行中的会话：( [pay.stripe_continue] ) |
+|  未发起、创建结果未定：( [pay.stripe_go] )                              |
+|  有进行中的会话：( [pay.stripe_continue] )                             |
 |                                                                       |
 |  ([pay.cancel_order])                                                 |
 +-----------------------------------------------------------------------+
@@ -836,8 +842,9 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 
 说明：
 
-- **未发起**（本单没有进行中的会话）：显示 `[pay.expires]` 倒计时；点 `[pay.stripe_go]` 由服务端按 Stripe 节第 3 条创建会话（或取回已建的同一会话）并返回付款页地址，页面只跳转到服务端返回的地址。
-- **有进行中的会话**（会话创建中或已建成、未付款）：不显示 `[pay.expires]`，改显示 `[pay.stripe_in_progress]`（会话结束前订单不会因 15 分钟到期被取消，Stripe 节第 5 条）；`[pay.stripe_continue]` 打开同一会话，不另建会话。从 Stripe 页点返回（取消返回地址 `/pay`）回到本页即此状态。
+- **未发起**（本单没有 Stripe 记录或只有已作废的）：显示 `[pay.expires]` 倒计时；点 `[pay.stripe_go]` 由服务端按 Stripe 节第 3 条创建会话并返回付款页地址，页面只跳转到服务端返回的地址。
+- **创建结果未定**（记录为创建中、服务端还没有付款页地址）：与「未发起」相同显示 `[pay.stripe_go]`，但不显示 `[pay.expires]`（这时订单要等对账才会取消，Stripe 节第 3、5 条）；点按钮由服务端以同一幂等键重试，取得同一个会话就跳转，仍无法确定则显示 `[pay.stripe_unavailable]`。页面不另建会话。
+- **有进行中的会话**（会话已建成、未付款，服务端有付款页地址）：不显示 `[pay.expires]`，改显示 `[pay.stripe_in_progress]`（会话结束前订单不会因 15 分钟到期被取消，Stripe 节第 5 条）；`[pay.stripe_continue]` 打开同一会话，不另建会话。从 Stripe 页点返回（取消返回地址 `/pay`）回到本页即此状态。
 - 跳转在当前标签页进行，不开新窗口。Stripe 的成功返回地址是 P07 的 `/pay/result`，取消返回地址是本页 `/pay`；两者都不带订单号、会话 ID 或任何凭据，返回后页面照旧凭服务端会话读取订单（Stripe 节第 3 条）。游客在 Stripe 页停留超过短期凭据的 30 分钟时，返回后看到 `[pay.session_expired]`，凭订单号和电话查单；付款仍由服务端按 Stripe 节第 4 条确认。
 - ◆ `[pay.stripe_notice]` 与 `[pay.stripe_test_card]` 在每次跳转前都显示，无勾选框（Stripe 节第 1、10 条）。测试卡号是 Stripe 公布的测试卡号；FPX、GrabPay 测试授权页的呈现以实现前的测试环境核验为准，与 `[pay.stripe_test_card]` 不符时先改文案。
 - 支付途径为 Stripe 测试时不显示 `[pay.choose_method]`、三种演示方式、`[pay.simulate_success]`、`[pay.simulate_failure]` 与 `[pay.action_hint]`；卡被拒或 FPX、GrabPay 授权失败由访客在 Stripe 页重试，不回本站显示失败（Stripe 节第 4 条）。
@@ -946,7 +953,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 - **成功**：同上成功区（`[result.success_body]` 照旧写明未扣真实款项）。从 P06 取消时会话已付款进入的，成功区顶部另显示 `[result.paid_not_cancelled]`。
 - **确认中**：服务端尚未确认（付款结果未定，或查询时 Stripe 暂不可用）。显示 `[result.confirming_title]` 与 `[result.confirming_body]`，页面每 5 秒自动重查一次、最多 12 次（约 1 分钟；间隔与次数为本稿提议）；用完后停止自动重查，显示 `[result.confirming_slow]` 与 `( [result.check_again] )`，每点一次重查一次，提交期间按钮禁用。
 - **尚未付款**：本单的会话仍进行中、未付款（例如直接打开本页）。显示 `[result.stripe_not_paid]` 与 `( [result.stripe_back_to_pay] )` 回到 P06。
-- **已取消、付款已退回**：极少数情形下 Stripe 付款到达时订单已取消（Stripe 节第 6 条），订单保持已取消，服务端在 Stripe 测试环境全额退款。服务端告知本单有来源为会话的 Stripe 退款时，以 `[result.stripe_late_refund]` 代替 `[result.cancelled]` 或 `[result.cancelled_by_you]`。
+- **已取消、已发起退款**：极少数情形下 Stripe 付款到达时订单已取消（Stripe 节第 6 条），订单保持已取消，服务端在 Stripe 测试环境发起全额退款并跟进结果，不保证成功。服务端告知本单有来源为会话的 Stripe 退款尝试时（不论该尝试当前状态），以 `[result.stripe_late_refund]` 代替 `[result.cancelled]` 或 `[result.cancelled_by_you]`。
 - Stripe 支付途径没有「失败」状态：卡被拒、FPX 或 GrabPay 授权失败由访客在 Stripe 页重试（Stripe 节第 4 条）；从 Stripe 页取消返回的是 P06，不是本页。
 
 桌面：
@@ -966,7 +973,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 +---------------------------- 成功 ------------------------------------+
 | 取消时会话已付款：[result.paid_not_cancelled]                           |
 | （其余同上成功区）                                                      |
-+------------------------ 已取消、付款已退回 --------------------------+
++------------------------ 已取消、已发起退款 --------------------------+
 | [result.stripe_late_refund]   ([result.continue])                     |
 +---------------------------- 游客凭据过期 ----------------------------+
 | [pay.session_expired]   ( [common.nav_track] ) → P08                  |
@@ -989,7 +996,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 --- 尚未付款时替换为 ---
 | [result.stripe_not_paid]       |
 | ( [result.stripe_back_to_pay] ) |
---- 已取消、付款已退回时 ---
+--- 已取消、已发起退款时 ---
 | [result.stripe_late_refund]    |
 | ([result.continue])            |
 ```
@@ -1003,7 +1010,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 | K | 订单号不进返回地址 | 「Stripe 测试环境支付」（第 3 条）「权限与资料保护」 |
 | — | 只在服务端向 Stripe 核实后进入已支付；同一会话重复确认返回原结果，不重复发放积分 | 「Stripe 测试环境支付」（第 4 条） |
 | — | 确认中：订单不因 15 分钟到期被取消，Stripe 不可用时也不取消 | 「Stripe 测试环境支付」（第 4、5 条） |
-| — | 迟到付款：订单状态不变，全额退回 Stripe 测试环境 | 「Stripe 测试环境支付」（第 6 条） |
+| — | 迟到付款：订单状态不变，在 Stripe 测试环境发起全额退款并告警；文案不承诺退款结果 | 「Stripe 测试环境支付」（第 6、8 条） |
 
 ---
 
