@@ -12,11 +12,13 @@ import {
   AdminCouponsView,
   INITIAL_LIST,
   disableCoupon,
+  disableState,
   disableStep,
   formatCouponDate,
   listStep,
   loadCoupons,
   pagerOf,
+  reloadedDisableState,
 } from "./AdminCouponsPage";
 import type { DisableStep, ListState, Moves } from "./AdminCouponsPage";
 
@@ -108,15 +110,41 @@ describe("AdminCouponsPage", () => {
     expect(disableStep({ kind: "ok", coupon: DISABLED })).toEqual({ kind: "update", coupon: DISABLED }); expect(disableStep({ kind: "csrf" })).toEqual({ kind: "reload" }); expect(disableStep({ kind: "not_found" })).toEqual({ kind: "reload" }); expect(disableStep({ kind: "none" })).toBe("login"); expect(disableStep({ kind: "network" })).toEqual({ kind: "error", error: "common.network_check" }); expect(disableStep({ kind: "failed" })).toEqual({ kind: "error", error: "common.error_retry" });
   });
 
+  // 本任务验收「ok 时以返回的券更新该行」「not_found 与 csrf 重新读取当前页，读取完成后仍显示 common.error_retry」：
+  // 状态转换保持为可直接验证的纯函数，避免组件内联逻辑遗漏这两条结果。
+  it("updates a disabled row and preserves retry after a required reload", () => {
+    const activePage = { busy: false, list: PAGE, error: null } satisfies ListState;
+    const returned = { ...COUPON, active: false };
+    const updated = disableState(activePage, { kind: "update", coupon: returned });
+    expect(updated.list?.coupons).toEqual([returned, DISABLED]);
+    expect(updated.list?.coupons[0]?.active).toBe(false);
+    expect(render(updated)).not.toContain(COPY["admin.coupon_disable"].en);
+    expect(disableState(activePage, { kind: "reload" })).toEqual({ busy: true, list: PAGE, error: "common.error_retry" });
+    expect(reloadedDisableState({ kind: "ok", page: PAGE })).toEqual({ busy: false, list: PAGE, error: "common.error_retry" });
+    expect(reloadedDisableState({ kind: "network" })).toEqual({ busy: false, list: null, error: "common.error_retry" });
+    expect(render(disableState(activePage, { kind: "error", error: "common.network_check" }))).toContain(COPY["common.network_check"].en);
+    expect(render(disableState(activePage, { kind: "error", error: "common.error_retry" }))).toContain(COPY["common.error_retry"].en);
+  });
+
   // 本任务验收：异步读取携带页码与 AbortSignal，并在取消后不再更新页面。
   it("loads the requested page and ignores an aborted result", async () => {
     const fetch = vi.fn().mockResolvedValue(response(200, PAGE)); vi.stubGlobal("fetch", fetch); const controller = new AbortController(); const target = moves<ListState>(); await loadCoupons(1, controller.signal, target.target); expect(fetch.mock.calls[0]?.[0]).toBe("/api/admin/coupons?page=1"); expect(target.shown).toEqual([{ busy: false, list: PAGE, error: null }]);
     const cancelled = moves<ListState>(); const signal = new AbortController(); const pending = loadCoupons(2, signal.signal, cancelled.target); signal.abort(); await pending; expect(cancelled.shown).toEqual([]);
   });
 
+  // 本任务验收「none 用路由的 replace 进入 /admin/login」：列表读取把 401 的结果直接交给路由替身。
+  it("replaces the route when a list read has no session", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(401, {})));
+    const target = moves<ListState>();
+    await loadCoupons(1, new AbortController().signal, target.target);
+    expect(target.paths).toEqual(["/admin/login"]);
+  });
+
   // 本任务验收：停用进行中禁用按钮并标 aria-busy；完成后由调用方以返回券替换该行。
   it("marks only the pending active coupon busy", () => {
-    const html = render({ busy: false, list: PAGE, error: null }, COUPON.id); expect(html).toContain('disabled="" aria-busy="true"'); expect(html).toContain('aria-busy="false"');
+    const html = render({ busy: false, list: PAGE, error: null }, COUPON.id);
+    expect(html.match(/aria-busy="true"/g)).toHaveLength(2);
+    expect(html).toContain('aria-busy="false"');
   });
 
   // 本任务验收：停用使用最近列表的 CSRF，none 用 replace 进入登录，取消后的结果不更新。
