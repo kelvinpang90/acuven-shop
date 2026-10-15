@@ -3550,7 +3550,7 @@ tasks:
       设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.48（优惠券）。拆分：业务规则层（3 个允许路径）。
       run cf522fd5 以 review_repair_exhausted 失败（2026-10-14，三轮评审都认可规则函数，卡在测试：第一轮漏了验收列出的多数测试意图，第二轮断言不够严格并发现停用返回的已用次数恒为 0，第三轮列表测试手算的排序期望写错致 CI 失败），所以第 4 条写明停用返回的已用次数，第 5 条写死已在该 run 的实现上实跑通过的测试写法。
       run d90611c4 以 checks_failed 失败（2026-10-14，backend 收集阶段即报错：其三的参数化参数取名 request，是 pytest 的保留名；改名后其九仍失败——停用前没有提交，rollback 把券一起撤掉），所以第 5 条写明参数化参数名不用 request、其九单独成条且在停用前先提交；两处改后该 run 的测试 22 条全部通过。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-083
       - SHOP-TASK-085
