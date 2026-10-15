@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390">
+<title>A03 Approved, latest Stripe refund failed — phone</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}.acs-admin__input,.acs-admin__select{box-sizing:border-box;max-width:100%;min-width:0}.acs-admin main *{min-width:0;overflow-wrap:anywhere}</style>
+</head>
+<body>
+<div class="acs-admin" data-mode="light" style="width: 390px; height: 1160px; display: flex; flex-direction: column">
+<div class="acs-admin__banner" style="padding: 6px 16px"><span class="acs-tag acs-tag--demo">DEMO</span>Admin — demo store. Actions here never move real money or goods.</div>
+<div style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--a-nav); color: var(--a-on-nav)"><a href="#" aria-label="Back" style="display: grid; place-items: center; width: 44px; height: 44px; color: inherit"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg></a><span style="font-weight: 600; min-width: 0">Refund request details</span><button class="acs-admin__btn acs-admin__btn--secondary" type="button" style="margin-left: auto; flex-shrink: 0; color: var(--a-on-nav); border-color: var(--a-nav-muted)">Log out</button></div>
+<main style="display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; padding: 16px">
+
+<div style="display: flex; justify-content: space-between; align-items: center"><h1 class="acs-admin__h" style="font-size: 17px"><a href="#" style="color: var(--a-ink); text-decoration: underline; text-underline-offset: 2px">P9DS-6HWN</a></h1><span class="acs-tag acs-tag--success">Approved (demo)</span></div>
+<div class="acs-admin__panel" style="display: grid; gap: 12px; padding: 14px">
+<div style="display: grid; gap: 6px"><span class="acs-admin__muted" style="font-size: 12px; font-weight: 600">Items</span><div style="display: flex; justify-content: space-between; gap: 12px"><span>Soy Wax Candle</span><span>Requested 2 / bought 2 / approved 2</span></div></div>
+<div style="display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--a-line)"><span style="font-weight: 600">Cash refund (demo): RM 64.00</span><span>Refunded so far (demo): RM 64.00</span><span>Still refundable: RM 0.00</span><span class="acs-admin__muted" style="font-size: 13px">Sample shipping fees are not refunded.</span></div>
+<div style="display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--a-line)"><span>Reviewed by admin on 14 Oct 2026 16:40</span></div>
+<div style="display: grid; gap: 6px; padding-top: 12px; border-top: 1px solid var(--a-line)"><span style="font-weight: 600">Paid with Stripe test mode</span><span>Payment method type: grabpay</span><span class="acs-admin__muted" style="font-size: 13px">Stripe allows GrabPay refunds within 90 days of payment.</span></div>
+</div>
+
+<h2 class="acs-admin__h" style="font-size: 15px">Stripe test refunds</h2>
+<div class="acs-admin__panel" style="display: grid; gap: 6px; padding: 14px">
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 12px"><span>14 Oct 2026 16:41</span><span class="acs-tag acs-tag--danger">Failed</span></div>
+<span>RM 64.00</span>
+<span class="acs-admin__muted" style="font-size: 12px">Stripe refund ID <span style="font-family: ui-monospace, monospace">re_3Qa…m2Zc</span></span>
+</div>
+<div class="acs-admin__alert" role="alert" style="font-size: 13px">Stripe didn't complete this refund. Check the time limit above and the Stripe dashboard, then retry. Retrying sends a new refund request.</div>
+<button class="acs-admin__btn" type="button" style="justify-content: center; min-height: 44px">Retry Stripe refund</button>
+</main>
+</div>
+</body>
+</html>

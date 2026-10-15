@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=640">
+<title>P07 Stripe result states</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs" data-shop-theme="pandan" data-mode="light" style="width: 640px; height: 560px; box-sizing: border-box; padding: 32px 40px; display: grid; gap: 22px; align-content: start">
+
+<div style="display: grid; gap: 12px; justify-items: start">
+<div class="acs-alert acs-alert--info" role="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6M12 7.5v.5"></path></svg><span>This order hasn't been paid yet. You can go back to continue the Stripe test payment or cancel the order.</span></div>
+<a class="acs-btn acs-btn--primary" href="#">Back to payment</a>
+</div>
+
+<div style="display: grid; gap: 12px; justify-items: start; padding-top: 20px; border-top: 1px solid var(--rule)">
+<div class="acs-alert acs-alert--info" role="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6M12 7.5v.5"></path></svg><span>This order had already been cancelled when your Stripe test payment came through, so the store handles that payment as a refund in Stripe's test mode. No real money was involved.</span></div>
+<a class="acs-btn acs-btn--secondary" href="#">Continue shopping</a>
+</div>
+
+<div style="display: grid; gap: 12px; padding-top: 20px; border-top: 1px solid var(--rule)">
+<div class="acs-alert acs-alert--success" role="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M8 12.5l2.5 2.5L16 9.5"></path></svg><span>Your payment on Stripe had already gone through, so this order was not cancelled.</span></div>
+<div style="display: flex; gap: 14px; align-items: center"><span style="display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--success-soft); color: var(--success)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg></span><h2 class="acs-display-m">Demo payment successful</h2></div>
+<p class="acs-body-s acs-muted" style="margin: 0">No real money was taken. Your order is now "Paid (demo)".</p>
+</div>
+
+</div>
+</body>
+</html>

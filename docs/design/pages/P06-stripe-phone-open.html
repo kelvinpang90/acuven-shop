@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390">
+<title>P06 Stripe test payment, session open — phone</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs acs--phone" data-shop-theme="pandan" data-mode="light" style="width: 390px; height: 1760px; display: flex; flex-direction: column; overflow: hidden">
+
+<div class="acs-banner"><span class="acs-tag acs-tag--demo">DEMO</span><span>Demo only — no real transactions</span></div>
+<header class="acs-header" style="gap: 10px; padding-top: 6px">
+<div class="acs-header__row" style="gap: 4px; flex-wrap: nowrap"><button class="acs-btn acs-btn--quiet" type="button" aria-label="Menu" style="color: var(--ink); padding: 0; min-width: 44px; margin-left: -10px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></button><a class="acs-brand" href="#" style="font-size: calc(18px * var(--display-scale))">ACUVEN SHOP</a><button class="acs-btn acs-btn--quiet" type="button" style="margin-left: auto; color: var(--ink); text-decoration: none; font-weight: 500; font-size: 14px; padding: 0 6px">English ▾</button><a href="#" style="color: var(--ink); font-weight: 600; font-size: 14px; text-decoration: none">Cart (0)</a></div>
+</header>
+
+<section style="display: grid; gap: 16px; padding: 24px 16px 32px">
+<div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap"><h1 class="acs-display-l">Payment (Stripe test mode)</h1><span class="acs-tag acs-tag--demo">DEMO</span></div>
+<p class="acs-hint" style="margin: 0"><svg class="acs-hint__mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"></path></svg><span>You'll pay on Stripe's test page. Stripe is a real payment service, but in test mode no real money moves.</span></p>
+<div class="acs-card" style="display: grid; gap: 12px; padding: 18px">
+<span class="acs-field__label">Order number</span>
+<div style="display: flex; justify-content: space-between; align-items: center"><span class="acs-num" style="font-size: 18px; font-weight: 600">B6TN-2RJD</span><button class="acs-btn acs-btn--secondary acs-btn--sm" type="button">Copy</button></div>
+<p class="acs-body-s acs-muted" style="margin: 0">Save this order number. You'll need it with your phone number to track the order.</p>
+<span class="acs-field__label" style="padding-top: 10px; border-top: 1px solid var(--rule)">Amount due (demo)</span>
+<span class="acs-price acs-price--l">RM 135.00</span>
+<p class="acs-body-s acs-muted" style="margin: 0">For your privacy, only this browser can open this order's payment and result pages, for 30 minutes after the order was placed.</p>
+</div>
+<details style="border-radius: var(--radius-card); background: var(--surface-alt); padding: 12px 16px"><summary style="min-height: 32px; display: flex; align-items: center; font-weight: 600; cursor: pointer">Shipping details</summary><p style="margin: 8px 0 0" class="acs-body-s">Sam Taylor · +44 7700 900123<br>1 Example Street, AB1 2CD, Greater London, United Kingdom</p></details>
+<div class="acs-alert acs-alert--info" role="status" style="margin-top: 8px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span>A Stripe test payment for this order is already open. The order stays reserved while that payment page is open; once Stripe confirms the page has expired without a payment, the order is cancelled.</span></div>
+<p class="acs-hint" style="margin: 0"><svg class="acs-hint__mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 9-9 9-9-9z"></path></svg><span>Use only a test card number — never a real card. On Stripe's page, the email is a demo address, and any name or billing address you're asked for can be made up. Whatever you enter there is kept by Stripe's test environment.</span></p>
+<div style="display: grid; gap: 10px; padding: 14px 16px; border: var(--border-w) dashed var(--border); border-radius: var(--radius-card); background: var(--surface-alt)">
+<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2"></rect><path d="M2.5 9.5h19M6 15h4"></path></svg>
+<p class="acs-body-s" style="margin: 0">Test card: <span class="acs-num" style="font-weight: 600; letter-spacing: 0.04em">4242 4242 4242 4242</span>, any future expiry date, any CVC. If Stripe's page offers other methods such as FPX or GrabPay, follow the test instructions shown there.</p>
+</div>
+<button class="acs-btn acs-btn--primary acs-btn--block" type="button">Continue on Stripe<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"></path></svg></button>
+<button class="acs-btn acs-btn--danger acs-btn--block" type="button" style="margin-top: 12px">Cancel this order</button>
+</section>
+
+<footer class="acs-footer" style="margin-top: auto">
+<span class="acs-brand" style="color: var(--on-footer)">ACUVEN SHOP</span>
+<p class="acs-body-s" style="margin: 0">Acuven demo store for showcasing online store solutions. All products, prices, stock, payments, shipping and refunds are simulated.</p>
+<a href="#" style="font-weight: 600">Privacy</a>
+<a class="acs-btn acs-btn--secondary acs-btn--block" href="#" style="justify-content: flex-start; text-align: left; padding: 12px 16px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M4 20l1.4-4A8 8 0 1 1 8 18.6z"></path></svg>Interested in a store like this? Chat with Acuven on WhatsApp</a>
+</footer>
+
+</div>
+</body>
+</html>
