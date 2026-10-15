@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=640">
+<title>P06 Stripe states</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs" data-shop-theme="pandan" data-mode="light" style="width: 640px; height: 760px; box-sizing: border-box; padding: 32px 40px; display: grid; gap: 22px; align-content: start">
+
+<div style="display: grid; gap: 8px; justify-items: start">
+<button class="acs-btn acs-btn--primary acs-btn--lg" type="button" disabled aria-busy="true">Go to Stripe test payment</button>
+<span class="acs-body-s" role="status">Opening Stripe's test payment page…</span>
+</div>
+
+<div style="display: grid; gap: 10px; justify-items: start; padding-top: 20px; border-top: 1px solid var(--rule)">
+<button class="acs-btn acs-btn--primary acs-btn--lg" type="button">Go to Stripe test payment<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17L17 7M9 7h8v8"></path></svg></button>
+<div class="acs-alert acs-alert--danger" role="alert"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 16.5v.5"></path></svg><span>Stripe test mode isn't responding right now. Your order is kept — please try again in a moment.</span></div>
+</div>
+
+<div style="padding-top: 20px; border-top: 1px solid var(--rule)">
+<div class="acs-alert acs-alert--info" role="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"></path></svg><span>The payment method for this order has changed. The page has been updated.</span></div>
+</div>
+
+<div style="padding-top: 20px; border-top: 1px solid var(--rule)">
+<div class="acs-alert acs-alert--info" role="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg><span>We couldn't confirm whether this order's Stripe test payment page was created. The order stays reserved while the store checks it; you don't need to do anything now.</span></div>
+</div>
+
+<div style="display: grid; gap: 10px; justify-items: start; padding-top: 20px; border-top: 1px solid var(--rule)">
+<div class="acs-alert acs-alert--danger" role="alert"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6M12 16.5v.5"></path></svg><span>We couldn't reach Stripe to close its payment page, so the order hasn't been cancelled. Please try again in a moment.</span></div>
+<button class="acs-btn acs-btn--danger" type="button">Cancel this order</button>
+</div>
+
+</div>
+</body>
+</html>

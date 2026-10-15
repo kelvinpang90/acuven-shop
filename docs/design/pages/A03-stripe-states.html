@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=640">
+<title>A03 Other Stripe states</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}.acs-admin main *{min-width:0;overflow-wrap:anywhere}</style>
+</head>
+<body>
+<div class="acs-admin" data-mode="light" style="width: 640px; height: 520px; box-sizing: border-box">
+<main style="display: grid; gap: 18px; padding: 28px 32px; align-content: start">
+
+<section class="acs-admin__panel" style="display: grid; gap: 6px; padding: 16px">
+<span style="font-weight: 600">Paid with Stripe test mode</span>
+<span>Payment method type: not known yet</span>
+<span class="acs-admin__muted" style="font-size: 13px">The refund time limit for this payment method is set by Stripe.</span>
+</section>
+
+<section class="acs-admin__panel" style="display: grid; gap: 10px; padding: 16px">
+<h3 class="acs-admin__h" style="font-size: 15px">Stripe test refunds</h3>
+<div role="status" style="padding: 10px 12px; border-radius: 4px; background: var(--a-select); font-size: 13px">Nothing to refund in Stripe: the approved items were fully paid with coupons or points.</div>
+</section>
+
+<section class="acs-admin__panel" style="display: grid; gap: 10px; padding: 16px; justify-items: start">
+<button class="acs-admin__btn" type="button">Retry Stripe refund</button>
+<div class="acs-admin__alert" role="alert" style="font-size: 13px">This refund can't be sent to Stripe because it would exceed the amount paid. The operator has been alerted.</div>
+</section>
+
+</main>
+</div>
+</body>
+</html>

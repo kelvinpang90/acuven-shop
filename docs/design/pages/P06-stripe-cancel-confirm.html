@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=640">
+<title>P06 Cancel confirmation, Stripe session open</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs" data-shop-theme="pandan" data-mode="light" style="width: 640px; height: 280px; box-sizing: border-box; display: grid; place-items: center; background: var(--surface-alt)">
+<div class="acs-dialog" role="dialog" aria-modal="true" aria-labelledby="dlg" aria-describedby="dlg2">
+<p id="dlg" style="margin: 0">Cancel this demo order? The held stock, coupon and points will be released. This cannot be undone.</p>
+<p id="dlg2" class="acs-body-s acs-muted" style="margin: 0">We'll first try to close this order's open Stripe test payment page. If the payment has already gone through, the order won't be cancelled.</p>
+<div class="acs-dialog__actions"><button class="acs-btn acs-btn--secondary" type="button">Keep order</button><button class="acs-btn acs-btn--danger" type="button">Yes, cancel order</button></div>
+</div>
+</div>
+</body>
+</html>
