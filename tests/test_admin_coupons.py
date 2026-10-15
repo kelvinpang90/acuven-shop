@@ -36,7 +36,12 @@ def db() -> Iterator[Session]:
 
     @event.listens_for(engine, "connect")
     def _foreign_keys(connection, _record) -> None:
+        connection.isolation_level = None
         connection.execute("PRAGMA foreign_keys=ON")
+
+    @event.listens_for(engine, "begin")
+    def _begin(connection) -> None:
+        connection.exec_driver_sql("BEGIN")
 
     Base.metadata.create_all(engine)
     with Session(engine) as session:
