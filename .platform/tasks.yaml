@@ -3664,24 +3664,59 @@ tasks:
     creates_pull_request: true
 
   - id: SHOP-TASK-102
-    title: 后台优惠券的列表、新建与停用 A05
+    title: 后台优惠券的列表、翻页与停用 A05
     purpose: >-
-      在 SHOP-TASK-100 的优惠券页上实现 A05 的列表、新建与停用：经 SHOP-TASK-101 的请求模块调用 SHOP-TASK-099 的接口，按 docs/HANDOFF.md 0.48 记录的 Kelvin 2026-10-12 决定（只新建与停用；有效期只录日期；新建被拒时显示 admin.coupon_code_taken 或 admin.coupon_invalid）。
-      不改路由与导航，不装依赖，不改后端，不改设计。
-      设计闸门：不适用（金额规则与校验在 SHOP-TASK-098、099 的服务端，页面只收集与显示）。
+      在 SHOP-TASK-100 的优惠券页上实现 A05 的列表、翻页与停用：经 SHOP-TASK-101 的请求模块调用 SHOP-TASK-099 的列表与停用接口，按 docs/HANDOFF.md 0.48 记录的 Kelvin 2026-10-12 决定（只新建与停用；有效期只录日期）。
+      新建表单与提交留给 SHOP-TASK-109。不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（金额规则与校验在 SHOP-TASK-098、099 的服务端，页面只显示与停用）。
       拆分：见 SHOP-TASK-100，本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+      原 102 一并做列表、新建与停用，run 55985642 以 review_repair_exhausted 失败（2026-10-15）：三轮各卡在一处新的前端检查错误（lint 的 no-misused-promises、日期解构的类型、测试里 AdminFrameView 的状态少了 error 字段），且要求的二十来条交互测试每轮只补上几条；
+      所以拆成列表与停用（本任务）和新建（SHOP-TASK-109），并写明照库存重置页的「导出纯函数与 View、测试直接调用」写法。
     status: ready
     depends_on:
       - SHOP-TASK-100
       - SHOP-TASK-101
     acceptance_criteria:
-      - 页面内容与文案以 docs/UX.md 0.10 的 A05、docs/UX-COPY.md 0.11 与 docs/HANDOFF.md 0.48 为准，样式以 docs/design/pages/ 的 A05-desktop、A05-phone-list 与 A05-phone-new 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入 docs/TODO.md 的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.11 加入本任务用到的键
-      - 列表——SHOP-TASK-100 的标题与说明之下，标题行右侧为 common.create 按钮；桌面表格列头 admin.coupon_code、admin.coupon_type、admin.coupon_value、admin.coupon_valid、admin.coupon_usage 与 admin.filter_status，手机为卡片（照 A05-phone-list）；类型显示 admin.coupon_fixed 或 admin.coupon_percent；面额 fixed 显示 common.price_myr（{amount} 为 frontend/src/format.ts 的 formatSen 的结果，即 RM 10.00），percent 显示百分数；有效期按界面语言显示起始日与截止日本身（不按访客时区换算，写法同 A07 的营业日期），两个完整日期以「 – 」连接（不像视觉稿那样合并同年或同月，记入偏离）；已用与上限显示为「已用 / 上限」，上限为 null 时显示不限的符号「—」（不是文字，记入偏离）；状态为 admin.coupon_enabled 或 admin.coupon_disabled 标签，启用的券另有 admin.coupon_disable 按钮；翻页与没有券时的显示沿用 SHOP-TASK-060 的做法（每页 30 张）
-      - 新建——列表读取成功（取得 csrf_token）之前 common.create 禁用，读取失败时也禁用；点 common.create 显示新建表单（h2 为 common.create；桌面在列表下方，手机隐藏列表只显示表单，表单上方有 common.back 按钮回到列表，照 A05-phone-new；手机顶栏标题仍为 admin.nav_coupons，不改后台框架——视觉稿为 New，记入偏离）：admin.coupon_code（文本，必填）、admin.coupon_type（admin.coupon_fixed 与 admin.coupon_percent 两个单选，默认 fixed）、admin.coupon_value（fixed 时以 RM 输入、步长 0.01、0.01 到 100000，提交时换成整数仙；percent 时为 1 到 100 的整数）、admin.coupon_valid（fieldset 的 legend，内放两个原生日期输入，起始日在前、截止日在后，两个输入都以该 legend 为可访问名称——UX-COPY 没有起与止各自的键，记入偏离）、admin.coupon_min_spend（RM，步长 0.01、0 到 100000，默认 0，换成整数仙）、admin.coupon_total_limit 与 admin.coupon_member_limit（1 到 1000000 的整数，留空即不限、提交 null），其下 admin.rules_apply_new 与 common.save；这些上下限与服务端（SHOP-TASK-098）一致，用浏览器自带的必填、最小值、最大值与步长约束，不另写文案
-      - 提交（经 SHOP-TASK-101 的请求模块，csrf_token 取自列表结果）——进行中按钮禁用并标 aria-busy；ok 时清空并收起表单、重新读取第 1 页；code_taken 显示 admin.coupon_code_taken、invalid 显示 admin.coupon_invalid，都保留表单内容；csrf 时重新读取当前页取得新令牌并显示 common.error_retry、保留表单；none 用路由的 replace 进入 /admin/login；network 显示 common.network_check 并重新读取第 1 页（新建可能已经成功，管理员可在列表里看到），保留表单内容；failed 显示 common.error_retry。停用——点 admin.coupon_disable 以该券内部 ID 调用停用，进行中该按钮禁用并标 aria-busy；ok 时以返回的券更新该行（不再显示停用按钮）；not_found 与 csrf 时重新读取当前页并显示 common.error_retry；none、network 与 failed 同上；不加确认框（UX 没有）
-      - 读取——打开页面读取第 1 页，进行中标 aria-busy；none 用路由的 replace 进入 /admin/login；network 显示 common.network_check，其他失败显示 common.error_retry；离开页面或翻页时中止旧请求，旧请求的结果不再更新页面
-      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AdminCouponsPage.test.tsx 验证意图——表头与卡片、类型与面额（fixed 显示为 RM 加两位小数）、日期不随时区偏移、已用与上限（含不限）、状态与停用按钮只在启用的券上；新建表单的字段、默认值与上下限、RM 换成整数仙（含 0.1 与 12.34）、留空上限提交 null、列表取得前 common.create 禁用、手机新建时顶栏标题仍为 admin.nav_coupons；提交成功收起并重新读取、code_taken 与 invalid 的文案且保留表单、csrf、401、网络中断后重新读取第 1 页且保留表单；停用成功更新该行、not_found 重新读取；翻页；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；SHOP-TASK-100 写的现有断言只按需要改并写明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - docs/TODO.md 新增 SHOP-TASK-102 记录段（列表、新建、停用、偏离、验证到什么程度，并写明未做浏览器验收），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 页面内容与文案以 docs/UX.md 0.10 的 A05、docs/UX-COPY.md 0.11 与 docs/HANDOFF.md 0.48 为准，样式以 docs/design/pages/ 的 A05-desktop 与 A05-phone-list 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入 docs/TODO.md 的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.11 加入本任务用到的键，写法与相邻条目相同（每种语言一行）
+      - 代码结构照 frontend/src/pages/AdminStockResetsPage.tsx——导出把读取结果变成列表状态（或进入登录）的纯函数、把停用结果变成状态变化（或进入登录、重新读取）的纯函数、翻页的 pagerOf 写法、接收 AbortSignal 与回调的读取和停用异步函数，以及只依赖 props 的 View 组件；AdminCouponsContent 只负责持有状态、调用这些函数并接上路由；传给 onClick 等事件属性的处理函数不返回 Promise（异步调用前加 void）；日期拆分沿用 AdminStockResetsPage.tsx 的 formatBusinessDate 写法（解构带默认值，tsconfig 开了 noUncheckedIndexedAccess）；组件与函数按相邻页面的多行写法，不把整段写在一行
+      - 列表——SHOP-TASK-100 的标题与说明之下；桌面表格列头 admin.coupon_code、admin.coupon_type、admin.coupon_value、admin.coupon_valid、admin.coupon_usage 与 admin.filter_status，手机为卡片（照 A05-phone-list——代码与面额、状态标签、已用与上限及有效期、停用按钮；卡片不另显示类型，面额的 RM 或百分号已表明类型）；类型显示 admin.coupon_fixed 或 admin.coupon_percent；面额 fixed 显示 common.price_myr（{amount} 为 frontend/src/format.ts 的 formatSen 的结果，即 RM 10.00），percent 显示百分数；有效期按界面语言显示起始日与截止日本身（不按访客时区换算，写法同 A07 的营业日期），两个完整日期以「 – 」连接（不像视觉稿那样合并同年或同月，记入偏离）；已用与上限显示为「已用 / 上限」，上限为 null 时显示不限的符号「—」（不是文字，记入偏离）；状态为 admin.coupon_enabled 或 admin.coupon_disabled 标签，启用的券另有 admin.coupon_disable 按钮；翻页与没有券时的显示照 AdminStockResetsPage.tsx 开头注释所写的 A02 做法（每页 30 张；总数超过每页张数时列表下方为 ‹ 与 › 两个按钮，读屏名称为 common.a11y_page_prev 与 common.a11y_page_next，这两个符号沿用现有页面、不算自写文案；没有券时桌面只有列头、手机没有卡片，不另加空状态文字）；本任务不加 common.create 按钮与新建表单（留给 SHOP-TASK-109）
+      - 读取——打开页面读取第 1 页，进行中列表区标 aria-busy；none 用路由的 replace 进入 /admin/login；network 显示 common.network_check，其他失败显示 common.error_retry；离开页面或翻页时中止旧请求，旧请求的结果不再更新页面。停用——点 admin.coupon_disable 以该券内部 ID 调用停用（csrf_token 取自最近一次列表结果），进行中该按钮禁用并标 aria-busy；ok 时以返回的券更新该行（不再显示停用按钮）；not_found 与 csrf 时重新读取当前页，读取完成后仍显示 common.error_retry（重新读取不清掉这条提示）；none 进入 /admin/login；network 显示 common.network_check；failed 显示 common.error_retry；不加确认框（UX 没有）；离开页面后停用的结果不再更新页面
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AdminCouponsPage.test.tsx 验证意图，写法照 frontend/src/pages/AdminStockResetsPage.test.tsx（以 renderToStaticMarkup 渲染 View、直接调用导出的纯函数与异步函数验证结果，不模拟点击；渲染 AdminFrameView 时 state 的写法照该文件，in 状态带 error 字段）——表头与卡片、类型与面额（fixed 为 RM 加两位小数）、日期不随时区偏移、已用与上限（含不限的「—」）、状态与停用按钮只在启用的券上、没有券时只有列头；读取的 ok、none、network 与其他失败及进行中列表区的 aria-busy；翻页（pagerOf 的上一页与下一页、读取请求的页码、中止后结果不再更新）；停用进行中该按钮禁用并标 aria-busy、ok 更新该行、not_found 与 csrf 重新读取后仍有 common.error_retry、none、network、failed；页面文字全部来自字典；每条测试写明它守住的是 UX、Kelvin 决定或本任务验收标准的哪一句
+      - SHOP-TASK-100 在 AdminCouponsPage.test.tsx 写的三条测试中，后台框架与导航两条一字不改；第三条（内容区只有标题与说明的逐字断言）因内容区加入列表而失效，只改为断言内容区以原样的 h1 与说明开头，并在测试注释写明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-102 记录段（列表、翻页、停用、偏离、验证到什么程度，只写实际存在的测试，并写明未做浏览器验收、新建留给 SHOP-TASK-109），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths（不新增路由，不改导航，不改 frontend/src/api/adminCoupons.ts）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/AdminCouponsPage.tsx
+      - frontend/src/pages/AdminCouponsPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-109
+    title: 后台优惠券的新建表单与提交 A05
+    purpose: >-
+      在 SHOP-TASK-102 的优惠券列表上实现 A05 的新建：经 SHOP-TASK-101 的请求模块调用 SHOP-TASK-099 的新建接口，按 docs/HANDOFF.md 0.48 记录的 Kelvin 2026-10-12 决定（只新建与停用；有效期只录日期；新建被拒时显示 admin.coupon_code_taken 或 admin.coupon_invalid）。
+      不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（金额规则与校验在 SHOP-TASK-098、099 的服务端，页面只收集字段并把 RM 换成整数仙）。
+      拆分：2026-10-15 由原 SHOP-TASK-102 拆出（原因见 102），本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+    status: ready
+    depends_on:
+      - SHOP-TASK-102
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.10 的 A05、docs/UX-COPY.md 0.11 与 docs/HANDOFF.md 0.48 为准，样式以 docs/design/pages/ 的 A05-desktop 与 A05-phone-new 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入 docs/TODO.md 的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.11 加入本任务用到的键（已有的键不重复加），写法与相邻条目相同
+      - 代码结构延续 SHOP-TASK-102 与 frontend/src/pages/AdminStoreDesignPage.tsx 的写法——导出表单默认值、把表单换成新建请求字段的纯函数（RM 字符串换成整数仙、留空上限换成 null）、把提交结果变成状态变化（或进入登录、重新读取）的纯函数、接收回调的提交异步函数，表单由只依赖 props 的 View 组件渲染；传给 onSubmit、onClick 等事件属性的处理函数不返回 Promise（异步调用前加 void）；组件与函数按相邻页面的多行写法，不把整段写在一行
+      - 新建——标题行右侧为 common.create 按钮，列表读取成功（取得 csrf_token）之前禁用，读取失败时也禁用；点 common.create 显示新建表单（h2 为 common.create；桌面在列表下方，手机隐藏列表只显示表单，表单上方有 common.back 按钮回到列表，照 A05-phone-new；手机顶栏标题仍为 admin.nav_coupons，不改后台框架——视觉稿为 New，记入偏离）；字段为 admin.coupon_code（文本，必填）、admin.coupon_type（admin.coupon_fixed 与 admin.coupon_percent 两个同名单选，默认 fixed）、admin.coupon_value（fixed 时以 RM 输入、步长 0.01、0.01 到 100000，提交时换成整数仙；percent 时为 1 到 100 的整数）、admin.coupon_valid（fieldset 的 legend，内放两个原生日期输入，起始日在前、截止日在后，两个输入都以该 legend 为可访问名称——UX-COPY 没有起与止各自的键，记入偏离）、admin.coupon_min_spend（RM，步长 0.01、0 到 100000，默认 0，换成整数仙）、admin.coupon_total_limit 与 admin.coupon_member_limit（1 到 1000000 的整数，留空即不限、提交 null），其下 admin.rules_apply_new 与 common.save；这些上下限与服务端（SHOP-TASK-098）一致，用浏览器自带的必填、最小值、最大值与步长约束，不另写文案；输入框旁不另写 RM（admin.coupon_fixed 与 admin.coupon_min_spend 的文字已带 RM）
+      - 提交（经 SHOP-TASK-101 的请求模块，csrf_token 取自最近一次列表结果）——进行中按钮禁用并标 aria-busy；ok 时清空并收起表单、重新读取第 1 页；code_taken 显示 admin.coupon_code_taken、invalid 显示 admin.coupon_invalid，都保留表单内容；csrf 时重新读取当前页取得新令牌，读取完成后仍显示 common.error_retry、保留表单；none 用路由的 replace 进入 /admin/login；network 显示 common.network_check 并重新读取第 1 页（新建可能已经成功，管理员可在列表里看到），保留表单内容；failed 显示 common.error_retry；重新读取失败后再提交时显示 common.error_retry，不静默不动；离开页面后提交的结果不再更新页面
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AdminCouponsPage.test.tsx 验证意图，写法照 SHOP-TASK-102 的测试（以 renderToStaticMarkup 渲染 View、直接调用导出的纯函数与异步函数，不模拟点击）——列表取得前与读取失败时 common.create 禁用、取得后可用；打开表单时出现 h2 common.create、common.back 按钮与表单，内容区带上手机隐藏列表所用的类，回到列表后表单收起；表单的字段、默认值（fixed 选中、最低消费 0、两个上限为空）、必填与上下限在 fixed 与 percent 两种类型下各自正确；RM 换成整数仙（含 0.1 与 12.34）、留空上限提交 null；手机新建时（表单已打开）顶栏标题仍为 admin.nav_coupons；提交进行中 common.save 禁用并标 aria-busy、ok 收起并重新读取第 1 页、code_taken 与 invalid 的文案且保留表单、csrf 重新读取后仍有 common.error_retry、none 进入 /admin/login、network 重新读取第 1 页且保留表单、failed；页面文字全部来自字典；每条测试写明它守住的是 UX、Kelvin 决定或本任务验收标准的哪一句
+      - SHOP-TASK-100、102 在 AdminCouponsPage.test.tsx 写的现有测试只在因标题行加入按钮或页面加入表单而失效时修改，并在测试注释写明原因，其余一字不改；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/TODO.md 新增 SHOP-TASK-109 记录段（新建表单、提交、偏离、验证到什么程度，只写实际存在的测试，并写明未做浏览器验收），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths（不新增路由，不改导航，不改 frontend/src/api/adminCoupons.ts）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
     allowed_change_paths:
       - frontend/src/pages/AdminCouponsPage.tsx
