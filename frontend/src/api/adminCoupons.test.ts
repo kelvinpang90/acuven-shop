@@ -40,8 +40,9 @@ describe("admin coupons", () => {
     expect(calls[0]).toMatchObject({ url: ADMIN_COUPONS_URL, init: { method: "POST", credentials: "same-origin", cache: "no-store" } });
     expect(new Headers(calls[0]?.init.headers).get("X-CSRF-Token")).toBe("csrf-abc");
     expect(new Headers(calls[0]?.init.headers).get("Content-Type")).toBe("application/json");
-    expect(JSON.parse(calls[0]?.init.body as string)).toEqual(INPUT);
-    expect(Object.keys(JSON.parse(calls[0]?.init.body as string))).toEqual(["code", "type", "amount_off_sen", "percent_off", "min_subtotal_sen", "starts_on", "ends_on", "total_use_limit", "per_member_use_limit"]);
+    const sent = JSON.parse(calls[0]?.init.body as string) as Record<string, unknown>;
+    expect(sent).toEqual(INPUT);
+    expect(Object.keys(sent)).toEqual(["code", "type", "amount_off_sen", "percent_off", "min_subtotal_sen", "starts_on", "ends_on", "total_use_limit", "per_member_use_limit"]);
   });
 
   // SHOP-TASK-099「POST /{coupon_id}/disable」与 UX A05 的停用：只带 CSRF 请求头，不发送请求体。
