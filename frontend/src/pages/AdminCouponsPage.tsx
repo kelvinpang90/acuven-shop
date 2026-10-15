@@ -47,6 +47,18 @@ export function disableStep(read: CouponDisable): DisableStep {
     case "failed": return { kind: "error", error: "common.error_retry" };
   }
 }
+export interface DisableMoves { show: (coupon: AdminCoupon) => void; reload: () => void; replace: (path: RoutePath) => void; error: (error: CopyKey) => void; }
+export async function disableCoupon(id: number, csrfToken: string, signal: AbortSignal, moves: DisableMoves): Promise<void> {
+  const read = await disableAdminCoupon(id, csrfToken, signal);
+  if (signal.aborted) return;
+  const step = disableStep(read);
+  switch (step.kind) {
+    case "show": moves.show(step.coupon); return;
+    case "reload": moves.reload(); return;
+    case "login": moves.replace(ADMIN_LOGIN_PATH); return;
+    case "error": moves.error(step.error);
+  }
+}
 export function replaceCoupon(list: AdminCouponPage, coupon: AdminCoupon): AdminCouponPage {
   return { ...list, coupons: list.coupons.map((row) => row.id === coupon.id ? coupon : row) };
 }
@@ -56,19 +68,55 @@ function valueOf(coupon: AdminCoupon, t: ReturnType<typeof useCopy>): string {
 }
 function CouponTag({ coupon }: { coupon: AdminCoupon }) {
   const t = useCopy();
-  return <span className={coupon.active ? "acs-tag acs-tag--success" : "acs-tag acs-tag--danger"}>{t(coupon.active ? "admin.coupon_enabled" : "admin.coupon_disabled")}</span>;
+  return (
+    <span className={coupon.active ? "acs-tag acs-tag--success" : "acs-tag acs-tag--danger"}>
+      {t(coupon.active ? "admin.coupon_enabled" : "admin.coupon_disabled")}
+    </span>
+  );
 }
 function DisableButton({ coupon, disableBusy, busy, onDisable }: CouponProps) {
   const t = useCopy();
-  return coupon.active ? <button className="acs-admin__btn acs-admin__btn--secondary" type="button" disabled={disableBusy} aria-busy={busy} onClick={() => { onDisable(coupon); }}>{t("admin.coupon_disable")}</button> : null;
+  if (!coupon.active) return null;
+  return (
+    <button
+      className="acs-admin__btn acs-admin__btn--secondary"
+      type="button"
+      disabled={disableBusy}
+      aria-busy={busy}
+      onClick={() => { onDisable(coupon); }}
+    >
+      {t("admin.coupon_disable")}
+    </button>
+  );
 }
 function CouponRow({ coupon, disableBusy, busy, onDisable }: CouponProps) {
-  const t = useCopy(); const { language } = useLanguage();
-  return <tr><td>{coupon.code}</td><td>{t(coupon.type === "fixed" ? "admin.coupon_fixed" : "admin.coupon_percent")}</td><td>{valueOf(coupon, t)}</td><td>{formatBusinessDate(coupon.starts_on, language)} – {formatBusinessDate(coupon.ends_on, language)}</td><td>{coupon.used_count} / {coupon.total_use_limit ?? "—"}</td><td><CouponTag coupon={coupon} /> <DisableButton coupon={coupon} disableBusy={disableBusy} busy={busy} onDisable={onDisable} /></td></tr>;
+  const t = useCopy();
+  const { language } = useLanguage();
+  return (
+    <tr>
+      <td>{coupon.code}</td>
+      <td>{t(coupon.type === "fixed" ? "admin.coupon_fixed" : "admin.coupon_percent")}</td>
+      <td>{valueOf(coupon, t)}</td>
+      <td>{formatBusinessDate(coupon.starts_on, language)} – {formatBusinessDate(coupon.ends_on, language)}</td>
+      <td>{coupon.used_count} / {coupon.total_use_limit ?? "—"}</td>
+      <td><CouponTag coupon={coupon} /> <DisableButton coupon={coupon} disableBusy={disableBusy} busy={busy} onDisable={onDisable} /></td>
+    </tr>
+  );
 }
 function CouponCard({ coupon, disableBusy, busy, onDisable }: CouponProps) {
-  const t = useCopy(); const { language } = useLanguage();
-  return <li className="acs-admin__panel site-admin-coupons__card"><div className="site-admin-coupons__card-head"><span>{coupon.code}</span><span>{valueOf(coupon, t)}</span><CouponTag coupon={coupon} /></div><span>{t("admin.coupon_usage")} {coupon.used_count} / {coupon.total_use_limit ?? "—"} · {formatBusinessDate(coupon.starts_on, language)} – {formatBusinessDate(coupon.ends_on, language)}</span><DisableButton coupon={coupon} disableBusy={disableBusy} busy={busy} onDisable={onDisable} /></li>;
+  const t = useCopy();
+  const { language } = useLanguage();
+  return (
+    <li className="acs-admin__panel site-admin-coupons__card">
+      <div className="site-admin-coupons__card-head">
+        <span>{coupon.code}</span>
+        <span>{valueOf(coupon, t)}</span>
+        <CouponTag coupon={coupon} />
+      </div>
+      <span>{t("admin.coupon_usage")} {coupon.used_count} / {coupon.total_use_limit ?? "—"} · {formatBusinessDate(coupon.starts_on, language)} – {formatBusinessDate(coupon.ends_on, language)}</span>
+      <DisableButton coupon={coupon} disableBusy={disableBusy} busy={busy} onDisable={onDisable} />
+    </li>
+  );
 }
 export interface AdminCouponsViewProps { state: ListState; disable: DisableState; onPage: (page: number) => void; onDisable: (coupon: AdminCoupon) => void; }
 export function AdminCouponsView({ state, disable, onPage, onDisable }: AdminCouponsViewProps) {
@@ -76,10 +124,59 @@ export function AdminCouponsView({ state, disable, onPage, onDisable }: AdminCou
   return <div className="site-admin-coupons"><h1 className="acs-admin__h">{t("admin.nav_coupons")}</h1><p className="site-admin-coupons__note">{t("admin.coupon_listed_note")}</p><div className="site-admin-coupons__list" aria-busy={state.busy}>{state.error !== null && <AdminAlert error={state.error} />}{disable.error !== null && <AdminAlert error={disable.error} />}{list !== null && <div className="site-admin-coupons__page" key={list.page}><div className="acs-admin__panel site-admin-coupons__table"><table className="acs-admin__table"><thead><tr><th>{t("admin.coupon_code")}</th><th>{t("admin.coupon_type")}</th><th>{t("admin.coupon_value")}</th><th>{t("admin.coupon_valid")}</th><th>{t("admin.coupon_usage")}</th><th>{t("admin.filter_status")}</th></tr></thead><tbody>{list.coupons.map((coupon) => <CouponRow key={coupon.id} coupon={coupon} disableBusy={disable.busyId !== null} busy={disable.busyId === coupon.id} onDisable={onDisable} />)}</tbody></table></div>{list.coupons.length > 0 && <ul className="site-admin-coupons__cards">{list.coupons.map((coupon) => <CouponCard key={coupon.id} coupon={coupon} disableBusy={disable.busyId !== null} busy={disable.busyId === coupon.id} onDisable={onDisable} />)}</ul>}{pager !== null && <div className="site-admin-coupons__pager"><button className="acs-admin__btn acs-admin__btn--secondary" type="button" aria-label={t("common.a11y_page_prev")} disabled={pager.prev === null} onClick={() => { if (pager.prev !== null) onPage(pager.prev); }}>‹</button><button className="acs-admin__btn acs-admin__btn--secondary" type="button" aria-label={t("common.a11y_page_next")} disabled={pager.next === null} onClick={() => { if (pager.next !== null) onPage(pager.next); }}>›</button></div>}</div>}</div></div>;
 }
 export function AdminCouponsContent() {
-  const { replace } = useRouter(); const [page, setPage] = useState(1); const [state, setState] = useState<ListState>(INITIAL_LIST); const [disable, setDisable] = useState<DisableState>(INITIAL_DISABLE); const disableRequest = useRef<AbortController | null>(null); const listRequest = useRef<AbortController | null>(null);
-  useEffect(() => { const controller = new AbortController(); listRequest.current = controller; void loadCoupons(page, controller.signal, { show: setState, replace }); return () => { controller.abort(); listRequest.current?.abort(); disableRequest.current?.abort(); }; }, [page, replace]);
-  const reloadWithError = () => { setState((current) => ({ ...current, busy: true, error: "common.error_retry" })); listRequest.current?.abort(); const controller = new AbortController(); listRequest.current = controller; void loadCoupons(page, controller.signal, { show: (next) => setState(next.error === null ? { ...next, error: "common.error_retry" } : next), replace }); };
-  const onDisable = (coupon: AdminCoupon) => { if (state.list === null || disable.busyId !== null) return; const controller = new AbortController(); disableRequest.current = controller; setDisable({ busyId: coupon.id, error: null }); void disableAdminCoupon(coupon.id, state.list.csrf_token, controller.signal).then((read) => { if (controller.signal.aborted) return; const step = disableStep(read); setDisable(INITIAL_DISABLE); if (step.kind === "login") replace(ADMIN_LOGIN_PATH); else if (step.kind === "show") setState((current) => current.list === null ? current : { ...current, list: replaceCoupon(current.list, step.coupon) }); else if (step.kind === "reload") reloadWithError(); else setDisable({ busyId: null, error: step.error }); }); };
-  return <AdminCouponsView state={state} disable={disable} onPage={(next) => { setPage(next); setState((current) => ({ ...current, busy: true, error: null })); }} onDisable={onDisable} />;
+  const { replace } = useRouter();
+  const [page, setPage] = useState(1);
+  const [state, setState] = useState<ListState>(INITIAL_LIST);
+  const [disable, setDisable] = useState<DisableState>(INITIAL_DISABLE);
+  const disableRequest = useRef<AbortController | null>(null);
+  const listRequest = useRef<AbortController | null>(null);
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  useEffect(() => {
+    const controller = new AbortController();
+    listRequest.current = controller;
+    void loadCoupons(page, controller.signal, { show: setState, replace });
+    return () => { controller.abort(); };
+  }, [page, replace]);
+  useEffect(() => () => { disableRequest.current?.abort(); }, []);
+  const reloadWithError = () => {
+    setState((current) => ({ ...current, busy: true, error: "common.error_retry" }));
+    listRequest.current?.abort();
+    const controller = new AbortController();
+    listRequest.current = controller;
+    void loadCoupons(pageRef.current, controller.signal, {
+      show: (next) => setState(next.error === null ? { ...next, error: "common.error_retry" } : next),
+      replace,
+    });
+  };
+  const onDisable = (coupon: AdminCoupon) => {
+    if (state.list === null || disable.busyId !== null) return;
+    const controller = new AbortController();
+    disableRequest.current = controller;
+    setDisable({ busyId: coupon.id, error: null });
+    void disableCoupon(coupon.id, state.list.csrf_token, controller.signal, {
+      show: (updated) => {
+        setDisable(INITIAL_DISABLE);
+        setState((current) => current.list === null ? current : { ...current, list: replaceCoupon(current.list, updated) });
+      },
+      reload: () => { setDisable(INITIAL_DISABLE); reloadWithError(); },
+      replace: (path) => { setDisable(INITIAL_DISABLE); replace(path); },
+      error: (error) => setDisable({ busyId: null, error }),
+    });
+  };
+  return (
+    <AdminCouponsView
+      state={state}
+      disable={disable}
+      onPage={(next) => {
+        setPage(next);
+        setState((current) => ({ ...current, busy: true, error: null }));
+        setDisable(INITIAL_DISABLE);
+      }}
+      onDisable={onDisable}
+    />
+  );
 }
-export default function AdminCouponsPage() { return <AdminFrame current="coupons"><AdminCouponsContent /></AdminFrame>; }
+export default function AdminCouponsPage() {
+  return <AdminFrame current="coupons"><AdminCouponsContent /></AdminFrame>;
+}
