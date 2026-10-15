@@ -1,7 +1,18 @@
 # Acuven Shop 前端页面结构与线框（审阅稿）
 
-> **审阅稿。0.7 已于 2026-10-01 经 Kelvin 审阅通过（记录见 `docs/HANDOFF.md`）；0.8 只在「管理后台总体」与 A09 增加后台退出按钮与视觉稿说明，P01–P14、V1 与 A01–A08 各页内容与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只在 A02、A03 增加状态与补充说明，其余各页与 0.8 相同，Kelvin 已于 2026-10-06 认可；0.10 只把 A01 的登录名改为邮箱（`[admin.email]`），其余各页与 0.9 相同，Kelvin 已于 2026-10-07 批准（记录见 `docs/HANDOFF.md`）。**
-> 版本 0.10（2026-10-07），运营者修订（Claude Code），在 0.9（提交 `1a65f6b`）上按 Kelvin 2026-10-07 的决定把 A01 的登录名改为邮箱；0.9（2026-10-06）在 0.8（提交 `61f7b8a`）上按 Kelvin 2026-10-06 的决定与认可补充 A02、A03 的状态；0.8（2026-10-05）在 0.7（提交 `2d13250`）上按 Kelvin 2026-10-05 的决定增加后台退出按钮；0.7 在 0.6（提交 `e3b3505`）上按 Kelvin 2026-10-01 的短信验证开关决定修改。依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；未特别注明时，各页「金额与个人资料元素」表引用的小节仍指 DESIGN 1.9（1.10、1.11 未改小节标题）。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。三语文案见 [UX-COPY.md](UX-COPY.md)（0.10）。视觉稿（设计系统、10 款主题、每页静态页面与参考图）见 [design/README.md](design/README.md)，只管样式，内容与流程以本稿为准；本版新增的元素沿用相邻元素的样式。本稿不改设计，冲突之处列入文末「待决问题」。
+> **审阅稿。0.7 已于 2026-10-01 经 Kelvin 审阅通过（记录见 `docs/HANDOFF.md`）；0.8 只在「管理后台总体」与 A09 增加后台退出按钮与视觉稿说明，P01–P14、V1 与 A01–A08 各页内容与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只在 A02、A03 增加状态与补充说明，其余各页与 0.8 相同，Kelvin 已于 2026-10-06 认可；0.10 只把 A01 的登录名改为邮箱（`[admin.email]`），其余各页与 0.9 相同，Kelvin 已于 2026-10-07 批准（记录见 `docs/HANDOFF.md`）。0.11 只在 P06、P07、P14、A03、A09 增加 Stripe 测试环境支付的状态与说明，其余各页与 0.10 相同，Kelvin 已于 2026-10-15 审阅通过（记录见 `docs/HANDOFF.md`）。**
+> 版本 0.11（2026-10-15），运营者修订（Claude Code），在 0.10（提交 `eb2bdc4`）上按已批准的 `docs/DESIGN.md` 1.12「Stripe 测试环境支付」与 `docs/REQUIREMENTS.md` 1.13（Kelvin 2026-10-15 批准，记录见 `docs/HANDOFF.md` 0.50）增加 Stripe 测试环境支付；新增元素的依据写 DESIGN 1.12 的小节与条号；三语文案见 [UX-COPY.md](UX-COPY.md) 0.12。以下为 0.10 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.10（2026-10-07），运营者修订（Claude Code），在 0.9（提交 `1a65f6b`）上按 Kelvin 2026-10-07 的决定把 A01 的登录名改为邮箱；0.9（2026-10-06）在 0.8（提交 `61f7b8a`）上按 Kelvin 2026-10-06 的决定与认可补充 A02、A03 的状态；0.8（2026-10-05）在 0.7（提交 `2d13250`）上按 Kelvin 2026-10-05 的决定增加后台退出按钮；0.7 在 0.6（提交 `e3b3505`）上按 Kelvin 2026-10-01 的短信验证开关决定修改。依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；未特别注明时，各页「金额与个人资料元素」表引用的小节仍指 DESIGN 1.9（1.10、1.11 未改小节标题）。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。三语文案见 [UX-COPY.md](UX-COPY.md)（0.10）。视觉稿（设计系统、10 款主题、每页静态页面与参考图）见 [design/README.md](design/README.md)，只管样式，内容与流程以本稿为准；本版新增的元素沿用相邻元素的样式。本稿不改设计，冲突之处列入文末「待决问题」。
+
+## 0.11 修订要点
+
+- **Stripe 测试环境支付**（Kelvin 2026-10-15 批准 DESIGN 1.12 / REQUIREMENTS 1.13，四个选择：托管付款页 Checkout、后台支付方式开关默认模拟、批准退款时同时在 Stripe 测试环境退款、Stripe 页预填固定演示邮箱；记录见 `docs/HANDOFF.md` 0.50）。只改下面五页，其余各页、V1 与全局框架不变：
+  - **P06**：服务端给出本单的支付途径。为「Stripe 测试」时不显示模拟支付的方式与成功/失败按钮，改为跳转按钮 `[pay.stripe_go]`，按钮旁显示测试卡号与虚构资料提示；本单有进行中的 Stripe 会话时显示 `[pay.stripe_in_progress]` 与 `[pay.stripe_continue]`，不显示 15 分钟倒计时；另有跳转中、Stripe 暂不可用、支付途径已改变、取消时会话已付款等状态。订单应付低于 Stripe 最低收款额时照旧显示模拟支付。见 P06「Stripe 测试（0.11）」。
+  - **P07**：从 Stripe 返回后先向服务端确认；尚未确认时显示「确认中」并自动重查，重查用完后显示手动重查按钮；本单尚未付款时引导回 P06 继续；极少数迟到付款由服务端发起退款时另有说明。见 P07「Stripe 测试（0.11）」。
+  - **P14**：新增 `[privacy.stripe]`，告知本站发给 Stripe 的内容、访客在 Stripe 页输入的资料由 Stripe 测试环境保存、本站不读取也无法逐条删除，只用测试卡号与虚构资料。
+  - **A03**：经 Stripe 测试付款的订单，退款详情显示付款方式与按付款方式的退款期限提示；批准后显示各次 Stripe 退款尝试的状态（处理中 / 已退 / 失败），最新一次失败时可手动重试。见 A03「Stripe 测试（0.11）」。
+  - **A09**：新增支付方式开关（模拟 / Stripe 测试，默认模拟）；Stripe 测试凭据未配置时该选项禁用并显示原因。
+- 前台只按服务端给出的支付途径与状态显示，不自行判断开关、金额门槛或会话状态；服务端在发起支付、取消与确认时自行按 DESIGN 1.12 判定，前端显示不是依据。
+- 新增文案键见 UX-COPY 0.12「0.12 修订要点」。视觉稿另做，经 Kelvin 审阅后才登记页面任务。待决问题未新增。
 
 ## 0.10 修订要点
 
@@ -193,8 +204,8 @@ V1 金额与个人资料元素：
 | P03 | 商品详情（规格、数量、加入购物车） | `/products/<slug>` | P04、P02 |
 | P04 | 购物车 | `/cart` | P05、P02 |
 | P05 | 结账（手机号与短信验证、收货资料、优惠券、积分、运费、合计） | `/checkout` | P06、P12、P14 |
-| P06 | 模拟支付（含取消待支付订单） | `/pay` | P07 |
-| P07 | 模拟支付结果（成功/失败/已取消） | `/pay/result` | P06（重试）、P09（会员）、P08（游客过期后）、P02、P11 |
+| P06 | 模拟支付（含取消待支付订单；0.11 起支付方式为 Stripe 测试时跳转 Stripe 测试付款页） | `/pay` | P07、Stripe 测试付款页 |
+| P07 | 模拟支付结果（成功/失败/已取消；0.11 起另有 Stripe 确认中） | `/pay/result` | P06（重试或继续 Stripe 付款）、P09（会员）、P08（游客过期后）、P02、P11 |
 | P08 | 订单查询 | `/track` | P09 |
 | P09 | 订单详情（确认收货、退款入口；查单模式 / 会员模式） | `/track/order`、`/account/order` | P10、P08、P13、P06（会员待支付订单） |
 | P10 | 退款申请（查单模式 / 会员模式） | `/track/order/refund`、`/account/order/refund` | P09 |
@@ -756,6 +767,108 @@ V1 金额与个人资料元素：
 | — | 取消按钮：游客与会员都有；由下单者取消为 `demo_cancelled`，释放库存、券及积分预占 | 「订单与退款状态」「权限与资料保护」「计价、优惠、积分与库存」（第 1、3、6 条） |
 | — | 倒计时：15 分钟未付自动取消并释放预占 | 「计价、优惠、积分与库存」（第 6 条）「订单与退款状态」 |
 
+### P06 Stripe 测试（0.11）
+
+依据 DESIGN 1.12「Stripe 测试环境支付」（下称「Stripe 节」）。服务端读取订单时一并给出本单的**支付途径**与 Stripe 状态，页面只按它显示：
+
+按 Stripe 节第 2 条依次判定：
+
+1. 本单有没作废的 Stripe 记录（创建中、进行中或已完成），不论开关当前取值与订单金额，一律是 **Stripe 测试**，不接受模拟支付。
+2. 否则（没有记录或只有已作废的）：开关为「Stripe 测试」且应付达到 Stripe 最低收款额时是 **Stripe 测试**；开关为「模拟」，或应付低于最低收款额时是 **模拟**。
+
+- **模拟**：页面与上面的线框完全相同，不显示任何 Stripe 文字。
+- **Stripe 测试**：显示下面的线框：标题、★ 提示与操作区换成 Stripe 的，订单号、应付金额、游客授权说明、收货资料与取消按钮同上。
+- 打开本页时，本单若已有付款完成的会话，服务端先按 Stripe 节第 4 条向 Stripe 确认；已付款则本页直接转到 P07 成功，不显示下面的线框。
+
+桌面：
+
+```text
+| [common.demo_banner]                                                  |
+| [pay.stripe_title]  [common.demo_badge]     ★ [pay.stripe_demo_hint]  |
++-----------------------------------------------------------------------+
+| [pay.order_no]  [K] <订单号>  ([common.copy])                          |
+| [pay.save_order_no]                                                   |
+| [pay.amount_due]  [M1] RM <合计>                                       |
+| 未发起：[pay.expires]  ⏱ <剩余分钟>                                     |
+| 游客：[G] [pay.guest_access]                                           |
++-----------------------------------------------------------------------+
+| [checkout.recipient_title]                                            |
+|  [P1] <姓名> / <电话> / <地址> / <邮编> / <地区> / <国家>               |
++-----------------------------------------------------------------------+
+| 有进行中的会话：[pay.stripe_in_progress]                                |
+|  ◆ [pay.stripe_notice]                                                |
+|    [pay.stripe_test_card]                                             |
+|  未发起、创建结果未定：( [pay.stripe_go] )                              |
+|  创建结果转人工核对：[pay.stripe_under_review]（无跳转按钮）              |
+|  有进行中的会话：( [pay.stripe_continue] )                             |
+|                                                                       |
+|  ([pay.cancel_order])                                                 |
++-----------------------------------------------------------------------+
+跳转中：按钮禁用，显示 [pay.stripe_redirecting]，随后在当前标签页打开服务端返回的 Stripe 付款页地址
+Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可点（再点即重试）
+支付途径已改变：显示 [pay.method_changed]，重新读取订单并按新的途径显示
+点取消后确认框：[pay.cancel_confirm]，有进行中的会话时其下另显示 [pay.cancel_confirm_stripe]；( [pay.cancel_confirm_yes] ) ([pay.cancel_confirm_no])
+取消时 Stripe 暂不可用：确认框关闭，显示 [pay.cancel_try_later]，订单保持待支付
+取消时会话已付款：→ P07 成功，成功区顶部另显示 [result.paid_not_cancelled]
+--- 游客凭据过期或不属于该单时替换整页（同上）---
+| [pay.session_expired]                                                 |
+| ( [common.nav_track] ) → P08（须输入订单号和电话）                       |
+```
+
+手机：
+
+```text
+| [common.demo_banner_short]     |
+| [pay.stripe_title] [common.demo_badge] |
+| ★ [pay.stripe_demo_hint]       |
+| [pay.order_no]                 |
+| [K] <订单号> ([common.copy])    |
+| [pay.save_order_no]            |
+| [pay.amount_due]               |
+| [M1] RM <合计>                  |
+| 未发起：[pay.expires] ⏱         |
+| 游客：[G] [pay.guest_access]    |
+| ▸ [checkout.recipient_title]   |
+|   [P1] <姓名>/<电话>/<地址>     |
+| 进行中：[pay.stripe_in_progress] |
+| ◆ [pay.stripe_notice]          |
+|   [pay.stripe_test_card]       |
+| ( [pay.stripe_go] ) 或          |
+| ( [pay.stripe_continue] )      |
+| 转人工核对：[pay.stripe_under_review]（无跳转按钮） |
+| ([pay.cancel_order])           |
+--- 过期时 ---
+| [pay.session_expired]          |
+| ( [common.nav_track] )         |
+```
+
+说明：
+
+- **未发起**（本单没有 Stripe 记录或只有已作废的）：显示 `[pay.expires]` 倒计时；点 `[pay.stripe_go]` 由服务端按 Stripe 节第 3 条创建会话并返回付款页地址，页面只跳转到服务端返回的地址。
+- **创建结果未定**（记录为创建中、服务端还没有付款页地址）：与「未发起」相同显示 `[pay.stripe_go]`，但不显示 `[pay.expires]`（这时订单要等对账才会取消，Stripe 节第 3、5 条）；点按钮由服务端以同一幂等键重试，取得同一个会话就跳转，仍无法确定则显示 `[pay.stripe_unavailable]`。页面不另建会话。服务端告知该记录已超过 24 小时仍无法确定、转人工核对时，不显示 `[pay.stripe_go]`，改显示 `[pay.stripe_under_review]`（订单不取消、库存继续预留；取消按钮照常显示，点后按 Stripe 节第 5 条由服务端处理）。
+- **有进行中的会话**（会话已建成、未付款，服务端有付款页地址）：不显示 `[pay.expires]`，改显示 `[pay.stripe_in_progress]`（会话结束前订单不会因 15 分钟到期被取消，Stripe 节第 5 条）；`[pay.stripe_continue]` 打开同一会话，不另建会话。从 Stripe 页点返回（取消返回地址 `/pay`）回到本页即此状态。
+- 跳转在当前标签页进行，不开新窗口。Stripe 的成功返回地址是 P07 的 `/pay/result`，取消返回地址是本页 `/pay`；两者都不带订单号、会话 ID 或任何凭据，返回后页面照旧凭服务端会话读取订单（Stripe 节第 3 条）。游客在 Stripe 页停留超过短期凭据的 30 分钟时，返回后看到 `[pay.session_expired]`，凭订单号和电话查单；付款仍由服务端按 Stripe 节第 4 条确认。
+- ◆ `[pay.stripe_notice]` 与 `[pay.stripe_test_card]` 在每次跳转前都显示，无勾选框（Stripe 节第 1、10 条）。测试卡号是 Stripe 公布的测试卡号，直接显示在页面上（Kelvin 2026-10-15 决定）；FPX、GrabPay 测试授权页的呈现以实现前的测试环境核验为准，与 `[pay.stripe_test_card]` 不符时先改文案。
+- 支付途径为 Stripe 测试时不显示 `[pay.choose_method]`、三种演示方式、`[pay.simulate_success]`、`[pay.simulate_failure]` 与 `[pay.action_hint]`；卡被拒或 FPX、GrabPay 授权失败由访客在 Stripe 页重试，不回本站显示失败（Stripe 节第 4 条）。
+- **支付途径已改变**：访客打开页面后管理员切换了开关，服务端在发起时按当时的值判定并拒绝不符的提交（点 Stripe 跳转时已改为模拟，或点模拟成功/失败时本单已有 Stripe 会话或已改为 Stripe 测试）；页面显示 `[pay.method_changed]` 并重新读取。两种途径的页面都处理这一状态。
+- 应付低于 Stripe 最低收款额（默认 RM 2.00）的订单，即使开关为「Stripe 测试」也显示模拟支付页面，不另加说明。
+- 会员从 P09 会员模式 `[account.order_pay]` 进入时同样按上述途径显示。
+
+金额与个人资料元素：
+
+| 标记 | 元素 | 依据 DESIGN 1.12 小节 |
+| --- | --- | --- |
+| M1 | 应付金额：Stripe 会话金额等于订单应付快照，币种 MYR | 「Stripe 测试环境支付」（第 3 条）「数据模型」（`Order` / `OrderItem`） |
+| P1 | 收货资料只在本页显示，不发给 Stripe；本站发给 Stripe 的只有金额、币种、行项目名称、内部订单 ID、语言、返回地址与预填的固定演示邮箱 | 「Stripe 测试环境支付」（第 10 条）「权限与资料保护」 |
+| G | 同上；Stripe 返回是顶层 GET，短期凭据照常带上，过期则凭订单号和电话查单 | 「Stripe 测试环境支付」（第 3 条）「权限与资料保护」 |
+| K | 订单号不进返回地址、会话元数据或行项目名称 | 「Stripe 测试环境支付」（第 3 条）「权限与资料保护」 |
+| — | 支付途径由服务端判定：开关、最低收款额、同单两条途径互斥 | 「Stripe 测试环境支付」（第 2 条） |
+| — | 跳转按钮：按现有授权与 CSRF 发起；同一订单至多一个进行中的会话，已有则返回同一付款页地址 | 「Stripe 测试环境支付」（第 3 条） |
+| — | ◆ 只用测试卡号、Stripe 页上的资料可虚构并由 Stripe 测试环境保存 | 「Stripe 测试环境支付」（第 1、10 条） |
+| — | 进行中的会话不显示倒计时：会话结束前订单不因到期被取消 | 「Stripe 测试环境支付」（第 5 条）「计价、优惠、积分与库存」（第 6 条） |
+| — | 取消：先作废会话；Stripe 不可用时提示稍后再试、订单保持待支付；会话已付款则按确认处理、不取消 | 「Stripe 测试环境支付」（第 5 条） |
+| — | Stripe 不可用：订单保持待支付，不自动改用模拟支付 | 「Stripe 测试环境支付」（第 9 条） |
+
 ---
 
 ## P07 模拟支付结果
@@ -833,6 +946,71 @@ V1 金额与个人资料元素：
 | G | 游客短期凭据：结果页可用，确认收货、退款须改用查单；过期提示凭订单号和电话查单 | 「权限与资料保护」 |
 | K | 订单号：查单凭据之一，不进路径、查询参数或分析事件 | 「权限与资料保护」 |
 | — | 重试不重复下单 | 「订单与退款状态」「失败、并发与重试」 |
+
+### P07 Stripe 测试（0.11）
+
+依据 DESIGN 1.12「Stripe 测试环境支付」（下称「Stripe 节」）。入口另有：Stripe 测试付款页的成功返回（`/pay/result`，不带订单号、会话 ID 或凭据）；P06 取消时会话已付款。
+
+- 页面照旧凭服务端会话读取订单。订单仍待支付且本单有 Stripe 会话时，页面调用本站的确认接口一次（须 CSRF），服务端向 Stripe 查询并按 Stripe 节第 4 条确认；返回地址本身不作依据。
+- **成功**：同上成功区（`[result.success_body]` 照旧写明未扣真实款项）。从 P06 取消时会话已付款进入的，成功区顶部另显示 `[result.paid_not_cancelled]`。
+- **确认中**：服务端尚未确认（付款结果未定，或查询时 Stripe 暂不可用）。不显示 `[result.demo_hint]`（它说的是付款之后的模拟发货），演示性质由常驻横幅提示。显示 `[result.confirming_title]` 与 `[result.confirming_body]`，页面每 5 秒自动重查一次、最多 12 次（约 1 分钟；Kelvin 2026-10-15 决定）；用完后停止自动重查，显示 `[result.confirming_slow]` 与 `( [result.check_again] )`，每点一次重查一次，提交期间按钮禁用。
+- **尚未付款**：本单的会话仍进行中、未付款（例如直接打开本页）。显示 `[result.stripe_not_paid]` 与 `( [result.stripe_back_to_pay] )` 回到 P06。
+- **已取消、已发起退款**：极少数情形下 Stripe 付款到达时订单已取消（Stripe 节第 6 条），订单保持已取消，服务端在 Stripe 测试环境发起全额退款并跟进结果，不保证成功。服务端告知本单有来源为会话的 Stripe 退款尝试时（不论该尝试当前状态；文案不说退款进行到哪一步），以 `[result.stripe_late_refund]` 代替 `[result.cancelled]` 或 `[result.cancelled_by_you]`。
+- Stripe 支付途径没有「失败」状态：卡被拒、FPX 或 GrabPay 授权失败由访客在 Stripe 页重试（Stripe 节第 4 条）；从 Stripe 页取消返回的是 P06，不是本页。
+
+桌面：
+
+```text
+| [common.demo_banner]                                                  |
++---------------------------- 确认中 ----------------------------------+
+| [result.confirming_title]                                             |
+| [result.confirming_body]                                              |
+| [pay.order_no] [K] <订单号> ([common.copy])   [pay.save_order_no]      |
+| [pay.amount_due] [M1]                                                 |
+| 游客：[G] [result.guest_next]                                          |
+| 自动重查用完后：[result.confirming_slow]  ( [result.check_again] )      |
++---------------------------- 尚未付款 --------------------------------+
+| [result.stripe_not_paid]   ( [result.stripe_back_to_pay] ) → P06      |
++---------------------------- 成功 ------------------------------------+
+| 取消时会话已付款：[result.paid_not_cancelled]                           |
+| （其余同上成功区）                                                      |
++------------------------ 已取消、已发起退款 --------------------------+
+| [result.stripe_late_refund]   ([result.continue])                     |
++---------------------------- 游客凭据过期 ----------------------------+
+| [pay.session_expired]   ( [common.nav_track] ) → P08                  |
+```
+
+手机：
+
+```text
+| [common.demo_banner_short]     |
+| [result.confirming_title]      |
+| [result.confirming_body]       |
+| [pay.order_no]                 |
+| [K] <订单号> ([common.copy])    |
+| [pay.save_order_no]            |
+| [pay.amount_due] [M1]          |
+| 游客：[result.guest_next]        |
+| 用完后：[result.confirming_slow] |
+|  ( [result.check_again] )      |
+--- 尚未付款时替换为 ---
+| [result.stripe_not_paid]       |
+| ( [result.stripe_back_to_pay] ) |
+--- 已取消、已发起退款时 ---
+| [result.stripe_late_refund]    |
+| ([result.continue])            |
+```
+
+金额与个人资料元素：
+
+| 标记 | 元素 | 依据 DESIGN 1.12 小节 |
+| --- | --- | --- |
+| M1 | 应付金额（快照）；确认时核对 Stripe 金额与币种与之相符 | 「Stripe 测试环境支付」（第 4 条） |
+| G | 返回是顶层 GET，短期凭据照常带上；过期则凭订单号和电话查单 | 「Stripe 测试环境支付」（第 3 条）「权限与资料保护」 |
+| K | 订单号不进返回地址 | 「Stripe 测试环境支付」（第 3 条）「权限与资料保护」 |
+| — | 只在服务端向 Stripe 核实后进入已支付；同一会话重复确认返回原结果，不重复发放积分 | 「Stripe 测试环境支付」（第 4 条） |
+| — | 确认中：订单不因 15 分钟到期被取消，Stripe 不可用时也不取消 | 「Stripe 测试环境支付」（第 4、5 条） |
+| — | 迟到付款：订单状态不变，在 Stripe 测试环境发起全额退款并告警；文案不承诺退款结果 | 「Stripe 测试环境支付」（第 6、8 条） |
 
 ---
 
@@ -1355,7 +1533,7 @@ V1 金额与个人资料元素：
 
 ## P14 隐私说明
 
-- **目的**：说明收集哪些资料、用途、保留期限（收货资料长期保存、会员手机号保留至注销）、两种订单授权、查单剩余风险、短信与日志，以及联系入口（占位）。
+- **目的**：说明收集哪些资料、用途、保留期限（收货资料长期保存、会员手机号保留至注销）、两种订单授权、查单剩余风险、短信与日志、Stripe 测试环境付款时的资料（0.11），以及联系入口（占位）。
 - **入口**：页脚「Privacy」；P05 `[checkout.form_notice_link]`。
 - **去向**：来源页；WhatsApp 占位链接（未配置时隐藏）。
 - **演示提示**：常驻横幅；★ `[privacy.demo_hint]`。
@@ -1369,6 +1547,7 @@ V1 金额与个人资料元素：
 | [privacy.intro]                                                       |
 | [privacy.h_collect]    [P1] [privacy.collect]                          |
 |                        [privacy.fictional]                             |
+|                        [P9] [privacy.stripe]                           |
 | [privacy.h_retention]  [P2] [privacy.retention_recipient]              |
 |                        [P3] [privacy.member]                           |
 |                        [P4] [privacy.member_backup]                    |
@@ -1388,7 +1567,7 @@ V1 金额与个人资料元素：
 | [privacy.title]                |
 | ★ [privacy.demo_hint]          |
 | [privacy.intro]                |
-| ▾ [privacy.h_collect] [P1]     |
+| ▾ [privacy.h_collect] [P1][P9] |
 | ▾ [privacy.h_retention] [P2][P3][P4] |
 | ▾ [privacy.h_access] [P5][P6]  |
 | ▾ [privacy.h_sms_logs] [P7][P8] |
@@ -1412,6 +1591,7 @@ V1 金额与个人资料元素：
 | P6 | 订单号 + 电话可见完整收货资料的剩余风险，随订单累积 | 「权限与资料保护」「资料保留」 |
 | P7 | 真实短信（结账验证、注册、短信登录、重设密码、注销确认）；日志最长 30 天且不含个人资料 | 「失败、并发与重试」「权限与资料保护」「资料保留」 |
 | P8 | 短信验证开关：可关闭全站短信，关闭时未登录访客无论号码都以游客结账（已登录会员照常以会员结账），注册、短信登录与重设密码暂停，注销以密码或会话确认（0.7） | 「边界与原则」「权限与资料保护」（DESIGN 1.11） |
+| P9 | Stripe 测试环境付款时的资料：本站发给 Stripe 的只有金额、币种、行项目名称、内部订单 ID、语言、返回地址与预填的固定演示邮箱，不发姓名、电话、地址或订单号；访客在 Stripe 页输入的内容（改填的邮箱、持卡人姓名、账单地址等）由 Stripe 测试环境保存，本站不读取、不保存、无法逐条删除，运营者只能删除整个测试环境；只用测试卡号与虚构资料。始终显示，不随支付方式开关隐藏（0.11） | 「Stripe 测试环境支付」（第 1、10 条）「资料保留」（DESIGN 1.12） |
 
 ---
 
@@ -1610,6 +1790,83 @@ V1 金额与个人资料元素：
 | M3 | 累计已退与剩余可退，累计上限约束 | 「计价、优惠、积分与库存」（第 5 条） |
 | K | 申请列表与详情中的订单号 | 「权限与资料保护」 |
 | — | 批准/拒绝幂等；已批准不可再批 | 「失败、并发与重试」「订单与退款状态」 |
+
+### A03 Stripe 测试（0.11）
+
+依据 DESIGN 1.12「Stripe 测试环境支付」第 8 条。只对经 Stripe 测试付款的订单的申请显示下面的内容；经模拟支付的订单与上面相同。列表不变。
+
+桌面（详情部分；其余同上）：
+
+```text
+|           | [admin.refund_detail]  [K]<订单号>                         |
+|           |  …（商品、金额、累计已退与剩余可退、运费不退，同上）           |
+|           |  [admin.paid_via_stripe]                                  |
+|           |  [admin.stripe_method] 或 [admin.stripe_method_unknown]    |
+|           |  审核中、已批准：[admin.stripe_deadline_fpx] / [admin.stripe_deadline_grabpay] / [admin.stripe_deadline_other] |
+| 审核中：   |  [admin.refund_reason] [____________]                     |
+|           |  ( [admin.refund_approve] )  ( [admin.refund_reject] )    |
+|           |  [admin.refund_hint]                                      |
+|           |  ◆ [admin.stripe_refund_hint]                             |
+| 已批准：   |  [admin.reviewed_by] …（同上）                             |
+|           |  [admin.stripe_refund_title]                              |
+|           |   [admin.col_time] [admin.col_amount] [admin.filter_status] [admin.col_stripe_refund_id] |
+|           |   <时间> [M4] <金额> [admin.stripe_refund_pending|succeeded|failed] <Stripe 退款 ID 或 —> |
+|           |   （每次尝试一行，最新的在最上）                               |
+|           |  最新一次处理中：[admin.stripe_refund_pending_hint]          |
+|           |  最新一次失败：[admin.stripe_refund_failed_hint]             |
+|           |                ( [admin.stripe_refund_retry] )             |
+|           |  现金退款额为 0：[admin.stripe_refund_none]（不显示尝试表）   |
+重试提交中：按钮禁用；成功后重新读取，表中多出一行处理中的尝试
+重试被拒（会超过 Stripe 付款金额）：按钮下显示 [admin.stripe_refund_blocked]
+```
+
+手机（详情）：
+
+```text
+| [admin.refund_detail] [K]<订单号> |
+| …（同上）                        |
+| [admin.paid_via_stripe]        |
+| [admin.stripe_method] 或       |
+|  [admin.stripe_method_unknown] |
+| 期限提示（三选一，同桌面）       |
+--- 审核中 ---
+| [admin.refund_reason] [____]   |
+| [admin.refund_hint]            |
+| ◆ [admin.stripe_refund_hint]   |
+| ( [admin.refund_approve] )     |
+| ( [admin.refund_reject] )      |
+--- 已批准 ---
+| [admin.stripe_refund_title]    |
+| <时间> [M4] <金额>              |
+|  [admin.stripe_refund_pending|succeeded|failed] |
+|  [admin.col_stripe_refund_id] <ID> |
+| [admin.stripe_refund_pending_hint] 或 |
+| [admin.stripe_refund_failed_hint] |
+| ( [admin.stripe_refund_retry] ) |
+| 重试被拒：[admin.stripe_refund_blocked] |
+| 现金退款额为 0：[admin.stripe_refund_none]（不显示尝试） |
+```
+
+说明：
+
+- `[admin.paid_via_stripe]` 与付款方式在审核中、已批准、已拒绝三种状态都显示；期限提示只在审核中与已批准显示。付款方式类型取确认付款时记下的实际类型（如 card、fpx、grabpay），原样作为 `{type}` 显示；尚未补齐时显示 `[admin.stripe_method_unknown]`。
+- 期限提示按付款方式类型选一条：fpx 用 `[admin.stripe_deadline_fpx]`，grabpay 用 `[admin.stripe_deadline_grabpay]`，其他类型或类型为空用 `[admin.stripe_deadline_other]`；只给提示、不计算具体日期。60 天、90 天以实现前在 Stripe 文档与测试环境的核验为准，不符时先改设计与文案。
+- 尝试的状态按设计映射：Stripe 的 pending 与 requires_action 显示 `[admin.stripe_refund_pending]`，succeeded 显示 `[admin.stripe_refund_succeeded]`，failed 与 canceled 显示 `[admin.stripe_refund_failed]`。已退的尝试之后可能被 Stripe 改为失败，页面照服务端当前值显示。页面不自动刷新，重新打开或重新读取时更新。
+- `[admin.stripe_refund_retry]` 只在最新一次尝试为失败时显示；重试新建一条尝试，重复点击与并发只有一个成功。处理中的尝试不提供改为失败或取消的按钮（DESIGN 1.12：本站不提供这一手段）。
+- Stripe 退款失败不影响本站的批准：申请仍为 `[order.refund_approved]`，访客在 P09 看到的仍是模拟退款已批准。
+- 迟到付款的全额退款（Stripe 节第 6 条）没有退款申请，不在 A03 显示；由运营告警邮件报告，在 Stripe 后台跟进。
+- 不显示 Stripe 返回的客户资料、卡号片段、账单地址或错误原文（Stripe 节第 10 条）。
+
+金额与个人资料元素：
+
+| 标记 | 元素 | 依据 DESIGN 1.12 小节 |
+| --- | --- | --- |
+| M4 | 每次 Stripe 退款尝试的金额，等于本次批准的现金退款额（不含运费）；现金退款额为 0 时不建尝试；同一付款的处理中与已退合计不超过付款金额 | 「Stripe 测试环境支付」（第 8 条） |
+| — | 退款状态映射与只进不退的改动规则；状态以向 Stripe 查询为准 | 「Stripe 测试环境支付」（第 8 条）「数据模型」（`StripeRefund`） |
+| — | 手动重试：最新一次失败时新建尝试，同一申请至多一条未失败的尝试 | 「Stripe 测试环境支付」（第 8 条） |
+| — | 按实际付款方式类型的退款期限提示 | 「Stripe 测试环境支付」（第 4、8 条） |
+| — | 本站批准不因 Stripe 退款失败回滚 | 「Stripe 测试环境支付」（第 8 条）「订单与退款状态」 |
+| — | 只显示对账字段，不显示 Stripe 的客户资料 | 「Stripe 测试环境支付」（第 10 条） |
 
 ## A04 后台商品、图片、规格与库存
 
@@ -1937,7 +2194,7 @@ V1 金额与个人资料元素：
 
 ## A09 后台站点设置（0.7）
 
-- **目的**：开关全站短信验证（REQUIREMENTS 1.12「管理后台」，DESIGN 1.11「边界与原则」「数据模型」`SiteSetting`）。
+- **目的**：开关全站短信验证（REQUIREMENTS 1.12「管理后台」，DESIGN 1.11「边界与原则」「数据模型」`SiteSetting`）；切换支付方式（0.11，REQUIREMENTS 1.13「管理后台」，DESIGN 1.12「Stripe 测试环境支付」第 2 条）。
 - **入口**：后台导航 `[admin.nav_settings]`。
 - **去向**：—（本页内完成；保存后对之后的请求立即生效）。
 - **演示提示**：★ `[admin.demo_banner]`；`[admin.sms_toggle_cost]`（开启会发送真实短信并产生费用）。
@@ -1952,8 +2209,13 @@ V1 金额与个人资料元素：
 |           |  ( ) [admin.sms_on]   (●) [admin.sms_off]                 |
 |           |  [admin.sms_toggle_hint]                                  |
 |           |  [admin.sms_toggle_cost]                                  |
+|           | [admin.payment_method]（0.11）                             |
+|           |  (●) [admin.payment_simulated]   ( ) [admin.payment_stripe] |
+|           |  [admin.payment_method_hint]                              |
+|           |  凭据未配置：[admin.payment_stripe] 禁用，其下显示 [admin.stripe_not_configured] |
 |           | ( [common.save] )                                         |
 |           | 保存成功：[admin.settings_saved]                            |
+|           | 保存被拒（凭据未配置）：[admin.stripe_not_configured]         |
 +-----------+-----------------------------------------------------------+
 ```
 
@@ -1967,6 +2229,11 @@ V1 金额与个人资料元素：
 | (●) [admin.sms_off]            |
 | [admin.sms_toggle_hint]        |
 | [admin.sms_toggle_cost]        |
+| [admin.payment_method]         |
+| (●) [admin.payment_simulated]  |
+| ( ) [admin.payment_stripe]     |
+| [admin.payment_method_hint]    |
+| 未配置：[admin.stripe_not_configured] |
 | ( [common.save] )              |
 ```
 
@@ -1974,6 +2241,7 @@ V1 金额与个人资料元素：
 
 - 默认 `[admin.sms_off]`。开启前运营者须已开通并核实短信服务；开启后结账、注册、短信登录、重设密码与注销确认按 0.6 的短信流程进行，关闭后前台按 V1「短信验证开关关闭时」显示。
 - 保存写入后台审计记录（操作者、时间、新旧值）。
+- **支付方式**（0.11）：默认 `[admin.payment_simulated]`。服务端告知 Stripe 测试凭据（测试密钥与 webhook 签名密钥）未配置或密钥不是测试密钥时，`[admin.payment_stripe]` 禁用、其下显示 `[admin.stripe_not_configured]`；当前已是「Stripe 测试」而凭据后来失效时，两项照常显示当前值，仍可切回模拟。保存时服务端再次检查，被拒则显示 `[admin.stripe_not_configured]`、本次保存不生效。切换只影响之后发起的支付，已经发起的 Stripe 会话的确认、作废与退款不受影响（DESIGN 1.12「Stripe 测试环境支付」第 2 条）；页面不另加确认框。
 - 本页沿用后台中性样式；视觉稿见 `docs/design/pages/` 的 A09 两张（0.8）。
 
 金额与个人资料元素：
@@ -1981,17 +2249,18 @@ V1 金额与个人资料元素：
 | 标记 | 元素 | 依据 DESIGN 1.11 小节 |
 | --- | --- | --- |
 | — | 短信验证开关：关闭时全站不发短信，马新号码以游客下单，注册、短信登录与重设密码暂停，注销改以密码或已登录会话确认；保存记入审计 | 「边界与原则」「数据模型」（`SiteSetting`）「权限与资料保护」 |
+| — | 支付方式（0.11）：模拟 / Stripe 测试，默认模拟；凭据未配置或不是测试密钥时不能切到 Stripe 测试；每次从数据库读取，保存记入审计 | DESIGN 1.12「Stripe 测试环境支付」（第 1、2 条）「数据模型」（`SiteSetting`） |
 
 ## 演示提示汇总
 
 | 位置 | 提示 |
 | --- | --- |
 | 所有前台页 | 常驻 `[common.demo_banner]` / `[common.demo_banner_short]`；页脚 `[common.footer_demo]` |
-| 每页 ★ | P01 `home.demo_hint`；P02 `list.demo_hint`；P03 `detail.demo_hint`；P04 `cart.demo_hint`；P05 `checkout.demo_hint`；P06 `pay.demo_hint`；P07 `result.demo_hint`；P08 `lookup.demo_hint`；P09 `order.demo_hint`；P10 `refund.demo_hint`；P11 `auth.register_demo_hint`；P12 `auth.login_demo_hint`；P13 `account.demo_hint`；P14 `privacy.demo_hint`；A01–A08 `admin.demo_banner`；A08 另有 `admin.design_demo_note` |
+| 每页 ★ | P01 `home.demo_hint`；P02 `list.demo_hint`；P03 `detail.demo_hint`；P04 `cart.demo_hint`；P05 `checkout.demo_hint`；P06 `pay.demo_hint`（支付途径为 Stripe 测试时 `pay.stripe_demo_hint`，0.11）；P07 `result.demo_hint`（Stripe 确认中不显示，0.11）；P08 `lookup.demo_hint`；P09 `order.demo_hint`；P10 `refund.demo_hint`；P11 `auth.register_demo_hint`；P12 `auth.login_demo_hint`；P13 `account.demo_hint`；P14 `privacy.demo_hint`；A01–A08 `admin.demo_banner`；A08 另有 `admin.design_demo_note` |
 | 店铺装修（0.4） | 演示横幅、每页 ★ 与 ◆ 提示、结账两处告知在所有主题与深浅色下照常显示，A08 不能隐藏或弱化；P01 的 ★ `home.demo_hint` 固定在所有区块之前 |
 | ◆ 下单 | P05 下单按钮旁 `[checkout.place_order_hint]` |
-| ◆ 模拟支付 | P06 成功/失败按钮旁 `[pay.action_hint]` |
-| ◆ 退款 | P10 提交按钮旁 `[refund.submit_hint]`；后台 A03 `[admin.refund_hint]` |
+| ◆ 模拟支付 | P06 成功/失败按钮旁 `[pay.action_hint]`；支付途径为 Stripe 测试时，跳转按钮旁 `[pay.stripe_notice]` 与 `[pay.stripe_test_card]`，★ 改为 `[pay.stripe_demo_hint]`（0.11） |
+| ◆ 退款 | P10 提交按钮旁 `[refund.submit_hint]`；后台 A03 `[admin.refund_hint]`，经 Stripe 测试付款的订单另有 `[admin.stripe_refund_hint]`（0.11） |
 | 结账手机号旁 | P05 `[checkout.phone_notice]`：马新号码会收到验证短信并自动注册会员、手机号保留至注销、可在会员中心注销；**无勾选框**；短信验证开关关闭时改为 `[checkout.phone_notice_sms_off]`（0.7） |
 | 收货表单旁 | P05 `[checkout.form_notice]`：不真实扣款、不真实发货、收货资料会长期保存；**无确认勾选框，无删除入口** |
 | 真实短信 | V1 `[auth.sms_scope]`；P11 `[auth.register_demo_hint]` |
