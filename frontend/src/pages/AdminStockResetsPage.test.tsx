@@ -267,16 +267,18 @@ describe("navigation", () => {
     for (const nav of [element(html, "nav", "site-admin__nav"), element(html, "nav", "site-admin__menu-nav")]) {
       const items = tags(nav, "a").filter((tag) => !attributes(tag).has("lang"));
       expect(items.map((tag) => [attributes(tag).get("href"), attributes(tag).get("aria-current")])).toEqual([
-        [ORDERS_PATH, undefined],
-        [REFUNDS_PATH, undefined],
-        [STOCK_RESETS_PATH, "page"],
+          [ORDERS_PATH, undefined],
+          [REFUNDS_PATH, undefined],
+          ["/admin/coupons", undefined],
+          [STOCK_RESETS_PATH, "page"],
         ["/admin/store-design", undefined],
       ]);
-      const labels = textNodes(nav).slice(0, 4);
+        const labels = textNodes(nav).slice(0, 5);
       expect(labels).toEqual([
-        COPY["admin.nav_orders"][language],
-        COPY["admin.nav_refunds"][language],
-        COPY["admin.nav_stock_resets"][language],
+          COPY["admin.nav_orders"][language],
+          COPY["admin.nav_refunds"][language],
+          COPY["admin.nav_coupons"][language],
+          COPY["admin.nav_stock_resets"][language],
         COPY["admin.nav_store_design"][language],
       ]);
     }

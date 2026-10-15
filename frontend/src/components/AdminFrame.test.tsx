@@ -42,9 +42,10 @@ const HTML_LANG = { en: "en", zh: "zh-Hans", ms: "ms" } as const;
 // UX-COPY 第 10 节里全部导航项的键（admin.nav_orders、admin.nav_refunds、admin.nav_stock_resets 与 admin.nav_store_design
 // 之外的都是尚未上线页面的项）。
 const DOC_NAV_KEYS = [...uxCopy.matchAll(/^\| `(admin\.nav_[a-z_]+)` \|/gm)].map((m) => m[1] ?? "");
-const LIVE_NAV_KEYS = ["admin.nav_orders", "admin.nav_refunds", "admin.nav_stock_resets", "admin.nav_store_design"];
+const LIVE_NAV_KEYS = ["admin.nav_orders", "admin.nav_refunds", "admin.nav_coupons", "admin.nav_stock_resets", "admin.nav_store_design"];
 const STOCK_RESETS_PATH = "/admin/stock-resets";
 const STORE_DESIGN_PATH = "/admin/store-design";
+const COUPONS_PATH = "/admin/coupons";
 // 尚未上线页面的导航项在 UX-COPY 里的三语文字。
 function otherNavLabels(language: Language): string[] {
   const column = { en: 2, zh: 3, ms: 4 }[language];
@@ -301,21 +302,24 @@ describe("first render", () => {
   // SHOP-TASK-062 改动：按 SHOP-TASK-062 验收第 3 条把「按 UX 顺序只含订单、退款与库存重置三项」改为「按 UX 顺序只含订单、退款、
   // 库存重置与店铺装修四项、其他 admin.nav_* 不出现」：第四项为 admin.nav_store_design（指向 /admin/store-design），
   // 在 UX「管理后台总体」与 UX-COPY 的导航项里排在库存重置之后。
-  it.each(LANGUAGES)("lists only the orders, refunds, stock resets and store design items in UX order in the navigation in %s", (language) => {
-    expect(ADMIN_NAV).toEqual(["orders", "refunds", "stockResets", "storeDesign"]);
+  // SHOP-TASK-100 改动：在退款之后加入优惠券，五项之外的 admin.nav_* 仍不出现。
+  it.each(LANGUAGES)("lists only the orders, refunds, coupons, stock resets and store design items in UX order in the navigation in %s", (language) => {
+    expect(ADMIN_NAV).toEqual(["orders", "refunds", "coupons", "stockResets", "storeDesign"]);
     expect(DOC_NAV_KEYS.filter((key) => LIVE_NAV_KEYS.includes(key))).toEqual(LIVE_NAV_KEYS);
     expect(DOC_NAV_KEYS.length).toBeGreaterThan(LIVE_NAV_KEYS.length);
     for (const html of [renderApp(ORDERS_PATH, language), render({}, language), render({ menuOpen: true }, language)]) {
       const nav = element(html, "nav", "site-admin__nav");
       const items = tags(nav, "a").filter((tag) => !attributes(tag).has("lang"));
-      expect(items.map((tag) => attributes(tag).get("href"))).toEqual([ORDERS_PATH, REFUNDS_PATH, STOCK_RESETS_PATH, STORE_DESIGN_PATH]);
-      expect(items.map((tag) => attributes(tag).get("aria-current"))).toEqual(["page", undefined, undefined, undefined]);
+      expect(items.map((tag) => attributes(tag).get("href"))).toEqual([ORDERS_PATH, REFUNDS_PATH, COUPONS_PATH, STOCK_RESETS_PATH, STORE_DESIGN_PATH]);
+      expect(items.map((tag) => attributes(tag).get("aria-current"))).toEqual(["page", undefined, undefined, undefined, undefined]);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_orders"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_refunds"][language])}</a>`);
+      expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_coupons"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_stock_resets"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_store_design"][language])}</a>`);
       expect(nav.indexOf(COPY["admin.nav_orders"][language])).toBeLessThan(nav.indexOf(escapeHtml(COPY["admin.nav_refunds"][language])));
-      expect(nav.indexOf(escapeHtml(COPY["admin.nav_refunds"][language]))).toBeLessThan(
+      expect(nav.indexOf(escapeHtml(COPY["admin.nav_refunds"][language]))).toBeLessThan(nav.indexOf(escapeHtml(COPY["admin.nav_coupons"][language])));
+      expect(nav.indexOf(escapeHtml(COPY["admin.nav_coupons"][language]))).toBeLessThan(
         nav.indexOf(escapeHtml(COPY["admin.nav_stock_resets"][language])),
       );
       expect(nav.indexOf(escapeHtml(COPY["admin.nav_stock_resets"][language]))).toBeLessThan(
@@ -390,13 +394,15 @@ describe("phone menu", () => {
     expect(attributes(menuTag).get("id")).toBe(attributes(buttonTag).get("aria-controls"));
     const nav = element(menu, "nav", "site-admin__menu-nav");
     expect(tags(nav, "a").map((tag) => [attributes(tag).get("href"), attributes(tag).get("aria-current")])).toEqual([
-      [ORDERS_PATH, "page"],
-      [REFUNDS_PATH, undefined],
-      [STOCK_RESETS_PATH, undefined],
+        [ORDERS_PATH, "page"],
+        [REFUNDS_PATH, undefined],
+        [COUPONS_PATH, undefined],
+        [STOCK_RESETS_PATH, undefined],
       [STORE_DESIGN_PATH, undefined],
     ]);
     expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_orders"][language])}</a>`);
-    expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_refunds"][language])}</a>`);
+      expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_refunds"][language])}</a>`);
+      expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_coupons"][language])}</a>`);
     expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_stock_resets"][language])}</a>`);
     expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_store_design"][language])}</a>`);
     const langs = element(menu, "div", "site-admin__lang");

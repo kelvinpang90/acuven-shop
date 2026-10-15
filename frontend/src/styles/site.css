@@ -333,6 +333,10 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-stock-resets { display: grid; gap: 16px; max-width: 960px; }
 .site-admin-stock-resets__note { margin: 0; padding: 10px 12px; }
 
+/* 后台优惠券 A05 的页头（A05-desktop、A05-phone-list）：本任务只有标题与会员中心说明；列表与新建表单后续接入。 */
+.site-admin-coupons { display: grid; gap: 16px; }
+.site-admin-coupons__note { margin: 0; }
+
 /* A07 的每日结果（A07-desktop）：表格在可横向滚动的面板里，SKU 数靠右；每天的展开处在该日下方另起一行（单元格不留内边距，
    details 内边距 8px 12px，明细表与 summary 间距 6px）；卡片不显示，翻页按钮靠右。summary 的字重、明细的字号 site.css 写不了，
    记在 docs/TODO.md 的偏离里 */
@@ -660,6 +664,9 @@ a.site-admin-refunds__clear { text-decoration: none; }
 
   /* 后台库存重置结果的页头（A07-phone）：标题与说明间距 10px */
   .site-admin-stock-resets { gap: 10px; }
+
+  /* 后台优惠券页头（A05-phone-list）：标题与会员中心说明间距 10px。 */
+  .site-admin-coupons { gap: 10px; }
 
   /* A07 的每日结果（A07-phone）：表格不显示、卡片显示（间距 10px，卡片内边距 12px，各项间距 8px，第一行日期与结果标签两端对齐、可换行），
      展开处在卡片里（summary 至少 32px 高，每个 SKU 一项、SKU 与 breakdown 上下排列、间距 2px、上下内边距 6px）；翻页按钮居中、至少 44×44。

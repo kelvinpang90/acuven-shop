@@ -1150,6 +1150,16 @@ export const COPY = {
     zh: "退款审核",
     ms: "Bayaran balik",
   },
+  "admin.nav_coupons": {
+    en: "Coupons",
+    zh: "优惠券",
+    ms: "Kupon",
+  },
+  "admin.coupon_listed_note": {
+    en: 'All active coupons within their valid dates are listed under "My coupons", the same for every member, regardless of total or per-member usage limits.',
+    zh: "所有启用中且在有效期内的优惠券都会列在会员中心「我的优惠券」中，对全部会员相同，不因总次数或每会员次数上限而不列出。",
+    ms: "Semua kupon aktif dalam tempoh sah disenaraikan di bawah \"Kupon saya\", sama bagi setiap ahli, tanpa mengira had jumlah penggunaan atau had setiap ahli.",
+  },
   "admin.nav_stock_resets": {
     en: "Stock resets",
     zh: "库存重置",
