@@ -39,7 +39,7 @@ MAX_COUPON_ID = 2**31 - 1
 
 
 class CouponIn(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True, populate_by_name=True)
+    model_config = ConfigDict(extra="forbid", strict=True)
 
     code: str = Field(min_length=1, max_length=64)
     coupon_type: Literal["fixed", "percent"] = Field(alias="type")
@@ -127,9 +127,15 @@ async def _create_body(request: Request) -> bytes:
     return await _json_body(request)
 
 
+def _require_admin_csrf(request: Request, admin: AdminDep) -> None:
+    """写操作先完成会话与 CSRF 检查，再验证路径参数。"""
+    require_admin_csrf(request, admin)
+
+
 PageDep = Annotated[int, Depends(_page)]
 CouponIdDep = Annotated[int, Depends(_coupon_id)]
 CreateBodyDep = Annotated[bytes, Depends(_create_body)]
+CsrfDep = Annotated[None, Depends(_require_admin_csrf)]
 SessionDep = Annotated[Session, Depends(get_session)]
 
 
@@ -189,9 +195,8 @@ def create_coupon(
 
 @router.post("/{coupon_id}/disable", response_model=CouponOut)
 def disable_coupon(
-    admin: AdminDep, coupon_id: CouponIdDep, session: SessionDep, request: Request
+    admin: AdminDep, _csrf: CsrfDep, coupon_id: CouponIdDep, session: SessionDep
 ) -> CouponOut:
-    require_admin_csrf(request, admin)
     try:
         disabled = disable_admin_coupon(session, admin.account.id, coupon_id, _utcnow())
         session.commit()

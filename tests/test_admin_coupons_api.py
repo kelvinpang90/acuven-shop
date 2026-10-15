@@ -248,10 +248,13 @@ def test_create_csrf_body_order_and_private_validation(
         assert response.status_code == 403 and db.query(Coupon).count() == 0
         _assert_no_store(response)
     malformed = client.post(URL, json=_body(extra="secret-value"), headers=_headers(admin_token))
+    internal_name_body = _body()
+    internal_name_body["coupon_type"] = internal_name_body.pop("type")
+    internal_name = client.post(URL, json=internal_name_body, headers=_headers(admin_token))
     typed = client.post(
         URL, json=_body(min_subtotal_sen="secret-value"), headers=_headers(admin_token)
     )
-    for response in (malformed, typed):
+    for response in (malformed, internal_name, typed):
         assert response.status_code == 422 and "secret-value" not in response.text
         _assert_no_store(response)
     non_json = client.post(URL, content=b"no", headers={"content-type": "text/plain"})
@@ -281,4 +284,9 @@ def test_disable_is_idempotent_and_validates_path(
     for path, expected in paths:
         response = client.post(f"{URL}/{path}/disable", headers=_headers(admin_token))
         assert response.status_code == expected
+        _assert_no_store(response)
+    for headers in ({}, {"X-CSRF-Token": "wrong"}):
+        response = client.post(f"{URL}/01/disable", headers=headers)
+        assert response.status_code == 403
+        assert response.json() == {"detail": "csrf_failed"}
         _assert_no_store(response)
