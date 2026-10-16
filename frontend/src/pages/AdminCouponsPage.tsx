@@ -106,10 +106,10 @@ export function couponInput(form: CouponForm): AdminCouponInput {
   };
 }
 
-export type CreateStep = "login" | { kind: "ok" } | { kind: "reload"; page: number; error: CopyKey | null } | { kind: "error"; error: CopyKey };
+export type CreateStep = "login" | { kind: "ok"; page: 1 } | { kind: "reload"; page: number; error: CopyKey } | { kind: "error"; error: CopyKey };
 export function createStep(read: CouponCreate, page: number): CreateStep {
   switch (read.kind) {
-    case "ok": return { kind: "ok" };
+    case "ok": return { kind: "ok", page: 1 };
     case "none": return "login";
     case "csrf": return { kind: "reload", page, error: "common.error_retry" };
     case "network": return { kind: "reload", page: 1, error: "common.network_check" };
@@ -120,7 +120,7 @@ export function createStep(read: CouponCreate, page: number): CreateStep {
 }
 
 export interface CreateMoves {
-  success: () => void;
+  success: (page: 1) => void;
   error: (error: CopyKey) => void;
   reload: (page: number, error: CopyKey) => void;
   replace: (path: RoutePath) => void;
@@ -130,8 +130,8 @@ export async function submitCoupon(input: AdminCouponInput, csrfToken: string, p
   if (signal.aborted) return;
   const step = createStep(read, page);
   if (step === "login") moves.replace(ADMIN_LOGIN_PATH);
-  else if (step.kind === "ok") moves.success();
-  else if (step.kind === "reload") moves.reload(step.page, step.error ?? "common.error_retry");
+  else if (step.kind === "ok") moves.success(step.page);
+  else if (step.kind === "reload") moves.reload(step.page, step.error);
   else moves.error(step.error);
 }
 
@@ -199,7 +199,7 @@ export function AdminCouponsContent() {
     if (saving) return;
     if (state.list === null) { setSaveError("common.error_retry"); return; }
     const controller = new AbortController(); createRequest.current = controller; setSaving(true); setSaveError(null);
-    void submitCoupon(couponInput(form), state.list.csrf_token, page, controller.signal, { replace, success: () => { setSaving(false); setForm(DEFAULT_COUPON_FORM); setFormOpen(false); setPage(1); setState((current) => ({ ...current, busy: true })); setReload((current) => current + 1); }, error: (error) => { setSaving(false); setSaveError(error); }, reload: (next, error) => { setSaving(false); setSaveError(error); setPage(next); setState((current) => ({ ...current, busy: true })); setReload((current) => current + 1); } });
+    void submitCoupon(couponInput(form), state.list.csrf_token, page, controller.signal, { replace, success: (next) => { setSaving(false); setForm(DEFAULT_COUPON_FORM); setFormOpen(false); setPage(next); setState((current) => ({ ...current, busy: true })); setReload((current) => current + 1); }, error: (error) => { setSaving(false); setSaveError(error); }, reload: (next, error) => { setSaving(false); setSaveError(error); setPage(next); setState((current) => ({ ...current, busy: true })); setReload((current) => current + 1); } });
   };
   return <AdminCouponsView state={state} disabling={disabling} creating={saving} formOpen={formOpen} form={form} saving={saving} error={saveError} onChange={(change) => { setForm(change); }} onSubmit={submit} onCreate={() => { setFormOpen(true); }} onBack={() => { setFormOpen(false); }} onDisable={disable} onPage={(next) => { setPage(next); setState((current) => ({ ...current, busy: true, error: null })); }} />;
 }

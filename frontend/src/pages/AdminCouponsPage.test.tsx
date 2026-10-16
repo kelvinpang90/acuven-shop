@@ -4,12 +4,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "../App";
 import type { AdminCoupon, AdminCouponPage } from "../api/adminCoupons";
+import AdminFrame from "../components/AdminFrame";
 import { COPY, LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { htmlLang, LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { RouterProvider } from "../router";
 import type { RoutePath } from "../router";
-import AdminCouponsPage, { AdminCouponsContent, AdminCouponsView, couponInput, DEFAULT_COUPON_FORM, disableCoupon, disableStep, formatCouponDate, INITIAL_LIST, listStep, loadCoupons, pagerOf, reloadedState, submitCoupon, updatedState } from "./AdminCouponsPage";
+import AdminCouponsPage, { AdminCouponsContent, AdminCouponsView, couponInput, createStep, DEFAULT_COUPON_FORM, disableCoupon, disableStep, formatCouponDate, INITIAL_LIST, listStep, loadCoupons, pagerOf, reloadedState, submitCoupon, updatedState } from "./AdminCouponsPage";
 import type { CreateMoves, DisableMoves, ListState, Moves } from "./AdminCouponsPage";
 
 const COUPONS_PATH = "/admin/coupons";
@@ -39,7 +40,7 @@ function stubFetch(...replies: (Response | (() => never))[]) { const calls: Call
 const networkDown = (): never => { throw new TypeError("Failed to fetch"); };
 function moves<T>() { const events: string[] = []; const states: T[] = []; const target: Moves<T> = { show: (state) => { states.push(state); events.push("show"); }, replace: (path: RoutePath) => { events.push(`replace ${path}`); } }; return { target, events, states }; }
 function disableMoves() { const events: string[] = []; const updates: AdminCoupon[] = []; const target: DisableMoves = { update: (coupon) => { updates.push(coupon); events.push("update"); }, error: (error: CopyKey) => { events.push(`error ${error}`); }, reload: () => { events.push("reload"); }, finish: () => { events.push("finish"); }, replace: (path: RoutePath) => { events.push(`replace ${path}`); } }; return { target, events, updates }; }
-function createMoves() { const events: string[] = []; const target: CreateMoves = { success: () => { events.push("success"); }, error: (error) => { events.push(`error ${error}`); }, reload: (page, error) => { events.push(`reload ${page} ${error}`); }, replace: (path) => { events.push(`replace ${path}`); } }; return { target, events }; }
+function createMoves() { const events: string[] = []; const target: CreateMoves = { success: (page) => { events.push(`success ${page}`); }, error: (error) => { events.push(`error ${error}`); }, reload: (page, error) => { events.push(`reload ${page} ${error}`); }, replace: (path) => { events.push(`replace ${path}`); } }; return { target, events }; }
 
 describe("AdminCouponsPage", () => {
   // UX A05「入口：后台导航」及 SHOP-TASK-100 验收：经路由打开页面渲染后台框架，不套前台框架。
@@ -109,9 +110,10 @@ describe("AdminCouponsPage", () => {
   // Disable result mapping is the A05 policy for ok, reload, login, network, and failure.
   it("maps disable results", () => { expect(disableStep({ kind: "ok", coupon: PERCENT })).toEqual({ kind: "updated", coupon: PERCENT }); expect(disableStep({ kind: "csrf" })).toEqual({ kind: "reload" }); expect(disableStep({ kind: "not_found" })).toEqual({ kind: "reload" }); expect(disableStep({ kind: "none" })).toBe("login"); expect(disableStep({ kind: "network" })).toEqual({ kind: "error", error: "common.network_check" }); expect(disableStep({ kind: "failed" })).toEqual({ kind: "error", error: "common.error_retry" }); });
   // SHOP-TASK-109 标题行加新建按钮后，守住 A05：停用结果不再显示停用按钮。
-  it.each<[Response | (() => never), string[], AdminCoupon[]]>([[json(200, { ...FIXED, active: false }), ["update", "finish"], [{ ...FIXED, active: false }]], [json(404, {}), ["reload", "finish"], []], [json(403, {}), ["reload", "finish"], []], [json(401, {}), [`replace ${LOGIN}`], []], [networkDown, ["error common.network_check", "finish"], []], [json(500, {}), ["error common.error_retry", "finish"], []]])("handles disable outcome (%#)", async (reply, events, updates) => { const calls = stubFetch(reply); const controller = new AbortController(); const target = disableMoves(); await disableCoupon(FIXED.id, "csrf", controller.signal, target.target); expect(String(calls[0]?.url)).toBe("/api/admin/coupons/1/disable"); expect(target.events).toEqual(events); expect(target.updates).toEqual(updates); if (updates.length > 0) expect(render(shown(page({ coupons: updates }))).not.toMatch(new RegExp(`<button[^>]*>${escapeHtml(COPY["admin.coupon_disable"].en)}</button>`)); });
+  it.each<[Response | (() => never), string[], AdminCoupon[]]>([[json(200, { ...FIXED, active: false }), ["update", "finish"], [{ ...FIXED, active: false }]], [json(404, {}), ["reload", "finish"], []], [json(403, {}), ["reload", "finish"], []], [json(401, {}), [`replace ${LOGIN}`], []], [networkDown, ["error common.network_check", "finish"], []], [json(500, {}), ["error common.error_retry", "finish"], []]])("handles disable outcome (%#)", async (reply, events, updates) => { const calls = stubFetch(reply); const controller = new AbortController(); const target = disableMoves(); await disableCoupon(FIXED.id, "csrf", controller.signal, target.target); expect(String(calls[0]?.url)).toBe("/api/admin/coupons/1/disable"); expect(target.events).toEqual(events); expect(target.updates).toEqual(updates); if (updates.length > 0) expect(render(shown(page({ coupons: updates })))).not.toMatch(new RegExp(`<button[^>]*>${escapeHtml(COPY["admin.coupon_disable"].en)}</button>`)); });
   // 本任务验收「同一时间只停用一张——进行中所有停用按钮都禁用，只有被点的那张标 aria-busy」：两张启用券，点的是 WELCOME，
   // 桌面行与手机卡片里只有 WELCOME 的那一项为 aria-busy="true"，SAVE20 的行与卡片不是，四个停用按钮都带 disabled。
+  // SHOP-TASK-109 added a heading-row create button, so this assertion selects only disable buttons.
   it("disables every disable button and marks only the clicked coupon busy", () => {
     const secondActive = { ...PERCENT, active: true };
     const html = render(shown(page({ coupons: [FIXED, secondActive] })), FIXED.id);
@@ -149,8 +151,32 @@ describe("AdminCouponsPage", () => {
   it("renders the guarded create control and new form", () => {
     expect(render(INITIAL_LIST)).toMatch(/<button[^>]*disabled=""[^>]*>New<\/button>/);
     expect(render({ busy: false, list: null, error: "common.error_retry" })).toMatch(/<button[^>]*disabled=""[^>]*>New<\/button>/);
+    expect(render(shown(page()))).toMatch(/<button class="acs-admin__btn" type="button">New<\/button>/);
     const html = renderToStaticMarkup(wrap(<AdminCouponsView state={shown(page())} disabling={null} formOpen form={DEFAULT_COUPON_FORM} saving={false} error={null} onChange={() => undefined} onSubmit={() => undefined} onCreate={() => undefined} onBack={() => undefined} onDisable={() => undefined} onPage={() => undefined} />));
     expect(html).toContain("site-admin-coupons--form-open"); expect(html).toContain(`<h2 class="acs-admin__h">${COPY["common.create"].en}</h2>`); expect(html).toContain(COPY["common.back"].en);
+    const closed = render(shown(page()));
+    expect(closed).not.toContain(`<h2 class="acs-admin__h">${COPY["common.create"].en}</h2>`); expect(closed).not.toContain(COPY["common.back"].en); expect(closed).not.toContain("site-admin-coupons__form");
+  });
+  // SHOP-TASK-109 field contract: the rendered fixed and percent forms retain browser validation rather than adding copy.
+  it("renders A05 form defaults and browser constraints for both coupon types", () => {
+    const fixed = renderToStaticMarkup(wrap(<AdminCouponsView state={shown(page())} disabling={null} formOpen form={DEFAULT_COUPON_FORM} saving={false} error={null} onChange={() => undefined} onSubmit={() => undefined} onDisable={() => undefined} onPage={() => undefined} />));
+    const percent = renderToStaticMarkup(wrap(<AdminCouponsView state={shown(page())} disabling={null} formOpen form={{ ...DEFAULT_COUPON_FORM, type: "percent" }} saving={false} error={null} onChange={() => undefined} onSubmit={() => undefined} onDisable={() => undefined} onPage={() => undefined} />));
+    expect(fixed).toMatch(new RegExp(`<input[^>]*type="radio"[^>]*checked=""[^>]*> ${escapeHtml(COPY["admin.coupon_fixed"].en)}`));
+    expect(fixed).toMatch(/<input[^>]*required=""[^>]*min="0\.01"[^>]*max="100000"[^>]*step="0\.01"/);
+    expect(percent).toMatch(/<input[^>]*required=""[^>]*min="1"[^>]*max="100"[^>]*step="1"/);
+    expect(fixed).toMatch(/<input[^>]*type="date"[^>]*required=""[^>]*value=""/); expect(fixed.match(/<input[^>]*type="date"[^>]*required=""[^>]*value=""/g)).toHaveLength(2);
+    expect(fixed).toMatch(/<input[^>]*required=""[^>]*value="0"[^>]*min="0"[^>]*max="100000"[^>]*step="0\.01"/);
+    expect(fixed.match(/<input[^>]*min="1"[^>]*max="1000000"[^>]*step="1"[^>]*value=""/g)).toHaveLength(2);
+  });
+  // A05 phone new state keeps the admin frame's coupon title while its content hides the heading and list.
+  it("keeps the coupon top-bar title while the phone new form is open", () => {
+    const html = renderToStaticMarkup(wrap(<AdminFrame current="coupons"><AdminCouponsView state={shown(page())} disabling={null} formOpen onDisable={() => undefined} onPage={() => undefined} /></AdminFrame>));
+    expect(html).toContain(`<span class="site-admin__bar-title">${COPY["admin.nav_coupons"].en}</span>`); expect(html).toContain("site-admin-coupons--form-open");
+  });
+  // SHOP-TASK-109 keeps save's in-progress state local to the form.
+  it("marks save busy while a coupon submission is in progress", () => {
+    const html = renderToStaticMarkup(wrap(<AdminCouponsView state={shown(page())} disabling={null} formOpen saving onDisable={() => undefined} onPage={() => undefined} />));
+    expect(html).toMatch(new RegExp(`<button[^>]*type="submit"[^>]*disabled=""[^>]*aria-busy="true"[^>]*>${escapeHtml(COPY["common.save"].en)}</button>`));
   });
   // SHOP-TASK-109 字段规则：fixed 默认、最低消费 0、两个上限空；fixed 与 percent 各自转换成服务端九字段。
   it("uses A05 form defaults, browser limits, and integer sen", () => {
@@ -159,9 +185,19 @@ describe("AdminCouponsPage", () => {
     expect(couponInput({ ...DEFAULT_COUPON_FORM, type: "percent", value: "20", starts_on: "2026-01-01", ends_on: "2026-01-02" })).toMatchObject({ amount_off_sen: null, percent_off: 20 });
   });
   // SHOP-TASK-109 提交结果：ok、重复、无效、CSRF、无会话、网络和失败各自执行 Kelvin 决定与验收指定的状态变化。
-  it.each<[Response | (() => never), string[]]>([[json(201, FIXED), ["success"]], [json(409, { detail: "coupon_code_taken" }), ["error admin.coupon_code_taken"]], [json(422, {}), ["error admin.coupon_invalid"]], [json(403, {}), ["reload 3 common.error_retry"]], [json(401, {}), [`replace ${LOGIN}`]], [networkDown, ["reload 1 common.network_check"]], [json(500, {}), ["error common.error_retry"]]])("handles each A05 create result (%#)", async (reply, events) => { const calls = stubFetch(reply); const target = createMoves(); await submitCoupon(couponInput({ ...DEFAULT_COUPON_FORM, code: "CODE", value: "12.34", starts_on: "2026-01-01", ends_on: "2026-01-02" }), "csrf", 3, new AbortController().signal, target.target); expect(calls[0]?.init.method).toBe("POST"); expect(target.events).toEqual(events); });
+  it.each<[Response | (() => never), string[]]>([[json(201, FIXED), ["success 1"]], [json(409, { detail: "coupon_code_taken" }), ["error admin.coupon_code_taken"]], [json(422, {}), ["error admin.coupon_invalid"]], [json(403, {}), ["reload 3 common.error_retry"]], [json(401, {}), [`replace ${LOGIN}`]], [networkDown, ["reload 1 common.network_check"]], [json(500, {}), ["error common.error_retry"]]])("handles each A05 create result (%#)", async (reply, events) => { const calls = stubFetch(reply); const target = createMoves(); await submitCoupon(couponInput({ ...DEFAULT_COUPON_FORM, code: "CODE", value: "12.34", starts_on: "2026-01-01", ends_on: "2026-01-02" }), "csrf", 3, new AbortController().signal, target.target); expect(calls[0]?.init.method).toBe("POST"); expect(target.events).toEqual(events); });
+  // SHOP-TASK-109: successful creation closes and resets the form, then reloads page one through this pure result.
+  it("maps a successful create to page one", () => { expect(createStep({ kind: "ok", coupon: FIXED }, 3)).toEqual({ kind: "ok", page: 1 }); });
+  // Kelvin's rejected-create decision keeps entered values; network also rereads page one because the create may have succeeded.
+  it.each(["admin.coupon_code_taken", "admin.coupon_invalid", "common.network_check"] as const)("keeps the form visible with its values for %s", (error) => {
+    const form = { ...DEFAULT_COUPON_FORM, code: "KEEP", value: "12.34", starts_on: "2026-01-01", ends_on: "2026-01-02" };
+    const html = renderToStaticMarkup(wrap(<AdminCouponsView state={shown(page())} disabling={null} formOpen form={form} saving={false} error={error} onDisable={() => undefined} onPage={() => undefined} />));
+    expect(html).toContain('value="KEEP"'); expect(html).toContain('value="12.34"'); expect(html).toContain(COPY[error].en);
+  });
   // SHOP-TASK-109：离开页面后的新建结果不得更新页面。
   it("ignores an aborted create", async () => { stubFetch(json(201, FIXED)); const controller = new AbortController(); const target = createMoves(); const pending = submitCoupon(couponInput({ ...DEFAULT_COUPON_FORM, code: "CODE", value: "1", starts_on: "2026-01-01", ends_on: "2026-01-02" }), "csrf", 1, controller.signal, target.target); controller.abort(); await pending; expect(target.events).toEqual([]); });
   // UI text is dictionary copy, API coupon data, formatted dates/values/counts, or A05's specified punctuation.
+  // SHOP-TASK-109 requires every open-form label, action, and rejection message to come from the dictionary.
+  it.each(LANGUAGES)("uses dictionary text for the open form in %s", (language) => { const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language])); const html = renderToStaticMarkup(wrap(<AdminCouponsView state={shown(page())} disabling={null} formOpen error="admin.coupon_code_taken" onDisable={() => undefined} onPage={() => undefined} />, language)); for (const value of visibleTexts(html)) expect(allowed.has(value), value).toBe(true); });
   it.each(LANGUAGES)("uses dictionary text only in %s", (language) => { const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language])); for (const coupon of [FIXED, PERCENT]) { const start = formatCouponDate(coupon.starts_on, language); const end = formatCouponDate(coupon.ends_on, language); const limit = String(coupon.total_use_limit ?? "—"); const usage = `${coupon.used_count} / ${limit}`; const valid = `${start} – ${end}`; allowed.add(coupon.code); allowed.add(coupon.type === "fixed" ? "RM 10.00" : "20%"); allowed.add(start); allowed.add(end); allowed.add(valid); allowed.add(String(coupon.used_count)); allowed.add(limit); allowed.add(usage); allowed.add(`${COPY["admin.coupon_usage"][language]} ${usage} · ${valid}`); } for (const value of ["/", "–", "·", "‹", "›"]) allowed.add(value); for (const html of [render(undefined, null, language), render({ busy: false, list: page(), error: "common.error_retry" }, null, language), render(shown(page({ total: 31 })), null, language)]) for (const value of visibleTexts(html)) expect(allowed.has(value), value).toBe(true); });
 });
