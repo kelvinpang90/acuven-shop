@@ -190,4 +190,18 @@ describe("AdminCouponsPage", () => {
     controller.abort(); await pending;
     expect(events).toEqual([]);
   });
+  // 本任务验收「列表读取成功之前禁用」：翻页或重新读取进行中（旧列表还在、busy 为真）时，页面上的 New 按钮也禁用。
+  it("disables create on the page while a read is in progress", () => {
+    expect(render({ busy: true, list: page(), error: null })).toMatch(/<button class="acs-admin__btn" type="button" disabled="">New<\/button>/);
+  });
+  // 本任务验收「提交的提示是表单自己的状态……与列表区的提示分开，重新读取列表（成功或失败）不清掉也不改它」：
+  // View 只按 saveError 显示表单里的提示，与列表状态无关——列表重新读取中、读取成功或读取失败时，表单提示都在 common.save 旁原样显示，列表区的提示另在列表区。
+  it("shows the form's save message whatever the list state is", () => {
+    for (const state of [{ busy: true, list: page(), error: null }, shown(page()), { busy: false, list: null, error: "common.error_retry" }] as ListState[]) {
+      const html = render(state, null, "en", true, DEFAULT_COUPON_FORM, false, "common.network_check");
+      expect(element(html, "div", "site-admin-coupons__save")).toContain(escapeHtml(COPY["common.network_check"].en));
+      expect(element(html, "div", "site-admin-coupons__list")).not.toContain(escapeHtml(COPY["common.network_check"].en));
+      if (state.error !== null) expect(element(html, "div", "site-admin-coupons__list")).toContain(escapeHtml(COPY[state.error].en));
+    }
+  });
 });
