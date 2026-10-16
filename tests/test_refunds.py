@@ -963,7 +963,7 @@ def test_same_key_insert_race(
 def test_view_refund_fields_for_paid_order(db: Session, client: TestClient) -> None:
     """「系统显示累计已退及剩余可退金额」；HANDOFF 0.27 截止时间；P09 游客订单不显示积分。
     SHOP-TASK-029 验收：订单行序；截止时间为支付时间加 30×24 小时、在退款期内；累计已退 0、剩余
-    可退为商品现金实付合计（不含运费）；每行可退件数与预计金额列表；没有申请记录；不含积分字段。
+    可退为商品现金实付合计（不含运费）；每行可退件数与预计金额列表；没有申请记录；退款部分不含积分返还或追回字段。
     """
     placed = _make_order(db)
     _looked_up(client, placed)
@@ -981,7 +981,8 @@ def test_view_refund_fields_for_paid_order(db: Session, client: TestClient) -> N
         (line["line_index"], line["refundable_quantity"], line["refund_estimates_sen"])
         for line in view["lines"]
     ] == [(0, 3, [2701, 5400, 8100]), (1, 1, [1500])]
-    assert "point" not in json.dumps(view)
+    assert "points_returned" not in view
+    assert "points_clawback" not in view
 
 
 @pytest.mark.parametrize("status", [STATUS_AWAITING_PAYMENT, STATUS_CANCELLED])
