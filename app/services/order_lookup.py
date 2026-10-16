@@ -63,7 +63,13 @@ from app.models import (
     OrderRecipient,
     ReceiptConfirmation,
 )
-from app.models.order import ACTOR_GUEST, STATUS_COMPLETED, STATUS_SHIPPED
+from app.models.order import (
+    ACTOR_GUEST,
+    ACTOR_MEMBER,
+    CLAIM_NOT_CLAIMABLE,
+    STATUS_COMPLETED,
+    STATUS_SHIPPED,
+)
 from app.models.order_access import SCOPE_LOOKUP
 from app.services.catalog import Language
 from app.services.order_access import IssuedAccess, issue_order_access
@@ -165,8 +171,8 @@ class LookupRefund(BaseModel):
 class LookupOrder(BaseModel):
     """查单模式订单详情所需的一张订单。时间都带 UTC 时区。
 
-    不含优惠券与积分两项：现有订单都是游客订单，docs/UX.md 0.7 的 P09 对游客订单不显示这两行；
-    会员订单由之后的会员任务扩展。退款部分同样不含积分返还与追回。
+    placed_by_member 为真时带下单时的优惠券与积分抵扣快照；游客订单（包括后来被认领的订单）
+    不在 P09 显示这两项。退款部分同样不含积分返还与追回。
     """
 
     order_number: str
@@ -177,6 +183,9 @@ class LookupOrder(BaseModel):
     server_time: datetime
     lines: list[LookupLine]
     subtotal_sen: int
+    placed_by_member: bool
+    coupon_discount_sen: int
+    points_redeemed: int
     shipping_fee_sen: int
     total_sen: int
     # 订单摘要不依赖收货资料记录存在：没有那一条时为空。
@@ -323,6 +332,9 @@ def lookup_orders(
             server_time=_utc(now),
             lines=lines[order_id],
             subtotal_sen=order.subtotal_sen,
+            placed_by_member=order.claim_status == CLAIM_NOT_CLAIMABLE,
+            coupon_discount_sen=order.coupon_discount_sen,
+            points_redeemed=order.points_redeemed,
             shipping_fee_sen=order.shipping_fee_sen,
             total_sen=order.total_sen,
             recipient=None if recipient is None else _recipient(recipient),
@@ -360,19 +372,23 @@ def confirm_receipt(
     order_id: int,
     idempotency_key: str,
     now: datetime,
+    *,
+    actor: str = ACTOR_GUEST,
 ) -> tuple[ConfirmOutcome, bool]:
-    """访客确认收货，返回订单状态与是否新写了确认收货记录（重放为假）。
+    """访客或会员确认收货，返回订单状态与是否新写了确认收货记录（重放为假）。
 
     0. 结束此前的事务（此前只有读取，回滚即可），锁定订单行，作为新事务的第一条语句。
     1. 按幂等键查确认收货记录：指纹相同返回订单当前状态，不同抛 IdempotencyConflict；都不改订单。
     2. 订单不是 demo_shipped（含已经 demo_completed）：抛 OrderNotConfirmable，不写记录与事件。
     3. 读取退款占用，全部已退抛 FulfilmentFrozen，不写记录与事件、不改订单。
-    4. 经迁移判定后，同一事务里写确认收货记录（操作者 guest）、用带条件的 UPDATE（状态仍为
-       demo_shipped 才改）改为 demo_completed、写一条操作者为 guest 的事件，然后提交。
+    4. 经迁移判定后，同一事务里写确认收货记录（操作者为 actor）、用带条件的 UPDATE（状态仍为
+       demo_shipped 才改）改为 demo_completed、写一条同一操作者的事件，然后提交。
     写记录撞上唯一约束（同键或同一订单已有记录）或 UPDATE 未命中时回滚，再按幂等键重新查询：
     同键同指纹重放，同键不同指纹抛 IdempotencyConflict，否则抛 OrderNotConfirmable 与当前状态。
     所以一张订单至多完成一次。
     """
+    if actor not in (ACTOR_GUEST, ACTOR_MEMBER):
+        raise ValueError("actor must be guest or member")
     fingerprint = receipt_fingerprint(order_id)
     db.rollback()
     order = db.scalars(lock_order_statement(order_id)).one()
@@ -387,7 +403,7 @@ def confirm_receipt(
         raise FulfilmentFrozen(order.status)
 
     # 经 SHOP-TASK-010 的迁移判定函数检查；这条迁移在表里，不通过即编程错误。
-    if not is_transition_allowed(STATUS_SHIPPED, STATUS_COMPLETED, ACTOR_GUEST):
+    if not is_transition_allowed(STATUS_SHIPPED, STATUS_COMPLETED, actor):
         raise RuntimeError("order status transition is not allowed")
 
     db.add(
@@ -395,7 +411,7 @@ def confirm_receipt(
             order_id=order_id,
             idempotency_key=idempotency_key,
             request_fingerprint=fingerprint,
-            actor_type=ACTOR_GUEST,
+            actor_type=actor,
             created_at=now,
         )
     )
@@ -421,7 +437,7 @@ def confirm_receipt(
             order_id=order_id,
             from_status=STATUS_SHIPPED,
             to_status=STATUS_COMPLETED,
-            actor_type=ACTOR_GUEST,
+            actor_type=actor,
             created_at=now,
         )
     )

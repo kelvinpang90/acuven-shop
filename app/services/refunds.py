@@ -1,4 +1,4 @@
-"""退款申请：退款期、可退件与金额的计算、查询，以及游客提交退款申请。
+"""退款申请：退款期、可退件与金额的计算、查询，以及访客或会员提交退款申请。
 
 依据 docs/DESIGN.md 1.11（提交 2d13250）：
 - 「订单与退款状态」：支付成功后 30 天内可申请退款，包含已发货和已完成订单；requested → 管理员
@@ -22,9 +22,9 @@
 - 运费不计入任何金额。
 
 访问授权、CSRF 与请求格式由调用方（app/api/refunds.py）先行校验；这里只按订单 ID 操作，
-申请方固定为 guest。审核（批准、拒绝及审核人与理由，拒绝时把逐件记录的占用标记置空）、全部退款后
-冻结打包、发货与确认收货、积分返还与追回、会员模式（申请方 member）都由之后的任务扩展，
-这里不预留参数。
+申请方由调用方明确为 guest 或 member。审核（批准、拒绝及审核人与理由，
+拒绝时把逐件记录的占用标记置空）、
+全部退款后冻结打包、发货与确认收货、积分返还与追回由其他服务处理。
 
 本模块不写日志；异常消息不含个人资料、订单号、幂等键或令牌。时间一律是不带时区的 UTC。
 """
@@ -51,7 +51,7 @@ from app.models import (
     RefundLineUnit,
     RefundRequest,
 )
-from app.models.order import ACTOR_GUEST, PAID_STATUSES
+from app.models.order import ACTOR_GUEST, ACTOR_MEMBER, PAID_STATUSES
 from app.models.refund import REFUND_APPROVED, REFUND_REQUESTED, UNIT_OCCUPIED
 
 # 「支付成功后 30 天内」：支付时刻加 30×24 小时。
@@ -304,8 +304,10 @@ def submit_refund(
     lines: Sequence[RefundLineRequest],
     idempotency_key: str,
     now: datetime,
+    *,
+    actor: str = ACTOR_GUEST,
 ) -> tuple[RefundOutcome, bool]:
-    """游客提交退款申请，返回申请结果与是否新写了申请（重放为假）。
+    """访客或会员提交退款申请，返回申请结果与是否新写了申请（重放为假）。
 
     lines 的行序不重复、件数为正，由调用方校验。按以下顺序，每一步不通过即停止：
     1. 按幂等键查申请：指纹相同返回原申请，不同抛 IdempotencyConflict；都不再写入。
@@ -314,11 +316,13 @@ def submit_refund(
     4. 请求里的行序不属于该订单抛 UnknownOrderLine。
     5. 该单已没有任何可退件抛 RefundNothingLeft。
     6. 任一行申请件数超过该行可退件数抛 RefundDuplicate；整笔不受理、不部分受理。
-    7. 同一事务里写申请（requested、guest）、各申请行与逐件记录（占用标记 1）并提交。
+    7. 同一事务里写申请（requested、actor）、各申请行与逐件记录（占用标记 1）并提交。
     写入撞上唯一约束（同键，或同一件已被另一笔有效申请占用）时回滚，再按幂等键重新查询：
     同键同指纹重放，同键不同指纹抛 IdempotencyConflict，否则按重新读取的可退件抛
     RefundNothingLeft 或 RefundDuplicate。所以同一件不会被两笔有效申请占用。
     """
+    if actor not in (ACTOR_GUEST, ACTOR_MEMBER):
+        raise ValueError("actor must be guest or member")
     fingerprint = refund_fingerprint(order_id, lines)
     existing = _request_by_key(db, idempotency_key)
     if existing is not None:
@@ -352,7 +356,7 @@ def submit_refund(
     request = RefundRequest(
         order_id=order_id,
         status=REFUND_REQUESTED,
-        actor_type=ACTOR_GUEST,
+        actor_type=actor,
         idempotency_key=idempotency_key,
         request_fingerprint=fingerprint,
         amount_sen=sum(unit.cash_paid_sen for _, picked in chosen for unit in picked),

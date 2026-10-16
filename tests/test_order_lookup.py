@@ -95,6 +95,9 @@ ORDER_FIELDS = {
     "server_time",
     "lines",
     "subtotal_sen",
+    "placed_by_member",
+    "coupon_discount_sen",
+    "points_redeemed",
     "shipping_fee_sen",
     "total_sen",
     "recipient",
@@ -809,10 +812,10 @@ def test_lookup_invalid_body_is_422_without_echo(
 
 
 def test_view_returns_fields_and_recipient(db: Session, client: TestClient) -> None:
-    """「查询成功后…可见完整姓名和地址」；「不缓存敏感响应」；P09 游客订单不显示
-    checkout.summary_coupon、checkout.summary_points 两行。SHOP-TASK-027 验收：订单号、状态、
+    """「查询成功后…可见完整姓名和地址」；「不缓存敏感响应」；UX P09 说游客订单（即使后来
+    被认领）不显示优惠与积分。SHOP-TASK-027 验收：订单号、状态、
     创建时间、支付时间、服务器当前时间、订单行快照（含逐件实付金额列表）、商品小计、运费、应付、
-    收货资料原文；不含优惠券与积分；另返回由 cookie 重新算出的 CSRF 令牌；no-store。
+    收货资料原文；另返回由 cookie 重新算出的 CSRF 令牌；no-store。
     """
     placed = _make_order(db, STATUS_SHIPPED)
     _looked_up(client, placed)
@@ -827,8 +830,12 @@ def test_view_returns_fields_and_recipient(db: Session, client: TestClient) -> N
     assert body["csrf_token"] == csrf_token_for_cookie(client.cookies.get(COOKIE_NAME))
     (view,) = body["orders"]
     assert set(view) == ORDER_FIELDS
-    for absent in ["coupon_discount_sen", "points_redeemed", "points_earned"]:
-        assert absent not in view
+    assert (view["placed_by_member"], view["coupon_discount_sen"], view["points_redeemed"]) == (
+        False,
+        0,
+        0,
+    )
+    assert "points_earned" not in view
     db.expire_all()
     order = db.get(Order, placed.id)
     assert order is not None and order.paid_at is not None
