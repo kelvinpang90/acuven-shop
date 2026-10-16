@@ -3910,3 +3910,252 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # Stripe 测试环境支付第一批（DESIGN 1.12 与 REQUIREMENTS 1.13 由 Kelvin 2026-10-15 批准，测试环境核验见 docs/HANDOFF.md 0.53）：
+  # SHOP-TASK-110 会话记录表与支付方式列，115 事件与退款尝试表，111 配置与适配器，112 支付途径判定与创建会话，113 确认付款，117 迟到与不符的付款，114 现有入口的取消与超时，116 定时处理。
+  # webhook、支付页接口、退款、后台与页面在这一批合并后按实际代码再登记（Kelvin 2026-10-15 决定分批）。
+  - id: SHOP-TASK-110
+    title: Stripe 测试会话记录与支付方式列的数据模型
+    purpose: >-
+      按 docs/DESIGN.md 1.12「数据模型」SiteSetting 一行（支付方式：模拟 / Stripe 测试，默认模拟）与 StripeCheckout 一行，
+      以及「Stripe 测试环境支付」第 2、3 条（同一订单至多一条不是 expired 的会话记录，由数据库唯一约束保证），
+      给站点设置加支付方式列，建 Stripe 会话记录表与迁移。核对不符的已付款会话由 SHOP-TASK-117 标为 expired 释放订单（付款状态可以是 paid），依据 docs/HANDOFF.md 0.53 记录的 Kelvin 2026-10-15 落实决定（不改设计文本），本表的约束须允许这种记录。只建表与约束；事件表与退款尝试表由 SHOP-TASK-115 建；支付途径判定、会话、确认、取消、webhook 与退款由之后的任务实现。不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e），支付对账记录。拆分：数据库层（7 个允许路径）；预审估计三张表一起超过约 1500 行，2026-10-15 拆为本任务与 SHOP-TASK-115。
+    status: ready
+    depends_on:
+      - SHOP-TASK-084
+    acceptance_criteria:
+      - 新文件 app/models/stripe.py 定义 StripeCheckout 模型（StripeEvent、StripeRefund 由 SHOP-TASK-115 加到同一文件），沿用 app/db/base.py 的基类、约束命名约定与 InnoDB、utf8mb4 表选项（写法照 app/models/points.py）；app/models/__init__.py 导出它；时间一律不带时区的 UTC；外键删除行为一律 RESTRICT；除下面写明可空的列外全部非空；金额一律整数仙；不存任何客户资料（姓名、邮箱、电话、地址、卡号片段）与 Stripe 响应原文（创建参数快照里的 customer_email 是站点配置的固定演示邮箱，不是客户资料，照存）；模块说明逐条引用所依据的设计原句；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - 会话记录表 stripe_checkouts——订单（外键 orders）、创建幂等键（最长 64，全表唯一）、会话 ID（可空，最长 255，全表唯一）、PaymentIntent ID（可空，最长 255，全表唯一）、金额（仙，大于 0）、币种（只允许 myr）、状态（creating、open、complete、expired）、付款状态（可空；unpaid、paid、no_payment_required）、实际付款方式类型（可空，最长 32）、付款页地址（可空，最长 2048）、创建参数快照（非空的文本，存发给 Stripe 的全部表单参数，由规则任务写入）、Stripe 到期时间（与快照里的 expires_at 相同，单列存放供定时任务查询）、创建时间、完成时间（可空）、确认时间（可空，本记录的确认把订单改为 demo_paid 时写入，是「订单由这个会话付款」的持久证据）、告警时间（可空）、上次查询时间（可空，定时任务每处理一条就写入，用来轮转处理顺序）、活动订单列 active_order_id（可空）；检查约束逐条保证（SQL 的 CHECK 对 NULL 求值为未知也算通过，所以「非空」一律写成 IS NOT NULL）——状态为 expired 时 active_order_id IS NULL，其余状态时 active_order_id IS NOT NULL 且等于订单；确认时间非空时状态为 complete 且付款状态为 paid；expired 的记录可以带付款状态 paid（迟到或核对不符的付款由 SHOP-TASK-117 记为 expired 并释放活动列，订单才不会既不能再付款也不能取消）；creating 时会话 ID、付款页地址与付款状态都为空；open 时会话 ID 与付款页地址都非空；complete 时会话 ID 与完成时间都 IS NOT NULL（expired 的记录可以带完成时间，迟到付款的会话由 SHOP-TASK-117 记下）；对 active_order_id 建唯一约束（同一订单至多一条不是 expired 的记录；它不另建外键，只由检查约束保证等于订单列），按订单、（状态、Stripe 到期时间）与（状态、上次查询时间）建索引
+      - app/models/site.py 的 SiteSetting 加 payment_method（最长 16，服务端默认 simulated，检查约束只允许 simulated 与 stripe_test），模块说明补上这一列与所依据的设计句；读取函数由 SHOP-TASK-112 加到 app/services/site_settings.py，本任务不改它
+      - 新迁移文件 alembic/versions/20261015_0020_stripe_checkouts.py，revision 为 0020、down_revision 为 0019；upgrade 先给 site_settings 加列（现有那一行取服务端默认 simulated），再建 stripe_checkouts 及其索引，downgrade 倒序删除；约束名按命名约定逐个写出；迁移只在 MySQL 上执行；模型里的检查约束表达式须 SQLite 与 MySQL 都支持（只用比较、IN、NOT IN、IS NULL 与 AND / OR）；PR 正文列出检查约束、外键、唯一约束与索引
+      - tests/test_stripe_models.py 用 SQLite 内存库（开启外键检查）按模型建表，写法照 tests/test_point_models.py——先写入合法的会话记录（四种状态各一条，分属不同订单）作对照，再验证每个检查约束、唯一约束与外键各至少一个被拒的反例（含除自增主键外每个非空列写入空值被拒、未知状态与付款状态、币种不是 myr、金额为 0、同一订单两条不是 expired 的记录被拒而一条 expired 加一条 open 可以、creating 带会话 ID、open 缺付款页地址、open 记录的 active_order_id 为空、确认时间非空而状态不是 complete（另以对照写入一条付款状态为 paid 的 expired 记录可以通过）、站点设置的支付方式取未知值）；tests/test_site_settings.py 的 test_table_has_only_the_switch 断言站点设置只有三列，随加列改为四列并在测试注释写明原因，其余断言一字不改；每条测试写明它守住的是设计的哪一句；迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，alembic check 无差异；这些都由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-110 记录段（会话记录表与支付方式列的含义与约束、活动订单列如何表示「至多一条」、偏离、验证到什么程度，并写明事件表与退款尝试表留给 SHOP-TASK-115、规则与接线留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改已有模型（app/models/site.py 除外）与已有迁移、.platform/、CI、部署配置；不装依赖；不加接口、不改 app/main.py、app/services/ 与前端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e），不合并、不直推
+    allowed_change_paths:
+      - app/models/stripe.py
+      - app/models/site.py
+      - app/models/__init__.py
+      - alembic/versions/20261015_0020_stripe_checkouts.py
+      - tests/test_stripe_models.py
+      - tests/test_site_settings.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-115
+    title: Stripe 事件与退款尝试的数据模型
+    purpose: >-
+      按 docs/DESIGN.md 1.12「数据模型」StripeCheckout / StripeEvent / StripeRefund 一行与「Stripe 测试环境支付」第 6、7、8 条（事件 ID 去重；每条退款尝试有自己的本站 ID，同一来源至多一条不是 failed 的尝试，由数据库唯一约束保证），
+      在 SHOP-TASK-110 的会话记录表之上建事件表与退款尝试表及迁移。只建表与约束；webhook、迟到付款与退款规则由之后的任务实现。不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e），退款对账记录。拆分：数据库层（5 个允许路径），2026-10-15 由原 SHOP-TASK-110 拆出。
+    status: ready
+    depends_on:
+      - SHOP-TASK-110
+    acceptance_criteria:
+      - 在 app/models/stripe.py 增加 StripeEvent 与 StripeRefund 两个模型（写法与约束约定同 SHOP-TASK-110 的 StripeCheckout），app/models/__init__.py 导出它们；不改 StripeCheckout；不存任何客户资料与 Stripe 请求、响应或事件原文；模块说明补上所依据的设计原句；发现设计本身有问题时停下并在 PR 里说明，不自行改设计
+      - 事件表 stripe_events——事件 ID（最长 255，全表唯一）、类型（最长 64）、处理结果（processed 或 ignored）、处理时间，不存事件原文
+      - 退款尝试表 stripe_refunds（每条是一次尝试）——PaymentIntent ID（最长 255）、来源类别（refund_request 或 checkout）、退款申请（外键 refund_requests，可空）、来源会话记录（外键 stripe_checkouts，可空）、Stripe 退款 ID（可空，最长 255，全表唯一；核验显示 FPX、GrabPay 的退款 ID 前缀不是 re_，不校验前缀）、金额（仙，大于 0）、状态（pending、succeeded、failed）、调用次数（非负整数，服务端默认 0）、最后的错误类别（可空，最长 64）、创建时间、成功时间（可空）、上次复查时间（可空）、活动来源列 active_refund_request_id 与 active_checkout_id（都可空）；检查约束逐条保证——来源类别只能取 refund_request 或 checkout；来源类别为 refund_request 时退款申请非空、来源会话为空，为 checkout 时反之；状态为 failed 时两个活动列都 IS NULL，否则与来源类别对应的活动列 IS NOT NULL 且等于该来源、另一个 IS NULL；状态为 succeeded 时成功时间非空；两个活动列各建唯一约束（同一来源至多一条不是 failed 的尝试），按 PaymentIntent ID 与（状态、创建时间）建索引
+      - 新迁移文件 alembic/versions/20261015_0021_stripe_refunds.py，revision 为 0021、down_revision 为 0020；upgrade 依次建 stripe_events、stripe_refunds 及其索引，downgrade 倒序删除；约束名按命名约定逐个写出；迁移只在 MySQL 上执行；检查约束表达式须 SQLite 与 MySQL 都支持；PR 正文逐表列出检查约束、外键、唯一约束与索引
+      - 新文件 tests/test_stripe_refund_models.py 用 SQLite 内存库（开启外键检查）按模型建表，写法照 tests/test_point_models.py——先写入合法的事件与退款尝试（两种来源与三种状态）作对照，再验证每个检查约束、唯一约束与外键各至少一个被拒的反例（含除自增主键外每个非空列写入空值被拒、同一事件 ID 两次、未知处理结果、同一退款申请两条不是 failed 的尝试被拒而一条 failed 加一条 pending 可以、同一会话来源同理、failed 的尝试活动列非空、pending 的尝试活动列为空、来源类别取未知值、来源类别与来源列不一致、succeeded 缺成功时间、金额为 0、调用次数为负）；每条测试写明它守住的是设计的哪一句；迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，alembic check 无差异；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-115 记录段（两张表的含义与约束、活动来源列如何表示「至多一条」、偏离、验证到什么程度，并写明规则留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 StripeCheckout、其他已有模型与已有迁移、.platform/、CI、部署配置；不装依赖；不加接口、不改 app/main.py、app/services/ 与前端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e），不合并、不直推
+    allowed_change_paths:
+      - app/models/stripe.py
+      - app/models/__init__.py
+      - alembic/versions/20261015_0021_stripe_refunds.py
+      - tests/test_stripe_refund_models.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-111
+    title: Stripe 测试环境的配置与适配器
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 1 条（只接测试环境：服务端只接受 sk_test_ 或 rk_test_ 开头的密钥，其他前缀一律不启用并告警；会话或付款的 livemode 为真即拒绝）、
+      第 7 条（用原始请求体与 webhook 签名密钥校验 Stripe-Signature，含时间容差）、第 9 条（CI 与本地测试用模拟的 Stripe 适配器，不调用 Stripe）与第 10 条（日志不记录 Stripe 请求与事件原文），
+      以及 docs/HANDOFF.md 0.53 记录的 2026-10-15 测试环境核验结论（创建会话已不接受 payment_method_types；过期后以同一幂等键重放返回当初保存的响应；退款与作废被拒时为 400），
+      新增配置项、Stripe 适配器、签名校验函数与测试用替身。不接业务、不加接口、不改模型；不改设计。
+      运营告警邮件尚未接入（docs/TODO.md 后续计划），设计里写「告警」之处一律先记一条 error 级日志（只含类别，有本站记录 ID 时带上），由告警邮件任务改为发邮件。
+      设计闸门：DESIGN 1.12（提交 acf576e），接入支付服务。拆分：基础设施层（5 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-115
+    acceptance_criteria:
+      - 配置项加在 app/core/config.py（前缀 SHOP_，默认空串即未配置，最后一项默认 200；变量名与示例值已由登记 PR 写进 .env.example，本任务不改它）——stripe_api_base_url（只写到主机的 https 地址，路径由适配器拼接）、stripe_secret_key、stripe_webhook_secret、stripe_demo_email（Stripe 页预填的固定演示邮箱）、public_site_url（成功与取消返回地址的前缀，只写到主机的 https 地址，不取请求头里的主机）、stripe_min_amount_sen；docker-compose.yml 的 shop_api 与 shop_jobs 两个服务把这六项都传进容器（写法照 SHOP_REDIS_URL，前五项未设置时为空串、最后一项未设置时为 200，照常部署）
+      - 新文件 app/services/stripe_gateway.py 的配置判定——前五项都非空、两个地址都是 https 协议、密钥以 sk_test_ 或 rk_test_ 开头、webhook 签名密钥以 whsec_ 开头时为已配置，否则未配置；未配置时适配器的每个调用都归为 unavailable、不发请求；密钥非空但不以这两种测试前缀开头（含 sk_live_、rk_live_）时另记一条 error 级日志（同一进程只记一次），内容只有类别 stripe_key_not_test，不含密钥的任何部分；判定写成可单独调用的函数，供之后的站点设置接口判断能否切到 Stripe 测试
+      - 适配器的写法照 app/services/sms_provider.py——可注入的传输函数（默认只用标准库 urllib，超时 5 秒，不重试，不跟随重定向，响应体最多读 64 KB），认证头为 Bearer 加密钥；不发送 Stripe-Version 头，沿用账户默认的 API 版本（2026-10-15 的核验即按账户默认版本完成，升级账户 API 版本前须先在测试环境重跑核验）；提供六个调用——创建 Checkout 会话（POST，表单参数按调用方给出的顺序原样发送，带 Idempotency-Key）、按 ID 查询会话（GET，expand[] 为 payment_intent.latest_charge）、作废会话（POST 到会话的 expire）、创建退款（POST，带 Idempotency-Key）、按 ID 查询退款、列出某 PaymentIntent 的退款（GET，limit 为 100，支持 starting_after 分页）；适配器不自行添加任何表单参数，也不传 payment_method_types（核验显示 Checkout 已不接受它，付款方式由 Stripe 后台设置决定）
+      - 结果归类——2xx 且响应是 JSON 对象为 ok，带是否回放（响应头 Idempotent-Replayed 为 true）与按字段白名单取出的对账字段（第 10 条：本站不读取、不保存 Stripe 返回的客户资料）——会话只取 id、status、payment_status、livemode、currency、amount_total、client_reference_id、metadata 里的 order_id 与 create_key、url、expires_at，以及 payment_intent 的 id、status、livemode 与 latest_charge.payment_method_details.type；退款只取 id、status、amount、payment_intent 与 metadata 里的 attempt_id；列表只取这些退款与 has_more；customer_details、账单地址、姓名、邮箱与卡号片段一律不取，原始对象不出适配器；ok 的会话或其 payment_intent 的 livemode 为真时改归单独的 live 类别（第 1 条：会话或付款的 livemode 为真即拒绝；不是 rejected：会话可能已经建成）并记一条 error 日志（类别 stripe_livemode；适配器没有本站记录 ID，日志只含类别，带记录 ID 的告警由调用方另记）；409 与 429 以外的 4xx 归 rejected，带 HTTP 状态码与 Stripe 错误的 type、param 与 code（不带 message 原文；是否说明没有建成对象由调用方按状态码与错误内容一起判断，第 8 条：不单凭状态码）；409、429、3xx（不跟随重定向）、5xx、其他状态码、超时、连接失败、响应过大或不是 JSON 对象归 unavailable（4xx 的响应体不是带 error 的 JSON 对象时同样归 unavailable，不算明确拒绝）；2xx 的对象缺少 id 或 object 类型不对时归 unavailable（列表响应要求 object 为 list 且 data 为数组，其中任一退款不合格整页归 unavailable），白名单里其他字段缺失或类型不对时取空值，payment_intent 未展开（只是 ID 字符串）时只取其 ID、其余 PaymentIntent 字段为空；除上面两类日志外不写日志；请求与响应原文、密钥、邮箱都不进异常消息、repr 或返回值的字符串形式
+      - 签名校验函数——入参为原始请求体字节、Stripe-Signature 头、签名密钥与当前时间（不带时区的 UTC）；从头里取 t 与全部 v1，以签名密钥对「t 的十进制、一个英文句点、请求体」做 HMAC-SHA256，十六进制结果与任一 v1 以常量时间比较相等、且当前时间与 t 相差不超过 300 秒才通过；头缺失、格式不合、t 不是整数、没有 v1、签名不符或超出容差都返回不通过，不抛异常、不写日志
+      - 同一模块提供测试用替身 FakeStripeGateway（内存里记下每次调用的方法、路径、表单与幂等键，结果可按调用编排）与取得适配器的 FastAPI 依赖（从 app.state.stripe_gateway 取，测试以此注入替身；没有设置时按 get_sms_provider 读取配置的写法建真实适配器）；本任务不改 app/main.py
+      - tests/test_stripe_gateway.py 验证意图（全部经替身传输，不连网）——配置判定（逐项缺失、http 地址、sk_live_ 与未知前缀不启用且记一条不含密钥的日志、未配置时不发请求）；六个调用的方法、路径、表单顺序、Idempotency-Key、expand 与认证头；归类（回放标记、返回值只有白名单字段而不含响应里的 customer_details 与邮箱、livemode 为真归 live、409、429 与 3xx 归 unavailable、400 与 422 带 type 与 param 归 rejected、非测试密钥的日志同一进程只记一次、超时与过大的响应）；签名校验（测试里自算签名——通过、篡改请求体、超出容差、多个 v1 其一相符、头格式不合）；异常与 repr 不含密钥与邮箱；每条测试写明它守住的是设计或核验结论的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-111 记录段（配置项、判定、六个调用、归类、签名校验、告警先记日志、偏离、验证到什么程度），不改 planning-v1 块，复选框只允许 [ ] / [x]；改动只落在 allowed_change_paths；除 docker-compose.yml 的这六个环境变量外不改 .platform/、CI、部署配置；不装依赖；不改模型、迁移、app/main.py 与前端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e），不合并、不直推
+    allowed_change_paths:
+      - app/core/config.py
+      - docker-compose.yml
+      - app/services/stripe_gateway.py
+      - tests/test_stripe_gateway.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-112
+    title: 支付途径判定与创建 Stripe 测试会话
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 2 条（支付方式开关每次从数据库读取；订单有不是 expired 的 Stripe 记录时两条途径互斥、只继续该会话；应付低于最低收款额走模拟支付）、
+      第 3 条（创建会话：先写 creating 记录与创建参数快照再调用 Stripe，结果未知时以同一幂等键与同一快照重试，Stripe 到期时间过后以同一幂等键再请求一次对账，24 小时内无法确定就告警由人工核对）、第 9 条与第 10 条，
+      以及 docs/HANDOFF.md 0.53 记录的核验结论（过期后同一幂等键重放返回当初保存的响应，须再查询会话取实际状态；新键加过去的到期时间被 400 拒绝、param 为 expires_at，即原请求没有建成），
+      在 SHOP-TASK-110、111 之上实现支付途径判定、发起会话与创建结果未定时的对账。只做业务规则，不加接口、不接定时任务；确认付款由 SHOP-TASK-113、取消与超时由 SHOP-TASK-114 实现。发起函数在合并后没有调用方：调用它的支付页接口任务排在 SHOP-TASK-114 之后，所以现有取消入口改造之前生产环境不会出现 Stripe 记录。不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e），支付。拆分：业务规则层（5 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-111
+    acceptance_criteria:
+      - app/services/site_settings.py 增加读取支付方式的函数（写法照 is_sms_verification_enabled——每次一条 SELECT、不缓存；没有那一行或值不认识时视为 simulated）；新文件 app/services/stripe_checkout.py 的支付途径判定（入参数据库会话、订单 ID 与 stripe_min_amount_sen）——该订单有不是 expired 的 Stripe 记录时一律为 stripe；否则开关为 stripe_test 且订单应付 total_sen 不低于最低收款额时为 stripe；其余为 simulated；不看 Stripe 配置是否齐全（未配置时由发起返回 unavailable，不自动改用模拟支付）；只读
+      - 发起（入参数据库会话、适配器、配置、订单 ID、界面语言 en、zh 或 ms、当前时间）——在加锁读订单（SELECT … FOR UPDATE，只锁订单行，不锁会员行；Stripe 记录在订单之后锁，与 SHOP-TASK-113、114 的统一顺序「会员 → 订单 → Stripe 会话记录 → 用券 → 积分 → 退款尝试」一致；调用 Stripe 时不持有任何数据库锁，调用前提交、调用后重新加锁并重查）的事务里依次判定：订单不是 awaiting_demo_payment 返回 not_payable；途径为 simulated 返回 method_changed；已有 open 记录返回 redirect 与它的付款页地址，不再调用 Stripe；已有 complete 记录返回 complete（由调用方按 SHOP-TASK-113 确认）；已有 creating 记录走下面的重试；没有不是 expired 的记录而订单已过本地支付到期时间时，先回滚释放订单锁，再对它执行 app/services/payment.py 的 expire_overdue_orders（它按现有的「会员 → 订单」顺序加锁，不能在持有订单锁时调用），然后返回 not_payable，不写记录（15 分钟期限只让已有会话继续付款，不允许过期订单新建会话）；没有记录时写一条 creating 记录（创建幂等键为新生成的 UUID 字符串）与创建参数快照并提交，再调用适配器创建会话；重试或对账把已有 creating 记录记为 expired 后，本次发起在同一调用里按「没有记录」继续——提交后重新加锁读订单并重查（含本地到期），再写新的 creating 记录；配置判定为未配置时不写记录、返回 unavailable
+      - 创建参数写成纯函数并逐项测试——mode 为 payment；一个行项目，币种 myr、金额为订单 total_sen、数量 1、名称按语言为 Demo order、演示订单或 Pesanan demo（DESIGN 第 3 条的三语「演示订单」，取值见登记 PR）；client_reference_id 与 metadata[order_id] 为订单内部 ID，metadata[create_key] 为创建幂等键，元数据不放其他内容；customer_email 为 stripe_demo_email；locale 为 en、zh 或 ms；success_url 为 public_site_url 加 /pay/result，cancel_url 为 public_site_url 加 /pay；expires_at 取订单支付到期时间与当前时间加 31 分钟中较晚者（Stripe 要求至少 30 分钟，多 1 分钟抵消传输与时钟误差）；不传 payment_method_types 与其他参数，不发送姓名、电话、地址或订单号；参数按顺序序列化为 JSON 存入快照，重试时原样取出发送，Stripe 到期时间另存单列
+      - 调用结果——ok 时锁住该记录：仍为 creating 才写会话 ID、付款页地址、PaymentIntent ID（有则写）、状态与付款状态（按会话实际状态，open 返回 redirect）；已被 webhook 记为 complete 或已被对账记为 expired 时只补齐缺失的会话 ID 与付款页地址，不改状态与付款结果；首次调用 rejected 且 HTTP 状态码为 400、错误 type 为 invalid_request_error 并带 param 时（按 Stripe 幂等规则参数校验失败不保存结果，而同一幂等键与同一快照的请求若原已建成会回放原响应，所以说明没有建成会话）记录改为 expired（active_order_id 置空）、返回 unavailable，并记一条 error 日志（类别 stripe_create_rejected，只含记录 ID）；其他 rejected（401、402、403、404，如密钥被轮换，不能证明原请求没建成）、live 与 unavailable 时记录保持 creating、返回 unavailable，交给下面的重试、对账与 24 小时转人工；会话为 complete 时完成时间取本站首次得知的当前时间；重试与对账里的 400 参数错误把记录记为 expired 后，按上一条在同一调用里继续建新记录，不返回 unavailable；记录与订单都不写日志以外的个人资料
+      - creating 记录的重试与对账（单独导出对账函数，供 SHOP-TASK-114 的本人取消与 SHOP-TASK-116 的定时任务调用）——Stripe 到期时间之前，以同一幂等键与同一快照重试，结果按上一条处理；之后以同一幂等键与同一快照再请求一次——ok（回放）时先按会话 ID 查询一次取实际状态（核验结论），open 或 complete 按实际状态记下、expired 才记 expired；rejected 且 HTTP 状态码为 400、param 为 expires_at 时记为 expired（原请求没有建成）；其他结果留待下次；记录创建满 24 小时仍无法确定时不再调用 Stripe，写告警时间并记一条 error 日志（类别 stripe_checkout_needs_review，只含记录 ID，同一记录只记一次），订单不取消、库存继续预留，发起返回 under_review
+      - tests/test_stripe_checkout.py 用 SQLite 内存库与 SHOP-TASK-111 的 FakeStripeGateway 验证意图——途径判定（有不是 expired 的记录不论开关都为 stripe、只有 expired 记录看开关、开关为 stripe_test 但应付低于 200 为 simulated、开关为 simulated）；发起写 creating 后改 open 并返回地址、已有 open 不再调用 Stripe、complete、not_payable（含没有记录而已过本地支付到期时间：执行超时取消、不写记录）、method_changed、未配置；400 参数错误记 expired 而 401、403、live 与 unavailable 保持 creating；对账记为 expired 后同一调用建新记录；创建参数逐项（不含 payment_method_types、订单号与收货资料，三种语言，到期时间取较晚者）；重试用同一幂等键与同一快照；rejected 记 expired；webhook 先记 complete 时只补地址；过期后回放再查询、expires_at 被拒记 expired、24 小时转人工只告警一次；同一订单第二条不是 expired 的记录被唯一约束拦下；tests/test_site_settings.py 补支付方式读取（默认、stripe_test、未知值）；每条测试写明它守住的是设计或核验结论的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-112 记录段（途径判定、发起的各结果、创建参数、重试与对账、偏离、验证到什么程度，并写明接口留给之后的支付页接口任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/payment.py、app/jobs.py、app/api/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e），不合并、不直推
+    allowed_change_paths:
+      - app/services/site_settings.py
+      - app/services/stripe_checkout.py
+      - tests/test_stripe_checkout.py
+      - tests/test_site_settings.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-113
+    title: 确认 Stripe 测试付款
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 4 条（订单只在服务端确认 Stripe 付款成功后才进入 demo_paid；核对会话属于该订单、处于测试环境、币种 MYR、金额等于订单应付快照；
+      按模拟支付成功的同一事务进入 demo_paid；记下 PaymentIntent ID 与实际成功那笔 Charge 的付款方式类型，读不到时留空由定时任务补齐；确认不看 15 分钟支付到期时间，只看订单是否仍待支付；重复确认返回原结果）
+      与 docs/HANDOFF.md 0.53 的核验结论（付款方式类型取 PaymentIntent 的 latest_charge.payment_method_details.type），
+      实现确认函数与补齐付款方式类型的函数；第 6 条的迟到与不符的付款（以及已为 expired 的记录）本任务只判定、不处理，由 SHOP-TASK-117 接着实现。只做业务规则；webhook 与支付页接口之后调用它。不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e），支付与订单状态。拆分：业务规则层（7 个允许路径）；预审估计原任务约 1600 至 2000 行，2026-10-16 拆为本任务与 SHOP-TASK-117。
+    status: ready
+    depends_on:
+      - SHOP-TASK-112
+      - SHOP-TASK-115
+    acceptance_criteria:
+      - app/services/payment.py 把支付成功的状态迁移（带条件的 UPDATE 改为 demo_paid 并写支付时间、写一条事件、_settle_paid 核销用券并按快照发放积分）抽成模拟支付与 Stripe 确认共用的函数，锁顺序不变（会员 → 订单 → 用券 → 积分）；模拟支付这一路的条件、行为与现有测试不变；Stripe 确认这一路不带「未到期」条件（第 4 条：只看订单是否仍待支付），不写 PaymentAttempt，事件操作者为 system；app/services/order_rules.py 的迁移表允许 system 把 awaiting_demo_payment 改为 demo_paid（注释写明只用于服务端确认 Stripe 付款），tests/test_order_rules.py 随之补充；模块说明补上这两处
+      - 新文件 app/services/stripe_confirm.py 的确认函数（入参数据库会话、适配器、Stripe 会话记录 ID、可选的会话对象与当前时间；会话对象只来自签名校验通过的 webhook 或本次查询；没有给出，或给出的对象里 payment_intent 未展开、缺少其 livemode 或 latest_charge 时，向 Stripe 查询一次，expand 为 payment_intent.latest_charge，取不到可核对的对象就不改订单与记录、返回 unavailable；查询后已付款而 latest_charge 仍缺失时照常确认、付款方式类型留空待补齐，已付款却仍缺 PaymentIntent 时无法核对其 livemode，不改订单与记录、返回 unavailable，未付款且没有 PaymentIntent 时返回 pending；记录没有会话 ID 又没有给出会话对象时无法查询，返回 unavailable）——先核对会话的身份——metadata[create_key] 等于这条记录的创建幂等键，记录已有会话 ID 时会话的 id 与之相同（同一订单可能先后有多条会话记录，第 3 条：webhook 按创建幂等键与订单 ID 对上记录），不符时不迁移订单、不改写这条记录，记一条 error 日志（类别 stripe_session_mismatch，含记录 ID）并返回 unavailable；再核对 metadata[order_id] 与 client_reference_id 都等于记录的订单、会话与 PaymentIntent 的 livemode 都为假、currency 为 myr、amount_total 等于订单 total_sen；按会话更新记录的状态与付款状态（只把 open 或 creating 更新为 complete，complete 时写完成时间；会话报告 expired 而未付款时确认不改记录与订单、返回 pending，记 expired 与取消由 SHOP-TASK-114、116 经 cancel_after_stripe_end 完成）、会话 ID 与付款地址（记录尚无时写入，creating 记录由 webhook 的会话对象确认时同样写入）、PaymentIntent ID，以及 latest_charge.payment_method_details.type（读不到时留空，不用会话的可用方式列表代替）；查询为 unavailable 时返回 unavailable、不改任何东西；查询结果为 live 或 rejected 时同样不改任何东西、返回 unavailable，并记一条 error 日志（类别 stripe_livemode 或 stripe_confirm_rejected，含记录 ID）；另导出补齐付款方式类型的函数——对已付款而付款方式类型为空的记录向 Stripe 查询一次补上，只改这一字段，不执行状态迁移，unavailable 时留待下次，供之后的定时任务调用
+      - 判定（先以普通读取得记录与订单，查询 Stripe 时不持有任何锁；写入时按统一顺序「会员 → 订单 → Stripe 会话记录 → 用券 → 积分 → 退款尝试」加锁并重查）——全部相符、会话状态为 complete、payment_status 为 paid 且订单仍为 awaiting_demo_payment 时，在同一事务里经上面的共用函数进入 demo_paid，并在同一事务里写该记录的确认时间，返回 paid；该记录已有确认时间（订单由这个会话付款的持久证据）时返回 paid，不再迁移、核销或发放；payment_status 不是 paid 时返回 pending，订单不变；会话状态不是 complete 而 payment_status 为 paid（Stripe 正常不会这样给出）视为取不到可核对的对象，先于其他判定（含留给 SHOP-TASK-117 的情形），不改订单与记录、返回 unavailable（定时任务因而按不可用计时并在 24 小时后告警一次，不自动取消）；并发的两次确认只有一次迁移（带条件的 UPDATE 保证）
+      - 下列情形先于正常确认判定（本站记录已为 expired 而会话为 complete 时归这里，先于正常确认；会话为 expired 或 open 且未付款时照确认函数一条返回 pending、不记日志），本任务只判定、不处理，留给 SHOP-TASK-117：记录已为 expired 而会话状态为 complete；payment_status 为 paid 而订单已不是待支付且该记录没有确认时间；payment_status 为 paid 而金额、币种或所属订单不符（第 6 条）——这时订单与记录都不改（不写确认时间、不迁移订单、不改活动列），返回 needs_review，记一条 error 日志（类别 stripe_late_payment，只含记录 ID）
+      - tests/test_stripe_confirm.py 用 SQLite 内存库与 FakeStripeGateway 验证意图——游客与会员订单确认后为 demo_paid、事件操作者为 system、用券核销、会员按快照得积分；已过 15 分钟支付到期时间的待支付订单照常确认；重复确认不重复发放；付款方式类型取 latest_charge（card、fpx、grabpay），缺失时留空并可补齐；pending 不改订单；状态为 open 而付款状态为 paid 的会话对象不改订单与记录、返回 unavailable；留给 SHOP-TASK-117 的三种情形返回 needs_review 且订单与记录不变；已为 expired 的记录收到 expired 或 open 未付款的会话时返回 pending、不记日志；live 与 rejected 的查询结果不改任何东西；livemode 为真与 unavailable 不改任何东西；webhook 给的对象里 PaymentIntent 未展开时先查询再核对，查询不可用时不改任何东西；创建幂等键或会话 ID 与记录不符时不迁移订单、不改写记录；tests/test_demo_payment.py 的现有测试一字不改全部通过（只有因抽出函数而失效的断言才改并写明原因）；每条测试写明它守住的是设计或核验结论的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-113 记录段（共用的迁移函数、确认的核对与结果、补齐付款方式类型、system 操作者、偏离、验证到什么程度，并写明迟到与不符的付款留给 SHOP-TASK-117），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/stripe_checkout.py、app/jobs.py、app/api/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e），不合并、不直推
+    allowed_change_paths:
+      - app/services/payment.py
+      - app/services/order_rules.py
+      - app/services/stripe_confirm.py
+      - tests/test_stripe_confirm.py
+      - tests/test_order_rules.py
+      - tests/test_demo_payment.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-117
+    title: 迟到与不符的 Stripe 测试付款
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 6 条（迟到与不符的付款：订单状态不变，在 Stripe 测试环境全额退款，记为来源为该会话的退款尝试并告警）、第 8 条的合计上限，
+      以及第 3 条末句（遗失会话 ID 的会话被付款时照第 4、6 条处理），在 SHOP-TASK-113 的确认函数里实现它只判定、不处理的情形——迟到与不符的付款和已为 expired 的记录；
+      核对不符的已付款会话写完退款尝试后标为 expired 释放订单，依据 docs/HANDOFF.md 0.53 记录的 Kelvin 2026-10-15 落实决定（不改设计文本）。
+      向 Stripe 发起迟到付款的退款由之后的退款任务的定时重试完成，本任务只写 pending 尝试。不加接口；不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e），支付、订单状态与退款。拆分：业务规则层（4 个允许路径），2026-10-16 由原 SHOP-TASK-113 拆出。
+    status: ready
+    depends_on:
+      - SHOP-TASK-113
+    acceptance_criteria:
+      - 记录已为 expired 而会话为 expired 或 open 且未付款时（正常的会话过期通知）不改任何东西、返回 pending、不记日志；不符而未付款的活动记录照 SHOP-TASK-113 按会话状态处理（返回 pending，不写退款尝试）；已为 expired 的记录（含对账记为 expired）的会话（下面的改回 complete 只在金额、币种与所属订单都相符时进行，改回时从已核对的会话对象补齐会话 ID、付款地址与 PaymentIntent ID，完成时间为空则写本次处理的当前时间；不符时记录保持 expired、不占活动位——已付款按下一条处理，付款未定时只补付款状态、不写退款尝试、返回 pending）后来报告 complete 而付款未定时，订单仍为待支付且没有其他不是 expired 的记录才改回 complete 继续等待（交给定时任务），否则保留 expired、只补付款状态，返回 pending；报告已付款（会话状态为 complete 且 payment_status 为 paid；open 而 paid 的对象由 SHOP-TASK-113 先行返回 unavailable）时：订单仍为待支付、该订单没有其他不是 expired 的记录、且这个会话没有任何退款尝试（不论状态；已有尝试说明它曾按迟到付款处理，第 6、8 条：不再确认订单，按下一条返回 refunded），才把它改回 complete（活动列设为订单，第 3 条末句：遗失会话 ID 的会话被付款时照第 4、6 条处理）按上一条确认；否则保留 expired 与空的活动列，只补齐会话 ID、PaymentIntent ID、付款状态与付款方式类型，按下一条的迟到付款处理，不碰唯一约束
+      - 迟到与不符（第 6 条，先于正常确认判定，替换 SHOP-TASK-113 对这些情形返回 needs_review 的占位）——payment_status 为 paid，且下列任一成立：该记录已为 expired 而这个会话已有任何退款尝试（直接返回 refunded，不重新确认订单、不新增尝试、不记日志）；订单已不是待支付而该记录没有确认时间（不是由这个会话付款，含旧会话已 expired、订单随后经模拟支付或另一会话付款的情形）；该记录已为 expired 而订单另有不是 expired 的记录；金额、币种或所属订单不符；这时订单状态不变；只有在这个会话已有退款尝试、或本次成功写入了退款尝试之后，不符的记录若仍占着活动列才改为 expired（活动列置空，依据 HANDOFF 0.53 的落实决定），免得订单既不能再付款也不能取消；因合计上限或缺字段而没写成退款尝试时保留活动位、订单不变，按下面的日志交人工核对，不另作释放；在锁住该会话记录的事务里先看这个会话是否已有任何退款尝试（不论状态）——已有则不再写新尝试、不核对上限、不再记日志（重复确认与 webhook 重发都只生效一次；已有尝试为 failed 时也不自动另建，第 8 条：明确拒绝的不自动重试）；没有时才核对同一 PaymentIntent 不是 failed 的尝试金额合计加上本次不超过付款金额，未超出则写一条来源为该会话、金额为 amount_total、状态 pending 的退款尝试（同一会话重复确认不重复写：靠下文「已有任何尝试即不再写」，并发时由 SHOP-TASK-115 的活动来源唯一约束兜底），超出则不写；两种情形各记一条 error 日志（类别 stripe_late_payment 或 stripe_refund_cap，只含记录 ID）；会话缺少 amount_total 或 PaymentIntent ID 而无法写退款尝试时不写，记一条 error 日志（类别 stripe_late_payment_unrefundable）交人工处理；没写成退款尝试时在同一事务里把记录的付款状态写为 paid 并写告警时间（已非空则不改）；stripe_refund_cap 与 stripe_late_payment_unrefundable 只在本次确认之前记录的付款状态不是 paid（首次看到这笔付款）或告警时间为空时记，其余重复确认不再记——告警时间先因别的原因（SHOP-TASK-112、116）写过时，首次看到付款仍会记一次（重复确认与定时任务每轮的重试只告警一次，与 SHOP-TASK-116 的每条记录至多告警一次一致）；该会话已有或本次写成退款尝试（活动位已按上文释放）时返回 refunded（不说退款进行到哪一步），没写成而保留活动位时返回 needs_review
+      - 新文件 tests/test_stripe_late_payment.py 用 SQLite 内存库与 FakeStripeGateway 验证意图——金额、币种、订单不符、订单已取消，以及旧会话 expired 后订单经模拟支付付款、该会话才迟到付款时，各写一条 pending 退款尝试且订单不变，重复确认不再写也不记 stripe_refund_cap，已有 failed 尝试时不另建，超出合计上限时不写；不符的 complete 记录写退款尝试后改为 expired、订单随后可再发起或取消，超出合计上限或缺字段而没写成退款尝试时保留活动位、写告警时间、重复确认不再记日志，而记录已因别的原因有告警时间时首次看到付款仍记一次；expired 记录金额不符时不改回 complete（已付款写退款尝试，付款未定返回 pending 且不写尝试）；本站尚无会话 ID 的 expired 记录改回 complete 时补齐会话 ID；expired 记录报告 complete 而未付款时的两种去向；expired 记录在订单另有活动会话时迟到付款（先于正常确认），记录保持 expired 并写退款尝试，在订单仍待支付且没有其他活动记录时改回 complete 并确认，但这个会话已有退款尝试时（如先前因另有活动会话按迟到付款写过尝试、那条会话随后 expired）保持 expired、订单不变、返回 refunded；旧会话已 expired、同单已有新的活动会话时，把旧会话的付款对象交给新记录确认时不迁移订单、不改写记录；tests/test_stripe_confirm.py 只改 SHOP-TASK-113 为这些情形写的 needs_review 占位断言并写明原因，其余一字不改；每条测试写明它守住的是设计或核验结论的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-117 记录段（迟到与不符的退款尝试、已为 expired 的记录的去向、释放活动位的依据、告警只记一次、偏离、验证到什么程度，并写明向 Stripe 发起退款留给之后的退款任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/payment.py、app/services/order_rules.py、app/services/stripe_checkout.py、app/jobs.py、app/api/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e），不合并、不直推
+    allowed_change_paths:
+      - app/services/stripe_confirm.py
+      - tests/test_stripe_late_payment.py
+      - tests/test_stripe_confirm.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-114
+    title: 有 Stripe 记录的订单的模拟支付、本人取消与超时取消
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 2 条（同一订单的两条支付途径互斥；现有的模拟支付提交、本人取消、查看触发的超时取消与定时任务都要在锁住订单的同一事务里先查该单的 Stripe 记录）、
+      第 5 条（有 Stripe 记录的订单取消一律先处理会话：creating 先取得会话或对账，open 先请求作废，complete 且已付款按第 4 条确认，付款未定时继续等待；Stripe 不可用时本人取消提示稍后再试；以 Stripe 的状态为准，不以本地时钟代替）、
+      「计价、优惠、积分与库存」第 6 条，以及 docs/HANDOFF.md 0.53 的核验结论（作废已过期或已完成的会话被 400 拒绝，须再查询会话决定），改造 app/services/payment.py 的三个现有入口。定时任务由 SHOP-TASK-116 实现。不加接口；不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e），订单状态、库存、券与积分的释放。拆分：业务规则层（4 个允许路径）；预审估计原任务超过约 1500 行，2026-10-15 拆为本任务与 SHOP-TASK-116。
+    status: ready
+    depends_on:
+      - SHOP-TASK-117
+    acceptance_criteria:
+      - app/services/payment.py 的 submit_payment——检查顺序为：同键同请求的幂等重放返回原结果；订单不是 awaiting_demo_payment 抛 OrderNotPayable；订单有不是 expired 的 Stripe 记录抛新异常 PaymentPathMismatch；已过本地支付到期时间时按现有做法先超时取消再抛 OrderExpired；按途径判定为 stripe 时抛 PaymentPathMismatch——也就是订单有不是 expired 的 Stripe 记录，或按 SHOP-TASK-112 的途径判定（最低收款额取 app/core/config.py 的 stripe_min_amount_sen）为 stripe 时，抛新异常 PaymentPathMismatch（先于写支付尝试，订单不变）；成功的一路在带条件的 UPDATE 命中（已持有订单行锁，锁顺序仍为会员 → 订单）之后再以加锁读查一次不是 expired 的 Stripe 记录，有则回滚并抛同一异常；失败的一路在写支付尝试之前以 SELECT … FOR UPDATE 锁住订单行（只锁订单，不锁会员，与 SHOP-TASK-112 发起会话的加锁一致）并重查订单状态与 Stripe 记录，有则回滚并抛同一异常；两路都堵住与发起会话并发的情形；重放不改订单，不受途径检查影响；没有记录且途径为 simulated 时现有流程与现有测试不变；之后的接口把这个异常归为 method_changed
+      - submit_payment 与 cancel_order 以 app/core/config.py 的 get_settings() 取最低收款额与 SHOP-TASK-112 对账所需的配置，签名只新增可选参数，现有调用方不变；cancel_order 增加可选的适配器参数（不给时等同 Stripe 不可用），订单已不是待支付时照现有规则（已取消返回当前状态、其余抛 OrderNotCancellable），不处理会话；仍待支付且有不是 expired 的 Stripe 记录时先处理会话——creating 调用 SHOP-TASK-112 的对账，只有记为 expired 才按现有规则取消，对账取得 open 会话时接着按下面 open 的做法请求作废；open 请求作废，作废成功、或作废被拒后查询会话为 expired，才把记录记为 expired 并按现有规则取消；查询或记录为 complete 时调用 SHOP-TASK-113 的确认，paid 时不取消、抛 OrderNotCancellable（状态为 demo_paid），refunded（核对不符，记录已被确认标为 expired、订单仍待支付）时，不给记录 ID 调用下面的 cancel_after_stripe_end（它在锁内重查订单仍待支付且已没有不是 expired 的记录才取消）；needs_review（没写成退款尝试、活动位保留）时不取消、抛 StripeUnavailable，交人工核对；付款未定、对账结果不明或作废后查询仍不能确定时都不取消并抛新异常 StripeUnavailable（之后的接口归为稍后再试），Stripe 不可用时同样抛 StripeUnavailable，订单保持待支付、库存继续预留；会话确认结束后的取消不看本地 15 分钟支付到期时间（第 5 条：订单在会话结束之前不会被超时取消），以 actor 为操作者释放库存、券与积分并写事件；这条取消路径导出为公开函数 cancel_after_stripe_end（入参数据库会话、订单 ID、可选的 Stripe 会话记录 ID 与调用方查询 Stripe 前读到的该记录状态、操作者与当前时间；操作者为 guest、member 或 system，迁移检查沿用 app/services/order_rules.py 现有规则；给记录 ID 只用于调用方已从 Stripe 确认会话结束且未付款的情形；不给记录 ID 用于记录已是 expired 的情形——creating 经对账记为 expired、核对不符的已付款记录由 SHOP-TASK-117 写成退款尝试后记为 expired——这时只做下面订单的重查与取消）——在自己的事务里按统一顺序「会员 → 订单 → Stripe 会话记录」加锁；给了记录 ID 时先重查该记录：状态仍等于调用方读到的状态、付款状态不是 paid 且没有确认时间，才把它记为 expired（active_order_id 置空），否则（查询 Stripe 之后被 webhook 或另一次确认改动过）不改记录与订单、回滚并返回 changed；再重查订单仍为 awaiting_demo_payment 且已没有不是 expired 的记录，才释放库存、券与积分并写事件（不看本地支付到期时间），提交并返回 cancelled；订单不满足时只提交记录的 expired、订单不动、返回 kept；cancel_order 与 SHOP-TASK-116 的定时处理都经它取消——cancel_order 遇 changed 时按有记录的路径重新处理一次、仍为 changed 则抛 StripeUnavailable，遇 kept 时重新读订单，已为 demo_cancelled（如两次并发的取消）照现有重复取消的规则返回当前状态，为 demo_paid 等其他状态抛 OrderNotCancellable，仍待支付（另有活动记录）抛 StripeUnavailable；调用 Stripe 时不持有任何数据库锁，之后按统一顺序「会员 → 订单 → Stripe 会话记录」加锁并重查；没有记录（或只有 expired 记录）时现有流程不变，只在带条件的 UPDATE 命中（已持有订单行锁）后以加锁读重查一次不是 expired 的 Stripe 记录，有则回滚并按有记录的路径重新处理一次（与发起会话并发时）
+      - expire_overdue_orders 只取消没有不是 expired 的 Stripe 记录的订单，有记录的订单不做任何改动——候选查询在应用 limit 之前就排除有这类记录的订单（否则最早到期的一批若都有活动会话，后面的普通逾期订单每轮都选不到）；选单之后、带条件的 UPDATE 命中（已持有订单行锁）时再以加锁读重查一次，有记录则回滚、跳过这张，堵住与发起会话并发的情形（查看触发、现有的超时取消任务与库存重置里的调用一样；第 5 条：查看入口只对没有 Stripe 记录或只有 expired 记录的订单执行超时取消，其余留给定时任务）；现有测试不变
+      - 新文件 tests/test_stripe_cancel.py 用 SQLite 内存库与 FakeStripeGateway 验证意图——submit_payment 的检查顺序（重放优先、有记录抛 PaymentPathMismatch、没有记录而已过期抛 OrderExpired、途径为 stripe 抛 PaymentPathMismatch）与成功、失败两路都不写支付尝试；cancel_order 对 creating（对账为 expired 后取消、对账取得 open 会话后作废再取消、结果不明抛 StripeUnavailable）、open（作废后取消、作废被拒查询为 expired 后取消、查询为 complete 且已付款时抛 OrderNotCancellable 且订单为 demo_paid、确认返回 refunded 时取消而 needs_review 时抛 StripeUnavailable 且订单与库存不变、付款未定抛 StripeUnavailable）、Stripe 不可用（抛 StripeUnavailable、订单与库存不变）；本地 15 分钟已过、Stripe 会话才结束时本人取消成功并释放库存、券与积分；cancel_after_stripe_end 以 system 调用时记录的 expired 与订单的取消在同一事务提交，订单已不是待支付或另有活动记录时只记 expired、订单不变（kept），查询 Stripe 后记录被改为 complete 且已付款或已有确认时间时不改记录与订单（changed），不给记录 ID 时（对账记 expired 后、确认返回 refunded 后）只重查订单并取消；查看触发的超时取消跳过有记录的订单，最早到期的 limit 张都有活动会话时后面的普通逾期订单照常取消，选单后才建记录的订单在 UPDATE 后的重查里被跳过；tests/test_demo_payment.py 的现有测试一字不改全部通过；每条测试写明它守住的是设计或核验结论的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-114 记录段（三个现有入口的改动、两个新异常、检查顺序、偏离、验证到什么程度，并写明定时任务留给 SHOP-TASK-116、接口对新异常的归类与 webhook 的 async_payment_failed 留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/stripe_checkout.py、app/services/stripe_confirm.py、app/jobs.py、app/api/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e），不合并、不直推
+    allowed_change_paths:
+      - app/services/payment.py
+      - tests/test_stripe_cancel.py
+      - tests/test_demo_payment.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-116
+    title: 有 Stripe 记录的订单的定时处理
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 3 条（创建结果未定时由之后的发起或定时任务以同一幂等键重试，到期后对账，24 小时内无法确定就告警由人工核对，订单在此期间不取消、库存继续预留）、
+      第 4 条（付款方式类型读不到时由定时任务向 Stripe 重查补齐）与第 5 条（有 Stripe 记录的订单由定时任务按会话的实际状态处理；Stripe 不可用时留到下一轮；会话完成 24 小时后仍无结果就告警；24 小时仍无法查询就告警，订单不自动取消），
+      在 SHOP-TASK-112 至 114 与 117 之上加 Stripe 会话的定时处理并接入定时任务进程。人工核对在 Stripe 后台进行；本任务不提供处置入口，手动补跑不能解除已转人工的记录（SHOP-TASK-112 对创建满 24 小时的记录不再调用 Stripe）；处置手段另行登记（见计划块），它涉及支付状态，登记前须按设计闸门写明核实条件并经 Kelvin 批准。不加接口；不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e），订单状态、库存、券与积分的释放。拆分：定时任务层（7 个允许路径），2026-10-15 由原 SHOP-TASK-114 拆出。
+    status: ready
+    depends_on:
+      - SHOP-TASK-114
+    acceptance_criteria:
+      - 新文件 app/services/stripe_overdue.py 的定时处理（取消一律经 SHOP-TASK-114 导出的 cancel_after_stripe_end，操作者为 system，记录记为 expired 与订单的取消在它的同一事务里完成；它返回 changed 时这条留到下一轮）（入参数据库会话、适配器、当前时间与上限）——每轮先做待支付订单的会话处理、再做付款方式类型补齐，两者各自最多 limit 条；会话处理只选需要动作的记录（待支付订单的不是 expired 的记录中，creating、Stripe 到期时间已过的 open，以及 complete），按上次查询时间从早到晚、从没查过的排最前（同时刻按 ID），逐条在各自的事务里处理并写上次查询时间，所以长期不能确定的记录不会挤掉新记录；处理条数为本轮两种扫描选中并处理过的记录数之和（Stripe 不可用而跳过的也算处理过、也写上次查询时间）——creating 记录不论是否已过 Stripe 到期时间都调用 SHOP-TASK-112 的对账函数（到期前以同一幂等键与同一快照重试，到期后对账；第 3 条：之后的发起或定时任务重试），只有对账确认没有建成会话（记为 expired）且订单已过本地支付到期时间时，才按统一锁顺序以 system 按现有规则取消，对账取得会话时按会话实际状态继续处理，结果不明时订单保留不动，不凭时间取消；open 且已过 Stripe 到期时间时查询会话，expired 才记 expired 并以 system 按现有规则取消订单（不看本地支付到期时间，同上一条），complete 或已付款时调用确认；complete 而付款未定时查询会话，已付款调用确认；PaymentIntent 为 canceled 或 requires_payment_method（Stripe 给出的付款失败）时记为 expired 并按现有规则取消；processing、requires_action 等其余状态或查询不到 PaymentIntent 时继续等待，完成时间满 24 小时仍无结果写告警时间并记一条 error 日志（类别 stripe_payment_needs_review）；付款方式类型补齐单独扫描付款状态为 paid 而付款方式类型为空的记录（不论订单状态，订单确认后已是 demo_paid），同样按上次查询时间轮转，逐条调用 SHOP-TASK-113 的补齐函数并写上次查询时间；补齐只是补字段，不计入「有待处理的记录」，Stripe 不可用或未配置时静默留到下一轮，不记任何告警、不写告警时间；Stripe 不可用（含配置被清空后未配置，以及确认或补齐函数返回 unavailable，如会话为 open 而已付款这类取不到可核对对象的情形）时跳过这条留到下一轮，creating 记录自记录创建满 24 小时（与 SHOP-TASK-112 转人工的起点相同，第 3 条）、open 记录自 Stripe 到期时间满 24 小时仍无法确定时写告警时间并记 error 日志（类别 stripe_unreachable；complete 记录查询不可用时不用这一类，按上面完成时间满 24 小时记 stripe_payment_needs_review），订单不取消；每条记录至多告警一次（complete 记录用 stripe_payment_needs_review，creating 与 open 记录用 stripe_unreachable 或 SHOP-TASK-112 的 stripe_checkout_needs_review）——告警时间已非空的记录（含 SHOP-TASK-112 的 stripe_checkout_needs_review 与 SHOP-TASK-117 在确认返回 needs_review 时写的告警时间）不再记任何告警，告警时间也不清空；调用 Stripe 时不持有任何数据库锁，之后按统一顺序「会员 → 订单 → Stripe 会话记录」加锁并重查；返回处理条数
+      - app/jobs.py 在超时取消之后加入这个任务（名称 stripe_checkouts，两种扫描每轮各最多 CANCEL_BATCH_LIMIT 条（合计至多两倍），own_transactions，逐条提交），适配器按配置建；Stripe 未配置时，没有待处理的记录才静默跳过、算成功，有待处理的记录则照上一条按不可用处理（计时与告警），不能因未配置而永远不告警；另加手动补跑命令 process-stripe（写法照 cancel-expired）；模块说明与用法随之补充
+      - 测试验证意图——新文件 tests/test_stripe_overdue.py 用 SQLite 内存库与 FakeStripeGateway：creating 记录在到期前由定时任务重试取得会话、对账确认没建成后才取消并释放库存、券与积分而结果不明时订单不变；open 会话查询确认 expired 后才取消（本地支付到期时间早已过去也不提前取消）；complete 已付款时确认；付款未定时 PaymentIntent 为 canceled 或 requires_payment_method 才取消、processing 与 requires_action 继续等待、24 小时只告警一次；Stripe 不可用、未配置与确认返回 unavailable（open 而已付款的会话）时跳过、creating 记录自创建满 24 小时与 open 记录自 Stripe 到期满 24 小时各只告警一次（creating 不等到 Stripe 到期后 24 小时）、已有告警时间的记录不再告警；已支付订单的付款方式类型由单独扫描补齐；两种扫描各自的每轮上限与轮转（长期不能确定的记录不挤掉新记录）、处理条数；tests/test_jobs.py 补任务顺序、未配置且没有待处理记录时跳过、手动补跑命令；tests/test_auto_complete.py 与 tests/test_sms_retention.py 里断言 default_jobs 位置与个数的测试随新任务改为新的位置与个数并写明原因，其余断言一字不改；每条测试写明它守住的是设计或核验结论的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/TODO.md 新增 SHOP-TASK-116 记录段（定时处理的各情形、告警、任务顺序、手动补跑、偏离、验证到什么程度，并写明 webhook 的 async_payment_failed 留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/payment.py、app/services/stripe_checkout.py、app/services/stripe_confirm.py、app/api/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e），不合并、不直推
+    allowed_change_paths:
+      - app/services/stripe_overdue.py
+      - app/jobs.py
+      - tests/test_stripe_overdue.py
+      - tests/test_jobs.py
+      - tests/test_auto_complete.py
+      - tests/test_sms_retention.py
+      - docs/TODO.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
