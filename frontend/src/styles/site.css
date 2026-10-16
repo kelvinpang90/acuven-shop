@@ -341,6 +341,7 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-coupons__pager { display: flex; gap: 8px; justify-content: flex-end; }
 .site-admin-coupons__title, .site-admin-coupons__form, .site-admin-coupons__types, .site-admin-coupons__dates, .site-admin-coupons__save { display: flex; gap: 12px; }
 .site-admin-coupons__title { align-items: center; justify-content: space-between; }
+.site-admin-coupons__back { display: none; }
 .site-admin-coupons__form { display: grid; max-width: 560px; }
 .site-admin-coupons__types, .site-admin-coupons__dates { margin: 0; padding: 12px; }
 .site-admin-coupons__types { flex-wrap: wrap; }
@@ -686,7 +687,7 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-coupons__pager .acs-admin__btn { justify-content: center; min-width: 44px; min-height: 44px; }
   .site-admin-coupons--form-open > .site-admin-coupons__list-content { display: none; }
   .site-admin-coupons__form-content { display: grid; gap: 14px; }
-  .site-admin-coupons__back { justify-self: start; min-height: 44px; }
+  .site-admin-coupons__back { display: block; justify-self: start; min-height: 44px; }
   .site-admin-coupons__form { gap: 14px; }
   .site-admin-coupons__types, .site-admin-coupons__dates { display: grid; gap: 10px; }
   .site-admin-coupons__dates input { min-height: 44px; }
