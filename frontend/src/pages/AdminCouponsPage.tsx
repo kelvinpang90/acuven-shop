@@ -32,6 +32,16 @@ export function listStep(read: CouponsRead): ListState | "login" {
   }
 }
 
+// 停用得到 not_found 或 csrf 后重新读取当前页：读取完成后仍显示 common.error_retry；重新读取本身失败时显示那次失败。
+export function reloadedState(current: ListState, next: ListState): ListState {
+  return current.error === "common.error_retry" && next.error === null ? { ...next, error: current.error } : next;
+}
+
+// 停用 ok：以返回的券替换同一内部 ID 的那一行，其他行不变。
+export function updatedState(current: ListState, coupon: AdminCoupon): ListState {
+  return current.list === null ? current : { ...current, list: { ...current.list, coupons: current.list.coupons.map((row) => row.id === coupon.id ? coupon : row) } };
+}
+
 export type DisableStep = { kind: "updated"; coupon: AdminCoupon } | { kind: "reload" } | { kind: "error"; error: CopyKey } | "login";
 export function disableStep(read: CouponDisable): DisableStep {
   switch (read.kind) {
@@ -89,12 +99,12 @@ export function AdminCouponsView({ state, disabling, onDisable, onPage }: AdminC
 
 export function AdminCouponsContent() {
   const { replace } = useRouter(); const [page, setPage] = useState(1); const [reload, setReload] = useState(0); const [state, setState] = useState<ListState>(INITIAL_LIST); const [disabling, setDisabling] = useState<number | null>(null); const disableRequest = useRef<AbortController | null>(null);
-  useEffect(() => { const controller = new AbortController(); void loadCoupons(page, controller.signal, { show: (next) => { setState((current) => current.error === "common.error_retry" && next.error === null ? { ...next, error: current.error } : next); }, replace }); return () => { controller.abort(); }; }, [page, reload, replace]);
+  useEffect(() => { const controller = new AbortController(); void loadCoupons(page, controller.signal, { show: (next) => { setState((current) => reloadedState(current, next)); }, replace }); return () => { controller.abort(); }; }, [page, reload, replace]);
   useEffect(() => () => { disableRequest.current?.abort(); }, []);
   const disable = (coupon: AdminCoupon) => {
     if (state.list === null || disabling !== null) return;
     const controller = new AbortController(); disableRequest.current = controller; setDisabling(coupon.id);
-    void disableCoupon(coupon.id, state.list.csrf_token, controller.signal, { replace, finish: () => { setDisabling(null); }, update: (updated) => { setState((current) => current.list === null ? current : { ...current, list: { ...current.list, coupons: current.list.coupons.map((row) => row.id === updated.id ? updated : row) } }); }, error: (error) => { setState((current) => ({ ...current, error })); }, reload: () => { setState((current) => ({ ...current, busy: true, error: "common.error_retry" })); setReload((current) => current + 1); } });
+    void disableCoupon(coupon.id, state.list.csrf_token, controller.signal, { replace, finish: () => { setDisabling(null); }, update: (updated) => { setState((current) => updatedState(current, updated)); }, error: (error) => { setState((current) => ({ ...current, error })); }, reload: () => { setState((current) => ({ ...current, busy: true, error: "common.error_retry" })); setReload((current) => current + 1); } });
   };
   return <AdminCouponsView state={state} disabling={disabling} onDisable={disable} onPage={(next) => { setPage(next); setState((current) => ({ ...current, busy: true, error: null })); }} />;
 }
