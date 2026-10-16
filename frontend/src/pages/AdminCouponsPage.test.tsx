@@ -21,6 +21,7 @@ const PERCENT: AdminCoupon = { id: 2, code: "SAVE20", type: "percent", amount_of
 
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 function storage(language: Language) { return { getItem: (key: string) => key === LANGUAGE_STORAGE_KEY ? language : null, setItem: () => undefined }; }
+function renderApp(language: Language) { return renderToStaticMarkup(<App initialPath={COUPONS_PATH} storage={storage(language)} />); }
 function page(overrides: Partial<AdminCouponPage> = {}): AdminCouponPage { return { total: 2, page: 1, page_size: 30, coupons: [FIXED, PERCENT], csrf_token: "csrf", ...overrides }; }
 function shown(list: AdminCouponPage): ListState { return { busy: false, list, error: null }; }
 function wrap(element: ReactNode, language: Language = "en") { return <LanguageProvider storage={storage(language)}><RouterProvider initialPath={PATH}>{element}</RouterProvider></LanguageProvider>; }
@@ -42,7 +43,7 @@ function disableMoves() { const events: string[] = []; const updates: AdminCoupo
 describe("AdminCouponsPage", () => {
   // UX A05「入口：后台导航」及 SHOP-TASK-100 验收：经路由打开页面渲染后台框架，不套前台框架。
   it.each(LANGUAGES)("renders the admin frame, not the storefront frame, in %s", (language) => {
-    const html = renderToStaticMarkup(<App initialPath={PATH} storage={storage(language)} />);
+    const html = renderApp(language);
     expect(html).toContain(COPY["admin.demo_banner"][language]);
     expect(html).not.toContain(COPY["common.demo_banner"][language]);
     expect(html).not.toMatch(/<(header|footer)\b/);
@@ -52,7 +53,7 @@ describe("AdminCouponsPage", () => {
   it.each(LANGUAGES)("marks coupons current in both navigation menus in UX order in %s", (language) => {
     const html = renderToStaticMarkup(
       <LanguageProvider storage={storage(language)}>
-        <RouterProvider initialPath={PATH}>
+        <RouterProvider initialPath={COUPONS_PATH}>
           <AdminCouponsPage />
         </RouterProvider>
       </LanguageProvider>,
@@ -66,7 +67,7 @@ describe("AdminCouponsPage", () => {
     expect(html).toContain(`<span class="site-admin__bar-title">${COPY["admin.nav_coupons"][language]}</span>`);
   });
   // The former exact content assertion changes only because the list now follows: original h1 and note must begin content.
-  it.each(LANGUAGES)("starts content with the original title and note in %s", (language) => { const html = renderToStaticMarkup(wrap(<AdminCouponsContent />, language)); expect(html).toStartWith(`<div class="site-admin-coupons"><h1 class="acs-admin__h">${escapeHtml(COPY["admin.nav_coupons"][language])}</h1><p class="site-admin-coupons__note">${escapeHtml(COPY["admin.coupon_listed_note"][language])}</p>`); });
+  it.each(LANGUAGES)("starts content with the original title and note in %s", (language) => { const html = renderToStaticMarkup(wrap(<AdminCouponsContent />, language)); expect(html.startsWith(`<div class="site-admin-coupons"><h1 class="acs-admin__h">${escapeHtml(COPY["admin.nav_coupons"][language])}</h1><p class="site-admin-coupons__note">${escapeHtml(COPY["admin.coupon_listed_note"][language])}</p>`)).toBe(true); });
   // UX A05: table/cards show all fields, full dates, limits including —, statuses, and the active-only disable button.
   it.each(LANGUAGES)("renders A05 rows and cards in %s", (language) => { const html = render(undefined, null, language); for (const key of ["admin.coupon_code", "admin.coupon_type", "admin.coupon_value", "admin.coupon_valid", "admin.coupon_usage", "admin.filter_status", "admin.coupon_fixed", "admin.coupon_percent", "admin.coupon_enabled", "admin.coupon_disabled"] as const) expect(html).toContain(escapeHtml(COPY[key][language])); expect(html).toContain("RM 10.00"); expect(html).toContain("20%"); expect(html).toContain("12 / 100"); expect(html).toContain("0 / —"); expect(html.match(new RegExp(`<button[^>]*>${escapeHtml(COPY["admin.coupon_disable"][language])}</button>`, "g"))?.length).toBe(2); });
   // Kelvin's date decision: business date October 5 remains the fifth, not a visitor-time-zone neighbor.
@@ -86,11 +87,11 @@ describe("AdminCouponsPage", () => {
   // Disable API outcomes update, reload, redirect, or show precisely the required state; updated active rows lose their button.
   it.each<[Response | (() => never), string[], AdminCoupon[]]>([[json(200, { ...FIXED, active: false }), ["update", "finish"], [{ ...FIXED, active: false }]], [json(404, {}), ["reload", "finish"], []], [json(403, {}), ["reload", "finish"], []], [json(401, {}), [`replace ${LOGIN}`], []], [networkDown, ["error common.network_check", "finish"], []], [json(500, {}), ["error common.error_retry", "finish"], []]])("handles disable outcome (%#)", async (reply, events, updates) => { const calls = stubFetch(reply); const controller = new AbortController(); const target = disableMoves(); await disableCoupon(FIXED.id, "csrf", controller.signal, target.target); expect(String(calls[0]?.url)).toBe("/api/admin/coupons/1/disable"); expect(target.events).toEqual(events); expect(target.updates).toEqual(updates); if (updates.length > 0) expect(render(shown(page({ coupons: updates }))).match(/<button\b/g)).toBeNull(); });
   // One disable at a time: every button is disabled, but only the selected row/card is busy.
-  it("marks only the selected coupon busy", () => { const html = render(undefined, FIXED.id); expect((html.match(/aria-busy="true"/g) ?? []).length).toBe(2); expect((html.match(/disabled=""/g) ?? []).length).toBe(2); });
+  it("marks only the selected coupon busy", () => { const secondActive = { ...PERCENT, active: true }; const html = render(shown(page({ coupons: [FIXED, secondActive] })), FIXED.id); const buttons = [...html.matchAll(/<button\b[^>]*>[^<]*<\/button>/g)].map((match) => match[0]); expect(buttons).toHaveLength(4); expect(buttons.every((button) => button.includes('disabled=""'))).toBe(true); expect((html.match(/aria-busy="true"/g) ?? []).length).toBe(2); });
   // CSRF/not-found reloads retain error_retry even once the replacement list has completed.
   it("keeps retry after a reload", () => { expect(render({ busy: false, list: page(), error: "common.error_retry" })).toContain(COPY["common.error_retry"].en); });
   // Aborted disables cannot apply late updates, errors, reloads, or redirects.
   it("ignores an aborted disable", async () => { stubFetch(json(200, { ...FIXED, active: false })); const controller = new AbortController(); const target = disableMoves(); const pending = disableCoupon(FIXED.id, "csrf", controller.signal, target.target); controller.abort(); await pending; expect(target.events).toEqual([]); });
   // UI text is dictionary copy, API coupon data, formatted dates/values/counts, or A05's specified punctuation.
-  it.each(LANGUAGES)("uses dictionary text only in %s", (language) => { const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language])); for (const coupon of [FIXED, PERCENT]) { allowed.add(coupon.code); allowed.add(coupon.type === "fixed" ? "RM 10.00" : "20%"); allowed.add(formatCouponDate(coupon.starts_on, language)); allowed.add(formatCouponDate(coupon.ends_on, language)); allowed.add(String(coupon.used_count)); allowed.add(String(coupon.total_use_limit ?? "—")); } for (const value of ["/", "–", "·", "‹", "›"]) allowed.add(value); for (const html of [render(undefined, null, language), render({ busy: false, list: page(), error: "common.error_retry" }, null, language), render(shown(page({ total: 31 })), null, language)]) for (const value of visibleTexts(html)) expect(allowed.has(value), value).toBe(true); });
+  it.each(LANGUAGES)("uses dictionary text only in %s", (language) => { const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language])); for (const coupon of [FIXED, PERCENT]) { const start = formatCouponDate(coupon.starts_on, language); const end = formatCouponDate(coupon.ends_on, language); const limit = String(coupon.total_use_limit ?? "—"); const usage = `${coupon.used_count} / ${limit}`; const valid = `${start} – ${end}`; allowed.add(coupon.code); allowed.add(coupon.type === "fixed" ? "RM 10.00" : "20%"); allowed.add(start); allowed.add(end); allowed.add(valid); allowed.add(String(coupon.used_count)); allowed.add(limit); allowed.add(usage); allowed.add(`${COPY["admin.coupon_usage"][language]} ${usage} · ${valid}`); } for (const value of ["/", "–", "·", "‹", "›"]) allowed.add(value); for (const html of [render(undefined, null, language), render({ busy: false, list: page(), error: "common.error_retry" }, null, language), render(shown(page({ total: 31 })), null, language)]) for (const value of visibleTexts(html)) expect(allowed.has(value), value).toBe(true); });
 });
