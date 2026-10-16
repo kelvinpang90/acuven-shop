@@ -3708,7 +3708,7 @@ tasks:
       不改路由与导航，不装依赖，不改后端，不改设计。
       设计闸门：不适用（金额规则与校验在 SHOP-TASK-098、099 的服务端，页面只收集字段并把 RM 换成整数仙）。
       拆分：2026-10-15 由原 SHOP-TASK-102 拆出（原因见 102），本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-102
     acceptance_criteria:
