@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 
-import { disableAdminCoupon, listAdminCoupons } from "../api/adminCoupons";
-import type { AdminCoupon, AdminCouponPage, CouponDisable, CouponsRead } from "../api/adminCoupons";
+import { createAdminCoupon, disableAdminCoupon, listAdminCoupons } from "../api/adminCoupons";
+import type { AdminCoupon, AdminCouponInput, AdminCouponPage, CouponCreate, CouponDisable, CouponType, CouponsRead } from "../api/adminCoupons";
 import AdminFrame, { AdminAlert } from "../components/AdminFrame";
 import { formatSen } from "../format";
 import type { CopyKey, Language } from "../i18n/copy";
@@ -73,6 +74,35 @@ export async function disableCoupon(id: number, csrfToken: string, signal: Abort
   else { moves.error(step.error); moves.finish(); }
 }
 
+export interface CouponForm { code: string; type: CouponType; value: string; starts_on: string; ends_on: string; min_spend: string; total_limit: string; member_limit: string; }
+export const DEFAULT_COUPON_FORM: CouponForm = { code: "", type: "fixed", value: "", starts_on: "", ends_on: "", min_spend: "0", total_limit: "", member_limit: "" };
+export function couponInputOf(form: CouponForm): AdminCouponInput {
+  const sen = (value: string) => Math.round(Number(value) * 100);
+  const limit = (value: string) => value === "" ? null : Number(value);
+  return { code: form.code, type: form.type, amount_off_sen: form.type === "fixed" ? sen(form.value) : null, percent_off: form.type === "percent" ? Number(form.value) : null, min_subtotal_sen: sen(form.min_spend), starts_on: form.starts_on, ends_on: form.ends_on, total_use_limit: limit(form.total_limit), per_member_use_limit: limit(form.member_limit) };
+}
+export type CreateStep = { kind: "ok" | "reload" } | { kind: "error"; error: CopyKey } | "login";
+export function createStep(read: CouponCreate): CreateStep {
+  switch (read.kind) {
+    case "ok": return { kind: "ok" };
+    case "csrf": return { kind: "reload" };
+    case "code_taken": return { kind: "error", error: "admin.coupon_code_taken" };
+    case "invalid": return { kind: "error", error: "admin.coupon_invalid" };
+    case "network": return { kind: "error", error: "common.network_check" };
+    case "failed": return { kind: "error", error: "common.error_retry" };
+    case "none": return "login";
+  }
+}
+export interface CreateMoves { clear: () => void; error: (error: CopyKey) => void; reload: (page: number) => void; finish: () => void; replace: (path: RoutePath) => void; }
+export async function createCoupon(form: CouponForm, csrfToken: string, page: number, signal: AbortSignal, moves: CreateMoves): Promise<void> {
+  const step = createStep(await createAdminCoupon(couponInputOf(form), csrfToken, signal));
+  if (signal.aborted) return;
+  if (step === "login") { moves.replace(ADMIN_LOGIN_PATH); return; }
+  if (step.kind === "ok") { moves.clear(); moves.reload(1); moves.finish(); return; }
+  if (step.kind === "reload") { moves.error("common.error_retry"); moves.reload(page); moves.finish(); return; }
+  moves.error(step.error); if (step.error === "common.network_check") moves.reload(1); moves.finish();
+}
+
 function valueOf(coupon: AdminCoupon, t: ReturnType<typeof useCopy>): string {
   return coupon.type === "fixed" ? t("common.price_myr", { amount: formatSen(coupon.amount_off_sen ?? 0) }) : `${String(coupon.percent_off ?? 0)}%`;
 }
@@ -91,13 +121,13 @@ function CouponCard({ coupon, disabling, onDisable }: CouponRowProps) {
   return <li className="acs-admin__panel site-admin-coupons__card" aria-busy={disabling === coupon.id}><div className="site-admin-coupons__card-head"><span>{coupon.code}</span><CouponStatus coupon={coupon} /></div><span>{valueOf(coupon, t)}</span><span>{t("admin.coupon_usage")} {coupon.used_count} / {coupon.total_use_limit ?? "—"} · {validOf(coupon, language)}</span>{coupon.active && <button className="acs-admin__btn acs-admin__btn--secondary" type="button" disabled={disabling !== null} onClick={() => { onDisable(coupon); }}>{t("admin.coupon_disable")}</button>}</li>;
 }
 
-export interface AdminCouponsViewProps { state: ListState; disabling: number | null; onDisable: (coupon: AdminCoupon) => void; onPage: (page: number) => void; }
-export function AdminCouponsView({ state, disabling, onDisable, onPage }: AdminCouponsViewProps) {
+interface LegacyAdminCouponsViewProps { state: ListState; disabling: number | null; onDisable: (coupon: AdminCoupon) => void; onPage: (page: number) => void; }
+function LegacyAdminCouponsView({ state, disabling, onDisable, onPage }: LegacyAdminCouponsViewProps) {
   const t = useCopy(); const list = state.list; const pager = list === null ? null : pagerOf(list);
   return <div className="site-admin-coupons"><h1 className="acs-admin__h">{t("admin.nav_coupons")}</h1><p className="site-admin-coupons__note">{t("admin.coupon_listed_note")}</p><div className="site-admin-coupons__list" aria-busy={state.busy}>{state.error !== null && <AdminAlert error={state.error} />}{list !== null && <div className="site-admin-coupons__page" key={list.page}><div className="acs-admin__panel site-admin-coupons__table"><table className="acs-admin__table"><thead><tr><th>{t("admin.coupon_code")}</th><th>{t("admin.coupon_type")}</th><th>{t("admin.coupon_value")}</th><th>{t("admin.coupon_valid")}</th><th>{t("admin.coupon_usage")}</th><th>{t("admin.filter_status")}</th></tr></thead><tbody>{list.coupons.map((coupon) => <CouponRows key={coupon.id} coupon={coupon} disabling={disabling} onDisable={onDisable} />)}</tbody></table></div>{list.coupons.length > 0 && <ul className="site-admin-coupons__cards">{list.coupons.map((coupon) => <CouponCard key={coupon.id} coupon={coupon} disabling={disabling} onDisable={onDisable} />)}</ul>}{pager !== null && <div className="site-admin-coupons__pager"><button className="acs-admin__btn acs-admin__btn--secondary" type="button" aria-label={t("common.a11y_page_prev")} disabled={pager.prev === null} onClick={() => { if (pager.prev !== null) onPage(pager.prev); }}>‹</button><button className="acs-admin__btn acs-admin__btn--secondary" type="button" aria-label={t("common.a11y_page_next")} disabled={pager.next === null} onClick={() => { if (pager.next !== null) onPage(pager.next); }}>›</button></div>}</div>}</div></div>;
 }
 
-export function AdminCouponsContent() {
+function LegacyAdminCouponsContent() {
   const { replace } = useRouter(); const [page, setPage] = useState(1); const [reload, setReload] = useState(0); const [state, setState] = useState<ListState>(INITIAL_LIST); const [disabling, setDisabling] = useState<number | null>(null); const disableRequest = useRef<AbortController | null>(null);
   useEffect(() => { const controller = new AbortController(); void loadCoupons(page, controller.signal, { show: (next) => { setState((current) => reloadedState(current, next)); }, replace }); return () => { controller.abort(); }; }, [page, reload, replace]);
   useEffect(() => () => { disableRequest.current?.abort(); }, []);
@@ -106,6 +136,35 @@ export function AdminCouponsContent() {
     const controller = new AbortController(); disableRequest.current = controller; setDisabling(coupon.id);
     void disableCoupon(coupon.id, state.list.csrf_token, controller.signal, { replace, finish: () => { setDisabling(null); }, update: (updated) => { setState((current) => updatedState(current, updated)); }, error: (error) => { setState((current) => ({ ...current, error })); }, reload: () => { setState((current) => ({ ...current, busy: true, error: "common.error_retry" })); setReload((current) => current + 1); } });
   };
-  return <AdminCouponsView state={state} disabling={disabling} onDisable={disable} onPage={(next) => { setPage(next); setState((current) => ({ ...current, busy: true, error: null })); }} />;
+  return <LegacyAdminCouponsView state={state} disabling={disabling} onDisable={disable} onPage={(next) => { setPage(next); setState((current) => ({ ...current, busy: true, error: null })); }} />;
+}
+void LegacyAdminCouponsContent;
+export interface AdminCouponsViewProps { state: ListState; disabling: number | null; form: CouponForm; creating: boolean; showingForm: boolean; saveError: CopyKey | null; onDisable: (coupon: AdminCoupon) => void; onPage: (page: number) => void; onCreate: () => void; onBack: () => void; onForm: (form: CouponForm) => void; onSave: () => void; }
+function CouponFormView({ form, creating, error, onForm, onSave }: { form: CouponForm; creating: boolean; error: CopyKey | null; onForm: (form: CouponForm) => void; onSave: () => void }) {
+  const t = useCopy(); const change = (name: keyof CouponForm) => (event: ChangeEvent<HTMLInputElement>) => { onForm({ ...form, [name]: event.target.value }); };
+  return <form className="site-admin-coupons__form" onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); onSave(); }}>
+    <h2 className="acs-admin__h">{t("common.create")}</h2>
+    <label className="acs-admin__field"><span>{t("admin.coupon_code")}</span><input required value={form.code} onChange={change("code")} /></label>
+    <fieldset className="site-admin-coupons__types"><legend>{t("admin.coupon_type")}</legend><label><input type="radio" name="coupon-type" checked={form.type === "fixed"} onChange={() => { onForm({ ...form, type: "fixed" }); }} />{t("admin.coupon_fixed")}</label><label><input type="radio" name="coupon-type" checked={form.type === "percent"} onChange={() => { onForm({ ...form, type: "percent" }); }} />{t("admin.coupon_percent")}</label></fieldset>
+    <label className="acs-admin__field"><span>{t("admin.coupon_value")}</span><input type="number" required min={form.type === "fixed" ? "0.01" : "1"} max={form.type === "fixed" ? "100000" : "100"} step={form.type === "fixed" ? "0.01" : "1"} value={form.value} onChange={change("value")} /></label>
+    <fieldset className="site-admin-coupons__dates"><legend id="coupon-valid">{t("admin.coupon_valid")}</legend><input type="date" required aria-labelledby="coupon-valid" value={form.starts_on} onChange={change("starts_on")} /><input type="date" required aria-labelledby="coupon-valid" value={form.ends_on} onChange={change("ends_on")} /></fieldset>
+    <label className="acs-admin__field"><span>{t("admin.coupon_min_spend")}</span><input type="number" required min="0" max="100000" step="0.01" value={form.min_spend} onChange={change("min_spend")} /></label>
+    <label className="acs-admin__field"><span>{t("admin.coupon_total_limit")}</span><input type="number" min="1" max="1000000" step="1" value={form.total_limit} onChange={change("total_limit")} /></label>
+    <label className="acs-admin__field"><span>{t("admin.coupon_member_limit")}</span><input type="number" min="1" max="1000000" step="1" value={form.member_limit} onChange={change("member_limit")} /></label>
+    <div className="site-admin-coupons__save"><span>{t("admin.rules_apply_new")}</span><button className="acs-admin__btn" type="submit" disabled={creating} aria-busy={creating}>{t("common.save")}</button>{error !== null && <AdminAlert error={error} />}</div>
+  </form>;
+}
+export function AdminCouponsView({ state, disabling, form, creating, showingForm, saveError, onDisable, onPage, onCreate, onBack, onForm, onSave }: AdminCouponsViewProps) {
+  const t = useCopy(); const list = state.list; const pager = list === null ? null : pagerOf(list);
+  return <div className={`site-admin-coupons${showingForm ? " site-admin-coupons--form-open" : ""}`}><div className="site-admin-coupons__list-content"><div className="site-admin-coupons__title"><h1 className="acs-admin__h">{t("admin.nav_coupons")}</h1><button className="acs-admin__btn" type="button" disabled={list === null} onClick={onCreate}>{t("common.create")}</button></div><p className="site-admin-coupons__note">{t("admin.coupon_listed_note")}</p><div className="site-admin-coupons__list" aria-busy={state.busy}>{state.error !== null && <AdminAlert error={state.error} />}{list !== null && <div className="site-admin-coupons__page" key={list.page}><div className="acs-admin__panel site-admin-coupons__table"><table className="acs-admin__table"><thead><tr><th>{t("admin.coupon_code")}</th><th>{t("admin.coupon_type")}</th><th>{t("admin.coupon_value")}</th><th>{t("admin.coupon_valid")}</th><th>{t("admin.coupon_usage")}</th><th>{t("admin.filter_status")}</th></tr></thead><tbody>{list.coupons.map((coupon) => <CouponRows key={coupon.id} coupon={coupon} disabling={disabling} onDisable={onDisable} />)}</tbody></table></div>{list.coupons.length > 0 && <ul className="site-admin-coupons__cards">{list.coupons.map((coupon) => <CouponCard key={coupon.id} coupon={coupon} disabling={disabling} onDisable={onDisable} />)}</ul>}{pager !== null && <div className="site-admin-coupons__pager"><button className="acs-admin__btn acs-admin__btn--secondary" type="button" aria-label={t("common.a11y_page_prev")} disabled={pager.prev === null} onClick={() => { if (pager.prev !== null) onPage(pager.prev); }}>‹</button><button className="acs-admin__btn acs-admin__btn--secondary" type="button" aria-label={t("common.a11y_page_next")} disabled={pager.next === null} onClick={() => { if (pager.next !== null) onPage(pager.next); }}>›</button></div>}</div>}</div></div>{showingForm && <div className="site-admin-coupons__form-content"><button className="acs-admin__btn acs-admin__btn--secondary site-admin-coupons__back" type="button" onClick={onBack}>{t("common.back")}</button><CouponFormView form={form} creating={creating} error={saveError} onForm={onForm} onSave={onSave} /></div>}</div>;
+}
+export function AdminCouponsContent() {
+  const { replace } = useRouter(); const [page, setPage] = useState(1); const [reload, setReload] = useState(0); const [state, setState] = useState<ListState>(INITIAL_LIST); const [disabling, setDisabling] = useState<number | null>(null); const [form, setForm] = useState<CouponForm>(DEFAULT_COUPON_FORM); const [showingForm, setShowingForm] = useState(false); const [creating, setCreating] = useState(false); const [saveError, setSaveError] = useState<CopyKey | null>(null); const disableRequest = useRef<AbortController | null>(null); const createRequest = useRef<AbortController | null>(null);
+  useEffect(() => { const controller = new AbortController(); void loadCoupons(page, controller.signal, { show: (next) => { setState((current) => reloadedState(current, next)); }, replace }); return () => { controller.abort(); }; }, [page, reload, replace]);
+  useEffect(() => () => { disableRequest.current?.abort(); createRequest.current?.abort(); }, []);
+  const reloadPage = (next: number) => { setPage(next); setState((current) => ({ ...current, busy: true, error: null })); setReload((current) => current + 1); };
+  const disable = (coupon: AdminCoupon) => { if (state.list === null || disabling !== null) return; const controller = new AbortController(); disableRequest.current = controller; setDisabling(coupon.id); void disableCoupon(coupon.id, state.list.csrf_token, controller.signal, { replace, finish: () => { setDisabling(null); }, update: (updated) => { setState((current) => updatedState(current, updated)); }, error: (error) => { setState((current) => ({ ...current, error })); }, reload: () => { setState((current) => ({ ...current, busy: true, error: "common.error_retry" })); setReload((current) => current + 1); } }); };
+  const save = () => { if (state.list === null || creating) { if (state.list === null) setSaveError("common.error_retry"); return; } const controller = new AbortController(); createRequest.current = controller; setCreating(true); setSaveError(null); void createCoupon(form, state.list.csrf_token, page, controller.signal, { replace, clear: () => { setForm(DEFAULT_COUPON_FORM); setShowingForm(false); }, error: setSaveError, reload: reloadPage, finish: () => { setCreating(false); } }); };
+  return <AdminCouponsView state={state} disabling={disabling} form={form} creating={creating} showingForm={showingForm} saveError={saveError} onDisable={disable} onPage={reloadPage} onCreate={() => { setShowingForm(true); }} onBack={() => { setShowingForm(false); }} onForm={setForm} onSave={save} />;
 }
 export default function AdminCouponsPage() { return <AdminFrame current="coupons"><AdminCouponsContent /></AdminFrame>; }

@@ -339,6 +339,14 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-coupons__table { overflow-x: auto; }
 .site-admin-coupons__cards { display: none; margin: 0; padding: 0; list-style: none; }
 .site-admin-coupons__pager { display: flex; gap: 8px; justify-content: flex-end; }
+.site-admin-coupons__title, .site-admin-coupons__form, .site-admin-coupons__types, .site-admin-coupons__dates, .site-admin-coupons__save { display: flex; gap: 12px; }
+.site-admin-coupons__title { align-items: center; justify-content: space-between; }
+.site-admin-coupons__form { display: grid; max-width: 560px; }
+.site-admin-coupons__types, .site-admin-coupons__dates { margin: 0; padding: 12px; }
+.site-admin-coupons__types { flex-wrap: wrap; }
+.site-admin-coupons__dates { align-items: center; }
+.site-admin-coupons__dates input { min-width: 0; }
+.site-admin-coupons__save { align-items: center; flex-wrap: wrap; }
 
 /* A07 的每日结果（A07-desktop）：表格在可横向滚动的面板里，SKU 数靠右；每天的展开处在该日下方另起一行（单元格不留内边距，
    details 内边距 8px 12px，明细表与 summary 间距 6px）；卡片不显示，翻页按钮靠右。summary 的字重、明细的字号 site.css 写不了，
@@ -676,6 +684,14 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-coupons__card-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; }
   .site-admin-coupons__pager { justify-content: center; }
   .site-admin-coupons__pager .acs-admin__btn { justify-content: center; min-width: 44px; min-height: 44px; }
+  .site-admin-coupons--form-open > .site-admin-coupons__list-content { display: none; }
+  .site-admin-coupons__form-content { display: grid; gap: 14px; }
+  .site-admin-coupons__back { justify-self: start; min-height: 44px; }
+  .site-admin-coupons__form { gap: 14px; }
+  .site-admin-coupons__types, .site-admin-coupons__dates { display: grid; gap: 10px; }
+  .site-admin-coupons__dates input { min-height: 44px; }
+  .site-admin-coupons__save { align-items: stretch; }
+  .site-admin-coupons__save .acs-admin__btn { min-height: 44px; }
 
   /* A07 的每日结果（A07-phone）：表格不显示、卡片显示（间距 10px，卡片内边距 12px，各项间距 8px，第一行日期与结果标签两端对齐、可换行），
      展开处在卡片里（summary 至少 32px 高，每个 SKU 一项、SKU 与 breakdown 上下排列、间距 2px、上下内边距 6px）；翻页按钮居中、至少 44×44。
