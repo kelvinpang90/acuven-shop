@@ -3674,7 +3674,7 @@ tasks:
       所以拆成列表与停用（本任务）和新建（SHOP-TASK-109），并写明照库存重置页的「导出纯函数与 View、测试直接调用」写法。
       拆分后的 run b39a313d 仍以 review_repair_exhausted 失败（2026-10-15）：页面代码已合格，三轮卡在测试写法上（Disable 是 Disabled 的子串、未带类型的 vi.fn 让 any 流出触发 lint 的 no-unsafe-return）；运营者把最后一轮的代码补上两处测试修正后本地 lint、类型检查、全部测试与构建通过，另一处是字典文字测试没有还原 &quot; 实体。
       这三处与评审提过的停用中止列表读取、手机卡片的已用一行，写进下面的验收标准。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-100
       - SHOP-TASK-101
