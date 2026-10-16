@@ -2092,6 +2092,12 @@
 - 偏离：固定金额以 `RM` 加两位小数显示；起止日期不合并同年或同月；无总使用上限显示 `—`；视觉稿中 site.css 无法声明的颜色、字号、字重、底色与圆角没有搬入，也没有借用其他组件的类取得这些属性。
 - 验证到什么程度：`frontend/src/pages/AdminCouponsPage.test.tsx` 以 `renderToStaticMarkup` 渲染 View、直接调用导出的纯函数与异步函数（fetch 与路由以替身代替，不模拟点击）：SHOP-TASK-100 的后台框架与导航两条不改，第三条改为断言内容区以原样的标题与说明开头；表头与手机卡片的代码、类型、面额（RM 10.00 与 20%）、已用 / 上限（含不限的「—」）、状态与只在启用券上的停用按钮；有效期按马来西亚营业日期显示，并在 UTC−12 与 UTC+14 的默认时区下不偏移；空列表只有列头；`pagerOf` 与读取请求的页码；`listStep` 与 `loadCoupons` 的 ok、none、network、其他失败、中止与列表区 aria-busy；`disableStep` 与 `disableCoupon` 的 ok、not_found、csrf、none、network、failed 与中止；停用进行中四个停用按钮都禁用、只有被点那张的行与卡片为 aria-busy；`updatedState` 只替换被停用的那一行；`reloadedState` 在重新读取成功后保留 common.error_retry、重新读取失败时显示那次失败；页面文字全部来自字典。每条测试写明守住的验收句。由运营者接手完成：Worker run f4f835da 最后一轮的页面与测试已过 CI，评审仍要求把重新读取保留提示的合并逻辑抽成纯函数并直接测试；运营者把它与停用后替换行抽成导出的 `reloadedState`、`updatedState` 并补测试，收紧停用进行中与日期两条测试，本地 lint、类型检查、全部测试与构建通过，并以变异确认新测试能发现逻辑被删。由 PR 必需 CI 的 `frontend` 执行 lint、类型检查、测试、构建与镜像构建。未做浏览器验收；新建留给 SHOP-TASK-109。
 
+### SHOP-TASK-109 后台优惠券的新建表单与提交 A05
+
+- [x] 在既有 A05 优惠券列表加入新建按钮、桌面列表下方表单与手机的新建态；表单收集代码、固定金额或百分比、两个日期、最低消费及两个可空使用上限，并经既有请求模块把 RM 转成整数仙后提交。提交按 Kelvin 2026-10-12 决定分别处理成功、重复代码、无效输入、CSRF、无会话、网络和失败；成功重读第一页，网络时也重读第一页以确认结果。
+- 偏离：手机新建态仍保留后台顶栏的 `admin.nav_coupons`，视觉稿标题为 New；两个日期输入以共同的 `admin.coupon_valid` 为可访问名称，UX-COPY 没有各自的键。视觉稿中 site.css 无法声明的颜色、字号、字重、底色与圆角没有搬入，也没有借用其他组件的类取得这些属性。
+- 验证到什么程度：`frontend/src/pages/AdminCouponsPage.test.tsx` 以 vitest 与 `renderToStaticMarkup` 覆盖新建入口的禁用与表单显示、默认值、RM 到整数仙和空上限、各个提交结果及中止；既有标题行与停用按钮断言仅按本任务造成的变化调整。未做浏览器验收；前端检查由 PR 必需 CI 的 `frontend` 执行。
+
 ### SHOP-TASK-099 后台优惠券的列表、新建与停用接口
 
 - [x] 提供 `GET /api/admin/coupons`、`POST /api/admin/coupons` 与 `POST /api/admin/coupons/{coupon_id}/disable`。三者均由后台会话授权并经 `_NoStoreRoute` 返回 no-store；列表返回分页（每页 30）、由 cookie 算出的 CSRF、券的代码、类型、固定金额或百分比、最低消费、马来西亚起止日期、两个使用上限、已用次数与启停状态。新建严格接收券字段并提交审计；停用为幂等，只有实际停用写审计。
