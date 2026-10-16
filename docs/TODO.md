@@ -2076,7 +2076,7 @@
 - [x] 按 `docs/DESIGN.md` 1.11（提交 `2d13250`）「订单与退款状态」、「权限与资料保护」第 6 条与「数据模型」Order 一行，以及 `docs/UX.md` 0.10 的 P09、P13，扩展查单服务视图：新增 `placed_by_member`、`coupon_discount_sen`、`points_redeemed`。`placed_by_member` 只由 `claim_status == not_claimable` 判定，因此会员注销后仍保留其下单身份；游客订单及后来认领的游客订单为假。查单接口通过既有视图序列化自动带出字段，未改接口文件。
 - `confirm_receipt` 与 `submit_refund` 新增默认值为 `guest` 的关键字 `actor`，只接受 `guest` 与 `member`；确认收货记录、订单事件和退款申请均记录该操作者。新增 `app/services/account_orders.py` 的只读会员订单列表（每页 20 张、本人下单与已认领订单、创建时间和 ID 倒排、总数与越界空页）及本人订单号定位。
 - 偏离与取舍：无设计偏离；不做会员接口，会员的身份授权仍留给接口层。查单页 P09 对会员下单订单显示券与积分两行留给之后的前端任务。
-- 验证到什么程度：`tests/test_account_orders.py` 以内存 SQLite 按模型建表，覆盖本人订单隔离、排序、分页、定位、会员操作者与非法操作者、以及会员下单/游客/已认领游客订单的视图快照；既有查单测试只为新增视图字段更新。由 PR 的必需 CI 检查 backend 执行。会员接口留给 SHOP-TASK-104、105。
+- 验证到什么程度：`tests/test_account_orders.py` 以内存 SQLite 按模型建表，覆盖本人订单隔离、排序、分页、定位、会员操作者与非法操作者、以及会员下单/游客/已认领游客订单的视图快照；既有查单与退款测试只为新增视图字段更新，退款视图仍断言不含积分返还或追回字段。由 PR 的必需 CI 检查 backend 执行。会员接口留给 SHOP-TASK-104、105。
 
 ### SHOP-TASK-100 后台优惠券页的路由与导航 A05
 
