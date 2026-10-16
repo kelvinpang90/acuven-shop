@@ -110,6 +110,11 @@ export const COPY = {
     zh: "返回",
     ms: "Kembali",
   },
+  "common.create": {
+    en: "New",
+    zh: "新建",
+    ms: "Baharu",
+  },
   "common.rate_limited": {
     en: "Too many attempts. Please wait and try again later.",
     zh: "尝试次数过多，请稍后再试。",
@@ -1209,6 +1214,36 @@ export const COPY = {
     en: "Disable",
     zh: "停用",
     ms: "Nyahaktifkan",
+  },
+  "admin.coupon_min_spend": {
+    en: "Minimum item spend (RM)",
+    zh: "最低商品消费（RM）",
+    ms: "Perbelanjaan item minimum (RM)",
+  },
+  "admin.coupon_total_limit": {
+    en: "Total uses allowed",
+    zh: "总使用次数上限",
+    ms: "Had jumlah penggunaan",
+  },
+  "admin.coupon_member_limit": {
+    en: "Uses per member",
+    zh: "每会员使用次数上限",
+    ms: "Had penggunaan setiap ahli",
+  },
+  "admin.rules_apply_new": {
+    en: "Changes apply to new orders only. Existing orders keep their original amounts.",
+    zh: "修改只影响新订单，已有订单保持原金额。",
+    ms: "Perubahan hanya terpakai untuk pesanan baharu. Pesanan sedia ada mengekalkan jumlah asal.",
+  },
+  "admin.coupon_code_taken": {
+    en: "This coupon code is already in use. Choose another code.",
+    zh: "此优惠券代码已被使用，请换一个代码。",
+    ms: "Kod kupon ini sudah digunakan. Sila pilih kod lain.",
+  },
+  "admin.coupon_invalid": {
+    en: "Check the code (4–20 letters or digits), value, minimum spend, usage limits and dates.",
+    zh: "请检查代码（4 到 20 位字母或数字）、面额、最低消费、次数上限与日期。",
+    ms: "Semak kod (4–20 huruf atau digit), nilai, perbelanjaan minimum, had penggunaan dan tarikh.",
   },
   "admin.nav_stock_resets": {
     en: "Stock resets",

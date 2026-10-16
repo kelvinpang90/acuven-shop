@@ -4,12 +4,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "../App";
 import type { AdminCoupon, AdminCouponPage } from "../api/adminCoupons";
+import AdminFrame from "../components/AdminFrame";
 import { COPY, LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { htmlLang, LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { RouterProvider } from "../router";
 import type { RoutePath } from "../router";
-import AdminCouponsPage, { AdminCouponsContent, AdminCouponsView, disableCoupon, disableStep, formatCouponDate, INITIAL_LIST, listStep, loadCoupons, pagerOf, reloadedState, updatedState } from "./AdminCouponsPage";
+import AdminCouponsPage, { AdminCouponsContent, AdminCouponsView, canCreate, couponInputOf, createCoupon, createStep, DEFAULT_COUPON_FORM, disableCoupon, disableStep, formatCouponDate, INITIAL_LIST, listStep, loadCoupons, pagerOf, reloadedState, updatedState } from "./AdminCouponsPage";
 import type { DisableMoves, ListState, Moves } from "./AdminCouponsPage";
 
 const COUPONS_PATH = "/admin/coupons";
@@ -25,7 +26,7 @@ function renderApp(language: Language) { return renderToStaticMarkup(<App initia
 function page(overrides: Partial<AdminCouponPage> = {}): AdminCouponPage { return { total: 2, page: 1, page_size: 30, coupons: [FIXED, PERCENT], csrf_token: "csrf", ...overrides }; }
 function shown(list: AdminCouponPage): ListState { return { busy: false, list, error: null }; }
 function wrap(element: ReactNode, language: Language = "en") { return <LanguageProvider storage={storage(language)}><RouterProvider initialPath={PATH}>{element}</RouterProvider></LanguageProvider>; }
-function render(state: ListState = shown(page()), disabling: number | null = null, language: Language = "en") { return renderToStaticMarkup(wrap(<AdminCouponsView state={state} disabling={disabling} onDisable={() => undefined} onPage={() => undefined} />, language)); }
+function render(state: ListState = shown(page()), disabling: number | null = null, language: Language = "en", showingForm = false, form = DEFAULT_COUPON_FORM, creating = false, saveError: CopyKey | null = null) { return renderToStaticMarkup(wrap(<AdminCouponsView state={state} disabling={disabling} form={form} creating={creating} showingForm={showingForm} saveError={saveError} onDisable={() => undefined} onPage={() => undefined} onCreate={() => undefined} onBack={() => undefined} onForm={() => undefined} onSave={() => undefined} />, language)); }
 function escapeHtml(value: string) { return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;"); }
 function unescapeHtml(value: string) { return value.replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"); }
 function textNodes(html: string) { return html.replace(/<!--[\s\S]*?-->/g, "\n").replace(/<[^>]*>/g, "\n").split("\n").map((value) => unescapeHtml(value).trim()).filter((value) => value !== ""); }
@@ -66,8 +67,8 @@ describe("AdminCouponsPage", () => {
     }
     expect(html).toContain(`<span class="site-admin__bar-title">${COPY["admin.nav_coupons"][language]}</span>`);
   });
-  // The former exact content assertion changes only because the list now follows: original h1 and note must begin content.
-  it.each(LANGUAGES)("starts content with the original title and note in %s", (language) => { const html = renderToStaticMarkup(wrap(<AdminCouponsContent />, language)); expect(html.startsWith(`<div class="site-admin-coupons"><h1 class="acs-admin__h">${escapeHtml(COPY["admin.nav_coupons"][language])}</h1><p class="site-admin-coupons__note">${escapeHtml(COPY["admin.coupon_listed_note"][language])}</p>`)).toBe(true); });
+  // Existing SHOP-TASK-100 assertion changes only because A05 adds common.create beside the original title.
+  it.each(LANGUAGES)("starts content with the original title and note in %s", (language) => { const html = renderToStaticMarkup(wrap(<AdminCouponsContent />, language)); expect(html.startsWith(`<div class="site-admin-coupons"><div class="site-admin-coupons__list-content"><div class="site-admin-coupons__title"><h1 class="acs-admin__h">${escapeHtml(COPY["admin.nav_coupons"][language])}</h1><button class="acs-admin__btn" type="button" disabled="">${escapeHtml(COPY["common.create"][language])}</button></div><p class="site-admin-coupons__note">${escapeHtml(COPY["admin.coupon_listed_note"][language])}</p>`)).toBe(true); });
   // UX A05: table/cards show all fields, full dates, limits including —, statuses, and the active-only disable button.
   it.each(LANGUAGES)("renders A05 rows and cards in %s", (language) => { const html = render(undefined, null, language); for (const key of ["admin.coupon_code", "admin.coupon_type", "admin.coupon_value", "admin.coupon_valid", "admin.coupon_usage", "admin.filter_status", "admin.coupon_fixed", "admin.coupon_percent", "admin.coupon_enabled", "admin.coupon_disabled"] as const) expect(html).toContain(escapeHtml(COPY[key][language])); expect(html).toContain("RM 10.00"); expect(html).toContain("20%"); expect(html).toContain("12 / 100"); expect(html).toContain("0 / —"); expect(html.match(new RegExp(`<button[^>]*>${escapeHtml(COPY["admin.coupon_disable"][language])}</button>`, "g"))?.length).toBe(2); });
   // Kelvin 2026-10-12 决定「有效期只录日期」与本任务验收「有效期按界面语言显示起始日与截止日本身（不按访客时区换算，写法同 A07 的营业日期）」：
@@ -107,14 +108,15 @@ describe("AdminCouponsPage", () => {
   it("ignores an aborted read", async () => { stubFetch(json(200, page())); const controller = new AbortController(); const target = moves<ListState>(); const pending = loadCoupons(1, controller.signal, target.target); controller.abort(); await pending; expect(target.events).toEqual([]); });
   // Disable result mapping is the A05 policy for ok, reload, login, network, and failure.
   it("maps disable results", () => { expect(disableStep({ kind: "ok", coupon: PERCENT })).toEqual({ kind: "updated", coupon: PERCENT }); expect(disableStep({ kind: "csrf" })).toEqual({ kind: "reload" }); expect(disableStep({ kind: "not_found" })).toEqual({ kind: "reload" }); expect(disableStep({ kind: "none" })).toBe("login"); expect(disableStep({ kind: "network" })).toEqual({ kind: "error", error: "common.network_check" }); expect(disableStep({ kind: "failed" })).toEqual({ kind: "error", error: "common.error_retry" }); });
-  // Disable API outcomes update, reload, redirect, or show precisely the required state; updated active rows lose their button.
-  it.each<[Response | (() => never), string[], AdminCoupon[]]>([[json(200, { ...FIXED, active: false }), ["update", "finish"], [{ ...FIXED, active: false }]], [json(404, {}), ["reload", "finish"], []], [json(403, {}), ["reload", "finish"], []], [json(401, {}), [`replace ${LOGIN}`], []], [networkDown, ["error common.network_check", "finish"], []], [json(500, {}), ["error common.error_retry", "finish"], []]])("handles disable outcome (%#)", async (reply, events, updates) => { const calls = stubFetch(reply); const controller = new AbortController(); const target = disableMoves(); await disableCoupon(FIXED.id, "csrf", controller.signal, target.target); expect(String(calls[0]?.url)).toBe("/api/admin/coupons/1/disable"); expect(target.events).toEqual(events); expect(target.updates).toEqual(updates); if (updates.length > 0) expect(render(shown(page({ coupons: updates }))).match(/<button\b/g)).toBeNull(); });
+  // Existing SHOP-TASK-102 assertion changes only because the new title-row create button means it can no longer say no buttons.
+  it.each<[Response | (() => never), string[], AdminCoupon[]]>([[json(200, { ...FIXED, active: false }), ["update", "finish"], [{ ...FIXED, active: false }]], [json(404, {}), ["reload", "finish"], []], [json(403, {}), ["reload", "finish"], []], [json(401, {}), [`replace ${LOGIN}`], []], [networkDown, ["error common.network_check", "finish"], []], [json(500, {}), ["error common.error_retry", "finish"], []]])("handles disable outcome (%#)", async (reply, events, updates) => { const calls = stubFetch(reply); const controller = new AbortController(); const target = disableMoves(); await disableCoupon(FIXED.id, "csrf", controller.signal, target.target); expect(String(calls[0]?.url)).toBe("/api/admin/coupons/1/disable"); expect(target.events).toEqual(events); expect(target.updates).toEqual(updates); if (updates.length > 0) expect(render(shown(page({ coupons: updates })))).not.toMatch(new RegExp(`<button[^>]*>${escapeHtml(COPY["admin.coupon_disable"].en)}</button>`)); });
   // 本任务验收「同一时间只停用一张——进行中所有停用按钮都禁用，只有被点的那张标 aria-busy」：两张启用券，点的是 WELCOME，
   // 桌面行与手机卡片里只有 WELCOME 的那一项为 aria-busy="true"，SAVE20 的行与卡片不是，四个停用按钮都带 disabled。
+  // Existing SHOP-TASK-102 assertion selects only disable buttons because A05 adds the independent create button.
   it("disables every disable button and marks only the clicked coupon busy", () => {
     const secondActive = { ...PERCENT, active: true };
     const html = render(shown(page({ coupons: [FIXED, secondActive] })), FIXED.id);
-    const buttons = [...html.matchAll(/<button\b[^>]*>[^<]*<\/button>/g)].map((match) => match[0]);
+    const buttons = [...html.matchAll(new RegExp(`<button[^>]*>${escapeHtml(COPY["admin.coupon_disable"].en)}</button>`, "g"))].map((match) => match[0]);
     expect(buttons).toHaveLength(4);
     expect(buttons.every((button) => button.includes('disabled=""'))).toBe(true);
     const items = [...html.matchAll(/<(tr|li)\b[^>]*>[\s\S]*?<\/\1>/g)].map((match) => match[0]).filter((item) => item.includes("WELCOME") || item.includes("SAVE20"));
@@ -146,4 +148,60 @@ describe("AdminCouponsPage", () => {
   it("ignores an aborted disable", async () => { stubFetch(json(200, { ...FIXED, active: false })); const controller = new AbortController(); const target = disableMoves(); const pending = disableCoupon(FIXED.id, "csrf", controller.signal, target.target); controller.abort(); await pending; expect(target.events).toEqual([]); });
   // UI text is dictionary copy, API coupon data, formatted dates/values/counts, or A05's specified punctuation.
   it.each(LANGUAGES)("uses dictionary text only in %s", (language) => { const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language])); for (const coupon of [FIXED, PERCENT]) { const start = formatCouponDate(coupon.starts_on, language); const end = formatCouponDate(coupon.ends_on, language); const limit = String(coupon.total_use_limit ?? "—"); const usage = `${coupon.used_count} / ${limit}`; const valid = `${start} – ${end}`; allowed.add(coupon.code); allowed.add(coupon.type === "fixed" ? "RM 10.00" : "20%"); allowed.add(start); allowed.add(end); allowed.add(valid); allowed.add(String(coupon.used_count)); allowed.add(limit); allowed.add(usage); allowed.add(`${COPY["admin.coupon_usage"][language]} ${usage} · ${valid}`); } for (const value of ["/", "–", "·", "‹", "›"]) allowed.add(value); for (const html of [render(undefined, null, language), render({ busy: false, list: page(), error: "common.error_retry" }, null, language), render(shown(page({ total: 31 })), null, language)]) for (const value of visibleTexts(html)) expect(allowed.has(value), value).toBe(true); });
+  // 本任务验收「页面文字全部来自字典」：打开新建表单时新增的标题、字段、说明与按钮均来自现有字典键。
+  it.each(LANGUAGES)("uses dictionary text for the opened form in %s", (language) => { const html = render(shown(page()), null, language, true); for (const key of ["common.create", "common.back", "admin.coupon_code", "admin.coupon_type", "admin.coupon_fixed", "admin.coupon_percent", "admin.coupon_value", "admin.coupon_valid", "admin.coupon_min_spend", "admin.coupon_total_limit", "admin.coupon_member_limit", "admin.rules_apply_new", "common.save"] as const) expect(html).toContain(escapeHtml(COPY[key][language])); });
+  // 本任务验收「字段为 admin.coupon_code（文本，必填）」及「固定金额时以 RM 输入、步长 0.01、0.01 到 100000」：字段本身，而非页面中其他输入，带这些约束。
+  it("renders the new-coupon form and converts its values", () => { const html = render(shown(page()), null, "en", true); const inputs = tags(html, "input"); const code = inputs.find((tag) => attributes(tag).get("type") === undefined); const fixed = inputs.find((tag) => attributes(tag).get("value") === "fixed"); const value = inputs.find((tag) => attributes(tag).get("min") === "0.01"); const minimum = inputs.find((tag) => attributes(tag).get("min") === "0"); const limits = inputs.filter((tag) => attributes(tag).get("min") === "1" && attributes(tag).get("max") === "1000000"); expect(html).toContain(`<h2 class="acs-admin__h">${COPY["common.create"].en}</h2>`); expect(html).toContain(COPY["common.back"].en); expect(attributes(code ?? "").has("required")).toBe(true); expect(attributes(value ?? "").has("required")).toBe(true); expect(attributes(minimum ?? "").has("required")).toBe(true); expect(attributes(fixed ?? "").get("checked")).toBe(""); expect(Object.fromEntries(attributes(value ?? ""))).toMatchObject({ min: "0.01", max: "100000", step: "0.01" }); expect(Object.fromEntries(attributes(minimum ?? ""))).toMatchObject({ value: "0", min: "0", max: "100000", step: "0.01" }); expect(limits).toHaveLength(2); expect(limits.map((tag) => attributes(tag).get("value"))).toEqual(["", ""]); expect(couponInputOf({ ...DEFAULT_COUPON_FORM, code: "SAVE", value: "12.34", min_spend: "0.1", starts_on: "2026-01-01", ends_on: "2026-12-31" })).toMatchObject({ amount_off_sen: 1234, min_subtotal_sen: 10, total_use_limit: null, per_member_use_limit: null }); expect(couponInputOf({ ...DEFAULT_COUPON_FORM, value: "19.99", min_spend: "19.99" })).toMatchObject({ amount_off_sen: 1999, min_subtotal_sen: 1999 }); expect(couponInputOf({ ...DEFAULT_COUPON_FORM, type: "percent", value: "20", starts_on: "2026-01-01", ends_on: "2026-12-31" })).toMatchObject({ amount_off_sen: null, percent_off: 20 }); });
+  // Acceptance: create is available only after the most recent list read supplied its CSRF token; A05 form opening hides the phone list area.
+  it("gates create on a successful read and renders the opened form", () => { const unavailable: ListState = { busy: false, list: null, error: "common.error_retry" }; expect(render(INITIAL_LIST)).toMatch(/<button[^>]*disabled=""[^>]*>New<\/button>/); expect(render(unavailable)).toMatch(/<button[^>]*disabled=""[^>]*>New<\/button>/); expect(render(shown(page()))).toMatch(/<button class="acs-admin__btn" type="button">New<\/button>/); const open = render(shown(page()), null, "en", true); expect(open).toContain('site-admin-coupons--form-open'); expect(open).toContain('site-admin-coupons__list-content'); expect(open).toContain(`<h2 class="acs-admin__h">${COPY["common.create"].en}</h2>`); expect(open).toContain(COPY["common.back"].en); expect(render(shown(page()))).not.toContain('site-admin-coupons__form-content'); });
+  // 本任务验收「fixed 时以 RM 输入、步长 0.01、0.01 到 100000；percent 时为 1 到 100 的整数」及「两个都必填」：类型切换只改变优惠值字段的原生约束。
+  it("uses the A05 native form constraints and busy save state", () => { const fixed = render(shown(page()), null, "en", true, DEFAULT_COUPON_FORM, true); const fixedInputs = tags(fixed, "input"); const fixedRadio = fixedInputs.find((tag) => attributes(tag).get("value") === "fixed"); const percentRadio = fixedInputs.find((tag) => attributes(tag).get("value") === "percent"); const fixedValue = fixedInputs.find((tag) => attributes(tag).get("min") === "0.01"); const fixedDates = fixedInputs.filter((tag) => attributes(tag).get("type") === "date"); expect(attributes(fixedRadio ?? "").get("checked")).toBe(""); expect(attributes(percentRadio ?? "").has("checked")).toBe(false); expect(Object.fromEntries(attributes(fixedValue ?? ""))).toMatchObject({ min: "0.01", max: "100000", step: "0.01" }); expect(fixedDates).toHaveLength(2); expect(fixedDates.every((tag) => attributes(tag).has("required"))).toBe(true); expect(fixed).toMatch(/<button[^>]*disabled=""[^>]*aria-busy="true"[^>]*>Save<\/button>/); const percent = render(shown(page()), null, "en", true, { ...DEFAULT_COUPON_FORM, type: "percent" }); const percentInputs = tags(percent, "input"); const percentValue = percentInputs.find((tag) => attributes(tag).get("min") === "1" && attributes(tag).get("max") === "100"); expect(attributes(percentInputs.find((tag) => attributes(tag).get("value") === "fixed") ?? "").has("checked")).toBe(false); expect(attributes(percentInputs.find((tag) => attributes(tag).get("value") === "percent") ?? "").get("checked")).toBe(""); expect(Object.fromEntries(attributes(percentValue ?? ""))).toMatchObject({ min: "1", max: "100", step: "1" }); expect(attributes(percentValue ?? "").has("required")).toBe(true); });
+  // 本任务验收「手机顶栏标题仍为 admin.nav_coupons，不改后台框架」：打开新建表单不改变后台框架的顶栏文案。
+  it("keeps the coupon title in the phone bar while the form is open", () => { const html = renderToStaticMarkup(wrap(<AdminFrame current="coupons"><AdminCouponsView state={shown(page())} disabling={null} form={DEFAULT_COUPON_FORM} creating={false} showingForm saveError={null} onDisable={() => undefined} onPage={() => undefined} onCreate={() => undefined} onBack={() => undefined} onForm={() => undefined} onSave={() => undefined} /></AdminFrame>)); expect(html).toContain(`<span class="site-admin__bar-title">${COPY["admin.nav_coupons"].en}</span>`); });
+  // Kelvin 2026-10-12 decision and acceptance: each create result retains or clears the form and selects the prescribed retry page.
+  it.each<[Response | (() => never), string[]]>([[json(409, { detail: "coupon_code_taken" }), ["error admin.coupon_code_taken", "finish"]], [json(422, {}), ["error admin.coupon_invalid", "finish"]], [json(403, {}), ["error common.error_retry", "reload 3", "finish"]], [json(401, {}), [`replace ${LOGIN}`]], [networkDown, ["error common.network_check", "reload 1", "finish"]], [json(500, {}), ["error common.error_retry", "finish"]]])("handles required create outcome (%#)", async (reply, expected) => { stubFetch(reply); const events: string[] = []; await createCoupon({ ...DEFAULT_COUPON_FORM, code: "NEW", value: "1", starts_on: "2026-01-01", ends_on: "2026-12-31" }, "csrf", 3, new AbortController().signal, { clear: () => { events.push("clear"); }, error: (error) => { events.push(`error ${error}`); }, reload: (next) => { events.push(`reload ${next}`); }, finish: () => { events.push("finish"); }, replace: (path) => { events.push(`replace ${path}`); } }); expect(events).toEqual(expected); });
+  // Kelvin's 2026-10-12 decision: each create result takes its specified page, form, or login action.
+  it("maps every create outcome", async () => { expect(createStep({ kind: "code_taken" })).toEqual({ kind: "error", error: "admin.coupon_code_taken" }); expect(createStep({ kind: "invalid" })).toEqual({ kind: "error", error: "admin.coupon_invalid" }); const calls = stubFetch(json(201, { ...FIXED, code: "NEW" })); const events: string[] = []; await createCoupon({ ...DEFAULT_COUPON_FORM, code: "NEW", value: "1", starts_on: "2026-01-01", ends_on: "2026-12-31" }, "csrf", 3, new AbortController().signal, { clear: () => { events.push("clear"); }, error: (error) => { events.push(`error ${error}`); }, reload: (page) => { events.push(`reload ${page}`); }, finish: () => { events.push("finish"); }, replace: (path) => { events.push(`replace ${path}`); } }); expect(calls[0]?.url).toBe("/api/admin/coupons"); expect(events).toEqual(["clear", "reload 1", "finish"]); });
+  // 本任务验收「列表读取成功（取得 csrf_token）之前禁用，读取失败时也禁用」与「重新读取失败后再提交时显示 common.error_retry，不静默不动」：
+  // 新建按钮与保存共用 canCreate——只有手里有列表（令牌）且没有读取进行中时为真；读取失败（list 为 null）、读取中都为假。
+  it("allows creating only with a list from a completed read", () => {
+    expect(canCreate(INITIAL_LIST)).toBe(false);
+    expect(canCreate(shown(page()))).toBe(true);
+    expect(canCreate({ busy: true, list: page(), error: null })).toBe(false);
+    for (const read of [{ kind: "network" }, { kind: "failed" }] as const) { const step = listStep(read); expect(step !== "login" && canCreate(step)).toBe(false); }
+    const step = listStep({ kind: "ok", page: page() }); expect(step !== "login" && canCreate(step)).toBe(true);
+    expect(canCreate(reloadedState({ busy: true, list: page(), error: "common.error_retry" }, { busy: false, list: null, error: "common.network_check" }))).toBe(false);
+  });
+  // 本任务验收「页面文字全部来自字典」：打开的新建表单（含各种提交提示）里看得见的文字全部是字典文案；列表为空，所以没有券数据。
+  it.each(LANGUAGES)("uses dictionary text only in the opened form in %s", (language) => {
+    const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language]));
+    const empty = shown(page({ total: 0, coupons: [] }));
+    for (const saveError of [null, "admin.coupon_code_taken", "admin.coupon_invalid", "common.network_check", "common.error_retry"] as const) {
+      const html = render(empty, null, language, true, DEFAULT_COUPON_FORM, false, saveError);
+      if (saveError !== null) expect(html).toContain(escapeHtml(COPY[saveError][language]));
+      for (const value of visibleTexts(html)) expect(allowed.has(value), value).toBe(true);
+    }
+  });
+  // 本任务验收「离开页面后提交的结果不再更新页面」：中止后的新建结果不清空表单、不显示提示、不重新读取、不进入登录。
+  it("ignores an aborted create", async () => {
+    stubFetch(json(201, { ...FIXED, code: "NEW" }));
+    const controller = new AbortController(); const events: string[] = [];
+    const pending = createCoupon({ ...DEFAULT_COUPON_FORM, code: "NEW", value: "1", starts_on: "2026-01-01", ends_on: "2026-12-31" }, "csrf", 1, controller.signal, { clear: () => { events.push("clear"); }, error: (error) => { events.push(`error ${error}`); }, reload: (next) => { events.push(`reload ${next}`); }, finish: () => { events.push("finish"); }, replace: (path) => { events.push(`replace ${path}`); } });
+    controller.abort(); await pending;
+    expect(events).toEqual([]);
+  });
+  // 本任务验收「列表读取成功之前禁用」：翻页或重新读取进行中（旧列表还在、busy 为真）时，页面上的 New 按钮也禁用。
+  it("disables create on the page while a read is in progress", () => {
+    expect(render({ busy: true, list: page(), error: null })).toMatch(/<button class="acs-admin__btn" type="button" disabled="">New<\/button>/);
+  });
+  // 本任务验收「提交的提示是表单自己的状态……与列表区的提示分开，重新读取列表（成功或失败）不清掉也不改它」：
+  // View 只按 saveError 显示表单里的提示，与列表状态无关——列表重新读取中、读取成功或读取失败时，表单提示都在 common.save 旁原样显示，列表区的提示另在列表区。
+  it("shows the form's save message whatever the list state is", () => {
+    for (const state of [{ busy: true, list: page(), error: null }, shown(page()), { busy: false, list: null, error: "common.error_retry" }] as ListState[]) {
+      const html = render(state, null, "en", true, DEFAULT_COUPON_FORM, false, "common.network_check");
+      expect(element(html, "div", "site-admin-coupons__save")).toContain(escapeHtml(COPY["common.network_check"].en));
+      expect(element(html, "div", "site-admin-coupons__list")).not.toContain(escapeHtml(COPY["common.network_check"].en));
+      if (state.error !== null) expect(element(html, "div", "site-admin-coupons__list")).toContain(escapeHtml(COPY[state.error].en));
+    }
+  });
 });
