@@ -110,6 +110,11 @@ export const COPY = {
     zh: "返回",
     ms: "Kembali",
   },
+  "common.create": {
+    en: "New",
+    zh: "新建",
+    ms: "Baharu",
+  },
   "common.rate_limited": {
     en: "Too many attempts. Please wait and try again later.",
     zh: "尝试次数过多，请稍后再试。",
