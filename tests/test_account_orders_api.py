@@ -7,6 +7,7 @@ thread, matching the member-session API tests.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 
@@ -54,6 +55,7 @@ from app.services.order_access import (
 from app.services.order_access import (
     issue_order_access,
 )
+from app.services.order_lookup import lookup_orders
 from app.services.order_rules import generate_order_number
 
 LIST_URL = "/api/member/orders"
@@ -291,6 +293,11 @@ def test_view_hides_other_and_guest_orders_but_marks_member_snapshot(
     assert view.json()["coupon_discount_sen"] == 100
     assert view.json()["points_redeemed"] == 50
     assert claimed.json()["placed_by_member"] is False
+    # UX P09 会员模式：详情就是查单视图（收货资料、逐件实付与退款部分），不另起一套字段。
+    (expected,) = lookup_orders(db, [own.id], "en", _now())
+    assert view.json() | {"server_time": None} == expected.model_dump(mode="json") | {
+        "server_time": None
+    }
     missing = client.post(VIEW_URL, headers=headers, json={"order_number": generate_order_number()})
     assert missing.status_code == 404
     for order in (outsider, guest):
@@ -447,4 +454,57 @@ def test_member_order_endpoints_require_member_session_not_lookup_cookie(
     for response in responses:
         assert response.status_code == 401
         assert response.json() == {"detail": "member_session_required"}
+        _assert_no_store(response)
+
+
+MAX_BODY_BYTES = 8 * 1024
+
+
+@pytest.mark.parametrize("url", [VIEW_URL, CONFIRM_URL])
+def test_post_endpoints_answer_in_contract_order_without_echo(
+    db: Session, client: TestClient, url: str
+) -> None:
+    """SHOP-TASK-104 验收：检查顺序 413 → 415 → require_member →（确认收货）CSRF → 422 → 404，
+    每一步都带 no-store、不回显请求内容；后一步的毛病不会抢在前一步之前回答。
+    """
+    member, other = _member(db, 10), _member(db, 11)
+    headers = _headers(db, member)
+    outsider = _order(db, other)
+    number = outsider.order_number
+    padding = "0123456789" * (MAX_BODY_BYTES // 10)
+    json_type = {"Content-Type": "application/json"}
+    key = {"Idempotency-Key": "i" * 16}
+    no_csrf = {"Cookie": headers["Cookie"]}
+    bad_body = json.dumps({"order_number": number, "extra": "secret-extra"})
+    cases = [
+        # 超限且不是 JSON、没有会话：413 最先。
+        (413, None, {"Content-Type": "text/plain"}, json.dumps({"note": padding})),
+        # 不是 JSON、没有会话：415 先于会员检查。
+        (415, None, {"Content-Type": "text/plain"}, bad_body),
+        # 没有会话、请求体不合法：401 先于 422。
+        (401, "member_session_required", json_type | key, bad_body),
+        # 有会话、请求体不合法、他人订单：422 先于 404，且不回显订单号与多出的字段。
+        (422, None, headers | json_type | key, bad_body),
+    ]
+    if url == CONFIRM_URL:
+        # 有会话、缺 CSRF、请求体不合法：403 先于 422。
+        cases.insert(3, (403, "csrf_failed", no_csrf | json_type | key, bad_body))
+    for status, detail, request_headers, content in cases:
+        response = client.post(url, headers=request_headers, content=content)
+        assert response.status_code == status, (status, response.text)
+        if detail is not None:
+            assert response.json() == {"detail": detail}
+        assert number not in response.text
+        assert "secret-extra" not in response.text
+        assert "0123456789" not in response.text
+        _assert_no_store(response)
+
+
+def test_list_rejects_bad_page_without_echo(db: Session, client: TestClient) -> None:
+    """SHOP-TASK-104 验收：page 只收 1 到 10000 的整数，不合法 422、不回显所给的值、带 no-store。"""
+    headers = _headers(db, _member(db, 12))
+    for page in ("0", "10001", "7x7x7"):
+        response = client.get(LIST_URL, headers=headers, params={"page": page})
+        assert response.status_code == 422, (page, response.text)
+        assert "7x7x7" not in response.text and "10001" not in response.text
         _assert_no_store(response)
