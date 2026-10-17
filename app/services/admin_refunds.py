@@ -12,6 +12,20 @@
 复用而不复制：累计已退与剩余可退用 SHOP-TASK-029 的 refund_state；分页常量沿用
 app/services/admin_orders.py。批准与拒绝在 app/services/refund_review.py（SHOP-TASK-040）。
 
+详情的积分返还与追回（SHOP-TASK-106）依据 DESIGN 1.11「计价、优惠、积分与库存」
+第 5 条（退款批准时返还未过期的抵扣积分并追回获得积分，余额不足记待抵扣）、
+docs/UX.md 0.10 的 A03（详情显示 admin.refund_points）与 docs/HANDOFF.md 0.46：
+- placed_by_member：订单的 claim_status 为 not_claimable（会员下单；注销后仍为真，
+  认领的游客订单为假），与 app/services/order_lookup.py 的同名字段相同。
+- approved：取该申请的实际积分流水。points_returned 为 refund_return 之和，
+  points_reversed 为 refund_reversal 之和取负加 debt_add 之和（从余额追回与记入
+  待抵扣之和）；points_estimated 为假。游客订单与注销后批准的订单没有流水，为 0。
+- requested：以该申请各件逐件快照的 points_discount 与 points_earned 之和调用
+  SHOP-TASK-087 的 estimate_refund_points（订单 member_id 为空或会员不是 active 时
+  为零）；points_returned 为预估的实际返还，points_reversed 为预估的 reversed_total，
+  points_estimated 为真。预估与批准时可能因到期或余额变化而不同，以批准时为准。
+- rejected：三个积分字段都为空。
+
 访问授权由调用方（app/api/admin_refunds.py）先行校验；这里只按申请的内部 ID 操作。
 本模块不写日志。库里的时间一律是不带时区的 UTC，返回的视图里换成带 UTC 时区的时间。
 """
@@ -25,10 +39,22 @@ from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import AdminAccount, Order, OrderItem, RefundLine, RefundRequest
-from app.models.refund import REFUND_APPROVED
+from app.models import (
+    AdminAccount,
+    Order,
+    OrderItem,
+    OrderItemUnit,
+    PointEntry,
+    RefundLine,
+    RefundLineUnit,
+    RefundRequest,
+)
+from app.models.order import CLAIM_NOT_CLAIMABLE
+from app.models.points import KIND_DEBT_ADD, KIND_REFUND_RETURN, KIND_REFUND_REVERSAL
+from app.models.refund import REFUND_APPROVED, REFUND_REQUESTED
 from app.services.admin_orders import PAGE_SIZE
 from app.services.catalog import Language
+from app.services.points_refund import estimate_refund_points
 from app.services.refunds import refund_state
 
 # 「订单与退款状态」的三种申请状态，与 app/models/refund.py 的 REFUND_STATUSES 相同。
@@ -95,6 +121,13 @@ class AdminRefundDetail(BaseModel):
     # 该单累计已退与剩余可退（SHOP-TASK-029 的 refund_state）。
     refunded_sen: int
     refundable_left_sen: int
+    # 订单的 claim_status 为 not_claimable（会员下单）。
+    placed_by_member: bool
+    # 积分返还与追回（SHOP-TASK-106）：approved 为实际流水，requested 为预估，
+    # rejected 都为空。points_reversed 为从余额追回与记入待抵扣之和。
+    points_returned: int | None
+    points_reversed: int | None
+    points_estimated: bool | None
 
 
 def _utc(value: datetime) -> datetime:
@@ -166,10 +199,21 @@ def query_refunds(
     return AdminRefundPage(total=total, page=page, page_size=PAGE_SIZE, refunds=refunds)
 
 
-def refund_detail(db: Session, refund_request_id: int, lang: Language) -> AdminRefundDetail | None:
-    """一笔退款申请的后台详情；申请不存在时为空。只读，不写审计。"""
+def refund_detail(
+    db: Session, refund_request_id: int, lang: Language, now: datetime
+) -> AdminRefundDetail | None:
+    """一笔退款申请的后台详情；申请不存在时为空。只读，不写审计，不锁行。
+
+    now 为不带时区的 UTC，只用于审核中申请的积分预估（判断批次是否已过期）。
+    """
     stmt = (
-        select(RefundRequest, Order.order_number, Order.status, AdminAccount.username)
+        select(
+            RefundRequest,
+            Order.order_number,
+            Order.status,
+            Order.claim_status,
+            AdminAccount.username,
+        )
         .join(Order, Order.id == RefundRequest.order_id)
         .outerjoin(AdminAccount, AdminAccount.id == RefundRequest.reviewer_admin_id)
         .where(RefundRequest.id == refund_request_id)
@@ -177,7 +221,7 @@ def refund_detail(db: Session, refund_request_id: int, lang: Language) -> AdminR
     found = db.execute(stmt).tuples().one_or_none()
     if found is None:
         return None
-    request, order_number, order_status, reviewer_username = found
+    request, order_number, order_status, claim_status, reviewer_username = found
 
     line_stmt = (
         select(OrderItem, RefundLine.quantity)
@@ -188,6 +232,7 @@ def refund_detail(db: Session, refund_request_id: int, lang: Language) -> AdminR
     line_rows = list(db.execute(line_stmt).tuples())
     approved = _approved_quantities(db, [item.id for item, _ in line_rows])
     state = refund_state(db, request.order_id)
+    points_returned, points_reversed, points_estimated = _refund_points(db, request, now)
 
     return AdminRefundDetail(
         id=request.id,
@@ -212,7 +257,39 @@ def refund_detail(db: Session, refund_request_id: int, lang: Language) -> AdminR
         ],
         refunded_sen=state.refunded_sen,
         refundable_left_sen=state.refundable_left_sen,
+        placed_by_member=claim_status == CLAIM_NOT_CLAIMABLE,
+        points_returned=points_returned,
+        points_reversed=points_reversed,
+        points_estimated=points_estimated,
     )
+
+
+def _refund_points(
+    db: Session, request: RefundRequest, now: datetime
+) -> tuple[int | None, int | None, bool | None]:
+    """该申请的（返还、追回、是否预估）；追回为从余额追回与记入待抵扣之和。"""
+    if request.status == REFUND_APPROVED:
+        stmt = select(PointEntry.kind, PointEntry.points).where(
+            PointEntry.refund_request_id == request.id
+        )
+        entries = db.execute(stmt).tuples().all()
+        returned = sum(points for kind, points in entries if kind == KIND_REFUND_RETURN)
+        reversed_ = -sum(points for kind, points in entries if kind == KIND_REFUND_REVERSAL)
+        reversed_ += sum(points for kind, points in entries if kind == KIND_DEBT_ADD)
+        return returned, reversed_, False
+    if request.status == REFUND_REQUESTED:
+        unit_stmt = (
+            select(OrderItemUnit.points_discount, OrderItemUnit.points_earned)
+            .join(RefundLineUnit, RefundLineUnit.order_item_unit_id == OrderItemUnit.id)
+            .join(RefundLine, RefundLine.id == RefundLineUnit.refund_line_id)
+            .where(RefundLine.refund_request_id == request.id)
+        )
+        rows = db.execute(unit_stmt).tuples().all()
+        points_back = sum(discount for discount, _ in rows)
+        points_reversed = sum(earned for _, earned in rows)
+        estimate = estimate_refund_points(db, request.order_id, points_back, points_reversed, now)
+        return estimate.returned, estimate.reversed_total, True
+    return None, None, None
 
 
 def _approved_quantities(db: Session, order_item_ids: list[int]) -> dict[int, int]:

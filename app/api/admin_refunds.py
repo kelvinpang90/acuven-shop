@@ -19,6 +19,9 @@ A03。路径只用退款申请的内部整数 ID；订单号与收货资料不�
 2. require_admin（401）→ 语言参数（422）。
 详情（GET）：require_admin（401）→ 路径里的申请 ID 与语言参数（422）→
 申请不存在 404 not_found → 返回，另带由 cookie 算出的 CSRF 令牌。不写审计。
+积分返还与追回（placed_by_member、points_returned、points_reversed、
+points_estimated，SHOP-TASK-106）由 refund_detail 按当前时间给出，
+取值规则见 app/services/admin_refunds.py。
 批准与拒绝（POST …/approve、…/reject），每一步不通过即停止：
 1. 请求体超过 8 KB 413 → 不是 JSON 415；
 2. require_admin（401）；
@@ -169,12 +172,12 @@ def detail(
     lang: LanguageDep,
     session: SessionDep,
 ) -> AdminRefundDetailOut:
-    """申请详情含审核理由（只在后台返回），不含收货资料；不写审计。"""
+    """申请详情含审核理由（只在后台返回）与积分返还与追回，不含收货资料；不写审计。"""
     csrf_token = csrf_token_for_cookie(admin.cookie_value)
     if csrf_token is None:
         # require_admin 通过时 cookie 格式必然合法；这里只为类型收窄。
         raise HTTPException(status_code=401, detail="admin_session_required")
-    found = refund_detail(session, refund_id, lang)
+    found = refund_detail(session, refund_id, lang, _utcnow())
     if found is None:
         raise _not_found()
     return AdminRefundDetailOut.model_validate({**found.model_dump(), "csrf_token": csrf_token})
