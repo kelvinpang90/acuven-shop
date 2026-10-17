@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
+from app.api.account_orders import router as account_orders_router
 from app.api.admin_auth import router as admin_auth_router
 from app.api.admin_coupons import router as admin_coupons_router
 from app.api.admin_orders import router as admin_orders_router
@@ -54,6 +55,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(member_deletion_router)
     app.include_router(member_orders_router)
     app.include_router(member_pay_router)
+    app.include_router(account_orders_router)
     app.include_router(admin_auth_router)
     app.include_router(admin_coupons_router)
     app.include_router(admin_orders_router)
