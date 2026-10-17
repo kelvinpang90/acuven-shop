@@ -268,11 +268,14 @@ def test_member_points_estimate_is_private_read_only_and_uses_snapshots(
     assert guest_response.headers["cache-control"] == "no-store"
     # 只读：预估前后积分与退款各表内容不变。
     assert _snapshot(engine) == before
-    # 本人订单定位：他人的会员订单一律 404 order_not_found。
-    hidden = client.post(ESTIMATE_URL, json=_payload(order), headers=_headers(db, other))
-    assert hidden.status_code == 404
-    assert hidden.json() == {"detail": "order_not_found"}
-    assert hidden.headers["cache-control"] == "no-store"
+    # 本人订单定位：他人的会员订单与未认领的游客订单一律 404 order_not_found。
+    unclaimed = _order(db, None)
+    db.commit()
+    for target, viewer in ((order, other), (unclaimed, member)):
+        hidden = client.post(ESTIMATE_URL, json=_payload(target), headers=_headers(db, viewer))
+        assert hidden.status_code == 404
+        assert hidden.json() == {"detail": "order_not_found"}
+        assert hidden.headers["cache-control"] == "no-store"
 
 
 def test_lookup_cookie_cannot_authorize_member_refund_endpoints(
