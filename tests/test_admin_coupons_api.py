@@ -11,6 +11,7 @@ from sqlalchemy import Engine, create_engine, event, select, text
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from app.api import admin_auth as admin_auth_api
 from app.api import admin_coupons as admin_coupons_api
 from app.api.admin_auth import COOKIE_NAME, csrf_token_for_cookie
 from app.core.config import Settings
@@ -52,8 +53,9 @@ def db(engine: Engine) -> Iterator[Session]:
 
 @pytest.fixture
 def client(engine: Engine, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    # 新建表单的结束日不得早于今天；固定接口时钟，测试不随真实日期过期。
+    # 新建表单的结束日不得早于今天、后台会话 30 天到期；固定两处接口时钟，测试不随真实日期过期。
     monkeypatch.setattr(admin_coupons_api, "_utcnow", lambda: NOW)
+    monkeypatch.setattr(admin_auth_api, "_utcnow", lambda: NOW)
     app = create_app(Settings(_env_file=None, database_url="sqlite://"))
 
     def session_override() -> Iterator[Session]:
