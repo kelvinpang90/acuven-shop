@@ -22,6 +22,7 @@ from app.db.base import Base
 from app.db.session import get_session
 from app.main import create_app
 from app.models import (
+    AdminAccount,
     Member,
     Order,
     OrderEvent,
@@ -29,6 +30,9 @@ from app.models import (
     OrderItemUnit,
     OrderRecipient,
     ReceiptConfirmation,
+    RefundLine,
+    RefundLineUnit,
+    RefundRequest,
 )
 from app.models.member import MEMBER_ACTIVE
 from app.models.order import (
@@ -41,7 +45,15 @@ from app.models.order import (
     STATUS_COMPLETED,
     STATUS_SHIPPED,
 )
+from app.models.order_access import SCOPE_LOOKUP
+from app.models.refund import REFUND_APPROVED
 from app.services.member_auth import csrf_token_for_cookie, issue_member_session
+from app.services.order_access import (
+    COOKIE_NAME as ORDER_ACCESS_COOKIE,
+)
+from app.services.order_access import (
+    issue_order_access,
+)
 from app.services.order_rules import generate_order_number
 
 LIST_URL = "/api/member/orders"
@@ -180,6 +192,61 @@ def _order(
     return order
 
 
+def _lookup_headers(db: Session, order: Order) -> dict[str, str]:
+    """Issue a real lookup-only order cookie, never a member session."""
+    issued = issue_order_access(db, None, order.id, SCOPE_LOOKUP, _now())
+    db.commit()
+    assert issued.new_token is not None
+    return {"Cookie": f"{ORDER_ACCESS_COOKIE}={issued.new_token}"}
+
+
+def _fully_refund(db: Session, order: Order) -> None:
+    """Create one approved request occupying this fixture order's only unit."""
+    admin = AdminAccount(
+        username="reviewer@example.test",
+        password_hash="not-a-real-hash",
+        created_at=_now(),
+        password_updated_at=_now(),
+    )
+    db.add(admin)
+    db.flush()
+    request = RefundRequest(
+        order_id=order.id,
+        status=REFUND_APPROVED,
+        actor_type=ACTOR_MEMBER,
+        idempotency_key="refund-request-key",
+        request_fingerprint="a" * 64,
+        amount_sen=850,
+        created_at=_now(),
+        reviewed_at=_now(),
+        reviewer_admin_id=admin.id,
+        review_reason=None,
+        review_idempotency_key="refund-review-key",
+        review_fingerprint="b" * 64,
+    )
+    db.add(request)
+    db.flush()
+    item = db.scalars(select(OrderItem).where(OrderItem.order_id == order.id)).one()
+    unit = db.scalars(select(OrderItemUnit).where(OrderItemUnit.order_item_id == item.id)).one()
+    line = RefundLine(
+        refund_request_id=request.id,
+        order_item_id=item.id,
+        quantity=1,
+        amount_sen=850,
+    )
+    db.add(line)
+    db.flush()
+    db.add(
+        RefundLineUnit(
+            refund_line_id=line.id,
+            order_item_unit_id=unit.id,
+            cash_paid_sen=850,
+            occupied=1,
+        )
+    )
+    db.commit()
+
+
 def _assert_no_store(response: object) -> None:
     assert response.headers["cache-control"] == NO_STORE
 
@@ -224,11 +291,14 @@ def test_view_hides_other_and_guest_orders_but_marks_member_snapshot(
     assert view.json()["coupon_discount_sen"] == 100
     assert view.json()["points_redeemed"] == 50
     assert claimed.json()["placed_by_member"] is False
+    missing = client.post(VIEW_URL, headers=headers, json={"order_number": generate_order_number()})
+    assert missing.status_code == 404
     for order in (outsider, guest):
         response = client.post(VIEW_URL, headers=headers, json={"order_number": order.order_number})
         assert response.status_code == 404
-        assert response.json() == {"detail": "order_not_found"}
+        assert response.content == missing.content
         _assert_no_store(response)
+    _assert_no_store(missing)
 
 
 def test_view_expires_overdue_awaiting_payment_order(db: Session, client: TestClient) -> None:
@@ -276,13 +346,19 @@ def test_confirm_requires_member_csrf_and_records_member_event(
     _assert_no_store(response)
 
 
-def test_confirm_is_private_and_idempotent_without_order_access_cookie(
+def test_confirm_is_private_idempotent_and_matches_lookup_conflicts(
     db: Session, client: TestClient
 ) -> None:
-    """DESIGN 1.11 clause 6: member APIs ignore lookup cookies and preserve replays."""
+    """DESIGN 1.11 clause 6: member confirmation preserves lookup-mode outcomes."""
     member, other = _member(db, 7), _member(db, 8)
     headers = _headers(db, member)
-    own, outsider = _order(db, member), _order(db, other)
+    own, outsider, pending, frozen = (
+        _order(db, member),
+        _order(db, other),
+        _order(db, member, status=STATUS_AWAITING_PAYMENT),
+        _order(db, member),
+    )
+    _fully_refund(db, frozen)
     key = "c" * 16
     first = client.post(
         CONFIRM_URL,
@@ -299,10 +375,76 @@ def test_confirm_is_private_and_idempotent_without_order_access_cookie(
         headers=headers | {"Idempotency-Key": "d" * 16},
         json={"order_number": outsider.order_number},
     )
+    conflict = client.post(
+        CONFIRM_URL,
+        headers=headers | {"Idempotency-Key": key},
+        json={"order_number": pending.order_number},
+    )
+    not_confirmable = client.post(
+        CONFIRM_URL,
+        headers=headers | {"Idempotency-Key": "e" * 16},
+        json={"order_number": pending.order_number},
+    )
+    frozen_response = client.post(
+        CONFIRM_URL,
+        headers=headers | {"Idempotency-Key": "f" * 16},
+        json={"order_number": frozen.order_number},
+    )
     assert first.status_code == replay.status_code == 200
+    assert replay.json() == first.json()
     assert hidden.status_code == 404
     assert hidden.json() == {"detail": "order_not_found"}
-    cookie_only = client.get(LIST_URL, headers={"Cookie": "shop_order_access=not-a-member-session"})
-    assert cookie_only.status_code == 401
-    for response in (first, replay, hidden, cookie_only):
+    assert conflict.status_code == 409
+    assert conflict.json() == {"detail": "idempotency_conflict"}
+    assert not_confirmable.status_code == 409
+    assert not_confirmable.json() == {
+        "detail": "order_not_confirmable",
+        "status": STATUS_AWAITING_PAYMENT,
+    }
+    assert frozen_response.status_code == 409
+    assert frozen_response.json() == {
+        "detail": "fulfilment_frozen",
+        "status": STATUS_SHIPPED,
+    }
+    for response in (
+        first,
+        replay,
+        hidden,
+        conflict,
+        not_confirmable,
+        frozen_response,
+    ):
+        _assert_no_store(response)
+
+
+def test_member_order_endpoints_require_member_session_not_lookup_cookie(
+    db: Session, client: TestClient
+) -> None:
+    """DESIGN 1.11 clause 6: a valid lookup cookie cannot access My Orders."""
+    member = _member(db, 9)
+    order = _order(db, member)
+    lookup_headers = _lookup_headers(db, order)
+    responses = (
+        client.get(LIST_URL),
+        client.post(VIEW_URL, json={"order_number": order.order_number}),
+        client.post(
+            CONFIRM_URL,
+            headers={"Idempotency-Key": "g" * 16},
+            json={"order_number": order.order_number},
+        ),
+        client.get(LIST_URL, headers=lookup_headers),
+        client.post(
+            VIEW_URL,
+            headers=lookup_headers,
+            json={"order_number": order.order_number},
+        ),
+        client.post(
+            CONFIRM_URL,
+            headers=lookup_headers | {"Idempotency-Key": "h" * 16},
+            json={"order_number": order.order_number},
+        ),
+    )
+    for response in responses:
+        assert response.status_code == 401
+        assert response.json() == {"detail": "member_session_required"}
         _assert_no_store(response)
