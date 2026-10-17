@@ -7,6 +7,7 @@ member-order APIs, while points are prepared through SHOP-TASK-086 functions.
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -19,6 +20,7 @@ from sqlalchemy import Engine, create_engine, event, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from app.api.checkout import MAX_BODY_BYTES
 from app.core.config import Settings
 from app.db.base import Base
 from app.db.session import get_session
@@ -290,4 +292,46 @@ def test_lookup_cookie_cannot_authorize_member_refund_endpoints(
         response = client.post(url, json=_payload(order), headers=headers)
         assert response.status_code == 401
         assert response.json() == {"detail": "member_session_required"}
+        assert response.headers["cache-control"] == "no-store"
+
+
+@pytest.mark.parametrize("url", [REFUNDS_URL, ESTIMATE_URL])
+def test_member_refund_endpoints_answer_in_contract_order_without_echo(
+    db: Session, client: TestClient, url: str
+) -> None:
+    """SHOP-TASK-105 验收：检查顺序 413 → 415 → require_member →（退款申请）CSRF → 422 → 404，
+    每一步都带 no-store、不回显请求内容；后一步的毛病不会抢在前一步之前回答。
+    """
+    member, other = _member(db, 8), _member(db, 9)
+    outsider = _order(db, other)
+    headers = _headers(db, member)
+    number = outsider.order_number
+    padding = "0123456789" * (MAX_BODY_BYTES // 10)
+    json_type = {"Content-Type": "application/json"}
+    key = {"Idempotency-Key": "member-key-order-check-01"}
+    no_csrf = {"Cookie": headers["Cookie"]}
+    bad_body = json.dumps({"order_number": number, "lines": [], "extra": "secret-extra"})
+    cases = [
+        # 超限且不是 JSON、没有会话：413 最先。
+        (413, None, {"Content-Type": "text/plain"}, json.dumps({"note": padding})),
+        # 不是 JSON、没有会话：415 先于会员检查。
+        (415, None, {"Content-Type": "text/plain"}, bad_body),
+        # 没有会话、请求体不合法：401 先于 422。
+        (401, "member_session_required", json_type | key, bad_body),
+        # 有会话、请求体不合法、他人订单：422 先于 404，且不回显订单号与多出的字段。
+        (422, None, headers | json_type | key, bad_body),
+        # 请求体合法、他人订单：404 order_not_found。
+        (404, "order_not_found", headers | json_type | key, json.dumps(_payload(outsider))),
+    ]
+    if url == REFUNDS_URL:
+        # 有会话、缺 CSRF、请求体不合法：403 先于 422。
+        cases.insert(3, (403, "csrf_failed", no_csrf | json_type | key, bad_body))
+    for status, detail, request_headers, content in cases:
+        response = client.post(url, headers=request_headers, content=content)
+        assert response.status_code == status, (status, response.text)
+        if detail is not None:
+            assert response.json() == {"detail": detail}
+        assert number not in response.text
+        assert "secret-extra" not in response.text
+        assert "0123456789" not in response.text
         assert response.headers["cache-control"] == "no-store"
