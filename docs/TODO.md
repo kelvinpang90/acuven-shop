@@ -2082,6 +2082,13 @@
 - 授权与取舍：三个接口只使用会员会话，不读取订单访问 cookie；详情和确认收货对他人或游客订单统一返回 order_not_found，写操作另验 CSRF。没有设计偏离，不改服务、模型、迁移、前端或查单接口。
 - 验证到什么程度：`tests/test_account_orders_api.py` 以 TestClient 和 SQLite 内存库、经 SHOP-TASK-076 会话签发，覆盖三个接口的未登录与真实查单 cookie 拒绝、私有列表与分页、详情快照和隔离、超时取消、CSRF、member 事件、重放、幂等冲突、不可确认与全部已退冻结；每条测试注明守住的 DESIGN 1.11 或 UX P09/P13 句子。由 PR 的必需 CI 检查 backend 执行。退款接口留给 SHOP-TASK-105，前端 P13 与 P09 会员模式留给之后的任务。
 
+### SHOP-TASK-105 会员模式的退款申请与积分预估接口
+
+- [x] 在会员订单路由器提供退款申请与积分预估接口：二者只凭会员会话定位本人订单并统一返回 `no-store`；申请沿用查单模式的请求、幂等、冲突与退款规则，以 `member` 记录申请方并额外验证 CSRF；预估沿用查单模式的选件和积分计算，只读且不要求 CSRF 或幂等键。
+- 授权与异同：未登录统一为 `member_session_required`，他人和游客订单统一为 `order_not_found`，不读取查单 cookie。申请的处理顺序为请求体大小与 JSON 类型、会员会话、CSRF、请求校验、本人订单；预估不要求 CSRF。已认领的游客订单属于会员订单但下单时没有积分抵扣与获得，预估两个积分数均为 0。
+- 偏离与取舍：无设计偏离；未改服务、模型、迁移、查单接口、前端或设计。P10 的会员模式退款申请与积分显示前端留给之后的任务。
+- 验证到什么程度：`tests/test_account_order_refunds_api.py` 以 TestClient 与 SQLite 内存库、会员会话和 SHOP-TASK-086 的积分准备函数，覆盖未登录、CSRF、本人隔离、member 申请记录、重放与幂等冲突、DESIGN 第 4 条算例的返还 120 与追回 8、预估前后不写库、零积分会员订单、查单 cookie 拒绝和所有响应的 `no-store`；每条测试注明守住的 DESIGN 1.11 或 UX P10 句子。由 PR 的必需 CI 检查 backend 执行；未在真实 MySQL 或浏览器中验证。
+
 ### SHOP-TASK-100 后台优惠券页的路由与导航 A05
 
 - [x] 按 `docs/UX.md` 0.10 A05、`docs/UX-COPY.md` 0.11 与 `docs/HANDOFF.md` 0.48 增加 `/admin/coupons`：用后台框架渲染，当前导航项为优惠券，内容区仅有 `admin.nav_coupons` 标题和 `admin.coupon_listed_note`。后台导航按 UX 顺序改为订单、退款、优惠券、库存重置、店铺装修；同步修改后台框架、退款、库存重置、店铺装修页既有导航断言，以及路由表断言。本任务不调用接口、不装依赖、不改后端或设计。设计闸门：不适用（只加路由、导航与静态文字）。
