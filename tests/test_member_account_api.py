@@ -13,6 +13,7 @@ from sqlalchemy import Engine, create_engine, event, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from app.api import member_account as member_account_api
 from app.core.config import Settings
 from app.db.base import Base
 from app.db.session import get_session
@@ -156,11 +157,15 @@ def test_unauthenticated_and_revoked_sessions_are_rejected_with_no_store(
         assert response.headers["cache-control"] == NO_STORE
 
 
-def test_points_are_member_scoped_typed_and_read_only(client: TestClient, engine: Engine) -> None:
+def test_points_are_member_scoped_typed_and_read_only(
+    client: TestClient, engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """UX 0.10 P13：我的积分显示本会员余额、明细与到期信息。"""
     first = add_member(engine, "+60123456789")
     second = add_member(engine, "+60123456780")
     stamp = datetime(2026, 10, 10, 4, 0, 0)
+    # 积分批次 30 天后到期；固定接口时钟在有效期内，测试不随真实日期过期。
+    monkeypatch.setattr(member_account_api, "_utcnow", lambda: stamp + timedelta(days=1))
     with Session(engine) as session:
         mine = add_order(session, first, "0000000000000001")
         other = add_order(session, second, "0000000000000002")
