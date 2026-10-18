@@ -346,7 +346,7 @@ def test_configured_with_test_key_sends_request(key: str) -> None:
         {"stripe_secret_key": LIVE_KEY},
         {"stripe_secret_key": "rk_live_" + "99Zq" * 6},
         {"stripe_secret_key": "pk_test_" + "99Zq" * 6},
-        {"stripe_secret_key": "mystery-key"},
+        {"stripe_secret_key": "unknown_" + "99Zq" * 6},
     ],
 )
 def test_unconfigured_calls_are_unavailable_without_requests(overrides: dict[str, str]) -> None:
@@ -365,7 +365,7 @@ def test_unconfigured_calls_are_unavailable_without_requests(overrides: dict[str
 
 
 @pytest.mark.parametrize(
-    "key", [LIVE_KEY, "rk_live_" + "99Zq" * 6, "pk_test_" + "99Zq" * 6, "mystery-key"]
+    "key", [LIVE_KEY, "rk_live_" + "99Zq" * 6, "pk_test_" + "99Zq" * 6, "unknown_" + "99Zq" * 6]
 )
 def test_non_test_key_logs_category_once_without_key(
     key: str, caplog: pytest.LogCaptureFixture
