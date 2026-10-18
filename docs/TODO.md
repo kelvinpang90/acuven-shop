@@ -26,15 +26,14 @@
 
 <!-- openclaw:planning-v1:begin -->
 ### 当前计划
-1. `SHOP-TASK-107` 后台退款详情显示积分一行 A03
-2. `SHOP-TASK-110` Stripe 测试会话记录与支付方式列的数据模型
-3. `SHOP-TASK-115` Stripe 事件与退款尝试的数据模型
-4. `SHOP-TASK-111` Stripe 测试环境的配置与适配器
-5. `SHOP-TASK-112` 支付途径判定与创建 Stripe 测试会话
-6. `SHOP-TASK-113` 确认 Stripe 测试付款
-7. `SHOP-TASK-117` 迟到与不符的 Stripe 测试付款
-8. `SHOP-TASK-114` 有 Stripe 记录的订单的模拟支付、本人取消与超时取消
-9. `SHOP-TASK-116` 有 Stripe 记录的订单的定时处理
+1. `SHOP-TASK-110` Stripe 测试会话记录与支付方式列的数据模型
+2. `SHOP-TASK-115` Stripe 事件与退款尝试的数据模型
+3. `SHOP-TASK-111` Stripe 测试环境的配置与适配器
+4. `SHOP-TASK-112` 支付途径判定与创建 Stripe 测试会话
+5. `SHOP-TASK-113` 确认 Stripe 测试付款
+6. `SHOP-TASK-117` 迟到与不符的 Stripe 测试付款
+7. `SHOP-TASK-114` 有 Stripe 记录的订单的模拟支付、本人取消与超时取消
+8. `SHOP-TASK-116` 有 Stripe 记录的订单的定时处理
 
 ### 已阻塞
 - 待登记：短信验证组件 V1 与结账会员路径（马新号码验证、自动注册或登录、优惠券与积分；会员访问 P06、P07）｜阻塞：依赖会员计价与下单接口（SHOP-TASK-089）与支付页的会员接口（SHOP-TASK-091）
