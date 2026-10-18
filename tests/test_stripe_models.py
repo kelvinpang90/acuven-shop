@@ -141,8 +141,10 @@ def _resolve(order_id: int, value: Any) -> Any:
     return value
 
 
-def _checkout_values(order_id: int, status: str, **overrides: Any) -> dict[str, Any]:
-    """该状态一条合法的会话记录；每次给不同的幂等键、会话 ID 与 PaymentIntent ID。"""
+def _checkout_values(order_id: int, status: str, /, **overrides: Any) -> dict[str, Any]:
+    """该状态一条合法的会话记录；每次给不同的幂等键、会话 ID 与 PaymentIntent ID。
+    前两个参数只按位置传，overrides 里才能再带 status 覆盖状态列。
+    """
     n = next(_CHECKOUT_SEQUENCE)
     session_id = f"cs_test_{n:06d}"
     creating = status == CHECKOUT_CREATING
@@ -174,7 +176,7 @@ def _checkout_values(order_id: int, status: str, **overrides: Any) -> dict[str, 
     return values | {key: _resolve(order_id, value) for key, value in overrides.items()}
 
 
-def _checkout(session: Session, order_id: int, status: str, **overrides: Any) -> StripeCheckout:
+def _checkout(session: Session, order_id: int, status: str, /, **overrides: Any) -> StripeCheckout:
     return _add(session, StripeCheckout(**_checkout_values(order_id, status, **overrides)))
 
 
