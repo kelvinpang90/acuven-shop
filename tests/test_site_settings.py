@@ -2,7 +2,8 @@
 
 依据 docs/DESIGN.md 1.11（提交 2d13250）「边界与原则」第 4 条、「数据模型」的 SiteSetting 一行
 与「上线依赖与设计闸门」（配置 WhatsApp 联系方式），
-以及 docs/UX.md 待决问题 Q10（配置缺失时隐藏）。
+以及 docs/UX.md 待决问题 Q10（配置缺失时隐藏）；支付方式的读取函数依据 docs/DESIGN.md 1.12
+（提交 acf576e）「Stripe 测试环境支付」第 2 条（SHOP-TASK-112）。
 每条测试的文档字符串写明它守住的设计或 UX 原句；没有直接原句的写明是 SHOP-TASK-022 或
 SHOP-TASK-073 验收标准里的约定。
 
@@ -26,7 +27,8 @@ from app.db.base import Base
 from app.db.session import get_session
 from app.main import create_app
 from app.models import SiteSetting
-from app.services.site_settings import is_sms_verification_enabled
+from app.models.site import PAYMENT_METHOD_SIMULATED, PAYMENT_METHOD_STRIPE_TEST
+from app.services.site_settings import get_payment_method, is_sms_verification_enabled
 
 URL = "/api/site-settings"
 NOW = datetime(2026, 10, 1, 2, 0)
@@ -173,6 +175,94 @@ def test_read_ignores_a_stale_loaded_object(db: Session) -> None:
 
     assert row.sms_verification_enabled is False
     assert is_sms_verification_enabled(db) is True
+
+
+# ---- 支付方式的读取 ----
+# 依据 DESIGN 1.12（提交 acf576e）「Stripe 测试环境支付」第 2 条与
+# 「数据模型」SiteSetting 一行；只出自 SHOP-TASK-112 验收标准的约定注明「验收：」。
+
+
+def _set_payment_method_unchecked(db: Session, value: str) -> None:
+    # SQLite 上暂时关掉检查约束，写入约束本来会拒绝的值（MySQL 默认排序规则下
+    # IN 不区分大小写，大写的值能通过约束）。
+    connection = db.connection()
+    connection.exec_driver_sql("PRAGMA ignore_check_constraints = ON")
+    connection.exec_driver_sql("UPDATE site_settings SET payment_method = ?", (value,))
+    connection.exec_driver_sql("PRAGMA ignore_check_constraints = OFF")
+
+
+def test_payment_method_missing_row_reads_as_simulated(db: Session) -> None:
+    """第 2 条「支付方式取『模拟』（默认）」；验收：「没有那一行……时视为
+    simulated」：表里没有那一行时为 simulated。"""
+    assert db.scalar(select(SiteSetting.id)) is None
+
+    assert get_payment_method(db) == PAYMENT_METHOD_SIMULATED
+
+
+def test_payment_method_defaults_to_simulated(db: Session) -> None:
+    """「数据模型」SiteSetting「支付方式（模拟 / Stripe 测试，默认模拟）」：
+    行里不给支付方式时取服务端默认值，读取为 simulated。"""
+    db.execute(insert(SiteSetting).values(id=1, updated_at=NOW))
+
+    assert get_payment_method(db) == PAYMENT_METHOD_SIMULATED
+
+
+def test_payment_method_reads_stripe_test(db: Session) -> None:
+    """第 2 条「支付方式取『模拟』（默认）或『Stripe 测试』」：库里为
+    stripe_test 时读到 stripe_test。"""
+    db.execute(
+        insert(SiteSetting).values(id=1, payment_method=PAYMENT_METHOD_STRIPE_TEST, updated_at=NOW)
+    )
+
+    assert get_payment_method(db) == PAYMENT_METHOD_STRIPE_TEST
+
+
+@pytest.mark.parametrize("value", ["STRIPE_TEST", "Stripe_Test", "paypal", ""])
+def test_payment_method_unknown_value_reads_as_simulated(db: Session, value: str) -> None:
+    """第 2 条「支付方式取『模拟』（默认）或『Stripe 测试』」；验收：「值不认识
+    时视为 simulated」：大小写不同或其他取值（MySQL 上大写能通过检查约束）
+    不当作 Stripe 测试。"""
+    _setting(db, enabled=False)
+    _set_payment_method_unchecked(db, value)
+    assert db.scalar(select(SiteSetting.payment_method)) == value
+
+    assert get_payment_method(db) == PAYMENT_METHOD_SIMULATED
+
+
+def test_payment_method_each_read_queries_the_database(db: Session) -> None:
+    """第 2 条「与短信验证开关一样每次从数据库读取」；验收：「每次一条
+    SELECT、不缓存」：两次读取之间改库，第二次读到新值，每次调用发一条
+    SELECT。"""
+    _setting(db, enabled=False)
+    statements = _record_statements(db)
+
+    assert get_payment_method(db) == PAYMENT_METHOD_SIMULATED
+    db.execute(update(SiteSetting).values(payment_method=PAYMENT_METHOD_STRIPE_TEST))
+    db.flush()
+    assert get_payment_method(db) == PAYMENT_METHOD_STRIPE_TEST
+    db.execute(delete(SiteSetting))
+    assert get_payment_method(db) == PAYMENT_METHOD_SIMULATED
+
+    selects = [s for s in statements if s.lstrip().upper().startswith("SELECT")]
+    assert len(selects) == 3
+
+
+def test_payment_method_read_ignores_a_stale_loaded_object(db: Session) -> None:
+    """「数据模型」SiteSetting「每次判定都从数据库读取当前值、不缓存」：会话里
+    已加载的对象仍是旧值时，读取函数照样给出库里的新值。"""
+    # 显式给出支付方式：只靠服务端默认值时，对象上的这一列在写入后会过期并在访问时重读。
+    row = SiteSetting(
+        id=1,
+        sms_verification_enabled=False,
+        payment_method=PAYMENT_METHOD_SIMULATED,
+        updated_at=NOW,
+    )
+    db.add(row)
+    db.flush()
+    db.connection().exec_driver_sql("UPDATE site_settings SET payment_method = 'stripe_test'")
+
+    assert row.payment_method == PAYMENT_METHOD_SIMULATED
+    assert get_payment_method(db) == PAYMENT_METHOD_STRIPE_TEST
 
 
 # ---- 公开接口 ----
