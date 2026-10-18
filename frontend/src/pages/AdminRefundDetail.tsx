@@ -18,8 +18,8 @@ import { formatDateTime } from "./TrackOrderPage";
 // 打开时以当前界面语言调用一次 GET /api/admin/refunds/{内部 ID}：推迟到下一轮事件循环再发（沿用 A02 详情的 startDeferred），
 // 开发模式下 StrictMode 让 effect 执行两次时也只发一次；之后切换界面语言不重新读取（与 A02 详情相同）。
 // 标题 admin.refund_detail · 订单号（链接到 A02 该单详情）与状态标签；各行名称 / 规格与 admin.refund_qty；
-// admin.refund_amount、order.refunded_total、order.refundable_left 与 refund.shipping_not_refunded。
-// 首版不显示 admin.refund_points 一行（Kelvin 2026-10-06 决定，由会员与积分账本任务加回）。
+// admin.refund_amount、order.refunded_total、order.refundable_left 与 refund.shipping_not_refunded；会员订单的退款金额之下另有
+// admin.refund_points（SHOP-TASK-106 给出的返还与追回积分；审核中的申请为预估，UX-COPY 没有「预估」的文案，照样显示这一行）。
 // 审核中：admin.refund_reason 输入框（最多 500 个字符）、admin.refund_approve、admin.refund_reject 与 admin.refund_hint；
 // 理由去掉首尾空白后为空时拒绝禁用，批准不要求理由（Kelvin 2026-10-06 决定）。已批准或已拒绝：只读，金额之后为 admin.reviewed_by，
 // 有理由时其下为 admin.refund_reason 与理由原文。申请不存在（404）或路径 ID 不合法时只显示 common.error_retry 与返回
@@ -298,6 +298,15 @@ function ReviewedBlock({ refund }: { refund: AdminRefundDetail }) {
   );
 }
 
+// admin.refund_points 一行：只在会员下的订单（placed_by_member）且积分字段不为 null（已拒绝为 null）时显示，{returned} 与 {reversed} 为接口给的两个积分数。
+function PointsLine({ refund }: { refund: AdminRefundDetail }) {
+  const t = useCopy();
+  if (!refund.placed_by_member || refund.points_returned === null || refund.points_reversed === null) {
+    return null;
+  }
+  return <span>{t("admin.refund_points", { returned: refund.points_returned, reversed: refund.points_reversed })}</span>;
+}
+
 // 已取到的详情：桌面为一张面板；手机外层面板不绘制（site.css），标题、内容面板（商品、金额与理由或审核记录）、提示与按钮依次排列。
 function RefundDetail({ refund, reason, busy, notice, onReason, onReview }: ReadyProps) {
   const t = useCopy();
@@ -321,6 +330,7 @@ function RefundDetail({ refund, reason, busy, notice, onReason, onReview }: Read
         </div>
         <div className="site-admin-refund__block">
           <span>{t("admin.refund_amount", { amount: formatSen(refund.amount_sen) })}</span>
+          <PointsLine refund={refund} />
           <span>{t("order.refunded_total", { amount: formatSen(refund.refunded_sen) })}</span>
           <span>{t("order.refundable_left", { amount: formatSen(refund.refundable_left_sen) })}</span>
           <span className="acs-admin__muted">{t("refund.shipping_not_refunded")}</span>

@@ -191,9 +191,10 @@ export interface AdminRefundDetailLine {
   approved_quantity: number;
 }
 
-// 申请详情：只取 SHOP-TASK-041 记录段列出的字段。reviewed_at、reviewer_username（管理员邮箱）未审核时为 null；
-// review_reason 未审核或批准时没写理由为 null；refunded_sen 与 refundable_left_sen 为该单累计已退与剩余可退；
-// csrf_token 只用于审核的请求头。
+// 申请详情：只取 SHOP-TASK-041 记录段列出的字段，另取 SHOP-TASK-106 记录段的四个积分字段。reviewed_at、reviewer_username
+// （管理员邮箱）未审核时为 null；review_reason 未审核或批准时没写理由为 null；refunded_sen 与 refundable_left_sen 为该单累计已退
+// 与剩余可退；csrf_token 只用于审核的请求头。placed_by_member 为会员下的订单；points_returned（返还的抵扣积分）、
+// points_reversed（追回的获得积分，含记入待抵扣）与 points_estimated（审核中的预估为真）三者同为 null（已拒绝）或同不为 null。
 export interface AdminRefundDetail {
   id: number;
   status: RefundStatus;
@@ -209,6 +210,10 @@ export interface AdminRefundDetail {
   refunded_sen: number;
   refundable_left_sen: number;
   csrf_token: string;
+  placed_by_member: boolean;
+  points_returned: number | null;
+  points_reversed: number | null;
+  points_estimated: boolean | null;
 }
 
 // 读取详情的结果：取到（200）、没有会话（401）、申请不存在（404，路径 ID 不合法时不发请求也归为此类）、
@@ -236,6 +241,19 @@ function readDetailLine(value: unknown): AdminRefundDetailLine | null {
   return { name, variant_label, quantity, purchased_quantity, approved_quantity };
 }
 
+type DetailPoints = Pick<AdminRefundDetail, "points_returned" | "points_reversed" | "points_estimated">;
+
+// 三个积分字段要么都为 null，要么都不为 null（积分为非负整数，是否预估为布尔）；只有一部分为 null 算不合格。
+function readPoints(returned: unknown, reversed: unknown, estimated: unknown): DetailPoints | null {
+  if (returned === null && reversed === null && estimated === null) {
+    return { points_returned: null, points_reversed: null, points_estimated: null };
+  }
+  if (!isCount(returned) || !isCount(reversed) || typeof estimated !== "boolean") {
+    return null;
+  }
+  return { points_returned: returned, points_reversed: reversed, points_estimated: estimated };
+}
+
 function readDetail(value: unknown): AdminRefundDetail | null {
   if (typeof value !== "object" || value === null) {
     return null;
@@ -243,6 +261,7 @@ function readDetail(value: unknown): AdminRefundDetail | null {
   const body = value as Record<string, unknown>;
   const { id, status, created_at, reviewed_at, reviewer_username, review_reason, order_id, order_number, order_status } = body;
   const { amount_sen, refunded_sen, refundable_left_sen, csrf_token } = body;
+  const { placed_by_member, points_returned, points_reversed, points_estimated } = body;
   if (
     !isPositive(id) ||
     !isRefundStatus(status) ||
@@ -255,8 +274,13 @@ function readDetail(value: unknown): AdminRefundDetail | null {
     !Array.isArray(body.lines) ||
     !isCount(refunded_sen) ||
     !isCount(refundable_left_sen) ||
-    typeof csrf_token !== "string"
+    typeof csrf_token !== "string" ||
+    typeof placed_by_member !== "boolean"
   ) {
+    return null;
+  }
+  const points = readPoints(points_returned, points_reversed, points_estimated);
+  if (points === null) {
     return null;
   }
   // 审核中的申请没有审核时间与审核人；已批准或已拒绝的两者都有（页面据此显示 admin.reviewed_by）。
@@ -287,6 +311,8 @@ function readDetail(value: unknown): AdminRefundDetail | null {
     refunded_sen,
     refundable_left_sen,
     csrf_token,
+    placed_by_member,
+    ...points,
   };
 }
 

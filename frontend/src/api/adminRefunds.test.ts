@@ -212,7 +212,7 @@ const KEY = "0f8e7d6c-5b4a-4321-8fed-cba987654321";
 const REASON = "The returned hoodie shows signs of use.";
 const REVIEWER = "kelvin@example.com";
 
-// 审核中的申请详情（SHOP-TASK-041 记录段的全部字段）。
+// 审核中的申请详情（SHOP-TASK-041 记录段的全部字段，与 SHOP-TASK-106 的四个积分字段：会员订单，积分为预估）。
 const DETAIL: AdminRefundDetail = {
   id: 9,
   status: "requested",
@@ -231,16 +231,26 @@ const DETAIL: AdminRefundDetail = {
   refunded_sen: 3000,
   refundable_left_sen: 9500,
   csrf_token: TOKEN,
+  placed_by_member: true,
+  points_returned: 146,
+  points_reversed: 27,
+  points_estimated: true,
 };
 
-// 已拒绝的申请：有审核时间、审核人邮箱与理由。
+// 已拒绝的申请：有审核时间、审核人邮箱与理由；三个积分字段都为 null（SHOP-TASK-106 记录段「rejected：三个积分字段都为 null」）。
 const REJECTED_DETAIL: AdminRefundDetail = {
   ...DETAIL,
   status: "rejected",
   reviewed_at: "2026-10-03T10:02:00Z",
   reviewer_username: REVIEWER,
   review_reason: REASON,
+  points_returned: null,
+  points_reversed: null,
+  points_estimated: null,
 };
+
+// 已批准、没写理由的申请：积分为实际流水，不是预估。
+const APPROVED_DETAIL: AdminRefundDetail = { ...REJECTED_DETAIL, status: "approved", review_reason: null, points_returned: 146, points_reversed: 27, points_estimated: false };
 
 function headers(call: Call | undefined): Record<string, string> {
   return (call?.init.headers ?? {}) as Record<string, string>;
@@ -302,21 +312,66 @@ describe("reading a refund request", () => {
     expect(parseRefundId("2147483647")).toBe(2147483647);
   });
 
-  // 同一条「详情只取 SHOP-TASK-041 记录段列出的字段」：响应里多出的字段（含商品行里的）不带进结果；审核中、已批准（没写理由）与已拒绝都合格。
+  // 同一条「详情只取 SHOP-TASK-041 记录段列出的字段」与 SHOP-TASK-107 验收第 2 条「详情另取 placed_by_member、points_returned、points_reversed
+  // 与 points_estimated…其余字段与归类不变」：响应里多出的字段（含商品行里的）不带进结果；审核中、已批准（没写理由）与已拒绝都合格。
+  // SHOP-TASK-107 改动：原来作为多出字段的 points_returned 现在是约定字段，换成别的多出字段 member_id；已批准的申请改用带积分的 APPROVED_DETAIL。
   it("keeps only the agreed fields", async () => {
     stubFetch(
       json(200, {
         ...DETAIL,
         recipient: { name: "Aminah", phone: "+60123456789" },
-        points_returned: 146,
+        member_id: 5,
         lines: DETAIL.lines.map((line) => ({ ...line, unit_cash_paid_sen: [2763] })),
       }),
     );
     await expect(readAdminRefund("9", "en")).resolves.toEqual({ kind: "ok", refund: DETAIL });
-    for (const refund of [REJECTED_DETAIL, { ...REJECTED_DETAIL, status: "approved", review_reason: null } as AdminRefundDetail]) {
+    for (const refund of [REJECTED_DETAIL, APPROVED_DETAIL]) {
       stubFetch(json(200, refund));
       await expect(readAdminRefund("9", "en")).resolves.toEqual({ kind: "ok", refund });
     }
+  });
+
+  // SHOP-TASK-107 验收第 2 条「points_returned、points_reversed（非负整数或 null）与 points_estimated（布尔或 null）」与 SHOP-TASK-106 记录段
+  // 「游客订单的 approved 与 requested 也给出 0 而不是 null」：游客订单的零积分、零积分的会员订单与会员订单的已拒绝（三者都为 null）都原样取到。
+  it.each<AdminRefundDetail>([
+    { ...DETAIL, placed_by_member: false, points_returned: 0, points_reversed: 0, points_estimated: true },
+    { ...APPROVED_DETAIL, placed_by_member: false, points_returned: 0, points_reversed: 0, points_estimated: false },
+    { ...REJECTED_DETAIL, placed_by_member: false },
+    { ...APPROVED_DETAIL, points_returned: 0, points_reversed: 8 },
+    { ...DETAIL, points_returned: 120, points_reversed: 0 },
+  ])("accepts the points fields %#", async (refund) => {
+    stubFetch(json(200, refund));
+    await expect(readAdminRefund("9", "en")).resolves.toEqual({ kind: "ok", refund });
+  });
+
+  // SHOP-TASK-107 验收第 2 条「placed_by_member（布尔）…三个积分字段要么都为 null、要么都不为 null，否则算响应体不合格」：
+  // placed_by_member 缺少或不是布尔、只有一部分积分字段为 null、积分不是非负整数、是否预估不是布尔、字段缺少，都归为失败。
+  it.each<Record<string, unknown>>([
+    { ...DETAIL, placed_by_member: undefined },
+    { ...DETAIL, placed_by_member: null },
+    { ...DETAIL, placed_by_member: "true" },
+    { ...DETAIL, placed_by_member: 1 },
+    { ...DETAIL, points_returned: null },
+    { ...DETAIL, points_reversed: null },
+    { ...DETAIL, points_estimated: null },
+    { ...DETAIL, points_returned: null, points_reversed: null },
+    { ...REJECTED_DETAIL, points_returned: 0 },
+    { ...REJECTED_DETAIL, points_reversed: 0 },
+    { ...REJECTED_DETAIL, points_estimated: false },
+    { ...DETAIL, points_returned: undefined },
+    { ...DETAIL, points_reversed: undefined },
+    { ...DETAIL, points_estimated: undefined },
+    { ...DETAIL, points_returned: undefined, points_reversed: undefined, points_estimated: undefined },
+    { ...DETAIL, points_returned: -1 },
+    { ...DETAIL, points_reversed: -27 },
+    { ...DETAIL, points_returned: 1.5 },
+    { ...DETAIL, points_reversed: "27" },
+    { ...DETAIL, points_returned: 2 ** 53 },
+    { ...DETAIL, points_estimated: "true" },
+    { ...DETAIL, points_estimated: 1 },
+  ])("rejects inconsistent points fields %#", async (reply) => {
+    stubFetch(json(200, reply));
+    await expect(readAdminRefund("9", "en")).resolves.toEqual({ kind: "failed" });
   });
 
   // 同一条「响应体不合格算失败」与验收第 5 条「申请不存在（404）…读取详情 401…网络中断…其他失败」：401 为没有会话，404 为不存在；
