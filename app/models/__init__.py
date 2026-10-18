@@ -28,7 +28,7 @@ from app.models.shipping import DemoFxRate, ShippingRate
 from app.models.site import SiteSetting
 from app.models.stock_reset import StockReset, StockResetLine
 from app.models.store_design import StoreDesignSetting, StoreFeaturedProduct, StoreHomeBlock
-from app.models.stripe import StripeCheckout
+from app.models.stripe import StripeCheckout, StripeEvent, StripeRefund
 
 __all__ = [
     "AdminAccount",
@@ -68,6 +68,8 @@ __all__ = [
     "StoreFeaturedProduct",
     "StoreHomeBlock",
     "StripeCheckout",
+    "StripeEvent",
+    "StripeRefund",
     "VariantOptionValue",
     "VerificationAttempt",
 ]

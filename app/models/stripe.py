@@ -1,4 +1,4 @@
-"""Stripe 测试环境的对账记录：Checkout 会话记录。
+"""Stripe 测试环境的对账记录：Checkout 会话记录、事件记录与退款尝试。
 
 依据 docs/DESIGN.md 1.12（提交 acf576e）：
 - 「数据模型」的 StripeCheckout / StripeEvent / StripeRefund 一行：
@@ -8,7 +8,14 @@
   expired）与付款状态、实际付款方式类型（可空）、付款页地址、创建参数快照
   （金额、语言、返回地址、Stripe 到期时间）、创建与完成时间；同一订单至多
   一条不是 expired 的记录，由一个只在 creating、open、complete 时等于订单
-  ID 的列上的唯一索引保证。」
+  ID 的列上的唯一索引保证。`StripeEvent`：Stripe 事件 ID（唯一）、类型、
+  处理结果与时间，与事件引起的改动同一事务提交，不存原文。`StripeRefund`
+  （每条是一次退款尝试）：所属 PaymentIntent、来源（退款申请或迟到付款的
+  会话）及其 ID、Stripe 退款 ID（可空，唯一）、金额（仙）、状态（pending /
+  succeeded / failed，Stripe 的 requires_action 记为 pending、canceled 记为
+  failed）、调用次数、最后的错误类别、创建与成功时间、上次复查时间；本站 ID
+  即幂等键并写进 Stripe 退款元数据；同一来源至多一条不是 failed 的尝试，由
+  一个只在非 failed 时等于来源的列上的唯一索引保证。」
 - 「Stripe 测试环境支付」第 2 条：「同一订单的两条支付途径互斥：订单只要
   有一条不是 expired 的 Stripe 记录（creating、open 或 complete），不论
   开关当前取值，都不接受模拟支付、不另建会话」。
@@ -24,6 +31,18 @@
   grabpay）；读不到时留空」。
 - 第 5 条：「会话完成 24 小时后仍无结果就告警」；「定时任务也定期查询该
   会话的付款状态」。
+- 第 6 条：「服务端对这笔付款在 Stripe 测试环境全额退款，记为来源为该会话的
+  `StripeRefund` 尝试」。
+- 第 7 条：「事件 ID 的去重记录与它引起的订单、积分或退款改动在同一个数据库
+  事务里提交：已提交过的事件直接回 200」；「其他类型回 200 不处理」；「不存、
+  不记录事件原文」。
+- 第 8 条：「同一事务另写一条 pending 的 `StripeRefund` 尝试，来源为该退款
+  申请，金额为该现金退款额」；「每条 `StripeRefund` 是一次尝试，有自己的本站
+  ID（即幂等键，并写进 Stripe 退款元数据）；同一来源至多一条不是 failed 的
+  尝试，由数据库唯一约束保证」；「只接受 pending → succeeded、pending →
+  failed、succeeded → failed 三种改动」；「最新一次尝试为 failed 时管理员可
+  手动重试，重试是新建一条尝试（受上述唯一约束，重复点击与并发只有一个
+  成功）」。
 - 第 10 条：「本站不读取、不保存 Stripe 返回的客户资料、卡号片段或账单
   地址」；「本站只存『数据模型』`StripeCheckout` / `StripeEvent` /
   `StripeRefund` 一行所列的对账字段」；「日志不记录 Stripe 请求与事件原文」。
@@ -44,12 +63,27 @@ customer_email 是站点配置的固定演示邮箱，不是客户资料。Strip
 快照里的 expires_at 相同，单列存放供定时任务查询。不存客户的姓名、邮箱、
 电话、地址、卡号片段与 Stripe 响应原文。
 
+事件记录只存事件 ID、类型、处理结果（processed：已按第 4、5、8 条处理；
+ignored：其他类型，回 200 不处理）与处理时间，不存事件原文。
+
+退款尝试的本站 ID 即自增主键，由规则任务用作 Stripe 幂等键并写进退款
+元数据。来源类别为 refund_request 时退款申请列非空、会话列为空，为
+checkout 时反之。「同一来源至多一条不是 failed 的尝试」的表示：
+active_refund_request_id 与 active_checkout_id 两列，pending 与 succeeded
+时与来源类别对应的那一列等于来源、另一列为空，failed 时都为空，由检查
+约束逐条保证；两列各建唯一约束，空值不参与唯一比较，所以 failed 的尝试
+不限条数。succeeded 改为 failed 时须同时清空活动列，释放来源。两列与
+active_order_id 一样不另建外键。Stripe 退款 ID 不校验前缀（核验显示 FPX、
+GrabPay 的退款 ID 不以 re_ 开头）。错误类别只存 Stripe 错误的类别代码，
+不存错误原文。
+
 时间一律是不带时区的 UTC；金额一律是整数仙。外键一律 RESTRICT：被会话
-记录引用的订单不能物理删除。除设计指定可空的列外全部非空：检查约束遇到
-空值会放行，非空约束不能省，检查约束里的「非空」一律写成 IS NOT NULL。
-检查约束只用比较、IN、NOT IN、IS NULL 与 AND / OR，MySQL 与 SQLite 都能
-执行。这里只建表与约束；事件表与退款尝试表由 SHOP-TASK-115 加到本文件；
-支付途径判定、创建会话、确认、取消、webhook 与退款由之后的任务实现。
+记录引用的订单不能物理删除，被退款尝试引用的退款申请与会话记录也一样。
+除设计指定可空的列外全部非空：检查约束遇到空值会放行，非空约束不能省，
+检查约束里的「非空」一律写成 IS NOT NULL。检查约束只用比较、IN、NOT IN、
+IS NULL 与 AND / OR，MySQL 与 SQLite 都能执行。这里只建表与约束；支付
+途径判定、创建会话、确认、取消、webhook、迟到付款与退款规则由之后的任务
+实现。
 """
 
 from __future__ import annotations
@@ -101,6 +135,36 @@ STATUS_MAX_LENGTH = 16
 PAYMENT_STATUS_MAX_LENGTH = 24
 PAYMENT_METHOD_TYPE_MAX_LENGTH = 32
 CHECKOUT_URL_MAX_LENGTH = 2048
+
+# 事件的处理结果。
+# processed：第 4、5 条的 Checkout 事件或退款状态事件，已在同一事务里处理。
+EVENT_PROCESSED = "processed"
+# ignored：其他类型，回 200 不处理。
+EVENT_IGNORED = "ignored"
+
+EVENT_OUTCOMES = (EVENT_PROCESSED, EVENT_IGNORED)
+
+# 退款尝试的状态；Stripe 的 requires_action 记为 pending、canceled 记为 failed。
+STRIPE_REFUND_PENDING = "pending"
+STRIPE_REFUND_SUCCEEDED = "succeeded"
+STRIPE_REFUND_FAILED = "failed"
+
+STRIPE_REFUND_STATUSES = (STRIPE_REFUND_PENDING, STRIPE_REFUND_SUCCEEDED, STRIPE_REFUND_FAILED)
+# 占用来源的状态：与来源类别对应的活动列等于来源。
+ACTIVE_STRIPE_REFUND_STATUSES = (STRIPE_REFUND_PENDING, STRIPE_REFUND_SUCCEEDED)
+
+# 退款尝试的来源类别。
+# refund_request：管理员批准的退款申请（第 8 条）。
+SOURCE_REFUND_REQUEST = "refund_request"
+# checkout：迟到或不符的付款所在的会话记录（第 6 条）。
+SOURCE_CHECKOUT = "checkout"
+
+REFUND_SOURCE_TYPES = (SOURCE_REFUND_REQUEST, SOURCE_CHECKOUT)
+
+EVENT_TYPE_MAX_LENGTH = 64
+EVENT_OUTCOME_MAX_LENGTH = 16
+SOURCE_TYPE_MAX_LENGTH = 16
+ERROR_TYPE_MAX_LENGTH = 64
 
 
 def _sql_in(values: tuple[str, ...]) -> str:
@@ -208,3 +272,124 @@ class StripeCheckout(Base):
     last_polled_at: Mapped[datetime | None] = mapped_column(DateTime)
     # creating、open、complete 时等于 order_id，expired 时为空；唯一。
     active_order_id: Mapped[int | None] = mapped_column(Integer)
+
+
+class StripeEvent(Base):
+    """一条已处理的 Stripe 事件：事件 ID（唯一）、类型、处理结果与处理时间。
+
+    由 webhook 与事件引起的改动在同一事务里写入；事件 ID 唯一，已提交过的
+    事件再来时由它查到、直接回 200。不存事件原文。
+    """
+
+    __tablename__ = "stripe_events"
+    __table_args__ = (
+        UniqueConstraint("event_id"),
+        CheckConstraint(f"outcome IN {_sql_in(EVENT_OUTCOMES)}", name="outcome_valid"),
+        MYSQL_TABLE_OPTIONS,
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Stripe 事件 ID（evt_…）；唯一。
+    event_id: Mapped[str] = mapped_column(String(STRIPE_ID_MAX_LENGTH))
+    # Stripe 事件类型，如 checkout.session.completed。
+    event_type: Mapped[str] = mapped_column(String(EVENT_TYPE_MAX_LENGTH))
+    outcome: Mapped[str] = mapped_column(String(EVENT_OUTCOME_MAX_LENGTH))
+    processed_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class StripeRefund(Base):
+    """一次 Stripe 退款尝试：所属 PaymentIntent、来源、Stripe 退款 ID、金额、
+    状态、调用次数、最后的错误类别与各时间。
+
+    来源类别与来源列、状态与活动列的关系逐条由检查约束保证：来源类别为
+    refund_request 时退款申请非空、会话为空，为 checkout 时反之；failed 时
+    两个活动列都为空，pending 与 succeeded 时与来源类别对应的活动列等于
+    来源、另一列为空；succeeded 时成功时间非空。succeeded 改为 failed 后
+    成功时间保留，不另加限制。按 PaymentIntent 查该付款的全部尝试（合计
+    核对）；按（状态、创建时间）供定时任务取待重试与待复查的尝试。
+    """
+
+    __tablename__ = "stripe_refunds"
+    __table_args__ = (
+        UniqueConstraint("stripe_refund_id"),
+        # 同一来源至多一条不是 failed 的尝试。
+        UniqueConstraint("active_refund_request_id"),
+        UniqueConstraint("active_checkout_id"),
+        Index("ix_stripe_refunds_payment_intent_id", "payment_intent_id"),
+        Index("ix_stripe_refunds_status_created_at", "status", "created_at"),
+        CheckConstraint(
+            f"source_type IN {_sql_in(REFUND_SOURCE_TYPES)}",
+            name="source_type_valid",
+        ),
+        CheckConstraint(f"status IN {_sql_in(STRIPE_REFUND_STATUSES)}", name="status_valid"),
+        CheckConstraint("amount_sen > 0", name="amount_positive"),
+        CheckConstraint("call_count >= 0", name="call_count_non_negative"),
+        # 下面各条都只约束已知的来源类别与状态，未知取值只由上面两条 valid 拒绝。
+        CheckConstraint(
+            f"source_type <> '{SOURCE_REFUND_REQUEST}'"
+            " OR (refund_request_id IS NOT NULL AND checkout_id IS NULL)",
+            name="refund_request_source",
+        ),
+        CheckConstraint(
+            f"source_type <> '{SOURCE_CHECKOUT}'"
+            " OR (checkout_id IS NOT NULL AND refund_request_id IS NULL)",
+            name="checkout_source",
+        ),
+        CheckConstraint(
+            f"status <> '{STRIPE_REFUND_FAILED}'"
+            " OR (active_refund_request_id IS NULL AND active_checkout_id IS NULL)",
+            name="failed_has_no_active_source",
+        ),
+        CheckConstraint(
+            f"status NOT IN {_sql_in(ACTIVE_STRIPE_REFUND_STATUSES)}"
+            f" OR source_type <> '{SOURCE_REFUND_REQUEST}'"
+            " OR (active_refund_request_id IS NOT NULL"
+            " AND active_refund_request_id = refund_request_id"
+            " AND active_checkout_id IS NULL)",
+            name="active_refund_request_is_source",
+        ),
+        CheckConstraint(
+            f"status NOT IN {_sql_in(ACTIVE_STRIPE_REFUND_STATUSES)}"
+            f" OR source_type <> '{SOURCE_CHECKOUT}'"
+            " OR (active_checkout_id IS NOT NULL"
+            " AND active_checkout_id = checkout_id"
+            " AND active_refund_request_id IS NULL)",
+            name="active_checkout_is_source",
+        ),
+        CheckConstraint(
+            f"status <> '{STRIPE_REFUND_SUCCEEDED}' OR succeeded_at IS NOT NULL",
+            name="succeeded_has_succeeded_at",
+        ),
+        MYSQL_TABLE_OPTIONS,
+    )
+
+    # 本站 ID，即 Stripe 退款的幂等键，并写进退款元数据。
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    payment_intent_id: Mapped[str] = mapped_column(String(STRIPE_ID_MAX_LENGTH))
+    source_type: Mapped[str] = mapped_column(String(SOURCE_TYPE_MAX_LENGTH))
+    # 来源为退款申请时非空。
+    refund_request_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("refund_requests.id", ondelete="RESTRICT"),
+    )
+    # 来源为迟到或不符付款的会话记录时非空。
+    checkout_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("stripe_checkouts.id", ondelete="RESTRICT"),
+    )
+    # Stripe 退款 ID；调用结果未知或明确拒绝创建时为空；不校验前缀。
+    stripe_refund_id: Mapped[str | None] = mapped_column(String(STRIPE_ID_MAX_LENGTH))
+    amount_sen: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(STATUS_MAX_LENGTH))
+    # 调用 Stripe 退款接口的次数；服务端默认 0。
+    call_count: Mapped[int] = mapped_column(Integer, server_default="0")
+    # 最后一次调用失败时 Stripe 错误的类别代码，不存错误原文。
+    last_error_type: Mapped[str | None] = mapped_column(String(ERROR_TYPE_MAX_LENGTH))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    succeeded_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # 定时任务每复查一条就写入。
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # 不是 failed 且来源为退款申请时等于 refund_request_id，否则为空；唯一。
+    active_refund_request_id: Mapped[int | None] = mapped_column(Integer)
+    # 不是 failed 且来源为会话时等于 checkout_id，否则为空；唯一。
+    active_checkout_id: Mapped[int | None] = mapped_column(Integer)
