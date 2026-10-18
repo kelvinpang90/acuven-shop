@@ -42,7 +42,8 @@ type DetailLine = AdminRefundDetail["lines"][number];
 const TEE: DetailLine = { name: "Crew Neck Tee", variant_label: "White, L", quantity: 1, purchased_quantity: 2, approved_quantity: 0 };
 const CANDLE: DetailLine = { name: "Soy Wax Candle", variant_label: "", quantity: 2, purchased_quantity: 3, approved_quantity: 1 };
 
-// 审核中的申请（视觉稿 A03-desktop-order：一行有规格，一行没有）。
+// 审核中的申请（视觉稿 A03-desktop-order：一行有规格，一行没有）。游客订单：SHOP-TASK-106 记录段「游客订单的 approved 与 requested
+// 也给出 0 而不是 null」，审核中的积分为预估。
 const REQUESTED: AdminRefundDetail = {
   id: 9,
   status: "requested",
@@ -58,9 +59,13 @@ const REQUESTED: AdminRefundDetail = {
   refunded_sen: 2763,
   refundable_left_sen: 9500,
   csrf_token: TOKEN,
+  placed_by_member: false,
+  points_returned: 0,
+  points_reversed: 0,
+  points_estimated: true,
 };
 
-// 已批准、没写理由（A03-desktop-reviewed）。
+// 已批准、没写理由（A03-desktop-reviewed）；游客订单，没有积分流水即为 0。
 const APPROVED: AdminRefundDetail = {
   ...REQUESTED,
   status: "approved",
@@ -70,9 +75,10 @@ const APPROVED: AdminRefundDetail = {
   refunded_sen: 6163,
   refundable_left_sen: 6100,
   csrf_token: NEW_TOKEN,
+  points_estimated: false,
 };
 
-// 已拒绝、有理由（A03-phone-detail-rejected）。
+// 已拒绝、有理由（A03-phone-detail-rejected）；三个积分字段都为 null（SHOP-TASK-106 记录段「rejected：三个积分字段都为 null」）。
 const REJECTED: AdminRefundDetail = {
   ...REQUESTED,
   status: "rejected",
@@ -80,7 +86,15 @@ const REJECTED: AdminRefundDetail = {
   reviewer_username: REVIEWER,
   review_reason: REASON,
   csrf_token: NEW_TOKEN,
+  points_returned: null,
+  points_reversed: null,
+  points_estimated: null,
 };
+
+// 会员订单的三种状态（视觉稿 A03-desktop 与 A03-phone-detail 的「Points returned 146 / taken back 27」）：审核中为预估，已批准为实际流水。
+const MEMBER_REQUESTED: AdminRefundDetail = { ...REQUESTED, placed_by_member: true, points_returned: 146, points_reversed: 27, points_estimated: true };
+const MEMBER_APPROVED: AdminRefundDetail = { ...APPROVED, placed_by_member: true, points_returned: 120, points_reversed: 8, points_estimated: false };
+const MEMBER_REJECTED: AdminRefundDetail = { ...REJECTED, placed_by_member: true };
 
 const STATUS_KEY: Readonly<Record<RefundStatus, CopyKey>> = {
   requested: "order.refund_requested",
@@ -280,6 +294,10 @@ function amountLines(refund: AdminRefundDetail, language: Language): string[] {
   ];
 }
 
+function pointsLine(refund: AdminRefundDetail, language: Language): string {
+  return translate(language, "admin.refund_points", { returned: refund.points_returned ?? "", reversed: refund.points_reversed ?? "" });
+}
+
 function reviewedBy(refund: AdminRefundDetail, language: Language): string {
   return translate(language, "admin.reviewed_by", { username: refund.reviewer_username ?? "", time: formatDateTime(refund.reviewed_at ?? "", language) });
 }
@@ -351,16 +369,47 @@ describe("refund detail", () => {
     expect(amountLines(REQUESTED, "en").slice(0, 3)).toEqual(["Cash refund (demo): RM 34.00", "Refunded so far (demo): RM 27.63", "Still refundable: RM 95.00"]);
   });
 
-  // UX A03「状态与补充（0.9）」「首版不显示 [admin.refund_points] 一行」与验收第 4 条「不显示 admin.refund_points」（Kelvin 2026-10-06 决定）：
-  // 字典里没有这个键，三种状态、三种语言的详情里都没有积分一行的文字（取 UX-COPY 该键三语的开头）。
-  it.each(LANGUAGES)("has no points line in %s", (language) => {
-    expect(Object.keys(COPY)).not.toContain("admin.refund_points");
-    for (const refund of [REQUESTED, APPROVED, REJECTED]) {
-      const html = render({ state: shown(refund) }, language);
-      for (const text of ["Points returned", "返还积分", "Mata dikembalikan"]) {
-        expect(html).not.toContain(text);
-      }
+  // SHOP-TASK-107 删去了 SHOP-TASK-057 的「has no points line」：它守的是 UX A03「状态与补充（0.9）」「首版不显示 [admin.refund_points] 一行…
+  // 由会员与积分账本任务接入积分字段时加回」的前半句，积分字段已由 SHOP-TASK-106 接入，按后半句加回，由下面三条代替。
+
+  // UX A03 线框「[admin.refund_amount] [M1]」之下「[admin.refund_points] [M2]」（M2：返还抵扣积分与追回获得积分）与「状态与补充（0.9）」
+  // 「由会员与积分账本任务接入积分字段时加回」（Kelvin 2026-10-06 决定）：会员订单已批准与审核中的申请在退款金额之下、累计已退之上
+  // 显示 admin.refund_points，{returned} 与 {reversed} 为接口给的两个数；审核中的是预估，UX-COPY 没有「预估」的文案，同样只显示这一行。
+  it.each(LANGUAGES)("shows the points line under the refund amount for a member order in %s", (language) => {
+    for (const refund of [MEMBER_REQUESTED, MEMBER_APPROVED]) {
+      const block = elements(render({ state: shown(refund) }, language), "div", "site-admin-refund__block")[1] ?? "";
+      const [amount, ...rest] = amountLines(refund, language);
+      expect(textNodes(block)).toEqual([amount, pointsLine(refund, language), ...rest]);
     }
+    expect(pointsLine(MEMBER_REQUESTED, "en")).toBe("Points returned 146 / taken back 27");
+    expect(pointsLine(MEMBER_APPROVED, "zh")).toBe("返还积分 120 / 追回积分 8");
+  });
+
+  // 同一条（M2 只对会员订单有积分）与 SHOP-TASK-106 记录段「rejected：三个积分字段都为 null」「页面是否显示这一行由 placed_by_member 决定」：
+  // 会员订单已拒绝的申请与游客订单（三种状态，积分为 0 或 null）都不显示这一行，金额区块与 SHOP-TASK-057 相同。
+  it.each(LANGUAGES)("has no points line for a rejected request or a guest order in %s", (language) => {
+    for (const refund of [MEMBER_REJECTED, REQUESTED, APPROVED, REJECTED]) {
+      const html = render({ state: shown(refund) }, language);
+      expect(textNodes(elements(html, "div", "site-admin-refund__block")[1] ?? "")).toEqual(amountLines(refund, language));
+      expect(html).not.toContain(escapeHtml(COPY["admin.refund_points"][language].split(" {")[0] ?? ""));
+    }
+    // 积分为 0 的会员订单照样显示（只按 placed_by_member 与积分字段是否为 null 判断，不按数值）。
+    const zero = { ...MEMBER_APPROVED, points_returned: 0, points_reversed: 0 };
+    expect(textNodes(elements(render({ state: shown(zero) }, language), "div", "site-admin-refund__block")[1] ?? "")).toContain(pointsLine(zero, language));
+  });
+
+  // SHOP-TASK-107 验收「三个积分字段要么都为 null、要么都不为 null，否则算响应体不合格」与 SHOP-TASK-057 验收第 5 条「其他失败 common.error_retry」：
+  // 打开详情时积分字段只有一部分为 null（或 placed_by_member 不是布尔）归为读取失败，显示 common.error_retry，不显示详情。
+  it.each<Record<string, unknown>>([
+    { ...MEMBER_REQUESTED, points_estimated: null },
+    { ...MEMBER_APPROVED, points_returned: null },
+    { ...MEMBER_REJECTED, points_reversed: 0 },
+    { ...MEMBER_REQUESTED, placed_by_member: null },
+  ])("treats inconsistent points fields as a failed read (%#)", async (reply) => {
+    stubFetch(json(200, reply));
+    const moves = fakeMoves();
+    await openDetail("9", "en", new AbortController().signal, moves.target);
+    expect(moves.states).toEqual([{ status: "failed", error: "common.error_retry" }]);
   });
 });
 
@@ -756,8 +805,12 @@ describe("dictionary", () => {
   // 验收第 6 条「页面文字全部来自字典」与第 1 条「需要 UX-COPY 里没有的界面文字时停下…不自行编写文案」：审核中（含提示、进行中）、
   // 已批准、已拒绝、不存在、读取失败与读取中，每段文字（含 aria-label）都是当前语言的字典文案（含填入变量后的 admin.refund_qty、金额与
   // admin.reviewed_by），或接口给的订单号、商品名称、规格与理由原文、输入框里的理由；此外只有视觉稿给定的符号 · 与 /。
+  // SHOP-TASK-107 只按需要加上会员订单的三种状态与填入两个积分数的 admin.refund_points（验收「页面文字全部来自字典」也覆盖积分一行）。
   it.each(LANGUAGES)("shows only dictionary text in %s", (language) => {
     const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language]));
+    for (const refund of [MEMBER_REQUESTED, MEMBER_APPROVED]) {
+      allowed.add(pointsLine(refund, language));
+    }
     for (const refund of [REQUESTED, APPROVED, REJECTED]) {
       allowed.add(refund.order_number);
       for (const line of refund.lines) {
@@ -781,6 +834,9 @@ describe("dictionary", () => {
       shown(REQUESTED, "common.network_check", true),
       shown(APPROVED),
       shown(REJECTED),
+      shown(MEMBER_REQUESTED),
+      shown(MEMBER_APPROVED),
+      shown(MEMBER_REJECTED),
       { status: "missing" },
       { status: "failed", error: "common.network_check" },
       INITIAL_DETAIL,

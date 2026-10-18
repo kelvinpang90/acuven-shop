@@ -1375,6 +1375,11 @@ export const COPY = {
     zh: "模拟退现金：RM {amount}",
     ms: "Bayaran balik tunai (demo): RM {amount}",
   },
+  "admin.refund_points": {
+    en: "Points returned {returned} / taken back {reversed}",
+    zh: "返还积分 {returned} / 追回积分 {reversed}",
+    ms: "Mata dikembalikan {returned} / ditarik balik {reversed}",
+  },
   "admin.refund_approve": {
     en: "Approve (demo)",
     zh: "批准（演示）",
