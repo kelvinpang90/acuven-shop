@@ -1,6 +1,6 @@
 # TODO — 开发任务清单
 
-> 最后更新：2026-10-16
+> 最后更新：2026-10-18
 
 ---
 
@@ -2257,3 +2257,35 @@
   - 删除电话关联防套利索引仍留给之后的任务（不在本任务验收内）。
 - 留给之后的任务：会员中心的积分与优惠券查询（SHOP-TASK-095）；积分到期的定时任务（SHOP-TASK-096）；注销删除失败向运营告警邮件报告，留给运营告警邮件任务。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.11 第 3 条原句、UX 0.10 的 Q19 与 HANDOFF 0.46 的 Kelvin 决定自查，人工核对 `tests/test_member_deletion.py` 的既有用例（没有积分时 `forfeit_points` 不写记录）与 `tests/test_payment_coupons_points.py` 中其他调用 `delete_member` 的用例（只看该订单的流水或只在超时取消期间记录语句）不受接入影响。`tests/test_member_deletion_points.py` 用 SQLite 内存库（引擎设置同 `tests/test_member_deletion.py`：由引擎发 BEGIN，每个连接打开外键检查并断言已打开），积分经 `earn_points`、`reserve_points`、`release_points` 准备，用券记录经 `reserve_coupon`、`use_coupon`，待抵扣照 `tests/test_points.py` 直接写一条 `debt_add`；覆盖：注销后可用余额为 0、有余额的批次各一条 `forfeit`、已过期的记为 `expire`、剩余为 0 的批次不写、待抵扣不变、原有流水保留；其他会员的批次、流水、余额与待抵扣不变；以替身包住 `forfeit_points` 断言命中时入参为该会员 ID 与当前时间、未命中（已注销、不存在）时不调用且不写流水；已注销会员再注销不写积分流水；同号经 `sms_login_or_register` 重新注册为新会员，余额与待抵扣从 0 开始；注销时有预占积分的待支付订单在 `release_points` 释放时随即 `forfeit`；用券记录（`used` 与 `reserved`）与券在注销后不变；注销函数返回后回滚，会员、订单、积分批次、积分流水与用券记录全部复原；以 SQL 执行事件钩子断言注销期间读取会员、积分批次与流水的语句的整数参数只有该会员的 ID；没有 `app.` 日志。每条测试写明它守住的是设计或 Kelvin 决定的哪一句，只出自本任务验收标准的约束注明「验收：」。SQLite 不支持行锁、不生成 FOR UPDATE，锁下的排队只能在真 MySQL 上体现，未在真 MySQL 上做并发验证。这些测试与已有后端测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
+
+### SHOP-TASK-110 Stripe 测试会话记录与支付方式列的数据模型
+
+- [x] 按 `docs/DESIGN.md` 1.12（提交 `acf576e`）「数据模型」的 SiteSetting 一行（支付方式：模拟 / Stripe 测试，默认模拟）与 StripeCheckout / StripeEvent / StripeRefund 一行、「Stripe 测试环境支付」第 2、3 条（同一订单至多一条不是 expired 的会话记录，由数据库唯一约束保证），以及 `docs/HANDOFF.md` 0.53 记录的 Kelvin 2026-10-15 落实决定（核对不符的已付款会话由 SHOP-TASK-117 标为 expired、释放订单；不改设计文本），给站点设置加支付方式列、建会话记录表：`app/models/stripe.py`（`app/models/__init__.py` 导出 `StripeCheckout`）、`app/models/site.py` 加 `payment_method`、迁移 `alembic/versions/20261015_0020_stripe_checkouts.py`（revision `0020`，down_revision `0019`）；测试见 `tests/test_stripe_models.py`，`tests/test_site_settings.py` 的 `test_table_has_only_the_switch` 随加列改为四列（测试注释写明原因，其余断言未改）
+- 支付方式列：`site_settings.payment_method` String(16)，非空，服务端默认 `simulated`；检查约束 `ck_site_settings_payment_method_valid`：`payment_method IN ('simulated', 'stripe_test')`。迁移 0020 加列时已有的那一行取服务端默认值 simulated。读取函数由 SHOP-TASK-112 加到 `app/services/site_settings.py`，本任务未改该文件。
+- 会话记录表 `stripe_checkouts`（显式 InnoDB、utf8mb4，约束名按 `app/db/base.py` 的命名约定，迁移逐个写出同样的名字；时间一律不带时区的 UTC；金额一律整数仙；外键一律 ON DELETE RESTRICT；检查约束只用比较、IN、NOT IN、IS NULL / IS NOT NULL 与 AND / OR）：
+  - 列：`order_id` → `orders.id`（`fk_stripe_checkouts_order_id_orders`）、`idempotency_key` String(64)（唯一）、`checkout_session_id` String(255)（可空，唯一）、`payment_intent_id` String(255)（可空，唯一）、`amount_sen`、`currency` String(3)、`status` String(16)、`payment_status` String(24)（可空）、`payment_method_type` String(32)（可空）、`checkout_url` String(2048)（可空）、`create_params` Text（发给 Stripe 的全部表单参数，由规则任务写入；其中 customer_email 是站点配置的固定演示邮箱，不是客户资料）、`expires_at`（Stripe 到期时间，与快照里的 expires_at 相同）、`created_at`、`completed_at`（可空）、`confirmed_at`（可空，本记录的确认把订单改为 demo_paid 时写入，是「订单由这个会话付款」的持久证据）、`alerted_at`（可空）、`last_polled_at`（可空，定时任务每处理一条就写入，用来轮转处理顺序）、`active_order_id`（可空）。其余列全部非空。不存客户姓名、邮箱、电话、地址、卡号片段与 Stripe 响应原文。
+  - 外键：`fk_stripe_checkouts_order_id_orders`（`order_id` → `orders.id`，RESTRICT）；`active_order_id` 不建外键。
+  - 唯一约束：`uq_stripe_checkouts_idempotency_key`、`uq_stripe_checkouts_checkout_session_id`、`uq_stripe_checkouts_payment_intent_id`、`uq_stripe_checkouts_active_order_id`。
+  - 普通索引：`ix_stripe_checkouts_order_id`（`order_id`）、`ix_stripe_checkouts_status_expires_at`（`status`, `expires_at`）、`ix_stripe_checkouts_status_last_polled_at`（`status`, `last_polled_at`）。
+  - 检查约束：
+    - `ck_stripe_checkouts_status_valid`：`status IN ('creating', 'open', 'complete', 'expired')`
+    - `ck_stripe_checkouts_payment_status_valid`：`payment_status IS NULL OR payment_status IN ('unpaid', 'paid', 'no_payment_required')`
+    - `ck_stripe_checkouts_currency_myr`：`currency = 'myr'`
+    - `ck_stripe_checkouts_amount_positive`：`amount_sen > 0`
+    - `ck_stripe_checkouts_expired_has_no_active_order`：`status <> 'expired' OR active_order_id IS NULL`
+    - `ck_stripe_checkouts_active_order_is_order`：`status NOT IN ('creating', 'open', 'complete') OR (active_order_id IS NOT NULL AND active_order_id = order_id)`
+    - `ck_stripe_checkouts_confirmed_is_complete_paid`：`confirmed_at IS NULL OR (status = 'complete' AND payment_status IS NOT NULL AND payment_status = 'paid')`
+    - `ck_stripe_checkouts_creating_has_no_session`：`status <> 'creating' OR (checkout_session_id IS NULL AND checkout_url IS NULL AND payment_status IS NULL)`
+    - `ck_stripe_checkouts_open_has_session_and_url`：`status <> 'open' OR (checkout_session_id IS NOT NULL AND checkout_url IS NOT NULL)`
+    - `ck_stripe_checkouts_complete_has_session_and_time`：`status <> 'complete' OR (checkout_session_id IS NOT NULL AND completed_at IS NOT NULL)`
+  - 「至多一条」的表示：`active_order_id` 在 creating、open、complete 时等于 `order_id`、expired 时为空，由上面两条检查约束保证；对它的唯一约束因此等于「同一订单至多一条不是 expired 的记录」，空值不参与唯一比较（MySQL 与 SQLite 都如此），所以 expired 记录不限条数。把记录改为 expired 时须同时清空该列，释放订单。
+  - expired 的记录不另加限制：可以带付款状态 paid、完成时间与 PaymentIntent（迟到或核对不符的付款由 SHOP-TASK-117 记为 expired 并释放活动列，订单才不会既不能再付款也不能取消），也可以没有会话 ID 与付款页地址（第 3 条对账确认没有建成会话）。
+  - 0020 的 upgrade 先给 `site_settings` 加列与检查约束，再建 `stripe_checkouts` 及三个索引；downgrade 先删 `stripe_checkouts`（索引随表删除，与 0018、0019 相同），再删检查约束与列（MySQL 不许删除仍被检查约束引用的列）。
+- 偏离：未改设计，未发现须停下的设计问题。说明几处取舍，请审阅：
+  - 列名：会话 ID 为 `checkout_session_id`（避免与会员、后台会话混淆），付款页地址为 `checkout_url`，快照为 `create_params`，Stripe 到期时间为 `expires_at`，上次查询时间为 `last_polled_at`；付款状态最长取 24（最长取值 no_payment_required 为 19 个字符），币种取 3。
+  - 「确认时间非空时付款状态为 paid」写成 `payment_status IS NOT NULL AND payment_status = 'paid'`：只写等于时付款状态为空会求值为未知而放行。
+  - MySQL 默认排序规则不区分大小写：`currency = 'myr'` 与各状态、支付方式的 IN 在 MySQL 上也接受大写，取值由写入方用模型常量写小写；SQLite 上按区分大小写拒绝。
+  - creating 只约束会话 ID、付款页地址与付款状态为空（按验收），不另约束 PaymentIntent、完成与确认时间；确认时间由确认约束限定在 complete，其余由规则任务保证。库里也不约束金额等于订单应付、Stripe 到期时间与快照一致、记录的状态迁移顺序，这些由之后的规则任务保证。
+  - MySQL 会为 `order_id` 外键使用已建的 `ix_stripe_checkouts_order_id`，不另建索引；`active_order_id` 的唯一索引由唯一约束建出。
+- 留给之后的任务：事件表 `StripeEvent` 与退款尝试表 `StripeRefund` 由 SHOP-TASK-115 加到 `app/models/stripe.py`；配置与适配器（SHOP-TASK-111）、支付途径判定与创建会话及支付方式的读取函数（SHOP-TASK-112）、确认付款（SHOP-TASK-113）、迟到与不符的付款（SHOP-TASK-117）、现有入口的模拟支付、本人取消与超时取消（SHOP-TASK-114）、定时处理（SHOP-TASK-116），以及 webhook、退款规则与各接口和页面（规划块「已阻塞」所列）都由之后的任务实现。
+- 验证到什么程度：人工逐条对照验收标准、DESIGN 1.12 原句与 HANDOFF 0.53 的 Kelvin 决定自查，并逐个核对 0020 的列类型、可空性、服务端默认值、约束名与表达式、外键删除行为、唯一约束、索引与表选项同模型按命名约定生成的一致（`alembic check` 不比较检查约束、服务端默认值与表选项，这几项只经人工核对）。`tests/test_stripe_models.py` 用 SQLite 内存库（每个连接打开外键检查，并断言已打开）按模型建表，先写入四种状态各一条（分属不同订单）作对照，并以付款状态为 paid（带完成时间或 PaymentIntent）与从未建成会话的 expired 记录作对照；再覆盖：每个检查约束至少一个反例（先在独立连接上逐条求值该表全部检查约束，断言目标约束不成立，再断言写入被拒且报出的是不成立的约束之一，另断言用例覆盖表上全部检查约束），含未知状态与付款状态、币种不是 myr、金额为 0 与负、expired 仍占活动列、creating / open / complete 的活动列为空、活动列指向另一张订单、确认时间非空而状态为 open 或 expired、complete 的付款状态为 unpaid 或空却有确认时间、creating 带会话 ID / 付款页地址 / 付款状态、open 缺付款页地址或会话 ID、complete 缺会话 ID 或完成时间；除自增主键外每个非空列写入 NULL 被非空约束拒绝；同一订单已有一条不是 expired 的记录时再写一条被唯一约束拒绝，而两条 expired 加一条 open 可以并存、open 改为 expired 并清空活动列后又可写 creating，不同订单各有一条 open 互不影响；重复的幂等键、会话 ID 与 PaymentIntent ID 被唯一约束拒绝，空的会话 ID 与 PaymentIntent 不互相冲突；记录指向不存在的订单、删除被记录引用的订单被外键拒绝（另以未被引用的订单可删作对照）；金额读回为 int；只有设计与验收指定的列可空、唯一约束与索引存在、外键是 RESTRICT 且活动列没有外键；站点设置的支付方式两种取值可写、未知值与 NULL 被拒、不给时为 simulated。每条测试写明它守住的设计或决定原句。这些测试与已有后端测试，以及迁移在真 MySQL 上的 upgrade head、downgrade base、再 upgrade head 与 `alembic check`，都只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
