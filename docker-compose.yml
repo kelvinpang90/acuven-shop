@@ -27,6 +27,14 @@ services:
       SHOP_DATABASE_URL: ${SHOP_DATABASE_URL:?set SHOP_DATABASE_URL in .env (see .env.example)}
       # 可以不设：未设置时为空串，照常部署，依赖限流的接口回答暂不可用。
       SHOP_REDIS_URL: ${SHOP_REDIS_URL:-}
+      # Stripe 测试环境支付：可以不设，前五项未设置时为空串（未配置，不能切到 Stripe 测试），
+      # 最低收款额未设置时为 200 仙，照常部署。
+      SHOP_STRIPE_API_BASE_URL: ${SHOP_STRIPE_API_BASE_URL:-}
+      SHOP_STRIPE_SECRET_KEY: ${SHOP_STRIPE_SECRET_KEY:-}
+      SHOP_STRIPE_WEBHOOK_SECRET: ${SHOP_STRIPE_WEBHOOK_SECRET:-}
+      SHOP_STRIPE_DEMO_EMAIL: ${SHOP_STRIPE_DEMO_EMAIL:-}
+      SHOP_PUBLIC_SITE_URL: ${SHOP_PUBLIC_SITE_URL:-}
+      SHOP_STRIPE_MIN_AMOUNT_SEN: ${SHOP_STRIPE_MIN_AMOUNT_SEN:-200}
     networks: [proxy_net, data_net]
     healthcheck:
       test:
@@ -48,6 +56,13 @@ services:
     mem_limit: 128m
     environment:
       SHOP_DATABASE_URL: ${SHOP_DATABASE_URL:?set SHOP_DATABASE_URL in .env (see .env.example)}
+      # Stripe 测试环境支付：写法与 shop_api 相同，可以不设，照常部署。
+      SHOP_STRIPE_API_BASE_URL: ${SHOP_STRIPE_API_BASE_URL:-}
+      SHOP_STRIPE_SECRET_KEY: ${SHOP_STRIPE_SECRET_KEY:-}
+      SHOP_STRIPE_WEBHOOK_SECRET: ${SHOP_STRIPE_WEBHOOK_SECRET:-}
+      SHOP_STRIPE_DEMO_EMAIL: ${SHOP_STRIPE_DEMO_EMAIL:-}
+      SHOP_PUBLIC_SITE_URL: ${SHOP_PUBLIC_SITE_URL:-}
+      SHOP_STRIPE_MIN_AMOUNT_SEN: ${SHOP_STRIPE_MIN_AMOUNT_SEN:-200}
     networks: [data_net]
     # 心跳文件路径与 app/jobs.py 的 HEARTBEAT_PATH 相同；任一任务连续失败满 10 分钟即不再写，
     # 心跳超过 180 秒未更新即不健康（运营告警邮件接入前以此代替告警）。

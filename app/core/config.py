@@ -65,6 +65,21 @@ class Settings(BaseSettings):
     # 前台隐藏联系入口（UX Q10）。不合格的值同样按未配置处理（app/api/site_settings.py）。
     whatsapp_contact_url: str = ""
 
+    # Stripe 测试环境（sandbox）支付（DESIGN 1.12「Stripe 测试环境支付」）。空串 = 未配置；
+    # 判定见 app/services/stripe_gateway.py 的 stripe_configured：前五项都非空、两个地址都是
+    # https://、密钥以 sk_test_ 或 rk_test_ 开头、webhook 签名密钥以 whsec_ 开头才算已配置，
+    # 否则适配器的调用一律归为 unavailable、不发请求。接口地址只写到主机，如
+    # https://STRIPE_API_HOST，路径由适配器拼接。
+    stripe_api_base_url: str = ""
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    # Stripe 付款页预填的固定演示邮箱。
+    stripe_demo_email: str = ""
+    # 成功与取消返回地址的前缀，只写到主机（https://），不取请求头里的主机。
+    public_site_url: str = ""
+    # Stripe 对 MYR 的最低收款额（仙）；应付低于它的订单仍走模拟支付。
+    stripe_min_amount_sen: int = 200
+
 
 @lru_cache
 def get_settings() -> Settings:
