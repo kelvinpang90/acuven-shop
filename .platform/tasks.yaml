@@ -3984,7 +3984,7 @@ tasks:
       新增配置项、Stripe 适配器、签名校验函数与测试用替身。不接业务、不加接口、不改模型；不改设计。
       运营告警邮件尚未接入（docs/TODO.md 后续计划），设计里写「告警」之处一律先记一条 error 级日志（只含类别，有本站记录 ID 时带上），由告警邮件任务改为发邮件。
       设计闸门：DESIGN 1.12（提交 acf576e），接入支付服务。拆分：基础设施层（5 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-115
     acceptance_criteria:
