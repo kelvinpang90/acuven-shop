@@ -3,6 +3,11 @@
 依据 docs/DESIGN.md 1.9（提交 361d8bf）「数据模型」的 Order / OrderItem 一行
 （不可猜测的订单号）与「订单与退款状态」。不碰数据库。
 订单号显示时的分组与查单时的输入规范化不在这里。
+
+依据 docs/DESIGN.md 1.12（提交 acf576e）「Stripe 测试环境支付」第 4 条「订单只在服务端
+确认 Stripe 付款成功后才进入 demo_paid」，迁移表另允许 system 把 awaiting_demo_payment
+改为 demo_paid：只用于服务端确认 Stripe 付款（app/services/stripe_confirm.py），模拟支付
+仍只由下单者（guest、member）完成。
 """
 
 from __future__ import annotations
@@ -32,8 +37,8 @@ ORDER_NUMBER_BITS = 80
 # (当前状态, 目标状态) → 允许的操作者类别。不在表里的迁移一律拒绝，
 # 包括原地迁移、倒退、跨级与已支付订单取消。模拟支付失败不是状态迁移。
 _ALLOWED_TRANSITIONS: dict[tuple[str, str], frozenset[str]] = {
-    # 下单者模拟支付成功。
-    (STATUS_AWAITING_PAYMENT, STATUS_PAID): frozenset({ACTOR_GUEST, ACTOR_MEMBER}),
+    # 下单者模拟支付成功；system 只用于服务端确认 Stripe 付款（DESIGN 1.12 第 4 条）。
+    (STATUS_AWAITING_PAYMENT, STATUS_PAID): frozenset({ACTOR_GUEST, ACTOR_MEMBER, ACTOR_SYSTEM}),
     # 下单者在支付页取消，或超时由系统取消。
     (STATUS_AWAITING_PAYMENT, STATUS_CANCELLED): frozenset(
         {ACTOR_GUEST, ACTOR_MEMBER, ACTOR_SYSTEM}

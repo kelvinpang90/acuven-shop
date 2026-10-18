@@ -1,7 +1,9 @@
 """订单号生成与订单状态迁移判定。
 
 依据 docs/DESIGN.md 1.9（提交 361d8bf）「数据模型」的 Order / OrderItem 一行
-「不可猜测的订单号」，「权限与资料保护」「查单先按高熵订单号定位」，以及「订单与退款状态」。
+「不可猜测的订单号」，「权限与资料保护」「查单先按高熵订单号定位」，以及「订单与退款状态」；
+另依据 docs/DESIGN.md 1.12（提交 acf576e）「Stripe 测试环境支付」第 4 条「订单只在服务端确认
+Stripe 付款成功后才进入 demo_paid」（system 把 awaiting_demo_payment 改为 demo_paid）。
 每条测试的文档字符串引用它守住的那一句。期望的迁移表在这里另写一份，不取实现里的表。
 """
 
@@ -23,7 +25,8 @@ EXPECTED_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 
 # (当前状态, 目标状态) → 允许的操作者类别，按「订单与退款状态」逐句写出。
 ALLOWED = {
-    ("awaiting_demo_payment", "demo_paid"): {"guest", "member"},
+    # system 只用于服务端确认 Stripe 付款（DESIGN 1.12 第 4 条）。
+    ("awaiting_demo_payment", "demo_paid"): {"guest", "member", "system"},
     ("awaiting_demo_payment", "demo_cancelled"): {"guest", "member", "system"},
     ("demo_paid", "demo_packed"): {"admin"},
     ("demo_packed", "demo_shipped"): {"admin"},
@@ -130,7 +133,8 @@ def test_invalid_order_number_is_rejected(number: object) -> None:
 def test_designed_transitions_are_allowed(current: str, target: str, actor: str) -> None:
     """「下单：awaiting_demo_payment……成功进入 demo_paid」「待支付订单可由下单者在支付页
     取消……或超时为 demo_cancelled」「管理员依次推进 demo_paid → demo_packed → demo_shipped」
-    「访客……会员……确认收货后进入 demo_completed……模拟发货满 7 天自动确认收货」：
+    「访客……会员……确认收货后进入 demo_completed……模拟发货满 7 天自动确认收货」，以及
+    DESIGN 1.12 第 4 条「订单只在服务端确认 Stripe 付款成功后才进入 demo_paid」：
     五条迁移各自允许设计列出的操作者。
     """
     assert is_transition_allowed(current, target, actor)
@@ -166,17 +170,34 @@ def test_every_other_combination_is_rejected() -> None:
         ("demo_paid", "demo_cancelled", "admin"),
         ("demo_shipped", "demo_cancelled", "system"),
         ("awaiting_demo_payment", "demo_paid", "admin"),
-        ("awaiting_demo_payment", "demo_paid", "system"),
         ("demo_paid", "demo_packed", "guest"),
         ("demo_shipped", "demo_completed", "admin"),
     ],
 )
 def test_named_forbidden_transitions(current: str, target: str, actor: str) -> None:
     """「已完成的履约状态不可倒退」「已模拟支付订单不走取消，走退款流程」
-    「管理员依次推进」：原地迁移、倒退、跨级、已支付订单取消，以及支付由下单者完成、
+    「管理员依次推进」：原地迁移、倒退、跨级、已支付订单取消，以及支付不由管理员代为完成、
     打包由管理员完成、确认收货不由管理员代为完成，逐一点名被拒。
     """
     assert not is_transition_allowed(current, target, actor)
+
+
+@pytest.mark.parametrize(
+    ("current", "target"),
+    [
+        ("demo_paid", "demo_paid"),
+        ("demo_cancelled", "demo_paid"),
+        ("demo_packed", "demo_paid"),
+        ("awaiting_demo_payment", "demo_packed"),
+    ],
+)
+def test_system_confirmation_only_moves_awaiting_to_paid(current: str, target: str) -> None:
+    """DESIGN 1.12 第 4 条「全部相符且订单仍为 awaiting_demo_payment 时……进入 demo_paid」：
+    system 的付款确认只允许 awaiting_demo_payment → demo_paid；已支付、已取消或之后的状态
+    不能由 system 改为 demo_paid，也不能借此跨级。
+    """
+    assert is_transition_allowed("awaiting_demo_payment", "demo_paid", "system")
+    assert not is_transition_allowed(current, target, "system")
 
 
 @pytest.mark.parametrize(
