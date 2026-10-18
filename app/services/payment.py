@@ -24,6 +24,14 @@
   已注销时 release_points 随即记为到期或作废）。UPDATE 未命中时整个事务回滚，
   不释放。
 
+支付成功的状态迁移（带条件的 UPDATE 改为 demo_paid 并写支付时间、写一条事件、
+_settle_paid 核销用券并按快照发放积分）抽成 mark_paid，由模拟支付与 Stripe 确认
+（app/services/stripe_confirm.py，依据 docs/DESIGN.md 1.12（提交 acf576e）「Stripe
+测试环境支付」第 4 条「按模拟支付成功的同一事务进入 demo_paid」）共用：模拟支付带
+「未到期」条件、另写支付尝试，事件操作者为 guest 或 member；Stripe 确认不带「未到期」
+条件（第 4 条「确认不看订单的 15 分钟支付到期时间，只看订单是否仍待支付」）、不写
+支付尝试，事件操作者为 system。
+
 访问授权、CSRF 与请求格式由调用方（app/api/pay.py，以后的会员接口）先行校验；
 这里只按订单 ID 操作。支付与本人取消的操作者由调用方以 actor 给出（guest 或
 member，默认 guest），状态迁移的检查与事件都用它；超时取消的操作者为 system。
@@ -38,7 +46,8 @@ FOR UPDATE）：支付成功、本人取消与超时取消在带条件的 UPDATE
 也锁），为空（游客订单或会员注销后已清空）时不预先锁；之后才由 UPDATE 锁订单行。
 于是单张订单的会员下单（会员 → 库存）、取消（会员 → 订单 → 库存 → 用券记录 →
 积分）、支付成功（会员 → 订单 → 用券记录 → 积分）与注销（会员 → 订单）都先取
-会员锁。会员 ID 已清空的订单在取消时由 release_points 在库存之后才锁会员行，
+会员锁（mark_paid 的两个调用方相同；Stripe 确认另在订单之后、用券之前锁 Stripe 会话
+记录）。会员 ID 已清空的订单在取消时由 release_points 在库存之后才锁会员行，
 这时该会员已注销，不会再下单或注销。这依赖超时取消逐张订单真实提交
 （SHOP-TASK-097 之后，定时任务与每日库存重置都不再在外层事务里连续取消多张
 订单），所以不会跨订单持有库存与券的锁。
@@ -57,7 +66,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import BaseModel
-from sqlalchemy import ColumnElement, func, select, update
+from sqlalchemy import ColumnElement, func, select, true, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -224,11 +233,13 @@ def submit_payment(
     2. 订单已模拟支付或已取消：抛 OrderNotPayable，不写支付尝试。
     3. 已过支付到期时间：先按超时取消处理，再抛 OrderExpired，不写支付尝试。
     4. 失败：只写支付尝试，订单状态、库存、券、积分与事件都不变，可再次提交。
-    5. 成功：先锁订单的会员行（会员 ID 非空时），再在同一事务里用带条件的 UPDATE（状态仍为
-       awaiting_demo_payment 且未到期）改为 demo_paid 并写支付时间，写支付尝试与一条操作者
-       为 actor 的事件，核销用券记录、按订单快照发放获得积分（见模块说明）；库存不变（预留即
-       被消耗）。UPDATE 未命中时回滚：同键的并发请求已提交则按 1 处理，否则抛 OrderNotPayable。
-    写支付尝试撞上幂等键唯一约束时回滚，按 1 处理。重放不再核销或发放。
+    5. 成功：在同一事务里经 mark_paid（unexpired_only 为真）先锁订单的会员行（会员 ID 非空
+       时），再用带条件的 UPDATE（状态仍为 awaiting_demo_payment 且未到期）改为 demo_paid 并
+       写支付时间，写一条操作者为 actor 的事件，核销用券记录、按订单快照发放获得积分（见模块
+       说明）；之后写支付尝试。库存不变（预留即被消耗）。UPDATE 未命中时回滚：同键的并发请求
+       已提交则按 1 处理，否则抛 OrderNotPayable。
+    写支付尝试撞上幂等键唯一约束时回滚（连同已写的迁移、事件、核销与发放），按 1 处理。重放
+    不再核销或发放。
     """
     _check_actor(actor)
     fingerprint = payment_fingerprint(order_id, method, result)
@@ -247,16 +258,12 @@ def submit_payment(
         raise OrderNotPayable(status)
 
     succeeded = result == "success"
-    if succeeded:
-        _require_transition(STATUS_PAID, actor)
-        _lock_order_member(db, order_id)
-        not_due = Order.payment_expires_at > now
-        if not _update_awaiting(db, order_id, not_due, status=STATUS_PAID, paid_at=now):
-            db.rollback()
-            existing = _attempt_by_key(db, idempotency_key)
-            if existing is not None:
-                return _replay(db, existing, fingerprint), False
-            raise OrderNotPayable(_load_order(db, order_id).status)
+    if succeeded and not mark_paid(db, order_id, actor, now, unexpired_only=True):
+        db.rollback()
+        existing = _attempt_by_key(db, idempotency_key)
+        if existing is not None:
+            return _replay(db, existing, fingerprint), False
+        raise OrderNotPayable(_load_order(db, order_id).status)
 
     attempt = PaymentAttempt(
         order_id=order_id,
@@ -280,12 +287,34 @@ def submit_payment(
     status = STATUS_AWAITING_PAYMENT
     paid_at = None
     if succeeded:
-        db.add(_event(order_id, STATUS_PAID, actor, now))
-        _settle_paid(db, order_id, now)
         status = STATUS_PAID
         paid_at = now.replace(tzinfo=UTC)
     db.commit()
     return PaymentOutcome(method=method, result=result, status=status, paid_at=paid_at), True
+
+
+def mark_paid(
+    db: Session, order_id: int, actor: str, now: datetime, *, unexpired_only: bool
+) -> bool:
+    """支付成功的状态迁移，模拟支付与 Stripe 确认共用；只 flush、不提交，返回是否命中。
+
+    先经迁移判定检查 actor（不在迁移表里抛 RuntimeError），以普通读取得订单的会员 ID、非空时
+    锁住该会员的行，再用带条件的 UPDATE（状态仍为 awaiting_demo_payment；unexpired_only 为真
+    时还须未到支付到期时间）改为 demo_paid、支付时间写 now；命中时写一条操作者为 actor 的事件，
+    核销用券记录、按订单快照发放获得积分（_settle_paid）。锁顺序为会员 → 订单 → 用券 → 积分。
+    未命中返回假，此时本函数没有写任何东西，由调用方回滚。不写支付尝试。
+
+    模拟支付以 unexpired_only=True 调用；Stripe 确认以 actor 为 system、unexpired_only=False
+    调用（DESIGN 1.12 第 4 条：确认不看 15 分钟支付到期时间，只看订单是否仍待支付）。
+    """
+    _require_transition(STATUS_PAID, actor)
+    _lock_order_member(db, order_id)
+    due = Order.payment_expires_at > now if unexpired_only else true()
+    if not _update_awaiting(db, order_id, due, status=STATUS_PAID, paid_at=now):
+        return False
+    db.add(_event(order_id, STATUS_PAID, actor, now))
+    _settle_paid(db, order_id, now)
+    return True
 
 
 def cancel_order(
