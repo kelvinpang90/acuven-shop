@@ -803,6 +803,11 @@ def test_detail_fields_amounts_and_reviewer(
         ],
         "refunded_sen": 2701 + 2699,
         "refundable_left_sen": 1500,
+        # SHOP-TASK-106 多出的积分字段：游客订单，已批准的申请没有积分流水。
+        "placed_by_member": False,
+        "points_returned": 0,
+        "points_reversed": 0,
+        "points_estimated": False,
         "csrf_token": _csrf_for(token),
     }
     assert pending_body == {
@@ -827,6 +832,11 @@ def test_detail_fields_amounts_and_reviewer(
         ],
         "refunded_sen": 2701 + 2699,
         "refundable_left_sen": 1500,
+        # SHOP-TASK-106 多出的积分字段：游客订单的预估为零。
+        "placed_by_member": False,
+        "points_returned": 0,
+        "points_reversed": 0,
+        "points_estimated": True,
         "csrf_token": _csrf_for(token),
     }
 
