@@ -26,7 +26,10 @@ app/api/pay.py 的游客接口，会话依赖取自 app/api/member_auth.py。
 3. require_member_csrf（403 csrf_failed）。
 4. 查订单（404 order_not_found）。
 5. 以 actor="member" 调用 submit_payment 与 cancel_order；成功与 409 的状态码、响应体与
-   detail 和游客接口相同。
+   detail 和游客接口相同。取消另经 get_stripe_gateway 取得适配器并传给 cancel_order，模拟
+   支付不传（docs/DESIGN.md 1.12（提交 acf576e）第 2、5、9 条与 docs/HANDOFF.md 0.54）：
+   PaymentPathMismatch 回 409 method_changed，StripeUnavailable 回 503 stripe_unavailable，
+   与游客接口相同。
 
 三个接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control: no-store，由
 SHOP-TASK-027 的路由类统一加上；路径存在但方法不匹配的 405 由框架在路由之外回答，不在此列。
@@ -50,11 +53,13 @@ from app.api.order_lookup import _NoStoreRoute
 from app.api.pay import (
     CancelDep,
     CancelIn,
+    GatewayDep,
     LanguageDep,
     PaymentDep,
     _body_errors,
     _conflict,
     _json_body,
+    _stripe_unavailable,
     _utcnow,
 )
 from app.db.session import get_session
@@ -68,7 +73,9 @@ from app.services.payment import (
     OrderNotCancellable,
     OrderNotPayable,
     PaymentOutcome,
+    PaymentPathMismatch,
     PayOrder,
+    StripeUnavailable,
     cancel_order,
     expire_overdue_orders,
     pay_orders,
@@ -159,6 +166,8 @@ def submit_attempt(
         return _conflict("order_expired", exc.status)
     except OrderNotPayable as exc:
         return _conflict("order_not_payable", exc.status)
+    except PaymentPathMismatch:
+        return _conflict("method_changed")
     if not created:
         response.status_code = 200
     return outcome
@@ -169,6 +178,7 @@ def cancel(
     body: CancelDep,
     member: MemberDep,
     session: SessionDep,
+    gateway: GatewayDep,
     request: Request,
 ) -> CancelOutcome | JSONResponse:
     """不要求幂等键：重复取消已取消的订单直接返回当前状态。"""
@@ -176,6 +186,8 @@ def cancel(
     member_id = member.member.id
     order_id, _ = _member_order(session, member_id, body.order_number)
     try:
-        return cancel_order(session, order_id, _utcnow(), actor="member")
+        return cancel_order(session, order_id, _utcnow(), actor="member", gateway=gateway)
     except OrderNotCancellable as exc:
         return _conflict("order_not_cancellable", exc.status)
+    except StripeUnavailable:
+        return _stripe_unavailable()
