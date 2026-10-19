@@ -446,6 +446,9 @@ def test_tables_store_only_reconciliation_fields() -> None:
         "last_error_type",
         "created_at",
         "succeeded_at",
+        # SHOP-TASK-123：HANDOFF 0.54「退款尝试表补告警时间列，『数据模型』一行所说
+        # 『错误类别与时间』含此列」。
+        "alerted_at",
         "last_checked_at",
         "active_refund_request_id",
         "active_checkout_id",
@@ -739,10 +742,59 @@ def test_only_designated_refund_columns_are_nullable() -> None:
         "stripe_refund_id",
         "last_error_type",
         "succeeded_at",
+        # SHOP-TASK-123：告警时间在还没发过会反复出现的告警时为空（HANDOFF 0.54）。
+        "alerted_at",
         "last_checked_at",
         "active_refund_request_id",
         "active_checkout_id",
     }
+
+
+def test_alerted_at_is_nullable_writable_and_outside_constraints(session: Session) -> None:
+    """HANDOFF 0.54「退款尝试表补告警时间列……它只给会反复出现的告警（24 小时后
+    对账找不到或列不完、Stripe 退款对象与尝试不符）去重，这类告警每条尝试至多
+    一次」：不给告警时间时读回为空（还没告警过）；两种来源、三种状态的尝试都能
+    写入告警时间并原样读回，求值辅助函数不报任何约束不成立；没有检查约束、唯一
+    约束或索引引用这一列，所以它不改变现有约束——带告警时间的第二条不是 failed
+    的尝试仍被同一来源的活动列唯一约束拒绝。
+    """
+    alerted = CREATED + timedelta(hours=24, minutes=1)
+    sources = _sources(session)
+    plain = _attempt(session, sources, SOURCE_REFUND_REQUEST, STRIPE_REFUND_PENDING)
+
+    alerted_ids: list[int] = []
+    for source_type in REFUND_SOURCE_TYPES:
+        for status in STRIPE_REFUND_STATUSES:
+            values = _refund_values(_sources(session), source_type, status, alerted_at=alerted)
+            assert _failing_checks(StripeRefund, values) == []
+            alerted_ids.append(_add(session, StripeRefund(**values)).id)
+
+    session.expire_all()
+    reloaded = session.get(StripeRefund, plain.id)
+    assert reloaded is not None
+    assert reloaded.alerted_at is None
+    for row_id in alerted_ids:
+        row = session.get(StripeRefund, row_id)
+        assert row is not None
+        assert row.alerted_at == alerted
+
+    table = StripeRefund.__table__
+    for constraint in _check_constraints(StripeRefund):
+        assert "alerted_at" not in str(constraint.sqltext)
+    for constraint in table.constraints:
+        if isinstance(constraint, UniqueConstraint):
+            assert "alerted_at" not in [column.name for column in constraint.columns]
+    for index in table.indexes:
+        assert "alerted_at" not in [column.name for column in index.columns]
+
+    values = _refund_values(
+        sources, SOURCE_REFUND_REQUEST, STRIPE_REFUND_PENDING, alerted_at=alerted
+    )
+    assert _failing_checks(StripeRefund, values) == []
+    message = r"UNIQUE constraint failed: stripe_refunds\.active_refund_request_id\b"
+
+    with pytest.raises(IntegrityError, match=message):
+        _add(session, StripeRefund(**values))
 
 
 # ---------------------------------------------------------------------------
