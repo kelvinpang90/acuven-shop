@@ -30,7 +30,8 @@ latest_charge.payment_method_details.type（查询时 expand 为 payment_intent.
 会话对象只来自签名校验通过的 webhook 或本次向 Stripe 的查询，调用方不得传入其他来源的
 对象。确认先以普通读取得记录与订单；向 Stripe 查询时不持有任何数据库锁、不留着读事务；
 写入时按统一顺序「会员 → 订单 → Stripe 会话记录 → 用券 → 积分 → 退款尝试」加锁并重查
-（同一订单的其他会话记录在锁住订单之后以加锁读查看，同一订单的确认都先在订单行排队），
+（依次锁住订单、这条会话记录、同一订单的其他会话记录，最后才以加锁读查看这个会话的退款
+尝试；同一订单的确认都先在订单行排队），
 支付成功的迁移经 app/services/payment.py 的 mark_paid（操作者 system、不带「未到期」
 条件、不写支付尝试）。并发的两次确认只有一次迁移：带条件的 UPDATE 未命中时回滚重查，
 这时记录已有确认时间（订单由这个会话付款的持久证据），返回 paid。SQLite 不支持行锁，
@@ -316,10 +317,11 @@ def _write(
     stripe_session: CheckoutSession,
     now: datetime,
 ) -> tuple[_Step, str | None]:
-    """按「会员 → 订单 → Stripe 会话记录」加锁，重查后写入并提交；返回重查的结论与要记的
+    """按「会员 → 订单 → Stripe 会话记录 → 退款尝试」加锁，重查后写入并提交；返回重查的结论与要记的
     日志类别（提交之后由调用方记）。
 
-    重查时以加锁读查看这个会话的退款尝试与同一订单的其他会话记录。确认：按会话更新记录
+    重查时先以加锁读查看同一订单的其他会话记录，再查看这个会话的退款尝试（会话记录先于退款
+    尝试）。确认：按会话更新记录
     （expired 的记录改回 complete、重新占用活动位），经 mark_paid（system，不带「未到期」
     条件）进入 demo_paid，写确认时间，同一事务提交。只更新记录：按会话更新记录后提交。只补
     付款状态：记录保持 expired。迟到或不符的付款：按 _settle_late。重查的结论不再要求写入时
@@ -336,8 +338,10 @@ def _write(
         if order.member_id != member_id:
             continue
         record = _lock_checkout(db, checkout_id)
+        # 先锁同一订单的其他会话记录，再锁这个会话的退款尝试，守住统一锁顺序。
+        order_view = _order_view(db, order, checkout_id, lock=True)
         view = _record_view(db, record, lock=True)
-        step = _decide(view, _order_view(db, order, checkout_id, lock=True), stripe_session)
+        step = _decide(view, order_view, stripe_session)
         if step not in _WRITES:
             db.rollback()
             return step, _LOGS.get(step)
@@ -559,7 +563,8 @@ def _read(db: Session, checkout_id: int) -> tuple[_RecordView, _OrderView]:
         select(Order).where(Order.id == record.order_id).execution_options(populate_existing=True)
     )
     order = db.scalars(stmt).one()
-    return _record_view(db, record, lock=False), _order_view(db, order, checkout_id, lock=False)
+    order_view = _order_view(db, order, checkout_id, lock=False)
+    return _record_view(db, record, lock=False), order_view
 
 
 def _record_view(db: Session, record: StripeCheckout, *, lock: bool) -> _RecordView:
@@ -579,7 +584,8 @@ def _record_view(db: Session, record: StripeCheckout, *, lock: bool) -> _RecordV
 
 def _order_view(db: Session, order: Order, checkout_id: int, *, lock: bool) -> _OrderView:
     """lock 为真时以加锁读查看同一订单的其他活动记录：已锁住订单行，同一订单的确认都先在
-    订单行排队；并发新建的记录由活动列的唯一约束兜底。"""
+    订单行排队；并发新建的记录由活动列的唯一约束兜底。须在 _record_view 锁退款尝试之前调用
+    （锁顺序「Stripe 会话记录 → 退款尝试」）。"""
     stmt = select(StripeCheckout.id).where(
         StripeCheckout.active_order_id == order.id, StripeCheckout.id != checkout_id
     )
