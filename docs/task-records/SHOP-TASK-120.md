@@ -1,0 +1,21 @@
+# SHOP-TASK-120 游客支付页的 Stripe 发起与确认接口
+
+- [x] 按 `docs/DESIGN.md` 1.12（提交 `acf576e`）「Stripe 测试环境支付」第 3、4、9 条、`docs/UX.md` 0.11 的 P06、P07 与 `docs/HANDOFF.md` 0.54 的落实写法，新增 `app/api/stripe_pay.py`（前缀 `/api/pay/stripe`，路由类为 `app/api/order_lookup.py` 的 `_NoStoreRoute`），并在 `app/main.py` 注册。设计闸门：DESIGN 1.12（提交 `acf576e`）与 HANDOFF 0.54。未改 `app/api/pay.py`、`app/api/member_pay.py`、`app/services/`、模型、迁移与设计。
+- 两个接口都只凭订单访问 cookie 与 guest_checkout 授权，不读会员会话。授权、CSRF、请求体读取与 422 写法复用 `app/api/pay.py` 的 `_authorized_order_id`、`_require_csrf`、`_json_body`、`_body_errors`、`LanguageDep`（另复用 `SessionDep`、`GatewayDep`、`_conflict`、`_stripe_unavailable`、`_utcnow`），检查顺序与 `POST /api/pay/cancel` 相同：413 → 415 → 422（含 lang）→ 401 `access_expired` → 403 `csrf_failed`。适配器经 `get_stripe_gateway` 取得。处理函数与依赖产生的全部响应（含错误）由路由类加 no-store；路径存在而方法不匹配的 405 由框架回答，不在此列。接口不写日志。
+- `POST /api/pay/stripe/start`：请求体只有 `order_number`（extra forbid、strict），查询参数 `lang` 照 `LanguageDep`；调用 SHOP-TASK-112 的 `start_checkout`，Settings 取 `request.app.state.settings`。结果映射：
+  - `redirect` → 200 `{"result":"redirect","checkout_url":付款页地址}`
+  - `complete` → 200 `{"result":"complete","checkout_url":null}`（前端随后调用确认接口，HANDOFF 0.54）
+  - `not_payable` → 409 `{"detail":"order_not_payable","status":订单当前状态}`
+  - `method_changed` → 409 `{"detail":"method_changed"}`
+  - `under_review` → 409 `{"detail":"stripe_under_review"}`
+  - `unavailable` → 503 `{"detail":"stripe_unavailable"}`
+  - 响应里除付款页地址外不带任何 Stripe ID。
+- `POST /api/pay/stripe/confirm`：请求体只有 `order_number`，要求 CSRF；调用 SHOP-TASK-119 的 `confirm_order_payment`，回 200 `{"result":值}`，值为 `paid`、`confirming`、`not_paid`、`refunded` 之一。Stripe 不可用不回 503，由该函数归为 `confirming`。
+- 偏离与取舍，请审阅（未改设计，未发现须停下的设计问题）：
+  - `start_checkout` 的 `not_payable` 不带订单状态；接口在它返回后另以普通读重读订单状态填进 `status`。没有会话而已过本地支付到期时间时，它已按超时取消，所以这里读到的是 `cancelled`。
+  - 确认接口在授权与 CSRF 检查（只有读取）之后、调用 `confirm_order_payment` 之前先结束读事务，照该函数「调用方不得持有数据库锁、不得有未提交的改动」的要求。
+  - 确认接口不接受 `lang` 查询参数：验收标准只写了请求体，且确认结果与语言无关。
+  - 请求体模型 `StripeOrderIn` 在本文件里另写，字段与 `pay.py` 的 `CancelIn` 相同。
+- 测试：新文件 `tests/test_stripe_pay_api.py` 用 TestClient 与 SQLite 内存库（夹具照 `tests/test_demo_payment.py`），订单、Stripe 会话记录与退款尝试在本文件里按模型写入，以 `app.state.stripe_gateway` 注入 `FakeStripeGateway`。覆盖：发起时建会话，只返回付款页地址（响应里没有会话 ID、PaymentIntent ID 与创建幂等键），locale 随 lang；已有 open 会话直接返回原地址，不调用 Stripe、不另建记录；complete 会话为 complete；模拟途径 409 `method_changed`；非待支付 409 `order_not_payable`（带 status）；转人工 409 `stripe_under_review`；Stripe 不可用 503，记录保持 creating，接口不写日志。确认的 paid、confirming（Stripe 不可用）、not_paid、refunded 各一例。两个接口各验证：没有订单访问 cookie 401、缺 CSRF 403、未知字段 422 不回显，以及请求体超过 8 KB 时 413 先于授权；发起另验证非法 lang 422 不回显。所有响应（含错误）都断言带 no-store。每条测试的文档字符串写明它守住的设计、UX 或 HANDOFF 原句；只出自验收标准的注明「验收：」。
+- 验证到什么程度：人工逐条对照验收标准、DESIGN 1.12 第 3、4、9 条、UX 0.11 P06、P07 与 HANDOFF 0.54 自查，并核对 `start_checkout`、`confirm_order_payment` 各结果的映射。测试由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。SQLite 不支持行锁，加锁行为只按代码审阅；未连真实的 Stripe 测试环境。检查命令结果由 Worker 另行记录。
+- [ ] 会员的发起与确认接口（SHOP-TASK-121），以及 P06、P07 的前端页面，留给之后的任务。
