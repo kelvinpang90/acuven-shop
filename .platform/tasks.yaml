@@ -3270,7 +3270,7 @@ tasks:
       按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 2 条（订单有不是 expired 的 Stripe 记录时不接受模拟支付）、第 5 条（有 Stripe 记录的订单取消一律先处理会话；Stripe 不可用时本人取消提示稍后再试）与第 9 条，
       以及 docs/HANDOFF.md 0.54 的落实写法，让 app/api/pay.py 与 app/api/member_pay.py 现有的模拟支付与取消接口给 cancel_order 传入 Stripe 适配器，并把 SHOP-TASK-114 新增的两个异常归类为接口错误；现在这两个异常都会变成 500，Stripe 订单的本人取消一律按不可用处理。不加接口，不改服务层与设计。
       设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.54，订单状态与取消。拆分：接口层（4 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-114
     acceptance_criteria:
