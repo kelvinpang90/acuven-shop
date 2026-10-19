@@ -1,4 +1,4 @@
-"""读取站点设置：短信验证开关与支付方式的当前值。
+"""读取站点设置：短信验证开关与支付方式的当前值；后台保存支付方式。
 
 依据 docs/DESIGN.md 1.11（提交 2d13250）「边界与原则」第 4 条：「下单、发送短信、提交验证码与
 确认注销时，服务端都按当时读取的开关值判定」；「数据模型」的 SiteSetting 一行：「每次判定都从
@@ -8,20 +8,42 @@
 的支付方式取『模拟』（默认）或『Stripe 测试』，与短信验证开关一样每次从数据库读取」；「服务端在
 访客发起支付时按当时的值判定」。
 
-本模块只读、不写；修改开关由之后的管理后台业务接口任务在管理员登录与审计记录就绪后实现。
+读取函数只发 SELECT、不写库。只有支付方式可以修改（save_payment_method，SHOP-TASK-122，接口见
+app/api/admin_site_settings.py）：锁定站点设置行后在同一事务里改值并写审计
+admin_payment_method_changed（「数据模型」SiteSetting 一行「后台修改写入 AuditEvent」）；凭据
+不可用时不能改为 Stripe 测试（第 2 条「凭据未配置时不能切到 Stripe 测试」，docs/UX.md 0.11 A09
+「保存时服务端再次检查」）。短信验证开关按 Kelvin 2026-10-07 与 2026-10-15 的决定暂不提供写入。
+本模块不写日志。
 """
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from datetime import datetime
+
+from sqlalchemy import Select, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.site import (
     PAYMENT_METHOD_SIMULATED,
+    PAYMENT_METHOD_STRIPE_TEST,
     PAYMENT_METHODS,
     SITE_SETTING_ID,
     SiteSetting,
 )
+from app.services.admin_auth import record_audit
+
+# 审计操作名与对象类别（对象 ID 为站点设置行的 ID）。
+ADMIN_PAYMENT_METHOD_CHANGED = "admin_payment_method_changed"
+AUDIT_TARGET_SITE_SETTING = "site_setting"
+
+
+class PaymentMethodRejected(Exception):
+    """保存支付方式被拒；code 为 stripe_not_configured。"""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
 
 
 def is_sms_verification_enabled(db: Session) -> bool:
@@ -55,6 +77,99 @@ def get_payment_method(db: Session) -> str:
     订单已有不是 expired 的 Stripe 记录时途径不看本函数（第 2 条「不论开关当前取值」）。
     """
     method = db.scalar(select(SiteSetting.payment_method).where(SiteSetting.id == SITE_SETTING_ID))
-    if method in PAYMENT_METHODS:
+    return _known_method(method)
+
+
+def _known_method(method: str | None) -> str:
+    if method is not None and method in PAYMENT_METHODS:
         return method
     return PAYMENT_METHOD_SIMULATED
+
+
+# ---------------------------------------------------------------------------
+# 保存支付方式
+# ---------------------------------------------------------------------------
+
+
+def lock_site_setting_statement() -> Select[tuple[SiteSetting]]:
+    """锁定站点设置行的查询（SELECT … FOR UPDATE）。"""
+    return (
+        select(SiteSetting)
+        .where(SiteSetting.id == SITE_SETTING_ID)
+        .with_for_update()
+        # 会话里可能留着并发提交之前读到的旧值。
+        .execution_options(populate_existing=True)
+    )
+
+
+def _lock_site_setting(db: Session, now: datetime) -> SiteSetting:
+    setting = db.scalars(lock_site_setting_statement()).one_or_none()
+    if setting is not None:
+        return setting
+    # 迁移 0010 已写入这一行，正常不会走到这里。并发插入时后到的一方撞上主键，回滚保存点后再锁定
+    # 对方插入的行。新行的两项取服务端默认值：短信验证关闭、支付方式模拟。
+    try:
+        with db.begin_nested():
+            db.add(
+                SiteSetting(
+                    id=SITE_SETTING_ID,
+                    sms_verification_enabled=False,
+                    payment_method=PAYMENT_METHOD_SIMULATED,
+                    updated_at=now,
+                )
+            )
+            db.flush()
+    except IntegrityError:
+        pass
+    return db.scalars(lock_site_setting_statement()).one()
+
+
+def save_payment_method(
+    db: Session,
+    admin_account_id: int,
+    method: str,
+    stripe_available: bool,
+    now: datetime,
+) -> tuple[str, bool]:
+    """保存支付方式，返回保存后的支付方式与是否实际改动（与当前值相同为假）。
+
+    method 须为 simulated 或 stripe_test（由接口校验，其他值是编程错误，抛 ValueError）；
+    stripe_available 为 app/services/stripe_gateway.py 的 stripe_configured 在当次请求里的结果；
+    admin_account_id 须在调用前取出（这里先回滚，调用方会话里的 ORM 对象随之过期）。按以下顺序：
+    1. method 为 stripe_test 而 stripe_available 为假：抛 stripe_not_configured，不查库、不写入
+       （当前已是 stripe_test 也一样）。切回 simulated 不看配置。
+    2. 结束此前的事务（此前只有读取，回滚即可），以 SELECT … FOR UPDATE 锁定站点设置行，使锁定
+       成为新事务的第一条语句；行不存在时在保存点里按默认值插入，撞上主键即回滚该保存点，然后
+       再锁定。
+    3. 当前值按 get_payment_method 的规则解读（不认识的值视为 simulated）；与 method 相同时回滚
+       （释放锁），不写入、不写审计。
+    4. 否则改值与更新时间，写一条 admin_payment_method_changed 审计（对象为该行，旧值与新值为
+       simulated 或 stripe_test），一起提交。短信验证开关不动。
+    """
+    if method not in PAYMENT_METHODS:
+        raise ValueError("payment method must be simulated or stripe_test")
+    if method == PAYMENT_METHOD_STRIPE_TEST and not stripe_available:
+        raise PaymentMethodRejected("stripe_not_configured")
+
+    db.rollback()
+    setting = _lock_site_setting(db, now)
+    current = _known_method(setting.payment_method)
+    if current == method:
+        db.rollback()
+        return current, False
+
+    setting.payment_method = method
+    setting.updated_at = now
+    db.flush()
+    record_audit(
+        db,
+        ADMIN_PAYMENT_METHOD_CHANGED,
+        admin_account_id,
+        now,
+        target_type=AUDIT_TARGET_SITE_SETTING,
+        target_id=setting.id,
+        old_value=current,
+        new_value=method,
+    )
+    db.commit()
+    return method, True
