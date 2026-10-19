@@ -54,7 +54,13 @@ from app.services.stripe_confirm import (
     ConfirmResult,
     confirm_checkout,
 )
-from app.services.stripe_gateway import CheckoutSession, FakeStripeGateway, PaymentIntentInfo
+from app.services.stripe_gateway import (
+    CheckoutSession,
+    FakeStripeGateway,
+    PaymentIntentInfo,
+    StripeOutcome,
+    StripeResult,
+)
 
 # 订单在 CREATED 下单，支付到期为下单加 15 分钟；访客在下单 1 分钟后发起，5 分钟时确认。
 CREATED = datetime(2026, 10, 18, 2, 0)
@@ -272,6 +278,18 @@ def _confirm(
     return confirm_checkout(db, FakeStripeGateway(), checkout_id, stripe_session, now)
 
 
+def _confirm_queried(
+    db: Session,
+    checkout_id: int,
+    queried: CheckoutSession,
+    now: datetime = NOW,
+) -> ConfirmResult:
+    """不给出会话对象，按记录的会话 ID 向替身查询，查到 queried（同 tests/test_stripe_confirm.py
+    的未付款用例）：未付款的会话没有 PaymentIntent，给出的对象总要重查。"""
+    gateway = FakeStripeGateway(StripeResult(StripeOutcome.OK, queried))
+    return confirm_checkout(db, gateway, checkout_id, None, now)
+
+
 def _pending_refund(checkout_id: int, amount: int = TOTAL) -> tuple[Any, ...]:
     return (SOURCE_CHECKOUT, f"pi_test_{checkout_id}", amount, STRIPE_REFUND_PENDING, checkout_id)
 
@@ -334,6 +352,7 @@ def test_repeated_confirmation_of_a_late_payment_writes_nothing_more(
     stripe_session = _object(db, checkout_id, currency="sgd")
     assert _confirm(db, checkout_id, stripe_session) is ConfirmResult.REFUNDED
     record_before = _record_state(db, checkout_id)
+    caplog.clear()
 
     with caplog.at_level(logging.DEBUG, logger=LOGGER):
         again = _confirm(db, checkout_id, stripe_session, LATER)
@@ -588,7 +607,7 @@ def test_expired_record_with_mismatched_amount_is_not_revived(
     )
 
     with caplog.at_level(logging.DEBUG, logger=LOGGER):
-        pending = _confirm(db, checkout_id, unpaid)
+        pending = _confirm_queried(db, checkout_id, unpaid)
 
     assert pending is ConfirmResult.PENDING
     record = _record(db, checkout_id)
@@ -618,7 +637,7 @@ def test_expired_record_complete_and_unpaid_is_revived_to_wait(db: Session) -> N
     checkout_id = _checkout(db, order_id, CHECKOUT_EXPIRED)
     unpaid = _object(db, checkout_id, payment_status=PAYMENT_UNPAID, payment_intent=None)
 
-    assert _confirm(db, checkout_id, unpaid) is ConfirmResult.PENDING
+    assert _confirm_queried(db, checkout_id, unpaid) is ConfirmResult.PENDING
 
     record = _record(db, checkout_id)
     assert (record.status, record.active_order_id) == (CHECKOUT_COMPLETE, order_id)
@@ -641,7 +660,7 @@ def test_expired_record_complete_and_unpaid_otherwise_keeps_expired(db: Session,
     order_before = _order(db, order_id)
     unpaid = _object(db, checkout_id, payment_status=PAYMENT_UNPAID, payment_intent=None)
 
-    assert _confirm(db, checkout_id, unpaid) is ConfirmResult.PENDING
+    assert _confirm_queried(db, checkout_id, unpaid) is ConfirmResult.PENDING
 
     record = _record(db, checkout_id)
     assert (record.status, record.active_order_id) == (CHECKOUT_EXPIRED, None)
@@ -732,7 +751,7 @@ def test_expired_record_with_an_unpaid_session_changes_nothing(
     before = (_record_state(db, checkout_id), _order(db, order_id))
 
     with caplog.at_level(logging.DEBUG, logger=LOGGER):
-        result = _confirm(db, checkout_id, unpaid)
+        result = _confirm_queried(db, checkout_id, unpaid)
 
     assert result is ConfirmResult.PENDING
     assert (_record_state(db, checkout_id), _order(db, order_id)) == before
@@ -750,6 +769,6 @@ def test_mismatched_unpaid_active_record_is_pending_without_refund(db: Session) 
     )
     before = _record_state(db, checkout_id)
 
-    assert _confirm(db, checkout_id, unpaid) is ConfirmResult.PENDING
+    assert _confirm_queried(db, checkout_id, unpaid) is ConfirmResult.PENDING
     assert _record_state(db, checkout_id) == before
     assert _refunds(db, checkout_id) == []
