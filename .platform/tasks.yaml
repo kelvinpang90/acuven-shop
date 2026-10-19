@@ -3359,7 +3359,7 @@ tasks:
     depends_on:
       - SHOP-TASK-120
     acceptance_criteria:
-      - 在 app/api/member_pay.py 增加 POST /api/member/pay/stripe/start 与 POST /api/member/pay/stripe/confirm（同一路由器，响应同样带 no-store）；只凭会员会话（require_member，401 member_session_required），不读订单访问 cookie；都要求 require_member_csrf（403 csrf_failed）；本人订单经现有 _member_order 定位（找不到、不属于本人一律 404 order_not_found）；检查顺序与 POST /api/member/pay/cancel 相同；接口不写日志（服务层按设计记的 error 日志除外）
+      - 在 app/api/member_pay.py 增加 POST /api/member/pay/stripe/start 与 POST /api/member/pay/stripe/confirm（同一路由器，沿用它的 _NoStoreRoute；这些接口的处理函数与依赖产生的响应（含错误）都带 no-store，路径存在而方法不匹配时由框架返回的 405 不在此列）；只凭会员会话（require_member，401 member_session_required），不读订单访问 cookie；都要求 require_member_csrf（403 csrf_failed）；本人订单经现有 _member_order 定位（找不到、不属于本人一律 404 order_not_found）；检查顺序与 POST /api/member/pay/cancel 相同；接口不写日志（服务层按设计记的 error 日志除外）
       - 两个接口的请求体、查询参数 lang、成功响应、结果映射与错误（409 order_not_payable、method_changed、stripe_under_review，503 stripe_unavailable，确认的 paid、confirming、not_paid、refunded）都与 SHOP-TASK-120 的游客接口相同，可直接复用 app/api/stripe_pay.py 的请求模型与映射函数（不改那个文件）
       - 测试验证意图——新文件 tests/test_member_stripe_pay_api.py 用 TestClient 与 SQLite 内存库（夹具照 tests/test_member_pay_api.py，Stripe 记录的准备在本文件里另写），以 app.state.stripe_gateway 注入 FakeStripeGateway，验证——会员发起与确认各结果、未登录 401、缺 CSRF 403、他人订单与游客订单 404、订单访问 cookie 不能用于这些接口、所有响应（含错误）带 no-store；每条测试写明它守住的是设计或 UX 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
       - tests/test_member_pay_api.py 只为把两个新路由加进 test_order_number_never_in_path_or_query 的穷举而改（新路由同样不在路径或查询里带订单号），其余断言一字不改
