@@ -4082,7 +4082,7 @@ tasks:
       核对不符的已付款会话写完退款尝试后标为 expired 释放订单，依据 docs/HANDOFF.md 0.53 记录的 Kelvin 2026-10-15 落实决定（不改设计文本）。
       向 Stripe 发起迟到付款的退款由之后的退款任务的定时重试完成，本任务只写 pending 尝试。不加接口；不改设计。
       设计闸门：DESIGN 1.12（提交 acf576e），支付、订单状态与退款。拆分：业务规则层（4 个允许路径），2026-10-16 由原 SHOP-TASK-113 拆出。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-113
     acceptance_criteria:
