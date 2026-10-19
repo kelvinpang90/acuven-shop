@@ -46,6 +46,8 @@
 - 每个 `ready` 任务都要出现在 [docs/TODO.md](docs/TODO.md) 的 planning-v1 块里；「当前计划」里的每一项都要在 `tasks.yaml` 登记为 `ready`。
   格式见 `docs/TODO.md` 块上方的注释，格式不对整块作废、项目 fail closed。
 - `allowed_change_paths` 逐个写精确文件路径（不是目录、不是通配符）；`allowed_commands` 只引用 `.platform/commands.yaml` 里已有的 id。
+- **任务记录写在 `docs/task-records/<任务 id>.md`，不写进 `docs/TODO.md`（2026-10-19 起）**：登记时 `allowed_change_paths` 带这个文件、不带 `docs/TODO.md`，验收标准写「docs/task-records/<任务 id>.md 新增本任务记录（……）」。已交付任务的 `acceptance_criteria` 由运营者在登记 PR 里顺带原样移到该记录文件末尾，`tasks.yaml` 里只留一行指向；其余字段与 done 条目本身不删（后续任务的 `depends_on` 要在同一个 `tasks.yaml` 里读成 done）。
+  起因：Worker 读计划文件与契约的子进程输出上限是 1,000,000 字节，`docs/TODO.md` 涨到 1,001,658 字节后 SHOP-TASK-116 自动收尾以 `closeout_lost` 结束、规划上报一直是 `planning_invalid`、所有「开启」被拒（2026-10-19）。`tests/test_platform_tasks.py` 在 CI 里要求两个文件都不超过 600,000 字节。
 - **只在 CI 跑的检查不写进 `allowed_commands`**：用 TestClient / asyncio 的后端 pytest（`tests.unit`）和前端检查只在 CI 跑。
   Worker 的 MXC 沙箱里 ssl 等扩展加载失败、回环 socket 被禁，这类测试跑不通；Worker 本来就要等 PR 的必需 CI 检查
   （backend、frontend）全绿才进入「等待批准」，测试照样被强制。任务的 `allowed_commands` 目前只写 `lint.check`、`format.check`；
@@ -57,7 +59,7 @@
 - **前端样式文件（Kelvin 2026-10-01 决定）**：`frontend/src/styles/acuven-shop.css` 是生成文件，只读，必须和 `docs/design/tokens/acuven-shop.css` 逐字节相同；
   框架和页面的布局、显隐、媒体查询统一写在 `frontend/src/styles/site.css`，由 `frontend/src/main.tsx` 引入；不声明颜色、字体、圆角属性（由设计系统的类提供，用变量也不行；唯一例外是链接可写 `color: inherit` 取父元素的颜色，Kelvin 2026-10-07 决定），视觉稿给出的固定间距与尺寸直接写像素值（`acuven-shop.css` 没有间距与尺寸变量），响应式部分沿用 site.css 现有写法（`--gutter` 这类布局用的局部变量、百分比、`fr`）。
   登记任务时验收标准照这个写法写，不写「只用设计变量」：SHOP-TASK-038 的 run 因评审把它读成不许写像素间距，以 `review_repair_exhausted` 失败（2026-10-06）。
-  视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入 docs/TODO.md 的偏离，不借用其他组件的类来取颜色；登记时在验收标准里写明这一句，评审不以此要求修改。起因：SHOP-TASK-055 的 run a596c9c6 因评审要求链接用视觉稿的正文色，以 `review_repair_exhausted` 失败（2026-10-07）。
+  视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入该任务记录文件（docs/task-records/<任务 id>.md）的偏离，不借用其他组件的类来取颜色；登记时在验收标准里写明这一句，评审不以此要求修改。起因：SHOP-TASK-055 的 run a596c9c6 因评审要求链接用视觉稿的正文色，以 `review_repair_exhausted` 失败（2026-10-07）。
   每个有用户可见页面的前端任务，`allowed_change_paths` 固定带 `frontend/src/styles/site.css`，和 `frontend/src/router.tsx`、`frontend/src/i18n/copy.ts` 一样。
 - **新增路由的前端任务带上页面表**：`frontend/src/App.tsx` 的页面表按 `router.tsx` 的路由表穷举，路由表加了路径而页面表没加，类型检查不通过；
   所以目的或验收标准里新增路由（「路由 /…」「路径为 /…」）或允许改 `frontend/src/router.tsx` 的任务，`allowed_change_paths` 必须带 `frontend/src/App.tsx`，

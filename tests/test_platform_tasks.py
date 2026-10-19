@@ -14,7 +14,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-TASKS_FILE = Path(__file__).resolve().parent.parent / ".platform" / "tasks.yaml"
+ROOT = Path(__file__).resolve().parent.parent
+TASKS_FILE = ROOT / ".platform" / "tasks.yaml"
+PLAN_FILE = ROOT / "docs" / "TODO.md"
+# Worker 读这两个文件的子进程输出上限是 1,000,000 字节；留四成余量，CI 先报错，不等 Worker 读不了。
+MAX_CONTRACT_FILE_BYTES = 600_000
 ROUTER = "frontend/src/router.tsx"
 APP = "frontend/src/App.tsx"
 
@@ -78,3 +82,13 @@ def test_route_task_without_app_is_flagged(text: str, paths: list[str]) -> None:
 def test_backend_and_rule_mentions_are_not_routes(text: str) -> None:
     """后端接口路径与「按路由规则」这类说法不是新增前台路由，不要求 App.tsx。"""
     assert not _missing_app(_task(text, ["app/api/orders.py"]))
+
+
+@pytest.mark.parametrize("path", [PLAN_FILE, TASKS_FILE], ids=lambda path: path.name)
+def test_contract_files_stay_readable_by_the_worker(path: Path) -> None:
+    """CLAUDE.md「登记任务」：Worker 读计划文件与契约的输出上限是 1,000,000 字节，
+    超过即计划无效、自动收尾失败（docs/TODO.md 涨到 1,001,658 字节时
+    SHOP-TASK-116 以 closeout_lost 结束，2026-10-19）。任务记录写在 docs/task-records/，
+    已交付任务的验收标准移到那里，两个文件才不会再涨到上限。"""
+    size = path.stat().st_size
+    assert size <= MAX_CONTRACT_FILE_BYTES, f"{path.name} is {size} bytes"
