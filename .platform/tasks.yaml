@@ -3411,7 +3411,7 @@ tasks:
       按 docs/DESIGN.md 1.12「数据模型」StripeCheckout / StripeEvent / StripeRefund 一行（错误类别与时间）与「Stripe 测试环境支付」第 8 条（24 小时后对账找不到时告警、成功后又失败时告警、请求被明确拒绝时告警），
       以及 docs/HANDOFF.md 0.54 记录的 Kelvin 2026-10-19 决定（退款尝试表补告警时间列，给会反复出现的告警去重），在 SHOP-TASK-115 的退款尝试表上加告警时间列与迁移。只加列；退款规则由之后的任务实现。不改设计。
       设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.54，退款对账记录。拆分：数据库层（4 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-115
     acceptance_criteria:
