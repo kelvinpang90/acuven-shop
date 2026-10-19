@@ -21,6 +21,13 @@ pay.session_expired），不区分订单不存在、授权过期、不属于该�
 409 的 detail：idempotency_conflict、order_expired、order_not_payable、order_not_cancellable；
 后三种另带订单当前状态 status。不写日志；错误响应不含订单号、内部细节或令牌。
 限流留给之后统一处理公开接口限流的任务。
+
+有 Stripe 记录的订单依据 docs/DESIGN.md 1.12（提交 acf576e）「Stripe 测试环境支付」第 2、5、9 条
+与 docs/HANDOFF.md 0.54 的落实写法：取消经 get_stripe_gateway 取得适配器并传给 cancel_order
+（测试以 app.state.stripe_gateway 注入替身），模拟支付不传适配器。PaymentPathMismatch（订单有
+不是 expired 的 Stripe 记录或途径为 stripe）回 409 {"detail": "method_changed"}，不带 status；
+StripeUnavailable（Stripe 不可用或会话结果还不能确定）回 503 {"detail": "stripe_unavailable"}，
+订单与库存不变。两者都带 no-store。
 """
 
 from __future__ import annotations
@@ -59,13 +66,16 @@ from app.services.payment import (
     OrderNotPayable,
     PaymentMethod,
     PaymentOutcome,
+    PaymentPathMismatch,
     PaymentResult,
     PayOrder,
+    StripeUnavailable,
     cancel_order,
     expire_overdue_orders,
     pay_orders,
     submit_payment,
 )
+from app.services.stripe_gateway import StripeGateway, get_stripe_gateway
 
 router = APIRouter(prefix="/api/pay", tags=["pay"])
 
@@ -168,6 +178,7 @@ PaymentDep = Annotated[PaymentInput, Depends(_payment_input)]
 CancelDep = Annotated[CancelIn, Depends(_cancel_input)]
 LanguageDep = Annotated[Language, Depends(_language)]
 SessionDep = Annotated[Session, Depends(get_session)]
+GatewayDep = Annotated[StripeGateway, Depends(get_stripe_gateway)]
 
 
 def _access_expired() -> HTTPException:
@@ -204,6 +215,12 @@ def _conflict(code: str, status: str | None = None) -> JSONResponse:
     if status is not None:
         content["status"] = status
     return JSONResponse(status_code=409, content=content, headers=_NO_STORE)
+
+
+def _stripe_unavailable() -> JSONResponse:
+    # 第 5 条「Stripe 不可用时本人取消提示稍后再试」：订单保持待支付、库存继续预留。
+    content = {"detail": "stripe_unavailable"}
+    return JSONResponse(status_code=503, content=content, headers=_NO_STORE)
 
 
 @router.get("/orders", response_model=PayOrdersOut)
@@ -249,6 +266,8 @@ def submit_attempt(
         return _conflict("order_expired", exc.status)
     except OrderNotPayable as exc:
         return _conflict("order_not_payable", exc.status)
+    except PaymentPathMismatch:
+        return _conflict("method_changed")
     if not created:
         response.status_code = 200
     response.headers["Cache-Control"] = "no-store"
@@ -259,6 +278,7 @@ def submit_attempt(
 def cancel(
     body: CancelDep,
     session: SessionDep,
+    gateway: GatewayDep,
     request: Request,
     response: Response,
 ) -> CancelOutcome | JSONResponse:
@@ -268,8 +288,10 @@ def cancel(
     order_id = _authorized_order_id(session, cookie_value, body.order_number, now)
     _require_csrf(request, cookie_value)
     try:
-        outcome = cancel_order(session, order_id, now)
+        outcome = cancel_order(session, order_id, now, gateway=gateway)
     except OrderNotCancellable as exc:
         return _conflict("order_not_cancellable", exc.status)
+    except StripeUnavailable:
+        return _stripe_unavailable()
     response.headers["Cache-Control"] = "no-store"
     return outcome
