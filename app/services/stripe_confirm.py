@@ -41,6 +41,13 @@ SQLAlchemy 在 SQLite 上不生成 FOR UPDATE。
 尚未接入：设计写「告警」之处与核对不通过时先记一条 error 级日志，只含类别与本站记录 ID。
 不记录会话对象与 Stripe 响应原文。库里的时间一律是不带时区的 UTC。本模块只做业务规则：
 webhook、支付页与结果页接口以及定时任务之后调用它。
+
+按订单确认（confirm_order_payment）供之后的支付页发起与结果页确认接口调用，依据第 4 条
+（「同一会话或同一 PaymentIntent 的重复确认（订单已由它付款）直接返回原结果」）、第 6 条、
+docs/UX.md 0.11 P07（成功、确认中、尚未付款、已取消且已发起退款）与 docs/HANDOFF.md 0.54
+的落实写法（结果页的确认结果为 paid、confirming、not_paid、refunded 四种，Stripe 不可用与
+确认返回 needs_review 都按「确认中」显示）。它自己找记录时只读、结束读事务后才调用
+confirm_checkout，确认的事务与锁沿用 confirm_checkout。
 """
 
 from __future__ import annotations
@@ -103,6 +110,20 @@ class ConfirmResult(StrEnum):
     # 第 6 条的迟到或不符的付款，因合计上限或缺字段没写成退款尝试：订单不变、记录保留原来
     # 的活动位，交人工核对。
     NEEDS_REVIEW = "needs_review"
+
+
+class OrderPaymentResult(StrEnum):
+    """confirm_order_payment 的结果：结果页 P07 的四种状态。"""
+
+    # 订单已付款（本次确认，或之前已付款）。
+    PAID = "paid"
+    # 付款结果还不能确定：会话已完成而付款未定、Stripe 不可用、核对取不到对象或交人工核对。
+    CONFIRMING = "confirming"
+    # 尚未付款：订单仍待支付（会话未完成、创建结果未定、不符的付款已退款），或已取消而没有
+    # 迟到付款的退款尝试。
+    NOT_PAID = "not_paid"
+    # 订单已不是待支付，本单有来源为会话的退款尝试（迟到的付款，第 6 条）。
+    REFUNDED = "refunded"
 
 
 class FillResult(StrEnum):
@@ -401,6 +422,73 @@ def _payment_status(stripe_session: CheckoutSession) -> str | None:
     return payment_status if payment_status in PAYMENT_STATUSES else None
 
 
+# ---------------------------------------------------------------- 按订单确认
+
+
+def confirm_order_payment(
+    db: Session, gateway: StripeGateway, order_id: int, now: datetime
+) -> OrderPaymentResult:
+    """按订单确认 Stripe 付款，返回 paid、confirming、not_paid 或 refunded。
+
+    now 为不带时区的 UTC（带时区抛 ValueError，先于访问数据库）。调用方不得持有数据库锁、不得
+    有未提交的改动。先以普通读取得订单与它不是 expired 的记录，结束读事务：
+    1. 订单的支付时间非空：paid，不调用 Stripe（第 4 条：重复确认直接返回原结果）。
+    2. 没有这样的记录：订单已不是 awaiting_demo_payment 且本单有来源为 checkout 的退款尝试时
+       refunded，否则 not_paid（不符的付款退款后订单仍待支付、可再发起支付，HANDOFF 0.53）。
+    3. creating：not_paid，不调用 Stripe（创建结果由发起与定时任务对账）。
+    4. open 或 complete：按 confirm_checkout 确认（向 Stripe 查询一次）。paid 照传；unavailable
+       与 needs_review 为 confirming；refunded 与 pending 时重读该记录与订单：记录为 complete
+       （会话已完成而付款未定）为 confirming，订单已不是 awaiting_demo_payment 且本单有来源为
+       checkout 的退款尝试为 refunded，其余为 not_paid。
+    """
+    now = _resolve_now(now)
+    order = _load_order(db, order_id)
+    if order.paid_at is not None:
+        db.rollback()
+        return OrderPaymentResult.PAID
+    record = _load_active_checkout(db, order_id)
+    if record is None:
+        result = _settled(db, order_id, None)
+        db.rollback()
+        return result
+    checkout_id = record.id
+    status = record.status
+    db.rollback()
+    if status == CHECKOUT_CREATING:
+        return OrderPaymentResult.NOT_PAID
+
+    confirmed = confirm_checkout(db, gateway, checkout_id, None, now)
+    if confirmed is ConfirmResult.PAID:
+        return OrderPaymentResult.PAID
+    if confirmed in (ConfirmResult.UNAVAILABLE, ConfirmResult.NEEDS_REVIEW):
+        return OrderPaymentResult.CONFIRMING
+    result = _settled(db, order_id, checkout_id)
+    db.rollback()
+    return result
+
+
+def _settled(db: Session, order_id: int, checkout_id: int | None) -> OrderPaymentResult:
+    """普通读重读订单（与给出的记录），按 confirm_order_payment 第 2、4 条归为 confirming、
+    refunded 或 not_paid；不结束读事务。"""
+    order = _load_order(db, order_id)
+    if checkout_id is not None and _load_checkout(db, checkout_id).status == CHECKOUT_COMPLETE:
+        return OrderPaymentResult.CONFIRMING
+    if order.status != STATUS_AWAITING_PAYMENT and _has_checkout_refund(db, order_id):
+        return OrderPaymentResult.REFUNDED
+    return OrderPaymentResult.NOT_PAID
+
+
+def _has_checkout_refund(db: Session, order_id: int) -> bool:
+    """本单任一会话记录有来源为 checkout 的退款尝试（不论尝试状态）。"""
+    stmt = (
+        select(StripeRefund.id)
+        .join(StripeCheckout, StripeRefund.checkout_id == StripeCheckout.id)
+        .where(StripeCheckout.order_id == order_id, StripeRefund.source_type == SOURCE_CHECKOUT)
+        .limit(1)
+    )
+    return db.scalar(stmt) is not None
+
+
 # ---------------------------------------------------------------- 迟到与不符的付款
 
 
@@ -605,6 +693,20 @@ def _load_checkout(db: Session, checkout_id: int) -> StripeCheckout:
         .execution_options(populate_existing=True)
     )
     return db.scalars(stmt).one()
+
+
+def _load_order(db: Session, order_id: int) -> Order:
+    stmt = select(Order).where(Order.id == order_id).execution_options(populate_existing=True)
+    return db.scalars(stmt).one()
+
+
+def _load_active_checkout(db: Session, order_id: int) -> StripeCheckout | None:
+    stmt = (
+        select(StripeCheckout)
+        .where(StripeCheckout.active_order_id == order_id)
+        .execution_options(populate_existing=True)
+    )
+    return db.scalars(stmt).one_or_none()
 
 
 def _lock_order(db: Session, order_id: int) -> Order:
