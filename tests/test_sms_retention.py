@@ -336,15 +336,18 @@ def test_job_is_registered_last_with_own_transactions() -> None:
     加 delete_expired_verifications，以 own_transactions=True 注册（服务自己提交）。"""
     default = jobs.default_jobs()
 
-    assert [job.name for job in default][:3] == [
+    # SHOP-TASK-116 在超时取消之后插入了 stripe_checkouts，之后各项的位置后移一位、
+    # 任务数由 5 改为 6；下面只按新的位置与个数改写。
+    assert [job.name for job in default][:4] == [
         "cancel_expired_orders",
+        "stripe_checkouts",
         "reset_daily_stock",
         "auto_complete_shipped",
     ]
-    assert default[3].name == "delete_expired_verifications"
-    assert len(default) == 5
-    assert default[3].own_transactions is True
-    assert default[4].name == "expire_points"
+    assert default[4].name == "delete_expired_verifications"
+    assert len(default) == 6
+    assert default[4].own_transactions is True
+    assert default[5].name == "expire_points"
     assert jobs.delete_verifications_job().own_transactions is True
 
 

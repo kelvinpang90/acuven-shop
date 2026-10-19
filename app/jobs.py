@@ -1,5 +1,11 @@
-"""定时任务运行器：常驻进程每分钟执行一轮任务；另有手动执行一次超时取消、当日库存重置、
-发货满 7 天自动确认收货、删除满 30 天短信验证记录或积分到期的命令。
+"""定时任务运行器：常驻进程每分钟执行一轮任务；另有手动执行一次超时取消、Stripe 会话的
+定时处理、当日库存重置、发货满 7 天自动确认收货、删除满 30 天短信验证记录或积分到期的命令。
+
+依据 docs/DESIGN.md 1.12（提交 acf576e）「Stripe 测试环境支付」第 3、4、5 条：
+creating 记录由定时任务以同一幂等键重试、到期后对账；付款方式类型由定时任务
+向 Stripe 重查补齐；有 Stripe 记录的订单由定时任务按会话的实际状态处理，Stripe
+不可用时留到下一轮，24 小时仍无法确定就告警、订单不自动取消（SHOP-TASK-116，
+见 app/services/stripe_overdue.py）。
 
 依据 docs/DESIGN.md 1.11（提交 2d13250）：
 - 「计价、优惠、积分与库存」第 6 条：15 分钟未支付自动取消并释放；每天按马来西亚时间重建当日
@@ -17,6 +23,10 @@
 用法（生产栈里的 shop_jobs 容器与 shop_api 同一镜像）：
     python -m app.jobs run              常驻循环，SIGTERM 或 SIGINT 时退出
     python -m app.jobs cancel-expired   执行一次超时取消后退出（运营者手动补跑用）
+    python -m app.jobs process-stripe   执行一次 Stripe 会话的定时处理后退出（运营者
+                                        手动补跑用；两种扫描每次各最多
+                                        STRIPE_CHECKOUT_BATCH_LIMIT 条；不能解除
+                                        已转人工的记录）
     python -m app.jobs reset-stock      执行一次当日库存重置后退出（运营者手动补跑用；只重置当前
                                         马来西亚营业日期，不补过去的日期；已完成也以 0 退出）
     python -m app.jobs complete-shipped 执行一次发货满 7 天自动确认收货后退出（运营者手动补跑用）
@@ -42,7 +52,10 @@
    正在执行，最多再等 SHUTDOWN_GRACE_SECONDS 让它做完，到时仍未退出即强制退出（未提交的
    事务随连接断开由数据库回滚），所以收到信号后 10 秒内一定退出。
 
-任务列表：先超时取消（每轮最多 CANCEL_BATCH_LIMIT 张，剩余的下一轮继续），再每日库存重置
+任务列表：先超时取消（每轮最多 CANCEL_BATCH_LIMIT 张，剩余的下一轮继续），
+再 Stripe 会话的定时处理（会话处理与付款方式类型补齐两种扫描每轮各最多
+STRIPE_CHECKOUT_BATCH_LIMIT 条，合计至多两倍；Stripe 未配置时没有待处理的记录
+才跳过，见 stripe_checkouts_job），再每日库存重置
 （当前马来西亚营业日期已有 succeeded 记录时跳过，否则执行；失败只记日志、下一轮重试），再发货
 满 7 天自动确认收货（每轮最多完成 AUTO_COMPLETE_BATCH_LIMIT 张，与超时取消相同），再删除满
 30 天的短信验证记录（每轮最多 VERIFICATION_DELETE_BATCH_LIMIT 条，与超时取消相同），最后处理
@@ -57,6 +70,8 @@ default_jobs()：
 带到下一张订单的加锁里（否则 SHOP-TASK-090 让取消先锁会员行之后，会与持会员锁、等库存的会员
 下单成环；与按库存顺序加锁的游客下单之间也有同类情形）。某张订单取消时抛异常，只回滚这一张，
 之前已取消的订单保留，本轮记失败、下一轮继续；同一订单只生效一次由它带条件的 UPDATE 保证。
+Stripe 会话的定时处理也自己管理事务：逐条记录在各自的事务里处理并提交，
+调用 Stripe 时不持有任何数据库锁（见 app/services/stripe_overdue.py）。
 库存重置自己管理事务：它要在独立事务里记下失败，不能放进运行器的事务里随失败一起回滚。
 自动确认收货也自己管理事务：每张订单锁定订单行之前先结束此前的事务，使锁定成为新事务的
 第一条语句（SHOP-TASK-040 的锁定协议）；放进运行器的外层事务以保存点执行时，
@@ -64,9 +79,11 @@ default_jobs()：
 记录也自己管理事务：服务删除一批后自己提交，没有到期记录时回滚只读事务。积分到期不自己管理事务：
 服务只 flush，运行器在任务正常返回后提交，异常时回滚整批。
 
-日志只记录任务名、生效条数（超时取消即取消张数，库存重置即 SKU 数，自动确认收货即完成张数，
-删除短信验证记录即删除条数，积分到期即到期批次数）、营业日期、结果与异常类名，不记录订单号、手机号等个人资料、
-连接串或异常消息原文。
+日志只记录任务名、生效条数（超时取消即取消张数，Stripe 会话的定时处理即
+两种扫描处理过的记录数，库存重置即 SKU 数，自动确认收货即完成张数，删除短信验证
+记录即删除条数，积分到期即到期批次数）、营业日期、结果与异常类名，不记录订单号、
+手机号等个人资料、连接串或异常消息原文。Stripe 的告警日志由服务另记，只含类别与
+本站记录 ID。
 """
 
 from __future__ import annotations
@@ -87,13 +104,15 @@ from typing import Protocol
 
 from sqlalchemy.orm import Session
 
-from app.core.config import get_settings
+from app.core.config import Settings, get_settings
 from app.db.session import _session_factory
 from app.services.auto_complete import auto_complete_shipped_orders
 from app.services.payment import expire_overdue_orders
 from app.services.points import expire_points
 from app.services.sms_retention import delete_expired_verifications
 from app.services.stock_reset import business_date, reset_completed, reset_daily_stock
+from app.services.stripe_gateway import StripeGateway, StripeHttpGateway, stripe_configured
+from app.services.stripe_overdue import has_pending_checkouts, process_stripe_checkouts
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +122,8 @@ ROUND_SECONDS = 60.0
 UNHEALTHY_AFTER_SECONDS = 600.0
 # 超时取消每轮最多处理的订单数；剩余的下一轮继续。
 CANCEL_BATCH_LIMIT = 100
+# Stripe 会话的定时处理：会话处理与付款方式类型补齐每轮各最多处理的记录数（合计至多两倍）。
+STRIPE_CHECKOUT_BATCH_LIMIT = CANCEL_BATCH_LIMIT
 # 自动确认收货每轮最多完成的订单数（跳过的全部已退订单不计入）；剩余的下一轮继续。
 AUTO_COMPLETE_BATCH_LIMIT = CANCEL_BATCH_LIMIT
 # 删除满 30 天的短信验证记录每轮最多删除的条数；剩余的下一轮继续。
@@ -153,6 +174,31 @@ def cancel_expired_job(limit: int = CANCEL_BATCH_LIMIT) -> Job:
         return expire_overdue_orders(db, now, limit=limit)
 
     return Job(name="cancel_expired_orders", run=run, own_transactions=True)
+
+
+GatewayFactory = Callable[[Settings], StripeGateway]
+
+
+def stripe_checkouts_job(
+    limit: int = STRIPE_CHECKOUT_BATCH_LIMIT,
+    gateway_factory: GatewayFactory = StripeHttpGateway.from_settings,
+) -> Job:
+    """Stripe 会话的定时处理：SHOP-TASK-116 的 process_stripe_checkouts，两种扫描每次各最多
+    limit 条。它逐条提交，所以 own_transactions。
+
+    每次按 get_settings() 的当前配置以 gateway_factory 建适配器（配置被清空后即为未配置，
+    适配器的调用一律归为 unavailable）。Stripe 未配置时，没有待处理的记录（会话处理要选的
+    记录；只需补齐付款方式类型的不算）才不调用、返回 0（跳过算成功）；有待处理的记录则照常
+    处理、按不可用计时与告警，不能因未配置而永远不告警。
+    """
+
+    def run(db: Session, now: datetime) -> int:
+        settings = get_settings()
+        if not stripe_configured(settings) and not has_pending_checkouts(db, now):
+            return 0
+        return process_stripe_checkouts(db, gateway_factory(settings), now, limit)
+
+    return Job(name="stripe_checkouts", run=run, own_transactions=True)
 
 
 def reset_stock_job() -> Job:
@@ -209,10 +255,11 @@ def expire_points_job(limit: int = POINTS_EXPIRE_BATCH_LIMIT) -> Job:
 
 
 def default_jobs() -> list[Job]:
-    """run 每轮按顺序执行的任务：先超时取消，再每日库存重置，再发货满 7 天自动确认收货，
-    再删除满 30 天的短信验证记录，最后处理积分到期。"""
+    """run 每轮按顺序执行的任务：先超时取消，再 Stripe 会话的定时处理，再每日库存重置，
+    再发货满 7 天自动确认收货，再删除满 30 天的短信验证记录，最后处理积分到期。"""
     return [
         cancel_expired_job(),
+        stripe_checkouts_job(),
         reset_stock_job(),
         auto_complete_job(),
         delete_verifications_job(),
@@ -395,6 +442,28 @@ def cancel_expired(
     return EXIT_OK
 
 
+def process_stripe(
+    session_factory: SessionFactory | None,
+    *,
+    now: Callable[[], datetime] = utc_now,
+    limit: int = STRIPE_CHECKOUT_BATCH_LIMIT,
+) -> int:
+    """执行一次 Stripe 会话的定时处理，返回退出码。某种扫描的处理条数达到上限时可能还有
+    剩余，可再执行一次；重复执行不重复生效。不能解除已转人工的记录（创建满 24 小时的
+    creating 记录不再调用 Stripe）。"""
+    if session_factory is None:
+        logger.error("database is not configured")
+        return EXIT_NOT_CONFIGURED
+    job = stripe_checkouts_job(limit)
+    try:
+        count = run_job(job, session_factory, now())
+    except Exception as exc:
+        logger.error("job %s failed: %s", job.name, type(exc).__name__)
+        return EXIT_FAILED
+    logger.info("job %s done: %d changed", job.name, count)
+    return EXIT_OK
+
+
 def reset_stock(
     session_factory: SessionFactory | None,
     *,
@@ -489,6 +558,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("run", help="run the jobs every minute until SIGTERM or SIGINT")
     commands.add_parser("cancel-expired", help="cancel overdue unpaid orders once and exit")
+    commands.add_parser("process-stripe", help="process Stripe checkout records once and exit")
     commands.add_parser("reset-stock", help="reset today's stock (Malaysia date) once and exit")
     commands.add_parser("complete-shipped", help="complete orders shipped 7 days ago once and exit")
     commands.add_parser(
@@ -501,6 +571,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     session_factory = configured_session_factory()
     if args.command == "cancel-expired":
         return cancel_expired(session_factory)
+    if args.command == "process-stripe":
+        return process_stripe(session_factory)
     if args.command == "reset-stock":
         return reset_stock(session_factory)
     if args.command == "complete-shipped":
