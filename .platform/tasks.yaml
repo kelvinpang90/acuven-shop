@@ -3327,7 +3327,7 @@ tasks:
       按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 3 条（访客在支付页按现有授权与 CSRF 校验后发起；服务端只把 Stripe 返回的付款页地址交给前台跳转）、第 4 条（访客从 Stripe 返回后前台调用本站接口，服务端按授权找到该单的会话向 Stripe 查询一次）与第 9 条，
       以及 docs/UX.md 0.11 的 P06、P07 与 docs/HANDOFF.md 0.54 的落实写法，给游客（订单访问 cookie）提供 Stripe 发起与确认接口。会员接口由之后的任务做；不做前端，不改设计。
       设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.54，支付状态。拆分：接口层（4 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-118
       - SHOP-TASK-119
