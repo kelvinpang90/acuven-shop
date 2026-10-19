@@ -4109,7 +4109,7 @@ tasks:
       第 5 条（有 Stripe 记录的订单取消一律先处理会话：creating 先取得会话或对账，open 先请求作废，complete 且已付款按第 4 条确认，付款未定时继续等待；Stripe 不可用时本人取消提示稍后再试；以 Stripe 的状态为准，不以本地时钟代替）、
       「计价、优惠、积分与库存」第 6 条，以及 docs/HANDOFF.md 0.53 的核验结论（作废已过期或已完成的会话被 400 拒绝，须再查询会话决定），改造 app/services/payment.py 的三个现有入口。定时任务由 SHOP-TASK-116 实现。不加接口；不改设计。
       设计闸门：DESIGN 1.12（提交 acf576e），订单状态、库存、券与积分的释放。拆分：业务规则层（4 个允许路径）；预审估计原任务超过约 1500 行，2026-10-15 拆为本任务与 SHOP-TASK-116。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-117
     acceptance_criteria:
