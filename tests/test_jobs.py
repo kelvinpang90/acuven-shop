@@ -1115,8 +1115,11 @@ def _stripe_record(
         active_order_id=order_id,
     )
     db.add(record)
+    db.flush()
+    # 提交前取 ID：提交后读属性会重新加载、让共享连接上留下未结束的事务。
+    checkout_id = record.id
     db.commit()
-    return record.id
+    return checkout_id
 
 
 def _last_polled(db: Session, checkout_id: int) -> datetime | None:

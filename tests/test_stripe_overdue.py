@@ -686,7 +686,9 @@ def test_changed_record_is_left_for_the_next_round(
 ) -> None:
     """第 5 条「所有取消入口……用同一规则」；验收：取消经
     cancel_after_stripe_end，它返回 changed（查询 Stripe 之后记录被 webhook
-    改为 complete 且已付款）时这条留到下一轮，下一轮按 complete 确认。"""
+    改为 complete 且已付款）时这条留到下一轮，下一轮按 complete 确认。模拟的
+    webhook 一并写上付款方式类型，使这条不满足补齐扫描的条件、本轮只算会话处理
+    这一条。"""
     placed = _guest_order(db, variant)
     checkout_id = _checkout(db, placed.order_id, CHECKOUT_OPEN)
     expired = _session(db, checkout_id, "expired")
@@ -700,6 +702,7 @@ def test_changed_record_is_left_for_the_next_round(
                 .values(
                     status=CHECKOUT_COMPLETE,
                     payment_status=PAYMENT_PAID,
+                    payment_method_type="card",
                     completed_at=AFTER_STRIPE_EXPIRY,
                 )
             )
