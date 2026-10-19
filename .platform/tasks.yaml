@@ -3278,13 +3278,13 @@ tasks:
       - 归类——cancel_order 抛 StripeUnavailable 时回 503 {"detail":"stripe_unavailable"}（订单与库存不变）；submit_payment 抛 PaymentPathMismatch 时回 409 {"detail":"method_changed"}（不写支付尝试）；游客接口的这两种响应与现有 401、403、409 一样带 no-store，会员接口照它的路由器已有的 no-store；取消时会话已付款仍按现有映射回 409 order_not_cancellable（status 为 demo_paid）
       - 测试验证意图——新文件 tests/test_stripe_pay_cancel_api.py 用 TestClient 与 SQLite 内存库（照 tests/test_demo_payment.py 与 tests/test_member_pay_api.py 的夹具写法，Stripe 会话记录的准备照 tests/test_stripe_cancel.py 在本文件里另写，不 import 其他测试文件），以 app.state.stripe_gateway 注入 FakeStripeGateway，游客与会员各验证——open 会话作废成功后取消成功、库存释放；Stripe 不可用时取消回 503 stripe_unavailable 且订单仍待支付、库存仍预留、响应带 no-store；作废时 Stripe 答复会话已付款则订单变为 demo_paid、回 409 order_not_cancellable；有不是 expired 的记录时模拟支付回 409 method_changed、不写支付尝试；没有 Stripe 记录的订单取消不调用适配器（FakeStripeGateway 的 calls 为空）；每条测试写明它守住的是设计的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
       - 现有 tests/test_demo_payment.py 与 tests/test_member_pay_api.py 一字不改且照常通过；接口不写日志（服务层按设计记的 error 日志除外）
-      - docs/TODO.md 新增 SHOP-TASK-118 记录段（适配器的传入、两个新错误码、偏离、验证到什么程度，并写明发起与确认接口留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - docs/task-records/SHOP-TASK-118.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；适配器的传入、两个新错误码、偏离、验证到什么程度，并写明发起与确认接口留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
     allowed_change_paths:
       - app/api/pay.py
       - app/api/member_pay.py
       - tests/test_stripe_pay_cancel_api.py
-      - docs/TODO.md
+      - docs/task-records/SHOP-TASK-118.md
     allowed_commands:
       - lint.check
       - format.check
@@ -3306,7 +3306,7 @@ tasks:
       - 确认的事务与锁沿用 confirm_checkout，confirm_order_payment 自己找记录时只读、不持锁调用 Stripe；不改 confirm_checkout、fill_payment_method_type 与 SHOP-TASK-112 至 117 的其他函数的行为
       - 测试验证意图——新文件 tests/test_stripe_pay_view.py 用 SQLite 内存库与 FakeStripeGateway 验证——三个字段在模拟途径、Stripe 途径（开关为 stripe_test 且应付不低于最低额，或已有不是 expired 的记录）、低于最低额、非待支付订单下的取值；creating、带告警时间的 creating、open、complete 与只有 expired 记录时的 stripe_state；迟到付款退款后 stripe_refunded 为真；confirm_order_payment 的每一种返回（含 creating 不调用适配器、Stripe 不可用为 confirming、open 未付款为 not_paid、complete 而付款未定为 confirming、迟到付款为 refunded、已付款的订单为 paid 且不调用适配器）；视图不写库；每条测试写明它守住的是设计或 UX 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
       - tests/test_demo_payment.py 与 tests/test_member_pay_api.py 只把三个新字段加进 ORDER_FIELDS 并写明原因，其余断言一字不改
-      - docs/TODO.md 新增 SHOP-TASK-119 记录段（三个字段与确认结果的含义、偏离、验证到什么程度，并写明 P06 打开时已有 complete 会话由前端调用确认接口、发起与确认接口留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - docs/task-records/SHOP-TASK-119.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；三个字段与确认结果的含义、偏离、验证到什么程度，并写明 P06 打开时已有 complete 会话由前端调用确认接口、发起与确认接口留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/api/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
     allowed_change_paths:
       - app/services/payment.py
@@ -3314,7 +3314,7 @@ tasks:
       - tests/test_stripe_pay_view.py
       - tests/test_demo_payment.py
       - tests/test_member_pay_api.py
-      - docs/TODO.md
+      - docs/task-records/SHOP-TASK-119.md
     allowed_commands:
       - lint.check
       - format.check
@@ -3336,13 +3336,13 @@ tasks:
       - POST /api/pay/stripe/start——请求体只有 order_number（extra forbid、strict），查询参数 lang 照 LanguageDep；调用 start_checkout，Settings 取 request.app.state.settings；redirect 回 200 {"result":"redirect","checkout_url":付款页地址}，complete 回 200 {"result":"complete","checkout_url":null}（前端随后调用确认接口）；not_payable 回 409 order_not_payable（带订单当前 status，照现有 _conflict）、method_changed 回 409 method_changed、under_review 回 409 stripe_under_review、unavailable 回 503 stripe_unavailable；响应里除付款页地址外不带任何 Stripe ID
       - POST /api/pay/stripe/confirm——请求体只有 order_number，要求 CSRF；调用 SHOP-TASK-119 的 confirm_order_payment，回 200 {"result":值}，值为 paid、confirming、not_paid、refunded 之一；Stripe 不可用不回 503，由函数归为 confirming
       - 测试验证意图——新文件 tests/test_stripe_pay_api.py 用 TestClient 与 SQLite 内存库（夹具照 tests/test_demo_payment.py，Stripe 记录的准备在本文件里另写），以 app.state.stripe_gateway 注入 FakeStripeGateway，验证——发起建会话并只返回付款页地址、已有 open 会话直接返回原地址而不再创建、模拟途径回 409 method_changed、非待支付回 409 order_not_payable、转人工回 409 stripe_under_review、不可用回 503；确认的四种结果各一例；没有订单访问 cookie 401、缺 CSRF 403、未知字段与非法 lang 422 且不回显输入；所有响应（含错误）带 no-store；每条测试写明它守住的是设计或 UX 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
-      - docs/TODO.md 新增 SHOP-TASK-120 记录段（两个接口、结果映射、偏离、验证到什么程度，并写明会员接口与 P06、P07 页面留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - docs/task-records/SHOP-TASK-120.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；两个接口、结果映射、偏离、验证到什么程度，并写明会员接口与 P06、P07 页面留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/api/pay.py、app/api/member_pay.py、app/services/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
     allowed_change_paths:
       - app/api/stripe_pay.py
       - app/main.py
       - tests/test_stripe_pay_api.py
-      - docs/TODO.md
+      - docs/task-records/SHOP-TASK-120.md
     allowed_commands:
       - lint.check
       - format.check
@@ -3363,13 +3363,13 @@ tasks:
       - 两个接口的请求体、查询参数 lang、成功响应、结果映射与错误（409 order_not_payable、method_changed、stripe_under_review，503 stripe_unavailable，确认的 paid、confirming、not_paid、refunded）都与 SHOP-TASK-120 的游客接口相同，可直接复用 app/api/stripe_pay.py 的请求模型与映射函数（不改那个文件）
       - 测试验证意图——新文件 tests/test_member_stripe_pay_api.py 用 TestClient 与 SQLite 内存库（夹具照 tests/test_member_pay_api.py，Stripe 记录的准备在本文件里另写），以 app.state.stripe_gateway 注入 FakeStripeGateway，验证——会员发起与确认各结果、未登录 401、缺 CSRF 403、他人订单与游客订单 404、订单访问 cookie 不能用于这些接口、所有响应（含错误）带 no-store；每条测试写明它守住的是设计或 UX 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
       - tests/test_member_pay_api.py 只为把两个新路由加进 test_order_number_never_in_path_or_query 的穷举而改（新路由同样不在路径或查询里带订单号），其余断言一字不改
-      - docs/TODO.md 新增 SHOP-TASK-121 记录段（两个接口、与游客接口的异同、偏离、验证到什么程度，并写明 P06、P07 页面留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - docs/task-records/SHOP-TASK-121.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；两个接口、与游客接口的异同、偏离、验证到什么程度，并写明 P06、P07 页面留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；现有三个会员支付接口的行为不变；不改 app/api/stripe_pay.py、app/api/pay.py、app/services/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
     allowed_change_paths:
       - app/api/member_pay.py
       - tests/test_member_stripe_pay_api.py
       - tests/test_member_pay_api.py
-      - docs/TODO.md
+      - docs/task-records/SHOP-TASK-121.md
     allowed_commands:
       - lint.check
       - format.check
@@ -3391,14 +3391,14 @@ tasks:
       - PUT /api/admin/site-settings 照 app/api/admin_store_design.py 的保存接口写法，检查顺序 413（8 KB）→ 415 → 401 → 403 csrf_failed → 422（请求体只有 payment_method，取两个常量之一，extra forbid、strict，含短信字段或未知值一律 422，错误沿用 _body_errors 不回显）；值为 stripe_test 而 stripe_available 为假时回 422 {"detail":"stripe_not_configured"}、不写入（当前已是 stripe_test 也一样）；切回 simulated 不看配置
       - 保存照 app/services/store_design.py 的 save_store_design 在一个事务里完成——锁住唯一的站点设置行（行不存在时照它的写法插入），与当前值相同时回 200、不写入、不写审计；否则改值并经 record_audit 写操作 admin_payment_method_changed（对象类别 site_setting、对象 ID 为该行 ID、旧值与新值为 simulated 或 stripe_test）后一并提交；回 200 与保存后的 payment_method；锁定与保存函数加在 app/services/site_settings.py，模块说明里「只读、不写」一句随之改写
       - 测试验证意图——新文件 tests/test_admin_site_settings.py 用 TestClient 与 SQLite 内存库（夹具照 tests/test_admin_store_design.py，Stripe 配置照 tests/test_stripe_gateway.py 的 make_settings）验证——未登录 401、缺 CSRF 403、超长 413、非 JSON 415、短信字段与未知值与大写值 422 且不回显；未配置、密钥为正式环境前缀、签名密钥前缀不对时 GET 的 stripe_available 为假且 PUT stripe_test 回 422 stripe_not_configured、数据与审计不变；已配置时切换成功、审计的操作者与新旧值正确、get_payment_method 随即读到新值；未配置时切回 simulated 成功；相同值不写审计；所有响应（含错误）带 no-store；用 MySQL 方言编译锁定语句含 FOR UPDATE；每条测试写明它守住的是设计或 UX 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
-      - docs/TODO.md 新增 SHOP-TASK-122 记录段（两个接口、凭据判定以 stripe_configured 为准、审计、偏离、验证到什么程度，并写明 A09 页面与短信验证开关留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - docs/task-records/SHOP-TASK-122.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；两个接口、凭据判定以 stripe_configured 为准、审计、偏离、验证到什么程度，并写明 A09 页面与短信验证开关留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；公开的 GET /api/site-settings 与 tests/test_site_settings.py 不变；不改模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
     allowed_change_paths:
       - app/api/admin_site_settings.py
       - app/services/site_settings.py
       - app/main.py
       - tests/test_admin_site_settings.py
-      - docs/TODO.md
+      - docs/task-records/SHOP-TASK-122.md
     allowed_commands:
       - lint.check
       - format.check
@@ -3419,13 +3419,13 @@ tasks:
       - 新迁移文件 alembic/versions/20261019_0022_stripe_refund_alerts.py，revision 为 0022、down_revision 为 0021；upgrade 只给 stripe_refunds 加 alerted_at 列（可空，已有行为空），downgrade 只删除它；迁移只在 MySQL 上执行
       - tests/test_stripe_refund_models.py 只做两处改动并写明原因——test_tables_store_only_reconciliation_fields 的退款尝试列集合加入 alerted_at，test_only_designated_refund_columns_are_nullable 的可空列集合加入 alerted_at；另加一条测试验证 alerted_at 可空、可写入时间且不影响现有约束；其余断言一字不改
       - 迁移在真 MySQL 上 upgrade head、downgrade base、再 upgrade head 全部成功，alembic check 无差异；每条新测试写明它守住的是设计或 HANDOFF 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
-      - docs/TODO.md 新增 SHOP-TASK-123 记录段（新列的含义、迁移、偏离、验证到什么程度，并写明告警的写入留给之后的退款规则任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - docs/task-records/SHOP-TASK-123.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；新列的含义、迁移、偏离、验证到什么程度，并写明告警的写入留给之后的退款规则任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改其他模型与已有迁移、app/services/、app/api/、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
     allowed_change_paths:
       - app/models/stripe.py
       - alembic/versions/20261019_0022_stripe_refund_alerts.py
       - tests/test_stripe_refund_models.py
-      - docs/TODO.md
+      - docs/task-records/SHOP-TASK-123.md
     allowed_commands:
       - lint.check
       - format.check
@@ -3447,12 +3447,12 @@ tasks:
       - 公开函数 refresh_refund_attempt（入参同上）——对已有 Stripe 退款 ID 的尝试不持锁调用 retrieve_refund，再在自己的事务里按 apply_refund_object 写入并提交；Stripe 不可用或查询被拒时只写上次复查时间，不改状态、不告警；公开函数 refunded_total（入参数据库会话、PaymentIntent ID）以 FOR UPDATE 锁住同一 PaymentIntent 的 pending 与 succeeded 尝试并返回金额合计（failed 不计），供批准与手动重试核对「合计不得超过付款金额」
       - 告警一律是提交之后记一条 error 级日志（格式照 app/services/stripe_confirm.py，只含类别与本站尝试 ID）；会反复出现的告警（本任务的 stripe_refund_mismatch）以带条件的更新写告警时间，告警时间已非空的尝试不再记这类告警；状态改动引起的告警（stripe_refund_rejected、stripe_refund_failed_after_success）随改动只记一次，不看也不写告警时间；不记录 Stripe 请求、响应与退款原文
       - 测试验证意图——新文件 tests/test_stripe_refund.py 用 SQLite 内存库与 FakeStripeGateway 验证——状态映射五种与未知值；三种允许的改动与被忽略的改动（succeeded 到 pending、failed 到任何状态）、以相反顺序写入两个查询结果不倒退；succeeded 改为 failed 释放活动来源（同一来源随后可再建一条）并告警（已因不符告警过的尝试也照记）；不符的告警只记一次；PaymentIntent 或尝试 ID 不符不写；提交表单与幂等键；rejected 记 failed 与错误类别且不再调用；unavailable 保持 pending、调用次数加一；回放时先查询；满 24 小时不调用；refunded_total 不计 failed；用 MySQL 方言编译锁定语句含 FOR UPDATE；每条测试写明它守住的是设计或 HANDOFF 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
-      - docs/TODO.md 新增 SHOP-TASK-124 记录段（写入规则、调用、告警、偏离、验证到什么程度，并写明批准与手动重试、定时任务、webhook 与后台接口留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - docs/task-records/SHOP-TASK-124.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写入规则、调用、告警、偏离、验证到什么程度，并写明批准与手动重试、定时任务、webhook 与后台接口留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/ 下的已有文件、app/api/、app/jobs.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
     allowed_change_paths:
       - app/services/stripe_refund.py
       - tests/test_stripe_refund.py
-      - docs/TODO.md
+      - docs/task-records/SHOP-TASK-124.md
     allowed_commands:
       - lint.check
       - format.check
@@ -3473,13 +3473,13 @@ tasks:
       - approve_refund 保持现有的开头 rollback 与锁订单写法，不新增 begin、rollback 或 commit，提交仍由调用方完成（tests/test_refund_review.py 的现有约束）；retry_request_attempt 照 _review 的写法先 rollback 再锁订单；新增的读取都在锁订单之后；告警的日志在保存点成功之后记（外层提交失败时可能多一条告警，只供人工核对，PR 写明）；模块说明里「本模块不写日志」一句随之改写
       - app/services/stripe_refund.py 新增公开函数 retry_request_attempt（入参数据库会话、退款申请 ID、当前时间）——锁顺序同上；只在申请已批准、该申请最新一条尝试（按尝试 ID 取最大者）为 failed 时新建一条 pending 尝试，返回新尝试的 ID；核对合计同上，超过则不建、记一条告警日志（类别 stripe_refund_cap，这一情形不写库，日志在抛出前记）并抛 RefundCapExceeded；申请不存在、未批准、没有尝试或最新一条不是 failed 时抛各自的异常、不写库；同一来源并发重试由活动来源列的唯一约束保证只有一个成功，失败的一方回滚保存点并抛「不能重试」；只 flush 不提交，由之后的接口提交并调用 submit_refund_attempt
       - 测试验证意图——新文件 tests/test_stripe_refund_approval.py 用 SQLite 内存库与 SHOP-TASK-117 测试里的写法准备 Stripe 付款的订单与退款申请，验证——Stripe 付款订单批准后有一条 pending 尝试、金额等于申请的现金退款额（不含运费）、来源为该申请；按幂等键重放不再建；金额为 0 时不建；模拟支付订单不建；同一 PaymentIntent 已有的 pending 或 succeeded 尝试（测试直接插入复用该付款 PaymentIntent ID 的尝试来构造）加本次超过付款金额时不建且告警一次、批准照常成功、failed 的尝试不计入；缺 PaymentIntent 时不建且告警；手动重试在最新为 failed 时新建、在 pending 或 succeeded 时拒绝、未批准时拒绝、超额时抛 RefundCapExceeded 且不写库；第二次并发插入被唯一约束拒绝；每条测试写明它守住的是设计的哪一句；tests/test_refund_review.py 一字不改且照常通过；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
-      - docs/TODO.md 新增 SHOP-TASK-125 记录段（批准时建尝试的条件、合计核对、手动重试、偏离、验证到什么程度，并写明调用 Stripe 由定时任务与之后的后台接口发起），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - docs/task-records/SHOP-TASK-125.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；批准时建尝试的条件、合计核对、手动重试、偏离、验证到什么程度，并写明调用 Stripe 由定时任务与之后的后台接口发起），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/api/、app/jobs.py、app/services/stripe_confirm.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
     allowed_change_paths:
       - app/services/refund_review.py
       - app/services/stripe_refund.py
       - tests/test_stripe_refund_approval.py
-      - docs/TODO.md
+      - docs/task-records/SHOP-TASK-125.md
     allowed_commands:
       - lint.check
       - format.check
@@ -3501,7 +3501,7 @@ tasks:
       - app/jobs.py 在现有任务之后追加任务 stripe_refunds（每轮最多 CANCEL_BATCH_LIMIT 条，own_transactions，逐条提交），适配器照 stripe_checkouts_job 的写法按配置建；Stripe 未配置且没有到期的尝试时静默跳过、算成功，有到期的尝试则照常处理（不可用时留到下一轮）；另加手动补跑命令 process-stripe-refunds（写法照 process-stripe）；模块说明与用法随之补充
       - 测试验证意图——新文件 tests/test_stripe_refund_overdue.py 用 SQLite 内存库与 FakeStripeGateway 验证——从未调用的尝试在下一轮调用、5 分钟内不重复、24 小时内同一幂等键重试、满 24 小时不再调用 create_refund 而改为分页对账（找到采用、第二页才找到也采用、找不到或列到一半不可用时保持 pending 且只告警一次、1 小时内不重复对账）；有 ID 的 pending 每 10 分钟查询；succeeded 在 30 天内每天、之后每周查询，变为 failed 时释放活动来源并告警；上限与轮转（长期不能确定的不挤掉新尝试）；处理条数；每条测试写明它守住的是设计或 HANDOFF 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
       - tests/test_jobs.py 补任务顺序、未配置且没有到期尝试时跳过、手动补跑命令；tests/test_jobs.py、tests/test_auto_complete.py 与 tests/test_sms_retention.py 里断言 default_jobs 位置与个数的测试随新任务改为新的位置与个数并写明原因，其余断言一字不改
-      - docs/TODO.md 新增 SHOP-TASK-126 记录段（四种到期规则与频率、告警、任务顺序、手动补跑、偏离、验证到什么程度，并写明 webhook 的退款事件留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
+      - docs/task-records/SHOP-TASK-126.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；四种到期规则与频率、告警、任务顺序、手动补跑、偏离、验证到什么程度，并写明 webhook 的退款事件留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/stripe_refund.py 与其他已有服务、app/api/、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
     allowed_change_paths:
       - app/services/stripe_refund_overdue.py
@@ -3510,7 +3510,7 @@ tasks:
       - tests/test_jobs.py
       - tests/test_auto_complete.py
       - tests/test_sms_retention.py
-      - docs/TODO.md
+      - docs/task-records/SHOP-TASK-126.md
     allowed_commands:
       - lint.check
       - format.check
