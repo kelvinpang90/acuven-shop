@@ -42,7 +42,10 @@
   尝试，由数据库唯一约束保证」；「只接受 pending → succeeded、pending →
   failed、succeeded → failed 三种改动」；「最新一次尝试为 failed 时管理员可
   手动重试，重试是新建一条尝试（受上述唯一约束，重复点击与并发只有一个
-  成功）」。
+  成功）」；「后一种不自动重试，记下错误类别并告警」；「发现变为 failed 就
+  照上面改并告警」；「24 小时后不再调用退款接口，改为列出该 PaymentIntent
+  退款的全部分页、按元数据里的尝试 ID 对账，找到就采用；找不到或无法列完都
+  保持 pending、占用额度，告警由运营者在 Stripe 后台跟进」。
 - 第 10 条：「本站不读取、不保存 Stripe 返回的客户资料、卡号片段或账单
   地址」；「本站只存『数据模型』`StripeCheckout` / `StripeEvent` /
   `StripeRefund` 一行所列的对账字段」；「日志不记录 Stripe 请求与事件原文」。
@@ -50,6 +53,11 @@
 文本）：第 6 条中会话已付款但核对不符而订单仍待支付时，写完退款尝试后把
 这条会话记录标为 expired、释放订单的活动会话位。所以 expired 的记录可以
 带付款状态 paid 与完成时间，由 SHOP-TASK-117 写入。
+以及 docs/HANDOFF.md 0.54 记录的 Kelvin 2026-10-19 决定（不改设计文本）：
+「退款尝试表补告警时间列，『数据模型』一行所说『错误类别与时间』含此列；它
+只给会反复出现的告警（24 小时后对账找不到或列不完、Stripe 退款对象与尝试
+不符）去重，这类告警每条尝试至多一次；状态改动引起的告警（请求被明确拒绝、
+成功后又失败）随改动只发生一次，不受它限制」。
 
 「同一订单至多一条不是 expired 的记录」的表示：active_order_id 在
 creating、open、complete 时等于 order_id，expired 时为空，由检查约束逐条
@@ -75,7 +83,9 @@ active_refund_request_id 与 active_checkout_id 两列，pending 与 succeeded
 不限条数。succeeded 改为 failed 时须同时清空活动列，释放来源。两列与
 active_order_id 一样不另建外键。Stripe 退款 ID 不校验前缀（核验显示 FPX、
 GrabPay 的退款 ID 不以 re_ 开头）。错误类别只存 Stripe 错误的类别代码，
-不存错误原文。
+不存错误原文。告警时间 alerted_at 记会反复出现的告警的首次告警时间，
+为空表示还没发过这类告警，规则任务只在它为空时告警并写入；状态改动引起
+的告警不看也不写它。
 
 时间一律是不带时区的 UTC；金额一律是整数仙。外键一律 RESTRICT：被会话
 记录引用的订单不能物理删除，被退款尝试引用的退款申请与会话记录也一样。
@@ -387,6 +397,10 @@ class StripeRefund(Base):
     last_error_type: Mapped[str | None] = mapped_column(String(ERROR_TYPE_MAX_LENGTH))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     succeeded_at: Mapped[datetime | None] = mapped_column(DateTime)
+    # 会反复出现的告警（24 小时后对账找不到或列不完、Stripe 退款对象与尝试不符）
+    # 的首次告警时间，这类告警每条尝试至多一次（HANDOFF 0.54）；状态改动引起的
+    # 告警（请求被明确拒绝、成功后又失败）随改动只发生一次，不看也不写它。
+    alerted_at: Mapped[datetime | None] = mapped_column(DateTime)
     # 定时任务每复查一条就写入。
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime)
     # 不是 failed 且来源为退款申请时等于 refund_request_id，否则为空；唯一。
