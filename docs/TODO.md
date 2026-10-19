@@ -27,11 +27,10 @@
 
 <!-- openclaw:planning-v1:begin -->
 ### 当前计划
-1. `SHOP-TASK-122` 后台站点设置的支付方式读写接口
-2. `SHOP-TASK-123` Stripe 退款尝试的告警时间列
-3. `SHOP-TASK-124` Stripe 退款尝试的写入规则与调用
-4. `SHOP-TASK-125` 批准退款时建 Stripe 退款尝试与手动重试
-5. `SHOP-TASK-126` Stripe 退款尝试的定时处理
+1. `SHOP-TASK-123` Stripe 退款尝试的告警时间列
+2. `SHOP-TASK-124` Stripe 退款尝试的写入规则与调用
+3. `SHOP-TASK-125` 批准退款时建 Stripe 退款尝试与手动重试
+4. `SHOP-TASK-126` Stripe 退款尝试的定时处理
 
 ### 已阻塞
 - 待登记：短信验证组件 V1 与结账会员路径（马新号码验证、自动注册或登录、优惠券与积分；会员访问 P06、P07）｜阻塞：依赖会员计价与下单接口（SHOP-TASK-089）与支付页的会员接口（SHOP-TASK-091）
