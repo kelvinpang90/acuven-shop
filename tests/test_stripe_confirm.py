@@ -917,16 +917,32 @@ def test_late_or_mismatched_payment_needs_review_and_changes_nothing(
     金额、币种不符，订单状态不变」；验收：「记录已为 expired 而会话状态为 complete；
     payment_status 为 paid 而订单已不是待支付且该记录没有确认时间；payment_status 为 paid 而
     金额、币种或所属订单不符……订单与记录都不改……返回 needs_review，记一条 error 日志（类别
-    stripe_late_payment，只含记录 ID）」。退款留给 SHOP-TASK-117。"""
+    stripe_late_payment，只含记录 ID）」。退款留给 SHOP-TASK-117。
+
+    SHOP-TASK-117 替换了这里的 needs_review 占位断言（原因：第 6 条的退款尝试与 HANDOFF 0.53
+    的释放活动位已实现，第 3 条末句的已为 expired 的记录改回 complete 也已实现）：
+    expired-record（订单仍待支付、没有别的活动记录、全部相符）改回 complete 并确认，返回
+    paid、不记日志；其余情形订单状态与其他各表不变，写一条退款尝试后记录改为 expired，返回
+    refunded，只记一条 stripe_late_payment。细节见 tests/test_stripe_late_payment.py。"""
     placed, checkout_id, stripe_session = _late_case(db, case)
     before = _world(db, placed, checkout_id)
 
     with caplog.at_level(logging.DEBUG, logger=LOGGER):
         result = _confirm(db, FakeStripeGateway(), checkout_id, stripe_session)
 
-    assert result is ConfirmResult.NEEDS_REVIEW
-    assert _world(db, placed, checkout_id) == before
-    assert _messages(caplog) == [f"{LOG_LATE_PAYMENT} checkout={checkout_id}"]
+    after = _world(db, placed, checkout_id)
+    if case == "expired-record":
+        assert result is ConfirmResult.PAID
+        assert after["order"] == (STATUS_PAID, NOW)
+        assert after["record"]["status"] == CHECKOUT_COMPLETE
+        assert _messages(caplog) == []
+    else:
+        assert result is ConfirmResult.REFUNDED
+        assert after["record"]["status"] == CHECKOUT_EXPIRED
+        assert after["record"]["active_order_id"] is None
+        del after["record"], before["record"]
+        assert after == before
+        assert _messages(caplog) == [f"{LOG_LATE_PAYMENT} checkout={checkout_id}"]
 
 
 @pytest.mark.parametrize("status", ["expired", "open"])
