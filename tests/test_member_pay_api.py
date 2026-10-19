@@ -1050,9 +1050,15 @@ def test_payment_needs_idempotency_key(db: Session, client: TestClient, key: str
 
 
 def test_order_number_never_in_path_or_query(app: FastAPI) -> None:
-    """第 6 条凭据不写入「网址」；验收：订单号只在请求体里，不进任何路径或查询参数；只有三个
-    POST 接口，查看只多一个查询参数 lang。
+    """第 6 条凭据不写入「网址」；验收：订单号只在请求体里，不进任何路径或查询参数；查看与
+    Stripe 发起只多一个查询参数 lang，其余接口不带查询参数。
+
+    SHOP-TASK-121 修改：同一路由器新增 POST /api/member/pay/stripe/start 与
+    POST /api/member/pay/stripe/confirm（docs/DESIGN.md 1.12 第 3、4 条，会员凭登录会话发起与
+    确认），穷举的路由加入这两个；发起与游客的发起接口一样带 lang，确认不带任何查询参数。
     """
+    stripe_start_url = "/api/member/pay/stripe/start"
+    stripe_confirm_url = "/api/member/pay/stripe/confirm"
     paths = {
         path: operations
         for path, operations in app.openapi()["paths"].items()
@@ -1063,10 +1069,12 @@ def test_order_number_never_in_path_or_query(app: FastAPI) -> None:
         (ORDER_URL, "post"),
         (PAY_URL, "post"),
         (CANCEL_URL, "post"),
+        (stripe_start_url, "post"),
+        (stripe_confirm_url, "post"),
     }
     for path, operations in paths.items():
         names = {param["name"] for param in operations["post"].get("parameters", [])}
-        assert names == ({"lang"} if path == ORDER_URL else set())
+        assert names == ({"lang"} if path in (ORDER_URL, stripe_start_url) else set())
         assert "{" not in path
 
 

@@ -1,5 +1,6 @@
 """支付页 P06 与结果页 P07 的会员接口：POST /api/member/pay/order、
-POST /api/member/pay/attempts、POST /api/member/pay/cancel。
+POST /api/member/pay/attempts、POST /api/member/pay/cancel，以及 Stripe 的
+POST /api/member/pay/stripe/start、POST /api/member/pay/stripe/confirm。
 
 依据 docs/DESIGN.md 1.11（提交 2d13250）「订单与退款状态」（待支付订单可由下单者在支付页
 取消，会员凭登录会话）与「权限与资料保护」第 6 条（会员仅能访问自己认领或下单的订单；支付、
@@ -31,10 +32,19 @@ app/api/pay.py 的游客接口，会话依赖取自 app/api/member_auth.py。
    PaymentPathMismatch 回 409 method_changed，StripeUnavailable 回 503 stripe_unavailable，
    与游客接口相同。
 
-三个接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control: no-store，由
+Stripe 的发起与确认依据 docs/DESIGN.md 1.12（提交 acf576e）第 3 条（「访客在支付页按现有授权
+（游客短期凭据或会员登录会话）与 CSRF 校验后发起」）、第 4 条（「服务端按授权找到该单的会话向
+Stripe 查询一次」）与第 9 条，docs/UX.md 0.11 的 P06、P07 会员访问，以及 docs/HANDOFF.md 0.54。
+请求体、查询参数 lang、成功响应、结果映射与错误都与 app/api/stripe_pay.py 的游客接口
+相同，请求与响应模型取自该文件；只是授权改为会员会话与本人订单。处理顺序同两个写接口，
+每一步不通过即停止：
+请求体 413 → 415 → 422（发起另含 lang）→ 401 member_session_required → 403 csrf_failed →
+404 order_not_found，之后才调用 start_checkout 与 confirm_order_payment。
+
+五个接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control: no-store，由
 SHOP-TASK-027 的路由类统一加上；路径存在但方法不匹配的 405 由框架在路由之外回答，不在此列。
-422 每条错误只给位置、类型与固定消息，不回显请求内容。本模块不写日志；错误响应不含订单号、
-会员 ID、令牌或 cookie 值。
+422 每条错误只给位置、类型与固定消息，不回显请求内容。本模块不写日志（服务层按设计记的 error
+日志除外）；错误响应不含订单号、会员 ID、令牌或 cookie 值。
 """
 
 from __future__ import annotations
@@ -62,6 +72,7 @@ from app.api.pay import (
     _stripe_unavailable,
     _utcnow,
 )
+from app.api.stripe_pay import ConfirmOut, OrderDep, StartOut
 from app.db.session import get_session
 from app.models import Order
 from app.models.order import STATUS_AWAITING_PAYMENT
@@ -81,6 +92,8 @@ from app.services.payment import (
     pay_orders,
     submit_payment,
 )
+from app.services.stripe_checkout import StartResult, start_checkout
+from app.services.stripe_confirm import confirm_order_payment
 
 router = APIRouter(prefix="/api/member/pay", tags=["member"], route_class=_NoStoreRoute)
 
@@ -191,3 +204,52 @@ def cancel(
         return _conflict("order_not_cancellable", exc.status)
     except StripeUnavailable:
         return _stripe_unavailable()
+
+
+@router.post("/stripe/start", response_model=StartOut)
+def stripe_start(
+    body: OrderDep,
+    lang: LanguageDep,
+    member: MemberDep,
+    session: SessionDep,
+    gateway: GatewayDep,
+    request: Request,
+) -> StartOut | JSONResponse:
+    """结果映射同 POST /api/pay/stripe/start。"""
+    require_member_csrf(request, member)
+    # start_checkout 先回滚会话，会员对象随之过期：会员 ID 在此之前取出。
+    member_id = member.member.id
+    order_id, _ = _member_order(session, member_id, body.order_number)
+    settings = request.app.state.settings
+    started = start_checkout(session, gateway, settings, order_id, lang, _utcnow())
+    if started.result is StartResult.REDIRECT:
+        return StartOut(result="redirect", checkout_url=started.checkout_url)
+    if started.result is StartResult.COMPLETE:
+        return StartOut(result="complete", checkout_url=None)
+    if started.result is StartResult.NOT_PAYABLE:
+        # start_checkout 已结束自己的事务（含超时取消）；这里重读订单当前状态。
+        status = session.scalars(select(Order.status).where(Order.id == order_id)).one()
+        session.rollback()
+        return _conflict("order_not_payable", status)
+    if started.result is StartResult.METHOD_CHANGED:
+        return _conflict("method_changed")
+    if started.result is StartResult.UNDER_REVIEW:
+        return _conflict("stripe_under_review")
+    return _stripe_unavailable()
+
+
+@router.post("/stripe/confirm", response_model=ConfirmOut)
+def stripe_confirm(
+    body: OrderDep,
+    member: MemberDep,
+    session: SessionDep,
+    gateway: GatewayDep,
+    request: Request,
+) -> ConfirmOut:
+    """结果同 POST /api/pay/stripe/confirm：paid、confirming、not_paid 或 refunded。"""
+    require_member_csrf(request, member)
+    member_id = member.member.id
+    order_id, _ = _member_order(session, member_id, body.order_number)
+    # 授权检查只有读取；confirm_order_payment 要求调用方不持锁、没有未提交的改动。
+    session.rollback()
+    return ConfirmOut(result=confirm_order_payment(session, gateway, order_id, _utcnow()))
