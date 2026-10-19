@@ -75,6 +75,17 @@ Stripe 记录（或只有 expired 记录）的订单执行超时取消，其余�
 积分」加锁并重查。app/services/stripe_checkout.py 与 stripe_confirm.py 在模块级导入本模块，
 所以本模块在函数里才导入它们。
 
+支付页视图的 Stripe 字段依据 DESIGN 1.12「Stripe 测试环境支付」第 2 条（支付途径）、第 3 条
+（creating 与 24 小时转人工）、第 6 条（迟到付款按来源为会话的退款尝试处理）与 docs/UX.md 0.11
+P06、P07「服务端读取订单时一并给出本单的支付途径与 Stripe 状态」，以及 docs/HANDOFF.md 0.54
+的落实写法（P06 打开时已有 complete 会话由前端调用确认接口，订单视图保持只读）：
+- payment_route：订单待支付时取 SHOP-TASK-112 的 payment_route（最低收款额同 submit_payment
+  取 get_settings()），其他状态为空。
+- stripe_state：订单不是 expired 的记录的状态 creating、open、complete；creating 且已写告警
+  时间为 under_review；没有为空。
+- stripe_refunded：本单任一会话记录有来源为 checkout 的退款尝试（不论状态）。
+pay_orders 按订单批量读取，只读、不加锁、不调用 Stripe。
+
 本模块不写日志；异常消息不含个人资料、订单号、幂等键或令牌。库里的时间一律是不带时区的
 UTC，返回的视图里换成带 UTC 时区的时间。
 """
@@ -104,6 +115,7 @@ from app.models import (
     PaymentAttempt,
     ProductVariant,
     StripeCheckout,
+    StripeRefund,
 )
 from app.models.member import MEMBER_ACTIVE
 from app.models.order import (
@@ -125,6 +137,7 @@ from app.models.stripe import (
     CHECKOUT_EXPIRED,
     CHECKOUT_OPEN,
     PAYMENT_PAID,
+    SOURCE_CHECKOUT,
 )
 from app.services.catalog import Language
 from app.services.coupons import release_coupon, use_coupon
@@ -138,6 +151,14 @@ CancelledBy = Literal["self", "timeout"]
 # 支付与本人取消的操作者：游客或会员（超时取消固定为 system，不由调用方给出）。
 PayActor = Literal["guest", "member"]
 _PAY_ACTORS = (ACTOR_GUEST, ACTOR_MEMBER)
+# 支付页视图的支付途径（SHOP-TASK-112 的 PaymentRoute 的取值）与 Stripe 记录状态。
+PayRoute = Literal["stripe", "simulated"]
+StripeState = Literal["creating", "open", "complete", "under_review"]
+_STRIPE_STATES: dict[str, StripeState] = {
+    CHECKOUT_CREATING: "creating",
+    CHECKOUT_OPEN: "open",
+    CHECKOUT_COMPLETE: "complete",
+}
 # 会话结束后取消的操作者：本人取消为 guest 或 member，定时任务为 system。
 _END_ACTORS = (ACTOR_GUEST, ACTOR_MEMBER, ACTOR_SYSTEM)
 
@@ -250,6 +271,13 @@ class PayOrder(BaseModel):
     last_payment: LastPayment | None
     # 已取消时的取消方：self 为下单者本人，timeout 为超时；未取消为空。
     cancelled_by: CancelledBy | None
+    # 支付途径：待支付时为 stripe 或 simulated，其他状态为空。
+    payment_route: PayRoute | None
+    # 不是 expired 的 Stripe 记录的状态；creating 且已告警（转人工核对）为 under_review；
+    # 没有这样的记录为空。
+    stripe_state: StripeState | None
+    # 本单有来源为会话的 Stripe 退款尝试（迟到或不符的付款，不论尝试状态）。
+    stripe_refunded: bool
 
 
 class PaymentOutcome(BaseModel):
@@ -726,7 +754,13 @@ def pay_orders(
     lang: Language,
     now: datetime,
 ) -> list[PayOrder]:
-    """按 order_ids 的顺序返回这些订单的支付页视图；只读。订单行按行序。"""
+    """按 order_ids 的顺序返回这些订单的支付页视图；只读。订单行按行序。
+
+    Stripe 字段见模块说明：会话记录与退款尝试按订单批量读取；支付途径只对待支付订单按
+    SHOP-TASK-112 的 payment_route 判定。不加锁、不调用 Stripe。
+    """
+    from app.services.stripe_checkout import PaymentRoute, payment_route
+
     if not order_ids:
         return []
     order_stmt = select(Order).where(Order.id.in_(order_ids))
@@ -755,6 +789,9 @@ def pay_orders(
     last_payments = {attempt.order_id: attempt for attempt in attempts}
 
     cancelled_by = _cancelled_by(db, order_ids)
+    stripe_states = _stripe_states(db, order_ids)
+    stripe_refunded = _stripe_refunded(db, order_ids)
+    min_amount_sen = get_settings().stripe_min_amount_sen
     views = []
     for order_id in order_ids:
         order = orders.get(order_id)
@@ -762,6 +799,10 @@ def pay_orders(
             continue
         recipient = recipients.get(order_id)
         attempt = last_payments.get(order_id)
+        route: PayRoute | None = None
+        if order.status == STATUS_AWAITING_PAYMENT:
+            stripe = payment_route(db, order_id, min_amount_sen) is PaymentRoute.STRIPE
+            route = "stripe" if stripe else "simulated"
         view = PayOrder(
             order_number=order.order_number,
             status=order.status,
@@ -778,9 +819,42 @@ def pay_orders(
             recipient=None if recipient is None else _recipient(recipient),
             last_payment=None if attempt is None else _last_payment(attempt),
             cancelled_by=cancelled_by[order_id],
+            payment_route=route,
+            stripe_state=stripe_states.get(order_id),
+            stripe_refunded=order_id in stripe_refunded,
         )
         views.append(view)
     return views
+
+
+def _stripe_states(db: Session, order_ids: list[int]) -> dict[int, StripeState]:
+    """各订单不是 expired 的 Stripe 记录（至多一条）的状态；creating 且已写告警时间（24 小时仍
+    无法确定、转人工核对）为 under_review。没有这样的记录的订单不在结果里。"""
+    columns = (StripeCheckout.active_order_id, StripeCheckout.status, StripeCheckout.alerted_at)
+    stmt = select(*columns).where(StripeCheckout.active_order_id.in_(order_ids))
+    found: dict[int, StripeState] = {}
+    for order_id, status, alerted_at in db.execute(stmt).tuples():
+        if order_id is None or status not in _STRIPE_STATES:
+            continue
+        if status == CHECKOUT_CREATING and alerted_at is not None:
+            found[order_id] = "under_review"
+        else:
+            found[order_id] = _STRIPE_STATES[status]
+    return found
+
+
+def _stripe_refunded(db: Session, order_ids: list[int]) -> set[int]:
+    """任一会话记录有来源为 checkout 的退款尝试（不论尝试状态）的订单。"""
+    stmt = (
+        select(StripeCheckout.order_id)
+        .join(StripeRefund, StripeRefund.checkout_id == StripeCheckout.id)
+        .where(
+            StripeCheckout.order_id.in_(order_ids),
+            StripeRefund.source_type == SOURCE_CHECKOUT,
+        )
+        .distinct()
+    )
+    return set(db.scalars(stmt))
 
 
 def _utc(value: datetime) -> datetime:

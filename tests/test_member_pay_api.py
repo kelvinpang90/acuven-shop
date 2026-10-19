@@ -138,6 +138,11 @@ ORDER_FIELDS = {
     "recipient",
     "last_payment",
     "cancelled_by",
+    # SHOP-TASK-119 新增的 Stripe 字段（DESIGN 1.12 第 2 条、UX 0.11 P06：服务端给出支付途径与
+    # Stripe 状态）；取值见 tests/test_stripe_pay_view.py。
+    "payment_route",
+    "stripe_state",
+    "stripe_refunded",
 }
 
 PLACED_BY_MEMBER = (None, STATUS_AWAITING_PAYMENT, ACTOR_MEMBER)
