@@ -13,6 +13,9 @@ SHOP-TASK-032 在默认任务列表的超时取消之后加入了每日库存重
 
 SHOP-TASK-097 起超时取消任务自己管理事务（own_transactions），逐张订单真实提交；新增的用例写明
 它守住的是本任务的哪条约定。自定义的非 own_transactions 任务仍以保存点执行、失败时整次回滚。
+
+SHOP-TASK-116 在超时取消之后加入了 Stripe 会话的定时处理（stripe_checkouts）；它的各情形见
+tests/test_stripe_overdue.py，这里只测任务顺序、未配置时的跳过与手动补跑命令。
 """
 
 from __future__ import annotations
@@ -43,6 +46,7 @@ from app.models import (
     PointEntry,
     Product,
     ProductVariant,
+    StripeCheckout,
 )
 from app.models.member import MEMBER_ACTIVE
 from app.models.order import (
@@ -50,8 +54,10 @@ from app.models.order import (
     CLAIM_NOT_CLAIMABLE,
     STATUS_AWAITING_PAYMENT,
     STATUS_CANCELLED,
+    STATUS_PAID,
 )
 from app.models.points import KIND_EXPIRE
+from app.models.stripe import CHECKOUT_COMPLETE, CHECKOUT_OPEN, PAYMENT_PAID, PAYMENT_UNPAID
 from app.services import payment
 from app.services.order_rules import generate_order_number
 from app.services.points import earn_points
@@ -405,28 +411,32 @@ def test_default_jobs_use_the_fixed_round_limit(
     assert statuses.count(STATUS_CANCELLED) == limit
     assert statuses[-1] == STATUS_AWAITING_PAYMENT
     default = jobs.default_jobs()
-    assert [job.name for job in default][:4] == [
+    # SHOP-TASK-116 在超时取消之后插入了 stripe_checkouts，之后各项后移一位、任务数改为 6。
+    assert [job.name for job in default][:5] == [
         "cancel_expired_orders",
+        "stripe_checkouts",
         "reset_daily_stock",
         "auto_complete_shipped",
         "delete_expired_verifications",
     ]
-    assert len(default) == 5
-    assert default[4].name == "expire_points"
+    assert len(default) == 6
+    assert default[5].name == "expire_points"
 
 
 def test_points_expiry_job_is_registered_after_existing_jobs() -> None:
     """DESIGN 1.11「失败、并发与重试」第 6 条：定时任务可重复运行、只生效一次。"""
     default = jobs.default_jobs()
 
+    # SHOP-TASK-116 在超时取消之后插入了 stripe_checkouts，积分到期由下标 4 移到 5。
     assert [job.name for job in default] == [
         "cancel_expired_orders",
+        "stripe_checkouts",
         "reset_daily_stock",
         "auto_complete_shipped",
         "delete_expired_verifications",
         "expire_points",
     ]
-    assert default[4].own_transactions is False
+    assert default[5].own_transactions is False
     assert jobs.POINTS_EXPIRE_BATCH_LIMIT == jobs.CANCEL_BATCH_LIMIT
 
 
@@ -708,12 +718,14 @@ def test_database_unavailable_is_logged_by_class_name_only(
     clock.advance(60)
     runner.run_round()
 
-    # 每轮五个任务（超时取消、SHOP-TASK-032 的每日库存重置、SHOP-TASK-042 的发货满 7 天
-    # 自动确认收货、SHOP-TASK-072 的删除满 30 天短信验证记录与 SHOP-TASK-096 的积分到期）
-    # 各开一次会话、各记一条失败；后三项依次在默认列表末尾加入。
-    assert len(calls) == 10
+    # 每轮六个任务（超时取消、SHOP-TASK-116 的 Stripe 会话定时处理、SHOP-TASK-032 的每日库存
+    # 重置、SHOP-TASK-042 的发货满 7 天自动确认收货、SHOP-TASK-072 的删除满 30 天短信验证记录
+    # 与 SHOP-TASK-096 的积分到期）各开一次会话、各记一条失败；后三项依次在默认列表末尾加入，
+    # SHOP-TASK-116 插在超时取消之后，所以会话数由 10 改为 12、每轮多一条失败日志。
+    assert len(calls) == 12
     each_round = [
         "job cancel_expired_orders failed: OperationalError",
+        "job stripe_checkouts failed: OperationalError",
         "job reset_daily_stock failed: OperationalError",
         "job auto_complete_shipped failed: OperationalError",
         "job delete_expired_verifications failed: OperationalError",
@@ -1070,6 +1082,152 @@ def test_main_cancel_expired_uses_the_session_factory(
     assert jobs.main(["cancel-expired"]) == jobs.EXIT_FAILED
     assert _job_messages(caplog) == ["job cancel_expired_orders failed: OperationalError"]
     assert all(url not in message for message in caplog.messages)
+
+
+# ---------------------------------------------------------------------------
+# Stripe 会话的定时处理（SHOP-TASK-116）
+# ---------------------------------------------------------------------------
+
+
+def _unconfigured(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stripe 未配置（不读本地 .env）。"""
+    monkeypatch.setattr(jobs, "get_settings", lambda: Settings(_env_file=None))
+
+
+def _stripe_record(
+    db: Session, order_id: int, status: str, *, paid: bool = False, expires_at: datetime = START
+) -> int:
+    """直接写一条会话记录（open 或 complete）并提交；返回记录 ID。"""
+    total = db.get(Order, order_id).total_sen
+    record = StripeCheckout(
+        order_id=order_id,
+        idempotency_key=f"create-key-{order_id}",
+        checkout_session_id=f"cs_test_{order_id}",
+        amount_sen=total,
+        currency="myr",
+        status=status,
+        payment_status=PAYMENT_PAID if paid else PAYMENT_UNPAID,
+        checkout_url=f"https://checkout.stripe.example.com/c/pay/cs_test_{order_id}",
+        create_params="[]",
+        expires_at=expires_at,
+        created_at=expires_at - timedelta(minutes=31),
+        completed_at=expires_at if status == CHECKOUT_COMPLETE else None,
+        active_order_id=order_id,
+    )
+    db.add(record)
+    db.commit()
+    return record.id
+
+
+def _last_polled(db: Session, checkout_id: int) -> datetime | None:
+    db.expire_all()
+    value = db.get(StripeCheckout, checkout_id).last_polled_at
+    db.rollback()
+    return value
+
+
+def test_stripe_job_runs_right_after_cancel_with_own_transactions() -> None:
+    """DESIGN 1.12「Stripe 测试环境支付」第 5 条「所有取消入口（……定时任务）用同一
+    规则」；SHOP-TASK-116 验收：app/jobs.py 在超时取消之后加入 stripe_checkouts，
+    own_transactions，两种扫描每轮各最多 CANCEL_BATCH_LIMIT 条。"""
+    default = jobs.default_jobs()
+
+    assert [job.name for job in default][:3] == [
+        "cancel_expired_orders",
+        "stripe_checkouts",
+        "reset_daily_stock",
+    ]
+    assert default[1].own_transactions is True
+    assert jobs.stripe_checkouts_job().own_transactions is True
+    assert jobs.STRIPE_CHECKOUT_BATCH_LIMIT == jobs.CANCEL_BATCH_LIMIT
+
+
+def test_stripe_job_skips_when_unconfigured_and_nothing_is_pending(
+    db: Session,
+    factory: jobs.SessionFactory,
+    heartbeat: Path,
+    clock: FakeClock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """第 4 条「由定时任务之后向 Stripe 重查补齐」只是补字段；SHOP-TASK-116 验收：
+    Stripe 未配置时没有待处理的记录才静默跳过、算成功——只需补齐付款方式类型的
+    记录（订单已是 demo_paid）不算待处理，不建适配器、不写上次查询时间。"""
+    _unconfigured(monkeypatch)
+    order_id = _order(db, _variant(db), START - timedelta(minutes=30))
+    order = db.get(Order, order_id)
+    order.status = STATUS_PAID
+    order.paid_at = START - timedelta(minutes=20)
+    db.commit()
+    checkout_id = _stripe_record(db, order_id, CHECKOUT_COMPLETE, paid=True)
+    built: list[Settings] = []
+
+    def factory_spy(settings: Settings) -> Any:
+        built.append(settings)
+        raise AssertionError("gateway must not be built")
+
+    job = jobs.stripe_checkouts_job(gateway_factory=factory_spy)
+    runner = _runner([job], factory, heartbeat, clock)
+
+    assert _beat_once(runner, heartbeat)
+    assert runner.last_success["stripe_checkouts"] == clock.monotonic()
+    assert built == []
+    assert _last_polled(db, checkout_id) is None
+
+
+def test_stripe_job_handles_pending_records_when_unconfigured(
+    db: Session, factory: jobs.SessionFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """第 5 条「Stripe 不可用时……定时任务跳过该单留到下一轮」；SHOP-TASK-116 验收：
+    Stripe 未配置而有待处理的记录时照常按不可用处理（处理条数计入、写上次查询时间、
+    订单不变），不能因未配置而永远不告警。"""
+    _unconfigured(monkeypatch)
+    order_id = _order(db, _variant(db), START - timedelta(minutes=40))
+    expired_at = START - timedelta(minutes=1)
+    checkout_id = _stripe_record(db, order_id, CHECKOUT_OPEN, expires_at=expired_at)
+
+    with factory() as session:
+        assert jobs.stripe_checkouts_job().run(session, START) == 1
+
+    assert _last_polled(db, checkout_id) == START
+    assert _status(db, order_id) == STATUS_AWAITING_PAYMENT
+
+
+def test_process_stripe_command(
+    db: Session,
+    factory: jobs.SessionFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """「失败、并发与重试」第 6 条：失败有人工补跑办法；SHOP-TASK-116 验收：手动补跑
+    命令 process-stripe 写法照 cancel-expired——执行一次后以 0 退出、日志只含任务名与
+    处理条数，未配置数据库以非零退出，任务失败以非零退出且只记异常类名。"""
+    caplog.set_level(logging.INFO, logger="app.jobs")
+    _unconfigured(monkeypatch)
+    order_id = _order(db, _variant(db), START - timedelta(minutes=40))
+    number = _order_number(db, order_id)
+    expired_at = START - timedelta(minutes=1)
+    checkout_id = _stripe_record(db, order_id, CHECKOUT_OPEN, expires_at=expired_at)
+
+    assert jobs.process_stripe(factory, now=lambda: START) == jobs.EXIT_OK
+    assert _job_messages(caplog) == ["job stripe_checkouts done: 1 changed"]
+    assert _last_polled(db, checkout_id) == START
+    assert all(number not in message for message in caplog.messages)
+
+    monkeypatch.setattr(jobs, "configured_session_factory", lambda: factory)
+    assert jobs.main(["process-stripe"]) == jobs.EXIT_OK
+    assert _status(db, order_id) == STATUS_AWAITING_PAYMENT
+
+    caplog.clear()
+    assert jobs.process_stripe(None) == jobs.EXIT_NOT_CONFIGURED
+    assert _job_messages(caplog) == ["database is not configured"]
+
+    def broken() -> Session:
+        raise OperationalError("SELECT 1", {}, Exception(SECRET))
+
+    caplog.clear()
+    assert jobs.process_stripe(broken) == jobs.EXIT_FAILED
+    assert _job_messages(caplog) == ["job stripe_checkouts failed: OperationalError"]
+    assert all(SECRET not in message for message in caplog.messages)
 
 
 def test_main_requires_a_subcommand() -> None:
