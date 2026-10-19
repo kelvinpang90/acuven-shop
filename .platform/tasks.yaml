@@ -3297,7 +3297,7 @@ tasks:
       按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 2、3、4、6 条与 docs/UX.md 0.11 的 P06、P07（服务端给出支付途径；未发起、创建结果未定、转人工核对、有进行中的会话、已有付款完成的会话；结果页的成功、确认中、尚未付款、已取消且已发起退款），
       以及 docs/HANDOFF.md 0.54 的落实写法，在业务规则层给支付页视图加 Stripe 字段，并加一个按订单确认 Stripe 付款的函数供之后的发起与确认接口使用。不加接口，不改设计。
       设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.54，支付状态。拆分：业务规则层（5 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-117
     acceptance_criteria:
