@@ -16,6 +16,9 @@ SHOP-TASK-097 起超时取消任务自己管理事务（own_transactions），�
 
 SHOP-TASK-116 在超时取消之后加入了 Stripe 会话的定时处理（stripe_checkouts）；它的各情形见
 tests/test_stripe_overdue.py，这里只测任务顺序、未配置时的跳过与手动补跑命令。
+
+SHOP-TASK-126 在积分到期之后追加了 Stripe 退款尝试的定时处理（stripe_refunds）；它的各情形
+见 tests/test_stripe_refund_overdue.py，这里同样只测任务顺序、未配置时的跳过与手动补跑命令。
 """
 
 from __future__ import annotations
@@ -47,6 +50,7 @@ from app.models import (
     Product,
     ProductVariant,
     StripeCheckout,
+    StripeRefund,
 )
 from app.models.member import MEMBER_ACTIVE
 from app.models.order import (
@@ -57,7 +61,16 @@ from app.models.order import (
     STATUS_PAID,
 )
 from app.models.points import KIND_EXPIRE
-from app.models.stripe import CHECKOUT_COMPLETE, CHECKOUT_OPEN, PAYMENT_PAID, PAYMENT_UNPAID
+from app.models.stripe import (
+    CHECKOUT_COMPLETE,
+    CHECKOUT_EXPIRED,
+    CHECKOUT_OPEN,
+    PAYMENT_PAID,
+    PAYMENT_UNPAID,
+    SOURCE_CHECKOUT,
+    STRIPE_REFUND_PENDING,
+    STRIPE_REFUND_SUCCEEDED,
+)
 from app.services import payment
 from app.services.order_rules import generate_order_number
 from app.services.points import earn_points
@@ -419,7 +432,8 @@ def test_default_jobs_use_the_fixed_round_limit(
         "auto_complete_shipped",
         "delete_expired_verifications",
     ]
-    assert len(default) == 6
+    # SHOP-TASK-126 在积分到期之后追加了 stripe_refunds，任务数由 6 改为 7。
+    assert len(default) == 7
     assert default[5].name == "expire_points"
 
 
@@ -428,6 +442,7 @@ def test_points_expiry_job_is_registered_after_existing_jobs() -> None:
     default = jobs.default_jobs()
 
     # SHOP-TASK-116 在超时取消之后插入了 stripe_checkouts，积分到期由下标 4 移到 5。
+    # SHOP-TASK-126 在积分到期之后追加了 stripe_refunds，积分到期仍在下标 5。
     assert [job.name for job in default] == [
         "cancel_expired_orders",
         "stripe_checkouts",
@@ -435,6 +450,7 @@ def test_points_expiry_job_is_registered_after_existing_jobs() -> None:
         "auto_complete_shipped",
         "delete_expired_verifications",
         "expire_points",
+        "stripe_refunds",
     ]
     assert default[5].own_transactions is False
     assert jobs.POINTS_EXPIRE_BATCH_LIMIT == jobs.CANCEL_BATCH_LIMIT
@@ -722,7 +738,9 @@ def test_database_unavailable_is_logged_by_class_name_only(
     # 重置、SHOP-TASK-042 的发货满 7 天自动确认收货、SHOP-TASK-072 的删除满 30 天短信验证记录
     # 与 SHOP-TASK-096 的积分到期）各开一次会话、各记一条失败；后三项依次在默认列表末尾加入，
     # SHOP-TASK-116 插在超时取消之后，所以会话数由 10 改为 12、每轮多一条失败日志。
-    assert len(calls) == 12
+    # SHOP-TASK-126 在积分到期之后追加了 Stripe 退款尝试的定时处理（stripe_refunds），
+    # 每轮七个任务，会话数由 12 改为 14、每轮末尾多一条失败日志。
+    assert len(calls) == 14
     each_round = [
         "job cancel_expired_orders failed: OperationalError",
         "job stripe_checkouts failed: OperationalError",
@@ -730,6 +748,7 @@ def test_database_unavailable_is_logged_by_class_name_only(
         "job auto_complete_shipped failed: OperationalError",
         "job delete_expired_verifications failed: OperationalError",
         "job expire_points failed: OperationalError",
+        "job stripe_refunds failed: OperationalError",
     ]
     assert _job_messages(caplog) == each_round * 2
     assert all(SECRET not in message for message in caplog.messages)
@@ -1230,6 +1249,164 @@ def test_process_stripe_command(
     caplog.clear()
     assert jobs.process_stripe(broken) == jobs.EXIT_FAILED
     assert _job_messages(caplog) == ["job stripe_checkouts failed: OperationalError"]
+    assert all(SECRET not in message for message in caplog.messages)
+
+
+# ---------------------------------------------------------------------------
+# Stripe 退款尝试的定时处理（SHOP-TASK-126）
+# ---------------------------------------------------------------------------
+
+
+def _refund_attempt(
+    db: Session,
+    status: str = STRIPE_REFUND_PENDING,
+    *,
+    refund_id: str | None = None,
+    last_checked_at: datetime | None = None,
+) -> int:
+    """直接写一条退款尝试并提交；来源是一条已付款的 expired 会话记录（待支付订单的迟到
+    付款，会话的定时处理不选它）。返回尝试 ID。"""
+    order_id = _order(db, _variant(db), START - timedelta(minutes=40))
+    total = db.get(Order, order_id).total_sen
+    record = StripeCheckout(
+        order_id=order_id,
+        idempotency_key=f"create-key-{order_id}",
+        checkout_session_id=f"cs_test_{order_id}",
+        amount_sen=total,
+        currency="myr",
+        status=CHECKOUT_EXPIRED,
+        payment_status=PAYMENT_PAID,
+        create_params="[]",
+        expires_at=START - timedelta(minutes=9),
+        created_at=START - timedelta(minutes=40),
+        completed_at=START - timedelta(minutes=10),
+        active_order_id=None,
+    )
+    db.add(record)
+    db.flush()
+    attempt = StripeRefund(
+        payment_intent_id=f"pi_test_{order_id}",
+        source_type=SOURCE_CHECKOUT,
+        checkout_id=record.id,
+        stripe_refund_id=refund_id,
+        amount_sen=total,
+        status=status,
+        call_count=0,
+        created_at=START - timedelta(minutes=5),
+        succeeded_at=START - timedelta(days=1) if status == STRIPE_REFUND_SUCCEEDED else None,
+        last_checked_at=last_checked_at,
+        active_checkout_id=record.id,
+    )
+    db.add(attempt)
+    db.flush()
+    # 提交前取 ID：提交后读属性会重新加载、让共享连接上留下未结束的事务。
+    attempt_id = attempt.id
+    db.commit()
+    return attempt_id
+
+
+def _refund_state(db: Session, attempt_id: int) -> tuple[str, int, datetime | None]:
+    """尝试的状态、调用次数与上次复查时间。"""
+    db.expire_all()
+    attempt = db.get(StripeRefund, attempt_id)
+    state = (attempt.status, attempt.call_count, attempt.last_checked_at)
+    db.rollback()
+    return state
+
+
+def test_stripe_refunds_job_runs_last_with_own_transactions() -> None:
+    """DESIGN 1.12「Stripe 测试环境支付」第 8 条「由定时任务在该尝试创建后 24 小时内……
+    以同一幂等键自动重试」；SHOP-TASK-126 验收：app/jobs.py 在现有任务之后追加
+    stripe_refunds，own_transactions，每轮最多 CANCEL_BATCH_LIMIT 条。"""
+    default = jobs.default_jobs()
+
+    assert [job.name for job in default][-2:] == ["expire_points", "stripe_refunds"]
+    assert default[6].own_transactions is True
+    assert jobs.stripe_refunds_job().own_transactions is True
+    assert jobs.STRIPE_REFUND_BATCH_LIMIT == jobs.CANCEL_BATCH_LIMIT
+
+
+def test_stripe_refunds_job_skips_when_unconfigured_and_nothing_is_due(
+    db: Session,
+    factory: jobs.SessionFactory,
+    heartbeat: Path,
+    clock: FakeClock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """第 8 条「已 succeeded 的尝试，定时任务在成功后 30 天内每天……再查询一次」；
+    SHOP-TASK-126 验收：Stripe 未配置且没有到期的尝试时静默跳过、算成功——一小时前刚
+    复查过的 succeeded 尝试未到期，不建适配器、不写上次复查时间。"""
+    _unconfigured(monkeypatch)
+    checked = START - timedelta(hours=1)
+    attempt_id = _refund_attempt(
+        db, STRIPE_REFUND_SUCCEEDED, refund_id="re_test_1", last_checked_at=checked
+    )
+    built: list[Settings] = []
+
+    def factory_spy(settings: Settings) -> Any:
+        built.append(settings)
+        raise AssertionError("gateway must not be built")
+
+    job = jobs.stripe_refunds_job(gateway_factory=factory_spy)
+    runner = _runner([job], factory, heartbeat, clock)
+
+    assert _beat_once(runner, heartbeat)
+    assert runner.last_success["stripe_refunds"] == clock.monotonic()
+    assert built == []
+    assert _refund_state(db, attempt_id) == (STRIPE_REFUND_SUCCEEDED, 0, checked)
+
+
+def test_stripe_refunds_job_handles_due_attempts_when_unconfigured(
+    db: Session, factory: jobs.SessionFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """第 8 条「其余一律保持 pending、占用额度」；SHOP-TASK-126 验收：Stripe 未配置而有
+    到期的尝试时照常处理（不可用时留到下一轮）——从未调用过的尝试计入处理条数、写上次
+    复查时间，仍为 pending。"""
+    _unconfigured(monkeypatch)
+    attempt_id = _refund_attempt(db)
+
+    with factory() as session:
+        assert jobs.stripe_refunds_job().run(session, START) == 1
+
+    assert _refund_state(db, attempt_id) == (STRIPE_REFUND_PENDING, 1, START)
+
+
+def test_process_stripe_refunds_command(
+    db: Session,
+    factory: jobs.SessionFactory,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """「失败、并发与重试」第 6 条：失败有人工补跑办法；SHOP-TASK-126 验收：手动补跑
+    命令 process-stripe-refunds 写法照 process-stripe——执行一次后以 0 退出、日志只含
+    任务名与处理条数，未配置数据库以非零退出，任务失败以非零退出且只记异常类名。"""
+    caplog.set_level(logging.INFO, logger="app.jobs")
+    _unconfigured(monkeypatch)
+    attempt_id = _refund_attempt(db)
+
+    assert jobs.process_stripe_refunds_once(factory, now=lambda: START) == jobs.EXIT_OK
+    assert _job_messages(caplog) == ["job stripe_refunds done: 1 changed"]
+    assert _refund_state(db, attempt_id) == (STRIPE_REFUND_PENDING, 1, START)
+
+    # 5 分钟内再执行一次：没有到期的尝试，不重复调用。
+    later = START + timedelta(minutes=4)
+    assert jobs.process_stripe_refunds_once(factory, now=lambda: later) == jobs.EXIT_OK
+    assert _refund_state(db, attempt_id) == (STRIPE_REFUND_PENDING, 1, START)
+
+    monkeypatch.setattr(jobs, "configured_session_factory", lambda: factory)
+    assert jobs.main(["process-stripe-refunds"]) == jobs.EXIT_OK
+    assert _refund_state(db, attempt_id)[0] == STRIPE_REFUND_PENDING
+
+    caplog.clear()
+    assert jobs.process_stripe_refunds_once(None) == jobs.EXIT_NOT_CONFIGURED
+    assert _job_messages(caplog) == ["database is not configured"]
+
+    def broken() -> Session:
+        raise OperationalError("SELECT 1", {}, Exception(SECRET))
+
+    caplog.clear()
+    assert jobs.process_stripe_refunds_once(broken) == jobs.EXIT_FAILED
+    assert _job_messages(caplog) == ["job stripe_refunds failed: OperationalError"]
     assert all(SECRET not in message for message in caplog.messages)
 
 

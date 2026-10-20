@@ -1,11 +1,18 @@
 """定时任务运行器：常驻进程每分钟执行一轮任务；另有手动执行一次超时取消、Stripe 会话的
-定时处理、当日库存重置、发货满 7 天自动确认收货、删除满 30 天短信验证记录或积分到期的命令。
+定时处理、当日库存重置、发货满 7 天自动确认收货、删除满 30 天短信验证记录、积分到期或
+Stripe 退款尝试的定时处理的命令。
 
 依据 docs/DESIGN.md 1.12（提交 acf576e）「Stripe 测试环境支付」第 3、4、5 条：
 creating 记录由定时任务以同一幂等键重试、到期后对账；付款方式类型由定时任务
 向 Stripe 重查补齐；有 Stripe 记录的订单由定时任务按会话的实际状态处理，Stripe
 不可用时留到下一轮，24 小时仍无法确定就告警、订单不自动取消（SHOP-TASK-116，
 见 app/services/stripe_overdue.py）。
+第 8 条：还没有 Stripe 退款 ID 的尝试由定时任务在创建后 24 小时内以同一幂等键自动
+重试，之后改为列出该 PaymentIntent 退款的全部分页按元数据对账；已有 Stripe 退款 ID
+而状态未终结的由定时任务查询；已 succeeded 的在成功后 30 天内每天、之后每周再查询
+一次。频率按 docs/HANDOFF.md 0.54 记录的 Kelvin 2026-10-19 决定：每 5 分钟重试（从未
+调用过的立即处理）、有 ID 的 pending 每 10 分钟查询、满 24 小时的每小时对账一次
+（SHOP-TASK-126，见 app/services/stripe_refund_overdue.py）。
 
 依据 docs/DESIGN.md 1.11（提交 2d13250）：
 - 「计价、优惠、积分与库存」第 6 条：15 分钟未支付自动取消并释放；每天按马来西亚时间重建当日
@@ -35,6 +42,10 @@ creating 记录由定时任务以同一幂等键重试、到期后对账；付�
     python -m app.jobs delete-verifications
                                         执行一次删除满 30 天的短信验证记录后退出（运营者手动
                                         补跑用；每次最多 CANCEL_BATCH_LIMIT 条）
+    python -m app.jobs process-stripe-refunds
+                                        执行一次 Stripe 退款尝试的定时处理后退出（运营者
+                                        手动补跑用；每次最多 STRIPE_REFUND_BATCH_LIMIT
+                                        条，只处理已到期的尝试；不能把尝试改为 failed）
 
 数据库连接沿用 SHOP_DATABASE_URL 与 app/db/session.py 的会话工厂。
 
@@ -58,8 +69,10 @@ STRIPE_CHECKOUT_BATCH_LIMIT 条，合计至多两倍；Stripe 未配置时没有
 才跳过，见 stripe_checkouts_job），再每日库存重置
 （当前马来西亚营业日期已有 succeeded 记录时跳过，否则执行；失败只记日志、下一轮重试），再发货
 满 7 天自动确认收货（每轮最多完成 AUTO_COMPLETE_BATCH_LIMIT 张，与超时取消相同），再删除满
-30 天的短信验证记录（每轮最多 VERIFICATION_DELETE_BATCH_LIMIT 条，与超时取消相同），最后处理
-积分到期（每轮最多 POINTS_EXPIRE_BATCH_LIMIT 个批次，与超时取消相同）。之后的任务按同样方式加入
+30 天的短信验证记录（每轮最多 VERIFICATION_DELETE_BATCH_LIMIT 条，与超时取消相同），再处理
+积分到期（每轮最多 POINTS_EXPIRE_BATCH_LIMIT 个批次，与超时取消相同），最后做 Stripe 退款
+尝试的定时处理（每轮最多 STRIPE_REFUND_BATCH_LIMIT 条，与超时取消相同；Stripe 未配置时没有
+到期的尝试才跳过，见 stripe_refunds_job）。之后的任务按同样方式加入
 default_jobs()：
 写一个 Job（名称与执行函数）。每个任务必须
 可重复运行且只生效一次（一轮执行到一半失败或运营者手动补跑都会再次运行它），判定本次无需
@@ -71,7 +84,9 @@ default_jobs()：
 下单成环；与按库存顺序加锁的游客下单之间也有同类情形）。某张订单取消时抛异常，只回滚这一张，
 之前已取消的订单保留，本轮记失败、下一轮继续；同一订单只生效一次由它带条件的 UPDATE 保证。
 Stripe 会话的定时处理也自己管理事务：逐条记录在各自的事务里处理并提交，
-调用 Stripe 时不持有任何数据库锁（见 app/services/stripe_overdue.py）。
+调用 Stripe 时不持有任何数据库锁（见 app/services/stripe_overdue.py）。Stripe 退款尝试的
+定时处理同样逐条在各自的事务里处理并提交，调用 Stripe 时不持有任何数据库锁（见
+app/services/stripe_refund_overdue.py）。
 库存重置自己管理事务：它要在独立事务里记下失败，不能放进运行器的事务里随失败一起回滚。
 自动确认收货也自己管理事务：每张订单锁定订单行之前先结束此前的事务，使锁定成为新事务的
 第一条语句（SHOP-TASK-040 的锁定协议）；放进运行器的外层事务以保存点执行时，
@@ -81,7 +96,8 @@ Stripe 会话的定时处理也自己管理事务：逐条记录在各自的事�
 
 日志只记录任务名、生效条数（超时取消即取消张数，Stripe 会话的定时处理即
 两种扫描处理过的记录数，库存重置即 SKU 数，自动确认收货即完成张数，删除短信验证
-记录即删除条数，积分到期即到期批次数）、营业日期、结果与异常类名，不记录订单号、
+记录即删除条数，积分到期即到期批次数，Stripe 退款尝试的定时处理即处理过的
+尝试数）、营业日期、结果与异常类名，不记录订单号、
 手机号等个人资料、连接串或异常消息原文。Stripe 的告警日志由服务另记，只含类别与
 本站记录 ID。
 """
@@ -113,6 +129,7 @@ from app.services.sms_retention import delete_expired_verifications
 from app.services.stock_reset import business_date, reset_completed, reset_daily_stock
 from app.services.stripe_gateway import StripeGateway, StripeHttpGateway, stripe_configured
 from app.services.stripe_overdue import has_pending_checkouts, process_stripe_checkouts
+from app.services.stripe_refund_overdue import has_due_refunds, process_stripe_refunds
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +147,8 @@ AUTO_COMPLETE_BATCH_LIMIT = CANCEL_BATCH_LIMIT
 VERIFICATION_DELETE_BATCH_LIMIT = CANCEL_BATCH_LIMIT
 # 积分到期每轮最多处理的批次数；剩余的下一轮继续。
 POINTS_EXPIRE_BATCH_LIMIT = CANCEL_BATCH_LIMIT
+# Stripe 退款尝试的定时处理每轮最多处理的尝试数；剩余的下一轮继续。
+STRIPE_REFUND_BATCH_LIMIT = CANCEL_BATCH_LIMIT
 # 容器内固定的临时目录路径；docker-compose.yml 里 shop_jobs 的健康检查用同一路径。
 HEARTBEAT_PATH = Path("/tmp/acuven_shop_jobs_heartbeat")
 # 收到停止信号时一轮仍在执行，最多再等这么久；须短于验收的 10 秒。
@@ -254,9 +273,31 @@ def expire_points_job(limit: int = POINTS_EXPIRE_BATCH_LIMIT) -> Job:
     return Job(name="expire_points", run=run)
 
 
+def stripe_refunds_job(
+    limit: int = STRIPE_REFUND_BATCH_LIMIT,
+    gateway_factory: GatewayFactory = StripeHttpGateway.from_settings,
+) -> Job:
+    """Stripe 退款尝试的定时处理：SHOP-TASK-126 的 process_stripe_refunds，每次最多 limit 条
+    到期的尝试。它逐条提交，所以 own_transactions。
+
+    适配器照 stripe_checkouts_job 每次按 get_settings() 的当前配置以 gateway_factory 建。
+    Stripe 未配置时，没有到期的尝试才不调用、返回 0（跳过算成功）；有到期的尝试则照常处理
+    （适配器的调用一律归为 unavailable，留到下一轮；满 24 小时的对账照常告警）。
+    """
+
+    def run(db: Session, now: datetime) -> int:
+        settings = get_settings()
+        if not stripe_configured(settings) and not has_due_refunds(db, now):
+            return 0
+        return process_stripe_refunds(db, gateway_factory(settings), now, limit)
+
+    return Job(name="stripe_refunds", run=run, own_transactions=True)
+
+
 def default_jobs() -> list[Job]:
     """run 每轮按顺序执行的任务：先超时取消，再 Stripe 会话的定时处理，再每日库存重置，
-    再发货满 7 天自动确认收货，再删除满 30 天的短信验证记录，最后处理积分到期。"""
+    再发货满 7 天自动确认收货，再删除满 30 天的短信验证记录，再处理积分到期，最后做
+    Stripe 退款尝试的定时处理。"""
     return [
         cancel_expired_job(),
         stripe_checkouts_job(),
@@ -264,6 +305,7 @@ def default_jobs() -> list[Job]:
         auto_complete_job(),
         delete_verifications_job(),
         expire_points_job(),
+        stripe_refunds_job(),
     ]
 
 
@@ -545,6 +587,28 @@ def expire_points_once(
     return EXIT_OK
 
 
+def process_stripe_refunds_once(
+    session_factory: SessionFactory | None,
+    *,
+    now: Callable[[], datetime] = utc_now,
+    limit: int = STRIPE_REFUND_BATCH_LIMIT,
+) -> int:
+    """执行一次 Stripe 退款尝试的定时处理，返回退出码。处理条数达到上限时可能还有剩余，
+    可再执行一次；只处理已到期的尝试，重复执行不重复生效。不能把尝试改为 failed（创建满
+    24 小时仍找不到的尝试保持 pending，由运营者在 Stripe 后台跟进）。"""
+    if session_factory is None:
+        logger.error("database is not configured")
+        return EXIT_NOT_CONFIGURED
+    job = stripe_refunds_job(limit)
+    try:
+        count = run_job(job, session_factory, now())
+    except Exception as exc:
+        logger.error("job %s failed: %s", job.name, type(exc).__name__)
+        return EXIT_FAILED
+    logger.info("job %s done: %d changed", job.name, count)
+    return EXIT_OK
+
+
 def configured_session_factory() -> SessionFactory | None:
     """按 SHOP_DATABASE_URL 取会话工厂；未配置为空。引擎在第一次开会话时才建。"""
     database_url = get_settings().database_url
@@ -565,6 +629,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         "delete-verifications", help="delete SMS verification records 30 days old once and exit"
     )
     commands.add_parser("expire-points", help="expire points once and exit")
+    commands.add_parser(
+        "process-stripe-refunds", help="process due Stripe refund attempts once and exit"
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -581,6 +648,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return delete_verifications(session_factory)
     if args.command == "expire-points":
         return expire_points_once(session_factory)
+    if args.command == "process-stripe-refunds":
+        return process_stripe_refunds_once(session_factory)
 
     runner = Runner(default_jobs(), session_factory, force_exit=force_exit)
     install_signal_handlers(runner)

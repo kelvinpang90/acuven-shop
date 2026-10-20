@@ -671,7 +671,8 @@ def test_job_is_registered_after_existing_jobs_with_own_transactions() -> None:
         "delete_expired_verifications",
     ]
     assert default[4].own_transactions is True
-    assert len(default) == 6
+    # SHOP-TASK-126 在积分到期之后追加了 stripe_refunds，任务数由 6 改为 7，其余位置不变。
+    assert len(default) == 7
     assert default[5].name == "expire_points"
     assert jobs.auto_complete_job().own_transactions is True
     assert jobs.AUTO_COMPLETE_BATCH_LIMIT == jobs.CANCEL_BATCH_LIMIT
