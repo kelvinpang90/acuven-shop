@@ -4,8 +4,9 @@
 （提交 acf576e）「Stripe 测试环境支付」第 8、9 条，以及 docs/HANDOFF.md
 0.54 记录的 Kelvin 2026-10-19 决定（明确拒绝以适配器归为 rejected 为准，
 记下错误类别，不自动重试；告警时间列只给会反复出现的告警去重）。每条测试
-（参数化的测试是每个用例）的文档字符串写明它守住的设计或 HANDOFF 原句；
-只出自 SHOP-TASK-124 验收标准的约定注明「验收：」。
+（参数化的测试是每个用例）的文档字符串都引用它守住的 DESIGN 1.12 或
+HANDOFF 0.54 原句；SHOP-TASK-124 验收标准在原句之上细化的约定另注明
+「验收：」，不单独作为测试的依据。
 
 用 SQLite 内存库（StaticPool，每个连接打开外键检查，并断言已打开）按模型
 建表，订单、会话记录与退款尝试直接按模型写入；尝试的来源一律用已付款的
@@ -403,8 +404,11 @@ def test_reverse_order_does_not_regress(db: Session) -> None:
 
 
 def test_apply_only_flushes(db: Session) -> None:
-    """验收：apply_refund_object「只 flush 不提交，供 webhook 把事件去重
-    放进同一事务」：调用方回滚后改动不留下。"""
+    """DESIGN 1.12 第 7 条：「事件 ID 的去重记录与它引起的订单、积分或
+    退款改动在同一个数据库事务里提交」「处理失败整个事务回滚」；第 8 条：
+    「退款接口的响应、webhook 与定时查询共用同一写入规则」；验收：
+    apply_refund_object「只 flush 不提交，供 webhook 把事件去重放进同一
+    事务」：调用方回滚后改动不留下。"""
     attempt_id = _attempt(db)
 
     result = apply_refund_object(db, attempt_id, _refund(attempt_id, "succeeded"), NOW)
@@ -417,8 +421,11 @@ def test_apply_only_flushes(db: Session) -> None:
 
 
 def test_apply_does_not_log(db: Session, alerts: pytest.LogCaptureFixture) -> None:
-    """验收：apply_refund_object「不自己记日志，而是返回枚举结果……由
-    调用方在提交之后按结果记告警」。"""
+    """DESIGN 1.12 第 7 条：「处理失败整个事务回滚、回 5xx，由 Stripe
+    重发」——写入规则里记下的告警会随回滚失效而日志不会，所以告警不能在
+    写入规则里记；第 8 条：「发现变为 failed 就照上面改并告警」；验收：
+    apply_refund_object「不自己记日志，而是返回枚举结果……由调用方在提交
+    之后按结果记告警」。"""
     attempt_id = _attempt(db, STRIPE_REFUND_SUCCEEDED, stripe_refund_id=REFUND_ID)
     other = _refund(attempt_id, "failed", refund_id="re_test_other")
 
@@ -497,8 +504,11 @@ def test_mismatch_before_refund_id_is_known_writes_nothing(
 
 
 def test_mismatch_with_other_refund_id(db: Session) -> None:
-    """验收：已记下 Stripe 退款 ID 时 Refund 的 ID 必须等于它（元数据里
-    的尝试 ID 相符也不行），不符时不改状态与 Stripe 退款 ID。"""
+    """DESIGN 1.12 第 8 条：「有 Stripe 退款对象的尝试，状态一律以向
+    Stripe 查询到的该退款当前对象为准」——别的退款对象不能改这条尝试；
+    HANDOFF 0.54：告警时间列「只给会反复出现的告警（……Stripe 退款对象与
+    尝试不符）去重」；验收：已记下 Stripe 退款 ID 时 Refund 的 ID 必须等于
+    它（元数据里的尝试 ID 相符也不行），不符时不改状态与 Stripe 退款 ID。"""
     attempt_id = _attempt(db, stripe_refund_id=REFUND_ID)
     refund = _refund(attempt_id, "failed", refund_id="re_test_other")
 
@@ -561,8 +571,11 @@ def test_apply_mismatch_distinguishes_first_and_repeat(db: Session) -> None:
 
 
 def test_aware_now_is_rejected(db: Session) -> None:
-    """模型说明「时间一律是不带时区的 UTC」：带时区的当前时间抛
-    ValueError。"""
+    """DESIGN 1.12 第 8 条：「已 succeeded 的尝试，定时任务在成功后 30 天
+    内每天、之后每周再查询一次」「24 小时后不再调用退款接口」——写入规则
+    写下的成功时间与上次复查时间要与库里不带时区的 UTC 时间直接比较，
+    带时区的当前时间抛 ValueError，不写入（模型说明：时间一律是不带时区
+    的 UTC）。"""
     attempt_id = _attempt(db)
     aware = NOW.replace(tzinfo=UTC)
 
@@ -617,7 +630,10 @@ def test_submit_succeeded_response(db: Session) -> None:
 
 
 def test_submit_mismatch_not_written(db: Session, alerts: pytest.LogCaptureFixture) -> None:
-    """验收：ok 时按 apply_refund_object 写入：PaymentIntent 不符时不写
+    """DESIGN 1.12 第 8 条：「退款接口的响应、webhook 与定时查询共用同一
+    写入规则」；HANDOFF 0.54：告警时间列「只给会反复出现的告警（……Stripe
+    退款对象与尝试不符）去重，这类告警每条尝试至多一次」；验收：ok 时按
+    apply_refund_object 写入：PaymentIntent 不符时不写
     Stripe 退款 ID 与状态，首次不符记 stripe_refund_mismatch；调用次数
     照加。"""
     attempt_id = _attempt(db)
@@ -795,7 +811,10 @@ def test_submit_replay_unqueried_writes_refund_id_only(
 
 
 def test_submit_replay_mismatch_writes_no_id(db: Session) -> None:
-    """验收：回放而查询不成时只按回放内容写入 Stripe 退款 ID，核对同
+    """DESIGN 1.12 第 8 条：「Stripe 退款 ID、调用结果与之后的退款事件
+    （按 Stripe 退款 ID 或元数据里的记录 ID 关联）更新记录状态」——元数据
+    里的记录 ID 不是本尝试的退款不关联到它；验收：回放而查询不成时只按
+    回放内容写入 Stripe 退款 ID，核对同
     apply_refund_object：元数据里的尝试 ID 不符则不写。"""
     attempt_id = _attempt(db)
     replay = _ok(_refund(attempt_id, "pending", attempt_ref="999999"), replayed=True)
@@ -883,7 +902,9 @@ def test_refresh_writes_queried_object(db: Session) -> None:
 def test_refresh_unavailable_only_writes_checked_time(
     db: Session, alerts: pytest.LogCaptureFixture, query: StripeResult[Any]
 ) -> None:
-    """DESIGN 1.12 第 9 条：查询时 Stripe 不可用不改状态；验收：Stripe
+    """DESIGN 1.12 第 9 条：「创建会话或查询时 Stripe 不可用」；第 8 条：
+    「有 Stripe 退款对象的尝试，状态一律以向 Stripe 查询到的该退款当前
+    对象为准」——没查到当前对象就不改状态；验收：Stripe
     不可用或查询被拒时只写上次复查时间，不改状态、不告警。"""
     attempt_id = _attempt(db, STRIPE_REFUND_SUCCEEDED, stripe_refund_id=REFUND_ID)
     before = _snapshot(db, attempt_id)
@@ -899,8 +920,10 @@ def test_refresh_unavailable_only_writes_checked_time(
 
 
 def test_refresh_skips_attempt_without_refund_id(db: Session) -> None:
-    """DESIGN 1.12 第 8 条：还没有 Stripe 退款 ID 的由定时任务以同一幂等键
-    重试；验收：refresh_refund_attempt 只处理已有 Stripe 退款 ID 的尝试。"""
+    """DESIGN 1.12 第 8 条：「还没有 Stripe 退款 ID（调用结果未知或可重试
+    的错误）的，由定时任务在该尝试创建后 24 小时内（Stripe 保留幂等键的
+    最短期限）以同一幂等键自动重试」；验收：refresh_refund_attempt 只处理
+    已有 Stripe 退款 ID 的尝试。"""
     attempt_id = _attempt(db)
     gateway = FakeStripeGateway()
 
