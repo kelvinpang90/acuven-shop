@@ -66,7 +66,22 @@ MySQL 默认的 REPEATABLE READ 下，读取快照在事务的第一条非锁定
 会员订单的退款申请由之后的任务接入（申请方仍只有 guest）。后台接口由 SHOP-TASK-041 交付，
 管理员授权、CSRF 与请求格式由它先行校验。
 
-本模块不写日志；异常消息不含理由、幂等键或个人资料。
+Stripe 退款尝试（SHOP-TASK-125）依据 docs/DESIGN.md 1.12（提交 acf576e）
+「Stripe 测试环境支付」第 8 条（管理员批准退款的事务不变；订单经 Stripe 付款且本次批准的
+现金退款额（不含运费）大于 0 时，同一事务另写一条 pending 的尝试，来源为该退款申请；
+为 0 时不建；同一 PaymentIntent 的 pending 与 succeeded 退款合计不得超过付款金额，
+新建前在锁住该付款的事务里核对，超出即不建并告警）与 docs/HANDOFF.md 0.54：
+- 只在批准、不是按审核幂等键重放时，于保存点里 apply_refund_points 之后、写审计之前，
+  以订单 ID、申请 ID、申请的 amount_sen 与当前时间调用 app/services/stripe_refund.py 的
+  add_request_attempt（查与锁会话记录、核对合计与写尝试的规则都在那里）。锁顺序为
+  订单行 → 会员行 → Stripe 会话记录 → 退款尝试。
+- 没建成尝试的告警（stripe_refund_cap、stripe_refund_unrefundable）不影响批准：
+  批准照常成功，在保存点成功之后记一条 error 级日志，只含类别与申请 ID。
+  日志在调用方提交之前记，外层提交失败时可能多一条告警，只供人工核对。
+- 本模块不调用 Stripe：调用由之后的后台退款详情与重试接口在提交之后发起，
+  在那之前由定时任务发起。
+
+除上述告警外本模块不写日志；异常消息不含理由、幂等键或个人资料。
 时间一律是不带时区的 UTC。
 """
 
@@ -75,6 +90,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -93,6 +109,9 @@ from app.models.refund import (
 )
 from app.services.admin_auth import record_audit
 from app.services.points_refund import apply_refund_points
+from app.services.stripe_refund import add_request_attempt
+
+logger = logging.getLogger(__name__)
 
 # 审计操作名与对象类别。
 ADMIN_REFUND_APPROVED = "admin_refund_approved"
@@ -223,7 +242,8 @@ def _review(
     3. 读取申请：不是 requested 抛 RefundAlreadyReviewed 与当前状态。
     4. 读取该申请各件的占用；在保存点里写申请的审核各列、
        拒绝时置空各件的占用标记；批准且订单 member_id 非空时返还与追回积分；
-       写一条审计。
+       批准时按 add_request_attempt 新建 Stripe 退款尝试；写一条审计。
+    5. 保存点成功之后，没建成尝试的告警记一条 error 日志。
     写入遇唯一约束冲突时只回滚保存点（锁保持），按键重新查询：
     查到时按第 2 步返回，查不到原样抛出。积分函数抛 ValueError 时原样抛出。
     """
@@ -249,6 +269,7 @@ def _review(
     if any(unit.occupied != UNIT_OCCUPIED for unit in units):
         raise RuntimeError("refund request units are not occupied")
 
+    alert: str | None = None
     try:
         with db.begin_nested():
             request.status = review.result
@@ -266,6 +287,11 @@ def _review(
                 points_back, points_reversed = _unit_points(db, units)
                 apply_refund_points(
                     db, order.id, refund_request_id, points_back, points_reversed, now
+                )
+            if review.result == REFUND_APPROVED:
+                # 锁顺序：订单 → 会员（上面）→ Stripe 会话记录 → 退款尝试。
+                alert = add_request_attempt(
+                    db, order.id, refund_request_id, request.amount_sen, now
                 )
             record_audit(
                 db,
@@ -285,6 +311,9 @@ def _review(
             raise
         return _replay(existing, fingerprint), False
 
+    if alert is not None:
+        # 调用方提交之前记：外层提交失败时可能多一条告警，只供人工核对。
+        logger.error("%s refund_request=%d", alert, refund_request_id)
     return _outcome(request), True
 
 
