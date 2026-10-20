@@ -3438,7 +3438,7 @@ tasks:
       按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 8 条（以尝试的本站 ID 为幂等键并写进退款元数据；状态映射；只有 Stripe 明确给出 failed 或 canceled，或以请求错误明确拒绝创建才记为 failed；有退款对象的尝试状态以查询到的当前对象为准；写入时锁住该尝试的行，只接受 pending 到 succeeded、pending 到 failed、succeeded 到 failed 三种改动；24 小时后不再调用退款接口）与第 9 条，
       以及 docs/HANDOFF.md 0.54 记录的 Kelvin 2026-10-19 决定（明确拒绝以适配器归为 rejected 为准，记下错误类别，不自动重试；告警时间列只给会反复出现的告警去重），在新文件里实现退款尝试的写入规则与调用 Stripe 的函数，供之后的批准、手动重试、定时任务与 webhook 共用（SHOP-TASK-117 写的来源为会话的尝试也走这里）。不加接口，不接入定时任务，不改设计。
       设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.54，退款。拆分：业务规则层（3 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-123
     acceptance_criteria:
