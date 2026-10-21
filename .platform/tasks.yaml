@@ -3516,3 +3516,410 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  - id: SHOP-TASK-127
+    title: Stripe webhook 的事件解析与 Checkout 事件的同事务处理
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 7 条（事件 ID 的去重记录与它引起的订单、积分或退款改动在同一个数据库事务里提交；已提交过的事件直接回 200；处理失败整个事务回滚；业务动作另按对象去重；只处理第 4、5 条的 Checkout 事件与 Stripe 退款状态事件，其他类型回 200 不处理；不存、不记录事件原文）、第 1 条（webhook 事件 livemode 为真即拒绝）、第 3 条末句（本站没记下会话 ID 的会话被付款，其 webhook 按元数据里的创建幂等键与订单 ID 对上这条记录）、第 4 条（确认的两个来源走同一个幂等处理）与第 5 条（complete 而付款未定时等 async_payment_succeeded 确认，或 async_payment_failed 后按现有规则取消），
+      以及 docs/HANDOFF.md 0.55 的落实写法（处理的事件类型；checkout.session.expired 不处理、由定时任务查询；事件只作触发，按向 Stripe 查询到的会话分派），加事件解析与 Checkout 事件的处理函数，并让现有的确认与取消函数能把事件去重记录放进它们自己的提交里。退款事件由 SHOP-TASK-128、webhook 接口由 SHOP-TASK-129 做；不加接口，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，支付状态与取消。拆分：业务规则层（6 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-114
+      - SHOP-TASK-117
+    acceptance_criteria:
+      - app/services/stripe_gateway.py 新增常量 CHECKOUT_EVENT_TYPES（checkout.session.completed、checkout.session.async_payment_succeeded、checkout.session.async_payment_failed）与 REFUND_EVENT_TYPES（refund.created、refund.updated、refund.failed）、不可变数据类 WebhookEvent（id、type、livemode、session 为 CheckoutSession 或 None、refund 为 Refund 或 None）与公开函数 parse_webhook_event（入参原始请求体 bytes，返回 WebhookEvent 或 None）——不是 JSON 对象、object 不是 event、id 不是非空字符串或超过 STRIPE_ID_MAX_LENGTH、type 不是非空字符串或超过 EVENT_TYPE_MAX_LENGTH、livemode 不是布尔值、data.object 不是对象时返回 None；type 属于 CHECKOUT_EVENT_TYPES 时以现有 _parse_session 取 session，属于 REFUND_EVENT_TYPES 时以 _parse_refund 取 refund，取不到整条返回 None；其他类型（含 checkout.session.expired）两者都为 None；不抛异常、不写日志；文件里现有函数与 tests/test_stripe_gateway.py 不变
+      - app/services/stripe_confirm.py 的 confirm_checkout 与 app/services/payment.py 的 cancel_after_stripe_end 各加仅限关键字参数 record_event（可调用对象，入参数据库会话，默认 None；省略时现有行为与现有测试一字不变）——给出时，在每次写入的 db.commit() 之前（confirm_checkout 为 _write 里 _WRITES 各步骤的提交；cancel_after_stripe_end 为返回 kept 与 cancelled 的两处提交）先 db.flush() 本轮改动、再调用 record_event(db)，事件记录随改动一并提交；不写入的路径（判定不需写入、changed、回滚）不调用；record_event 抛出的异常原样向上传出，不被 confirm_checkout 的 except IntegrityError 重试吞掉（webhook 的 record_event 把事件 ID 唯一约束冲突转成不是 SQLAlchemy 异常子类的 EventAlreadyRecorded）；两个模块说明各补一句
+      - 新文件 app/services/stripe_webhook.py 提供 WebhookResult（processed、ignored、duplicate、unavailable）、EventAlreadyRecorded 与公开函数 handle_webhook_event（入参数据库会话、适配器、WebhookEvent、当前时间，返回 WebhookResult）——now 带时区或 event.livemode 为真时抛 ValueError（先于访问数据库，livemode 由接口先拒绝）；调用方不得持锁、不得有未提交的改动，本函数会提交或回滚；先结束当前事务，以私有函数 _already_recorded(db, event_id) 普通读查到该事件 ID 已有记录就返回 duplicate、不调用 Stripe；type 属于 CHECKOUT_EVENT_TYPES 按下一条处理；其余类型（退款事件类型的处理由 SHOP-TASK-128 接入，本任务暂按其他类型）记为 ignored；不需改动的情形由私有函数在只写这一行的事务里插入事件记录（outcome 为 processed 或 ignored，处理时间为 now）并提交，撞上事件 ID 唯一约束时回滚并返回 duplicate
+      - Checkout 事件——先以普通读按 checkout_session_id 等于事件会话 ID 找记录，找不到且元数据的创建幂等键非空、订单 ID 为十进制数字时按 idempotency_key 与 order_id 都相等找（第 3 条末句，含 creating 与 expired 记录）；都找不到为 ignored，不调用 Stripe；找到后记下记录 ID、订单 ID 与状态，结束读事务，本函数以事件会话 ID 调用 retrieve_checkout_session 一次（之后 confirm_checkout 按它现有的 _needs_query 可能再查一次以取实际付款方式类型，不另限制；测试不断言 Stripe 的总调用次数，只断言 duplicate、ignored 的情形不调用），按查询到的会话分派、不按事件类型（事件可能乱序）——已付款经 confirm_checkout（传入查询到的会话与 record_event）；否则会话为 complete、ID 与创建幂等键都等于记录、会话 livemode 为假、PaymentIntent 的 livemode 不为真且其状态属于 app/services/stripe_overdue.py 的 FAILED_INTENT_STATUSES 时，以 system 调用 cancel_after_stripe_end（给记录 ID，seen_status 为查询前读到的状态，传 record_event），与定时任务同一取消规则；否则会话为 complete 时经 confirm_checkout 只记下会话（第 5 条付款未定，不确认不取消）；其余（open、expired）不改，记为 processed
+      - 结果——查询 unavailable 为 unavailable（不留事件记录，Stripe 会重发）；查询 live 记一条 error 日志 stripe_livemode、rejected 记 stripe_confirm_rejected（只含记录 ID，沿用 stripe_confirm.py 的类别常量），都为 unavailable（不留事件记录、订单与记录不变——第 1 条「会话或付款的 livemode 为真即拒绝」、第 7 条「处理失败整个事务回滚、回 5xx」，已找到本站记录而无法核实时让 Stripe 重发，与 confirm_checkout 把查询 rejected 归为 unavailable 一致）；confirm_checkout 返回 unavailable（Stripe 不可用、核对不符或轮数用完）为 unavailable，不留事件记录，其余结果为 processed；cancel_after_stripe_end 返回 cancelled 或 kept 为 processed，changed 为 unavailable；record_event 未被调用而结果为 processed 时按上一条单独写事件记录；捕获 EventAlreadyRecorded 时回滚并返回 duplicate；本模块除上述两类外不写日志，日志不含事件 ID 与事件或会话原文
+      - 测试验证意图——新文件 tests/test_stripe_webhook.py 用 SQLite 内存库与 FakeStripeGateway（订单与会话记录的准备照 tests/test_stripe_overdue.py 的写法在本文件里另写），验证——解析的合格三类与各种不合格输入；completed 且已付款时订单进入 demo_paid、事件记录为 processed；同一事件再来为 duplicate 且不调用 Stripe；creating 记录按创建幂等键与订单 ID 找回并确认；找不到记录与 checkout.session.expired、其他类型为 ignored 且不调用 Stripe；async_payment_failed 而查询到 PaymentIntent 为 canceled 时记录 expired、订单取消；complete 而付款未定时只记下会话、订单仍待支付；事件类型与查询结果不一致时按查询结果；Stripe 不可用为 unavailable、没有事件记录且订单不变；查询结果为 live 与 rejected 时各为 unavailable、没有事件记录、订单与会话记录不变并各记一条对应的 error 日志；把 _already_recorded 替换为恒返回假并预先插入同一事件 ID 时返回 duplicate 且订单与会话记录都未改（守住同一事务）；给 confirm_checkout 与 cancel_after_stripe_end 传入抛异常的 record_event 时订单与记录都不变（守住提交之前调用）；livemode 为真与带时区的 now 抛 ValueError；不测退款事件类型；每条测试写明它守住的是设计的哪一句；tests/test_stripe_confirm.py、tests/test_stripe_cancel.py、tests/test_stripe_late_payment.py、tests/test_stripe_overdue.py、tests/test_stripe_gateway.py 一字不改且照常通过；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/task-records/SHOP-TASK-127.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；事件解析、record_event 的提交时机、Checkout 事件的找回与分派、结果映射、偏离、验证到什么程度，并写明退款事件与接口留给 SHOP-TASK-128、129），不改 docs/TODO.md，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/api/、app/jobs.py、app/services/stripe_refund.py、app/services/stripe_overdue.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
+    allowed_change_paths:
+      - app/services/stripe_gateway.py
+      - app/services/stripe_webhook.py
+      - app/services/stripe_confirm.py
+      - app/services/payment.py
+      - tests/test_stripe_webhook.py
+      - docs/task-records/SHOP-TASK-127.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-128
+    title: Stripe webhook 的退款事件同事务处理
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 7 条（事件 ID 的去重记录与它引起的退款改动在同一个数据库事务里提交；业务动作另按对象去重，第 8 条按退款记录）与第 8 条（Stripe 退款 ID、调用结果与之后的退款事件（按 Stripe 退款 ID 或元数据里的记录 ID 关联）更新记录状态；退款事件只作触发，收到后先查询再更新，不按事件里的快照改，所以先后颠倒送达的事件不会让状态倒退；退款接口的响应、webhook 与定时查询共用同一写入规则），
+      以及 docs/HANDOFF.md 0.55 的落实写法（处理 refund.created、refund.updated、refund.failed 三种事件，data.object 都是退款对象），在 SHOP-TASK-127 的 handle_webhook_event 里接入退款事件，写入沿用 SHOP-TASK-124 的 apply_refund_object。不加接口，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，退款。拆分：业务规则层（3 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-127
+    acceptance_criteria:
+      - handle_webhook_event 对 type 属于 REFUND_EVENT_TYPES 的事件不再按其他类型记 ignored，改按下面处理；其余行为（去重、Checkout 事件、其他类型、单独写事件记录与 duplicate）不变；模块说明随之改写
+      - 找尝试——以普通读按 stripe_refund_id 等于事件退款 ID 找，找不到且元数据的尝试 ID 为十进制数字时按尝试 ID 找；都找不到（含不是本站发起的退款）为 ignored，不调用 Stripe；找到后结束读事务，以事件退款 ID 调用 retrieve_refund 一次（第 8 条，只作触发、先查询），unavailable 为 unavailable（不留事件记录、尝试不变，Stripe 会重发），rejected 也为 unavailable（不留事件记录、尝试不变，记一条 error 日志 stripe_webhook_refund_rejected，只含尝试 ID——已找到本站尝试而无法核实时照第 7 条「处理失败整个事务回滚、回 5xx」让 Stripe 重发）
+      - 写入——查询 ok 时在同一事务里调用 apply_refund_object（尝试 ID、查询到的退款、now；它锁住尝试并核对 PaymentIntent 与退款 ID 或元数据），再插入事件记录（outcome 为 processed）并 flush，撞上事件 ID 唯一约束时回滚、返回 duplicate、不记告警；否则提交，提交之后按 alert_category 的结果照 refresh_refund_attempt 的写法记一条 error 日志（类别与尝试 ID），返回 processed；不调用 refresh_refund_attempt 与 submit_refund_attempt（它们自己提交），不用事件里的退款快照写状态
+      - 测试验证意图——新文件 tests/test_stripe_webhook_refund.py 用 SQLite 内存库与 FakeStripeGateway（尝试的准备照 tests/test_stripe_refund.py 的写法在本文件里另写），验证——refund.updated 而查询到 succeeded 时 pending 改为 succeeded、事件记录为 processed；refund.failed 而查询到 succeeded 时按查询结果（守住先查询再更新、事件乱序不倒退）；已 succeeded 的尝试查询到 failed 时改为 failed 并记一次 stripe_refund_failed_after_success；还没有 Stripe 退款 ID 的尝试按元数据的尝试 ID 找到并写入退款 ID；查询到的 PaymentIntent 不符时不改状态、写告警时间并记 stripe_refund_mismatch；找不到尝试为 ignored 且不调用 Stripe；Stripe 不可用为 unavailable、没有事件记录且尝试不变；查询被拒为 unavailable、没有事件记录、尝试不变并记一次 stripe_webhook_refund_rejected；同一事件再来为 duplicate 且不调用 Stripe；把 _already_recorded 替换为恒返回假并预先插入同一事件 ID 时返回 duplicate 且尝试未改、不记告警（守住同一事务）；每条测试写明它守住的是设计的哪一句；tests/test_stripe_webhook.py 与 tests/test_stripe_refund.py 一字不改且照常通过；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/task-records/SHOP-TASK-128.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；找尝试、先查询再写入、事件记录与写入同一事务、告警时机、偏离、验证到什么程度，并写明接口留给 SHOP-TASK-129），不改 docs/TODO.md，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/stripe_refund.py、app/services/stripe_gateway.py、app/services/stripe_confirm.py、app/services/payment.py、app/api/、app/jobs.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
+    allowed_change_paths:
+      - app/services/stripe_webhook.py
+      - tests/test_stripe_webhook_refund.py
+      - docs/task-records/SHOP-TASK-128.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-129
+    title: Stripe webhook 接口
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 7 条（端点为 POST /api/stripe/webhook，用原始请求体与 webhook 签名密钥校验 Stripe-Signature（含时间容差），不通过回 400、不处理；已提交过的事件直接回 200；处理失败整个事务回滚、回 5xx，由 Stripe 重发；其他类型回 200 不处理；不需要会话与 CSRF；不存、不记录事件原文）、第 1 条（webhook 事件 livemode 为真即拒绝）与第 2 条（签名密钥未配置时不启用 Stripe），
+      以及 docs/HANDOFF.md 0.55 的落实写法（请求体上限 256 KB；未配置回 503 且不验签；livemode 为真回 400；处理中 Stripe 不可用回 503），提供 webhook 接口，处理交给 SHOP-TASK-127、128 的 handle_webhook_event。不改服务层，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，支付状态与退款。拆分：接口层（4 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-128
+    acceptance_criteria:
+      - 新文件 app/api/stripe_webhook.py 建路由器（前缀 /api/stripe，route_class 用 app/api/order_lookup.py 的 _NoStoreRoute），app/main.py 只加 import 与 include_router 注册它；POST /api/stripe/webhook 的处理函数与依赖产生的响应（含错误）都带 no-store，路径存在而方法不匹配时由框架返回的 405 不在此列，未预期异常由框架回的 500 也不在此列（不在接口里捕获，会话关闭时未提交的改动回滚）；不读订单访问 cookie、会员或管理员会话，不要求 CSRF；接口不写日志（下面 livemode 一条与服务层按设计记的 error 日志除外），不记录请求体、请求头与事件内容
+      - 检查顺序，每一步不通过即停止、之前不读写数据库也不调用 Stripe——请求体照 app/api/pay.py 的 _json_body 逐块读，超过 256 KB（模块常量 MAX_WEBHOOK_BODY_BYTES = 256 * 1024）即 413 {"detail":"request body too large"}，不看 Content-Type；app/services/stripe_gateway.py 的 stripe_configured(request.app.state.settings) 为假（含签名密钥未配置、密钥不是测试密钥）回 503 {"detail":"stripe_unavailable"}，不验签；verify_webhook_signature（原始请求体、Stripe-Signature 请求头、settings 的 stripe_webhook_secret、当前时间）为假回 400 {"detail":"signature_invalid"}；parse_webhook_event 返回 None 回 400 {"detail":"event_invalid"}；livemode 为真回 400 {"detail":"livemode_rejected"} 并记一条 error 日志 stripe_livemode（只含类别），不写事件记录
+      - 之后调用 handle_webhook_event（适配器经 get_stripe_gateway 取得，当前时间取 app/api/pay.py 的 _utcnow，在本模块以同名导入以便测试替换）——processed、ignored、duplicate 都回 200 {"received":true}；unavailable 回 503 {"detail":"stripe_unavailable"}；响应体不回显任何输入，不带事件 ID 或任何 Stripe ID
+      - 测试验证意图——新文件 tests/test_stripe_webhook_api.py 用 TestClient 与 SQLite 内存库（夹具照 tests/test_stripe_pay_api.py，Stripe 配置照 tests/test_stripe_gateway.py 的 make_settings 写法在本文件里另写），以 app.state.stripe_gateway 注入 FakeStripeGateway，在测试里用测试签名密钥与替换后的当前时间计算 Stripe-Signature，验证——completed 已付款事件回 200、订单进入 demo_paid、有事件记录；同一事件再来回 200 且不调用 Stripe；缺签名头、签名不符、时间戳超出容差回 400，不写数据库、不调用 Stripe；签名密钥为空或密钥为正式环境前缀时回 503，即使签名按空密钥计算；超过 256 KB 回 413 且先于验签；签名正确而 JSON 不合格回 400 event_invalid；livemode 为真回 400 且没有事件记录；其他类型回 200 并记为 ignored；Stripe 不可用回 503 且没有事件记录；refund.updated 事件更新退款尝试；不带任何 cookie 与 CSRF 也能处理；所有列出的响应带 no-store 且不回显输入；每条测试写明它守住的是设计的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/task-records/SHOP-TASK-129.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；检查顺序、各响应、偏离、验证到什么程度，并写明在 Stripe 测试环境建 webhook 端点、订阅 CHECKOUT_EVENT_TYPES 与 REFUND_EVENT_TYPES 六种事件、把签名密钥写进私有配置由运营者在合并部署后完成），不改 docs/TODO.md，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、app/api/ 下的其他文件、模型、迁移、现有测试、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
+    allowed_change_paths:
+      - app/api/stripe_webhook.py
+      - app/main.py
+      - tests/test_stripe_webhook_api.py
+      - docs/task-records/SHOP-TASK-129.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-130
+    title: 后台退款详情给出 Stripe 付款与退款尝试
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 8 条（后台退款详情显示各次尝试的 Stripe 退款状态；按记下的实际付款方式类型显示期限提示；最新一次尝试为 failed 时管理员可手动重试）与第 10 条（不显示 Stripe 返回的客户资料与错误原文），以及 docs/UX.md 0.11 的 A03「Stripe 测试（0.11）」，
+      在后台退款详情接口加入 Stripe 付款与退款尝试字段；期限提示与能否重试由页面从这些字段推出，接口不另给。不加接口，不调用 Stripe，不做前端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，退款。拆分：业务规则层（4 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-125
+    acceptance_criteria:
+      - app/services/admin_refunds.py 的 AdminRefundDetail 另给 paid_via_stripe（布尔）、payment_method_type（字符串或 null）与 stripe_refunds（列表，每条只有 id、created_at、amount_sen、status、stripe_refund_id 五个字段，新模型照本模块的写法）；refund_detail 的签名不变，仍只读——不写审计、不锁行、不调用 Stripe；GET /api/admin/refunds/{refund_id} 的响应随之多出这三个字段，其余字段、检查顺序与错误不变（app/api/admin_refunds.py 不改）
+      - 取值——「由 Stripe 付款」与 app/services/stripe_refund.py 的 add_request_attempt 的判定相同，即该订单有确认时间非空的会话记录（至多一条）；有则 paid_via_stripe 为真，payment_method_type 原样取该记录的 payment_method_type（尚未补齐时为 null）；没有（经模拟支付，含只有 expired 或未确认会话记录的订单）则为假与 null；审核中、已批准、已拒绝三种申请的取值规则相同
+      - stripe_refunds 只含来源为本退款申请（refund_request_id 等于本申请 ID）的尝试，按尝试 ID 从大到小（最新在前）；created_at 照本模块 _utc 换成带 UTC 时区的时间；status 原样为 pending、succeeded 或 failed；没有 Stripe 退款 ID 时 stripe_refund_id 为 null；来源为会话的尝试（迟到与不符的付款）与同一订单其他申请的尝试不在其中；没有尝试时为空列表（含审核中、已拒绝、模拟支付与现金退款额为 0 的申请）；不返回 last_error_type、调用次数、告警时间、复查时间、PaymentIntent ID 与会话 ID
+      - 测试验证意图——新文件 tests/test_admin_refund_stripe_detail.py 用 TestClient 与 SQLite 内存库（夹具与后台登录照 tests/test_admin_refunds.py，Stripe 付款的会话记录与尝试照 tests/test_stripe_refund_approval.py 的 _stripe_paid 写法直接写入），验证——Stripe 付款且已批准的申请 paid_via_stripe 为真、payment_method_type 原样（如 fpx）、两条尝试按 ID 倒序且五个字段与库里相同；类型为空时为 null；同一订单另一申请的尝试与来源为会话的尝试不出现；模拟支付订单为假、null 与空列表；审核中的 Stripe 付款申请为真且列表为空；构造 last_error_type 非空的 failed 尝试，响应文本不含它与 PaymentIntent ID；读取前后各表不变，查询以 MySQL 方言编译都不带 FOR UPDATE（照 tests/test_admin_refund_points.py 的做法）；每条测试写明它守住的是设计或 UX 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - tests/test_admin_refunds.py 只改 test_detail_fields_amounts_and_reviewer 一条并写明原因——它对响应整体做相等断言，期望里补上游客模拟支付订单的取值（paid_via_stripe 为假、payment_method_type 为 null、stripe_refunds 为空列表）；该文件其余测试一字不改；tests/test_admin_refund_points.py 与 tests/test_admin_refund_order_filter.py 不改并照常通过
+      - docs/task-records/SHOP-TASK-130.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；三个字段的取值、偏离、验证到什么程度，并写明批准后调用 Stripe 与重试接口留给 SHOP-TASK-131、A03 页面留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/api/、app/services/stripe_refund.py、app/services/refund_review.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
+    allowed_change_paths:
+      - app/services/admin_refunds.py
+      - tests/test_admin_refund_stripe_detail.py
+      - tests/test_admin_refunds.py
+      - docs/task-records/SHOP-TASK-130.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-131
+    title: 批准退款后立即调用 Stripe 与手动重试接口
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 8 条（提交后调用 Stripe 退款接口，以该记录的本站 ID 为幂等键；最新一次尝试为 failed 时管理员可手动重试，重试是新建一条尝试，受唯一约束，重复点击与并发只有一个成功，再以它的 ID 调用 Stripe；本站的批准结果不因 Stripe 退款失败而回滚）、
+      docs/HANDOFF.md 0.54 第（1）项（在批准请求里提交之后立即调用；在那之前及调用结果未知时由定时任务在下一轮发起）与 docs/UX.md 0.11 的 A03（重试成功后重新读取；被合计上限拒绝时提示），
+      在后台退款接口接入批准后的调用，并新增手动重试接口。不做前端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，退款。拆分：接口层（5 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-130
+    acceptance_criteria:
+      - POST /api/admin/refunds/{refund_id}/approve 经 app/api/pay.py 的 GatewayDep 取适配器，现有检查顺序、错误、提交与响应不变；只在 approve_refund 返回实际审核（第二个返回值为真）且提交之后，以 app/services/stripe_refund.py 新增的公开函数（入参数据库会话与退款申请 ID，只读，返回活动来源列等于该申请的尝试 ID，没有为 None）找到本次建的尝试，有则调用 submit_refund_attempt；没有尝试（模拟支付、现金退款额为 0、因合计上限或缺 PaymentIntent 没建成）与按审核幂等键重放时不调用 Stripe（重放时的尝试留给定时任务）；拒绝接口不变
+      - submit_refund_attempt 的任何结果（含 unavailable、rejected）都不改变批准的 200 响应与内容；它抛出异常时回滚、记一条 error 日志（只含类别 stripe_refund_submit_failed 与尝试 ID）后仍回 200 与审核结果，由定时任务在下一轮发起；接口除这一条外不写日志（服务层按设计记的告警日志除外）
+      - 新增 POST /api/admin/refunds/{refund_id}/stripe-retry（同一路由器，沿用 _NoStoreRoute；这些接口的处理函数与依赖产生的响应（含错误）都带 no-store，路径存在而方法不匹配时由框架返回的 405 不在此列），不读请求体、不要 Idempotency-Key；检查顺序 require_admin（401 admin_session_required）→ require_admin_csrf（403 csrf_failed）→ 路径里的申请 ID（照 _refund_id_errors，422 不回显）→ retry_request_attempt；RetryRequestNotFound 回 404 not_found，RefundRequestNotApproved 回 409 refund_not_approved，NoRefundAttempt 与 RetryNotAllowed（含并发撞唯一约束）回 409 stripe_refund_not_retryable，RefundCapExceeded 回 409 stripe_refund_cap（照 _conflict 不带 status，告警日志已由服务层记）；每种错误都先 rollback
+      - 重试成功时在同一事务里经 record_audit 写操作 admin_stripe_refund_retried（常量加在 app/services/stripe_refund.py；对象类别沿用 app/services/refund_review.py 的 AUDIT_TARGET_REFUND_REQUEST，对象 ID 为申请 ID，旧值为空，新值为新尝试 ID 的十进制字符串）后提交，再照第 2 条调用 submit_refund_attempt（结果与异常同样不改变响应），回 200 {"result":"retried"}；响应不带 Stripe 退款 ID、错误类别或其他 Stripe 内容，页面随后重新读取详情
+      - 测试验证意图——新文件 tests/test_admin_refund_stripe_api.py 用 TestClient 与 SQLite 内存库（夹具与后台登录照 tests/test_admin_refunds.py，Stripe 付款的会话记录照 tests/test_stripe_refund_approval.py 的 _stripe_paid），以 app.state.stripe_gateway 注入 FakeStripeGateway，并以 monkeypatch 固定 app.api.admin_refunds 的 _utcnow，验证——批准 Stripe 付款订单后适配器恰好收到一次 create_refund，幂等键为新尝试 ID、金额为申请的现金退款额，尝试按结果写入；适配器回 unavailable 或 rejected 时批准仍为 200 且内容相同，尝试分别保持 pending 与记为 failed；同键重放与模拟支付订单不调用适配器；适配器替身抛出异常时仍为 200、批准已提交、恰有一条 stripe_refund_submit_failed 日志；最新为 failed 时重试 200、多一条 pending 尝试、审计一条且新值为新尝试 ID、适配器以新 ID 调用；最新为 pending 或 succeeded、没有尝试、未批准、超额、申请不存在分别回对应错误且不写库、不调用适配器；未登录 401、缺 CSRF 403、非法 ID 422 且不回显；所有响应（含错误）带 no-store；每条测试写明它守住的是设计或 UX 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - tests/test_admin_refunds.py 只改 test_routes_use_internal_id_only 一条并写明原因——穷举的路由加入重试接口，查询参数仍只有 lang；该文件其余测试（含 test_writes_no_log_records，现有批准都经模拟支付，不调用 Stripe）一字不改并照常通过
+      - docs/task-records/SHOP-TASK-131.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；批准后的调用、重试接口与错误码、审计、偏离、验证到什么程度，并写明 A03 页面留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；app/services/stripe_refund.py 只新增查询函数与审计常量，现有函数不改；不改 app/services/refund_review.py、app/services/admin_refunds.py、app/services/stripe_refund_overdue.py、app/jobs.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
+    allowed_change_paths:
+      - app/api/admin_refunds.py
+      - app/services/stripe_refund.py
+      - tests/test_admin_refund_stripe_api.py
+      - tests/test_admin_refunds.py
+      - docs/task-records/SHOP-TASK-131.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-132
+    title: 支付页 P06 与结果页 P07 的 Stripe 请求模块
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 2、3、4、5、9 条与 docs/UX.md 0.11 的 P06、P07，以及 docs/HANDOFF.md 0.54、0.55 的落实写法，
+      在 frontend/src/api/pay.ts 接上 SHOP-TASK-119 给支付页视图加的三个字段、SHOP-TASK-120 的游客 Stripe 发起与确认接口，以及 SHOP-TASK-118 给现有支付与取消接口加的 409 method_changed 与 503 stripe_unavailable，
+      并提供 P06 把「取消时会话已付款」交给 P07 的内存交接。只做游客接口（前端还没有会员支付页，会员的两个接口留给会员支付页的任务）；不改页面，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，支付状态的请求与归类（金额与状态的判定都在服务端）。
+      拆分：P06、P07 的请求层（5 个允许路径；两个页面测试只为补夹具字段列入）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-120
+    acceptance_criteria:
+      - PayOrder 加三个字段——payment_route（"stripe"、"simulated" 或 null）、stripe_state（"creating"、"open"、"complete"、"under_review" 或 null）与 stripe_refunded（布尔），含义照 app/services/payment.py 的 PayOrder 注释写在类型注释里；readPayOrder 的读取与校验写法不变（与现有字段一样不另做字段校验）
+      - 新函数 startStripe(language, orderNumber, csrfToken, signal?) 调用 POST /api/pay/stripe/start?lang=（查询参数只有 lang），新函数 confirmStripe(orderNumber, csrfToken, signal?) 调用 POST /api/pay/stripe/confirm（不带任何查询参数）；两者都是同源 cookie、cache 为 no-store、Accept 与 Content-Type 为 application/json、X-CSRF-Token 为调用方给出的令牌，JSON 请求体只有 order_number；订单号与令牌不进路径、查询参数或任何浏览器存储；写法沿用本文件 postWrite 与 readPayOrder 的现有做法，中止与网络中断一样归 network
+      - startStripe 的结果归为 redirect（200 且 result 为 redirect、checkout_url 是字符串且以 new URL 解析后 protocol 为 "https:"，结果带这个地址）、complete（200 且 result 为 complete、checkout_url 为 null）、closed（409 且 detail 为 order_not_payable）、method_changed（409 且 detail 为 method_changed）、under_review（409 且 detail 为 stripe_under_review）、unavailable（503 且 detail 为 stripe_unavailable）、expired（401）、csrf（403）、failed（其他状态、其他 detail、响应体不是 JSON 或不合格，含 200 而地址缺少、不是字符串、解析不了或不是 https）与 network；confirmStripe 的结果归为 paid、confirming、not_paid、refunded（200 且 result 为这四个值之一）、expired（401）、csrf（403）、failed（其他，含 200 而 result 为其他值）与 network
+      - 现有写接口的回答——WriteReply 加 method_changed（409 且 detail 为 method_changed，支付与取消都适用）与 unavailable（503 且 detail 为 stripe_unavailable）；其他 409 与 503 的归类不变；settle 把它们分别变成 kind 为 method_changed 与 unavailable 的两种新 WriteOutcome，runPayment 与 runCancel 的签名不变；frontend/src/pages/PayPage.tsx 不改，它对这两种新结果暂时落到现有的 common.error_retry（与此前归 failed 时相同），由 SHOP-TASK-134、135 接上
+      - 交接——新函数 rememberPaidNotCancelled(orderNumber) 与 takePaidNotCancelled(orderNumber)，把「取消时会话已付款」的订单号只放在模块内的变量里（不进地址、history 的 state、localStorage、sessionStorage 或 cookie）；take 只在记下的订单号与给出的相同时返回 true，不论是否相同都清除记录（读一次即失效，重新打开或刷新页面后不再显示）；P06 在 SHOP-TASK-135 调用 remember，P07 在 SHOP-TASK-133 调用 take
+      - 用 vitest（不加测试依赖，fetch 以替身代替）在 frontend/src/api/pay.test.ts 验证意图——两个新接口的地址、方法、查询参数、请求头与请求体（只有 order_number）；上面每种归类各一例，含 409 的其他 detail、503 的其他 detail、200 而地址不是 https 或缺少时归 failed；支付与取消遇到 409 method_changed 与 503 stripe_unavailable 时的回答与 settle 的结果；交接读一次即失效、订单号不同时返回 false 且同样清除、不写任何浏览器存储；每条测试写明它守住的是设计、UX 或 HANDOFF 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)（input 为 RequestInfo | URL，init 为 RequestInit 可省），从 mock.calls 取值时用 String(…) 收窄，不让 any 流出（CI 的 eslint 带类型规则）；现有测试的断言不改
+      - frontend/src/pages/PayPage.test.tsx 与 frontend/src/pages/PayResultPage.test.tsx 只许在各自的 payOrder 夹具默认值里补上三个新字段（payment_route 为 "simulated"、stripe_state 为 null、stripe_refunded 为 false），其余一字不改；frontend/src/api/pay.test.ts 的夹具同样补上；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-132.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；三个字段、两个接口与归类、两种新的写接口回答、交接、偏离、验证到什么程度，并写明会员接口与页面留给之后的任务）；改动只落在 allowed_change_paths（不改页面与路由）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/pay.ts
+      - frontend/src/api/pay.test.ts
+      - frontend/src/pages/PayPage.test.tsx
+      - frontend/src/pages/PayResultPage.test.tsx
+      - docs/task-records/SHOP-TASK-132.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-133
+    title: 结果页 P07 的 Stripe 确认中与重查
+    purpose: >-
+      按 docs/UX.md 0.11 的「P07 Stripe 测试」与 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 4、5、6 条，以及 docs/HANDOFF.md 0.54、0.55 的落实写法，
+      在 frontend/src/pages/PayResultPage.tsx 接上 Stripe 途径——订单仍待支付且有 Stripe 记录时调用 SHOP-TASK-132 的 confirmStripe，按结果显示成功、确认中（每 5 秒自动重查，最多 12 次，之后手动再查）、尚未付款或迟到付款的退款说明；
+      取消时会话已付款进入的成功区另显示一句。P06 打开即为 complete 时转到本页由本页确认（SHOP-TASK-134），所以本任务先于 P06 的任务。不改 P06，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，支付状态的显示（确认与退款都在服务端）。
+      拆分：P07 的显示层（7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-132
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.11 的「P07 Stripe 测试」、docs/UX-COPY.md 0.12 与 docs/HANDOFF.md 0.55 为准，样式以 docs/design/pages/ 的 P07-stripe-confirming、P07-stripe-phone-slow 与 P07-stripe-states 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.12 逐字加入本任务用到的 result.confirming_title、result.confirming_body、result.confirming_slow、result.check_again、result.stripe_not_paid、result.stripe_back_to_pay、result.stripe_late_refund 与 result.paid_not_cancelled，写法与相邻条目相同（每种语言一行）
+      - 判定——读到的订单仍待支付且 stripe_state 不为 null 时，以读取给的 CSRF 令牌调用 confirmStripe 一次，确认返回前按读取中显示（标 aria-busy）；paid 与 refunded 重新读取订单并按读到的状态显示（这次重新读取 network 或 failed 时按确认中处理、进入或继续自动重查，下一次重查读到的状态为准；expired 整页 pay.session_expired）；not_paid 显示 result.stripe_not_paid 与回到 /pay 的 result.stripe_back_to_pay；confirming、failed、csrf 与 network 都显示确认中；expired 整页 pay.session_expired。仍待支付而 stripe_state 为 null 时——payment_route 为 stripe 一律用路由的 replace 换成 /pay（Stripe 途径不显示失败页，订单此前即使有模拟支付失败的记录也一样），payment_route 为 simulated 照现有 resultKind 处理（失败页或换成 /pay）；不改 frontend/src/api/pay.ts 的 resultKind，Stripe 的判定写在本页
+      - 确认中——显示 result.confirming_title、result.confirming_body、订单卡片（OrderCard）与游客的 result.guest_next，不显示 result.demo_hint 与 pay.expires；每 5 秒自动重查一次、最多 12 次，每次重查是重新读取订单（取得新令牌；已不是待支付就按读到的状态显示）后仍待支付且有 Stripe 记录时再调用 confirmStripe 一次；重查里的重新读取失败（network 或 failed；expired 照判定一条整页 pay.session_expired）与确认失败一样计为一次重查、继续停在确认中画面，自动重查期间不切换为读取中，只在手动再查进行中按钮标 aria-busy；12 次用完仍是确认中时停止自动重查，显示 result.confirming_slow 与 result.check_again 按钮，每点一次重查一次，进行中按钮禁用并标 aria-busy；等待经可注入的 delay（默认 frontend/src/api/pay.ts 的 wait）完成，离开页面或切换语言时中止，中止后的结果不再更新页面；切换语言照现有写法重新读取，自动重查次数从头计
+      - 已取消且 stripe_refunded 为 true 时，以 result.stripe_late_refund 代替 result.cancelled 或 result.cancelled_by_you（不论取消方），其下照旧是 result.continue；成功——首次读到订单时以其订单号调用一次 takePaidNotCancelled，为 true 且订单按成功显示时，成功区顶部另显示 result.paid_not_cancelled（只在内存里，刷新后不再显示）；其余成功、失败、已取消与凭据过期的显示不变，Stripe 途径不显示失败页
+      - 代码结构照 frontend/src/pages/AdminStoreDesignPage.tsx 与本页现有写法——导出把读取与确认结果变成页面状态的纯函数、接收 AbortSignal 与回调的读取、确认和重查异步函数，以及只依赖 props 的 PayResultView；默认导出的页面只负责持有状态、调用这些函数并接上路由；传给 onClick 的处理函数不返回 Promise（异步调用前加 void）；页面组件与函数的排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch、delay 与路由以替身代替，不用假时钟、不模拟点击）在 frontend/src/pages/PayResultPage.test.tsx 验证意图——确认的四种结果与 failed、csrf、network、expired 各自的显示；确认中不显示 result.demo_hint；自动重查第 12 次后停止并出现 result.check_again、之前不出现、按钮进行中禁用；重查中订单已付款则按成功显示；中止后不再更新；迟到退款代替两种已取消文案；paid_not_cancelled 只显示一次且只在成功时；stripe_state 为 null 的待支付订单仍按原样处理；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 HANDOFF 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；现有测试只许在 props 辅助函数里补新增属性的默认值，其余断言不改；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-133.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；判定、确认中与重查、迟到退款、取消时已付款、偏离、验证到什么程度，并写明未做浏览器验收、P06 留给 SHOP-TASK-134、135）
+      - 改动只落在 allowed_change_paths（不新增路由，不改 frontend/src/pages/PayPage.tsx 与 frontend/src/api/pay.ts）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/PayResultPage.tsx
+      - frontend/src/pages/PayResultPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-133.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-134
+    title: 支付页 P06 的 Stripe 显示与跳转
+    purpose: >-
+      按 docs/UX.md 0.11 的「P06 Stripe 测试」与 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 1、2、3、9、10 条，以及 docs/HANDOFF.md 0.54、0.55 的落实写法，
+      在 frontend/src/pages/PayPage.tsx 按服务端给出的支付途径显示 Stripe 测试的标题、提示、测试卡号与各状态，经 SHOP-TASK-132 的 startStripe 跳转到服务端返回的付款页地址，
+      并在两种途径上处理「支付途径已改变」。打开时已有付款完成的会话（stripe_state 为 complete）直接换成 P07，由 SHOP-TASK-133 的确认处理（HANDOFF 0.54「由前端调用确认接口」由 P07 完成，P06 不重复）。
+      取消的 Stripe 处理留给 SHOP-TASK-135。不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，支付状态的显示与发起（途径判定与会话创建都在服务端）。
+      拆分：P06 拆成显示与跳转（本任务）和取消（SHOP-TASK-135）：两部分各有一组状态与测试，合在一起预计接近 1500 行，前端页面任务此前因一轮要补的交互测试太多而耗尽修复轮数（SHOP-TASK-102）；本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+    status: ready
+    depends_on:
+      - SHOP-TASK-133
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.11 的「P06 Stripe 测试」、docs/UX-COPY.md 0.12 与 docs/HANDOFF.md 0.55 为准，样式以 docs/design/pages/ 的 P06-stripe-desktop、P06-stripe-phone-open 与 P06-stripe-states（取消未成一项除外）为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.12 逐字加入本任务用到的 pay.stripe_title、pay.stripe_demo_hint、pay.stripe_notice、pay.stripe_test_card、pay.stripe_go、pay.stripe_redirecting、pay.stripe_in_progress、pay.stripe_under_review、pay.stripe_continue、pay.stripe_unavailable 与 pay.method_changed，写法与相邻条目相同（每种语言一行）
+      - payment_route 为 simulated 时页面与现有完全相同、不出现任何 Stripe 文字；为 stripe 时标题换成 pay.stripe_title，★ 换成 pay.stripe_demo_hint，订单卡片、游客 pay.guest_access、收货资料与取消按钮同现有；不显示 pay.choose_method、三种演示方式、pay.simulate_success、pay.simulate_failure 与 pay.action_hint；◆ pay.stripe_notice 与其下的 pay.stripe_test_card 总是显示（用现有 ActionHint 的菱形标记，无勾选框）
+      - 各状态——stripe_state 为 null 显示 pay.expires 倒计时与 pay.stripe_go；creating 显示 pay.stripe_go、不显示倒计时；open 显示 pay.stripe_in_progress 与 pay.stripe_continue、不显示倒计时；under_review 显示 pay.stripe_under_review、没有跳转按钮；读到 complete（或订单已不是待支付）时用路由的 replace 换成 /pay/result，不显示本页内容；倒计时到 0 照现有写法重新读取（只在显示倒计时时）
+      - 跳转——点 pay.stripe_go 或 pay.stripe_continue 以读取给的 CSRF 令牌调用 startStripe，进行中所有按钮禁用并显示 pay.stripe_redirecting；redirect 以 window.location.assign 在当前标签页打开结果里的地址（不开新窗口，页面只用服务端返回的地址，按钮保持禁用）；complete 与 closed 换成 /pay/result；unavailable 在按钮下显示 pay.stripe_unavailable、按钮恢复可点；under_review 重新读取（按读到的状态显示）；method_changed 显示 pay.method_changed 并重新读取、按新的途径显示；expired 整页 pay.session_expired；csrf 照现有写法重新读取取得新令牌后显示 common.error_retry；failed 与 network 显示 common.error_retry 并重新读取（已建成会话的按读到的 open 显示 pay.stripe_continue）。模拟途径的支付遇到 SHOP-TASK-132 的 method_changed 时同样显示 pay.method_changed 并重新读取；pay.method_changed 在下一次操作开始时收起
+      - 代码结构沿用本页现有写法——把 startStripe 的结果变成页面去向的纯函数与按订单决定显示哪个按钮的纯函数都导出，PayView 只依赖 props，默认导出的页面只负责持有状态、调用请求与 window.location.assign 并接上路由；传给 onClick 的处理函数不返回 Promise（异步调用前加 void）；页面组件与函数的排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 用 vitest 与 react-dom/server（不加测试依赖，路由以替身代替，不模拟点击）在 frontend/src/pages/PayPage.test.tsx 验证意图——模拟途径没有任何 Stripe 文字；Stripe 途径换标题与 ★、隐藏演示方式与两个模拟按钮、◆ 与测试卡号总在；四种 stripe_state 的按钮与倒计时；跳转中按钮禁用与 pay.stripe_redirecting；startStripe 每种结果的去向（直接调用导出的纯函数）；不可用时提示与按钮可点；两种途径的 pay.method_changed；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 HANDOFF 的哪一句；现有测试只许在 props 辅助函数里补新增属性的默认值，其余断言不改；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-134.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；途径与各状态、跳转、途径已改变、complete 交给 P07、偏离、验证到什么程度，并写明未做浏览器验收、取消的 Stripe 处理留给 SHOP-TASK-135）
+      - 改动只落在 allowed_change_paths（不新增路由，不改 frontend/src/api/pay.ts 与 frontend/src/pages/PayResultPage.tsx，取消的现有行为不变）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/PayPage.tsx
+      - frontend/src/pages/PayPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-134.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-135
+    title: 支付页 P06 取消时的 Stripe 处理
+    purpose: >-
+      按 docs/UX.md 0.11 的「P06 Stripe 测试」（取消确认框的补句、取消时 Stripe 暂不可用、取消时会话已付款）与 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 5 条，以及 docs/HANDOFF.md 0.55 的落实写法，
+      在 SHOP-TASK-134 的 P06 上接上取消的 Stripe 处理；会话已付款时经 SHOP-TASK-132 的内存交接让 SHOP-TASK-133 的 P07 显示 result.paid_not_cancelled。不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，取消订单的显示（取消规则在服务端）。
+      拆分：见 SHOP-TASK-134，本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+    status: ready
+    depends_on:
+      - SHOP-TASK-134
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.11 的「P06 Stripe 测试」、docs/UX-COPY.md 0.12 与 docs/HANDOFF.md 0.55 为准，样式以 docs/design/pages/ 的 P06-stripe-cancel-confirm 与 P06-stripe-states 的取消未成一项为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.12 逐字加入 pay.cancel_confirm_stripe 与 pay.cancel_try_later，写法与相邻条目相同（每种语言一行）
+      - 取消确认框——订单为 Stripe 途径且 stripe_state 为 open 时，pay.cancel_confirm 之下另显示 pay.cancel_confirm_stripe；其他情形（模拟途径、未发起、creating、under_review）确认框与现有相同
+      - 取消的结果——unavailable（SHOP-TASK-132 的 503 stripe_unavailable）时确认框已关闭、在取消按钮旁显示 pay.cancel_try_later、订单保持待支付、按钮恢复可点，下一次操作开始时收起；Stripe 途径的订单取消结果为转到结果页（现有 result，含 409 order_not_cancellable）时，先以该订单号调用 rememberPaidNotCancelled 再用路由的 replace 换成 /pay/result（P07 只在按成功显示时才显示 result.paid_not_cancelled，订单已被超时取消等其他结果不显示）；模拟途径的取消与现有完全相同、不调用 remember；其余结果（expired、csrf、failed、network）照现有写法
+      - 代码结构沿用本页现有写法——把取消结果变成页面去向的纯函数导出，PayView 只依赖 props；传给 onClick 的处理函数不返回 Promise；页面组件与函数的排版不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 用 vitest 与 react-dom/server（不加测试依赖，路由以替身代替，不模拟点击）在 frontend/src/pages/PayPage.test.tsx 验证意图——确认框只在 open 时有补句；不可用时 pay.cancel_try_later 与订单仍显示；Stripe 途径取消转结果页前记下交接、模拟途径不记（直接调用导出的纯函数，并以 takePaidNotCancelled 核对）；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 HANDOFF 的哪一句；SHOP-TASK-134 与更早的测试只许在 props 辅助函数里补新增属性的默认值，其余断言不改；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-135.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；确认框补句、取消未成、取消时已付款的交接、偏离、验证到什么程度，并写明未做浏览器验收）
+      - 改动只落在 allowed_change_paths（不新增路由，不改 frontend/src/api/pay.ts 与 frontend/src/pages/PayResultPage.tsx）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/PayPage.tsx
+      - frontend/src/pages/PayPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-135.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-136
+    title: 隐私说明 P14 的 Stripe 测试环境资料告知
+    purpose: >-
+      按 docs/UX.md 0.11 的 P14（「收集什么」段在 privacy.fictional 之后加 privacy.stripe，始终显示，不随支付方式开关隐藏）与 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 1、10 条、「资料保留」，
+      在隐私说明页加上 Stripe 测试环境的资料告知。不调用接口，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只加入 Kelvin 2026-10-15 审阅通过的告知文案，不收集、存储、展示或导出个人资料；告知内容依据 DESIGN 1.12 第 10 条）。
+      拆分：P14 的显示层（7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-074
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.11 的 P14 与 docs/UX-COPY.md 0.12 为准，样式以 docs/design/pages/ 的 P14-stripe-desktop 与 P14-stripe-phone 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局写在 frontend/src/styles/site.css（不声明颜色、字体、圆角属性，视觉稿给出的固定间距直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.12 逐字加入 privacy.stripe，写法与相邻条目相同（每种语言一行）
+      - frontend/src/pages/PrivacyPage.tsx 的「收集什么」段（privacy.h_collect）依次为 privacy.collect、privacy.fictional、privacy.stripe；始终显示，不读取站点设置或支付方式；段落数仍为四段（另加已配置时的「联系」段），其余段落与「联系」段不变
+      - frontend/src/pages/PrivacyPage.test.tsx 只许把段落顺序 ORDER 在 privacy.fictional 之后加入 privacy.stripe，并另加一条测试验证意图——三种语言下 privacy.stripe 在 privacy.fictional 之后、privacy.h_retention 之前，WhatsApp 链接未取得、未配置与已配置时都在；测试写明它守住的是 UX P14 的哪一句；其余断言一字不改；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-136.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；加入的段落、偏离、验证到什么程度，并写明未做浏览器验收）
+      - 改动只落在 allowed_change_paths（不新增路由）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/PrivacyPage.tsx
+      - frontend/src/pages/PrivacyPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-136.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-137
+    title: 后台站点设置页的路由与导航 A09
+    purpose: >-
+      按 docs/UX.md 0.11 的 A09 与「管理后台总体」（导航项依次为订单、退款、商品、优惠券、运费、库存重置、店铺装修、站点设置；页面路径 /admin/settings）加上后台站点设置页：
+      用后台框架渲染，当前导航项为站点设置，内容区只有页标题；后台导航在店铺装修之后加上站点设置。请求模块与支付方式表单由 SHOP-TASK-138、139 接上；
+      按 Kelvin 2026-10-07 与 2026-10-15 的决定，本页先只放支付方式开关，短信验证开关不做。不调用接口，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只加路由、导航与静态文字）。
+      拆分：A09 拆成路由与导航（本任务）、请求模块（SHOP-TASK-138）与支付方式表单（SHOP-TASK-139），照 A05 的 SHOP-TASK-100 至 102；本任务 14 个允许路径，超过 12 个但拆不开——导航加一项要同时改后台框架与退款、库存重置、店铺装修、优惠券四页已有的导航断言，任何一处不改 CI 就不通过（SHOP-TASK-100 同理为 13 个，当时是三页）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-100
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.11 的 A09 与 docs/UX-COPY.md 0.12 为准，样式以 docs/design/pages/ 的 A09-stripe-desktop 与 A09-stripe-phone 的页头部分为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色
+      - 路由 /admin/settings（frontend/src/router.tsx 加 ADMIN_SITE_SETTINGS_PATH，router.tsx、frontend/src/App.tsx 与 frontend/src/router.test.tsx 各加一项），新文件 frontend/src/pages/AdminSiteSettingsPage.tsx 用后台框架渲染，当前导航项为站点设置（手机顶栏标题为 admin.nav_settings），内容区只有 h1 admin.nav_settings；frontend/src/i18n/copy.ts 按 UX-COPY 0.12 逐字加入 admin.nav_settings；页面不发起自己的请求（读取与保存由 SHOP-TASK-139 接上）；视觉稿里的短信验证段不做（Kelvin 2026-10-07 与 2026-10-15 的决定），记入偏离
+      - frontend/src/components/AdminFrame.tsx 的导航按 UX 顺序只含已上线的订单、退款、优惠券、库存重置、店铺装修与站点设置六项（桌面导航与 ☰ 菜单同样）；frontend/src/components/AdminFrame.test.tsx 只许把「只含订单、退款、优惠券、库存重置与店铺装修五项」的断言（桌面导航与手机菜单，含 LIVE_NAV_KEYS）改为按 UX 顺序只含这六项、其他 admin.nav_* 不出现；frontend/src/pages/AdminRefundsPage.test.tsx、frontend/src/pages/AdminStockResetsPage.test.tsx、frontend/src/pages/AdminStoreDesignPage.test.tsx 与 frontend/src/pages/AdminCouponsPage.test.tsx 只许把 navigation 一组里「依次为这五项」的断言改为依次为这六项（各自的当前项与手机顶栏名称不变）；五个文件的其余断言不动
+      - 用 vitest 与 react-dom/server（不加测试依赖，路由以替身代替）在 frontend/src/pages/AdminSiteSettingsPage.test.tsx 验证意图——经路由打开页面渲染后台框架、不套前台框架；当前导航项为站点设置且六项顺序正确；内容区只有标题、没有任何 admin.sms_* 文字；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-137.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；路由、导航变化、改动的现有测试、偏离、验证到什么程度，并写明未做浏览器验收、请求模块与支付方式表单留给 SHOP-TASK-138、139）
+      - 改动只落在 allowed_change_paths；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/AdminSiteSettingsPage.tsx
+      - frontend/src/pages/AdminSiteSettingsPage.test.tsx
+      - frontend/src/components/AdminFrame.tsx
+      - frontend/src/components/AdminFrame.test.tsx
+      - frontend/src/pages/AdminRefundsPage.test.tsx
+      - frontend/src/pages/AdminStockResetsPage.test.tsx
+      - frontend/src/pages/AdminStoreDesignPage.test.tsx
+      - frontend/src/pages/AdminCouponsPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-137.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-138
+    title: 后台站点设置的请求模块 A09
+    purpose: >-
+      为 A09 页面新建调用 SHOP-TASK-122 两个接口（GET 与 PUT /api/admin/site-settings）的请求模块与测试，供 SHOP-TASK-139 使用；只有支付方式，不含短信验证开关。
+      不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（支付方式的凭据检查与审计在 SHOP-TASK-122 的服务端，请求模块只传递与校验字段）。
+      拆分：A09 页面的请求层（3 个允许路径）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-122
+    acceptance_criteria:
+      - 新文件 frontend/src/api/adminSiteSettings.ts 调用 GET /api/admin/site-settings 与 PUT /api/admin/site-settings（同源 cookie，cache 为 no-store；都不带查询参数；PUT 带 X-CSRF-Token 为调用方给出的 csrf_token，Content-Type 为 application/json，JSON 请求体只有 payment_method），写法沿用 frontend/src/api/adminStoreDesign.ts 的现有做法（CSRF_HEADER 取自 frontend/src/api/pay.ts）
+      - 只取 SHOP-TASK-122 记录列出的字段，多出的字段不带进结果；响应体不合格算失败——读取的 payment_method 不是 simulated 或 stripe_test，stripe_available 不是布尔值，csrf_token 不是非空字符串；保存的 payment_method 不是这两个值之一；字段缺少或类型不对都算不合格
+      - 读取结果归为 ok、none（401）、failed（其他，含 200 而响应体不合格）与 network；保存结果归为 ok（200，带保存后的 payment_method）、none（401）、csrf（403）、not_configured（422 且 detail 为 stripe_not_configured）、failed（其他，含其他 422 与 200 而响应体不合格）与 network；调用方可传入 AbortSignal，中止时按 adminStoreDesign.ts 的做法处理
+      - 用 vitest（不加测试依赖，fetch 以替身代替）在 frontend/src/api/adminSiteSettings.test.ts 验证意图——两个请求的地址、方法、请求头与请求体（只有 payment_method，不含任何短信字段）；字段与响应体不合格算失败（含大写值、stripe_available 为字符串、csrf_token 为空）；各状态码的归类（422 的 detail 不是 stripe_not_configured 时归 failed）与网络中断；每条测试写明它守住的是 SHOP-TASK-122 记录或 UX 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)（input 为 RequestInfo | URL，init 为 RequestInit 可省），从 mock.calls 取值时用 String(…) 收窄，不让 any 流出（CI 的 eslint 带类型规则）；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-138.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；请求、字段与归类、偏离、验证到什么程度，并写明页面留给 SHOP-TASK-139）
+      - 改动只落在 allowed_change_paths（不改页面、路由与导航）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/adminSiteSettings.ts
+      - frontend/src/api/adminSiteSettings.test.ts
+      - docs/task-records/SHOP-TASK-138.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-139
+    title: 后台站点设置的支付方式表单 A09
+    purpose: >-
+      在 SHOP-TASK-137 的站点设置页上实现 A09 的支付方式两项与保存：经 SHOP-TASK-138 的请求模块调用 SHOP-TASK-122 的读取与保存接口，
+      按 docs/UX.md 0.11 的 A09（凭据未配置时 Stripe 选项禁用并说明；当前已是 Stripe 测试而凭据失效时仍可切回模拟；保存被拒时说明；不加确认框）与 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 2 条。
+      按 Kelvin 2026-10-07 与 2026-10-15 的决定不做短信验证开关。不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，支付方式开关的显示与提交（凭据检查与审计在服务端）。
+      拆分：见 SHOP-TASK-137，本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+    status: ready
+    depends_on:
+      - SHOP-TASK-137
+      - SHOP-TASK-138
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.11 的 A09、docs/UX-COPY.md 0.12 与 docs/HANDOFF.md 0.55 为准，样式以 docs/design/pages/ 的 A09-stripe-desktop 与 A09-stripe-phone 的支付方式部分为准，二者冲突时以 UX 文档为准并在 PR 里说明；视觉稿里的短信验证段不做（Kelvin 2026-10-07 与 2026-10-15 的决定），记入偏离；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.12 逐字加入 admin.payment_method、admin.payment_simulated、admin.payment_stripe、admin.payment_method_hint、admin.stripe_not_configured 与 admin.settings_saved，写法与相邻条目相同（每种语言一行）
+      - 表单——标题之下为 admin.payment_method 一组两个单选项 admin.payment_simulated 与 admin.payment_stripe、其下 admin.payment_method_hint，再下为 common.save 按钮；选中项为读取（或保存后）的当前值；stripe_available 为假时 admin.payment_stripe 禁用、其下显示 admin.stripe_not_configured，当前值为 stripe_test 时照常显示为选中、仍可改选模拟并保存；不加确认框；不出现任何 admin.sms_* 文字或短信验证开关
+      - 读取——打开页面与切换语言时读取，进行中标 aria-busy、不显示表单；none 用路由的 replace 进入 /admin/login；network 显示 common.network_check，其他失败显示 common.error_retry，都不显示表单；离开页面时中止，中止后的结果不再更新页面。保存——点 common.save 以当前选择与读取给的 csrf_token 调用保存，进行中按钮禁用并标 aria-busy；ok 以返回的值更新选中项并显示 admin.settings_saved，改选任何一项后收起；not_configured 在保存按钮下方（与 admin.settings_saved 同一位置）显示 admin.stripe_not_configured、保留表单、选中项不变；它与 Stripe 选项下方的禁用说明各自独立，两者可同时出现，改选任何一项后收起；none 进入 /admin/login；csrf 照 frontend/src/pages/AdminStoreDesignPage.tsx 的写法重新读取后在表单上方显示 common.error_retry；network 显示 common.network_check；failed 显示 common.error_retry
+      - 代码结构照 frontend/src/pages/AdminStoreDesignPage.tsx——导出把读取结果变成页面状态（或进入登录）的纯函数、把保存结果变成状态变化（或进入登录、重新读取）的纯函数、接收 AbortSignal 与回调的读取和保存异步函数，以及只依赖 props 的 View 组件；默认导出的页面只负责持有状态、调用这些函数并接上路由；传给 onClick 等事件属性的处理函数不返回 Promise（异步调用前加 void）；页面组件与函数的排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改（copy.ts 的写法照上一条）
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AdminSiteSettingsPage.test.tsx 验证意图，写法照 frontend/src/pages/AdminStoreDesignPage.test.tsx（以 renderToStaticMarkup 渲染 View、直接调用导出的纯函数与异步函数验证结果，不模拟点击；渲染 AdminFrameView 时 state 的写法照该文件，in 状态带 error 字段）——两项与提示、选中项随当前值；stripe_available 为假时 Stripe 选项禁用并显示说明、当前为 stripe_test 时仍选中且模拟可选；读取的 ok、none、network 与其他失败及 aria-busy；保存进行中按钮禁用、ok 显示 admin.settings_saved 且改选后收起、not_configured、none、csrf 重新读取后的 common.error_retry、network、failed；没有任何 admin.sms_* 文字；页面文字全部来自字典（照该文件的 visibleTexts、textNodes 与 unescapeHtml 写，文本节点要还原 &quot; 等实体）；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出（CI 的 eslint 带类型规则）
+      - SHOP-TASK-137 在 AdminSiteSettingsPage.test.tsx 写的测试中，后台框架与导航两条一字不改；内容区只有标题的逐字断言因加入表单而失效，只改为断言内容区以原样的 h1 开头，并在测试注释写明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-139.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；表单、读取、保存、偏离（含短信验证段不做）、验证到什么程度，只写实际存在的测试，并写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由，不改导航，不改 frontend/src/api/adminSiteSettings.ts）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/AdminSiteSettingsPage.tsx
+      - frontend/src/pages/AdminSiteSettingsPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-139.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
