@@ -71,6 +71,10 @@ Stripe 记录（或只有 expired 记录）的订单执行超时取消，其余�
   留给定时任务（SHOP-TASK-116），也经 cancel_after_stripe_end 取消。
 - 所有取消在带条件的 UPDATE 命中之后都以加锁读重查一次不是 expired 的 Stripe 记录，有则由调用方
   回滚。
+- cancel_after_stripe_end 的仅限关键字参数 record_event 只供 webhook（SHOP-TASK-127）使用，
+  依据第 7 条「事件 ID 的去重记录与它引起的订单、积分或退款改动在同一个数据库事务里提交」：
+  给出时在返回 kept 与 cancelled 的两处提交之前先 flush、再调用它写事件记录，返回 changed 与
+  回滚时不调用。
 调用 Stripe 时不持有任何数据库锁；之后按统一顺序「会员 → 订单 → Stripe 会话记录 → 用券 →
 积分」加锁并重查。app/services/stripe_checkout.py 与 stripe_confirm.py 在模块级导入本模块，
 所以本模块在函数里才导入它们。
@@ -95,7 +99,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Literal
@@ -637,6 +641,7 @@ def cancel_after_stripe_end(
     *,
     checkout_id: int | None = None,
     seen_status: str | None = None,
+    record_event: Callable[[Session], None] | None = None,
 ) -> StripeEndResult:
     """Stripe 会话确认结束且未付款之后取消订单；本人取消（cancel_order）与 SHOP-TASK-116 的
     定时处理都经它取消。
@@ -654,6 +659,8 @@ def cancel_after_stripe_end(
     本地支付到期时间：第 5 条，订单在会话结束之前不会被超时取消）改为 demo_cancelled，加回库存、
     释放券与积分预占、写一条操作者为 actor 的事件，提交并返回 cancelled；订单不满足时只提交记录
     的 expired、订单不动，返回 kept。
+    给了 record_event（只供 webhook）时，这两处提交之前先 flush 本轮改动、再调用
+    record_event(db)，事件记录随改动一并提交；它抛出的异常原样向上传出（不回滚，由调用方回滚）。
     """
     if actor not in _END_ACTORS:
         raise ValueError("actor must be guest, member or system")
@@ -686,15 +693,25 @@ def cancel_after_stripe_end(
             order.status != STATUS_AWAITING_PAYMENT
             or _active_checkout_id(db, order_id, lock=True) is not None
         ):
+            _record_event(db, record_event)
             db.commit()
             return StripeEndResult.KEPT
         if not _cancel(db, order_id, actor, now, true()):
             # 已锁住订单行时不会出现；没有行锁（SQLite）时并发的处理先提交了，重新走一轮。
             continue
+        _record_event(db, record_event)
         db.commit()
         return StripeEndResult.CANCELLED
     db.rollback()
     return StripeEndResult.CHANGED
+
+
+def _record_event(db: Session, record_event: Callable[[Session], None] | None) -> None:
+    """提交之前：给了 record_event 时先 flush 本轮改动，再调用它把事件记录放进同一事务。"""
+    if record_event is None:
+        return
+    db.flush()
+    record_event(db)
 
 
 def expire_overdue_orders(
