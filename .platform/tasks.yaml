@@ -3555,7 +3555,7 @@ tasks:
       按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 7 条（事件 ID 的去重记录与它引起的退款改动在同一个数据库事务里提交；业务动作另按对象去重，第 8 条按退款记录）与第 8 条（Stripe 退款 ID、调用结果与之后的退款事件（按 Stripe 退款 ID 或元数据里的记录 ID 关联）更新记录状态；退款事件只作触发，收到后先查询再更新，不按事件里的快照改，所以先后颠倒送达的事件不会让状态倒退；退款接口的响应、webhook 与定时查询共用同一写入规则），
       以及 docs/HANDOFF.md 0.55 的落实写法（处理 refund.created、refund.updated、refund.failed 三种事件，data.object 都是退款对象），在 SHOP-TASK-127 的 handle_webhook_event 里接入退款事件，写入沿用 SHOP-TASK-124 的 apply_refund_object。不加接口，不改设计。
       设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，退款。拆分：业务规则层（3 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-127
     acceptance_criteria:
