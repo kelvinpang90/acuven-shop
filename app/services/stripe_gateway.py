@@ -8,6 +8,10 @@
 事件原文」；以及 docs/HANDOFF.md 0.53 记录的 2026-10-15 测试环境核验结论（创建会话已不接受
 payment_method_types；过期后以同一幂等键重放返回当初保存的响应；退款与作废被拒时为 400）。
 
+webhook 事件的解析（parse_webhook_event）依据第 7 条「只处理第 4、5 条的 Checkout 事件与 Stripe
+退款状态事件，其他类型回 200 不处理」与 docs/HANDOFF.md 0.55 的落实写法（处理的事件类型），
+只按白名单取出事件 ID、类型、livemode 与 data.object 的对账字段，不保留原文。
+
 本模块只做 HTTP 调用、结果归类与签名校验，不接业务、不读写数据库。运营告警邮件尚未接入：
 设计写「告警」之处先记一条 error 级日志，只含类别（本模块没有本站记录 ID）。除这两类日志
 （stripe_key_not_test、stripe_livemode）外不写日志；请求与响应原文、密钥、邮箱都不出现在
@@ -38,6 +42,7 @@ from typing import Any, Protocol
 from fastapi import Request
 
 from app.core.config import Settings
+from app.models.stripe import EVENT_TYPE_MAX_LENGTH, STRIPE_ID_MAX_LENGTH
 
 logger = logging.getLogger(__name__)
 
@@ -616,6 +621,71 @@ def verify_webhook_signature(
         if hmac.compare_digest(expected, candidate):
             matched = True
     return matched
+
+
+# ---------------------------------------------------------------- webhook 事件解析
+
+# HANDOFF 0.55：处理的事件类型。data.object 前三种为 Checkout 会话，后三种为退款对象。
+CHECKOUT_EVENT_TYPES = (
+    "checkout.session.completed",
+    "checkout.session.async_payment_succeeded",
+    "checkout.session.async_payment_failed",
+)
+REFUND_EVENT_TYPES = ("refund.created", "refund.updated", "refund.failed")
+
+
+@dataclass(frozen=True)
+class WebhookEvent:
+    """一条 webhook 事件的白名单字段；不带事件原文。
+
+    type 属于 CHECKOUT_EVENT_TYPES 时 session 非空，属于 REFUND_EVENT_TYPES 时 refund 非空，
+    其他类型（含 checkout.session.expired）两者都为空。
+    """
+
+    id: str
+    type: str
+    livemode: bool
+    session: CheckoutSession | None = None
+    refund: Refund | None = None
+
+
+def parse_webhook_event(payload: bytes) -> WebhookEvent | None:
+    """解析签名校验通过的原始请求体；内容不合格时返回 None。
+
+    不是 JSON 对象、object 不是 event、id 不是非空字符串或超过 STRIPE_ID_MAX_LENGTH、type 不是
+    非空字符串或超过 EVENT_TYPE_MAX_LENGTH、livemode 不是布尔值、data.object 不是对象时为
+    None；Checkout 事件按 _parse_session、退款事件按 _parse_refund 取对象，取不到也为 None。
+    livemode 为真照常返回，由调用方拒绝。不抛异常、不写日志。
+    """
+    if not isinstance(payload, bytes):
+        return None
+    data = _json_object(payload)
+    if data is None or data.get("object") != "event":
+        return None
+    event_id = _str(data, "id")
+    event_type = _str(data, "type")
+    livemode = _bool(data, "livemode")
+    if not event_id or len(event_id) > STRIPE_ID_MAX_LENGTH:
+        return None
+    if not event_type or len(event_type) > EVENT_TYPE_MAX_LENGTH:
+        return None
+    if livemode is None:
+        return None
+    body = data.get("data")
+    obj = body.get("object") if isinstance(body, dict) else None
+    if not isinstance(obj, dict):
+        return None
+    session = None
+    refund = None
+    if event_type in CHECKOUT_EVENT_TYPES:
+        session = _parse_session(obj)
+        if session is None:
+            return None
+    elif event_type in REFUND_EVENT_TYPES:
+        refund = _parse_refund(obj)
+        if refund is None:
+            return None
+    return WebhookEvent(event_id, event_type, livemode, session, refund)
 
 
 # ---------------------------------------------------------------- 测试替身与依赖

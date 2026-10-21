@@ -48,11 +48,17 @@ docs/UX.md 0.11 P07（成功、确认中、尚未付款、已取消且已发起�
 的落实写法（结果页的确认结果为 paid、confirming、not_paid、refunded 四种，Stripe 不可用与
 确认返回 needs_review 都按「确认中」显示）。它自己找记录时只读、结束读事务后才调用
 confirm_checkout，确认的事务与锁沿用 confirm_checkout。
+
+confirm_checkout 的仅限关键字参数 record_event 只供 webhook（SHOP-TASK-127）使用，依据第 7 条
+「事件 ID 的去重记录与它引起的订单、积分或退款改动在同一个数据库事务里提交」与 docs/HANDOFF.md
+0.55 的落实写法：给出时在每次写入的提交之前先 flush 本轮改动、再调用它写事件记录，不写入的
+路径不调用；它抛出的异常原样向上传出，不按 IntegrityError 重试。
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -208,12 +214,14 @@ def confirm_checkout(
     checkout_id: int,
     stripe_session: CheckoutSession | None = None,
     now: datetime | None = None,
+    *,
+    record_event: Callable[[Session], None] | None = None,
 ) -> ConfirmResult:
     """按一条 Stripe 会话记录确认付款，返回 paid、pending、unavailable、refunded 或
     needs_review。
 
     stripe_session 只能来自签名校验通过的 webhook 或本次查询；now 为不带时区的 UTC（带时区
-    抛 ValueError，先于访问数据库），省略时取当前时间。
+    抛 ValueError，先于访问数据库），省略时取当前时间。record_event 见 _write（只供 webhook）。
     1. 以普通读取得记录与订单，结束读事务。
     2. 没有给出会话对象，或给出的对象缺 livemode、payment_intent 未展开、缺其 livemode 或
        latest_charge 时，向 Stripe 查询一次（expand 为 payment_intent.latest_charge）：按
@@ -251,7 +259,7 @@ def confirm_checkout(
     step = _decide(record, order, session)
     log = _LOGS.get(step)
     if step in _WRITES:
-        step, log = _write(db, checkout_id, record.order_id, session, now)
+        step, log = _write(db, checkout_id, record.order_id, session, now, record_event)
     if log is not None:
         logger.error("%s checkout=%d", log, checkout_id)
     return _RESULTS[step]
@@ -337,9 +345,14 @@ def _write(
     order_id: int,
     stripe_session: CheckoutSession,
     now: datetime,
+    record_event: Callable[[Session], None] | None = None,
 ) -> tuple[_Step, str | None]:
     """按「会员 → 订单 → Stripe 会话记录 → 退款尝试」加锁，重查后写入并提交；返回重查的结论与要记的
     日志类别（提交之后由调用方记）。
+
+    给了 record_event 时，写入之后、提交之前先 flush 本轮改动，再调用 record_event(db)，事件
+    记录随改动一并提交；它在 except IntegrityError 之外调用，抛出的异常原样向上传出（不重试、
+    不回滚，由调用方回滚）。重查后不需写入、回滚重来的轮次与轮数用完时都不调用它。
 
     重查时先以加锁读查看同一订单的其他会话记录，再查看这个会话的退款尝试（会话记录先于退款
     尝试）。确认：按会话更新记录
@@ -378,9 +391,15 @@ def _write(
                     if not mark_paid(db, order_id, ACTOR_SYSTEM, now, unexpired_only=False):
                         continue
                     record.confirmed_at = now
-            db.commit()
+            if record_event is None:
+                db.commit()
+            else:
+                db.flush()
         except IntegrityError:
             continue
+        if record_event is not None:
+            record_event(db)
+            db.commit()
         return step, log
     db.rollback()
     return _Step.UNVERIFIABLE, None
