@@ -27,14 +27,13 @@
 
 <!-- openclaw:planning-v1:begin -->
 ### 当前计划
-1. `SHOP-TASK-132` 支付页 P06 与结果页 P07 的 Stripe 请求模块
-2. `SHOP-TASK-133` 结果页 P07 的 Stripe 确认中与重查
-3. `SHOP-TASK-134` 支付页 P06 的 Stripe 显示与跳转
-4. `SHOP-TASK-135` 支付页 P06 取消时的 Stripe 处理
-5. `SHOP-TASK-136` 隐私说明 P14 的 Stripe 测试环境资料告知
-6. `SHOP-TASK-137` 后台站点设置页的路由与导航 A09
-7. `SHOP-TASK-138` 后台站点设置的请求模块 A09
-8. `SHOP-TASK-139` 后台站点设置的支付方式表单 A09
+1. `SHOP-TASK-133` 结果页 P07 的 Stripe 确认中与重查
+2. `SHOP-TASK-134` 支付页 P06 的 Stripe 显示与跳转
+3. `SHOP-TASK-135` 支付页 P06 取消时的 Stripe 处理
+4. `SHOP-TASK-136` 隐私说明 P14 的 Stripe 测试环境资料告知
+5. `SHOP-TASK-137` 后台站点设置页的路由与导航 A09
+6. `SHOP-TASK-138` 后台站点设置的请求模块 A09
+7. `SHOP-TASK-139` 后台站点设置的支付方式表单 A09
 
 ### 已阻塞
 - 待登记：短信验证组件 V1 与结账会员路径（马新号码验证、自动注册或登录、优惠券与积分；会员访问 P06、P07）｜阻塞：依赖会员计价与下单接口（SHOP-TASK-089）与支付页的会员接口（SHOP-TASK-091）
