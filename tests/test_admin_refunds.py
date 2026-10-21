@@ -558,6 +558,9 @@ def test_all_endpoints_require_admin_session(
 def test_routes_use_internal_id_only(app: FastAPI) -> None:
     """「首版不提供后台导出」。SHOP-TASK-041 验收：路径只用退款申请的内部整数 ID，订单号与
     收货资料不进路径或查询参数；只有四个接口。
+    SHOP-TASK-131 改动本条：DESIGN 1.12 第 8 条「最新一次尝试为 failed 时管理员可手动重试」
+    新增 POST …/{refund_id}/stripe-retry，穷举的路由加入它；路径同样只用申请的内部 ID，
+    查询参数仍只有 lang。
     """
     openapi = app.openapi()
     paths = openapi["paths"]
@@ -573,6 +576,7 @@ def test_routes_use_internal_id_only(app: FastAPI) -> None:
         ("GET", f"{REFUNDS_URL}/{{refund_id}}"),
         ("POST", f"{REFUNDS_URL}/{{refund_id}}/approve"),
         ("POST", f"{REFUNDS_URL}/{{refund_id}}/reject"),
+        ("POST", f"{REFUNDS_URL}/{{refund_id}}/stripe-retry"),
     }
     query_params = {
         parameter["name"]

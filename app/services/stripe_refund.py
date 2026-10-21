@@ -85,6 +85,9 @@ LOG_REFUND_FAILED_AFTER_SUCCESS = "stripe_refund_failed_after_success"
 LOG_REFUND_CAP = "stripe_refund_cap"
 LOG_REFUND_UNREFUNDABLE = "stripe_refund_unrefundable"
 
+# 手动重试的审计操作名（SHOP-TASK-131）：对象为退款申请，新值为新尝试 ID。
+ADMIN_STRIPE_REFUND_RETRIED = "admin_stripe_refund_retried"
+
 # 第 8 条：「24 小时后不再调用退款接口」（Stripe 保留幂等键的最短期限）。
 RETRY_WINDOW = timedelta(hours=24)
 
@@ -533,6 +536,16 @@ def retry_request_attempt(db: Session, refund_request_id: int, now: datetime) ->
         # 保存点已回滚，订单行的锁仍在。
         raise RetryNotAllowed from None
     return attempt.id
+
+
+def active_request_attempt_id(db: Session, refund_request_id: int) -> int | None:
+    """活动来源列等于该申请的尝试 ID（受唯一约束，至多一条），没有为 None。
+
+    只读、不加锁、不提交。供批准接口在提交之后找到本次批准建的尝试，再以
+    submit_refund_attempt 调用 Stripe（SHOP-TASK-131）。
+    """
+    stmt = select(StripeRefund.id).where(StripeRefund.active_refund_request_id == refund_request_id)
+    return db.scalars(stmt).one_or_none()
 
 
 def _add_attempt(
