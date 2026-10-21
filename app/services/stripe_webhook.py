@@ -1,9 +1,10 @@
-"""Stripe webhook 事件的处理：事件去重与 Checkout 事件的同事务处理。
+"""Stripe webhook 事件的处理：事件去重，Checkout 事件与退款事件的同事务处理。
 
 依据 docs/DESIGN.md 1.12（提交 acf576e）「Stripe 测试环境支付」：
 - 第 7 条：「事件 ID 的去重记录与它引起的订单、积分或退款改动在同一个数据库事务里提交：已提交
-  过的事件直接回 200；处理失败整个事务回滚」；业务动作另按对象去重；「只处理第 4、5 条的
-  Checkout 事件与 Stripe 退款状态事件，其他类型回 200 不处理」；「不存、不记录事件原文」。
+  过的事件直接回 200；处理失败整个事务回滚」；业务动作另按对象去重（第 8 条按退款记录）；「只
+  处理第 4、5 条的 Checkout 事件与 Stripe 退款状态事件，其他类型回 200 不处理」；「不存、不记录
+  事件原文」。
 - 第 1 条：「webhook 事件、会话或付款的 `livemode` 为真即拒绝」。
 - 第 3 条末句：「万一有本站没记下会话 ID 的会话被付款，其 webhook 按元数据里的创建幂等键与订单
   ID 对上这条记录」。
@@ -11,20 +12,24 @@
   的 confirm_checkout。
 - 第 5 条：会话 complete 而付款未定时等 async_payment_succeeded 确认，async_payment_failed 后按
   现有规则取消（与定时任务同一规则，经 cancel_after_stripe_end）。
+- 第 8 条：「Stripe 退款 ID、调用结果与之后的退款事件（按 Stripe 退款 ID 或元数据里的记录 ID
+  关联）更新记录状态」；「退款事件只作触发，收到后先查询再更新，不按事件里的快照改，所以先后
+  颠倒送达的事件不会让状态倒退」；「退款接口的响应、webhook 与定时查询共用同一写入规则」，即
+  SHOP-TASK-124 的 apply_refund_object。
 以及 docs/HANDOFF.md 0.55 的落实写法：处理的事件类型见 app/services/stripe_gateway.py 的
-CHECKOUT_EVENT_TYPES 与 REFUND_EVENT_TYPES；checkout.session.expired 不处理，由定时任务查询；
-事件只作触发，按向 Stripe 查询到的会话分派；确认与取消函数以可选回调 record_event 在每次提交前
-写入事件记录，事件 ID 撞唯一约束时以 EventAlreadyRecorded 返回「已处理过」，不被确认函数的并发
-重试吞掉；已找到本站记录而向 Stripe 查询不可用、为正式环境或被拒时整个事务回滚、不留事件记录，
-由 Stripe 重发。
-
-退款事件的处理由 SHOP-TASK-128 接入，在那之前退款事件类型与其他类型一样记为 ignored；webhook
-接口（签名校验、请求体大小与 livemode 的拒绝）由 SHOP-TASK-129 实现。
+CHECKOUT_EVENT_TYPES 与 REFUND_EVENT_TYPES（退款事件的 data.object 都是退款对象）；
+checkout.session.expired 不处理，由定时任务查询；事件只作触发，按向 Stripe 查询到的对象处理；
+确认与取消函数以可选回调 record_event 在每次提交前写入事件记录，事件 ID 撞唯一约束时以
+EventAlreadyRecorded 返回「已处理过」，不被确认函数的并发重试吞掉；退款事件由本模块在调用
+apply_refund_object 之后、提交之前写入事件记录；已找到本站记录而向 Stripe 查询不可用、为正式
+环境或被拒时整个事务回滚、不留事件记录，由 Stripe 重发。webhook 接口（签名校验、请求体大小与
+livemode 的拒绝）由 SHOP-TASK-129 实现。
 
 调用 Stripe 时不持有任何数据库锁、不留着读事务；写入由被调用的函数按统一顺序加锁。运营告警邮件
-尚未接入：查询结果为 live 与 rejected 时先记一条 error 级日志，只含类别与本站记录 ID（沿用
-stripe_confirm.py 的类别）；除此之外本模块不写日志，日志不含事件 ID 与事件或会话原文。库里的
-时间一律是不带时区的 UTC。
+尚未接入：Checkout 查询结果为 live 与 rejected 时先记一条 error 级日志，只含类别与本站记录 ID
+（沿用 stripe_confirm.py 的类别）；退款查询被拒记 stripe_webhook_refund_rejected，退款写入在
+提交之后按 alert_category 的结果记一条（沿用 stripe_refund.py 的类别），都只含尝试 ID；除此之外
+本模块不写日志，日志不含事件 ID 与事件、会话或退款原文。库里的时间一律是不带时区的 UTC。
 """
 
 from __future__ import annotations
@@ -39,7 +44,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import StripeCheckout, StripeEvent
+from app.models import StripeCheckout, StripeEvent, StripeRefund
 from app.models.order import ACTOR_SYSTEM
 from app.models.stripe import CHECKOUT_COMPLETE, EVENT_IGNORED, EVENT_PROCESSED, PAYMENT_PAID
 from app.services.payment import StripeEndResult, cancel_after_stripe_end
@@ -51,21 +56,29 @@ from app.services.stripe_confirm import (
 )
 from app.services.stripe_gateway import (
     CHECKOUT_EVENT_TYPES,
+    REFUND_EVENT_TYPES,
     CheckoutSession,
+    Refund,
     StripeGateway,
     StripeOutcome,
     WebhookEvent,
 )
 from app.services.stripe_overdue import FAILED_INTENT_STATUSES
+from app.services.stripe_refund import alert_category, apply_refund_object
 
 logger = logging.getLogger(__name__)
 
-# 元数据里的订单 ID：十进制数字。位数上限只为不让超出整数列的取值进查询，超出按找不到。
+# 告警邮件接入前的 error 级日志类别（只含尝试 ID）：已找到本站尝试而退款查询被拒。
+LOG_WEBHOOK_REFUND_REJECTED = "stripe_webhook_refund_rejected"
+
+# 元数据里的订单 ID 与尝试 ID：十进制数字。位数上限只为不让超出整数列的取值进查询，超出按
+# 找不到。
 _ORDER_ID_PATTERN = re.compile(r"[0-9]{1,18}")
+_ATTEMPT_ID_PATTERN = _ORDER_ID_PATTERN
 
 
 class WebhookResult(StrEnum):
-    # 已按第 4、5 条处理（含查询到的会话不需改动），事件记录与改动同一事务提交。
+    # 已按第 4、5、8 条处理（含查询到的对象不需改动），事件记录与改动同一事务提交。
     PROCESSED = "processed"
     # 其他类型、checkout.session.expired 或找不到本站记录：只写事件记录。
     IGNORED = "ignored"
@@ -117,7 +130,8 @@ def handle_webhook_event(
     访问数据库。调用方不得持有数据库锁、不得有未提交的改动：本函数会提交或回滚当前事务。
     1. 先结束当前事务，以普通读查到该事件 ID 已有记录：duplicate，不调用 Stripe。
     2. Checkout 事件：见 _handle_checkout。
-    3. 其余类型（退款事件类型的处理由 SHOP-TASK-128 接入，暂按其他类型）：ignored。
+    3. 退款事件：见 _handle_refund。
+    4. 其余类型：ignored。
     不需改动的情形由 _record_only 在只写这一行的事务里写事件记录；撞上事件 ID 的唯一约束时
     回滚并返回 duplicate。
     """
@@ -132,6 +146,8 @@ def handle_webhook_event(
     db.rollback()
     if event.type in CHECKOUT_EVENT_TYPES and event.session is not None:
         return _handle_checkout(db, gateway, event, event.session, now)
+    if event.type in REFUND_EVENT_TYPES and event.refund is not None:
+        return _handle_refund(db, gateway, event, event.refund, now)
     return _record_only(db, event, EVENT_IGNORED, now)
 
 
@@ -238,6 +254,49 @@ def _confirm(
     return WebhookResult.PROCESSED
 
 
+def _handle_refund(
+    db: Session,
+    gateway: StripeGateway,
+    event: WebhookEvent,
+    event_refund: Refund,
+    now: datetime,
+) -> WebhookResult:
+    """退款事件：找回本站尝试，以事件退款 ID 向 Stripe 查询一次，按查询到的退款写入。
+
+    找不到尝试（含不是本站发起的退款）为 ignored，不调用 Stripe。查询 unavailable 为
+    unavailable；rejected 记 stripe_webhook_refund_rejected（只含尝试 ID），也为 unavailable。
+    这两种都不留事件记录、尝试不变。查询 ok 时在同一事务里调用 apply_refund_object（它锁住
+    尝试并核对 PaymentIntent 与退款 ID 或元数据），再写 processed 的事件记录并 flush：撞上
+    事件 ID 的唯一约束时回滚并返回 duplicate、不记告警；否则提交，提交之后按 alert_category
+    记告警（类别与尝试 ID）。不按事件里的退款快照写状态（第 8 条：先查询再更新）；不调用
+    refresh_refund_attempt 与 submit_refund_attempt（它们自己提交）。
+    """
+    attempt_id = _find_attempt(db, event_refund)
+    db.rollback()
+    if attempt_id is None:
+        return _record_only(db, event, EVENT_IGNORED, now)
+
+    result = gateway.retrieve_refund(event_refund.id)
+    if result.outcome is StripeOutcome.REJECTED:
+        logger.error("%s attempt=%d", LOG_WEBHOOK_REFUND_REJECTED, attempt_id)
+        return WebhookResult.UNAVAILABLE
+    if result.outcome is not StripeOutcome.OK or result.value is None:
+        return WebhookResult.UNAVAILABLE
+
+    applied = apply_refund_object(db, attempt_id, result.value, now)
+    db.add(_event_row(event, EVENT_PROCESSED, now))
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        return WebhookResult.DUPLICATE
+    db.commit()
+    log = alert_category(applied)
+    if log is not None:
+        logger.error("%s attempt=%d", log, attempt_id)
+    return WebhookResult.PROCESSED
+
+
 # ---------------------------------------------------------------- 读取与事件记录
 
 
@@ -274,6 +333,23 @@ def _find_checkout(db: Session, event_session: CheckoutSession) -> _CheckoutView
         session_id=record.checkout_session_id,
         idempotency_key=record.idempotency_key,
     )
+
+
+def _find_attempt(db: Session, event_refund: Refund) -> int | None:
+    """普通读找回本站尝试 ID；不结束读事务。
+
+    先按 Stripe 退款 ID 等于事件退款 ID 找；找不到且元数据的尝试 ID 为十进制数字时按尝试 ID
+    找（第 8 条：「按 Stripe 退款 ID 或元数据里的记录 ID 关联」，含还没记下退款 ID 的尝试）。
+    """
+    stmt = select(StripeRefund.id).where(StripeRefund.stripe_refund_id == event_refund.id)
+    attempt_id = db.scalars(stmt).one_or_none()
+    if attempt_id is not None:
+        return attempt_id
+    attempt_ref = event_refund.attempt_id
+    if attempt_ref is None or not _ATTEMPT_ID_PATTERN.fullmatch(attempt_ref):
+        return None
+    stmt = select(StripeRefund.id).where(StripeRefund.id == int(attempt_ref))
+    return db.scalars(stmt).one_or_none()
 
 
 def _record_only(db: Session, event: WebhookEvent, outcome: str, now: datetime) -> WebhookResult:
