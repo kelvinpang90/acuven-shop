@@ -26,6 +26,20 @@ docs/UX.md 0.10 的 A03（详情显示 admin.refund_points）与 docs/HANDOFF.md
   points_estimated 为真。预估与批准时可能因到期或余额变化而不同，以批准时为准。
 - rejected：三个积分字段都为空。
 
+详情的 Stripe 付款与退款尝试（SHOP-TASK-130）依据 DESIGN 1.12（提交 acf576e）「Stripe
+测试环境支付」第 8 条（「后台退款详情显示各次尝试的 Stripe 退款状态」；「后台退款详情按
+记下的实际付款方式类型显示期限提示」；「最新一次尝试为 failed 时管理员可手动重试」）与
+第 10 条（不读取、不保存 Stripe 返回的客户资料），docs/UX.md 0.11 的 A03「Stripe 测试
+（0.11）」与 docs/HANDOFF.md 0.55。期限提示与能否重试由页面从下面三个字段推出，这里不另给：
+- paid_via_stripe：订单「由 Stripe 付款」，与 app/services/stripe_refund.py 的
+  add_request_attempt 判定相同，即有确认时间非空的会话记录（至多一条）；经模拟支付的订单
+  （没有记录，或只有 expired、未确认的记录）为假。三种申请状态的取值规则相同。
+- payment_method_type：该记录的实际付款方式类型原样（尚未补齐时为空）；不是 Stripe 付款
+  时为空。
+- stripe_refunds：来源为本申请的尝试，按尝试 ID 从大到小（最新在前），只给 ID、创建时间、
+  金额、状态与 Stripe 退款 ID；来源为会话的尝试与同一订单其他申请的尝试不在其中。错误
+  类别、调用次数、告警与复查时间、PaymentIntent 与会话 ID 不读也不返回。
+
 访问授权由调用方（app/api/admin_refunds.py）先行校验；这里只按申请的内部 ID 操作。
 本模块不写日志。库里的时间一律是不带时区的 UTC，返回的视图里换成带 UTC 时区的时间。
 """
@@ -48,6 +62,8 @@ from app.models import (
     RefundLine,
     RefundLineUnit,
     RefundRequest,
+    StripeCheckout,
+    StripeRefund,
 )
 from app.models.order import CLAIM_NOT_CLAIMABLE
 from app.models.points import KIND_DEBT_ADD, KIND_REFUND_RETURN, KIND_REFUND_REVERSAL
@@ -101,6 +117,18 @@ class AdminRefundLine(BaseModel):
     approved_quantity: int
 
 
+class AdminRefundStripeRefund(BaseModel):
+    """详情里的一次 Stripe 退款尝试。时间带 UTC 时区。"""
+
+    id: int
+    created_at: datetime
+    amount_sen: int
+    # pending、succeeded 或 failed。
+    status: str
+    # 调用结果未知或 Stripe 明确拒绝创建时为空。
+    stripe_refund_id: str | None
+
+
 class AdminRefundDetail(BaseModel):
     """一笔退款申请的后台详情，不含收货资料。时间都带 UTC 时区。"""
 
@@ -128,6 +156,12 @@ class AdminRefundDetail(BaseModel):
     points_returned: int | None
     points_reversed: int | None
     points_estimated: bool | None
+    # Stripe 付款与退款尝试（SHOP-TASK-130）：订单有确认时间非空的会话记录时为真，
+    # 付款方式类型取该记录（尚未补齐或不是 Stripe 付款时为空）；尝试只含来源为本申请的，
+    # 最新在前。
+    paid_via_stripe: bool
+    payment_method_type: str | None
+    stripe_refunds: list[AdminRefundStripeRefund]
 
 
 def _utc(value: datetime) -> datetime:
@@ -205,6 +239,7 @@ def refund_detail(
     """一笔退款申请的后台详情；申请不存在时为空。只读，不写审计，不锁行。
 
     now 为不带时区的 UTC，只用于审核中申请的积分预估（判断批次是否已过期）。
+    Stripe 付款与退款尝试只读本站的记录，不调用 Stripe。
     """
     stmt = (
         select(
@@ -233,6 +268,7 @@ def refund_detail(
     approved = _approved_quantities(db, [item.id for item, _ in line_rows])
     state = refund_state(db, request.order_id)
     points_returned, points_reversed, points_estimated = _refund_points(db, request, now)
+    paid_via_stripe, payment_method_type = _stripe_payment(db, request.order_id)
 
     return AdminRefundDetail(
         id=request.id,
@@ -261,7 +297,49 @@ def refund_detail(
         points_returned=points_returned,
         points_reversed=points_reversed,
         points_estimated=points_estimated,
+        paid_via_stripe=paid_via_stripe,
+        payment_method_type=payment_method_type,
+        stripe_refunds=_stripe_refunds(db, request.id),
     )
+
+
+def _stripe_payment(db: Session, order_id: int) -> tuple[bool, str | None]:
+    """该订单的（是否由 Stripe 付款、付款方式类型）。
+
+    与 app/services/stripe_refund.py 的 _lock_paid_checkout 判定相同（确认时间非空的会话
+    记录，至多一条），但只普通读取、不锁。没有这样的记录时为（假、空）。
+    """
+    stmt = select(StripeCheckout.payment_method_type).where(
+        StripeCheckout.order_id == order_id, StripeCheckout.confirmed_at.is_not(None)
+    )
+    found = db.execute(stmt).tuples().one_or_none()
+    return (False, None) if found is None else (True, found[0])
+
+
+def _stripe_refunds(db: Session, refund_request_id: int) -> list[AdminRefundStripeRefund]:
+    """来源为该申请的 Stripe 退款尝试，按尝试 ID 从大到小。"""
+    stmt = (
+        select(
+            StripeRefund.id,
+            StripeRefund.created_at,
+            StripeRefund.amount_sen,
+            StripeRefund.status,
+            StripeRefund.stripe_refund_id,
+        )
+        .where(StripeRefund.refund_request_id == refund_request_id)
+        .order_by(StripeRefund.id.desc())
+    )
+    rows = db.execute(stmt).tuples()
+    return [
+        AdminRefundStripeRefund(
+            id=attempt_id,
+            created_at=_utc(created_at),
+            amount_sen=amount_sen,
+            status=status,
+            stripe_refund_id=stripe_refund_id,
+        )
+        for attempt_id, created_at, amount_sen, status, stripe_refund_id in rows
+    ]
 
 
 def _refund_points(
