@@ -32,6 +32,9 @@ function payOrder(overrides: Partial<PayOrder> = {}): PayOrder {
     },
     last_payment: { method: "card", result: "success", created_at: "2026-10-05T10:02:00Z" },
     cancelled_by: null,
+    payment_route: "simulated",
+    stripe_state: null,
+    stripe_refunded: false,
     ...overrides,
   };
 }

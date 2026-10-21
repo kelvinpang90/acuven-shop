@@ -33,6 +33,9 @@ function payOrder(overrides: Partial<PayOrder> = {}): PayOrder {
     },
     last_payment: null,
     cancelled_by: null,
+    payment_route: "simulated",
+    stripe_state: null,
+    stripe_refunded: false,
     ...overrides,
   };
 }
