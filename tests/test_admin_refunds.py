@@ -808,6 +808,11 @@ def test_detail_fields_amounts_and_reviewer(
         "points_returned": 0,
         "points_reversed": 0,
         "points_estimated": False,
+        # SHOP-TASK-130 多出的 Stripe 字段：本条对响应整体做相等断言，所以补上；
+        # 游客订单经模拟支付，不是 Stripe 付款、没有退款尝试。
+        "paid_via_stripe": False,
+        "payment_method_type": None,
+        "stripe_refunds": [],
         "csrf_token": _csrf_for(token),
     }
     assert pending_body == {
@@ -837,6 +842,10 @@ def test_detail_fields_amounts_and_reviewer(
         "points_returned": 0,
         "points_reversed": 0,
         "points_estimated": True,
+        # SHOP-TASK-130 多出的 Stripe 字段（原因同上）。
+        "paid_via_stripe": False,
+        "payment_method_type": None,
+        "stripe_refunds": [],
         "csrf_token": _csrf_for(token),
     }
 
