@@ -76,13 +76,15 @@ interface Call {
   init: RequestInit;
 }
 
+const requestUrl = (input: RequestInfo | URL): string =>
+  typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+
 // fetch 替身：按顺序给出回答（函数则抛出网络错误），记录每次请求。
 function stubFetch(...replies: (Response | (() => never))[]) {
   const calls: Call[] = [];
   const queue = [...replies];
   const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    calls.push({ url, init: init ?? {} });
+    calls.push({ url: requestUrl(input), init: init ?? {} });
     const next = queue.shift();
     if (next === undefined) {
       return Promise.reject(new Error("unexpected request"));
@@ -392,14 +394,14 @@ describe("Stripe start", () => {
     const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
       init?.signal?.aborted
         ? Promise.reject(new DOMException("The operation was aborted.", "AbortError"))
-        : Promise.reject(new Error(`unexpected request ${String(input)}`)),
+        : Promise.reject(new Error(`unexpected request ${requestUrl(input)}`)),
     );
     vi.stubGlobal("fetch", fetchMock);
     const controller = new AbortController();
     controller.abort();
     await expect(startStripe("en", ORDER_NUMBER, TOKEN, controller.signal)).resolves.toEqual({ kind: "network" });
     await expect(confirmStripe(ORDER_NUMBER, TOKEN, controller.signal)).resolves.toEqual({ kind: "network" });
-    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual(["/api/pay/stripe/start?lang=en", STRIPE_CONFIRM_URL]);
+    expect(fetchMock.mock.calls.map((call) => requestUrl(call[0]))).toEqual(["/api/pay/stripe/start?lang=en", STRIPE_CONFIRM_URL]);
   });
 });
 
