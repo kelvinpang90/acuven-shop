@@ -1,13 +1,16 @@
 import type { Language } from "../i18n/copy";
 
-// 支付页 P06 与结果页 P07 的游客接口（app/api/pay.py，SHOP-TASK-021）：GET /api/pay/orders、POST /api/pay/attempts、POST /api/pay/cancel。
+// 支付页 P06 与结果页 P07 的游客接口（app/api/pay.py，SHOP-TASK-021）：GET /api/pay/orders、POST /api/pay/attempts、POST /api/pay/cancel；
+// Stripe 测试环境支付（DESIGN 1.12「Stripe 测试环境支付」，app/api/stripe_pay.py，SHOP-TASK-120）：POST /api/pay/stripe/start、POST /api/pay/stripe/confirm。
 // 访问凭本浏览器的订单访问 cookie（服务端发的 HttpOnly cookie，页面脚本读不到也不写）；订单号只放在写接口的请求体里，
 // CSRF 令牌只放在请求头里，二者都只在页面内存中，不进路径、查询参数、localStorage、sessionStorage 或 cookie（UX「阅读说明」）。
-// 金额是服务端算好的整数仙，页面只格式化，不计算。
+// 金额是服务端算好的整数仙，页面只格式化，不计算；支付途径与 Stripe 状态也由服务端判定，页面只按它显示。
 
 const ORDERS_URL = "/api/pay/orders";
 export const ATTEMPTS_URL = "/api/pay/attempts";
 export const CANCEL_URL = "/api/pay/cancel";
+const STRIPE_START_URL = "/api/pay/stripe/start";
+export const STRIPE_CONFIRM_URL = "/api/pay/stripe/confirm";
 const REGIONS_URL = "/api/checkout/regions";
 
 export const IDEMPOTENCY_HEADER = "Idempotency-Key";
@@ -51,6 +54,12 @@ export interface PayOrder {
   recipient: PayRecipient | null;
   last_payment: LastPayment | null;
   cancelled_by: "self" | "timeout" | null;
+  // 支付途径：待支付时为 stripe 或 simulated，其他状态为空。
+  payment_route: "stripe" | "simulated" | null;
+  // 不是 expired 的 Stripe 记录的状态；creating 且已告警（转人工核对）为 under_review；没有这样的记录为空。
+  stripe_state: "creating" | "open" | "complete" | "under_review" | null;
+  // 本单有来源为会话的 Stripe 退款尝试（迟到或不符的付款，不论尝试状态）。
+  stripe_refunded: boolean;
 }
 
 interface PayOrdersResponse {
@@ -119,8 +128,9 @@ export function attemptFor(
 }
 
 // 写接口的回答：done 为已记录；closed 为订单已不能支付或取消（409 order_expired、order_not_payable、order_not_cancellable）；
-// expired 为 401；csrf 为 403；failed 为其他（含 409 idempotency_conflict）；network 为网络中断。
-export type WriteReply = "done" | "closed" | "expired" | "csrf" | "failed" | "network";
+// method_changed 为订单已走 Stripe 途径（409 method_changed，支付与取消都可能）；unavailable 为 Stripe 不可用（503 stripe_unavailable）；
+// expired 为 401；csrf 为 403；failed 为其他（含 409 idempotency_conflict 与其他 503）；network 为网络中断。
+export type WriteReply = "done" | "closed" | "method_changed" | "unavailable" | "expired" | "csrf" | "failed" | "network";
 
 const CLOSED_DETAILS: ReadonlySet<string> = new Set(["order_expired", "order_not_payable", "order_not_cancellable"]);
 
@@ -133,17 +143,25 @@ async function conflictDetail(response: Response): Promise<string | null> {
   }
 }
 
-async function postWrite(url: string, headers: Record<string, string>, body: unknown): Promise<WriteReply> {
-  let response: Response;
+// 同源 cookie、不缓存的 JSON POST；网络中断与中止都返回 null。
+async function postJson(url: string, headers: Record<string, string>, body: unknown, signal?: AbortSignal): Promise<Response | null> {
   try {
-    response = await fetch(url, {
+    return await fetch(url, {
       method: "POST",
       credentials: "same-origin",
       cache: "no-store",
       headers: { Accept: "application/json", "Content-Type": "application/json", ...headers },
       body: JSON.stringify(body),
+      signal: signal ?? null,
     });
   } catch {
+    return null;
+  }
+}
+
+async function postWrite(url: string, headers: Record<string, string>, body: unknown): Promise<WriteReply> {
+  const response = await postJson(url, headers, body);
+  if (response === null) {
     return "network";
   }
   if (response.ok) {
@@ -157,7 +175,13 @@ async function postWrite(url: string, headers: Record<string, string>, body: unk
   }
   if (response.status === 409) {
     const detail = await conflictDetail(response);
+    if (detail === "method_changed") {
+      return "method_changed";
+    }
     return detail !== null && CLOSED_DETAILS.has(detail) ? "closed" : "failed";
+  }
+  if (response.status === 503) {
+    return (await conflictDetail(response)) === "stripe_unavailable" ? "unavailable" : "failed";
   }
   return "failed";
 }
@@ -174,6 +198,128 @@ export function submitPayment(orderNumber: string, csrfToken: string, attempt: P
 // POST /api/pay/cancel：请求体只有订单号，不要求幂等键。
 export function submitCancel(orderNumber: string, csrfToken: string): Promise<WriteReply> {
   return postWrite(CANCEL_URL, { [CSRF_HEADER]: csrfToken }, { order_number: orderNumber });
+}
+
+// 发起 Stripe 付款的结果（DESIGN 1.12 第 3、9 条）：redirect 为跳转到 Stripe 返回的付款页地址（只接受 https）；
+// complete 为会话已完成，随后调用确认接口；closed 为订单已不能支付（409 order_not_payable）；method_changed 为 409 method_changed；
+// under_review 为创建结果未定、转人工核对（409 stripe_under_review）；unavailable 为 Stripe 不可用（503 stripe_unavailable）；
+// expired 为 401；csrf 为 403；failed 为其他（含 200 而地址缺少或不是 https）；network 为网络中断或中止。
+export type StripeStart =
+  | { kind: "redirect"; url: string }
+  | { kind: "complete" }
+  | { kind: "closed" }
+  | { kind: "method_changed" }
+  | { kind: "under_review" }
+  | { kind: "unavailable" }
+  | { kind: "expired" }
+  | { kind: "csrf" }
+  | { kind: "failed" }
+  | { kind: "network" };
+
+const START_CONFLICTS: ReadonlyMap<string, StripeStart> = new Map<string, StripeStart>([
+  ["order_not_payable", { kind: "closed" }],
+  ["method_changed", { kind: "method_changed" }],
+  ["stripe_under_review", { kind: "under_review" }],
+]);
+
+export function stripeStartUrl(language: Language): string {
+  return `${STRIPE_START_URL}?${new URLSearchParams({ lang: language }).toString()}`;
+}
+
+function isHttpsUrl(value: string): boolean {
+  try {
+    return new URL(value).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+// 200 的响应体：不是 JSON 或不是对象时为 null。
+async function replyObject(response: Response): Promise<Record<string, unknown> | null> {
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return null;
+  }
+  return body !== null && typeof body === "object" ? (body as Record<string, unknown>) : null;
+}
+
+// POST /api/pay/stripe/start：请求体只有订单号。
+export async function startStripe(language: Language, orderNumber: string, csrfToken: string, signal?: AbortSignal): Promise<StripeStart> {
+  const response = await postJson(stripeStartUrl(language), { [CSRF_HEADER]: csrfToken }, { order_number: orderNumber }, signal);
+  if (response === null) {
+    return { kind: "network" };
+  }
+  switch (response.status) {
+    case 200:
+      break;
+    case 401:
+      return { kind: "expired" };
+    case 403:
+      return { kind: "csrf" };
+    case 409:
+      return START_CONFLICTS.get((await conflictDetail(response)) ?? "") ?? { kind: "failed" };
+    case 503:
+      return (await conflictDetail(response)) === "stripe_unavailable" ? { kind: "unavailable" } : { kind: "failed" };
+    default:
+      return { kind: "failed" };
+  }
+  const body = await replyObject(response);
+  const url = body?.checkout_url;
+  if (body?.result === "redirect" && typeof url === "string" && isHttpsUrl(url)) {
+    return { kind: "redirect", url };
+  }
+  if (body?.result === "complete" && url === null) {
+    return { kind: "complete" };
+  }
+  return { kind: "failed" };
+}
+
+// 确认 Stripe 付款的结果（DESIGN 1.12 第 4、6 条，HANDOFF 0.54）：paid 已付款；confirming 确认中（含 Stripe 不可用），稍后重查；
+// not_paid 尚未付款；refunded 迟到付款按退款处理；expired 为 401；csrf 为 403；failed 为其他；network 为网络中断或中止。
+export const STRIPE_CONFIRM_RESULTS = ["paid", "confirming", "not_paid", "refunded"] as const;
+export type StripeConfirmResult = (typeof STRIPE_CONFIRM_RESULTS)[number];
+
+export type StripeConfirm = { kind: StripeConfirmResult } | { kind: "expired" } | { kind: "csrf" } | { kind: "failed" } | { kind: "network" };
+
+function isConfirmResult(value: unknown): value is StripeConfirmResult {
+  return (STRIPE_CONFIRM_RESULTS as readonly unknown[]).includes(value);
+}
+
+// POST /api/pay/stripe/confirm：不带查询参数，请求体只有订单号。
+export async function confirmStripe(orderNumber: string, csrfToken: string, signal?: AbortSignal): Promise<StripeConfirm> {
+  const response = await postJson(STRIPE_CONFIRM_URL, { [CSRF_HEADER]: csrfToken }, { order_number: orderNumber }, signal);
+  if (response === null) {
+    return { kind: "network" };
+  }
+  if (response.status === 401) {
+    return { kind: "expired" };
+  }
+  if (response.status === 403) {
+    return { kind: "csrf" };
+  }
+  if (response.status !== 200) {
+    return { kind: "failed" };
+  }
+  const result = (await replyObject(response))?.result;
+  return isConfirmResult(result) ? { kind: result } : { kind: "failed" };
+}
+
+// P06 交给 P07 的「取消时会话已付款」（HANDOFF 0.55 第（5）项）：订单号只放在本模块的变量里，
+// 不进地址、history 的 state、localStorage、sessionStorage 或 cookie；读一次即失效，重新打开或刷新页面后不再显示。
+let paidNotCancelled: string | null = null;
+
+// P06 取消时发现会话已付款，转到结果页之前调用（SHOP-TASK-135）。
+export function rememberPaidNotCancelled(orderNumber: string): void {
+  paidNotCancelled = orderNumber;
+}
+
+// P07 打开时调用（SHOP-TASK-133）：记下的订单号与给出的相同时返回 true；不论是否相同都清除记录。
+export function takePaidNotCancelled(orderNumber: string): boolean {
+  const same = paidNotCancelled === orderNumber;
+  paidNotCancelled = null;
+  return same;
 }
 
 // 网络中断后确认订单的间隔：读取本身也中断或失败时，隔一段时间再读，直到得到回答。
@@ -214,10 +360,14 @@ export async function confirmOrder(language: Language, { signal, delay = wait }:
 // 一次写操作（支付或取消）之后页面的去向：
 // result 转到结果页；expired 整页 pay.session_expired；
 // error 显示 common.error_retry（read 为重新读取到的订单与新令牌，没有则沿用原来的）；
-// retry 为网络中断后确认订单仍待支付：显示 common.error_retry，允许以同一幂等键（attempt）重试。
+// retry 为网络中断后确认订单仍待支付：显示 common.error_retry，允许以同一幂等键（attempt）重试；
+// method_changed 为订单已走 Stripe 途径（409 method_changed），unavailable 为 Stripe 不可用（503 stripe_unavailable），
+// 两者的显示由 P06 的 Stripe 任务（SHOP-TASK-134、135）接上。
 export type WriteOutcome =
   | { kind: "result" }
   | { kind: "expired" }
+  | { kind: "method_changed" }
+  | { kind: "unavailable" }
   | { kind: "error"; read: Extract<PayRead, { kind: "ok" }> | null }
   | { kind: "retry"; read: Extract<PayRead, { kind: "ok" }>; attempt: PaymentAttempt | null };
 
@@ -233,6 +383,10 @@ async function settle(language: Language, reply: WriteReply, attempt: PaymentAtt
       return { kind: "result" };
     case "expired":
       return { kind: "expired" };
+    case "method_changed":
+      return { kind: "method_changed" };
+    case "unavailable":
+      return { kind: "unavailable" };
     case "failed":
       return { kind: "error", read: null };
     case "csrf": {

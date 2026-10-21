@@ -5,6 +5,7 @@ import {
   ATTEMPTS_URL,
   CANCEL_URL,
   confirmOrder,
+  confirmStripe,
   CSRF_HEADER,
   fetchMyStates,
   IDEMPOTENCY_HEADER,
@@ -14,10 +15,16 @@ import {
   readPayOrder,
   RECHECK_DELAY_MS,
   remainingAtRead,
+  rememberPaidNotCancelled,
   resultKind,
   runCancel,
   runPayment,
+  startStripe,
+  STRIPE_CONFIRM_URL,
+  stripeStartUrl,
+  submitCancel,
   submitPayment,
+  takePaidNotCancelled,
 } from "./pay";
 import type { PayOrder, PaymentAttempt } from "./pay";
 
@@ -49,6 +56,9 @@ function payOrder(overrides: Partial<PayOrder> = {}): PayOrder {
     },
     last_payment: null,
     cancelled_by: null,
+    payment_route: "simulated",
+    stripe_state: null,
+    stripe_refunded: false,
     ...overrides,
   };
 }
@@ -271,6 +281,240 @@ describe("cancel requests", () => {
     expect(calls.map((call) => call.init.method)).toEqual(["POST", "GET"]);
     stubFetch(networkDown, json(200, ordersBody(payOrder({ status: "demo_cancelled", cancelled_by: "self" }))));
     await expect(runCancel("en", ORDER_NUMBER, TOKEN, { delay: noDelay })).resolves.toEqual({ kind: "result" });
+  });
+});
+
+describe("Stripe replies to the existing writes", () => {
+  // HANDOFF 0.54「模拟支付遇到 Stripe 途径回 409 method_changed」与 DESIGN 1.12 第 2 条「同一订单的两条支付途径互斥……不接受模拟支付」：
+  // 支付与取消遇到 409 method_changed 时回答 method_changed，settle 给出 kind 为 method_changed 的结果。
+  it("reports method_changed for payment and cancel", async () => {
+    stubFetch(json(409, { detail: "method_changed" }));
+    await expect(submitPayment(ORDER_NUMBER, TOKEN, attempt)).resolves.toBe("method_changed");
+    stubFetch(json(409, { detail: "method_changed" }));
+    await expect(submitCancel(ORDER_NUMBER, TOKEN)).resolves.toBe("method_changed");
+    stubFetch(json(409, { detail: "method_changed" }));
+    await expect(runPayment("en", ORDER_NUMBER, TOKEN, attempt)).resolves.toEqual({ kind: "method_changed" });
+    stubFetch(json(409, { detail: "method_changed" }));
+    await expect(runCancel("en", ORDER_NUMBER, TOKEN)).resolves.toEqual({ kind: "method_changed" });
+  });
+
+  // DESIGN 1.12 第 5 条「Stripe 不可用时本人取消提示稍后再试」与 HANDOFF 0.54「Stripe 不可用时接口回 503 stripe_unavailable」：
+  // 支付与取消遇到 503 stripe_unavailable 时回答 unavailable，settle 给出 kind 为 unavailable 的结果。
+  it("reports unavailable for payment and cancel", async () => {
+    stubFetch(json(503, { detail: "stripe_unavailable" }));
+    await expect(submitPayment(ORDER_NUMBER, TOKEN, attempt)).resolves.toBe("unavailable");
+    stubFetch(json(503, { detail: "stripe_unavailable" }));
+    await expect(submitCancel(ORDER_NUMBER, TOKEN)).resolves.toBe("unavailable");
+    stubFetch(json(503, { detail: "stripe_unavailable" }));
+    await expect(runPayment("en", ORDER_NUMBER, TOKEN, attempt)).resolves.toEqual({ kind: "unavailable" });
+    stubFetch(json(503, { detail: "stripe_unavailable" }));
+    await expect(runCancel("en", ORDER_NUMBER, TOKEN)).resolves.toEqual({ kind: "unavailable" });
+  });
+
+  // 派生实现约束（实现选择）：守住 SHOP-TASK-024 验收第 6 条的错误处理——只有这两个 detail 是新回答，其他 409 与 503 照旧显示 common.error_retry。
+  it.each([json(409, { detail: "idempotency_conflict" }), json(503, { detail: "service_unavailable" }), json(503, {}), new Response("down", { status: 503 })])(
+    "keeps other 409 and 503 replies as failures (%#)",
+    async (reply) => {
+      stubFetch(reply.clone());
+      await expect(submitCancel(ORDER_NUMBER, TOKEN)).resolves.toBe("failed");
+      stubFetch(reply.clone());
+      await expect(runPayment("en", ORDER_NUMBER, TOKEN, attempt)).resolves.toEqual({ kind: "error", read: null });
+    },
+  );
+});
+
+describe("Stripe start", () => {
+  const CHECKOUT_URL = "https://checkout.stripe.com/c/pay/cs_test_a1b2c3";
+
+  // DESIGN 1.12 第 3 条「访客在支付页按现有授权……与 CSRF 校验后发起」与 UX「阅读说明」订单号与令牌不进地址：
+  // POST /api/pay/stripe/start，查询参数只有 lang；同源 cookie、不缓存、JSON 请求头与 X-CSRF-Token；请求体只有订单号；中止信号交给 fetch。
+  it("posts only the order number with the CSRF token in the current language", async () => {
+    const calls = stubFetch(json(200, { result: "redirect", checkout_url: CHECKOUT_URL }));
+    const controller = new AbortController();
+    await expect(startStripe("ms", ORDER_NUMBER, TOKEN, controller.signal)).resolves.toEqual({ kind: "redirect", url: CHECKOUT_URL });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("/api/pay/stripe/start?lang=ms");
+    expect(stripeStartUrl("zh")).toBe("/api/pay/stripe/start?lang=zh");
+    expect(calls[0]?.init).toMatchObject({ method: "POST", credentials: "same-origin", cache: "no-store", signal: controller.signal });
+    expect(headers(calls[0])).toEqual({ Accept: "application/json", "Content-Type": "application/json", [CSRF_HEADER]: TOKEN });
+    expect(body(calls[0])).toEqual({ order_number: ORDER_NUMBER });
+    expect(calls[0]?.url).not.toContain(ORDER_NUMBER);
+    expect(calls[0]?.url).not.toContain(TOKEN);
+  });
+
+  // DESIGN 1.12 第 3 条「服务端只把 Stripe 返回的付款页地址交给前台跳转」「已有 open 就直接返回它的付款地址」与 SHOP-TASK-120 的回答表
+  // （complete 回 200、地址为 null，前端随后调用确认接口；not_payable 409 order_not_payable；409 method_changed；409 stripe_under_review；
+  // 503 stripe_unavailable）；DESIGN 1.12 第 9 条「Stripe 不可用，支付页提示稍后再试……不自动改用模拟支付」。
+  it.each<[Response, unknown]>([
+    [json(200, { result: "redirect", checkout_url: CHECKOUT_URL }), { kind: "redirect", url: CHECKOUT_URL }],
+    [json(200, { result: "complete", checkout_url: null }), { kind: "complete" }],
+    [json(409, { detail: "order_not_payable", status: "demo_cancelled" }), { kind: "closed" }],
+    [json(409, { detail: "method_changed" }), { kind: "method_changed" }],
+    [json(409, { detail: "stripe_under_review" }), { kind: "under_review" }],
+    [json(503, { detail: "stripe_unavailable" }), { kind: "unavailable" }],
+    [json(401, { detail: "access_expired" }), { kind: "expired" }],
+    [json(403, { detail: "csrf_failed" }), { kind: "csrf" }],
+  ])("classifies the start reply (%#)", async (reply, expected) => {
+    stubFetch(reply);
+    await expect(startStripe("en", ORDER_NUMBER, TOKEN)).resolves.toEqual(expected);
+  });
+
+  // 派生实现约束（实现选择）：守住 DESIGN 1.12 第 3 条「服务端只把 Stripe 返回的付款页地址交给前台跳转」——只跳转到 https 地址；
+  // 地址缺少、不是字符串、解析不了或不是 https，回答与内容不合格，其他 409 与 503 的 detail、其他状态都归 failed，不跳转。
+  it.each([
+    json(200, { result: "redirect", checkout_url: "http://checkout.stripe.com/c/pay/cs_test_a1b2c3" }),
+    json(200, { result: "redirect", checkout_url: "javascript:alert(1)" }),
+    json(200, { result: "redirect", checkout_url: "/relative/path" }),
+    json(200, { result: "redirect", checkout_url: "not a url" }),
+    json(200, { result: "redirect", checkout_url: null }),
+    json(200, { result: "redirect", checkout_url: 42 }),
+    json(200, { result: "redirect" }),
+    json(200, { result: "complete", checkout_url: CHECKOUT_URL }),
+    json(200, { result: "other", checkout_url: CHECKOUT_URL }),
+    json(200, null),
+    new Response("<html></html>", { status: 200 }),
+    json(201, { result: "redirect", checkout_url: CHECKOUT_URL }),
+    json(409, { detail: "idempotency_conflict" }),
+    json(409, {}),
+    json(503, { detail: "service_unavailable" }),
+    new Response("down", { status: 503 }),
+    json(500, {}),
+    json(422, { detail: [] }),
+  ])("treats anything else as a failure (%#)", async (reply) => {
+    stubFetch(reply);
+    await expect(startStripe("en", ORDER_NUMBER, TOKEN)).resolves.toEqual({ kind: "failed" });
+  });
+
+  // UX「全局框架」网络中断与 SHOP-TASK-132 验收第 2 条「中止与网络中断一样归 network」：fetch 被拒或请求被中止都回答 network。
+  it("reports a lost connection or an abort as network", async () => {
+    stubFetch(networkDown);
+    await expect(startStripe("en", ORDER_NUMBER, TOKEN)).resolves.toEqual({ kind: "network" });
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+      init?.signal?.aborted
+        ? Promise.reject(new DOMException("The operation was aborted.", "AbortError"))
+        : Promise.reject(new Error(`unexpected request ${String(input)}`)),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
+    controller.abort();
+    await expect(startStripe("en", ORDER_NUMBER, TOKEN, controller.signal)).resolves.toEqual({ kind: "network" });
+    await expect(confirmStripe(ORDER_NUMBER, TOKEN, controller.signal)).resolves.toEqual({ kind: "network" });
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual(["/api/pay/stripe/start?lang=en", STRIPE_CONFIRM_URL]);
+  });
+});
+
+describe("Stripe confirm", () => {
+  // DESIGN 1.12 第 4 条「访客从 Stripe 返回后前台调用本站接口，服务端按授权找到该单的会话向 Stripe 查询一次」：
+  // POST /api/pay/stripe/confirm 不带任何查询参数；同源 cookie、不缓存、JSON 请求头与 X-CSRF-Token；请求体只有订单号。
+  it("posts only the order number with the CSRF token and no query", async () => {
+    const calls = stubFetch(json(200, { result: "paid" }));
+    const controller = new AbortController();
+    await expect(confirmStripe(ORDER_NUMBER, TOKEN, controller.signal)).resolves.toEqual({ kind: "paid" });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("/api/pay/stripe/confirm");
+    expect(calls[0]?.url).not.toContain("?");
+    expect(calls[0]?.init).toMatchObject({ method: "POST", credentials: "same-origin", cache: "no-store", signal: controller.signal });
+    expect(headers(calls[0])).toEqual({ Accept: "application/json", "Content-Type": "application/json", [CSRF_HEADER]: TOKEN });
+    expect(body(calls[0])).toEqual({ order_number: ORDER_NUMBER });
+  });
+
+  // HANDOFF 0.54「结果页的确认结果为 paid、confirming、not_paid、refunded 四种，Stripe 不可用与确认返回 needs_review 都按『确认中』显示」
+  // 与 DESIGN 1.12 第 4 条「尚未确认时结果页显示『确认中』并稍后重查」、第 6 条迟到付款全额退款；401 与 403 分开报告。
+  it.each<[Response, unknown]>([
+    [json(200, { result: "paid" }), { kind: "paid" }],
+    [json(200, { result: "confirming" }), { kind: "confirming" }],
+    [json(200, { result: "not_paid" }), { kind: "not_paid" }],
+    [json(200, { result: "refunded" }), { kind: "refunded" }],
+    [json(401, { detail: "access_expired" }), { kind: "expired" }],
+    [json(403, { detail: "csrf_failed" }), { kind: "csrf" }],
+  ])("classifies the confirm reply (%#)", async (reply, expected) => {
+    stubFetch(reply);
+    await expect(confirmStripe(ORDER_NUMBER, TOKEN)).resolves.toEqual(expected);
+  });
+
+  // 派生实现约束（实现选择）：守住同一条——只认这四种结果；200 而结果为其他值（含 needs_review，服务端已归为 confirming）、内容不合格、其他状态都归 failed。
+  it.each([
+    json(200, { result: "needs_review" }),
+    json(200, { result: "PAID" }),
+    json(200, {}),
+    json(200, null),
+    new Response("ok", { status: 200 }),
+    json(201, { result: "paid" }),
+    json(409, { detail: "method_changed" }),
+    json(503, { detail: "stripe_unavailable" }),
+    json(500, {}),
+  ])("treats anything else as a failure (%#)", async (reply) => {
+    stubFetch(reply);
+    await expect(confirmStripe(ORDER_NUMBER, TOKEN)).resolves.toEqual({ kind: "failed" });
+  });
+
+  // UX「全局框架」网络中断：确认请求中断时回答 network，不当作失败。
+  it("reports a lost connection as network", async () => {
+    stubFetch(networkDown);
+    await expect(confirmStripe(ORDER_NUMBER, TOKEN)).resolves.toEqual({ kind: "network" });
+  });
+});
+
+describe("paid-not-cancelled handoff", () => {
+  afterEach(() => {
+    takePaidNotCancelled("");
+  });
+
+  // HANDOFF 0.55 第（5）项「『取消时会话已付款』的提示只放在请求模块的内存里、读一次即失效」：记下后第一次读到 true，之后再读为 false。
+  it("is read once", () => {
+    expect(takePaidNotCancelled(ORDER_NUMBER)).toBe(false);
+    rememberPaidNotCancelled(ORDER_NUMBER);
+    expect(takePaidNotCancelled(ORDER_NUMBER)).toBe(true);
+    expect(takePaidNotCancelled(ORDER_NUMBER)).toBe(false);
+  });
+
+  // 同一条：只对记下的那张订单显示；订单号不同时返回 false，并同样清除记录（之后用原订单号读也为 false）。
+  it("only matches the remembered order and clears it either way", () => {
+    rememberPaidNotCancelled(ORDER_NUMBER);
+    expect(takePaidNotCancelled("OLDERORDER000000")).toBe(false);
+    expect(takePaidNotCancelled(ORDER_NUMBER)).toBe(false);
+    rememberPaidNotCancelled("OLDERORDER000000");
+    rememberPaidNotCancelled(ORDER_NUMBER);
+    expect(takePaidNotCancelled(ORDER_NUMBER)).toBe(true);
+  });
+
+  // 同一条「不进地址、历史状态或浏览器存储」与 UX「阅读说明」订单号与令牌只在页面内存里：交接与两个 Stripe 接口都不写
+  // localStorage、sessionStorage、cookie 或 history，请求地址里没有订单号或令牌。
+  it("keeps the handoff and the Stripe requests out of browser storage", async () => {
+    const storage = () => ({ getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn() });
+    const local = storage();
+    const session = storage();
+    const cookieWrites: string[] = [];
+    const doc = {};
+    Object.defineProperty(doc, "cookie", {
+      get: () => "",
+      set: (value: string) => {
+        cookieWrites.push(value);
+      },
+    });
+    const history = { pushState: vi.fn(), replaceState: vi.fn() };
+    vi.stubGlobal("localStorage", local);
+    vi.stubGlobal("sessionStorage", session);
+    vi.stubGlobal("document", doc);
+    vi.stubGlobal("history", history);
+
+    const calls = stubFetch(json(200, { result: "complete", checkout_url: null }), json(200, { result: "paid" }));
+    await startStripe("en", ORDER_NUMBER, TOKEN);
+    await confirmStripe(ORDER_NUMBER, TOKEN);
+    rememberPaidNotCancelled(ORDER_NUMBER);
+    expect(takePaidNotCancelled(ORDER_NUMBER)).toBe(true);
+
+    for (const target of [local, session]) {
+      expect(target.setItem).not.toHaveBeenCalled();
+    }
+    expect(cookieWrites).toEqual([]);
+    expect(history.pushState).not.toHaveBeenCalled();
+    expect(history.replaceState).not.toHaveBeenCalled();
+    expect(calls.map((call) => call.url)).toEqual(["/api/pay/stripe/start?lang=en", "/api/pay/stripe/confirm"]);
+    for (const call of calls) {
+      expect(call.url).not.toContain(ORDER_NUMBER);
+      expect(call.url).not.toContain(TOKEN);
+    }
   });
 });
 
