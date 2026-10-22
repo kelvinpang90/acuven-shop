@@ -775,6 +775,16 @@ export const COPY = {
     zh: "此订单的支付方式已改变，页面已更新。",
     ms: "Kaedah pembayaran untuk pesanan ini telah berubah. Halaman telah dikemas kini.",
   },
+  "pay.cancel_confirm_stripe": {
+    en: "We'll first try to close this order's open Stripe test payment page. If the payment has already gone through, the order won't be cancelled.",
+    zh: "本站会先尝试关闭此订单进行中的 Stripe 测试付款页；若付款已经完成，订单不会取消。",
+    ms: "Kami akan cuba menutup halaman pembayaran ujian Stripe yang dibuka untuk pesanan ini terlebih dahulu. Jika pembayaran sudah berjaya, pesanan tidak akan dibatalkan.",
+  },
+  "pay.cancel_try_later": {
+    en: "We couldn't reach Stripe to close its payment page, so the order hasn't been cancelled. Please try again in a moment.",
+    zh: "暂时无法联系 Stripe 关闭付款页，订单尚未取消，请稍后再试。",
+    ms: "Kami tidak dapat menghubungi Stripe untuk menutup halaman pembayarannya, jadi pesanan belum dibatalkan. Sila cuba lagi sebentar lagi.",
+  },
   "result.success_title": {
     en: "Demo payment successful",
     zh: "模拟支付成功",

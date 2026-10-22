@@ -3,13 +3,29 @@ import type { ReactElement, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import type { PayOrder, StripeStart } from "../api/pay";
+import { takePaidNotCancelled } from "../api/pay";
+import type { PayOrder, StripeStart, WriteOutcome } from "../api/pay";
 import { BRAND, COPY, LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { RouterProvider } from "../router";
-import { canSubmit, copyText, countryName, leavesPayPage, PayView, recipientParts, showsCountdown, stripeAction, stripeMove } from "./PayPage";
-import type { PayViewProps, StripeMove } from "./PayPage";
+import type { RoutePath } from "../router";
+import {
+  cancelMove,
+  canSubmit,
+  confirmsStripeCancel,
+  copyText,
+  countryName,
+  leaveAfterCancel,
+  leavesPayPage,
+  PAY_RESULT_PATH,
+  PayView,
+  recipientParts,
+  showsCountdown,
+  stripeAction,
+  stripeMove,
+} from "./PayPage";
+import type { CancelMove, PayViewProps, StripeMove } from "./PayPage";
 
 const ORDER_NUMBER = "B6TN2RJD8K4M0QXZ";
 
@@ -60,6 +76,7 @@ function props(overrides: Partial<PayViewProps> = {}): PayViewProps {
     confirming: false,
     stripeUnavailable: false,
     methodChanged: false,
+    cancelTryLater: false,
     onMethod: noop,
     onPay: noop,
     onStripe: noop,
@@ -704,6 +721,150 @@ describe("Stripe dictionary", () => {
     const patterns = [BRAND, ...Object.values(COPY).map((entry) => entry[language])].map(copyPattern);
     for (const [state, overrides] of cases) {
       for (const value of visibleTexts(renderStripe(state, overrides, language))) {
+        const known = orderData.has(value) || patterns.some((pattern) => pattern.test(value));
+        expect(known, value).toBe(true);
+      }
+    }
+  });
+});
+
+// 确认框整段：开始标签的属性、其中的内容（到动作按钮所在的 div 结束）。
+function dialogOf(html: string): { open: string; body: string } | null {
+  const found = /(<div class="acs-dialog" role="dialog"[^>]*>)([\s\S]*?<\/div>)<\/div>/.exec(html);
+  return found ? { open: found[1] ?? "", body: found[2] ?? "" } : null;
+}
+
+// 取消按钮所在的区块。
+function cancelSection(html: string): string {
+  return /<div class="site-pay__cancel[^"]*">[\s\S]*?<\/button><\/div>/.exec(html)?.[0] ?? "";
+}
+
+const READ = { kind: "ok", order: payOrder(), csrfToken: "csrf-new" } as const;
+
+describe("Stripe cancel confirmation", () => {
+  // UX 0.11「点取消后确认框：[pay.cancel_confirm]，有进行中的会话时其下另显示 [pay.cancel_confirm_stripe]」与视觉稿 P06-stripe-cancel-confirm：
+  // Stripe 途径为 open 时补句紧接在 pay.cancel_confirm 之下、在按钮之前，作为对话框的说明（aria-describedby）。
+  it.each(LANGUAGES)("adds pay.cancel_confirm_stripe under pay.cancel_confirm for an open session in %s", (language) => {
+    const dialog = dialogOf(renderStripe("open", { confirming: true }, language));
+    expect(dialog).not.toBeNull();
+    const described = /aria-describedby="([^"]+)"/.exec(dialog?.open ?? "")?.[1] ?? "";
+    expect(described).not.toBe("");
+    expect(dialog?.body).toContain(
+      `${escapeHtml(COPY["pay.cancel_confirm"][language])}</p><p id="${described}" class="acs-body-s acs-muted">${escapeHtml(COPY["pay.cancel_confirm_stripe"][language])}</p><div class="acs-dialog__actions">`,
+    );
+    expect(dialog?.body).toContain(`>${escapeHtml(COPY["pay.cancel_confirm_yes"][language])}</button>`);
+    expect(dialog?.body).toContain(`>${escapeHtml(COPY["pay.cancel_confirm_no"][language])}</button>`);
+  });
+
+  // 同一句的「有进行中的会话时」与验收「其他情形（模拟途径、未发起、creating、under_review）确认框与现有相同」：
+  // 这些情形的确认框里只有 pay.cancel_confirm 与两个按钮，没有补句与 aria-describedby，与模拟途径的确认框逐字相同。
+  it.each(LANGUAGES)("keeps the existing dialog without an open session in %s", (language) => {
+    // useId 给的编号随在树里的位置而变，比较前换成同一个占位。
+    const withoutIds = (html: string) => html.replace(/(id|aria-labelledby)="[^"]*"/g, '$1="_"');
+    const simulated = dialogOf(withoutIds(render({ confirming: true }, language)));
+    expect(simulated).not.toBeNull();
+    for (const html of [render({ confirming: true }, language), ...([null, "creating", "under_review"] as const).map((state) => renderStripe(state, { confirming: true }, language))]) {
+      const dialog = dialogOf(withoutIds(html));
+      expect(dialog).toEqual(simulated);
+      expect(dialog?.open).not.toContain("aria-describedby");
+      expect(shows(html, "pay.cancel_confirm_stripe", language)).toBe(false);
+    }
+    expect(confirmsStripeCancel({ payment_route: "stripe", stripe_state: "open" })).toBe(true);
+    expect(confirmsStripeCancel({ payment_route: "simulated", stripe_state: "open" })).toBe(false);
+    for (const state of [null, "creating", "under_review", "complete"] as const) {
+      expect(confirmsStripeCancel({ payment_route: "stripe", stripe_state: state })).toBe(false);
+    }
+  });
+});
+
+describe("Stripe cancel not done", () => {
+  // UX 0.11「取消时 Stripe 暂不可用：确认框关闭，显示 [pay.cancel_try_later]，订单保持待支付」、DESIGN 1.12 第 5 条「Stripe 不可用时本人取消提示稍后再试…订单保持待支付」
+  // 与视觉稿 P06-stripe-states 的取消未成：提示在取消按钮旁（同一区块、按钮之上），订单号与应付金额照常显示，取消按钮可点（再点即重试）。
+  it.each(LANGUAGES)("shows pay.cancel_try_later beside a clickable cancel button with the order kept in %s", (language) => {
+    for (const screen of [stripeScreen("open"), stripeScreen(null), stripeScreen("creating"), stripeScreen("under_review")]) {
+      const html = render({ screen, cancelTryLater: true }, language);
+      const section = cancelSection(html);
+      expect(section).toContain(`<div class="site-pay__cancel site-pay__cancel--try-later">`);
+      expect(section).toContain(`role="alert"`);
+      const notice = section.indexOf(escapeHtml(COPY["pay.cancel_try_later"][language]));
+      expect(notice).toBeGreaterThan(0);
+      expect(section.indexOf(escapeHtml(COPY["pay.cancel_order"][language]))).toBeGreaterThan(notice);
+      expect(html).not.toContain(`role="dialog"`);
+      expect(html).toContain(`<span class="acs-num site-pay__number">${ORDER_NUMBER}</span>`);
+      expect(html).toContain(`<span class="acs-price acs-price--l">RM 135.00</span>`);
+      expect(button(tree({ screen, cancelTryLater: true }), "pay.cancel_order").props.disabled).toBe(false);
+    }
+  });
+
+  // 验收「下一次操作开始时收起」：操作进行中不显示；没有不可用时取消区块与现有相同、不出现 pay.cancel_try_later。
+  it("hides pay.cancel_try_later while busy and when not set", () => {
+    for (const busy of ["cancelling", "redirecting", "checking"] as const) {
+      expect(shows(renderStripe("open", { cancelTryLater: true, busy }), "pay.cancel_try_later")).toBe(false);
+    }
+    const html = renderStripe("open");
+    expect(shows(html, "pay.cancel_try_later")).toBe(false);
+    expect(cancelSection(html)).toBe(`<div class="site-pay__cancel"><button class="acs-btn acs-btn--danger" type="button">${escapeHtml(COPY["pay.cancel_order"].en)}</button></div>`);
+  });
+});
+
+describe("cancel outcome", () => {
+  // DESIGN 1.12 第 5 条「Stripe 不可用时本人取消提示稍后再试」、UX 0.11「取消时会话已付款：→ P07 成功」与验收「其余结果（expired、csrf、failed、network）照现有写法」：
+  // runCancel 每种结果的去向；转结果页时只有 Stripe 途径带交接（含 409 order_not_cancellable 归入的 result）。
+  it("maps every cancel outcome to where the page goes", () => {
+    const stripe = { payment_route: "stripe" } as const;
+    const simulated = { payment_route: "simulated" } as const;
+    const cases: [WriteOutcome, CancelMove, CancelMove][] = [
+      [{ kind: "result" }, { kind: "result", handOver: true }, { kind: "result", handOver: false }],
+      [{ kind: "unavailable" }, { kind: "try_later" }, { kind: "try_later" }],
+      [{ kind: "expired" }, { kind: "expired" }, { kind: "expired" }],
+      [{ kind: "method_changed" }, { kind: "error", read: null }, { kind: "error", read: null }],
+      [{ kind: "error", read: null }, { kind: "error", read: null }, { kind: "error", read: null }],
+      [{ kind: "error", read: READ }, { kind: "error", read: READ }, { kind: "error", read: READ }],
+      [{ kind: "retry", read: READ, attempt: null }, { kind: "error", read: READ }, { kind: "error", read: READ }],
+    ];
+    for (const [outcome, onStripe, onSimulated] of cases) {
+      expect(cancelMove(outcome, stripe), `stripe ${outcome.kind}`).toEqual(onStripe);
+      expect(cancelMove(outcome, simulated), `simulated ${outcome.kind}`).toEqual(onSimulated);
+    }
+  });
+
+  // HANDOFF 0.55 第（5）项「『取消时会话已付款』的提示只放在请求模块的内存里、读一次即失效」与验收「先以该订单号调用 rememberPaidNotCancelled 再用路由的 replace 换成 /pay/result」
+  // 「模拟途径的取消与现有完全相同、不调用 remember」：路由以替身代替，replace 被调用时以 takePaidNotCancelled 核对交接已记下（Stripe）或没有（模拟）。
+  it("remembers the hand-over before replacing with /pay/result only on the Stripe route", () => {
+    takePaidNotCancelled("");
+    for (const [route, expected] of [
+      ["stripe", true],
+      ["simulated", false],
+    ] as const) {
+      const calls: { path: RoutePath; handedOver: boolean }[] = [];
+      const replace = (path: RoutePath) => {
+        calls.push({ path, handedOver: takePaidNotCancelled(ORDER_NUMBER) });
+      };
+      const move = cancelMove({ kind: "result" }, { payment_route: route });
+      if (move.kind !== "result") {
+        throw new Error("not a result");
+      }
+      leaveAfterCancel(ORDER_NUMBER, move.handOver, replace);
+      expect(calls, route).toEqual([{ path: PAY_RESULT_PATH, handedOver: expected }]);
+      expect(PAY_RESULT_PATH).toBe("/pay/result");
+    }
+    expect(takePaidNotCancelled(ORDER_NUMBER)).toBe(false);
+  });
+});
+
+describe("Stripe cancel dictionary", () => {
+  // 验收「页面文字全部来自字典」：确认框补句与取消未成两种状态下（两种途径），除订单数据外每段文字都是当前语言的某条字典文案。
+  it.each(LANGUAGES)("shows only dictionary text besides order data in %s", (language) => {
+    const states: Partial<PayViewProps>[] = [
+      { screen: stripeScreen("open"), confirming: true },
+      { screen: stripeScreen("open"), cancelTryLater: true },
+      { screen: stripeScreen("under_review"), cancelTryLater: true, failed: true },
+      { cancelTryLater: true },
+    ];
+    const orderData = new Set([ORDER_NUMBER, "Sam Taylor", "+447700900123", "1 Example Street", "AB1 2CD", "Greater London", countryName("GB", language), "·", ","]);
+    const patterns = [BRAND, ...Object.values(COPY).map((entry) => entry[language])].map(copyPattern);
+    for (const state of states) {
+      for (const value of visibleTexts(render(state, language))) {
         const known = orderData.has(value) || patterns.some((pattern) => pattern.test(value));
         expect(known, value).toBe(true);
       }

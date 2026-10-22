@@ -1,7 +1,20 @@
 import { Fragment, useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
-import { attemptFor, AWAITING_PAYMENT, fetchMyStates, minutesLeft, nextTickDelay, PAY_METHODS, readPayOrder, remainingAtRead, runCancel, runPayment, startStripe } from "../api/pay";
+import {
+  attemptFor,
+  AWAITING_PAYMENT,
+  fetchMyStates,
+  minutesLeft,
+  nextTickDelay,
+  PAY_METHODS,
+  readPayOrder,
+  remainingAtRead,
+  rememberPaidNotCancelled,
+  runCancel,
+  runPayment,
+  startStripe,
+} from "../api/pay";
 import type { PayMethod, PayOrder, PayRead, PayRecipient, PayResult, PaymentAttempt, StripeStart, WriteOutcome } from "../api/pay";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
 import { formatSen } from "../format";
@@ -18,6 +31,8 @@ import type { RoutePath } from "../router";
 // 支付途径为 Stripe 测试时（docs/UX.md 0.11「P06 Stripe 测试」，SHOP-TASK-134）：标题、★ 与操作区换成 Stripe 的，
 // 按 stripe_state 显示跳转、进行中或转人工核对；跳转只在当前标签页打开服务端返回的付款页地址。
 // 读到已付款完成的会话（complete）时换成 P07，由 P07 调用确认接口（HANDOFF 0.55 第（5）项）。
+// 取消（SHOP-TASK-135）：有进行中的会话时确认框另显示 pay.cancel_confirm_stripe；Stripe 暂不可用时在取消按钮旁显示 pay.cancel_try_later；
+// Stripe 途径的取消转到 P07 之前记下「取消时会话已付款」的交接（rememberPaidNotCancelled），由 P07 按订单已付款决定是否显示。
 // 本文件另导出 P07 共用的订单卡片、收货资料、倒计时与凭据过期整页。
 
 export const PAY_PATH: RoutePath = "/pay";
@@ -354,6 +369,8 @@ export interface PayViewProps {
   stripeUnavailable: boolean;
   // 显示 pay.method_changed（两种途径都有）。
   methodChanged: boolean;
+  // 显示 pay.cancel_try_later（取消时 Stripe 暂不可用，取消按钮旁）。
+  cancelTryLater: boolean;
   onMethod: (method: PayMethod) => void;
   onPay: (result: PayResult) => void;
   onStripe: () => void;
@@ -435,6 +452,45 @@ export function stripeMove(start: StripeStart): StripeMove {
   }
 }
 
+// 取消确认框在 pay.cancel_confirm 之下另显示 pay.cancel_confirm_stripe：只在 Stripe 途径有进行中的会话（open）时（UX 0.11「点取消后确认框」）。
+export function confirmsStripeCancel(order: Pick<PayOrder, "payment_route" | "stripe_state">): boolean {
+  return isStripeRoute(order) && order.stripe_state === "open";
+}
+
+// runCancel 的结果之后页面的去向：
+// result 换成 P07，Stripe 途径的订单先记下交接（handOver，HANDOFF 0.55 第（5）项；P07 只在按成功显示时才显示 result.paid_not_cancelled），模拟途径不记；
+// expired 整页 pay.session_expired；try_later 为 Stripe 暂不可用（503 stripe_unavailable，DESIGN 1.12 第 5 条）：在取消按钮旁显示 pay.cancel_try_later、订单保持待支付；
+// error 照现有写法显示 common.error_retry（read 为重新读取到的订单与新令牌：csrf、网络中断后确认仍待支付；method_changed 与 failed 没有）。
+export type CancelMove =
+  | { kind: "result"; handOver: boolean }
+  | { kind: "expired" }
+  | { kind: "try_later" }
+  | { kind: "error"; read: Extract<PayRead, { kind: "ok" }> | null };
+
+export function cancelMove(outcome: WriteOutcome, order: Pick<PayOrder, "payment_route">): CancelMove {
+  switch (outcome.kind) {
+    case "result":
+      return { kind: "result", handOver: isStripeRoute(order) };
+    case "expired":
+      return { kind: "expired" };
+    case "unavailable":
+      return { kind: "try_later" };
+    case "method_changed":
+      return { kind: "error", read: null };
+    case "error":
+    case "retry":
+      return { kind: "error", read: outcome.read };
+  }
+}
+
+// 取消之后转到结果页：handOver 时先以该订单号记下交接，再用路由的 replace 换成 /pay/result。
+export function leaveAfterCancel(orderNumber: string, handOver: boolean, replace: (path: RoutePath) => void): void {
+  if (handOver) {
+    rememberPaidNotCancelled(orderNumber);
+  }
+  replace(PAY_RESULT_PATH);
+}
+
 // pay.method_changed：服务端按当时的开关拒绝了不符的提交，页面已重新读取（UX 0.11「支付途径已改变」）。
 function MethodChangedNotice() {
   const t = useCopy();
@@ -446,9 +502,11 @@ function MethodChangedNotice() {
   );
 }
 
-function CancelDialog({ onConfirm, onKeep }: { onConfirm: () => void; onKeep: () => void }) {
+// stripe 时 pay.cancel_confirm 之下另有 pay.cancel_confirm_stripe（视觉稿 P06-stripe-cancel-confirm），作为对话框的说明。
+function CancelDialog({ stripe, onConfirm, onKeep }: { stripe: boolean; onConfirm: () => void; onKeep: () => void }) {
   const t = useCopy();
   const labelId = useId();
+  const descriptionId = useId();
   return (
     <div
       className="site-pay__overlay"
@@ -458,8 +516,13 @@ function CancelDialog({ onConfirm, onKeep }: { onConfirm: () => void; onKeep: ()
         }
       }}
     >
-      <div className="acs-dialog" role="dialog" aria-modal="true" aria-labelledby={labelId}>
+      <div className="acs-dialog" role="dialog" aria-modal="true" aria-labelledby={labelId} aria-describedby={stripe ? descriptionId : undefined}>
         <p id={labelId}>{t("pay.cancel_confirm")}</p>
+        {stripe && (
+          <p id={descriptionId} className="acs-body-s acs-muted">
+            {t("pay.cancel_confirm_stripe")}
+          </p>
+        )}
         <div className="acs-dialog__actions">
           <button className="acs-btn acs-btn--secondary" type="button" autoFocus onClick={onKeep}>
             {t("pay.cancel_confirm_no")}
@@ -483,6 +546,7 @@ export function PayView({
   confirming,
   stripeUnavailable,
   methodChanged,
+  cancelTryLater,
   onMethod,
   onPay,
   onStripe,
@@ -524,6 +588,7 @@ export function PayView({
   const stripe = isStripeRoute(order);
   const submittable = canSubmit(method, busy);
   const action = stripeAction(order);
+  const tryLater = cancelTryLater && busy === null;
   const checking = busy === "checking" && (
     <div className="acs-alert acs-alert--info site-pay__status" role="status">
       <InfoIcon />
@@ -642,12 +707,19 @@ export function PayView({
         <ActionHint>{t("pay.action_hint")}</ActionHint>
       </section>
       )}
-      <div className="site-pay__cancel">
+      {/* 取消未成（视觉稿 P06-stripe-states）：pay.cancel_try_later 在取消按钮之上、同一区块里，按钮可点 */}
+      <div className={tryLater ? "site-pay__cancel site-pay__cancel--try-later" : "site-pay__cancel"}>
+        {tryLater && (
+          <div className="acs-alert acs-alert--danger" role="alert">
+            <AlertIcon />
+            <span>{t("pay.cancel_try_later")}</span>
+          </div>
+        )}
         <button className="acs-btn acs-btn--danger" type="button" disabled={busy !== null} onClick={onCancel}>
           {t("pay.cancel_order")}
         </button>
       </div>
-      {confirming && <CancelDialog onConfirm={onConfirmCancel} onKeep={onKeepOrder} />}
+      {confirming && <CancelDialog stripe={confirmsStripeCancel(order)} onConfirm={onConfirmCancel} onKeep={onKeepOrder} />}
     </main>
   );
 }
@@ -664,6 +736,7 @@ export default function PayPage() {
   const [confirming, setConfirming] = useState(false);
   const [stripeUnavailable, setStripeUnavailable] = useState(false);
   const [methodChanged, setMethodChanged] = useState(false);
+  const [cancelTryLater, setCancelTryLater] = useState(false);
   // 网络中断后确认仍待支付的那次支付：同一方式与结果的重试沿用它的幂等键。
   const [retry, setRetry] = useState<PaymentAttempt | null>(null);
   // 倒计时到 0、切换语言或 Stripe 发起之后需要按服务端的状态显示时重新读取订单。
@@ -688,6 +761,7 @@ export default function PayPage() {
     setFailed(false);
     setStripeUnavailable(false);
     setMethodChanged(false);
+    setCancelTryLater(false);
   };
 
   const showOrder = useCallback(
@@ -730,7 +804,8 @@ export default function PayPage() {
     };
   }, [language, reads, showOrder]);
 
-  const settle = (outcome: WriteOutcome | null, action: "pay" | "cancel") => {
+  // 模拟支付的去向。
+  const settle = (outcome: WriteOutcome | null) => {
     if (outcome === null) {
       return;
     }
@@ -742,24 +817,19 @@ export default function PayPage() {
         setScreen({ status: "expired" });
         return;
       case "method_changed":
-        // 模拟支付时本单已走 Stripe 途径：显示 pay.method_changed 并重新读取，按新的途径显示。取消的处理留给 SHOP-TASK-135。
-        if (action === "pay") {
-          setRetry(null);
-          setMethodChanged(true);
-          setBusy(null);
-          reread();
-          return;
-        }
-        break;
+        // 模拟支付时本单已走 Stripe 途径：显示 pay.method_changed 并重新读取，按新的途径显示。
+        setRetry(null);
+        setMethodChanged(true);
+        setBusy(null);
+        reread();
+        return;
       case "unavailable":
         break;
       case "error":
         if (outcome.read) {
           showOrder(outcome.read);
         }
-        if (action === "pay") {
-          setRetry(null);
-        }
+        setRetry(null);
         break;
       case "retry":
         showOrder(outcome.read);
@@ -769,6 +839,32 @@ export default function PayPage() {
         break;
     }
     setFailed(true);
+    setBusy(null);
+  };
+
+  // 取消的去向按 cancelMove（SHOP-TASK-135）；cancelled 为发起取消时的订单。
+  const settleCancel = (outcome: WriteOutcome | null, cancelled: PayOrder) => {
+    if (outcome === null) {
+      return;
+    }
+    const next = cancelMove(outcome, cancelled);
+    switch (next.kind) {
+      case "result":
+        leaveAfterCancel(cancelled.order_number, next.handOver, replace);
+        return;
+      case "expired":
+        setScreen({ status: "expired" });
+        return;
+      case "try_later":
+        setCancelTryLater(true);
+        break;
+      case "error":
+        if (next.read) {
+          showOrder(next.read);
+        }
+        setFailed(true);
+        break;
+    }
     setBusy(null);
   };
 
@@ -791,6 +887,7 @@ export default function PayPage() {
       confirming={confirming}
       stripeUnavailable={stripeUnavailable}
       methodChanged={methodChanged}
+      cancelTryLater={cancelTryLater}
       onMethod={setMethod}
       onPay={(result) => {
         if (order === null || csrfToken === null || method === null || !canSubmit(method, busy)) {
@@ -799,7 +896,7 @@ export default function PayPage() {
         const attempt = attemptFor(retry, method, result);
         startOperation("paying");
         void runPayment(language, order.order_number, csrfToken, attempt, writeOptions()).then((outcome) => {
-          settle(outcome, "pay");
+          settle(outcome);
         });
       }}
       onStripe={() => {
@@ -855,7 +952,7 @@ export default function PayPage() {
         }
         startOperation("cancelling");
         void runCancel(language, order.order_number, csrfToken, writeOptions()).then((outcome) => {
-          settle(outcome, "cancel");
+          settleCancel(outcome, order);
         });
       }}
     />
