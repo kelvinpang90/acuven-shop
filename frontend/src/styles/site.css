@@ -171,6 +171,8 @@ body { margin: 0; }
 /* P06-stripe-states：跳转中按钮与 pay.stripe_redirecting 间距 8px */
 .site-pay__go--redirecting { gap: 8px; }
 .site-pay__cancel { padding-top: 20px; border-top: 1px solid var(--rule); }
+/* P06-stripe-states 取消未成：pay.cancel_try_later 在取消按钮之上，间距 10px，靠左 */
+.site-pay__cancel--try-later { display: grid; gap: 10px; justify-items: start; }
 .site-pay__overlay { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; }
 .site-pay--expired { gap: 20px; justify-items: start; }
 .site-result { padding-top: 64px; }
@@ -556,6 +558,8 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-pay__actions { flex-direction: column; }
   .site-pay__actions .acs-btn, .site-pay__cancel .acs-btn { width: 100%; }
   .site-pay__cancel { padding-top: 12px; border-top: 0; }
+  /* 取消未成：提示与占满宽度的取消按钮同宽（同 Stripe 跳转按钮下的提示） */
+  .site-pay__cancel--try-later { justify-items: stretch; }
   /* P06-stripe-phone-open：Stripe 操作区间距同主体 16px；测试卡号图标（26px）在文字之上，内边距 14px 16px；跳转按钮占满宽度 */
   .site-pay__stripe { gap: 16px; }
   .site-pay__test-card { display: grid; gap: 10px; padding: 14px 16px; }
