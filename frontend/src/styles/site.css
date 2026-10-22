@@ -429,6 +429,10 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-store-design__cards .acs-pcard__name { overflow-wrap: anywhere; }
 .site-admin-store-design__details { display: none; }
 
+/* 后台站点设置 A09 的页头（A09-stripe-desktop）：内容最宽 720px，标题与之后各块上下排列（间距 16px）。
+   支付方式表单由 SHOP-TASK-139 接上；视觉稿的短信验证段按 Kelvin 2026-10-07 与 2026-10-15 的决定不做 */
+.site-admin-settings { display: grid; gap: 16px; max-width: 720px; }
+
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
 
@@ -771,4 +775,8 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-store-design__details { display: block; padding: 12px 14px; }
   .site-admin-store-design__details > summary { min-height: 32px; padding: 6px 0; cursor: pointer; }
   .site-admin-store-design__preview-body { display: grid; gap: 12px; padding-top: 12px; }
+
+  /* 后台站点设置的页头（A09-stripe-phone）：顶栏已是 admin.nav_settings，页面里不显示标题，h1 只留给读屏；各块间距 14px */
+  .site-admin-settings { gap: 14px; }
+  .site-admin-settings__title { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 }

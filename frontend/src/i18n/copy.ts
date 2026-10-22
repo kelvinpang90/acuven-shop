@@ -1560,6 +1560,11 @@ export const COPY = {
     zh: "店铺装修",
     ms: "Reka bentuk kedai",
   },
+  "admin.nav_settings": {
+    en: "Site settings",
+    zh: "站点设置",
+    ms: "Tetapan laman",
+  },
   "admin.design_demo_note": {
     en: "The demo banner and demo hints always show on the storefront and can't be turned off here.",
     zh: "前台的演示横幅与演示提示始终显示，这里不能关闭。",

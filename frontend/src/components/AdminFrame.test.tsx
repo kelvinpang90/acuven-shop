@@ -42,10 +42,11 @@ const HTML_LANG = { en: "en", zh: "zh-Hans", ms: "ms" } as const;
 // UX-COPY 第 10 节里全部导航项的键（admin.nav_orders、admin.nav_refunds、admin.nav_stock_resets 与 admin.nav_store_design
 // 之外的都是尚未上线页面的项）。
 const DOC_NAV_KEYS = [...uxCopy.matchAll(/^\| `(admin\.nav_[a-z_]+)` \|/gm)].map((m) => m[1] ?? "");
-const LIVE_NAV_KEYS = ["admin.nav_orders", "admin.nav_refunds", "admin.nav_coupons", "admin.nav_stock_resets", "admin.nav_store_design"];
+const LIVE_NAV_KEYS = ["admin.nav_orders", "admin.nav_refunds", "admin.nav_coupons", "admin.nav_stock_resets", "admin.nav_store_design", "admin.nav_settings"];
 const STOCK_RESETS_PATH = "/admin/stock-resets";
 const STORE_DESIGN_PATH = "/admin/store-design";
 const COUPONS_PATH = "/admin/coupons";
+const SETTINGS_PATH = "/admin/settings";
 // 尚未上线页面的导航项在 UX-COPY 里的三语文字。
 function otherNavLabels(language: Language): string[] {
   const column = { en: 2, zh: 3, ms: 4 }[language];
@@ -303,20 +304,24 @@ describe("first render", () => {
   // 库存重置与店铺装修四项、其他 admin.nav_* 不出现」：第四项为 admin.nav_store_design（指向 /admin/store-design），
   // 在 UX「管理后台总体」与 UX-COPY 的导航项里排在库存重置之后。
   // SHOP-TASK-100 改动：在退款之后加入优惠券，五项之外的 admin.nav_* 仍不出现。
-  it.each(LANGUAGES)("lists only the orders, refunds, coupons, stock resets and store design items in UX order in the navigation in %s", (language) => {
-    expect(ADMIN_NAV).toEqual(["orders", "refunds", "coupons", "stockResets", "storeDesign"]);
+  // SHOP-TASK-137 改动：按 SHOP-TASK-137 验收第 3 条把「按 UX 顺序只含这五项」改为「按 UX 顺序只含订单、退款、优惠券、库存重置、
+  // 店铺装修与站点设置六项、其他 admin.nav_* 不出现」：第六项为 admin.nav_settings（指向 /admin/settings），在 UX「管理后台总体」
+  // 与 UX-COPY 的导航项里排在店铺装修之后。
+  it.each(LANGUAGES)("lists only the orders, refunds, coupons, stock resets, store design and site settings items in UX order in the navigation in %s", (language) => {
+    expect(ADMIN_NAV).toEqual(["orders", "refunds", "coupons", "stockResets", "storeDesign", "settings"]);
     expect(DOC_NAV_KEYS.filter((key) => LIVE_NAV_KEYS.includes(key))).toEqual(LIVE_NAV_KEYS);
     expect(DOC_NAV_KEYS.length).toBeGreaterThan(LIVE_NAV_KEYS.length);
     for (const html of [renderApp(ORDERS_PATH, language), render({}, language), render({ menuOpen: true }, language)]) {
       const nav = element(html, "nav", "site-admin__nav");
       const items = tags(nav, "a").filter((tag) => !attributes(tag).has("lang"));
-      expect(items.map((tag) => attributes(tag).get("href"))).toEqual([ORDERS_PATH, REFUNDS_PATH, COUPONS_PATH, STOCK_RESETS_PATH, STORE_DESIGN_PATH]);
-      expect(items.map((tag) => attributes(tag).get("aria-current"))).toEqual(["page", undefined, undefined, undefined, undefined]);
+      expect(items.map((tag) => attributes(tag).get("href"))).toEqual([ORDERS_PATH, REFUNDS_PATH, COUPONS_PATH, STOCK_RESETS_PATH, STORE_DESIGN_PATH, SETTINGS_PATH]);
+      expect(items.map((tag) => attributes(tag).get("aria-current"))).toEqual(["page", undefined, undefined, undefined, undefined, undefined]);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_orders"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_refunds"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_coupons"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_stock_resets"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_store_design"][language])}</a>`);
+      expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_settings"][language])}</a>`);
       expect(nav.indexOf(COPY["admin.nav_orders"][language])).toBeLessThan(nav.indexOf(escapeHtml(COPY["admin.nav_refunds"][language])));
       expect(nav.indexOf(escapeHtml(COPY["admin.nav_refunds"][language]))).toBeLessThan(nav.indexOf(escapeHtml(COPY["admin.nav_coupons"][language])));
       expect(nav.indexOf(escapeHtml(COPY["admin.nav_coupons"][language]))).toBeLessThan(
@@ -324,6 +329,9 @@ describe("first render", () => {
       );
       expect(nav.indexOf(escapeHtml(COPY["admin.nav_stock_resets"][language]))).toBeLessThan(
         nav.indexOf(escapeHtml(COPY["admin.nav_store_design"][language])),
+      );
+      expect(nav.indexOf(escapeHtml(COPY["admin.nav_store_design"][language]))).toBeLessThan(
+        nav.indexOf(escapeHtml(COPY["admin.nav_settings"][language])),
       );
       for (const tag of tags(html, "nav")) {
         expect(attributes(tag).has("aria-label")).toBe(false);
@@ -381,6 +389,8 @@ describe("phone menu", () => {
   // SHOP-TASK-056 改动：原来断言菜单的导航只含订单一项，现按验收第 2 条「☰ 菜单同样」改为按 UX 顺序只含订单（aria-current="page"）与退款两项。
   // SHOP-TASK-059 改动：按 SHOP-TASK-059 验收第 3 条「☰ 菜单同样」改为按 UX 顺序只含订单（aria-current="page"）、退款与库存重置三项。
   // SHOP-TASK-062 改动：按 SHOP-TASK-062 验收第 3 条「☰ 菜单同样」改为按 UX 顺序只含订单（aria-current="page"）、退款、库存重置与店铺装修四项。
+  // SHOP-TASK-137 改动：按 SHOP-TASK-137 验收第 3 条「☰ 菜单同样」改为按 UX 顺序只含订单（aria-current="page"）、退款、优惠券、库存重置、
+  // 店铺装修与站点设置六项。
   it.each(LANGUAGES)("opens the menu with the navigation, the languages and the logout button in %s", (language) => {
     const html = render({ menuOpen: true }, language);
     const bar = element(html, "div", "site-admin__bar");
@@ -399,12 +409,14 @@ describe("phone menu", () => {
         [COUPONS_PATH, undefined],
         [STOCK_RESETS_PATH, undefined],
       [STORE_DESIGN_PATH, undefined],
+      [SETTINGS_PATH, undefined],
     ]);
     expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_orders"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_refunds"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_coupons"][language])}</a>`);
     expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_stock_resets"][language])}</a>`);
     expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_store_design"][language])}</a>`);
+    expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_settings"][language])}</a>`);
     const langs = element(menu, "div", "site-admin__lang");
     expect(menu.indexOf(langs)).toBeGreaterThan(menu.indexOf(nav));
     expect(tags(langs, "a").map((tag) => attributes(tag).get("lang"))).toEqual(LANGUAGES.map((option) => HTML_LANG[option]));

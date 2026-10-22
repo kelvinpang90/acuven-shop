@@ -9,6 +9,7 @@ import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminCouponsPage from "./pages/AdminCouponsPage";
 import AdminOrdersPage from "./pages/AdminOrdersPage";
 import AdminRefundsPage from "./pages/AdminRefundsPage";
+import AdminSiteSettingsPage from "./pages/AdminSiteSettingsPage";
 import AdminStockResetsPage from "./pages/AdminStockResetsPage";
 import AdminStoreDesignPage from "./pages/AdminStoreDesignPage";
 import CartPage from "./pages/CartPage";
@@ -51,6 +52,7 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   "/admin/coupons": AdminCouponsPage,
   "/admin/stock-resets": AdminStockResetsPage,
   "/admin/store-design": AdminStoreDesignPage,
+  "/admin/settings": AdminSiteSettingsPage,
 };
 
 // 后台页（以 /admin 开头的路由）不套前台的站点框架，直接渲染页面；其余页面照旧放在 SiteFrame 里。

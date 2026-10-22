@@ -315,6 +315,8 @@ describe("navigation", () => {
   // UX A08「入口：后台导航 [admin.nav_store_design]」与 Kelvin 2026-10-06（docs/HANDOFF.md 0.35）「后台导航只显示已上线页面的导航项」；
   // SHOP-TASK-062 验收第 2、3 条「当前导航项为店铺装修」「按 UX 顺序只含已上线的订单、退款、库存重置与店铺装修四项（桌面导航与 ☰ 菜单同样）」：
   // 经路由打开本页，桌面导航与 ☰ 菜单都依次为这四项，店铺装修标 aria-current="page"，没有其他导航项。
+  // SHOP-TASK-137 改动：按 SHOP-TASK-137 验收第 3 条把「依次为这五项」改为依次为订单、退款、优惠券、库存重置、店铺装修与
+  // 站点设置（/admin/settings）六项；当前项仍为店铺装修，手机顶栏名称不变（下一条）。
   it.each(LANGUAGES)("marks the store design item as current, after the other three, in %s", (language) => {
     const html = renderApp(STORE_DESIGN_PATH, language);
     for (const nav of [element(html, "nav", "site-admin__nav"), element(html, "nav", "site-admin__menu-nav")]) {
@@ -325,13 +327,15 @@ describe("navigation", () => {
           ["/admin/coupons", undefined],
           [STOCK_RESETS_PATH, undefined],
         [STORE_DESIGN_PATH, "page"],
+        ["/admin/settings", undefined],
       ]);
-        expect(textNodes(nav).slice(0, 5)).toEqual([
+        expect(textNodes(nav).slice(0, 6)).toEqual([
           COPY["admin.nav_orders"][language],
           COPY["admin.nav_refunds"][language],
           COPY["admin.nav_coupons"][language],
           COPY["admin.nav_stock_resets"][language],
         COPY["admin.nav_store_design"][language],
+        COPY["admin.nav_settings"][language],
       ]);
     }
   });
