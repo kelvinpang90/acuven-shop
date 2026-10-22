@@ -3769,7 +3769,7 @@ tasks:
       在 SHOP-TASK-134 的 P06 上接上取消的 Stripe 处理；会话已付款时经 SHOP-TASK-132 的内存交接让 SHOP-TASK-133 的 P07 显示 result.paid_not_cancelled。不装依赖，不改后端，不改设计。
       设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，取消订单的显示（取消规则在服务端）。
       拆分：见 SHOP-TASK-134，本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-134
     acceptance_criteria:
