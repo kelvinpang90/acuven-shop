@@ -3701,7 +3701,7 @@ tasks:
       取消时会话已付款进入的成功区另显示一句。P06 打开即为 complete 时转到本页由本页确认（SHOP-TASK-134），所以本任务先于 P06 的任务。不改 P06，不装依赖，不改后端，不改设计。
       设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，支付状态的显示（确认与退款都在服务端）。
       拆分：P07 的显示层（7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-132
     acceptance_criteria:
