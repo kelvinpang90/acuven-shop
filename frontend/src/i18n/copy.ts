@@ -720,6 +720,61 @@ export const COPY = {
     zh: "本页模拟支付服务商，并非真实支付页面。",
     ms: "Halaman ini menggantikan penyedia pembayaran. Ia bukan halaman pembayaran sebenar.",
   },
+  "pay.stripe_title": {
+    en: "Payment (Stripe test mode)",
+    zh: "支付（Stripe 测试环境）",
+    ms: "Pembayaran (mod ujian Stripe)",
+  },
+  "pay.stripe_demo_hint": {
+    en: "You'll pay on Stripe's test page. Stripe is a real payment service, but in test mode no real money moves.",
+    zh: "您将在 Stripe 的测试付款页付款。Stripe 是真实的支付服务，但在测试环境中不会有真实资金流动。",
+    ms: "Anda akan membayar di halaman ujian Stripe. Stripe ialah perkhidmatan pembayaran sebenar, tetapi dalam mod ujian tiada wang sebenar berpindah.",
+  },
+  "pay.stripe_notice": {
+    en: "Use only a test card number — never a real card. On Stripe's page, the email is a demo address, and any name or billing address you're asked for can be made up. Whatever you enter there is kept by Stripe's test environment.",
+    zh: "只用测试卡号，切勿输入真实银行卡。Stripe 页上的邮箱是演示地址，要求填写的姓名或账单地址都可填虚构内容。您在那里输入的内容由 Stripe 测试环境保存。",
+    ms: "Gunakan nombor kad ujian sahaja — jangan sekali-kali kad sebenar. Di halaman Stripe, e-mel ialah alamat demo, dan sebarang nama atau alamat pengebilan yang diminta boleh direka. Apa sahaja yang anda masukkan di sana disimpan oleh persekitaran ujian Stripe.",
+  },
+  "pay.stripe_test_card": {
+    en: "Test card: 4242 4242 4242 4242, any future expiry date, any CVC. If Stripe's page offers other methods such as FPX or GrabPay, follow the test instructions shown there.",
+    zh: "测试卡号：4242 4242 4242 4242，有效期填任意未来日期，CVC 任意。Stripe 页上如有 FPX、GrabPay 等其他方式，请按页面上的测试说明操作。",
+    ms: "Kad ujian: 4242 4242 4242 4242, sebarang tarikh luput akan datang, sebarang CVC. Jika halaman Stripe menawarkan kaedah lain seperti FPX atau GrabPay, ikut arahan ujian yang dipaparkan di sana.",
+  },
+  "pay.stripe_go": {
+    en: "Go to Stripe test payment",
+    zh: "前往 Stripe 测试付款",
+    ms: "Pergi ke pembayaran ujian Stripe",
+  },
+  "pay.stripe_redirecting": {
+    en: "Opening Stripe's test payment page…",
+    zh: "正在打开 Stripe 测试付款页…",
+    ms: "Membuka halaman pembayaran ujian Stripe…",
+  },
+  "pay.stripe_in_progress": {
+    en: "A Stripe test payment for this order is already open. The order stays reserved while that payment page is open; once Stripe confirms the page has expired without a payment, the order is cancelled.",
+    zh: "此订单已有一个进行中的 Stripe 测试付款。该付款页开着期间订单保持保留；经 Stripe 确认付款页已失效且没有付款后，订单才会取消。",
+    ms: "Pembayaran ujian Stripe untuk pesanan ini sudah dibuka. Pesanan kekal ditempah selagi halaman pembayaran itu dibuka; setelah Stripe mengesahkan halaman itu tamat tempoh tanpa pembayaran, pesanan dibatalkan.",
+  },
+  "pay.stripe_under_review": {
+    en: "We couldn't confirm whether this order's Stripe test payment page was created. The order stays reserved while the store checks it; you don't need to do anything now.",
+    zh: "暂时无法确认此订单的 Stripe 测试付款页是否已建立。本站核对期间订单保持保留，您现在无需操作。",
+    ms: "Kami tidak dapat mengesahkan sama ada halaman pembayaran ujian Stripe untuk pesanan ini telah dicipta. Pesanan kekal ditempah semasa kedai menyemaknya; anda tidak perlu berbuat apa-apa sekarang.",
+  },
+  "pay.stripe_continue": {
+    en: "Continue on Stripe",
+    zh: "继续在 Stripe 付款",
+    ms: "Teruskan di Stripe",
+  },
+  "pay.stripe_unavailable": {
+    en: "Stripe test mode isn't responding right now. Your order is kept — please try again in a moment.",
+    zh: "Stripe 测试环境暂时没有响应。订单已保留，请稍后再试。",
+    ms: "Mod ujian Stripe tidak bertindak balas sekarang. Pesanan anda disimpan — sila cuba lagi sebentar lagi.",
+  },
+  "pay.method_changed": {
+    en: "The payment method for this order has changed. The page has been updated.",
+    zh: "此订单的支付方式已改变，页面已更新。",
+    ms: "Kaedah pembayaran untuk pesanan ini telah berubah. Halaman telah dikemas kini.",
+  },
   "result.success_title": {
     en: "Demo payment successful",
     zh: "模拟支付成功",

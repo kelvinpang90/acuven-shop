@@ -163,6 +163,11 @@ body { margin: 0; }
 .site-pay__method { display: flex; gap: 12px; align-items: center; padding: 16px; cursor: pointer; }
 .site-pay__method input { flex-shrink: 0; width: 18px; height: 18px; margin: 0; }
 .site-pay__actions { display: flex; gap: 12px; flex-wrap: wrap; }
+/* P06-stripe-desktop：Stripe 操作区间距 18px；测试卡号一行图标在左（28px），内边距 18px 20px；跳转按钮靠左，其下的跳转中、不可用提示间距 10px */
+.site-pay__stripe { gap: 18px; }
+.site-pay__test-card { display: flex; gap: 16px; align-items: flex-start; padding: 18px 20px; }
+.site-pay__test-card svg { flex-shrink: 0; }
+.site-pay__go { display: grid; gap: 10px; justify-items: start; }
 .site-pay__cancel { padding-top: 20px; border-top: 1px solid var(--rule); }
 .site-pay__overlay { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; }
 .site-pay--expired { gap: 20px; justify-items: start; }
@@ -549,6 +554,12 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-pay__actions { flex-direction: column; }
   .site-pay__actions .acs-btn, .site-pay__cancel .acs-btn { width: 100%; }
   .site-pay__cancel { padding-top: 12px; border-top: 0; }
+  /* P06-stripe-phone-open：Stripe 操作区间距同主体 16px；测试卡号图标（26px）在文字之上，内边距 14px 16px；跳转按钮占满宽度 */
+  .site-pay__stripe { gap: 16px; }
+  .site-pay__test-card { display: grid; gap: 10px; padding: 14px 16px; }
+  .site-pay__test-card svg { width: 26px; height: 26px; }
+  .site-pay__go { justify-items: stretch; }
+  .site-pay__go .acs-btn { width: 100%; }
   .site-result { padding-top: 32px; }
   .site-result__icon { width: 48px; height: 48px; }
   .site-result__continue { justify-self: stretch; }

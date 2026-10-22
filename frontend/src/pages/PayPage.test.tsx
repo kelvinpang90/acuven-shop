@@ -3,13 +3,13 @@ import type { ReactElement, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import type { PayOrder } from "../api/pay";
+import type { PayOrder, StripeStart } from "../api/pay";
 import { BRAND, COPY, LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { RouterProvider } from "../router";
-import { canSubmit, copyText, countryName, PayView, recipientParts } from "./PayPage";
-import type { PayViewProps } from "./PayPage";
+import { canSubmit, copyText, countryName, leavesPayPage, PayView, recipientParts, showsCountdown, stripeAction, stripeMove } from "./PayPage";
+import type { PayViewProps, StripeMove } from "./PayPage";
 
 const ORDER_NUMBER = "B6TN2RJD8K4M0QXZ";
 
@@ -58,8 +58,11 @@ function props(overrides: Partial<PayViewProps> = {}): PayViewProps {
     busy: null,
     failed: false,
     confirming: false,
+    stripeUnavailable: false,
+    methodChanged: false,
     onMethod: noop,
     onPay: noop,
+    onStripe: noop,
     onCancel: noop,
     onConfirmCancel: noop,
     onKeepOrder: noop,
@@ -401,6 +404,306 @@ describe("dictionary", () => {
     const patterns = [BRAND, ...Object.values(COPY).map((entry) => entry[language])].map(copyPattern);
     for (const state of states) {
       for (const value of visibleTexts(render(state, language))) {
+        const known = orderData.has(value) || patterns.some((pattern) => pattern.test(value));
+        expect(known, value).toBe(true);
+      }
+    }
+  });
+});
+
+type StripeState = PayOrder["stripe_state"];
+
+function stripeScreen(state: StripeState): PayViewProps["screen"] {
+  return { status: "ready", order: payOrder({ payment_route: "stripe", stripe_state: state }) };
+}
+
+function renderStripe(state: StripeState, overrides: Partial<PayViewProps> = {}, language: Language = "en"): string {
+  return render({ screen: stripeScreen(state), ...overrides }, language);
+}
+
+// Stripe 的跳转按钮文字后跟一个图标，children 是数组；按其中的文字找按钮，没有时为 undefined。
+function labelled(node: ReactNode, key: CopyKey): AnyElement | undefined {
+  return elements(node).find((element) => element.type === "button" && [element.props.children].flat().includes(COPY[key].en));
+}
+
+function shows(html: string, key: CopyKey, language: Language = "en"): boolean {
+  return html.includes(escapeHtml(COPY[key][language]));
+}
+
+const STRIPE_KEYS: CopyKey[] = [
+  "pay.stripe_title",
+  "pay.stripe_demo_hint",
+  "pay.stripe_notice",
+  "pay.stripe_test_card",
+  "pay.stripe_go",
+  "pay.stripe_redirecting",
+  "pay.stripe_in_progress",
+  "pay.stripe_under_review",
+  "pay.stripe_continue",
+  "pay.stripe_unavailable",
+];
+
+const SIMULATED_ONLY: CopyKey[] = [
+  "pay.title",
+  "pay.demo_hint",
+  "pay.choose_method",
+  "pay.method_card",
+  "pay.method_bank",
+  "pay.method_ewallet",
+  "pay.simulate_success",
+  "pay.simulate_failure",
+  "pay.action_hint",
+];
+
+const DIAMOND = `<path d="M12 3l9 9-9 9-9-9z"></path>`;
+
+describe("payment route", () => {
+  // UX 0.11「P06 Stripe 测试」「模拟：页面与上面的线框完全相同，不显示任何 Stripe 文字」：
+  // 模拟途径在各状态下都没有 Stripe 的文案，也没有 Stripe 字样。
+  it.each(LANGUAGES)("shows no Stripe text on the simulated route in %s", (language) => {
+    const states: Partial<PayViewProps>[] = [{}, { method: "card", busy: "paying" }, { method: "card", failed: true }, { methodChanged: true }, { busy: "checking" }];
+    for (const state of states) {
+      const html = render(state, language);
+      for (const key of STRIPE_KEYS) {
+        expect(shows(html, key, language), key).toBe(false);
+      }
+      expect(html).not.toContain("Stripe");
+    }
+  });
+
+  // UX 0.11「Stripe 测试：标题、★ 提示与操作区换成 Stripe 的，订单号、应付金额、游客授权说明、收货资料与取消按钮同上」与
+  // 「支付途径为 Stripe 测试时不显示 [pay.choose_method]、三种演示方式、[pay.simulate_success]、[pay.simulate_failure] 与 [pay.action_hint]」。
+  it.each(LANGUAGES)("swaps the title, ★ and actions on the Stripe route in %s", (language) => {
+    for (const state of [null, "creating", "open", "under_review"] as const) {
+      const html = renderStripe(state, {}, language);
+      for (const key of ["pay.stripe_title", "pay.stripe_demo_hint", "common.demo_badge", "pay.order_no", "common.copy", "pay.save_order_no", "pay.amount_due", "pay.guest_access", "checkout.recipient_title", "pay.cancel_order"] as const) {
+        expect(shows(html, key, language), `${String(state)} ${key}`).toBe(true);
+      }
+      for (const key of SIMULATED_ONLY) {
+        expect(shows(html, key, language), `${String(state)} ${key}`).toBe(false);
+      }
+      expect(html).toContain(`<span class="acs-num site-pay__number">${ORDER_NUMBER}</span>`);
+      expect(html).toContain(`<span class="acs-price acs-price--l">RM 135.00</span>`);
+      expect(html).not.toContain("<input");
+    }
+  });
+
+  // UX 0.11「◆ [pay.stripe_notice] 与 [pay.stripe_test_card] 在每次跳转前都显示，无勾选框（Stripe 节第 1、10 条）」与验收「用现有 ActionHint 的菱形标记」：
+  // 各状态（含跳转中、不可用、失败）都有 ◆ 提示与测试卡号，◆ 是菱形标记、紧挨 pay.stripe_notice，测试卡号在其下；页面没有勾选框。
+  it("always shows ◆ pay.stripe_notice and pay.stripe_test_card", () => {
+    const cases: [StripeState, Partial<PayViewProps>][] = [
+      [null, {}],
+      ["creating", {}],
+      ["open", {}],
+      ["under_review", {}],
+      [null, { busy: "redirecting" }],
+      [null, { stripeUnavailable: true }],
+      ["open", { failed: true }],
+    ];
+    for (const [state, overrides] of cases) {
+      const html = renderStripe(state, overrides);
+      expect(html).toContain(`${DIAMOND}</svg><span>${escapeHtml(COPY["pay.stripe_notice"].en)}</span>`);
+      expect(html.indexOf(escapeHtml(COPY["pay.stripe_test_card"].en))).toBeGreaterThan(html.indexOf(escapeHtml(COPY["pay.stripe_notice"].en)));
+      expect(html).not.toContain(`type="checkbox"`);
+    }
+  });
+
+  // UX 0.11 桌面线框的顺序：[pay.stripe_title] ★ [pay.stripe_demo_hint]，订单卡片（未发起时 [pay.expires]），[pay.guest_access]，[checkout.recipient_title]，
+  // 有进行中的会话时 [pay.stripe_in_progress]，◆ [pay.stripe_notice]，[pay.stripe_test_card]，跳转按钮，[pay.cancel_order]。
+  it("follows the order of the Stripe wireframe", () => {
+    const go = renderStripe(null);
+    const goPositions = [
+      go.indexOf(COPY["pay.stripe_title"].en),
+      go.indexOf(escapeHtml(COPY["pay.stripe_demo_hint"].en)),
+      go.indexOf(COPY["pay.order_no"].en),
+      go.indexOf(COPY["pay.amount_due"].en),
+      go.indexOf("Complete within 14 min"),
+      go.indexOf(escapeHtml(COPY["pay.guest_access"].en)),
+      go.indexOf("site-desktop-only site-pay__recipient"),
+      go.indexOf(escapeHtml(COPY["pay.stripe_notice"].en)),
+      go.indexOf(escapeHtml(COPY["pay.stripe_test_card"].en)),
+      go.indexOf(COPY["pay.stripe_go"].en),
+      go.indexOf(COPY["pay.cancel_order"].en),
+    ];
+    const open = renderStripe("open");
+    const openPositions = [
+      open.indexOf(escapeHtml(COPY["pay.guest_access"].en)),
+      open.indexOf("site-desktop-only site-pay__recipient"),
+      open.indexOf(COPY["pay.stripe_in_progress"].en),
+      open.indexOf(escapeHtml(COPY["pay.stripe_notice"].en)),
+      open.indexOf(escapeHtml(COPY["pay.stripe_test_card"].en)),
+      open.indexOf(COPY["pay.stripe_continue"].en),
+      open.indexOf(COPY["pay.cancel_order"].en),
+    ];
+    for (const positions of [goPositions, openPositions]) {
+      for (const position of positions) {
+        expect(position).toBeGreaterThanOrEqual(0);
+      }
+      expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    }
+  });
+});
+
+describe("Stripe states", () => {
+  // UX 0.11 说明「未发起…显示 [pay.expires] 倒计时」「创建结果未定…与未发起相同显示 [pay.stripe_go]，但不显示 [pay.expires]」
+  // 「有进行中的会话…不显示 [pay.expires]，改显示 [pay.stripe_in_progress]；[pay.stripe_continue] 打开同一会话」
+  // 「转人工核对时，不显示 [pay.stripe_go]，改显示 [pay.stripe_under_review]（取消按钮照常显示）」。
+  it("shows the button and countdown each stripe_state calls for", () => {
+    const expected: [StripeState, { expires: boolean; go: boolean; cont: boolean; progress: boolean; review: boolean }][] = [
+      [null, { expires: true, go: true, cont: false, progress: false, review: false }],
+      ["creating", { expires: false, go: true, cont: false, progress: false, review: false }],
+      ["open", { expires: false, go: false, cont: true, progress: true, review: false }],
+      ["under_review", { expires: false, go: false, cont: false, progress: false, review: true }],
+    ];
+    for (const [state, want] of expected) {
+      const html = renderStripe(state);
+      const node = tree({ screen: stripeScreen(state) });
+      expect(html.includes("Complete within 14 min"), `${String(state)} expires`).toBe(want.expires);
+      expect(labelled(node, "pay.stripe_go") !== undefined, `${String(state)} go`).toBe(want.go);
+      expect(labelled(node, "pay.stripe_continue") !== undefined, `${String(state)} continue`).toBe(want.cont);
+      expect(shows(html, "pay.stripe_in_progress"), `${String(state)} in progress`).toBe(want.progress);
+      expect(shows(html, "pay.stripe_under_review"), `${String(state)} under review`).toBe(want.review);
+      expect(button(node, "pay.cancel_order").props.disabled).toBe(false);
+    }
+    expect(stripeAction({ stripe_state: null })).toBe("go");
+    expect(stripeAction({ stripe_state: "creating" })).toBe("go");
+    expect(stripeAction({ stripe_state: "open" })).toBe("continue");
+    expect(stripeAction({ stripe_state: "under_review" })).toBe("review");
+    expect(stripeAction({ stripe_state: "complete" })).toBeNull();
+  });
+
+  // 验收「倒计时到 0 照现有写法重新读取（只在显示倒计时时）」与 UX 0.11「创建结果未定…这时订单要等对账才会取消」「有进行中的会话…会话结束前订单不会因 15 分钟到期被取消」：
+  // 页面只在模拟途径与 Stripe 未发起时计时。
+  it("counts down only where pay.expires is shown", () => {
+    expect(showsCountdown({ payment_route: "simulated", stripe_state: null })).toBe(true);
+    expect(showsCountdown({ payment_route: "stripe", stripe_state: null })).toBe(true);
+    for (const state of ["creating", "open", "under_review"] as const) {
+      expect(showsCountdown({ payment_route: "stripe", stripe_state: state })).toBe(false);
+    }
+  });
+
+  // UX 0.11「打开本页时，本单若已有付款完成的会话…本页直接转到 P07」与 HANDOFF 0.55 第（5）项「P06 读到 complete 会话时转到结果页，由 P07 调用确认接口」：
+  // 读到 complete 或订单已不是待支付时离开本页；待支付的其他状态留在本页。
+  it("leaves for P07 on a complete session or a settled order", () => {
+    expect(leavesPayPage({ status: "awaiting_demo_payment", stripe_state: "complete" })).toBe(true);
+    expect(leavesPayPage({ status: "paid_demo", stripe_state: null })).toBe(true);
+    for (const state of [null, "creating", "open", "under_review"] as const) {
+      expect(leavesPayPage({ status: "awaiting_demo_payment", stripe_state: state })).toBe(false);
+    }
+  });
+});
+
+describe("Stripe redirect", () => {
+  // UX 0.11「跳转中：按钮禁用，显示 [pay.stripe_redirecting]」与验收「进行中所有按钮禁用」：跳转中跳转按钮与取消按钮都禁用、按钮标 aria-busy，
+  // 显示 pay.stripe_redirecting；不在跳转中时不显示。
+  it("disables every button and shows pay.stripe_redirecting while redirecting", () => {
+    for (const [state, key] of [
+      [null, "pay.stripe_go"],
+      ["open", "pay.stripe_continue"],
+    ] as const) {
+      const node = tree({ screen: stripeScreen(state), busy: "redirecting" });
+      expect(labelled(node, key)?.props.disabled).toBe(true);
+      expect(labelled(node, key)?.props["aria-busy"]).toBe(true);
+      expect(button(node, "pay.cancel_order").props.disabled).toBe(true);
+      expect(shows(renderStripe(state, { busy: "redirecting" }), "pay.stripe_redirecting")).toBe(true);
+      const idle = tree({ screen: stripeScreen(state) });
+      expect(labelled(idle, key)?.props.disabled).toBe(false);
+      expect(shows(renderStripe(state), "pay.stripe_redirecting")).toBe(false);
+    }
+    for (const busy of ["cancelling", "checking"] as const) {
+      expect(labelled(tree({ screen: stripeScreen(null), busy }), "pay.stripe_go")?.props.disabled).toBe(true);
+    }
+  });
+
+  // 验收「点 pay.stripe_go 或 pay.stripe_continue…调用 startStripe」：两个按钮都交给页面的 onStripe（页面以读取给的令牌调用 startStripe）。
+  it("passes both buttons to the page", () => {
+    const onStripe = vi.fn();
+    const go = labelled(tree({ screen: stripeScreen(null), onStripe }), "pay.stripe_go");
+    const cont = labelled(tree({ screen: stripeScreen("open"), onStripe }), "pay.stripe_continue");
+    if (!go || !cont) {
+      throw new Error("no Stripe button");
+    }
+    click(go);
+    click(cont);
+    expect(onStripe).toHaveBeenCalledTimes(2);
+  });
+
+  // 验收「跳转」一条与 UX 0.11「随后在当前标签页打开服务端返回的 Stripe 付款页地址」「Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可点」
+  // 「支付途径已改变：显示 [pay.method_changed]，重新读取订单并按新的途径显示」：startStripe 每种结果的去向。
+  it("maps every startStripe result to where the page goes", () => {
+    const url = "https://checkout.stripe.com/c/pay/cs_test_example";
+    const cases: [StripeStart, StripeMove][] = [
+      [{ kind: "redirect", url }, { kind: "redirect", url }],
+      [{ kind: "complete" }, { kind: "result" }],
+      [{ kind: "closed" }, { kind: "result" }],
+      [{ kind: "unavailable" }, { kind: "unavailable" }],
+      [{ kind: "under_review" }, { kind: "reread" }],
+      [{ kind: "method_changed" }, { kind: "method_changed" }],
+      [{ kind: "expired" }, { kind: "expired" }],
+      [{ kind: "csrf" }, { kind: "error" }],
+      [{ kind: "failed" }, { kind: "error" }],
+      [{ kind: "network" }, { kind: "error" }],
+    ];
+    for (const [start, move] of cases) {
+      expect(stripeMove(start), start.kind).toEqual(move);
+    }
+  });
+
+  // UX 0.11「Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可点（再点即重试）」：提示在按钮之后，按钮可点；下一次跳转开始时不显示。
+  it.each(LANGUAGES)("shows pay.stripe_unavailable under a clickable button in %s", (language) => {
+    for (const [state, key] of [
+      [null, "pay.stripe_go"],
+      ["creating", "pay.stripe_go"],
+      ["open", "pay.stripe_continue"],
+    ] as const) {
+      const html = renderStripe(state, { stripeUnavailable: true }, language);
+      expect(html.indexOf(escapeHtml(COPY["pay.stripe_unavailable"][language]))).toBeGreaterThan(html.indexOf(escapeHtml(COPY[key][language])));
+      expect(labelled(tree({ screen: stripeScreen(state), stripeUnavailable: true }), key)?.props.disabled).toBe(false);
+      expect(shows(renderStripe(state, { stripeUnavailable: true, busy: "redirecting" }), "pay.stripe_unavailable")).toBe(false);
+    }
+  });
+
+  // 验收「failed 与 network 显示 common.error_retry 并重新读取（已建成会话的按读到的 open 显示 pay.stripe_continue）」：
+  // Stripe 途径失败时显示 common.error_retry，读到 open 时按钮为 pay.stripe_continue。
+  it("shows common.error_retry after a failed start", () => {
+    const html = renderStripe("open", { failed: true });
+    expect(html).toContain(COPY["common.error_retry"].en);
+    expect(labelled(tree({ screen: stripeScreen("open"), failed: true }), "pay.stripe_continue")?.props.disabled).toBe(false);
+    expect(renderStripe(null)).not.toContain(COPY["common.error_retry"].en);
+  });
+});
+
+describe("payment method changed", () => {
+  // UX 0.11「支付途径已改变…页面显示 [pay.method_changed] 并重新读取。两种途径的页面都处理这一状态」：
+  // 模拟途径（模拟支付遇到 method_changed，读到新的 Stripe 途径之前）与 Stripe 途径都显示 pay.method_changed；没有时不显示。
+  it.each(LANGUAGES)("shows pay.method_changed on both routes in %s", (language) => {
+    expect(shows(render({ methodChanged: true }, language), "pay.method_changed", language)).toBe(true);
+    for (const state of [null, "creating", "open", "under_review"] as const) {
+      expect(shows(renderStripe(state, { methodChanged: true }, language), "pay.method_changed", language)).toBe(true);
+      expect(shows(renderStripe(state, {}, language), "pay.method_changed", language)).toBe(false);
+    }
+    expect(shows(render({}, language), "pay.method_changed", language)).toBe(false);
+  });
+});
+
+describe("Stripe dictionary", () => {
+  // 验收「页面文字全部来自字典」：Stripe 途径各状态下，除订单数据外，每段文字都是当前语言的某条字典文案。
+  it.each(LANGUAGES)("shows only dictionary text besides order data in %s", (language) => {
+    const cases: [StripeState, Partial<PayViewProps>][] = [
+      [null, {}],
+      ["creating", {}],
+      ["open", {}],
+      ["under_review", {}],
+      [null, { busy: "redirecting" }],
+      [null, { stripeUnavailable: true }],
+      ["open", { failed: true, methodChanged: true }],
+      ["open", { busy: "checking" }],
+      [null, { confirming: true }],
+    ];
+    const orderData = new Set([ORDER_NUMBER, "Sam Taylor", "+447700900123", "1 Example Street", "AB1 2CD", "Greater London", countryName("GB", language), "·", ","]);
+    const patterns = [BRAND, ...Object.values(COPY).map((entry) => entry[language])].map(copyPattern);
+    for (const [state, overrides] of cases) {
+      for (const value of visibleTexts(renderStripe(state, overrides, language))) {
         const known = orderData.has(value) || patterns.some((pattern) => pattern.test(value));
         expect(known, value).toBe(true);
       }
