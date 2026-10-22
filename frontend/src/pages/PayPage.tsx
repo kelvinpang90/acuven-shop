@@ -1,8 +1,8 @@
 import { Fragment, useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
-import { attemptFor, AWAITING_PAYMENT, fetchMyStates, minutesLeft, nextTickDelay, PAY_METHODS, readPayOrder, remainingAtRead, runCancel, runPayment } from "../api/pay";
-import type { PayMethod, PayOrder, PayRead, PayRecipient, PayResult, PaymentAttempt, WriteOutcome } from "../api/pay";
+import { attemptFor, AWAITING_PAYMENT, fetchMyStates, minutesLeft, nextTickDelay, PAY_METHODS, readPayOrder, remainingAtRead, runCancel, runPayment, startStripe } from "../api/pay";
+import type { PayMethod, PayOrder, PayRead, PayRecipient, PayResult, PaymentAttempt, StripeStart, WriteOutcome } from "../api/pay";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
 import { formatSen } from "../format";
 import type { CopyKey, Language } from "../i18n/copy";
@@ -15,6 +15,9 @@ import type { RoutePath } from "../router";
 // 订单不是待支付状态时直接换成结果页 P07；401 时整页显示 pay.session_expired。
 // 订单号、电话与 CSRF 令牌只在页面内存（React 状态）里，不进网址或任何浏览器存储；页面不显示凭据或其剩余时间。
 // 金额只格式化接口返回的整数仙；不出现卡号、有效期或 CVV 输入框，不显示参考外币。
+// 支付途径为 Stripe 测试时（docs/UX.md 0.11「P06 Stripe 测试」，SHOP-TASK-134）：标题、★ 与操作区换成 Stripe 的，
+// 按 stripe_state 显示跳转、进行中或转人工核对；跳转只在当前标签页打开服务端返回的付款页地址。
+// 读到已付款完成的会话（complete）时换成 P07，由 P07 调用确认接口（HANDOFF 0.55 第（5）项）。
 // 本文件另导出 P07 共用的订单卡片、收货资料、倒计时与凭据过期整页。
 
 export const PAY_PATH: RoutePath = "/pay";
@@ -55,6 +58,50 @@ export function InfoIcon() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
       <circle cx="12" cy="12" r="9" />
       <path d="M12 11v6M12 7.5v.5" />
+    </svg>
+  );
+}
+
+// 以下图标取自视觉稿 P06-stripe-desktop、P06-stripe-phone-open 与 P06-stripe-states。
+function PendingIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  );
+}
+
+function RefreshIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4" />
+    </svg>
+  );
+}
+
+function AlertIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v6M12 16.5v.5" />
+    </svg>
+  );
+}
+
+function CardIcon() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+      <rect x="2.5" y="5" width="19" height="14" rx="2" />
+      <path d="M2.5 9.5h19M6 15h4" />
+    </svg>
+  );
+}
+
+function ExternalIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M7 17L17 7M9 7h8v8" />
     </svg>
   );
 }
@@ -290,8 +337,8 @@ export function useMyStates(recipient: PayRecipient | null): ReadonlyMap<string,
 // 页面看到的订单：读取中、凭据过期、读取失败、已取到。
 export type PayScreen = { status: "loading" } | { status: "expired" } | { status: "error" } | { status: "ready"; order: PayOrder };
 
-// 正在进行的操作：提交支付、取消、网络中断后确认订单；进行中所有按钮禁用。
-export type PayBusy = "paying" | "cancelling" | "checking" | null;
+// 正在进行的操作：提交支付、取消、网络中断后确认订单、发起 Stripe 跳转（拿到地址后保持到页面离开）；进行中所有按钮禁用。
+export type PayBusy = "paying" | "cancelling" | "checking" | "redirecting" | null;
 
 export interface PayViewProps {
   screen: PayScreen;
@@ -303,8 +350,13 @@ export interface PayViewProps {
   failed: boolean;
   // 取消确认框是否打开。
   confirming: boolean;
+  // 显示 pay.stripe_unavailable（Stripe 途径的跳转按钮下）。
+  stripeUnavailable: boolean;
+  // 显示 pay.method_changed（两种途径都有）。
+  methodChanged: boolean;
   onMethod: (method: PayMethod) => void;
   onPay: (result: PayResult) => void;
+  onStripe: () => void;
   onCancel: () => void;
   onConfirmCancel: () => void;
   onKeepOrder: () => void;
@@ -313,6 +365,85 @@ export interface PayViewProps {
 // 未选支付方式或有操作进行中时，成功与失败按钮禁用。
 export function canSubmit(method: PayMethod | null, busy: PayBusy): boolean {
   return method !== null && busy === null;
+}
+
+export function isStripeRoute(order: Pick<PayOrder, "payment_route">): boolean {
+  return order.payment_route === "stripe";
+}
+
+// Stripe 途径的操作区按 stripe_state 显示哪一项（UX 0.11「P06 Stripe 测试」说明）：
+// 未发起（null）与创建结果未定（creating）为 pay.stripe_go；有进行中的会话（open）为 pay.stripe_continue；
+// 转人工核对（under_review）为 pay.stripe_under_review、没有跳转按钮；complete 不在本页显示（换成 P07），也没有按钮。
+export type StripeAction = "go" | "continue" | "review" | null;
+
+export function stripeAction(order: Pick<PayOrder, "stripe_state">): StripeAction {
+  switch (order.stripe_state) {
+    case null:
+    case "creating":
+      return "go";
+    case "open":
+      return "continue";
+    case "under_review":
+      return "review";
+    case "complete":
+      return null;
+  }
+}
+
+// pay.expires 倒计时只在模拟途径与 Stripe 未发起时显示；创建中、进行中与转人工核对时订单不因 15 分钟到期取消（UX 0.11，DESIGN 1.12 第 3、5 条）。
+export function showsCountdown(order: Pick<PayOrder, "payment_route" | "stripe_state">): boolean {
+  return !isStripeRoute(order) || order.stripe_state === null;
+}
+
+// 订单已不是待支付，或已有付款完成的会话（交给 P07 确认，HANDOFF 0.55 第（5）项）时，本页换成 P07。
+export function leavesPayPage(order: Pick<PayOrder, "status" | "stripe_state">): boolean {
+  return order.status !== AWAITING_PAYMENT || order.stripe_state === "complete";
+}
+
+// startStripe 的结果之后页面的去向：
+// redirect 在当前标签页打开服务端返回的地址；result 换成 P07（complete、closed）；expired 整页 pay.session_expired；
+// unavailable 在按钮下显示 pay.stripe_unavailable、按钮恢复可点；method_changed 显示 pay.method_changed 并重新读取；
+// reread 重新读取并按读到的状态显示（under_review）；error 显示 common.error_retry 并重新读取（csrf 取得新令牌，failed、network 按读到的状态显示）。
+export type StripeMove =
+  | { kind: "redirect"; url: string }
+  | { kind: "result" }
+  | { kind: "expired" }
+  | { kind: "unavailable" }
+  | { kind: "method_changed" }
+  | { kind: "reread" }
+  | { kind: "error" };
+
+export function stripeMove(start: StripeStart): StripeMove {
+  switch (start.kind) {
+    case "redirect":
+      return { kind: "redirect", url: start.url };
+    case "complete":
+    case "closed":
+      return { kind: "result" };
+    case "expired":
+      return { kind: "expired" };
+    case "unavailable":
+      return { kind: "unavailable" };
+    case "method_changed":
+      return { kind: "method_changed" };
+    case "under_review":
+      return { kind: "reread" };
+    case "csrf":
+    case "failed":
+    case "network":
+      return { kind: "error" };
+  }
+}
+
+// pay.method_changed：服务端按当时的开关拒绝了不符的提交，页面已重新读取（UX 0.11「支付途径已改变」）。
+function MethodChangedNotice() {
+  const t = useCopy();
+  return (
+    <div className="acs-alert acs-alert--info" role="status">
+      <RefreshIcon />
+      <span>{t("pay.method_changed")}</span>
+    </div>
+  );
 }
 
 function CancelDialog({ onConfirm, onKeep }: { onConfirm: () => void; onKeep: () => void }) {
@@ -342,7 +473,23 @@ function CancelDialog({ onConfirm, onKeep }: { onConfirm: () => void; onKeep: ()
   );
 }
 
-export function PayView({ screen, minutes, states, method, busy, failed, confirming, onMethod, onPay, onCancel, onConfirmCancel, onKeepOrder }: PayViewProps) {
+export function PayView({
+  screen,
+  minutes,
+  states,
+  method,
+  busy,
+  failed,
+  confirming,
+  stripeUnavailable,
+  methodChanged,
+  onMethod,
+  onPay,
+  onStripe,
+  onCancel,
+  onConfirmCancel,
+  onKeepOrder,
+}: PayViewProps) {
   const t = useCopy();
   const methodName = useId();
 
@@ -353,39 +500,98 @@ export function PayView({ screen, minutes, states, method, busy, failed, confirm
     return <SessionExpired />;
   }
 
-  const head = (
+  // 标题与 ★：Stripe 途径为 pay.stripe_title 与 pay.stripe_demo_hint（UX「演示提示汇总」）。
+  const head = (stripe: boolean) => (
     <div className="site-pay__head">
       <div className="site-pay__title">
-        <h1 className="acs-display-l">{t("pay.title")}</h1>
+        <h1 className="acs-display-l">{t(stripe ? "pay.stripe_title" : "pay.title")}</h1>
         <span className="acs-tag acs-tag--demo">{t("common.demo_badge")}</span>
       </div>
-      <DemoHint>{t("pay.demo_hint")}</DemoHint>
+      <DemoHint>{t(stripe ? "pay.stripe_demo_hint" : "pay.demo_hint")}</DemoHint>
     </div>
   );
 
   if (screen.status === "error") {
     return (
       <main className="site-pay">
-        {head}
+        {head(false)}
         <ErrorNotice />
       </main>
     );
   }
 
   const { order } = screen;
+  const stripe = isStripeRoute(order);
   const submittable = canSubmit(method, busy);
+  const action = stripeAction(order);
+  const checking = busy === "checking" && (
+    <div className="acs-alert acs-alert--info site-pay__status" role="status">
+      <InfoIcon />
+      <span>{t("common.network_check")}</span>
+    </div>
+  );
   return (
     <main className="site-pay" aria-busy={busy !== null}>
-      {head}
+      {head(stripe)}
       <OrderCard order={order}>
-        <ExpiresLine minutes={minutes} />
+        {showsCountdown(order) && <ExpiresLine minutes={minutes} />}
         <div className="acs-alert acs-alert--info">
           <LockIcon />
           <span>{t("pay.guest_access")}</span>
         </div>
       </OrderCard>
       <RecipientDetails recipient={order.recipient} states={states} />
+      {stripe ? (
+        <section className="site-pay__choose site-pay__stripe">
+          {methodChanged && <MethodChangedNotice />}
+          {action === "continue" && (
+            <div className="acs-alert acs-alert--info site-pay__in-progress" role="status">
+              <PendingIcon />
+              <span>{t("pay.stripe_in_progress")}</span>
+            </div>
+          )}
+          <ActionHint>{t("pay.stripe_notice")}</ActionHint>
+          <div className="site-pay__test-card">
+            <CardIcon />
+            <p>{t("pay.stripe_test_card")}</p>
+          </div>
+          <div className={busy === "redirecting" ? "site-pay__go site-pay__go--redirecting" : "site-pay__go"}>
+            {(action === "go" || action === "continue") && (
+              <button
+                className="acs-btn acs-btn--primary acs-btn--lg"
+                type="button"
+                disabled={busy !== null}
+                aria-busy={busy === "redirecting"}
+                onClick={onStripe}
+              >
+                {t(action === "go" ? "pay.stripe_go" : "pay.stripe_continue")}
+                {busy !== "redirecting" && <ExternalIcon />}
+              </button>
+            )}
+            {action === "review" && (
+              <div className="acs-alert acs-alert--info" role="status">
+                <PendingIcon />
+                <span>{t("pay.stripe_under_review")}</span>
+              </div>
+            )}
+            {busy === "redirecting" && (
+              <p className="acs-body-s" role="status">
+                {t("pay.stripe_redirecting")}
+              </p>
+            )}
+            {checking}
+            {stripeUnavailable && busy === null && (
+              <div className="acs-alert acs-alert--danger" role="alert">
+                <AlertIcon />
+                <span>{t("pay.stripe_unavailable")}</span>
+              </div>
+            )}
+            {failed && busy === null && <ErrorNotice />}
+          </div>
+        </section>
+      ) : (
       <section className="site-pay__choose">
+        {methodChanged && <MethodChangedNotice />}
         <fieldset className="site-pay__methods">
           <legend className="acs-display-s">{t("pay.choose_method")}</legend>
           {PAY_METHODS.map((option) => (
@@ -431,15 +637,11 @@ export function PayView({ screen, minutes, states, method, busy, failed, confirm
             {t("pay.processing")}
           </p>
         )}
-        {busy === "checking" && (
-          <div className="acs-alert acs-alert--info site-pay__status" role="status">
-            <InfoIcon />
-            <span>{t("common.network_check")}</span>
-          </div>
-        )}
+        {checking}
         {failed && busy === null && <ErrorNotice />}
         <ActionHint>{t("pay.action_hint")}</ActionHint>
       </section>
+      )}
       <div className="site-pay__cancel">
         <button className="acs-btn acs-btn--danger" type="button" disabled={busy !== null} onClick={onCancel}>
           {t("pay.cancel_order")}
@@ -460,22 +662,37 @@ export default function PayPage() {
   const [busy, setBusy] = useState<PayBusy>(null);
   const [failed, setFailed] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [stripeUnavailable, setStripeUnavailable] = useState(false);
+  const [methodChanged, setMethodChanged] = useState(false);
   // 网络中断后确认仍待支付的那次支付：同一方式与结果的重试沿用它的幂等键。
   const [retry, setRetry] = useState<PaymentAttempt | null>(null);
-  // 倒计时到 0 或切换语言时重新读取订单。
+  // 倒计时到 0、切换语言或 Stripe 发起之后需要按服务端的状态显示时重新读取订单。
   const [reads, setReads] = useState(0);
   // 离开页面时中止进行中的写操作与确认。
   const lifetime = useRef<AbortController | null>(null);
 
   const order = screen.status === "ready" ? screen.order : null;
-  const minutes = useCountdown(order, () => {
+  // 只在显示 pay.expires 时计时，到 0 才重新读取。
+  const minutes = useCountdown(order !== null && showsCountdown(order) ? order : null, () => {
     setReads((count) => count + 1);
   });
   const states = useMyStates(order?.recipient ?? null);
 
+  const reread = () => {
+    setReads((count) => count + 1);
+  };
+
+  // 下一次操作开始：收起上一次的提示。
+  const startOperation = (next: Exclude<PayBusy, null>) => {
+    setBusy(next);
+    setFailed(false);
+    setStripeUnavailable(false);
+    setMethodChanged(false);
+  };
+
   const showOrder = useCallback(
     (read: Extract<PayRead, { kind: "ok" }>) => {
-      if (read.order.status !== AWAITING_PAYMENT) {
+      if (leavesPayPage(read.order)) {
         replace(PAY_RESULT_PATH);
         return;
       }
@@ -524,6 +741,18 @@ export default function PayPage() {
       case "expired":
         setScreen({ status: "expired" });
         return;
+      case "method_changed":
+        // 模拟支付时本单已走 Stripe 途径：显示 pay.method_changed 并重新读取，按新的途径显示。取消的处理留给 SHOP-TASK-135。
+        if (action === "pay") {
+          setRetry(null);
+          setMethodChanged(true);
+          setBusy(null);
+          reread();
+          return;
+        }
+        break;
+      case "unavailable":
+        break;
       case "error":
         if (outcome.read) {
           showOrder(outcome.read);
@@ -560,16 +789,57 @@ export default function PayPage() {
       busy={busy}
       failed={failed}
       confirming={confirming}
+      stripeUnavailable={stripeUnavailable}
+      methodChanged={methodChanged}
       onMethod={setMethod}
       onPay={(result) => {
         if (order === null || csrfToken === null || method === null || !canSubmit(method, busy)) {
           return;
         }
         const attempt = attemptFor(retry, method, result);
-        setBusy("paying");
-        setFailed(false);
+        startOperation("paying");
         void runPayment(language, order.order_number, csrfToken, attempt, writeOptions()).then((outcome) => {
           settle(outcome, "pay");
+        });
+      }}
+      onStripe={() => {
+        if (order === null || csrfToken === null || busy !== null || !isStripeRoute(order)) {
+          return;
+        }
+        const signal = lifetime.current?.signal;
+        startOperation("redirecting");
+        void startStripe(language, order.order_number, csrfToken, signal).then((start) => {
+          if (signal?.aborted) {
+            return;
+          }
+          const move = stripeMove(start);
+          switch (move.kind) {
+            case "redirect":
+              // 当前标签页打开服务端返回的地址；按钮保持禁用直到页面离开。
+              window.location.assign(move.url);
+              return;
+            case "result":
+              replace(PAY_RESULT_PATH);
+              return;
+            case "expired":
+              setScreen({ status: "expired" });
+              return;
+            case "unavailable":
+              setStripeUnavailable(true);
+              break;
+            case "method_changed":
+              setMethodChanged(true);
+              reread();
+              break;
+            case "reread":
+              reread();
+              break;
+            case "error":
+              setFailed(true);
+              reread();
+              break;
+          }
+          setBusy(null);
         });
       }}
       onCancel={() => {
@@ -583,8 +853,7 @@ export default function PayPage() {
         if (order === null || csrfToken === null || busy !== null) {
           return;
         }
-        setBusy("cancelling");
-        setFailed(false);
+        startOperation("cancelling");
         void runCancel(language, order.order_number, csrfToken, writeOptions()).then((outcome) => {
           settle(outcome, "cancel");
         });
