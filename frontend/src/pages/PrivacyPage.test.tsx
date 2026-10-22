@@ -63,6 +63,7 @@ const ORDER: readonly CopyKey[] = [
   "privacy.h_collect",
   "privacy.collect",
   "privacy.fictional",
+  "privacy.stripe",
   "privacy.h_retention",
   "privacy.retention_recipient",
   "privacy.member",
@@ -91,6 +92,27 @@ describe("privacy page P14", () => {
     expect(main).toContain(`<h1 class="acs-display-l">${escapeText(COPY["privacy.title"][language])}</h1>`);
     expect(main.match(/<section\b/g)).toHaveLength(4);
     expect(main.match(/<h2\b/g)).toHaveLength(4);
+  });
+
+  // UX 0.11 P14 的 P9「始终显示，不随支付方式开关隐藏」与线框「[privacy.h_collect] … [privacy.fictional] [P9] [privacy.stripe]」：
+  // 三种语言下，WhatsApp 链接未取得、未配置与已配置时，privacy.stripe 都在 privacy.fictional 之后、privacy.h_retention 之前。
+  it("shows the Stripe paragraph in the collect section whatever the contact link", async () => {
+    const readers: [string, WhatsAppContactReader][] = [
+      ["not loaded", createWhatsAppContactReader()],
+      ["not configured", await settledReader(settings(null))],
+      ["configured", await settledReader(settings(WHATSAPP_LINK))],
+    ];
+    for (const [name, reader] of readers) {
+      for (const language of LANGUAGES) {
+        const main = renderMain(language, reader);
+        const fictional = main.indexOf(`<p>${escapeText(COPY["privacy.fictional"][language])}</p>`);
+        const stripe = main.indexOf(`<p>${escapeText(COPY["privacy.stripe"][language])}</p>`);
+        const retention = main.indexOf(escapeText(COPY["privacy.h_retention"][language]));
+        expect(fictional, `${name} ${language}`).toBeGreaterThan(-1);
+        expect(stripe, `${name} ${language}`).toBeGreaterThan(fictional);
+        expect(retention, `${name} ${language}`).toBeGreaterThan(stripe);
+      }
+    }
   });
 
   // UX P14 与 Q10：WhatsApp 联系链接未配置时隐藏整个「联系」段，不显示占位。

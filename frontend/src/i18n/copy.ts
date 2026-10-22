@@ -1165,6 +1165,11 @@ export const COPY = {
     zh: "收货资料可以填写虚构内容。唯一例外是短信验证开启时，结账时填写的马来西亚或新加坡手机号须能收到验证短信。",
     ms: "Anda boleh menggunakan butiran penghantaran rekaan. Pengecualiannya ialah apabila pengesahan SMS dihidupkan: nombor telefon bimbit Malaysia atau Singapura yang dimasukkan semasa daftar keluar mesti boleh menerima SMS pengesahan kami.",
   },
+  "privacy.stripe": {
+    en: "When payments use Stripe test mode, you pay on Stripe's test page instead of ours. We send Stripe only the amount and currency, a demo item name, an internal order reference, your language, the links back to this site and a fixed demo email — not your name, phone number, address or order number. Anything you type on Stripe's page, such as a cardholder name, billing address or a changed email, is kept by Stripe's test environment; we don't read or store it and can't delete it item by item, only the whole test environment. Use only test card numbers and made-up details there.",
+    zh: "支付使用 Stripe 测试环境时，您在 Stripe 的测试付款页而不是本站付款。本站发给 Stripe 的只有金额与币种、演示商品名、内部订单编号、您的语言、返回本站的链接与固定的演示邮箱，不发送您的姓名、电话、地址或订单号。您在 Stripe 页上输入的内容（如持卡人姓名、账单地址或改填的邮箱）由 Stripe 测试环境保存；本站不读取、不保存，也无法逐条删除，只能删除整个测试环境。请在那里只用测试卡号与虚构资料。",
+    ms: "Apabila pembayaran menggunakan mod ujian Stripe, anda membayar di halaman ujian Stripe, bukan di halaman kami. Kami hanya menghantar kepada Stripe jumlah dan mata wang, nama item demo, rujukan pesanan dalaman, bahasa anda, pautan kembali ke laman ini dan e-mel demo yang tetap — bukan nama, nombor telefon, alamat atau nombor pesanan anda. Apa sahaja yang anda taip di halaman Stripe, seperti nama pemegang kad, alamat pengebilan atau e-mel yang diubah, disimpan oleh persekitaran ujian Stripe; kami tidak membaca atau menyimpannya dan tidak boleh memadamnya satu demi satu, hanya keseluruhan persekitaran ujian. Gunakan nombor kad ujian dan butiran rekaan sahaja di sana.",
+  },
   "privacy.retention_recipient": {
     en: "Shipping details are kept long-term together with the order's items, amounts and status. They are not deleted or anonymised, including after a member account is deleted.",
     zh: "收货资料与订单商品、金额和状态一起长期保存，不删除、不匿名化；会员注销后也同样保留。",
