@@ -1720,6 +1720,36 @@ export const COPY = {
     zh: "退出登录",
     ms: "Log keluar",
   },
+  "admin.settings_saved": {
+    en: "Saved. New requests use this setting.",
+    zh: "已保存，之后的请求按此设置执行。",
+    ms: "Disimpan. Permintaan baharu menggunakan tetapan ini.",
+  },
+  "admin.payment_method": {
+    en: "Payment method",
+    zh: "支付方式",
+    ms: "Kaedah pembayaran",
+  },
+  "admin.payment_simulated": {
+    en: "Simulated (default)",
+    zh: "模拟（默认）",
+    ms: "Simulasi (lalai)",
+  },
+  "admin.payment_stripe": {
+    en: "Stripe test mode",
+    zh: "Stripe 测试环境",
+    ms: "Mod ujian Stripe",
+  },
+  "admin.payment_method_hint": {
+    en: "Simulated: customers pick an outcome on the store's own demo payment page. Stripe test mode: customers pay on Stripe's test payment page with test cards or other test methods offered there (such as FPX or GrabPay), and no real money moves; for those orders, approving a refund also sends a refund request to Stripe's test mode, and its status is shown in the refund details. Orders below Stripe's minimum amount still use simulated payment. Stripe payment sessions already started keep being handled through Stripe even if you switch back.",
+    zh: "模拟：顾客在本站的演示支付页选择结果。Stripe 测试环境：顾客在 Stripe 测试付款页用测试卡或该页提供的其他测试方式（如 FPX、GrabPay）付款，不会有真实资金流动；这些订单的退款经您批准后，也会向 Stripe 测试环境发出退款请求，其状态在退款详情中查看。低于 Stripe 最低收款额的订单仍用模拟支付。已在 Stripe 发起的付款会话，即使切回模拟也仍按 Stripe 流程处理。",
+    ms: "Simulasi: pelanggan memilih keputusan di halaman pembayaran demo kedai sendiri. Mod ujian Stripe: pelanggan membayar di halaman pembayaran ujian Stripe dengan kad ujian atau kaedah ujian lain yang ditawarkan di sana (seperti FPX atau GrabPay), dan tiada wang sebenar berpindah; bagi pesanan itu, meluluskan bayaran balik juga menghantar permintaan bayaran balik ke mod ujian Stripe, dan statusnya dipaparkan dalam butiran bayaran balik. Pesanan di bawah jumlah minimum Stripe masih menggunakan pembayaran simulasi. Sesi pembayaran Stripe yang sudah dimulakan terus dikendalikan melalui Stripe walaupun anda menukar semula.",
+  },
+  "admin.stripe_not_configured": {
+    en: "Stripe test mode can't be selected: its test secret key or webhook signing secret is missing or invalid. Only test keys are accepted, never live keys.",
+    zh: "无法选择 Stripe 测试环境：测试密钥或 webhook 签名密钥未配置或无效。只接受测试密钥，正式环境密钥一律不接受。",
+    ms: "Mod ujian Stripe tidak boleh dipilih: kunci rahsia ujian atau rahsia tandatangan webhook tiada atau tidak sah. Hanya kunci ujian diterima, bukan kunci langsung.",
+  },
 } as const satisfies Record<string, CopyEntry>;
 
 export type CopyKey = keyof typeof COPY;

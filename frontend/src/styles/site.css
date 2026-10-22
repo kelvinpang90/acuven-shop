@@ -433,6 +433,18 @@ a.site-admin-refunds__clear { text-decoration: none; }
    支付方式表单由 SHOP-TASK-139 接上；视觉稿的短信验证段按 Kelvin 2026-10-07 与 2026-10-15 的决定不做 */
 .site-admin-settings { display: grid; gap: 16px; max-width: 720px; }
 
+/* A09 的支付方式表单（SHOP-TASK-139，A09-stripe-desktop）：表单区、表单上方的提示、支付方式一组与保存上下排列（间距 16px）；
+   一组为面板（去掉 fieldset 的外边距，内边距 20px，组内间距 10px，legend 左右内边距 4px），每个选项为单选（18×18）与文字
+   （间距 10px，至少 44px 高）；保存按钮与其下的提示同一行（间距 12px），admin.settings_saved 内边距 10px 12px。
+   legend 的字重、选中项的字重、提示的字号与 admin.settings_saved 的底色和圆角 site.css 写不了，记在任务记录的偏离里 */
+.site-admin-settings__body, .site-admin-settings__form { display: grid; gap: 16px; }
+.site-admin-settings__group { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 20px; }
+.site-admin-settings__group > legend { padding: 0 4px; }
+.site-admin-settings__option { display: flex; gap: 10px; align-items: center; min-height: 44px; }
+.site-admin-settings__option input { flex-shrink: 0; width: 18px; height: 18px; margin: 0; }
+.site-admin-settings__save { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.site-admin-settings__save > [role="status"] { padding: 10px 12px; }
+
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
 
@@ -779,4 +791,9 @@ a.site-admin-refunds__clear { text-decoration: none; }
   /* 后台站点设置的页头（A09-stripe-phone）：顶栏已是 admin.nav_settings，页面里不显示标题，h1 只留给读屏；各块间距 14px */
   .site-admin-settings { gap: 14px; }
   .site-admin-settings__title { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  /* A09 的表单（A09-stripe-phone）：各块间距 14px；保存按钮占满宽度、至少 44px 高，文字居中，提示在其下（间距 10px，视觉稿未画手机的提示，
+     取 A08-phone 的写法） */
+  .site-admin-settings__body, .site-admin-settings__form { gap: 14px; }
+  .site-admin-settings__save { display: grid; gap: 10px; }
+  .site-admin-settings__save .acs-admin__btn { justify-content: center; min-height: 44px; }
 }
