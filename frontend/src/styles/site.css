@@ -170,6 +170,11 @@ body { margin: 0; }
 .site-result__head { display: grid; gap: 14px; justify-items: start; }
 .site-result__icon { width: 56px; height: 56px; padding: 0; justify-content: center; }
 .site-result__continue, .site-result__retry { justify-self: start; }
+/* P07 Stripe（P07-stripe-confirming、P07-stripe-states）：确认中的图标圆框与标题组，自动重查用完后的按钮；尚未付款的提示与按钮一组 */
+.site-result__pending { display: grid; place-items: center; width: 56px; height: 56px; }
+.site-result__confirming { display: grid; gap: 10px; }
+.site-result__check { justify-self: start; }
+.site-result__stripe { display: grid; gap: 12px; justify-items: start; }
 
 /* 订单查询 P08：居中 640px 单列；表单在卡片里，提交按钮靠左 */
 .site-track { box-sizing: border-box; width: min(640px, calc(100% - 2 * var(--gutter))); margin: 0 auto; display: grid; gap: 24px; align-content: start; padding: 64px 0 96px; }
@@ -547,6 +552,11 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-result { padding-top: 32px; }
   .site-result__icon { width: 48px; height: 48px; }
   .site-result__continue { justify-self: stretch; }
+  /* P07-stripe-phone-slow：图标圆框 48px、图标 24px，标题与正文间距同主体 16px，再查按钮占满宽度 */
+  .site-result__pending { width: 48px; height: 48px; }
+  .site-result__pending svg { width: 24px; height: 24px; }
+  .site-result__confirming { gap: 16px; }
+  .site-result__check { justify-self: stretch; }
 
   /* 订单查询：单列，错误提示在隐私提醒之后（UX P08 手机线框），提交按钮占满宽度 */
   .site-track { width: auto; margin: 0; gap: 16px; padding: 28px var(--gutter) 40px; }
