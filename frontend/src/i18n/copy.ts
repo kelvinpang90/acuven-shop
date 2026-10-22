@@ -765,6 +765,46 @@ export const COPY = {
     zh: "继续购物",
     ms: "Teruskan membeli-belah",
   },
+  "result.confirming_title": {
+    en: "Confirming your payment",
+    zh: "正在确认付款",
+    ms: "Mengesahkan pembayaran anda",
+  },
+  "result.confirming_body": {
+    en: "We're checking this order's payment with Stripe. This page checks again automatically.",
+    zh: "我们正在向 Stripe 核实此订单的付款，本页会自动重查。",
+    ms: "Kami sedang menyemak pembayaran pesanan ini dengan Stripe. Halaman ini menyemak semula secara automatik.",
+  },
+  "result.confirming_slow": {
+    en: "Still waiting for Stripe to confirm. Your order stays reserved meanwhile — check again in a little while.",
+    zh: "仍在等待 Stripe 确认，期间订单保持保留，请稍后再查。",
+    ms: "Masih menunggu pengesahan Stripe. Pesanan anda kekal ditempah sementara itu — semak semula sebentar lagi.",
+  },
+  "result.check_again": {
+    en: "Check again",
+    zh: "再查一次",
+    ms: "Semak semula",
+  },
+  "result.stripe_not_paid": {
+    en: "This order hasn't been paid yet. You can go back to continue the Stripe test payment or cancel the order.",
+    zh: "此订单尚未付款。您可以返回继续 Stripe 测试付款，或取消订单。",
+    ms: "Pesanan ini belum dibayar. Anda boleh kembali untuk meneruskan pembayaran ujian Stripe atau membatalkan pesanan.",
+  },
+  "result.stripe_back_to_pay": {
+    en: "Back to payment",
+    zh: "返回支付页",
+    ms: "Kembali ke pembayaran",
+  },
+  "result.stripe_late_refund": {
+    en: "This order had already been cancelled when your Stripe test payment came through, so the store handles that payment as a refund in Stripe's test mode. No real money was involved.",
+    zh: "您的 Stripe 测试付款到达时订单已经取消，这笔付款由本站在 Stripe 测试环境按退款处理。全程不涉及真实资金。",
+    ms: "Pesanan ini telah dibatalkan semasa pembayaran ujian Stripe anda diterima, jadi kedai mengendalikan pembayaran itu sebagai bayaran balik dalam mod ujian Stripe. Tiada wang sebenar terlibat.",
+  },
+  "result.paid_not_cancelled": {
+    en: "Your payment on Stripe had already gone through, so this order was not cancelled.",
+    zh: "您在 Stripe 的付款已经完成，所以此订单没有取消。",
+    ms: "Pembayaran anda di Stripe sudah berjaya, jadi pesanan ini tidak dibatalkan.",
+  },
   "result.demo_hint": {
     en: 'Next, the store admin will "ship" the order in the demo back office — nothing is actually sent.',
     zh: "接下来管理员会在后台模拟发货——不会真的寄出。",
