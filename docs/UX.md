@@ -1,7 +1,12 @@
 # Acuven Shop 前端页面结构与线框（审阅稿）
 
-> **审阅稿。0.7 已于 2026-10-01 经 Kelvin 审阅通过（记录见 `docs/HANDOFF.md`）；0.8 只在「管理后台总体」与 A09 增加后台退出按钮与视觉稿说明，P01–P14、V1 与 A01–A08 各页内容与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只在 A02、A03 增加状态与补充说明，其余各页与 0.8 相同，Kelvin 已于 2026-10-06 认可；0.10 只把 A01 的登录名改为邮箱（`[admin.email]`），其余各页与 0.9 相同，Kelvin 已于 2026-10-07 批准（记录见 `docs/HANDOFF.md`）。0.11 只在 P06、P07、P14、A03、A09 增加 Stripe 测试环境支付的状态与说明，其余各页与 0.10 相同，Kelvin 已于 2026-10-15 审阅通过（记录见 `docs/HANDOFF.md`）。**
-> 版本 0.11（2026-10-15），运营者修订（Claude Code），在 0.10（提交 `eb2bdc4`）上按已批准的 `docs/DESIGN.md` 1.12「Stripe 测试环境支付」与 `docs/REQUIREMENTS.md` 1.13（Kelvin 2026-10-15 批准，记录见 `docs/HANDOFF.md` 0.50）增加 Stripe 测试环境支付；新增元素的依据写 DESIGN 1.12 的小节与条号；三语文案见 [UX-COPY.md](UX-COPY.md) 0.12。以下为 0.10 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.10（2026-10-07），运营者修订（Claude Code），在 0.9（提交 `1a65f6b`）上按 Kelvin 2026-10-07 的决定把 A01 的登录名改为邮箱；0.9（2026-10-06）在 0.8（提交 `61f7b8a`）上按 Kelvin 2026-10-06 的决定与认可补充 A02、A03 的状态；0.8（2026-10-05）在 0.7（提交 `2d13250`）上按 Kelvin 2026-10-05 的决定增加后台退出按钮；0.7 在 0.6（提交 `e3b3505`）上按 Kelvin 2026-10-01 的短信验证开关决定修改。依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；未特别注明时，各页「金额与个人资料元素」表引用的小节仍指 DESIGN 1.9（1.10、1.11 未改小节标题）。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。三语文案见 [UX-COPY.md](UX-COPY.md)（0.10）。视觉稿（设计系统、10 款主题、每页静态页面与参考图）见 [design/README.md](design/README.md)，只管样式，内容与流程以本稿为准；本版新增的元素沿用相邻元素的样式。本稿不改设计，冲突之处列入文末「待决问题」。
+> **审阅稿。0.7 已于 2026-10-01 经 Kelvin 审阅通过（记录见 `docs/HANDOFF.md`）；0.8 只在「管理后台总体」与 A09 增加后台退出按钮与视觉稿说明，P01–P14、V1 与 A01–A08 各页内容与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只在 A02、A03 增加状态与补充说明，其余各页与 0.8 相同，Kelvin 已于 2026-10-06 认可；0.10 只把 A01 的登录名改为邮箱（`[admin.email]`），其余各页与 0.9 相同，Kelvin 已于 2026-10-07 批准（记录见 `docs/HANDOFF.md`）。0.11 只在 P06、P07、P14、A03、A09 增加 Stripe 测试环境支付的状态与说明，其余各页与 0.10 相同，Kelvin 已于 2026-10-15 审阅通过（记录见 `docs/HANDOFF.md`）。0.12 只在 A03「Stripe 测试」增加已批准却没有 Stripe 退款尝试时的提示，其余各页与 0.11 相同，候 Kelvin 审阅。**
+> 版本 0.12（2026-10-23），运营者修订（Claude Code），在 0.11（提交 `e922fcf`）上按 Kelvin 2026-10-23 的决定，在 A03「Stripe 测试」增加一种状态（不改设计）；三语文案见 [UX-COPY.md](UX-COPY.md) 0.13。以下为 0.11 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.11（2026-10-15），运营者修订（Claude Code），在 0.10（提交 `eb2bdc4`）上按已批准的 `docs/DESIGN.md` 1.12「Stripe 测试环境支付」与 `docs/REQUIREMENTS.md` 1.13（Kelvin 2026-10-15 批准，记录见 `docs/HANDOFF.md` 0.50）增加 Stripe 测试环境支付；新增元素的依据写 DESIGN 1.12 的小节与条号；三语文案见 [UX-COPY.md](UX-COPY.md) 0.12；版本 0.10（2026-10-07），运营者修订（Claude Code），在 0.9（提交 `1a65f6b`）上按 Kelvin 2026-10-07 的决定把 A01 的登录名改为邮箱；0.9（2026-10-06）在 0.8（提交 `61f7b8a`）上按 Kelvin 2026-10-06 的决定与认可补充 A02、A03 的状态；0.8（2026-10-05）在 0.7（提交 `2d13250`）上按 Kelvin 2026-10-05 的决定增加后台退出按钮；0.7 在 0.6（提交 `e3b3505`）上按 Kelvin 2026-10-01 的短信验证开关决定修改。依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；未特别注明时，各页「金额与个人资料元素」表引用的小节仍指 DESIGN 1.9（1.10、1.11 未改小节标题）。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。三语文案见 [UX-COPY.md](UX-COPY.md)（0.10）。视觉稿（设计系统、10 款主题、每页静态页面与参考图）见 [design/README.md](design/README.md)，只管样式，内容与流程以本稿为准；本版新增的元素沿用相邻元素的样式。本稿不改设计，冲突之处列入文末「待决问题」。
+
+## 0.12 修订要点
+
+- **A03 已批准却没有 Stripe 退款尝试**（Kelvin 2026-10-23 决定）：经 Stripe 测试付款、申请已批准、现金退款额大于 0，但没有任何 Stripe 退款尝试时（批准时因同一付款的退款合计会超过付款金额、或会话记录缺 PaymentIntent ID 而没建成；DESIGN 1.12「Stripe 测试环境支付」第 8 条，服务端已记告警），在 `[admin.stripe_refund_title]` 下显示 `[admin.stripe_refund_not_sent]`，不显示尝试表与重试按钮。页面分不出是哪一种原因，文案对两种都成立。0.11 的 A03 线框与说明没有写这种状态。
+- 新增文案键见 UX-COPY 0.13「0.13 修订要点」。视觉稿不另出：这一行沿用同一段里 `[admin.stripe_refund_none]` 的样式。其余各页、V1 与全局框架不变；待决问题未新增。
 
 ## 0.11 修订要点
 
@@ -1816,6 +1821,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 |           |  最新一次失败：[admin.stripe_refund_failed_hint]             |
 |           |                ( [admin.stripe_refund_retry] )             |
 |           |  现金退款额为 0：[admin.stripe_refund_none]（不显示尝试表）   |
+|           |  现金退款额大于 0 却没有尝试：[admin.stripe_refund_not_sent]（不显示尝试表与重试，0.12） |
 重试提交中：按钮禁用；成功后重新读取，表中多出一行处理中的尝试
 重试被拒（会超过 Stripe 付款金额）：按钮下显示 [admin.stripe_refund_blocked]
 ```
@@ -1845,6 +1851,8 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 | ( [admin.stripe_refund_retry] ) |
 | 重试被拒：[admin.stripe_refund_blocked] |
 | 现金退款额为 0：[admin.stripe_refund_none]（不显示尝试） |
+| 现金退款额大于 0 却没有尝试：  |
+|  [admin.stripe_refund_not_sent]（0.12） |
 ```
 
 说明：
@@ -1853,6 +1861,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 - 期限提示按付款方式类型选一条：fpx 用 `[admin.stripe_deadline_fpx]`，grabpay 用 `[admin.stripe_deadline_grabpay]`，其他类型或类型为空用 `[admin.stripe_deadline_other]`；只给提示、不计算具体日期。60 天、90 天以实现前在 Stripe 文档与测试环境的核验为准，不符时先改设计与文案。
 - 尝试的状态按设计映射：Stripe 的 pending 与 requires_action 显示 `[admin.stripe_refund_pending]`，succeeded 显示 `[admin.stripe_refund_succeeded]`，failed 与 canceled 显示 `[admin.stripe_refund_failed]`。已退的尝试之后可能被 Stripe 改为失败，页面照服务端当前值显示。页面不自动刷新，重新打开或重新读取时更新。
 - `[admin.stripe_refund_retry]` 只在最新一次尝试为失败时显示；重试新建一条尝试，重复点击与并发只有一个成功。处理中的尝试不提供改为失败或取消的按钮（DESIGN 1.12：本站不提供这一手段）。
+- 已批准、现金退款额大于 0 却没有任何尝试（0.12，Kelvin 2026-10-23 决定）：批准时因同一付款的退款合计会超过付款金额、或会话记录缺 PaymentIntent ID 而没建成（第 8 条，服务端已记告警）。在 `[admin.stripe_refund_title]` 下显示 `[admin.stripe_refund_not_sent]`，不显示尝试表、处理中或失败的提示与 `[admin.stripe_refund_retry]`（没有失败的尝试，不能重试）。现金退款额为 0 时仍只显示 `[admin.stripe_refund_none]`。
 - Stripe 退款失败不影响本站的批准：申请仍为 `[order.refund_approved]`，访客在 P09 看到的仍是模拟退款已批准。
 - 迟到付款的全额退款（Stripe 节第 6 条）没有退款申请，不在 A03 显示；由运营告警邮件报告，在 Stripe 后台跟进。
 - 不显示 Stripe 返回的客户资料、卡号片段、账单地址或错误原文（Stripe 节第 10 条）。
