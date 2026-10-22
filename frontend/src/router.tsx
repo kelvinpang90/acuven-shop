@@ -17,7 +17,7 @@ import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 // 列表的搜索、筛选与页码只在页面模块的内存里；退款申请列表 /admin/refunds 的状态筛选与页码只在页面内存里，
 // 按订单筛选 /admin/refunds/order/:orderId 的段值是订单的内部 ID，订单号只在页面内存里；
 // 退款详情 /admin/refunds/:id 的段值是申请的内部 ID，订单号、理由、审核人邮箱、令牌与幂等键只在页面内存与请求里，
-// 列表的筛选与页码只在页面模块的内存里；库存重置结果 /admin/stock-resets 与店铺装修 /admin/store-design 不带段值）：
+// 列表的筛选与页码只在页面模块的内存里；库存重置结果 /admin/stock-resets、店铺装修 /admin/store-design 与站点设置 /admin/settings 不带段值）：
 // App.tsx 不给它们套前台框架，前台页头、菜单与页脚也没有指向它们的入口（UX A01「前台不放入口链接」）。
 export const ROUTE_PATHS = [
   "/",
@@ -40,6 +40,7 @@ export const ROUTE_PATHS = [
   "/admin/coupons",
   "/admin/stock-resets",
   "/admin/store-design",
+  "/admin/settings",
 ] as const;
 export type RoutePattern = (typeof ROUTE_PATHS)[number];
 
@@ -55,6 +56,7 @@ export const ADMIN_REFUNDS_PATH: RoutePath = "/admin/refunds";
 export const ADMIN_COUPONS_PATH: RoutePath = "/admin/coupons";
 export const ADMIN_STOCK_RESETS_PATH: RoutePath = "/admin/stock-resets";
 export const ADMIN_STORE_DESIGN_PATH: RoutePath = "/admin/store-design";
+export const ADMIN_SITE_SETTINGS_PATH: RoutePath = "/admin/settings";
 
 export type RouteParams = Readonly<Record<string, string>>;
 

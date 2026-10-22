@@ -835,6 +835,8 @@ describe("navigation", () => {
   // SHOP-TASK-059 改动：按 SHOP-TASK-059 验收第 3 条把「依次为订单与退款两项」改为依次为订单、退款与库存重置（/admin/stock-resets）三项。
   // SHOP-TASK-062 改动：按 SHOP-TASK-062 验收第 3 条把「依次为订单、退款与库存重置三项」改为依次为订单、退款、库存重置与
   // 店铺装修（/admin/store-design）四项；当前项与手机顶栏名称不变。
+  // SHOP-TASK-137 改动：按 SHOP-TASK-137 验收第 3 条把「依次为这五项」改为依次为订单、退款、优惠券、库存重置、店铺装修与
+  // 站点设置（/admin/settings）六项；当前项与手机顶栏名称不变。
   it.each(LANGUAGES)("marks the refunds item as current in %s", (language) => {
     for (const path of [REFUNDS_PATH, "/admin/refunds/order/42"]) {
       const html = renderApp(path, language);
@@ -846,6 +848,7 @@ describe("navigation", () => {
             ["/admin/coupons", undefined],
             ["/admin/stock-resets", undefined],
           ["/admin/store-design", undefined],
+          ["/admin/settings", undefined],
         ]);
         expect(all(nav, "a").filter((a) => !attributes(tags(a, "a")[0] ?? "").has("lang")).map((a) => textNodes(a).join(""))).toEqual([
             COPY["admin.nav_orders"][language],
@@ -853,6 +856,7 @@ describe("navigation", () => {
             COPY["admin.nav_coupons"][language],
             COPY["admin.nav_stock_resets"][language],
           COPY["admin.nav_store_design"][language],
+          COPY["admin.nav_settings"][language],
         ]);
       }
       expect(element(html, "span", "site-admin__bar-title")).toBe(

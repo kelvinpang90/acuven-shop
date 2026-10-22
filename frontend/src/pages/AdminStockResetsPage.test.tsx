@@ -262,6 +262,8 @@ describe("navigation", () => {
   // 订单、退款与库存重置三项，库存重置标 aria-current="page"，没有其他导航项。
   // SHOP-TASK-062 改动：按 SHOP-TASK-062 验收第 3 条把「依次为订单、退款与库存重置三项」改为依次为订单、退款、库存重置与
   // 店铺装修（/admin/store-design）四项；当前项仍为库存重置，手机顶栏名称不变（下一条）。
+  // SHOP-TASK-137 改动：按 SHOP-TASK-137 验收第 3 条把「依次为这五项」改为依次为订单、退款、优惠券、库存重置、店铺装修与
+  // 站点设置（/admin/settings）六项；当前项仍为库存重置，手机顶栏名称不变（下一条）。
   it.each(LANGUAGES)("marks the stock resets item as current, after orders and refunds, in %s", (language) => {
     const html = renderApp(STOCK_RESETS_PATH, language);
     for (const nav of [element(html, "nav", "site-admin__nav"), element(html, "nav", "site-admin__menu-nav")]) {
@@ -272,14 +274,16 @@ describe("navigation", () => {
           ["/admin/coupons", undefined],
           [STOCK_RESETS_PATH, "page"],
         ["/admin/store-design", undefined],
+        ["/admin/settings", undefined],
       ]);
-        const labels = textNodes(nav).slice(0, 5);
+        const labels = textNodes(nav).slice(0, 6);
       expect(labels).toEqual([
           COPY["admin.nav_orders"][language],
           COPY["admin.nav_refunds"][language],
           COPY["admin.nav_coupons"][language],
           COPY["admin.nav_stock_resets"][language],
         COPY["admin.nav_store_design"][language],
+        COPY["admin.nav_settings"][language],
       ]);
     }
   });
