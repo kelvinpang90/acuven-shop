@@ -19,12 +19,11 @@
   - 离开页面时以现有的 `lifetime` 中止请求，中止后的结果不再更新页面。
 - 途径已改变：模拟支付（`runPayment`）得到 `method_changed` 时同样显示 `pay.method_changed`、清除网络中断重试的幂等键并重新读取；`pay.method_changed` 在两种途径都显示在操作区顶部。它与 `pay.stripe_unavailable`、`common.error_retry` 在下一次操作（支付、跳转、确认取消）开始时一起收起。
 - 文案：`frontend/src/i18n/copy.ts` 按 UX-COPY 0.12 逐字加入 `pay.stripe_title`、`pay.stripe_demo_hint`、`pay.stripe_notice`、`pay.stripe_test_card`、`pay.stripe_go`、`pay.stripe_redirecting`、`pay.stripe_in_progress`、`pay.stripe_under_review`、`pay.stripe_continue`、`pay.stripe_unavailable` 与 `pay.method_changed`（放在 `pay.demo_hint` 之后，与 UX-COPY 表的顺序一致）。没有用到 UX-COPY 以外的界面文字。`pay.cancel_confirm_stripe` 与 `pay.cancel_try_later` 属取消，留给 SHOP-TASK-135。
-- 样式（`frontend/src/styles/site.css`，只写布局与尺寸）：Stripe 操作区沿用本页的 `.site-pay__choose`（上分隔与内边距），另加 `.site-pay__stripe`（间距 18px，手机 16px）；`.site-pay__test-card`（桌面图标在左、间距 16px、内边距 18px 20px，手机图标 26px 在上、间距 10px、内边距 14px 16px）；`.site-pay__go`（按钮与其下提示间距 10px，桌面靠左，手机按钮占满宽度）。未改生成的 `acuven-shop.css`。
+- 样式（`frontend/src/styles/site.css`，只写布局与尺寸）：Stripe 操作区沿用本页的 `.site-pay__choose`（上分隔与内边距），另加 `.site-pay__stripe`（间距 18px，手机 16px）；`.site-pay__test-card`（桌面图标在左、间距 16px、内边距 18px 20px，手机图标 26px 在上、间距 10px、内边距 14px 16px）；`.site-pay__go`（按钮与其下提示间距 10px，桌面靠左，手机按钮占满宽度）；跳转中加 `.site-pay__go--redirecting`（照 P06-stripe-states 间距 8px）；`.site-pay__in-progress`（照 P06-stripe-phone-open，手机在进行中提示上方另加 8px 外边距）。跳转中的按钮照 P06-stripe-states 不带外链图标，其余状态带。未改生成的 `acuven-shop.css`。
 - 偏离（视觉稿与现有写法之间的取舍，未改设计）：
   - 测试卡号框的虚线边框、圆角与 `--surface-alt` 底色 site.css 写不了，未搬（只保留内边距与图标排法），也未借用其他组件的类来取颜色。
   - 视觉稿里测试卡号 `4242 4242 4242 4242` 加粗并加字距、手机版测试卡号为 `acs-body-s` 小字；`pay.stripe_test_card` 是一整条文案，页面不拆开文案，字重与字号也不在 site.css 写，均未搬。
-  - P06-stripe-phone-open 里 `pay.guest_access` 是次要文字段落；按 UX 0.11「游客授权说明…同上」沿用现有信息提示框。该稿的进行中提示上方另有 8px 外边距，未加（操作区间距已是 16px）。
-  - P06-stripe-states 的「跳转中」一组间距 8px、按钮不带外链图标；本页按钮与其下提示统一 10px，按钮在各状态都带外链图标。
+  - P06-stripe-phone-open 里 `pay.guest_access` 是次要文字段落；按 UX 0.11「游客授权说明…同上」沿用现有信息提示框。
   - 视觉稿与 UX 线框都没有给出 `pay.method_changed` 的位置；两种途径都放在操作区顶部（P06-stripe-states 的信息提示框与刷新图标）。
   - `pay.stripe_unavailable` 照 P06-stripe-states 用带图标的危险提示框，不用现有 `ErrorNotice`（后者只给 `common.error_retry`）。
 - 按验收标准未写死之处的取法：

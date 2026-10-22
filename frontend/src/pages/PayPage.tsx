@@ -545,7 +545,7 @@ export function PayView({
         <section className="site-pay__choose site-pay__stripe">
           {methodChanged && <MethodChangedNotice />}
           {action === "continue" && (
-            <div className="acs-alert acs-alert--info" role="status">
+            <div className="acs-alert acs-alert--info site-pay__in-progress" role="status">
               <PendingIcon />
               <span>{t("pay.stripe_in_progress")}</span>
             </div>
@@ -555,7 +555,7 @@ export function PayView({
             <CardIcon />
             <p>{t("pay.stripe_test_card")}</p>
           </div>
-          <div className="site-pay__go">
+          <div className={busy === "redirecting" ? "site-pay__go site-pay__go--redirecting" : "site-pay__go"}>
             {(action === "go" || action === "continue") && (
               <button
                 className="acs-btn acs-btn--primary acs-btn--lg"
@@ -565,7 +565,7 @@ export function PayView({
                 onClick={onStripe}
               >
                 {t(action === "go" ? "pay.stripe_go" : "pay.stripe_continue")}
-                <ExternalIcon />
+                {busy !== "redirecting" && <ExternalIcon />}
               </button>
             )}
             {action === "review" && (

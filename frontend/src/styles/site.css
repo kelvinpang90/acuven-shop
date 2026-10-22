@@ -168,6 +168,8 @@ body { margin: 0; }
 .site-pay__test-card { display: flex; gap: 16px; align-items: flex-start; padding: 18px 20px; }
 .site-pay__test-card svg { flex-shrink: 0; }
 .site-pay__go { display: grid; gap: 10px; justify-items: start; }
+/* P06-stripe-states：跳转中按钮与 pay.stripe_redirecting 间距 8px */
+.site-pay__go--redirecting { gap: 8px; }
 .site-pay__cancel { padding-top: 20px; border-top: 1px solid var(--rule); }
 .site-pay__overlay { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; }
 .site-pay--expired { gap: 20px; justify-items: start; }
@@ -560,6 +562,8 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-pay__test-card svg { width: 26px; height: 26px; }
   .site-pay__go { justify-items: stretch; }
   .site-pay__go .acs-btn { width: 100%; }
+  /* P06-stripe-phone-open：进行中提示上方另有 8px 外边距 */
+  .site-pay__in-progress { margin-top: 8px; }
   .site-result { padding-top: 32px; }
   .site-result__icon { width: 48px; height: 48px; }
   .site-result__continue { justify-self: stretch; }
