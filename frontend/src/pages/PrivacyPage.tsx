@@ -8,8 +8,10 @@ import { useCopy } from "../i18n/language";
 // 「联系」段在四段之后，链接取自 GET /api/site-settings 的 whatsapp_contact_url（api/siteSettings.ts，与页脚共用一次读取），
 // 按钮在新标签页打开；取得前、未配置或读取失败时整段不渲染（UX Q10：配置缺失时隐藏，不显示占位文字）。
 // 本页不提供、也不暗示访客删除收货资料的入口（DESIGN「资料保留」）。
+// 「收集什么」段的 privacy.stripe（UX 0.11 P14 的 P9，DESIGN 1.12「Stripe 测试环境支付」第 1、10 条）始终显示，
+// 不读取站点设置或支付方式。
 const SECTIONS: readonly { heading: CopyKey; paragraphs: readonly CopyKey[] }[] = [
-  { heading: "privacy.h_collect", paragraphs: ["privacy.collect", "privacy.fictional"] },
+  { heading: "privacy.h_collect", paragraphs: ["privacy.collect", "privacy.fictional", "privacy.stripe"] },
   {
     heading: "privacy.h_retention",
     paragraphs: ["privacy.retention_recipient", "privacy.member", "privacy.member_backup"],
