@@ -3736,7 +3736,7 @@ tasks:
       取消的 Stripe 处理留给 SHOP-TASK-135。不装依赖，不改后端，不改设计。
       设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，支付状态的显示与发起（途径判定与会话创建都在服务端）。
       拆分：P06 拆成显示与跳转（本任务）和取消（SHOP-TASK-135）：两部分各有一组状态与测试，合在一起预计接近 1500 行，前端页面任务此前因一轮要补的交互测试太多而耗尽修复轮数（SHOP-TASK-102）；本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-133
     acceptance_criteria:
