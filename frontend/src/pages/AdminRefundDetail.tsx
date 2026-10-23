@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
-import { readAdminRefund, reviewAdminRefund, reviewAttempt } from "../api/adminRefunds";
+import { readAdminRefund, retryStripeRefund, reviewAdminRefund, reviewAttempt } from "../api/adminRefunds";
 import type {
   AdminRefundDetail,
   AdminRefundDetailLine,
@@ -12,6 +12,7 @@ import type {
   ReviewAttempt,
   ReviewReply,
   StripeRefundStatus,
+  StripeRetryReply,
 } from "../api/adminRefunds";
 import { AdminAlert } from "../components/AdminFrame";
 import { formatSen } from "../format";
@@ -38,7 +39,8 @@ import { formatDateTime, usePrice } from "./TrackOrderPage";
 // 经 Stripe 测试付款的订单（UX 0.12 A03「Stripe 测试（0.11）」，视觉稿 A03-stripe-review、A03-stripe-approved、A03-stripe-phone-failed 与
 // A03-stripe-states）：金额区块之后为 admin.paid_via_stripe 与付款方式类型，审核中与已批准另有按类型的期限提示；审核中在
 // admin.refund_hint 之后另有 ◆ admin.stripe_refund_hint；已批准在审核记录之后为 Stripe 退款段（尝试表或 none / not_sent 提示）。
-// 状态与金额由服务端给出，页面只显示、不自动刷新；手动重试留给 SHOP-TASK-142。经模拟支付的订单与上面相同。
+// 状态与金额由服务端给出，页面只显示、不自动刷新。最新一次尝试为失败时，提示框之下为 admin.stripe_refund_retry（SHOP-TASK-142）：
+// 以详情给的 CSRF 令牌 POST 重试接口，成功后重新读取详情；能否重试、合计上限与审计在服务端。经模拟支付的订单与上面相同。
 
 // 退款申请状态与它的名称、标签样式（视觉稿 A03-desktop：审核中为演示标签、已批准为成功标签、已拒绝为描边标签）；列表与详情共用。
 export const REFUND_STATUS_LABEL: Readonly<Record<RefundStatus, CopyKey>> = {
@@ -127,6 +129,13 @@ export function stripeRefundSection(refund: AdminRefundDetail): StripeRefundSect
     return { kind: "not_sent" };
   }
   return { kind: "attempts", attempts: refund.stripe_refunds, hint: stripeRefundHint(latest.status) };
+}
+
+// admin.stripe_refund_retry 只在有尝试表且第一条（最新）为失败时显示（UX A03「Stripe 测试（0.11）」说明第 4 条）；处理中的尝试
+// 不提供改为失败或取消的按钮。
+export function canRetryStripeRefund(refund: AdminRefundDetail): boolean {
+  const section = stripeRefundSection(refund);
+  return section.kind === "attempts" && section.attempts[0]?.status === "failed";
 }
 
 // 详情区的状态：读取中、申请不存在（含路径 ID 不合法）、读取失败（提示）、已取到
@@ -253,6 +262,69 @@ export async function submitReview(
   settleDetail(await reviewStep(reply, id, refund, language, signal), signal, moves);
 }
 
+// 重试的下一步：在按钮的位置显示提示（详情不变）、回到 A01（login），或重新读取详情（取到后在按钮的位置显示 notice）。
+export type RetryStep = { kind: "notice"; notice: CopyKey } | { kind: "reread"; notice: CopyKey | null } | "login";
+
+// 按重试的回答决定：200 后重新读取（接口回 200 之前已调用 Stripe，新尝试照读到的状态显示）；409 stripe_refund_cap 保留当前详情并显示
+// admin.stripe_refund_blocked；409 stripe_refund_not_retryable、refund_not_approved 与 403 重新读取后显示 common.error_retry；
+// 401 回到 A01；网络中断显示 common.network_check；其他失败显示 common.error_retry。
+export function retryStep(reply: StripeRetryReply): RetryStep {
+  switch (reply) {
+    case "done":
+      return { kind: "reread", notice: null };
+    case "not_retryable":
+    case "csrf":
+      return { kind: "reread", notice: "common.error_retry" };
+    case "cap":
+      return { kind: "notice", notice: "admin.stripe_refund_blocked" };
+    case "none":
+      return "login";
+    case "network":
+      return { kind: "notice", notice: "common.network_check" };
+    case "failed":
+      return { kind: "notice", notice: "common.error_retry" };
+  }
+}
+
+// 重试另有一件事：结束提交中，并给出按钮位置的提示（null 为不显示）。重试不让列表重新查询（申请状态不变）。
+export interface RetryMoves extends DetailMoves {
+  retried: (notice: CopyKey | null) => void;
+}
+
+// 重试后重新读取的结果：取到时显示新详情（审核的提示清空），reread 带回的提示改在按钮的位置显示；读取失败时 reread 保留原来的详情，
+// 其 common.network_check 或 common.error_retry 同样显示在按钮的位置；申请已不存在时显示不存在；401 回到 A01。
+function settleRetry(step: DetailStep, signal: AbortSignal, moves: RetryMoves): void {
+  if (signal.aborted) {
+    return;
+  }
+  if (step === "login") {
+    moves.replace(ADMIN_LOGIN_PATH);
+  } else if (step.status === "ready") {
+    moves.show({ ...step, notice: null });
+    moves.retried(step.notice);
+  } else {
+    moves.show(step);
+    moves.retried(null);
+  }
+}
+
+// 发出一次重试：没有请求体与幂等键，请求头带详情给的 CSRF 令牌。重试的 POST 本身不中止（与审核相同），离开页面或换申请之后
+// 其结果与重新读取都不再更新页面。
+export async function submitRetry(id: string, refund: AdminRefundDetail, language: Language, signal: AbortSignal, moves: RetryMoves): Promise<void> {
+  const step = retryStep(await retryStripeRefund(id, refund.csrf_token));
+  if (step === "login") {
+    settleDetail(step, signal, moves);
+    return;
+  }
+  if (step.kind === "notice") {
+    if (!signal.aborted) {
+      moves.retried(step.notice);
+    }
+    return;
+  }
+  settleRetry(await reread(id, refund, language, signal, step.notice), signal, moves);
+}
+
 function BackIcon() {
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -288,13 +360,20 @@ function ItemRow({ line }: { line: AdminRefundDetailLine }) {
   );
 }
 
-interface ReadyProps {
+interface ReadyProps extends RetryProps {
   refund: AdminRefundDetail;
   reason: string;
   busy: boolean;
   notice: CopyKey | null;
   onReason: (value: string) => void;
   onReview: (action: ReviewAction) => void;
+}
+
+// Stripe 退款段的重试：提交中（按钮禁用、标 aria-busy）、按钮位置的提示与点按的回调。
+interface RetryProps {
+  retrying: boolean;
+  retryNotice: CopyKey | null;
+  onRetry: () => void;
 }
 
 // 审核中的理由输入框（最多 500 个字符）；审核进行中禁用。
@@ -321,7 +400,7 @@ function ReasonField({ reason, busy, onReason }: Pick<ReadyProps, "reason" | "bu
 
 // 审核中：批准与拒绝两个按钮，其后为提示与 admin.refund_hint，经 Stripe 付款时再以同样的 ◆ 标记显示 admin.stripe_refund_hint
 // （手机由 site.css 把两条 ◆ 提示排在按钮之前）。
-function ReviewActions({ refund, reason, busy, notice, onReview }: Omit<ReadyProps, "onReason">) {
+function ReviewActions({ refund, reason, busy, notice, onReview }: Omit<ReadyProps, "onReason" | keyof RetryProps>) {
   const t = useCopy();
   return (
     <div className="site-admin-refund__actions">
@@ -461,8 +540,9 @@ function StripeRefundAttempts({ attempts }: { attempts: AdminRefundStripeRefund[
 }
 
 // 已批准、经 Stripe 付款时审核记录之后的 Stripe 退款段：标题 admin.stripe_refund_title，其下按 stripeRefundSection 显示
-// admin.stripe_refund_none、admin.stripe_refund_not_sent，或尝试表与最新一次尝试的提示（失败为提示框）。
-function StripeRefundBlock({ refund }: { refund: AdminRefundDetail }) {
+// admin.stripe_refund_none、admin.stripe_refund_not_sent，或尝试表与最新一次尝试的提示（失败为提示框，其下为重试按钮）。
+// 重试的提示在按钮之下（视觉稿 A03-stripe-states）；重新读取后按钮不再显示时，仍在这一段的同一位置（段末）显示。
+function StripeRefundBlock({ refund, retrying, retryNotice, onRetry }: RetryProps & { refund: AdminRefundDetail }) {
   const t = useCopy();
   const section = stripeRefundSection(refund);
   if (section.kind === "hidden") {
@@ -490,15 +570,29 @@ function StripeRefundBlock({ refund }: { refund: AdminRefundDetail }) {
               {t(section.hint)}
             </div>
           )}
+          {canRetryStripeRefund(refund) && (
+            <button
+              className="acs-admin__btn site-admin-refund__stripe-retry"
+              type="button"
+              disabled={retrying}
+              aria-busy={retrying}
+              onClick={() => {
+                onRetry();
+              }}
+            >
+              {t("admin.stripe_refund_retry")}
+            </button>
+          )}
         </>
       )}
+      {retryNotice !== null && <AdminAlert error={retryNotice} />}
     </div>
   );
 }
 
 // 已取到的详情：桌面为一张面板；手机外层面板不绘制（site.css），标题、内容面板（商品、金额、经 Stripe 付款时的付款方式，以及理由或审核记录）、
 // 已批准时的 Stripe 退款段、提示与按钮依次排列。
-function RefundDetail({ refund, reason, busy, notice, onReason, onReview }: ReadyProps) {
+function RefundDetail({ refund, reason, busy, notice, retrying, retryNotice, onReason, onReview, onRetry }: ReadyProps) {
   const t = useCopy();
   const requested = refund.status === "requested";
   return (
@@ -528,7 +622,7 @@ function RefundDetail({ refund, reason, busy, notice, onReason, onReview }: Read
         <StripePaymentBlock refund={refund} />
         {requested ? <ReasonField reason={reason} busy={busy} onReason={onReason} /> : <ReviewedBlock refund={refund} />}
       </div>
-      <StripeRefundBlock refund={refund} />
+      <StripeRefundBlock refund={refund} retrying={retrying} retryNotice={retryNotice} onRetry={onRetry} />
       {requested && <ReviewActions refund={refund} reason={reason} busy={busy} notice={notice} onReview={onReview} />}
     </div>
   );
@@ -542,10 +636,15 @@ export interface AdminRefundDetailViewProps {
   backTo: RoutePath;
   onReason: (value: string) => void;
   onReview: (action: ReviewAction) => void;
+  // Stripe 退款重试进行中（按钮禁用、标 aria-busy）。
+  retrying: boolean;
+  // 重试之后显示在 Stripe 退款段按钮位置的提示（null 为不显示）。
+  retryNotice: CopyKey | null;
+  onRetry: () => void;
 }
 
 // 详情区：顶部为返回列表的链接（只在手机显示）；读取中标 aria-busy；不存在或读取失败时只有提示，不显示详情。
-export function AdminRefundDetailView({ state, reason, backTo, onReason, onReview }: AdminRefundDetailViewProps) {
+export function AdminRefundDetailView({ state, reason, backTo, retrying, retryNotice, onReason, onReview, onRetry }: AdminRefundDetailViewProps) {
   const t = useCopy();
   return (
     <section className="site-admin-refund" aria-busy={state.status === "loading"}>
@@ -556,7 +655,17 @@ export function AdminRefundDetailView({ state, reason, backTo, onReason, onRevie
       {state.status === "missing" && <AdminAlert error="common.error_retry" />}
       {state.status === "failed" && <AdminAlert error={state.error} />}
       {state.status === "ready" && (
-        <RefundDetail refund={state.refund} reason={reason} busy={state.busy} notice={state.notice} onReason={onReason} onReview={onReview} />
+        <RefundDetail
+          refund={state.refund}
+          reason={reason}
+          busy={state.busy}
+          notice={state.notice}
+          retrying={retrying}
+          retryNotice={retryNotice}
+          onReason={onReason}
+          onReview={onReview}
+          onRetry={onRetry}
+        />
       )}
     </section>
   );
@@ -577,6 +686,10 @@ export default function AdminRefundDetailContent({ id, backTo, onReviewed }: Adm
   const [reason, setReason] = useState("");
   // 网络中断后保留的那次审核（操作、理由与幂等键）；得到确定回答后为 null。
   const retry = useRef<ReviewAttempt | null>(null);
+  // Stripe 退款重试：提交中与按钮位置的提示；ref 让提交中的再点（重新渲染之前）也不发第二次请求。
+  const [retrying, setRetrying] = useState(false);
+  const [retryNotice, setRetryNotice] = useState<CopyKey | null>(null);
+  const retryingRef = useRef(false);
   // 打开时的界面语言：之后切换语言不重新读取（与 A02 详情相同）。
   const languageRef = useRef(language);
   useEffect(() => {
@@ -598,6 +711,8 @@ export default function AdminRefundDetailContent({ id, backTo, onReviewed }: Adm
       state={state}
       reason={reason}
       backTo={backTo}
+      retrying={retrying}
+      retryNotice={retryNotice}
       onReason={setReason}
       onReview={(action) => {
         const controller = lifetime.current;
@@ -614,6 +729,24 @@ export default function AdminRefundDetailContent({ id, backTo, onReviewed }: Adm
             retry.current = kept;
           },
           reviewed: onReviewed,
+        });
+      }}
+      onRetry={() => {
+        const controller = lifetime.current;
+        if (state.status !== "ready" || retryingRef.current || controller === null || !canRetryStripeRefund(state.refund)) {
+          return;
+        }
+        retryingRef.current = true;
+        setRetrying(true);
+        setRetryNotice(null);
+        void submitRetry(id, state.refund, languageRef.current, controller.signal, {
+          show: setState,
+          replace,
+          retried: (notice) => {
+            retryingRef.current = false;
+            setRetrying(false);
+            setRetryNotice(notice);
+          },
         });
       }}
     />

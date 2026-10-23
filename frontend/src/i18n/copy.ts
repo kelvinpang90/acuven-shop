@@ -1820,6 +1820,11 @@ export const COPY = {
     zh: "Stripe 未完成这笔退款。请先核对上面的期限与 Stripe 后台，再重试；重试会发出一笔新的退款请求。",
     ms: "Stripe tidak melengkapkan bayaran balik ini. Semak had masa di atas dan papan pemuka Stripe, kemudian cuba semula. Cubaan semula menghantar permintaan bayaran balik baharu.",
   },
+  "admin.stripe_refund_retry": {
+    en: "Retry Stripe refund",
+    zh: "重试 Stripe 退款",
+    ms: "Cuba semula bayaran balik Stripe",
+  },
   "admin.stripe_refund_none": {
     en: "Nothing to refund in Stripe: the approved items were fully paid with coupons or points.",
     zh: "无需在 Stripe 退款：所退商品已全部由优惠券或积分抵扣。",
@@ -1829,6 +1834,11 @@ export const COPY = {
     en: "This refund couldn't be sent to Stripe. The operator has been alerted; check this payment in the Stripe dashboard.",
     zh: "这笔退款未能发送到 Stripe，已告警运营者；请到 Stripe 后台核对这笔付款。",
     ms: "Bayaran balik ini tidak dapat dihantar ke Stripe. Pengendali telah dimaklumkan; semak pembayaran ini di papan pemuka Stripe.",
+  },
+  "admin.stripe_refund_blocked": {
+    en: "This refund can't be sent to Stripe because it would exceed the amount paid. The operator has been alerted.",
+    zh: "这笔退款会超过付款金额，无法发送到 Stripe，已告警运营者。",
+    ms: "Bayaran balik ini tidak boleh dihantar ke Stripe kerana ia akan melebihi amaun yang dibayar. Pengendali telah dimaklumkan.",
   },
 } as const satisfies Record<string, CopyEntry>;
 

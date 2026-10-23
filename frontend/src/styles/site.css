@@ -350,6 +350,9 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-refund__num { text-align: right; }
 .site-admin-refund__stripe-cards { display: none; margin: 0; padding: 0; list-style: none; }
 .site-admin-refund__stripe-note { padding: 10px 12px; }
+/* 重试按钮（A03-stripe-states）：在失败提示框之下靠左，不占满宽度；重试的提示框在按钮之下（同一段的间距 10px）。
+   提示框的字号 13px site.css 写不了，记在 docs/task-records/SHOP-TASK-142.md 的偏离里 */
+.site-admin-refund__stripe-retry { justify-self: start; }
 
 /* 后台库存重置结果 A07 的页头（A07-desktop）：内容最宽 960px，标题与说明上下排列（间距 16px）；说明内边距 10px 12px。
    说明的底色、文字颜色、字号与圆角 site.css 写不了，记在 docs/TODO.md 的偏离里 */
@@ -736,6 +739,8 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-refund__stripe-cards { display: grid; gap: 14px; }
   .site-admin-refund__stripe-card { display: grid; justify-items: start; gap: 6px; padding: 14px; }
   .site-admin-refund__stripe-id { display: flex; flex-wrap: wrap; gap: 4px; }
+  /* 重试按钮（A03-stripe-phone-failed）：占满宽度、文字居中、加高到 44px */
+  .site-admin-refund__stripe-retry { justify-self: stretch; justify-content: center; min-height: 44px; }
 
   /* 后台库存重置结果的页头（A07-phone）：标题与说明间距 10px */
   .site-admin-stock-resets { gap: 10px; }
