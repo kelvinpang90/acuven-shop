@@ -483,6 +483,17 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-login__register { padding-top: 14px; }
 .site-login .acs-field__error svg { flex-shrink: 0; margin-top: 2px; }
 
+/* 会员忘记密码 P12 的重设部分（SHOP-TASK-147，P12-desktop 的重设卡片与 P12-reset-states）：居中的 480px 卡片（页面上 64px、下 96px，
+   卡片内边距 32px），标题与内容区间距 18px；内容区里的提示、V1、提示条与链接上下排列（间距 16px，照 P12-reset-states）；新密码表单
+   各块间距 18px；auth.reset_not_registered 之下的 common.nav_register 与 auth.reset_done 之下的 common.nav_login 靠左。
+   视觉稿重设卡片里的遮掩号码一行（加粗）没有字典键，不渲染（V1 的 auth.code_sent 已显示遮掩号码），记在任务记录的偏离里 */
+.site-reset { display: grid; justify-content: center; align-items: start; padding: 64px 0 96px; }
+.site-reset__card { display: grid; gap: 18px; width: 480px; padding: 32px; }
+.site-reset__body { display: grid; gap: 16px; align-content: start; }
+.site-reset__form { display: grid; gap: 18px; align-content: start; }
+.site-reset__link { justify-self: start; }
+.site-reset .acs-field__error svg { flex-shrink: 0; margin-top: 2px; }
+
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
 
@@ -853,4 +864,10 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-login__panel:not([hidden]), .site-login__form { gap: 16px; }
   .site-login__forgot, .site-login__register { justify-self: center; }
   .site-login__register { padding-top: 0; }
+
+  /* 会员忘记密码 P12（P12-phone 没有画重设部分，照同页登录部分的手机写法）：不画卡片（display: contents），标题与内容区在内容区
+     （上 28px、左右 16px、下 40px）里上下排列，间距 16px；新密码表单同样 16px */
+  .site-reset { justify-content: stretch; gap: 16px; padding: 28px 16px 40px; }
+  .site-reset__card { display: contents; }
+  .site-reset__form { gap: 16px; }
 }
