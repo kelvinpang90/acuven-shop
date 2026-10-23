@@ -342,17 +342,19 @@ describe("submit results", () => {
 describe("number not registered", () => {
   // 同一条「not_registered 时显示 auth.reset_not_registered 与去 /register 的 common.nav_register（/register 进入路由表之前只显示文案、
   // 不渲染链接…），不显示密码输入」与 DESIGN 1.12「权限与资料保护」第 3 条「未注册号码不创建账号」、视觉稿 P12-reset-states：
-  // 目前 /register 不在路由表，只有 info 提示；给出路径时（以已有的 /privacy 代替）提示之后为次要按钮样式的链接。
+  // registerTo 为 null 时只有 info 提示；给出路径时提示之后为次要按钮样式的链接。
+  // SHOP-TASK-148 目的「/register 进入路由表后，…SHOP-TASK-147 重设页的 common.nav_register 随之出现」：注册页已进路由表，
+  // 原来断言 registerPath() 为 null 的一行改为 /register，链接改以它为去向（原以 /privacy 代替）；不渲染的一侧改以 registerTo 为 null 守住。
   it.each(LANGUAGES)("shows auth.reset_not_registered and the register link only when the page exists in %s", (language) => {
     expect(NOT_REGISTERED.verified).toEqual({ kind: "not_registered" });
-    expect(registerPath()).toBeNull();
-    const without = render({ form: NOT_REGISTERED, registerTo: registerPath() }, language);
+    expect(registerPath()).toBe("/register");
+    const without = render({ form: NOT_REGISTERED, registerTo: null }, language);
     expect(without).toMatch(new RegExp(`<div class="acs-alert acs-alert--info" role="status"><svg[^>]*>[\\s\\S]*?</svg><span>${copy("auth.reset_not_registered", language)}</span></div></div></section>`));
     expect(without).not.toContain(copy("common.nav_register", language) + "</a></div></section>");
     expect(hrefs(without)).toEqual([]);
     expect(without).not.toContain(`type="password"`);
-    const withLink = render({ form: NOT_REGISTERED, registerTo: "/privacy" }, language);
-    expect(withLink).toContain(`</span></div><a class="acs-btn acs-btn--secondary site-reset__link" href="/privacy">${copy("common.nav_register", language)}</a></div></section>`);
+    const withLink = render({ form: NOT_REGISTERED, registerTo: registerPath() }, language);
+    expect(withLink).toContain(`</span></div><a class="acs-btn acs-btn--secondary site-reset__link" href="/register">${copy("common.nav_register", language)}</a></div></section>`);
   });
 
   // 任务目的「嵌入 SHOP-TASK-145 的 V1（用途 reset_password），号码已注册时显示新密码输入…未注册时显示 auth.reset_not_registered」

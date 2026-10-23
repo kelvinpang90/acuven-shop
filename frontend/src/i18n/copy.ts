@@ -700,6 +700,11 @@ export const COPY = {
     zh: "验证通过后，近 30 天内用此号码下单的游客订单会自动归入您的账号；过去的订单不补发积分。",
     ms: "Setelah disahkan, pesanan tetamu dengan nombor ini dalam 30 hari lalu akan ditambah ke akaun anda. Mata tidak ditambah untuk pesanan lalu.",
   },
+  "auth.register_title": {
+    en: "Create a member account",
+    zh: "注册会员",
+    ms: "Daftar akaun ahli",
+  },
   "auth.same_flow_note": {
     en: "Verify your mobile number by SMS. If it already belongs to a member, you'll be logged in; otherwise a member account is created.",
     zh: "通过短信验证手机号。号码已是会员则直接登录，否则创建会员账号。",
@@ -779,6 +784,11 @@ export const COPY = {
     en: "Members can see order history, demo points and coupons, and confirm receipt or request refunds for their orders.",
     zh: "会员可查看历史订单、演示积分与优惠券，并对自己的订单确认收货或申请退款。",
     ms: "Ahli boleh melihat sejarah pesanan, mata demo dan kupon, serta mengesahkan penerimaan atau memohon bayaran balik bagi pesanan mereka.",
+  },
+  "auth.register_demo_hint": {
+    en: "Registration sends a real SMS to your phone. Everything else remains a demo.",
+    zh: "注册会向您的手机发送真实短信；其余一切仍是演示。",
+    ms: "Pendaftaran menghantar SMS sebenar ke telefon anda. Selain itu, semuanya kekal demo.",
   },
   "pay.title": {
     en: "Simulated payment",
@@ -959,6 +969,11 @@ export const COPY = {
     en: 'To view this order later, confirm receipt or request a refund, use "Track order" with your order number and phone number.',
     zh: "之后如需查看此订单、确认收货或申请退款，请在“查询订单”中输入订单号和电话。",
     ms: 'Untuk melihat pesanan ini kemudian, mengesahkan penerimaan atau memohon bayaran balik, gunakan "Semak pesanan" dengan nombor pesanan dan nombor telefon anda.',
+  },
+  "result.guest_register": {
+    en: "Have a Malaysian or Singapore mobile number? Register to earn points next time.",
+    zh: "有马来西亚或新加坡手机号？注册会员，下次购物可得积分。",
+    ms: "Ada nombor telefon bimbit Malaysia atau Singapura? Daftar untuk dapat mata pada pembelian seterusnya.",
   },
   "result.failure_title": {
     en: "Demo payment failed",

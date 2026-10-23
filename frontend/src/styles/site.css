@@ -179,6 +179,8 @@ body { margin: 0; }
 .site-result__head { display: grid; gap: 14px; justify-items: start; }
 .site-result__icon { width: 56px; height: 56px; padding: 0; justify-content: center; }
 .site-result__continue, .site-result__retry { justify-self: start; }
+/* P07-phone-guest：result.guest_register 是 result.guest_next 之下的普通链接，靠左 */
+.site-result__register { justify-self: start; }
 /* P07 Stripe（P07-stripe-confirming、P07-stripe-states）：确认中的图标圆框与标题组，自动重查用完后的按钮；尚未付款的提示与按钮一组 */
 .site-result__pending { display: grid; place-items: center; width: 56px; height: 56px; }
 .site-result__confirming { display: grid; gap: 10px; }
@@ -493,6 +495,15 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-reset__form { display: grid; gap: 18px; align-content: start; }
 .site-reset__link { justify-self: start; }
 .site-reset .acs-field__error svg { flex-shrink: 0; margin-top: 2px; }
+
+/* 会员注册 P11（SHOP-TASK-148，P11-desktop）：居中的 520px 卡片（页面上 64px、下 96px，卡片内边距 32px），标题、★ 提示、
+   auth.same_flow_note、V1 所在的内容区与 common.nav_login 上下排列（间距 16px）；V1 的发送按钮占满卡片宽度；common.nav_login 居中、上方 8px */
+.site-register { display: grid; justify-content: center; align-items: start; padding: 64px 0 96px; }
+.site-register__card { display: grid; gap: 16px; width: 520px; padding: 32px; }
+.site-register__text { margin: 0; }
+.site-register__body { display: grid; gap: 16px; align-content: start; }
+.site-register .site-sms__send { justify-self: stretch; }
+.site-register__login { justify-self: center; padding-top: 8px; }
 
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
@@ -870,4 +881,12 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-reset { justify-content: stretch; gap: 16px; padding: 28px 16px 40px; }
   .site-reset__card { display: contents; }
   .site-reset__form { gap: 16px; }
+
+  /* 会员注册 P11（P11-phone）：不画卡片（display: contents），各块在内容区（上 28px、左右 16px、下 40px）里上下排列，间距 16px；
+     V1 的验证码输入与验证按钮分行（间距 16px，按钮占满宽度），重发与 common.nav_login 居中 */
+  .site-register { justify-content: stretch; gap: 16px; padding: 28px 16px 40px; }
+  .site-register__card { display: contents; }
+  .site-register .site-sms__code { display: grid; gap: 16px; }
+  .site-register .site-sms__resend { justify-self: center; }
+  .site-register__login { padding-top: 0; }
 }
