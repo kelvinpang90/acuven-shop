@@ -258,7 +258,8 @@ describe("site settings", () => {
     expect(password).toMatch(new RegExp(`<button class="acs-btn acs-btn--primary acs-btn--block" type="submit" aria-busy="false">${copy("auth.login_submit", language)}</button>`));
     expect(canSubmit(FILLED)).toBe(true);
     expect(smsEnabledOf(FAILED)).toBe(false);
-    expect(textNodes(sms)).toEqual([COPY["common.error_retry"][language]]);
+    // panels() 的切片从开始标签的属性起，先去掉开始标签余下的部分，再看内容的文字。
+    expect(textNodes(sms.slice(sms.indexOf(">") + 1))).toEqual([COPY["common.error_retry"][language]]);
     expect(sms).toContain(`<p class="acs-alert acs-alert--danger site-notice" role="alert">`);
   });
 
@@ -347,7 +348,7 @@ describe("password tab", () => {
     expect(failed).not.toContain(PASSWORD);
     const invalid = render({ form: passwordStep("phone_invalid", true)(FILLED) }, language);
     expect(invalid).toContain(`<div class="acs-field acs-field--invalid">`);
-    expect(invalid).toMatch(new RegExp(`aria-invalid="true" aria-describedby="([^"]+)"/>[\\s\\S]*<span class="acs-field__error" id="\\1"><svg[^>]*>[\\s\\S]*?</svg>${copy("checkout.phone_invalid", language)}</span>`));
+    expect(invalid).toMatch(new RegExp(`aria-invalid="true" aria-describedby="([^"]+)"[^>]*/>[\\s\\S]*<span class="acs-field__error" id="\\1"><svg[^>]*>[\\s\\S]*?</svg>${copy("checkout.phone_invalid", language)}</span>`));
   });
 
   // 同一条「auth.forgot（/forgot-password 进入路由表之前不渲染，照 CheckoutPage.tsx 的 loginPath 写法以 isRoutePath 判断）」：
