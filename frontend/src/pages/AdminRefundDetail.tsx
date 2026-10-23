@@ -739,7 +739,7 @@ export default function AdminRefundDetailContent({ id, backTo, onReviewed }: Adm
         retryingRef.current = true;
         setRetrying(true);
         setRetryNotice(null);
-        void submitRetry(id, state.refund, language, controller.signal, {
+        void submitRetry(id, state.refund, languageRef.current, controller.signal, {
           show: setState,
           replace,
           retried: (notice) => {
