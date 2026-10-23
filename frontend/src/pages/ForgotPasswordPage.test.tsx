@@ -196,7 +196,7 @@ describe("number registered", () => {
     expect(html.indexOf(`<div class="site-sms">`)).toBeLessThan(html.indexOf(`<form class="site-reset__form"`));
     expect(form).toMatch(
       new RegExp(
-        `<label class="acs-field__label" for="([^"]+)">${copy("auth.new_password", language)}</label><input class="acs-input" id="\\1" type="password" autocomplete="new-password" value="" aria-describedby="([^"]+)"/><span class="acs-field__hint" id="\\2">${copy("auth.password_rule", language)}</span>`,
+        `<label class="acs-field__label" for="([^"]+)">${copy("auth.new_password", language)}</label><input class="acs-input" id="\\1" type="password" autocomplete="new-password" aria-describedby="([^"]+)" value=""/><span class="acs-field__hint" id="\\2">${copy("auth.password_rule", language)}</span>`,
         "i",
       ),
     );
@@ -273,7 +273,7 @@ describe("submit results", () => {
     expect(form).toEqual({ ...FILLED, tooShort: true });
     const html = render({ form }, language);
     expect(html).toContain(`<div class="acs-field acs-field--invalid">`);
-    expect(html).toMatch(new RegExp(`aria-invalid="true" aria-describedby="([^"]+)"/><span class="acs-field__error" id="\\1"><svg[^>]*>[\\s\\S]*?</svg>${copy("auth.password_rule", language)}</span>`));
+    expect(html).toMatch(new RegExp(`aria-invalid="true" aria-describedby="([^"]+)" value="[^"]*"/><span class="acs-field__error" id="\\1"><svg[^>]*>[\\s\\S]*?</svg>${copy("auth.password_rule", language)}</span>`));
     expect(canReset(form)).toBe(true);
   });
 
@@ -307,7 +307,7 @@ describe("submit results", () => {
   });
 
   // 同一条「unavailable 显示 common.service_unavailable、failed 显示 common.error_retry，都留在表单可再提交；network 显示 common.network_check」
-  // 与视觉稿 P12-phone 的失败提示（按钮之前的 danger 提示条）：新密码保留，按钮可再点。
+  // 与视觉稿 P12-phone 登录部分的失败提示写法（重设部分没有画，照同页按钮之前的 danger 提示条）：新密码保留，按钮可再点。
   const failures: [string, Reply, CopyKey][] = [
     ["unavailable", () => json(503, { detail: "service_unavailable" }), "common.service_unavailable"],
     ["failed", () => json(500, {}), "common.error_retry"],
