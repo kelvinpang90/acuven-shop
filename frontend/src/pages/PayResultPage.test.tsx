@@ -132,17 +132,26 @@ describe("success", () => {
     expect(html).toContain(`<span>${countryName("MY", language)}</span>`);
   });
 
-  // SHOP-TASK-024 验收第 8 条「result.guest_register 与 result.track 按路由规则在注册页、会员订单详情实现前不渲染，不显示获得积分」与
-  // UX P07 说明「游客结果页不提供确认收货、退款或其他订单的入口，也不设直达 P09 的按钮」：成功页唯一的链接是去商品列表。
-  it("has no register, order detail or points", () => {
+  // SHOP-TASK-024 验收第 8 条「result.track 按路由规则在会员订单详情实现前不渲染，不显示获得积分」与
+  // UX P07 说明「游客结果页不提供确认收货、退款或其他订单的入口，也不设直达 P09 的按钮」。
+  // SHOP-TASK-148 验收「PayResultPage.test.tsx 只改『has no register, order detail or points』一条…改为断言成功页恰有去 /register 与去 /products
+  // 两个链接、仍没有 result.track 与获得积分」：注册页进表后，原来断言 /register 不在路由表的一行不再成立。UX P07 线框
+  // 「游客：[result.guest_next] [result.guest_register] → P11」：注册链接紧跟 result.guest_next；只加在成功页，Stripe 确认中（也显示 result.guest_next）没有。
+  it("has the register link but no order detail or points", () => {
     const html = render(ready(payOrder()));
-    expect(isRoutePath("/register")).toBe(false);
     expect(isRoutePath("/account/order")).toBe(false);
-    for (const key of ["result.guest_register", "result.track", "result.points_earned", "result.retry"]) {
+    for (const key of ["result.track", "result.points_earned", "result.retry"]) {
       expect(html).not.toContain(key);
     }
-    expect(html).not.toMatch(/Register|View this order|demo points/);
-    expect([...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1])).toEqual(["/products"]);
+    expect(html).not.toMatch(/View this order|demo points/);
+    expect([...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1])).toEqual(["/register", "/products"]);
+    expect(html).toContain(`</span></div><a class="site-result__register" href="/register">${escapeHtml(COPY["result.guest_register"].en)}</a>`);
+    const stripe = payOrder({ status: "awaiting_demo_payment", last_payment: null, payment_route: "stripe", stripe_state: "open" });
+    for (const screen of [confirming(stripe, false), confirming(stripe, true)]) {
+      const other = render(screen);
+      expect(has(other, "result.guest_next")).toBe(true);
+      expect(other).not.toContain(`href="/register"`);
+    }
   });
 
   // UX P07 线框「成功」的顺序：[result.success_title]、[result.success_body]、订单号、[pay.save_order_no]、[pay.amount_due]、收货资料、[result.guest_next]、

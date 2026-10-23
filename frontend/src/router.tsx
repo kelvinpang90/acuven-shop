@@ -21,6 +21,7 @@ import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 // App.tsx 不给它们套前台框架，前台页头、菜单与页脚也没有指向它们的入口（UX A01「前台不放入口链接」）。
 // 会员登录 /login 的号码与密码只在页面内存与请求体里；登录成功后回到的来源页只记在路由的内存里（见下方「来源页」）。
 // 忘记密码 /forgot-password 的号码、验证码、新密码与 CSRF 令牌只在页面内存与请求里。
+// 注册 /register 的号码与验证码只在页面内存与请求体里；成功后的去向同会员登录。
 export const ROUTE_PATHS = [
   "/",
   "/products",
@@ -35,6 +36,7 @@ export const ROUTE_PATHS = [
   "/privacy",
   "/login",
   "/forgot-password",
+  "/register",
   "/admin/login",
   "/admin/orders",
   "/admin/orders/:id",

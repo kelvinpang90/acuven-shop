@@ -397,14 +397,16 @@ describe("SMS code tab", () => {
     expect(sms).toContain(`href="/checkout"`);
   });
 
-  // 同一条「页签下方 common.nav_register（/register 进入路由表之前不渲染，写法同上）」：目前不渲染；给出路径时（以 /privacy 代替）在 V1 之后。
+  // 同一条「页签下方 common.nav_register（/register 进入路由表之前不渲染，写法同上）」：registerTo 为 null 时不渲染；给出路径时在 V1 之后。
+  // SHOP-TASK-148 目的「/register 进入路由表后，SHOP-TASK-146 登录页…的 common.nav_register 随之出现」：注册页已进路由表，
+  // 原来断言 registerPath() 为 null 的一行改为 /register，链接改以它为去向（原以 /privacy 代替）；不渲染的一侧仍以 registerTo 为 null 守住。
   it("renders common.nav_register only when the register page exists", () => {
-    expect(registerPath()).toBeNull();
+    expect(registerPath()).toBe("/register");
     const without = render({ tab: "sms" });
     expect(without).not.toContain(copy("common.nav_register"));
     expect(without).not.toContain("/register");
-    const withLink = panels(render({ tab: "sms", registerTo: "/privacy" })).sms;
-    expect(withLink).toMatch(new RegExp(`<a class="site-login__register" href="/privacy">${copy("common.nav_register")}</a></div></div></section>`));
+    const withLink = panels(render({ tab: "sms", registerTo: registerPath() })).sms;
+    expect(withLink).toMatch(new RegExp(`<a class="site-login__register" href="/register">${copy("common.nav_register")}</a></div></div></section>`));
   });
 });
 

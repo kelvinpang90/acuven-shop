@@ -92,7 +92,9 @@ describe("route table", () => {
   // 原来断言 /login 不在表里的一行随之改为在表里，忘记密码与注册仍不在表里。
   // SHOP-TASK-147 验收第 2 条「路由 /forgot-password 加进 frontend/src/router.tsx 的路由表」：忘记密码进表，在会员登录之后；
   // 原来断言 /forgot-password 不在表里的一行随之改为在表里，注册仍不在表里。
-  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page, the member login, the password reset and the admin pages", () => {
+  // SHOP-TASK-148 验收第 2 条「路由 /register 加进 frontend/src/router.tsx 的路由表」：注册进表，在忘记密码之后；
+  // 原来断言 /register 不在表里的一行随之改为在表里。
+  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page, the member login, the password reset, the register page and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
       "/products",
@@ -107,6 +109,7 @@ describe("route table", () => {
       "/privacy",
       "/login",
       "/forgot-password",
+      "/register",
       "/admin/login",
       "/admin/orders",
       "/admin/orders/:id",
@@ -141,7 +144,7 @@ describe("route table", () => {
     expect(isRoutePath("/account/order/refund")).toBe(false);
     expect(isRoutePath("/login")).toBe(true);
     expect(isRoutePath("/forgot-password")).toBe(true);
-    expect(isRoutePath("/register")).toBe(false);
+    expect(isRoutePath("/register")).toBe(true);
   });
 
   // SHOP-TASK-147 验收第 2 条「页面为 frontend/src/pages/ForgotPasswordPage.tsx…套前台框架」与「读取完成前不渲染 V1、标 aria-busy」：
