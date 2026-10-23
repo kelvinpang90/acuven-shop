@@ -147,12 +147,13 @@ describe("route and card", () => {
     expect(html).toContain(`<a class="site-register__login" href="/login">${copy("common.nav_login", language)}</a>`);
   });
 
-  // UX P11「入口…页头只有登录入口，不设注册入口」与 SHOP-TASK-148 验收第 2 条「页头不出现注册入口」：注册页与首页的页头都没有指向 /register 的链接，
-  // 也没有 common.nav_register 的文字；页头的登录入口照旧。
+  // UX P11「入口…页头只有登录入口，不设注册入口」与 SHOP-TASK-148 验收第 2 条「页头不出现注册入口」：注册页与首页的页头里，除语言切换链接
+  // （指向当前页、带 lang）外没有指向 /register 的链接，也没有 common.nav_register 的文字；页头的登录入口照旧。
   it.each(LANGUAGES)("has no register entry in the header in %s", (language) => {
     for (const path of ["/register", "/"]) {
       const head = header(renderApp(path, language));
-      expect(head).not.toContain(`href="/register"`);
+      const toRegister = [...head.matchAll(/<a\s[^>]*href="\/register"[^>]*>/g)].map((m) => m[0]);
+      expect(toRegister.filter((tag) => !/\slang="/.test(tag))).toEqual([]);
       expect(head).not.toContain(`>${copy("common.nav_register", language)}<`);
       expect(head).toContain(`href="/login">${copy("common.nav_login", language)}</a>`);
     }
@@ -237,9 +238,11 @@ describe("embedded V1", () => {
   it.each(LANGUAGES)("replaces V1 with auth.sms_paused and continue as guest with SMS off in %s", (language) => {
     const html = render({ settings: SMS_OFF, guestTo: "/checkout" }, language);
     expect(textNodes(body(html))).toEqual([COPY["auth.sms_paused"][language], COPY["auth.continue_guest"][language]]);
+    // 只看 V1 所在的内容区：卡片上的 auth.same_flow_note 本身含有「手机号」等字样。
     for (const key of ["auth.sms_scope", "auth.claim_notice", "auth.send_code", "auth.phone"] as const) {
-      expect(html, key).not.toContain(copy(key, language));
+      expect(body(html), key).not.toContain(copy(key, language));
     }
+    expect(html).not.toContain(`${copy("auth.phone", language)}</label>`);
     expect(html).toContain(copy("auth.same_flow_note", language));
     expect(html).toContain(`href="/login">${copy("common.nav_login", language)}</a>`);
   });
