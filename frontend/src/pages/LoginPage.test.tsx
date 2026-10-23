@@ -352,14 +352,16 @@ describe("password tab", () => {
   });
 
   // 同一条「auth.forgot（/forgot-password 进入路由表之前不渲染，照 CheckoutPage.tsx 的 loginPath 写法以 isRoutePath 判断）」：
-  // 目前不在路由表，不渲染；给出路径时（以已有的 /privacy 代替）为登录按钮之后的链接。
+  // 没有路径时不渲染；给出路径时为登录按钮之后的链接。
+  // SHOP-TASK-147 验收第 2 条「/forgot-password 进入路由表后，SHOP-TASK-146 登录页的 auth.forgot 随之出现」：重设页已进路由表，
+  // 原来断言 forgotPath() 为 null 的一行改为 /forgot-password，链接改以它为去向；不渲染的一侧仍以 forgotTo 为 null 守住。
   it("renders auth.forgot only when the reset page exists", () => {
-    expect(forgotPath()).toBeNull();
+    expect(forgotPath()).toBe("/forgot-password");
     const without = render();
     expect(without).not.toContain(copy("auth.forgot"));
     expect(without).not.toContain("/forgot-password");
-    const withLink = render({ forgotTo: "/privacy" });
-    expect(withLink).toContain(`</button><a class="acs-btn acs-btn--quiet site-login__forgot" href="/privacy">${copy("auth.forgot")}</a></form>`);
+    const withLink = render({ forgotTo: forgotPath() });
+    expect(withLink).toContain(`</button><a class="acs-btn acs-btn--quiet site-login__forgot" href="/forgot-password">${copy("auth.forgot")}</a></form>`);
   });
 });
 

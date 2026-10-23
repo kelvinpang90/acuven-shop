@@ -90,7 +90,9 @@ describe("route table", () => {
   // SHOP-TASK-137 验收第 2 条「路由 /admin/settings（router.tsx、App.tsx 与 router.test.tsx 各加一项）」：站点设置进表，在店铺装修之后。
   // SHOP-TASK-146 验收第 2 条「路由 /login 加进 frontend/src/router.tsx 的路由表」：会员登录进表，在隐私说明之后、后台页之前；
   // 原来断言 /login 不在表里的一行随之改为在表里，忘记密码与注册仍不在表里。
-  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page, the member login and the admin pages", () => {
+  // SHOP-TASK-147 验收第 2 条「路由 /forgot-password 加进 frontend/src/router.tsx 的路由表」：忘记密码进表，在会员登录之后；
+  // 原来断言 /forgot-password 不在表里的一行随之改为在表里，注册仍不在表里。
+  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page, the member login, the password reset and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
       "/products",
@@ -104,6 +106,7 @@ describe("route table", () => {
       "/track/order/refund",
       "/privacy",
       "/login",
+      "/forgot-password",
       "/admin/login",
       "/admin/orders",
       "/admin/orders/:id",
@@ -137,8 +140,28 @@ describe("route table", () => {
     expect(isRoutePath("/track/order/refund")).toBe(true);
     expect(isRoutePath("/account/order/refund")).toBe(false);
     expect(isRoutePath("/login")).toBe(true);
-    expect(isRoutePath("/forgot-password")).toBe(false);
+    expect(isRoutePath("/forgot-password")).toBe(true);
     expect(isRoutePath("/register")).toBe(false);
+  });
+
+  // SHOP-TASK-147 验收第 2 条「页面为 frontend/src/pages/ForgotPasswordPage.tsx…套前台框架」与「读取完成前不渲染 V1、标 aria-busy」：
+  // /forgot-password 在前台框架里渲染重设页，服务端渲染时站点设置还没读到，只有标题，内容区为空并标 aria-busy，没有号码与密码输入。
+  it("renders the password reset page for /forgot-password inside the site frame", () => {
+    const html = render("/forgot-password");
+    expect(html).toContain(COPY["common.demo_banner"].en);
+    expect(html).toContain(`<h1 class="acs-display-l">${COPY["auth.reset_title"].en}</h1>`);
+    expect(html).toContain(`<div class="site-reset__body" aria-busy="true"></div>`);
+    expect(html).not.toContain(`type="tel"`);
+    expect(html).not.toContain(`type="password"`);
+  });
+
+  // 路径里不带段值（号码、新密码与 CSRF 令牌只在页面内存与请求里）：多出一段不匹配、按未知路径落到首页。
+  it("gives the password reset page no path parameters", () => {
+    expect(matchRoute("/forgot-password")).toEqual({ pattern: "/forgot-password", params: {} });
+    for (const path of ["/forgot-password/", "/forgot-password/60123456789", "/forgot-password/reset"]) {
+      expect(isRoutePath(path), path).toBe(false);
+      expect(resolvePath(path)).toBe("/");
+    }
   });
 
   // SHOP-TASK-146 验收第 2 条「页面为 frontend/src/pages/LoginPage.tsx…套前台框架」与「读取完成之前只显示标题、★ 提示与两个页签，页签内容区标 aria-busy、不渲染表单与 V1」：

@@ -745,6 +745,36 @@ export const COPY = {
     zh: "忘记密码？",
     ms: "Lupa kata laluan?",
   },
+  "auth.reset_title": {
+    en: "Reset password",
+    zh: "重设密码",
+    ms: "Tetapkan semula kata laluan",
+  },
+  "auth.new_password": {
+    en: "New password",
+    zh: "新密码",
+    ms: "Kata laluan baharu",
+  },
+  "auth.password_rule": {
+    en: "At least 8 characters.",
+    zh: "至少 8 位。",
+    ms: "Sekurang-kurangnya 8 aksara.",
+  },
+  "auth.reset_submit": {
+    en: "Set new password",
+    zh: "设置新密码",
+    ms: "Tetapkan kata laluan baharu",
+  },
+  "auth.reset_done": {
+    en: "Password updated. Please log in.",
+    zh: "密码已更新，请重新登录。",
+    ms: "Kata laluan dikemas kini. Sila log masuk.",
+  },
+  "auth.reset_not_registered": {
+    en: "This number isn't registered yet, so no account was created and no password was set. You can register with this number instead.",
+    zh: "此号码尚未注册，因此未创建账号，也未设置密码。您可以用此号码注册。",
+    ms: "Nombor ini belum didaftarkan, jadi tiada akaun dicipta dan tiada kata laluan ditetapkan. Anda boleh mendaftar dengan nombor ini.",
+  },
   "auth.login_demo_hint": {
     en: "Members can see order history, demo points and coupons, and confirm receipt or request refunds for their orders.",
     zh: "会员可查看历史订单、演示积分与优惠券，并对自己的订单确认收货或申请退款。",
