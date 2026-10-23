@@ -3,9 +3,10 @@
 依据 docs/DESIGN.md 1.11（提交 2d13250）「边界与原则」第 4 条、「数据模型」的 SiteSetting 一行
 与「上线依赖与设计闸门」（配置 WhatsApp 联系方式），
 以及 docs/UX.md 待决问题 Q10（配置缺失时隐藏）；支付方式的读取函数依据 docs/DESIGN.md 1.12
-（提交 acf576e）「Stripe 测试环境支付」第 2 条（SHOP-TASK-112）。
-每条测试的文档字符串写明它守住的设计或 UX 原句；没有直接原句的写明是 SHOP-TASK-022 或
-SHOP-TASK-073 验收标准里的约定。
+（提交 acf576e）「Stripe 测试环境支付」第 2 条（SHOP-TASK-112）；人机挑战的公开 site key
+依据 docs/UX.md V1 的托管人机挑战组件（SHOP-TASK-143）。
+每条测试的文档字符串写明它守住的设计或 UX 原句；没有直接原句的写明是 SHOP-TASK-022、
+SHOP-TASK-073 或 SHOP-TASK-143 验收标准里的约定。
 
 用 SQLite 内存库按模型建表；接口的会话依赖换成测试自己的会话。
 """
@@ -270,42 +271,57 @@ def test_payment_method_read_ignores_a_stale_loaded_object(db: Session) -> None:
 
 def test_endpoint_follows_the_stored_switch(db: Session, client: TestClient) -> None:
     """「修改对之后的请求立即生效」：接口返回值随库中开关变化，没有那一行时为关闭。"""
+    # SHOP-TASK-143 给响应加了 turnstile_site_key；这里未配置，期望补上 null。
     assert client.get(URL).json() == {
         "sms_verification_enabled": False,
         "whatsapp_contact_url": None,
+        "turnstile_site_key": None,
     }
 
     _setting(db, enabled=False)
     assert client.get(URL).json() == {
         "sms_verification_enabled": False,
         "whatsapp_contact_url": None,
+        "turnstile_site_key": None,
     }
 
     _set_enabled(db, True)
     assert client.get(URL).json() == {
         "sms_verification_enabled": True,
         "whatsapp_contact_url": None,
+        "turnstile_site_key": None,
     }
 
     _set_enabled(db, False)
     assert client.get(URL).json() == {
         "sms_verification_enabled": False,
         "whatsapp_contact_url": None,
+        "turnstile_site_key": None,
     }
 
 
 def test_endpoint_returns_only_the_switch_with_no_store(db: Session, client: TestClient) -> None:
     """「每次判定都从数据库读取当前值、不缓存」：响应带 Cache-Control: no-store，
-    浏览器与代理不留旧值；响应体只有 sms_verification_enabled 与 whatsapp_contact_url 两个字段
-    （SHOP-TASK-022 验收「不返回其他内容」，SHOP-TASK-073 加上联系链接，未配置时为 null）。"""
+    浏览器与代理不留旧值；响应体只有 sms_verification_enabled、whatsapp_contact_url 与
+    turnstile_site_key 三个字段（SHOP-TASK-022 验收「不返回其他内容」，SHOP-TASK-073 加上联系链接，
+    SHOP-TASK-143 加上人机挑战的公开 site key，未配置时都为 null）。"""
     _setting(db, enabled=True)
 
     response = client.get(URL)
 
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
-    assert response.json() == {"sms_verification_enabled": True, "whatsapp_contact_url": None}
-    assert list(response.json()) == ["sms_verification_enabled", "whatsapp_contact_url"]
+    # SHOP-TASK-143 给响应加了 turnstile_site_key；这里未配置，期望补上 null，字段列表补上它。
+    assert response.json() == {
+        "sms_verification_enabled": True,
+        "whatsapp_contact_url": None,
+        "turnstile_site_key": None,
+    }
+    assert list(response.json()) == [
+        "sms_verification_enabled",
+        "whatsapp_contact_url",
+        "turnstile_site_key",
+    ]
 
 
 def test_endpoint_needs_no_login_sets_no_cookie_and_only_reads(
@@ -322,7 +338,12 @@ def test_endpoint_needs_no_login_sets_no_cookie_and_only_reads(
 
     for response in (anonymous, with_cookie):
         assert response.status_code == 200
-        assert response.json() == {"sms_verification_enabled": True, "whatsapp_contact_url": None}
+        # SHOP-TASK-143 给响应加了 turnstile_site_key；这里未配置，期望补上 null。
+        assert response.json() == {
+            "sms_verification_enabled": True,
+            "whatsapp_contact_url": None,
+            "turnstile_site_key": None,
+        }
         assert "set-cookie" not in response.headers
     for method in ("post", "put", "patch", "delete"):
         assert client.request(method.upper(), URL, json={}).status_code == 405
@@ -357,9 +378,11 @@ def test_configured_contact_url_is_returned_as_is(db: Session) -> None:
     response = _client_with_contact(db, CONTACT_URL).get(URL)
 
     assert response.status_code == 200
+    # SHOP-TASK-143 给响应加了 turnstile_site_key；这里未配置，期望补上 null。
     assert response.json() == {
         "sms_verification_enabled": True,
         "whatsapp_contact_url": CONTACT_URL,
+        "turnstile_site_key": None,
     }
 
 
@@ -423,7 +446,12 @@ def test_unusable_contact_url_is_null_without_error_or_log(
         response = _client_with_contact(db, configured).get(URL)
 
     assert response.status_code == 200
-    assert response.json() == {"sms_verification_enabled": False, "whatsapp_contact_url": None}
+    # SHOP-TASK-143 给响应加了 turnstile_site_key；这里未配置，期望补上 null。
+    assert response.json() == {
+        "sms_verification_enabled": False,
+        "whatsapp_contact_url": None,
+        "turnstile_site_key": None,
+    }
     assert [r for r in caplog.records if r.name.startswith("app")] == []
 
 
@@ -435,7 +463,12 @@ def test_contact_url_comes_after_the_switch(db: Session) -> None:
 
     for configured in (CONTACT_URL, ""):
         response = _client_with_contact(db, configured).get(URL)
-        assert list(response.json()) == ["sms_verification_enabled", "whatsapp_contact_url"]
+        # SHOP-TASK-143 在联系链接之后加了 turnstile_site_key，字段列表补上它。
+        assert list(response.json()) == [
+            "sms_verification_enabled",
+            "whatsapp_contact_url",
+            "turnstile_site_key",
+        ]
 
 
 def test_configured_contact_url_keeps_the_endpoint_read_only(db: Session) -> None:
@@ -453,6 +486,135 @@ def test_configured_contact_url_keeps_the_endpoint_read_only(db: Session) -> Non
         assert response.status_code == 200
         assert response.headers["cache-control"] == "no-store"
         assert response.json()["whatsapp_contact_url"] == CONTACT_URL
+        assert "set-cookie" not in response.headers
+
+    assert statements
+    assert all(statement.lstrip().upper().startswith("SELECT") for statement in statements)
+
+
+# ---- 人机挑战的公开 site key ----
+
+SITE_KEY = "0x4AAAAAAAexample-site_key"
+TURNSTILE_SECRET = "0x4AAAAAAAexample-secret-do-not-leak"
+TURNSTILE_VERIFY_URL = "https://turnstile.example.com/siteverify"
+
+
+def _client_with_turnstile(db: Session, **overrides: str) -> TestClient:
+    app = create_app(Settings(_env_file=None, **overrides))
+    app.dependency_overrides[get_session] = lambda: db
+    return TestClient(app)
+
+
+def test_configured_site_key_is_returned_as_is(db: Session) -> None:
+    """docs/UX.md V1 的托管人机挑战组件要用公开 site key：配置了合格的值时接口原样返回它，
+    其余两个字段照常返回（SHOP-TASK-143 验收「原样返回」）。"""
+    _setting(db, enabled=True)
+
+    response = _client_with_turnstile(db, turnstile_site_key=SITE_KEY).get(URL)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "sms_verification_enabled": True,
+        "whatsapp_contact_url": None,
+        "turnstile_site_key": SITE_KEY,
+    }
+
+
+def test_site_key_has_surrounding_whitespace_removed(db: Session) -> None:
+    """SHOP-TASK-143 验收「配置值去掉首尾空白后」：私有配置里前后多出的空白、换行不算 key 的一部分，
+    去掉后返回。"""
+    response = _client_with_turnstile(db, turnstile_site_key=f"  \t{SITE_KEY}\n ").get(URL)
+
+    assert response.json()["turnstile_site_key"] == SITE_KEY
+
+
+def test_site_key_of_256_characters_is_returned(db: Session) -> None:
+    """SHOP-TASK-143 验收「不超过 256 个字符」：恰好 256 个字符的 key 照常返回，是下一条超长反例的
+    对照。"""
+    key = "k" * 256
+
+    response = _client_with_turnstile(db, turnstile_site_key=key).get(URL)
+
+    assert response.json()["turnstile_site_key"] == key
+
+
+@pytest.mark.parametrize(
+    "configured",
+    [
+        pytest.param("", id="empty"),
+        pytest.param("   ", id="only-whitespace"),
+        pytest.param("k" * 257, id="257-characters"),
+        pytest.param("0x4AAA example", id="space"),
+        pytest.param("0x4AAA\texample", id="tab"),
+        pytest.param("0x4AAA　example", id="ideographic-space"),
+        pytest.param("0x4AAA\nexample", id="inner-newline"),
+        pytest.param("0x4AAA\x00example", id="nul"),
+        pytest.param("0x4AAA\x7fexample", id="del"),
+        pytest.param("0x4AAA\x1bexample", id="escape"),
+    ],
+)
+def test_unusable_site_key_is_null_without_error_or_log(
+    db: Session, configured: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """SHOP-TASK-143 验收「否则（含未配置）为 null；配置不合格时不报错、不写日志」：
+    空串、超过 256 个字符、含空白或控制字符时返回 null，接口照常回答 200。"""
+    _setting(db, enabled=False)
+
+    with caplog.at_level("DEBUG"):
+        response = _client_with_turnstile(db, turnstile_site_key=configured).get(URL)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "sms_verification_enabled": False,
+        "whatsapp_contact_url": None,
+        "turnstile_site_key": None,
+    }
+    assert [r for r in caplog.records if r.name.startswith("app")] == []
+
+
+def test_response_never_carries_turnstile_secret_or_verify_url(db: Session) -> None:
+    """SHOP-TASK-143 验收「不读、不返回 secret key 与核验地址」「响应只有三个字段」：secret key 与
+    核验地址都已配置时，响应仍只有三个字段，两者的配置值都不出现在响应体里；只配了它们、没配
+    site key 时 site key 为 null，不拿 secret key 顶替。"""
+    _setting(db, enabled=True)
+
+    for site_key, expected in ((SITE_KEY, SITE_KEY), ("", None)):
+        client = _client_with_turnstile(
+            db,
+            turnstile_site_key=site_key,
+            turnstile_secret_key=TURNSTILE_SECRET,
+            turnstile_verify_url=TURNSTILE_VERIFY_URL,
+        )
+        response = client.get(URL)
+
+        assert response.status_code == 200
+        assert list(response.json()) == [
+            "sms_verification_enabled",
+            "whatsapp_contact_url",
+            "turnstile_site_key",
+        ]
+        assert response.json()["turnstile_site_key"] == expected
+        assert TURNSTILE_SECRET not in response.text
+        assert TURNSTILE_VERIFY_URL not in response.text
+        assert "turnstile.example.com" not in response.text
+
+
+def test_configured_site_key_keeps_the_endpoint_read_only(db: Session) -> None:
+    """SHOP-TASK-143 验收「其余字段、no-store 与只发 SELECT 不变」：配置了 site key 时，接口仍不需
+    登录、不设 cookie、带 Cache-Control: no-store、只发 SELECT。"""
+    _setting(db, enabled=True)
+    client = _client_with_turnstile(db, turnstile_site_key=SITE_KEY)
+    statements = _record_statements(db)
+
+    anonymous = client.get(URL)
+    client.cookies.set("session", "anything")
+    with_cookie = client.get(URL)
+
+    for response in (anonymous, with_cookie):
+        assert response.status_code == 200
+        assert response.headers["cache-control"] == "no-store"
+        assert response.json()["sms_verification_enabled"] is True
+        assert response.json()["turnstile_site_key"] == SITE_KEY
         assert "set-cookie" not in response.headers
 
     assert statements
