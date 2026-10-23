@@ -4060,7 +4060,7 @@ tasks:
       不做页面，不改路由与页头，不装依赖，不改后端，不改设计。
       设计闸门：DESIGN 1.12（提交 acf576e）「权限与资料保护」第 1、3、5 条（手机号与密码只在请求体里；规范化、白名单、限流与判定都在服务端）与 HANDOFF 0.58。
       拆分：会员前端第一批的请求层，5 个允许路径。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-143
     acceptance_criteria:
