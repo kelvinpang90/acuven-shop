@@ -56,7 +56,9 @@
 
 ## 未画的内容
 
-- P09、P10 的完整会员模式（与查单模式同版式，差别见 UX.md）、手机版游客结账第 3 步、会员中心手机版的积分 / 优惠券 / 设置页签：按已画画板与 UX.md 推出。
+- P09 的完整会员模式（与查单模式同版式，差别见 UX.md）、手机版游客结账第 3 步：按已画画板与 UX.md 推出。
+- 2026-10-24 补充的画板里没画、沿用现有画板的状态：短信未发出（V1-no-change）、尝试次数过多与限流（V1-errors；含短信关闭时以密码注销的 `common.rate_limited`）、我的订单空状态、短信关闭时手机版的设置段、注销提交中。
+- P13-phone-settings 的分段标签模拟了「已滚到末尾、选中设置」的位置（标签行靠右对齐，左端的「My orders」被截断）；前端不照搬这一写法，应让浏览器把选中的标签滚进可视区。
 
 ## 页面索引
 
@@ -103,6 +105,7 @@
 | P07 Stripe 确认中（游客）· 桌面 | [P07-stripe-confirming.html](pages/P07-stripe-confirming.html) | [P07-stripe-confirming.png](reference/P07-stripe-confirming.png) | 1440 × 1180 |
 | P07 Stripe 确认中 · 重查用完 · 手机 | [P07-stripe-phone-slow.html](pages/P07-stripe-phone-slow.html) | [P07-stripe-phone-slow.png](reference/P07-stripe-phone-slow.png) | 390 × 1180 |
 | P07 尚未付款 / 迟到付款 / 取消时已付款 | [P07-stripe-states.html](pages/P07-stripe-states.html) | [P07-stripe-states.png](reference/P07-stripe-states.png) | 640 × 560 |
+| P06、P07 会员找不到这笔订单 · 桌面与手机（2026-10-24） | [P06-P07-member-reopen.html](pages/P06-P07-member-reopen.html) | [P06-P07-member-reopen.png](reference/P06-P07-member-reopen.png) | 1440 × 2170 |
 | P08 订单查询 · 桌面 | [P08-desktop.html](pages/P08-desktop.html) | [P08-desktop.png](reference/P08-desktop.png) | 1440 × 1170 |
 | P08 查不到订单 · 手机 | [P08-phone.html](pages/P08-phone.html) | [P08-phone.png](reference/P08-phone.png) | 390 × 1210 |
 | P09 查单模式 · 会员下单的订单（已发货）· 桌面 | [P09-desktop.html](pages/P09-desktop.html) | [P09-desktop.png](reference/P09-desktop.png) | 1440 × 1450 |
@@ -111,6 +114,8 @@
 | P09 / P10 查单授权过期 | [P09-expired.html](pages/P09-expired.html) | [P09-expired.png](reference/P09-expired.png) | 640 × 220 |
 | P10 退款申请 · 查单模式 · 会员下单的订单（含积分行）· 桌面 | [P10-desktop.html](pages/P10-desktop.html) | [P10-desktop.png](reference/P10-desktop.png) | 1440 × 1300 |
 | P10 退款申请 · 会员下单的订单 · 手机 | [P10-phone.html](pages/P10-phone.html) | [P10-phone.png](reference/P10-phone.png) | 390 × 1110 |
+| P10 退款申请 · 会员模式 · 桌面（2026-10-24） | [P10-desktop-member.html](pages/P10-desktop-member.html) | [P10-desktop-member.png](reference/P10-desktop-member.png) | 1440 × 1250 |
+| P10 退款申请 · 会员模式 · 手机（2026-10-24） | [P10-phone-member.html](pages/P10-phone-member.html) | [P10-phone-member.png](reference/P10-phone-member.png) | 390 × 1060 |
 | P11 注册 · 桌面 | [P11-desktop.html](pages/P11-desktop.html) | [P11-desktop.png](reference/P11-desktop.png) | 1440 × 1320 |
 | P11 注册（已发送验证码）· 手机 | [P11-phone.html](pages/P11-phone.html) | [P11-phone.png](reference/P11-phone.png) | 390 × 1380 |
 | P12 登录 + 重设密码（已注册号码验证通过）· 桌面 | [P12-desktop.html](pages/P12-desktop.html) | [P12-desktop.png](reference/P12-desktop.png) | 1440 × 1210 |
@@ -118,6 +123,13 @@
 | P12 重设：号码未注册 / 密码已更新 | [P12-reset-states.html](pages/P12-reset-states.html) | [P12-reset-states.png](reference/P12-reset-states.png) | 640 × 290 |
 | P13 会员中心 · 桌面 | [P13-desktop.html](pages/P13-desktop.html) | [P13-desktop.png](reference/P13-desktop.png) | 1440 × 2610 |
 | P13 我的订单 · 手机 | [P13-phone.html](pages/P13-phone.html) | [P13-phone.png](reference/P13-phone.png) | 390 × 950 |
+| P13 积分 · 桌面（含待抵扣）（2026-10-24） | [P13-desktop-points.html](pages/P13-desktop-points.html) | [P13-desktop-points.png](reference/P13-desktop-points.png) | 1440 × 1360 |
+| P13 优惠券 · 桌面（含两种空状态）（2026-10-24） | [P13-desktop-coupons.html](pages/P13-desktop-coupons.html) | [P13-desktop-coupons.png](reference/P13-desktop-coupons.png) | 1440 × 1450 |
+| P13 设置 · 桌面（短信开启：密码两种状态、注销 V1、注销完成）（2026-10-24） | [P13-desktop-settings.html](pages/P13-desktop-settings.html) | [P13-desktop-settings.png](reference/P13-desktop-settings.png) | 1440 × 2400 |
+| P13 设置 · 桌面（短信关闭：以密码或会话注销、确认框）（2026-10-24） | [P13-desktop-settings-sms-off.html](pages/P13-desktop-settings-sms-off.html) | [P13-desktop-settings-sms-off.png](reference/P13-desktop-settings-sms-off.png) | 1440 × 2470 |
+| P13 积分 · 手机（2026-10-24） | [P13-phone-points.html](pages/P13-phone-points.html) | [P13-phone-points.png](reference/P13-phone-points.png) | 390 × 1500 |
+| P13 优惠券 · 手机（2026-10-24） | [P13-phone-coupons.html](pages/P13-phone-coupons.html) | [P13-phone-coupons.png](reference/P13-phone-coupons.png) | 390 × 1640 |
+| P13 设置 · 手机（2026-10-24） | [P13-phone-settings.html](pages/P13-phone-settings.html) | [P13-phone-settings.png](reference/P13-phone-settings.png) | 390 × 2470 |
 | P14 隐私说明 · 桌面 | [P14-desktop.html](pages/P14-desktop.html) | [P14-desktop.png](reference/P14-desktop.png) | 1440 × 1710 |
 | P14 隐私说明 · 手机 | [P14-phone.html](pages/P14-phone.html) | [P14-phone.png](reference/P14-phone.png) | 390 × 2220 |
 | P14「收集什么」段（含 Stripe 说明）· 桌面 | [P14-stripe-desktop.html](pages/P14-stripe-desktop.html) | [P14-stripe-desktop.png](reference/P14-stripe-desktop.png) | 1440 × 760 |
