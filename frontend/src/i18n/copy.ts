@@ -60,6 +60,11 @@ export const COPY = {
     zh: "登录",
     ms: "Log masuk",
   },
+  "common.nav_register": {
+    en: "Register",
+    zh: "注册",
+    ms: "Daftar",
+  },
   "common.nav_cart": {
     en: "Cart ({count})",
     zh: "购物车（{count}）",
@@ -620,6 +625,171 @@ export const COPY = {
     zh: "登录",
     ms: "Log masuk",
   },
+  "auth.sms_scope": {
+    en: "SMS verification is currently available for Malaysia (+60) and Singapore (+65) mobile numbers only.",
+    zh: "短信验证目前仅支持马来西亚（+60）和新加坡（+65）手机号。",
+    ms: "Pengesahan SMS kini hanya untuk nombor telefon bimbit Malaysia (+60) dan Singapura (+65).",
+  },
+  "auth.challenge": {
+    en: "Please complete the check below first.",
+    zh: "请先完成下方人机验证。",
+    ms: "Sila lengkapkan semakan di bawah dahulu.",
+  },
+  "auth.challenge_failed": {
+    en: "The check wasn't completed. Please try again.",
+    zh: "人机验证未完成，请重试。",
+    ms: "Semakan tidak dilengkapkan. Sila cuba lagi.",
+  },
+  "auth.send_code": {
+    en: "Send code",
+    zh: "发送验证码",
+    ms: "Hantar kod",
+  },
+  "auth.resend_code": {
+    en: "Send a new code",
+    zh: "重新发送验证码",
+    ms: "Hantar kod baharu",
+  },
+  "auth.code_sent": {
+    en: "We sent a code by SMS to {phoneMasked}.",
+    zh: "验证码已通过短信发送至 {phoneMasked}。",
+    ms: "Kami telah menghantar kod melalui SMS ke {phoneMasked}.",
+  },
+  "auth.code": {
+    en: "Verification code",
+    zh: "验证码",
+    ms: "Kod pengesahan",
+  },
+  "auth.verify_submit": {
+    en: "Verify",
+    zh: "验证",
+    ms: "Sahkan",
+  },
+  "auth.code_wrong": {
+    en: "That code is incorrect or has expired.",
+    zh: "验证码错误或已过期。",
+    ms: "Kod itu salah atau telah tamat tempoh.",
+  },
+  "auth.not_supported_country": {
+    en: "We can't send SMS to this number yet. You can still check out as a guest.",
+    zh: "暂时无法向此号码发送短信。您仍可以游客身份下单。",
+    ms: "Kami belum dapat menghantar SMS ke nombor ini. Anda masih boleh membuat pesanan sebagai tetamu.",
+  },
+  "auth.sms_failed": {
+    en: "The SMS could not be sent, so no account was created or changed. You can still check out as a guest.",
+    zh: "短信发送失败，账号未创建或更改。您仍可以游客身份下单。",
+    ms: "SMS tidak dapat dihantar, jadi tiada akaun dicipta atau diubah. Anda masih boleh membuat pesanan sebagai tetamu.",
+  },
+  "auth.sms_paused": {
+    en: "SMS is currently switched off, so registration, SMS login and password reset are unavailable. Members who have set a password can still log in with it.",
+    zh: "短信目前已关闭，暂不能注册、短信登录或重设密码。已设置密码的会员仍可用密码登录。",
+    ms: "SMS kini dimatikan, jadi pendaftaran, log masuk SMS dan tetapan semula kata laluan tidak tersedia. Ahli yang telah menetapkan kata laluan masih boleh log masuk dengannya.",
+  },
+  "auth.sms_not_sent_no_change": {
+    en: "The SMS was not sent, and nothing about your account has been changed. Please try again later.",
+    zh: "短信未发出，您的账号未作任何更改。请稍后再试。",
+    ms: "SMS tidak dihantar, dan tiada apa-apa pada akaun anda telah diubah. Sila cuba lagi kemudian.",
+  },
+  "auth.continue_guest": {
+    en: "Continue as guest",
+    zh: "以游客身份继续",
+    ms: "Teruskan sebagai tetamu",
+  },
+  "auth.claim_notice": {
+    en: "Once verified, guest orders placed with this number in the last 30 days are added to your account. Points are not added for past orders.",
+    zh: "验证通过后，近 30 天内用此号码下单的游客订单会自动归入您的账号；过去的订单不补发积分。",
+    ms: "Setelah disahkan, pesanan tetamu dengan nombor ini dalam 30 hari lalu akan ditambah ke akaun anda. Mata tidak ditambah untuk pesanan lalu.",
+  },
+  "auth.register_title": {
+    en: "Create a member account",
+    zh: "注册会员",
+    ms: "Daftar akaun ahli",
+  },
+  "auth.same_flow_note": {
+    en: "Verify your mobile number by SMS. If it already belongs to a member, you'll be logged in; otherwise a member account is created.",
+    zh: "通过短信验证手机号。号码已是会员则直接登录，否则创建会员账号。",
+    ms: "Sahkan nombor telefon bimbit anda melalui SMS. Jika ia sudah milik ahli, anda akan dilog masuk; jika tidak, akaun ahli akan dicipta.",
+  },
+  "auth.verified_login": {
+    en: "Verified. You're logged in.",
+    zh: "验证成功，您已登录。",
+    ms: "Disahkan. Anda telah log masuk.",
+  },
+  "auth.verified_registered": {
+    en: "Verified. Your member account has been created and you're logged in. You can set a password in My account.",
+    zh: "验证成功，会员账号已创建并已登录。您可在会员中心设置密码。",
+    ms: "Disahkan. Akaun ahli anda telah dicipta dan anda telah log masuk. Anda boleh menetapkan kata laluan di Akaun saya.",
+  },
+  "auth.login_title": {
+    en: "Log in",
+    zh: "登录",
+    ms: "Log masuk",
+  },
+  "auth.login_method_password": {
+    en: "Password",
+    zh: "密码登录",
+    ms: "Kata laluan",
+  },
+  "auth.login_method_sms": {
+    en: "SMS code",
+    zh: "短信验证码登录",
+    ms: "Kod SMS",
+  },
+  "auth.login_failed": {
+    en: "Mobile number or password is incorrect. If you haven't set a password, log in with an SMS code.",
+    zh: "手机号或密码不正确。如未设置密码，请用短信验证码登录。",
+    ms: "Nombor telefon bimbit atau kata laluan salah. Jika anda belum menetapkan kata laluan, log masuk dengan kod SMS.",
+  },
+  "auth.login_failed_sms_off": {
+    en: "Mobile number or password is incorrect.",
+    zh: "手机号或密码不正确。",
+    ms: "Nombor telefon bimbit atau kata laluan salah.",
+  },
+  "auth.forgot": {
+    en: "Forgot password?",
+    zh: "忘记密码？",
+    ms: "Lupa kata laluan?",
+  },
+  "auth.reset_title": {
+    en: "Reset password",
+    zh: "重设密码",
+    ms: "Tetapkan semula kata laluan",
+  },
+  "auth.new_password": {
+    en: "New password",
+    zh: "新密码",
+    ms: "Kata laluan baharu",
+  },
+  "auth.password_rule": {
+    en: "At least 8 characters.",
+    zh: "至少 8 位。",
+    ms: "Sekurang-kurangnya 8 aksara.",
+  },
+  "auth.reset_submit": {
+    en: "Set new password",
+    zh: "设置新密码",
+    ms: "Tetapkan kata laluan baharu",
+  },
+  "auth.reset_done": {
+    en: "Password updated. Please log in.",
+    zh: "密码已更新，请重新登录。",
+    ms: "Kata laluan dikemas kini. Sila log masuk.",
+  },
+  "auth.reset_not_registered": {
+    en: "This number isn't registered yet, so no account was created and no password was set. You can register with this number instead.",
+    zh: "此号码尚未注册，因此未创建账号，也未设置密码。您可以用此号码注册。",
+    ms: "Nombor ini belum didaftarkan, jadi tiada akaun dicipta dan tiada kata laluan ditetapkan. Anda boleh mendaftar dengan nombor ini.",
+  },
+  "auth.login_demo_hint": {
+    en: "Members can see order history, demo points and coupons, and confirm receipt or request refunds for their orders.",
+    zh: "会员可查看历史订单、演示积分与优惠券，并对自己的订单确认收货或申请退款。",
+    ms: "Ahli boleh melihat sejarah pesanan, mata demo dan kupon, serta mengesahkan penerimaan atau memohon bayaran balik bagi pesanan mereka.",
+  },
+  "auth.register_demo_hint": {
+    en: "Registration sends a real SMS to your phone. Everything else remains a demo.",
+    zh: "注册会向您的手机发送真实短信；其余一切仍是演示。",
+    ms: "Pendaftaran menghantar SMS sebenar ke telefon anda. Selain itu, semuanya kekal demo.",
+  },
   "pay.title": {
     en: "Simulated payment",
     zh: "模拟支付",
@@ -799,6 +969,11 @@ export const COPY = {
     en: 'To view this order later, confirm receipt or request a refund, use "Track order" with your order number and phone number.',
     zh: "之后如需查看此订单、确认收货或申请退款，请在“查询订单”中输入订单号和电话。",
     ms: 'Untuk melihat pesanan ini kemudian, mengesahkan penerimaan atau memohon bayaran balik, gunakan "Semak pesanan" dengan nombor pesanan dan nombor telefon anda.',
+  },
+  "result.guest_register": {
+    en: "Have a Malaysian or Singapore mobile number? Register to earn points next time.",
+    zh: "有马来西亚或新加坡手机号？注册会员，下次购物可得积分。",
+    ms: "Ada nombor telefon bimbit Malaysia atau Singapura? Daftar untuk dapat mata pada pembelian seterusnya.",
   },
   "result.failure_title": {
     en: "Demo payment failed",

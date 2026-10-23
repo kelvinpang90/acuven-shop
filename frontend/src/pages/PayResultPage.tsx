@@ -15,7 +15,8 @@ import { ExpiresLine, InfoIcon, OrderCard, PAY_PATH, RecipientDetails, SessionEx
 // 最近一次支付失败且仍待支付 → 失败（pay.expires 倒计时与回 P06 的 result.retry），倒计时到 0 时重新读取；
 // 已取消 → 按取消方 result.cancelled（超时）或 result.cancelled_by_you，以及 result.continue。
 // 仍待支付而最近一次不是失败时换成支付页 P06。401 时整页 pay.session_expired。
-// result.guest_register、result.track 按路由规则在注册页、会员订单详情实现前不渲染；游客不显示获得积分。
+// 成功页的 result.guest_next 之后是去注册页 /register 的 result.guest_register（UX P07 线框，视觉稿 P07-phone-guest）；
+// result.track 按路由规则在会员订单详情实现前不渲染；游客不显示获得积分。
 // Stripe 途径（docs/UX.md 0.11「P07 Stripe 测试」，DESIGN 1.12 第 4、5、6 条，HANDOFF 0.54、0.55，视觉稿 P07-stripe-confirming、
 // P07-stripe-phone-slow 与 P07-stripe-states）：仍待支付且有 Stripe 记录时调用确认接口一次（带读取给的 CSRF 令牌），确认返回前按读取中显示；
 // paid、refunded 重新读取订单并按读到的状态显示；not_paid 显示 result.stripe_not_paid 与回 P06 的 result.stripe_back_to_pay；
@@ -430,6 +431,9 @@ export function PayResultView({ screen, minutes, states, paidNotCancelled, onChe
       <OrderCard order={order} />
       <RecipientDetails recipient={order.recipient} states={states} />
       {guestNext}
+      <Link className="site-result__register" to="/register">
+        {t("result.guest_register")}
+      </Link>
       <DemoHint>{t("result.demo_hint")}</DemoHint>
       {continueLink}
     </main>

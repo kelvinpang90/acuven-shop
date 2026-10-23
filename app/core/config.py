@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     # 核验地址是完整的网址，含路径。
     turnstile_secret_key: str = ""
     turnstile_verify_url: str = ""
+    # 人机挑战的公开 site key，由 GET /api/site-settings 下发给前台的托管组件（docs/UX.md V1）。
+    # 空串 = 未配置；不合格的值同样按未配置处理、返回 null（app/api/site_settings.py）。
+    # 服务端核验不用它。
+    turnstile_site_key: str = ""
 
     # 短信每日总量与费用预算的 MySQL 兜底（app/services/sms_budget.py）。
     # 默认值按 Kelvin 2026-10-08 的决定：全站每天 200 条、费用上限 20 美元。

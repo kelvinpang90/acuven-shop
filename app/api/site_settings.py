@@ -1,13 +1,17 @@
 """站点设置的公开只读接口：只有 GET /api/site-settings，不需登录、不读写 cookie、只发 SELECT。
 
 依据 docs/DESIGN.md 1.11（提交 2d13250）「边界与原则」第 4 条与「数据模型」的 SiteSetting 一行。
-返回两个字段，供前台决定显示哪些界面：
+返回三个字段，供前台决定显示哪些界面：
 - sms_verification_enabled：短信验证开关，决定显示哪一组短信相关界面；服务端的判定不依赖它，
   下单、发送短信、提交验证码与确认注销都在当次请求里调用 app/services/site_settings.py 重新读取。
 - whatsapp_contact_url：WhatsApp 联系链接，取自配置 SHOP_WHATSAPP_CONTACT_URL（DESIGN 1.11
   「上线依赖与设计闸门」：配置 WhatsApp 联系方式，仓库只记录变量名）。去掉首尾空白后协议为 https、
   主机部分非空、不含空白与控制字符、不超过 512 个字符时原样返回，否则（含未配置）为 null，
   前台据此隐藏联系入口（docs/UX.md Q10：配置缺失时隐藏）。配置不合格时不报错、不写日志。
+- turnstile_site_key：人机挑战（Cloudflare Turnstile）的公开 site key，取自配置
+  SHOP_TURNSTILE_SITE_KEY，供前台短信验证组件 V1 的托管人机挑战组件（docs/UX.md V1）使用
+  （SHOP-TASK-143）。去掉首尾空白后非空、不超过 256 个字符、不含空白与控制字符时原样返回，
+  否则（含未配置）为 null。配置不合格时不报错、不写日志。不读、不返回 secret key 与核验地址。
 响应带 Cache-Control: no-store，开关修改后浏览器与中间代理不会继续给出旧值。
 不加修改开关的接口：修改留给管理后台业务接口任务（管理员登录与审计记录就绪后）。
 """
@@ -30,6 +34,7 @@ router = APIRouter(prefix="/api/site-settings", tags=["site-settings"])
 SessionDep = Annotated[Session, Depends(get_session)]
 
 WHATSAPP_CONTACT_URL_MAX_LENGTH = 512
+TURNSTILE_SITE_KEY_MAX_LENGTH = 256
 
 
 class SiteSettingsOut(BaseModel):
@@ -37,6 +42,7 @@ class SiteSettingsOut(BaseModel):
 
     sms_verification_enabled: bool
     whatsapp_contact_url: str | None
+    turnstile_site_key: str | None
 
 
 def whatsapp_contact_url(configured: str) -> str | None:
@@ -56,10 +62,22 @@ def whatsapp_contact_url(configured: str) -> str | None:
     return url
 
 
+def turnstile_site_key(configured: str) -> str | None:
+    """配置值合格时返回去掉首尾空白后的 site key，否则返回 None。"""
+    key = configured.strip()
+    if not key or len(key) > TURNSTILE_SITE_KEY_MAX_LENGTH:
+        return None
+    if any(ch.isspace() or unicodedata.category(ch) == "Cc" for ch in key):
+        return None
+    return key
+
+
 @router.get("", response_model=SiteSettingsOut)
 def site_settings(session: SessionDep, request: Request, response: Response) -> SiteSettingsOut:
     response.headers["Cache-Control"] = "no-store"
+    settings = request.app.state.settings
     return SiteSettingsOut(
         sms_verification_enabled=is_sms_verification_enabled(session),
-        whatsapp_contact_url=whatsapp_contact_url(request.app.state.settings.whatsapp_contact_url),
+        whatsapp_contact_url=whatsapp_contact_url(settings.whatsapp_contact_url),
+        turnstile_site_key=turnstile_site_key(settings.turnstile_site_key),
     )

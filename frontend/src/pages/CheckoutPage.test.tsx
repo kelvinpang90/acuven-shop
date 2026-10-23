@@ -226,16 +226,17 @@ describe("step 1: the mobile number", () => {
     expect(html).not.toContain(`type="checkbox"`);
   });
 
-  // UX P05 第 1 步线框「[checkout.phone_step_title]…[auth.phone]…[checkout.phone_step_hint]…( [checkout.phone_continue] )」与 SHOP-TASK-025 验收第 4 条
+  // UX P05 第 1 步线框「[checkout.phone_step_title]…[auth.phone]…[checkout.phone_step_hint]…( [checkout.phone_continue] )」「[checkout.login_password] → P12」与 SHOP-TASK-025 验收第 4 条
   // 「显示 checkout.phone_step_hint 与 checkout.phone_continue；checkout.login_password 按路由规则在登录页实现前不渲染」。
-  it.each(LANGUAGES)("shows the step title, label, hint and continue button but no login link in %s", (language) => {
+  // SHOP-TASK-146 验收「/login 进入路由表后结账第 1 步出现 checkout.login_password…改为断言该链接指向 /login」：登录页已进路由表，链接出现一次并指向 /login。
+  it.each(LANGUAGES)("shows the step title, label, hint and continue button and the login link to /login in %s", (language) => {
     const html = render({ form: { ...STEP_1, phoneInput: "12-345 6789" }, language });
     expect(html).toContain(`<h2 class="acs-display-s">${copy("checkout.phone_step_title", language)}</h2>`);
     expect(html).toMatch(new RegExp(`<label class="acs-field__label" id="[^"]+" for="[^"]+">${copy("auth.phone", language)}</label>`));
     expect(html).toContain(`<span class="acs-field__hint">${copy("checkout.phone_step_hint", language)}</span>`);
     expect(html).toContain(`<button class="acs-btn acs-btn--primary site-checkout__continue" type="submit">${copy("checkout.phone_continue", language)}</button>`);
-    expect(html).not.toContain(copy("checkout.login_password", language));
-    expect(html).not.toContain(`href="/login"`);
+    expect(html).toContain(`<a class="site-checkout__login" href="/login">${copy("checkout.login_password", language)}</a>`);
+    expect(count(html, copy("checkout.login_password", language))).toBe(1);
   });
 
   // SHOP-TASK-025 验收第 4 条「国家码下拉列出全部地区（显示本地化国家名与 +呼叫码，按名称排序），默认 MY」与 UX P05「国家码下拉列出所有国家，默认 +60」。
