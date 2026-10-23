@@ -17,10 +17,11 @@ describe("site settings", () => {
   // SHOP-TASK-025 验收第 3 条「打开时调用 SHOP-TASK-022 的 GET /api/site-settings」与 UX 0.7 修订要点「前台按服务端提供的开关当前值决定显示哪一组」：
   // GET 固定地址，不带 cookie、不缓存，回答里只取开关的布尔值。
   // SHOP-TASK-074 改动：结果另含 whatsapp_contact_url，回答里没有该字段时为 null，整体相等的期望值随之加上这一项。
+  // SHOP-TASK-144 改动：结果另含 turnstile_site_key，回答里没有该字段时为 null，整体相等的期望值随之加上这一项。
   it.each([true, false])("reads the SMS switch (%s) without cookies or caching", async (enabled) => {
     const fetchMock = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(() => Promise.resolve(json(200, { sms_verification_enabled: enabled })));
     vi.stubGlobal("fetch", fetchMock);
-    await expect(fetchSiteSettings()).resolves.toEqual({ sms_verification_enabled: enabled, whatsapp_contact_url: null });
+    await expect(fetchSiteSettings()).resolves.toEqual({ sms_verification_enabled: enabled, whatsapp_contact_url: null, turnstile_site_key: null });
     const [url, init]: [string, RequestInit] = fetchMock.mock.calls[0] ?? ["", {}];
     expect(url).toBe("/api/site-settings");
     expect(init.method).toBe("GET");
@@ -41,6 +42,7 @@ describe("site settings", () => {
 
   // SHOP-TASK-074 验收「另取 whatsapp_contact_url…不因它让现有 fetchSiteSettings 失败（结账页读取开关的行为不变）」：
   // 链接合格时一并取出；链接为 null、其他类型或不合格时开关照常读出、链接为 null。
+  // SHOP-TASK-144 改动：回答里没有 turnstile_site_key，整体相等的期望值随之加上 turnstile_site_key: null。
   it.each([LINK, null, 42, { url: LINK }, "http://chat.example.com/", "not a url"])(
     "reads the switch whatever the contact link is (%j)",
     async (link) => {
@@ -48,9 +50,32 @@ describe("site settings", () => {
       await expect(fetchSiteSettings()).resolves.toEqual({
         sms_verification_enabled: true,
         whatsapp_contact_url: link === LINK ? LINK : null,
+        turnstile_site_key: null,
       });
     },
   );
+
+  // SHOP-TASK-144 验收「SiteSettings 另取 turnstile_site_key——字符串原样取到，没有、不是字符串或为空串时为 null，
+  // 不因它让开关的读取失败（与 whatsapp_contact_url 的做法相同）」：字符串照原样取出；null、缺少、空串与数字时开关照常读出、key 为 null。
+  // 测试里的 key 是虚构值，不是真实的 Turnstile site key。
+  const SITE_KEY = "0x4AAAAAAAexample";
+  const siteKeys: [string, Record<string, unknown>, string | null][] = [
+    ["a string", { turnstile_site_key: SITE_KEY }, SITE_KEY],
+    ["null", { turnstile_site_key: null }, null],
+    ["missing", {}, null],
+    ["an empty string", { turnstile_site_key: "" }, null],
+    ["a number", { turnstile_site_key: 42 }, null],
+  ];
+  it.each(siteKeys)("reads the switch when the site key is %s", async (name, extra, expected) => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(json(200, { sms_verification_enabled: false, whatsapp_contact_url: LINK, ...extra }))));
+    await expect(fetchSiteSettings(), name).resolves.toEqual({ sms_verification_enabled: false, whatsapp_contact_url: LINK, turnstile_site_key: expected });
+  });
+
+  // 同一句「其余字段与检查不变」：key 合格也不能让不合格的开关读出来。
+  it("still throws when the switch is malformed even with a site key", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(json(200, { sms_verification_enabled: "true", turnstile_site_key: SITE_KEY }))));
+    await expect(fetchSiteSettings()).rejects.toBeInstanceOf(SiteSettingsError);
+  });
 });
 
 describe("WhatsApp contact link", () => {

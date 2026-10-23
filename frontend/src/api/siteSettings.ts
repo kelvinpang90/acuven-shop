@@ -4,7 +4,9 @@ import type { ReactNode } from "react";
 // 站点设置的公开只读接口 GET /api/site-settings（app/api/site_settings.py，SHOP-TASK-022、073）。
 // 短信验证开关的当前值，供前台决定显示哪一组短信相关界面（UX 0.7「全局框架」）；服务端下单时自行按开关判定，
 // 页面显示不是依据。WhatsApp 联系链接（SHOP-TASK-073），供页脚的 common.whatsapp_cta 与隐私说明 P14 的「联系」段：
-// 已配置时显示，未配置、不合格或读取失败时整个按钮与整段隐藏（UX Q10）。不带 cookie、不缓存（接口本身也回 no-store，开关改后不会读到旧值）。
+// 已配置时显示，未配置、不合格或读取失败时整个按钮与整段隐藏（UX Q10）。人机挑战的公开 site key（SHOP-TASK-143），
+// 供会员短信验证组件（SHOP-TASK-145 起）渲染挑战；合格与否由服务端判定，页面只取非空字符串。
+// 不带 cookie、不缓存（接口本身也回 no-store，开关改后不会读到旧值）。
 
 const SITE_SETTINGS_URL = "/api/site-settings";
 
@@ -12,6 +14,8 @@ export interface SiteSettings {
   sms_verification_enabled: boolean;
   // 不合格或没有时为 null；不因它让开关的读取失败。
   whatsapp_contact_url: string | null;
+  // 字符串原样取到；没有、不是字符串或为空串时为 null；同样不因它让开关的读取失败。
+  turnstile_site_key: string | null;
 }
 
 export class SiteSettingsError extends Error {
@@ -42,6 +46,11 @@ export function parseWhatsAppContactUrl(value: unknown): string | null {
   }
 }
 
+// 人机挑战的公开 site key：非空字符串原样返回，其余（缺字段、null、其他类型、空串）一律为 null。
+export function parseTurnstileSiteKey(value: unknown): string | null {
+  return typeof value === "string" && value !== "" ? value : null;
+}
+
 // 非 2xx 时抛 SiteSettingsError，网络错误照原样抛出。
 async function requestSiteSettings(signal?: AbortSignal): Promise<unknown> {
   const response = await fetch(SITE_SETTINGS_URL, {
@@ -67,6 +76,7 @@ export async function fetchSiteSettings(signal?: AbortSignal): Promise<SiteSetti
   return {
     sms_verification_enabled: body.sms_verification_enabled,
     whatsapp_contact_url: parseWhatsAppContactUrl(body.whatsapp_contact_url),
+    turnstile_site_key: parseTurnstileSiteKey(body.turnstile_site_key),
   };
 }
 
