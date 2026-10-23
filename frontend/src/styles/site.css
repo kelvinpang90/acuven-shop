@@ -457,6 +457,18 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-settings__save { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .site-admin-settings__save > [role="status"] { padding: 10px 12px; }
 
+/* 短信验证组件 V1（SHOP-TASK-145，V1-start、V1-code-wrong、V1-errors、V1-register-unavailable、V1-no-change 与 V1-verified，
+   画板均为 480px 宽、没有另画手机稿，所以没有 767px 及以下的差异）：各块上下排列（间距 16px）；国家码下拉 96px、号码占余下；
+   托管挑战的容器至少 64px 高；发送、重发与 auth.continue_guest 靠左；验证码输入与验证按钮同一行（间距 10px）；字段错误的图标不收缩、
+   下移 2px。视觉稿里挑战占位的虚线框、底色、圆角与文字颜色（挑战由托管服务渲染）site.css 不搬，记在任务记录的偏离里 */
+.site-sms { display: grid; gap: 16px; align-content: start; }
+.site-sms__text { margin: 0; }
+.site-sms__phone { grid-template-columns: 96px minmax(0, 1fr); }
+.site-sms__challenge { min-height: 64px; }
+.site-sms__send, .site-sms__resend, .site-sms__guest { justify-self: start; }
+.site-sms__code { display: flex; gap: 10px; }
+.site-sms .acs-field__error svg { flex-shrink: 0; margin-top: 2px; }
+
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
 
