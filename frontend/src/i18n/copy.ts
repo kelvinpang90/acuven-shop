@@ -60,6 +60,11 @@ export const COPY = {
     zh: "登录",
     ms: "Log masuk",
   },
+  "common.nav_register": {
+    en: "Register",
+    zh: "注册",
+    ms: "Daftar",
+  },
   "common.nav_cart": {
     en: "Cart ({count})",
     zh: "购物车（{count}）",
@@ -694,6 +699,56 @@ export const COPY = {
     en: "Once verified, guest orders placed with this number in the last 30 days are added to your account. Points are not added for past orders.",
     zh: "验证通过后，近 30 天内用此号码下单的游客订单会自动归入您的账号；过去的订单不补发积分。",
     ms: "Setelah disahkan, pesanan tetamu dengan nombor ini dalam 30 hari lalu akan ditambah ke akaun anda. Mata tidak ditambah untuk pesanan lalu.",
+  },
+  "auth.same_flow_note": {
+    en: "Verify your mobile number by SMS. If it already belongs to a member, you'll be logged in; otherwise a member account is created.",
+    zh: "通过短信验证手机号。号码已是会员则直接登录，否则创建会员账号。",
+    ms: "Sahkan nombor telefon bimbit anda melalui SMS. Jika ia sudah milik ahli, anda akan dilog masuk; jika tidak, akaun ahli akan dicipta.",
+  },
+  "auth.verified_login": {
+    en: "Verified. You're logged in.",
+    zh: "验证成功，您已登录。",
+    ms: "Disahkan. Anda telah log masuk.",
+  },
+  "auth.verified_registered": {
+    en: "Verified. Your member account has been created and you're logged in. You can set a password in My account.",
+    zh: "验证成功，会员账号已创建并已登录。您可在会员中心设置密码。",
+    ms: "Disahkan. Akaun ahli anda telah dicipta dan anda telah log masuk. Anda boleh menetapkan kata laluan di Akaun saya.",
+  },
+  "auth.login_title": {
+    en: "Log in",
+    zh: "登录",
+    ms: "Log masuk",
+  },
+  "auth.login_method_password": {
+    en: "Password",
+    zh: "密码登录",
+    ms: "Kata laluan",
+  },
+  "auth.login_method_sms": {
+    en: "SMS code",
+    zh: "短信验证码登录",
+    ms: "Kod SMS",
+  },
+  "auth.login_failed": {
+    en: "Mobile number or password is incorrect. If you haven't set a password, log in with an SMS code.",
+    zh: "手机号或密码不正确。如未设置密码，请用短信验证码登录。",
+    ms: "Nombor telefon bimbit atau kata laluan salah. Jika anda belum menetapkan kata laluan, log masuk dengan kod SMS.",
+  },
+  "auth.login_failed_sms_off": {
+    en: "Mobile number or password is incorrect.",
+    zh: "手机号或密码不正确。",
+    ms: "Nombor telefon bimbit atau kata laluan salah.",
+  },
+  "auth.forgot": {
+    en: "Forgot password?",
+    zh: "忘记密码？",
+    ms: "Lupa kata laluan?",
+  },
+  "auth.login_demo_hint": {
+    en: "Members can see order history, demo points and coupons, and confirm receipt or request refunds for their orders.",
+    zh: "会员可查看历史订单、演示积分与优惠券，并对自己的订单确认收货或申请退款。",
+    ms: "Ahli boleh melihat sejarah pesanan, mata demo dan kupon, serta mengesahkan penerimaan atau memohon bayaran balik bagi pesanan mereka.",
   },
   "pay.title": {
     en: "Simulated payment",
