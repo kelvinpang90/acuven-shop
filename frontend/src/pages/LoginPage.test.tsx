@@ -319,12 +319,13 @@ describe("password tab", () => {
 
   // 同一条「phone_invalid 显示 checkout.phone_invalid；unavailable 显示 common.service_unavailable…failed 显示 common.error_retry；network 显示 common.network_check」
   // 与「提交失败后保留号码、清空密码」。
-  it.each([
+  const failures: [string, Reply, Pick<PasswordForm, "phoneInvalid" | "notice">][] = [
     ["phone_invalid", () => json(422, { detail: [{ loc: ["body", "phone"], type: "phone_invalid", msg: "invalid" }] }), { phoneInvalid: true, notice: null }],
     ["unavailable", () => json(503, { detail: "service_unavailable" }), { phoneInvalid: false, notice: "common.service_unavailable" }],
     ["failed", () => json(500, {}), { phoneInvalid: false, notice: "common.error_retry" }],
-    ["network", () => "network" as const, { phoneInvalid: false, notice: "common.network_check" }],
-  ] as const)("handles %s, keeping the number and clearing the password", async (_name, reply, expected) => {
+    ["network", () => "network", { phoneInvalid: false, notice: "common.network_check" }],
+  ];
+  it.each(failures)("handles %s, keeping the number and clearing the password", async (_name, reply, expected) => {
     const { form, events } = await login(reply, true);
     expect(form()).toEqual({ ...FILLED, password: "", ...expected });
     expect(events).toEqual(["update"]);
