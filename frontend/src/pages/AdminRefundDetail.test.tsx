@@ -12,19 +12,22 @@ import { RouterProvider } from "../router";
 import type { RoutePath } from "../router";
 import {
   AdminRefundDetailView,
+  canRetryStripeRefund,
   canReview,
   detailStep,
   INITIAL_DETAIL,
   keptAttempt,
   openDetail,
   REASON_MAX_LENGTH,
+  retryStep,
   STRIPE_REFUND_LABEL,
   stripeDeadline,
   stripeRefundHint,
   stripeRefundSection,
+  submitRetry,
   submitReview,
 } from "./AdminRefundDetail";
-import type { AdminRefundDetailViewProps, DetailState, ReviewMoves } from "./AdminRefundDetail";
+import type { AdminRefundDetailViewProps, DetailState, RetryMoves, ReviewMoves } from "./AdminRefundDetail";
 import { formatDateTime } from "./TrackOrderPage";
 
 afterEach(() => {
@@ -148,8 +151,19 @@ function wrap(element: ReactNode, language: Language) {
   );
 }
 
+// SHOP-TASK-142 改动：View 新增重试的三个必需属性（提交中、按钮位置的提示与回调），默认值为没有在重试、没有提示，原有调用不变。
 function render(overrides: Partial<AdminRefundDetailViewProps> = {}, language: Language = "en"): string {
-  const props: AdminRefundDetailViewProps = { state: shown(REQUESTED), reason: "", backTo: REFUNDS_PATH, onReason: noop, onReview: noop, ...overrides };
+  const props: AdminRefundDetailViewProps = {
+    state: shown(REQUESTED),
+    reason: "",
+    backTo: REFUNDS_PATH,
+    retrying: false,
+    retryNotice: null,
+    onReason: noop,
+    onReview: noop,
+    onRetry: noop,
+    ...overrides,
+  };
   return renderToStaticMarkup(wrap(<AdminRefundDetailView {...props} />, language));
 }
 
@@ -1036,7 +1050,8 @@ describe("paid with Stripe test mode", () => {
 
   // UX A03「Stripe 测试（0.11）」线框「最新一次处理中：[admin.stripe_refund_pending_hint] 最新一次失败：[admin.stripe_refund_failed_hint]」：
   // 表下的提示只看第一条（最新）尝试——处理中为状态提示，失败为提示框（A03-stripe-phone-failed），已退不显示提示。
-  // admin.stripe_refund_failed_hint 提到的重试按钮由 SHOP-TASK-142 加入，这里照原文显示、页面没有按钮。
+  // SHOP-TASK-142 改动：原先断言段内没有按钮、提示为段内最后一段文字；SHOP-TASK-142 按同一线框「最新一次失败：[admin.stripe_refund_failed_hint]
+  // ( [admin.stripe_refund_retry] )」在失败提示之下加入重试按钮，故改为最新为 failed 时段内只有这一个按钮、它在提示之后，其余情形仍没有按钮。
   it.each(LANGUAGES)("shows the hint for the latest attempt in %s", (language) => {
     const succeeded: AdminRefundStripeRefund = { ...LATEST_ATTEMPT, id: 13, status: "succeeded" };
     const cases: [AdminRefundStripeRefund[], CopyKey | null][] = [
@@ -1049,7 +1064,13 @@ describe("paid with Stripe test mode", () => {
       const section = stripeSection(render({ state: shown(withAttempts(...attempts)) }, language));
       const notes = elements(section, "div", "site-admin-refund__stripe-note");
       const alerts = elements(section, "div", "acs-admin__alert");
-      expect(section).not.toContain("<button");
+      const texts = textNodes(section);
+      if (hint === "admin.stripe_refund_failed_hint") {
+        expect(all(section, "button").map(textNodes)).toEqual([[COPY["admin.stripe_refund_retry"][language]]]);
+        expect(texts.pop()).toBe(COPY["admin.stripe_refund_retry"][language]);
+      } else {
+        expect(section).not.toContain("<button");
+      }
       if (hint === "admin.stripe_refund_pending_hint") {
         expect(notes.map(textNodes)).toEqual([[COPY[hint][language]]]);
         expect(attributes(tags(notes[0] ?? "", "div")[0] ?? "").get("role")).toBe("status");
@@ -1062,7 +1083,7 @@ describe("paid with Stripe test mode", () => {
         expect(alerts).toEqual([]);
       }
       // 提示在尝试表与卡片之后。
-      expect(textNodes(section).at(-1)).toBe(hint === null ? "—" : COPY[hint][language]);
+      expect(texts.at(-1)).toBe(hint === null ? "—" : COPY[hint][language]);
     }
     expect(stripeRefundHint("pending")).toBe("admin.stripe_refund_pending_hint");
     expect(stripeRefundHint("failed")).toBe("admin.stripe_refund_failed_hint");
@@ -1172,6 +1193,296 @@ describe("paid with Stripe test mode", () => {
       expect(html).not.toMatch(/\s(title|placeholder)=/i);
       for (const value of visibleTexts(html)) {
         expect(allowed.has(value), value).toBe(true);
+      }
+    }
+  });
+});
+
+// 最新一次失败、只有一次尝试（视觉稿 A03-stripe-phone-failed）；令牌为 APPROVED 的 NEW_TOKEN。
+const STRIPE_FAILED: AdminRefundDetail = withAttempts(EARLIER_ATTEMPT);
+
+// 重试新建的一条尝试（SHOP-TASK-131 记录段「最新为 failed 时重试 200、多一条 pending 尝试」）。接口在回 200 之前已调用 Stripe，
+// 重新读取时它可能已是 pending、succeeded 或 failed（HANDOFF 0.57 第（3）项）。
+const RETRIED: AdminRefundStripeRefund = { id: 15, created_at: "2026-10-02T08:05:00Z", amount_sen: 3400, status: "pending", stripe_refund_id: "re_3QxRetried0aZ" };
+const RETRY_TOKEN = "csrf-token-after-retry";
+
+function retried(status: AdminRefundStripeRefund["status"]): AdminRefundDetail {
+  return { ...withAttempts({ ...RETRIED, status, stripe_refund_id: status === "failed" ? null : RETRIED.stripe_refund_id }, EARLIER_ATTEMPT), csrf_token: RETRY_TOKEN };
+}
+
+// 路由替身：记录详情区显示的状态、经 replace 去的地址与重试结束时按钮位置的提示。
+function fakeRetryMoves() {
+  const events: string[] = [];
+  const states: DetailState[] = [];
+  const target: RetryMoves = {
+    show: (state) => {
+      states.push(state);
+      events.push("show");
+    },
+    replace: (path: RoutePath) => {
+      events.push(`replace ${path}`);
+    },
+    retried: (notice) => {
+      events.push(`retried ${String(notice)}`);
+    },
+  };
+  return { target, events, states };
+}
+
+// Stripe 退款段里的按钮（属性）。
+function retryButtons(html: string): Map<string, string>[] {
+  return tags(stripeSection(html), "button").map(attributes);
+}
+
+describe("retrying a failed Stripe refund", () => {
+  // UX A03「Stripe 测试（0.11）」线框「最新一次失败：[admin.stripe_refund_failed_hint] ( [admin.stripe_refund_retry] )」与说明第 4 条
+  // 「[admin.stripe_refund_retry] 只在最新一次尝试为失败时显示」：最新为 failed 时失败提示框之下有一个按钮（主按钮样式，视觉稿 A03-stripe-states），
+  // 可点、未标进行中。
+  it.each(LANGUAGES)("shows the retry button under the failed hint in %s", (language) => {
+    const section = stripeSection(render({ state: shown(STRIPE_FAILED) }, language));
+    const buttons = all(section, "button");
+    expect(buttons.map(textNodes)).toEqual([[COPY["admin.stripe_refund_retry"][language]]]);
+    const button = attributes(tags(section, "button")[0] ?? "");
+    expect(button.get("type")).toBe("button");
+    expect(classes(tags(section, "button")[0] ?? "")).toEqual(["acs-admin__btn", "site-admin-refund__stripe-retry"]);
+    expect(button.has("disabled")).toBe(false);
+    expect(button.get("aria-busy")).toBe("false");
+    const hint = element(section, "div", "acs-admin__alert");
+    expect(textNodes(hint)).toEqual([COPY["admin.stripe_refund_failed_hint"][language]]);
+    expect(section.indexOf("<button")).toBeGreaterThan(section.indexOf(hint));
+    expect(textNodes(section).at(-1)).toBe(COPY["admin.stripe_refund_retry"][language]);
+    expect(canRetryStripeRefund(STRIPE_FAILED)).toBe(true);
+  });
+
+  // 同一条（只看最新一次）与说明第 4 条「处理中的尝试不提供改为失败或取消的按钮」、第 5 条「[admin.stripe_refund_not_sent]（不显示…
+  // [admin.stripe_refund_retry]）」、「现金退款额为 0：[admin.stripe_refund_none]」，以及开头「经模拟支付的订单与上面相同」：
+  // 较早一条失败而最新为处理中、最新为已退、没有尝试、现金退款额为 0、审核中、已拒绝与模拟支付都没有重试按钮（Stripe 退款段里没有任何按钮）。
+  it.each(LANGUAGES)("has no retry button unless the latest attempt failed in %s", (language) => {
+    const succeeded: AdminRefundStripeRefund = { ...LATEST_ATTEMPT, status: "succeeded" };
+    const refunds: AdminRefundDetail[] = [
+      STRIPE_APPROVED,
+      withAttempts(succeeded, EARLIER_ATTEMPT),
+      { ...STRIPE_APPROVED, stripe_refunds: [] },
+      { ...STRIPE_APPROVED, amount_sen: 0, stripe_refunds: [] },
+      STRIPE_REQUESTED,
+      STRIPE_REJECTED,
+      APPROVED,
+      REQUESTED,
+      REJECTED,
+    ];
+    for (const refund of refunds) {
+      const html = render({ state: shown(refund) }, language);
+      expect(retryButtons(html)).toEqual([]);
+      expect(textNodes(html)).not.toContain(COPY["admin.stripe_refund_retry"][language]);
+      expect(canRetryStripeRefund(refund)).toBe(false);
+    }
+    expect(STRIPE_APPROVED.stripe_refunds.map((attempt) => attempt.status)).toEqual(["pending", "failed"]);
+  });
+
+  // UX A03「Stripe 测试（0.11）」「重试提交中：按钮禁用」与本任务验收「进行中按钮禁用并标 aria-busy」：提交中按钮禁用、标 aria-busy，
+  // 不显示提示（再次点按时收起上一次的提示）。
+  it("disables the retry button while retrying", () => {
+    const html = render({ state: shown(STRIPE_FAILED), retrying: true });
+    const [button] = retryButtons(html);
+    expect(button?.has("disabled")).toBe(true);
+    expect(button?.get("aria-busy")).toBe("true");
+    expect(elements(stripeSection(html), "div", "acs-admin__alert").map(textNodes)).toEqual([[COPY["admin.stripe_refund_failed_hint"].en]]);
+  });
+
+  // SHOP-TASK-131 记录段「不读请求体、不要 Idempotency-Key」「回 200…页面随后重新读取详情」与 UX「成功后重新读取，表中多出一行」：
+  // 以详情给的 CSRF 令牌 POST 重试接口（不带请求体、幂等键与中止用的 signal，地址里没有令牌），200 后以当前语言 GET 详情，
+  // 显示新详情、按钮位置没有提示，不让列表重新查询（RetryMoves 没有这一步）。
+  // HANDOFF 0.57 第（3）项「新尝试可能已是 pending、succeeded 或 failed，页面按当前值显示，不假定为处理中」：多出的一行照读到的状态显示，
+  // 提示与按钮按最新一条——新尝试为处理中时没有按钮而有处理中提示，已退时两者都没有，已失败时按钮仍在。
+  it.each(["pending", "succeeded", "failed"] as const)("reloads the detail after 200 and shows the new attempt as %s", async (status) => {
+    const after = retried(status);
+    const calls = stubFetch(json(200, { result: "retried" }), json(200, after));
+    const moves = fakeRetryMoves();
+    await submitRetry("9", STRIPE_FAILED, "zh", new AbortController().signal, moves.target);
+    expect(requests(calls)).toEqual(["POST /api/admin/refunds/9/stripe-retry", "GET /api/admin/refunds/9?lang=zh"]);
+    expect(headers(calls[0])["X-CSRF-Token"]).toBe(STRIPE_FAILED.csrf_token);
+    expect(STRIPE_FAILED.csrf_token).toBe(NEW_TOKEN);
+    expect(headers(calls[0])).not.toHaveProperty("Idempotency-Key");
+    expect(calls[0]?.init.body).toBeUndefined();
+    expect(calls[0]?.init.signal).toBeUndefined();
+    expect(calls[0]?.url).not.toContain(NEW_TOKEN);
+    expect(moves.events).toEqual(["show", "retried null"]);
+    expect(moves.states).toEqual([shown(after)]);
+
+    const before = all(all(element(stripeSection(render({ state: shown(STRIPE_FAILED) }, "zh")), "div", "site-admin-refund__stripe-table"), "tbody")[0] ?? "", "tr");
+    const section = stripeSection(render({ state: shown(after) }, "zh"));
+    const rows = all(all(element(section, "div", "site-admin-refund__stripe-table"), "tbody")[0] ?? "", "tr");
+    expect(rows).toHaveLength(before.length + 1);
+    expect(all(rows[0] ?? "", "td").map((td) => textNodes(td).join(""))).toEqual([
+      formatDateTime(RETRIED.created_at, "zh"),
+      price(3400, "zh"),
+      COPY[STRIPE_REFUND_LABEL[status]].zh,
+      status === "failed" ? "—" : "re_3QxRetried0aZ",
+    ]);
+    expect(retryButtons(render({ state: shown(after) }, "zh"))).toHaveLength(status === "failed" ? 1 : 0);
+    const hint = stripeRefundHint(status);
+    expect(textNodes(section).filter((text) => text === COPY["admin.stripe_refund_pending_hint"].zh || text === COPY["admin.stripe_refund_failed_hint"].zh)).toEqual(
+      hint === null ? [] : [COPY[hint].zh],
+    );
+  });
+
+  // UX A03「重试被拒（会超过 Stripe 付款金额）：按钮下显示 [admin.stripe_refund_blocked]」与 HANDOFF 0.57 第（2）项「409 stripe_refund_cap
+  // 显示 admin.stripe_refund_blocked」：不重新读取、不改详情，按钮位置的提示为 admin.stripe_refund_blocked；它显示在按钮之下（视觉稿 A03-stripe-states），
+  // 按钮仍可点。
+  it.each(LANGUAGES)("shows admin.stripe_refund_blocked under the button when the cap is reached in %s", async (language) => {
+    const calls = stubFetch(json(409, { detail: "stripe_refund_cap" }));
+    const moves = fakeRetryMoves();
+    await submitRetry("9", STRIPE_FAILED, language, new AbortController().signal, moves.target);
+    expect(calls).toHaveLength(1);
+    expect(moves.events).toEqual(["retried admin.stripe_refund_blocked"]);
+    expect(moves.states).toEqual([]);
+    const section = stripeSection(render({ state: shown(STRIPE_FAILED), retryNotice: "admin.stripe_refund_blocked" }, language));
+    const alerts = elements(section, "div", "acs-admin__alert");
+    expect(alerts.map(textNodes)).toEqual([[COPY["admin.stripe_refund_failed_hint"][language]], [COPY["admin.stripe_refund_blocked"][language]]]);
+    expect(attributes(tags(alerts[1] ?? "", "div")[0] ?? "").get("role")).toBe("alert");
+    expect(section.indexOf(alerts[1] ?? "")).toBeGreaterThan(section.indexOf("</button>"));
+    expect(textNodes(section).at(-1)).toBe(COPY["admin.stripe_refund_blocked"][language]);
+    expect(retryButtons(render({ state: shown(STRIPE_FAILED), retryNotice: "admin.stripe_refund_blocked" }, language))[0]?.has("disabled")).toBe(false);
+  });
+
+  // HANDOFF 0.57 第（2）项「409 stripe_refund_not_retryable 与 refund_not_approved 都按『状态已变』重新读取后显示 common.error_retry」、本任务验收
+  // 「not_retryable 与 csrf 重新读取后显示 common.error_retry」与第（4）项「重新读取后按钮不再显示时仍显示」：重新读取后显示新详情（别人已重试，
+  // 最新为处理中），按钮不再显示，common.error_retry 仍在 Stripe 退款段的同一位置（段末，处理中提示之后）。
+  it.each([json(409, { detail: "stripe_refund_not_retryable" }), json(409, { detail: "refund_not_approved" }), json(403, { detail: "csrf_failed" })])(
+    "reloads the detail and keeps common.error_retry where the button was (%#)",
+    async (reply) => {
+      const after = retried("pending");
+      const calls = stubFetch(reply, json(200, after));
+      const moves = fakeRetryMoves();
+      await submitRetry("9", STRIPE_FAILED, "en", new AbortController().signal, moves.target);
+      expect(requests(calls)).toEqual(["POST /api/admin/refunds/9/stripe-retry", "GET /api/admin/refunds/9?lang=en"]);
+      expect(moves.events).toEqual(["show", "retried common.error_retry"]);
+      expect(moves.states).toEqual([shown(after)]);
+      const section = stripeSection(render({ state: shown(after), retryNotice: "common.error_retry" }));
+      expect(retryButtons(render({ state: shown(after), retryNotice: "common.error_retry" }))).toEqual([]);
+      expect(elements(section, "div", "acs-admin__alert").map(textNodes)).toEqual([[COPY["common.error_retry"].en]]);
+      expect(textNodes(section).slice(-2)).toEqual([COPY["admin.stripe_refund_pending_hint"].en, COPY["common.error_retry"].en]);
+    },
+  );
+
+  // 同一条：重新读取后为没有尝试或现金退款额为 0 的段时，提示同样在段末，这一段没有按钮。
+  it("keeps the notice at the end of the section without attempts", () => {
+    for (const refund of [{ ...STRIPE_APPROVED, stripe_refunds: [] }, { ...STRIPE_APPROVED, amount_sen: 0, stripe_refunds: [] }]) {
+      const section = stripeSection(render({ state: shown(refund), retryNotice: "common.error_retry" }));
+      expect(section).not.toContain("<button");
+      expect(textNodes(section).at(-1)).toBe(COPY["common.error_retry"].en);
+    }
+  });
+
+  // 本任务验收「none 用路由的 replace 进入 /admin/login」（SHOP-TASK-131 记录段「require_admin（401 admin_session_required）」）：重试本身与
+  // 重试之后的重新读取遇到 401 都进入登录页，不显示详情与提示。
+  it.each<Response[]>([
+    [json(401, { detail: "admin_session_required" })],
+    [json(403, { detail: "csrf_failed" }), json(401, { detail: "admin_session_required" })],
+    [json(200, { result: "retried" }), json(401, { detail: "admin_session_required" })],
+  ])("goes to the login page on 401 (%#)", async (...replies) => {
+    stubFetch(...replies);
+    const moves = fakeRetryMoves();
+    await submitRetry("9", STRIPE_FAILED, "en", new AbortController().signal, moves.target);
+    expect(moves.events).toEqual([`replace ${LOGIN_PATH}`]);
+    expect(moves.states).toEqual([]);
+  });
+
+  // 本任务验收「network 显示 common.network_check；failed 显示 common.error_retry」（SHOP-TASK-140 记录：failed 含别的 409、404 与 422）：
+  // 不重新读取、不改详情，只在按钮位置显示提示。
+  it.each<[Response | (() => never), CopyKey]>([
+    [networkDown, "common.network_check"],
+    [json(500, {}), "common.error_retry"],
+    [json(404, { detail: "not_found" }), "common.error_retry"],
+    [json(422, { detail: "invalid" }), "common.error_retry"],
+    [json(409, { detail: "other" }), "common.error_retry"],
+  ])("shows a notice without reloading (%#)", async (reply, notice) => {
+    const calls = stubFetch(reply);
+    const moves = fakeRetryMoves();
+    await submitRetry("9", STRIPE_FAILED, "en", new AbortController().signal, moves.target);
+    expect(calls).toHaveLength(1);
+    expect(moves.events).toEqual([`retried ${notice}`]);
+    expect(moves.states).toEqual([]);
+    const section = stripeSection(render({ state: shown(STRIPE_FAILED), retryNotice: notice }));
+    expect(textNodes(section).at(-1)).toBe(COPY[notice].en);
+  });
+
+  // 派生实现约束（照审核之后的 reread）：200 后重新读取遇到网络中断或其他失败时保留原来的详情，提示改在按钮的位置；申请已不存在时显示不存在。
+  it.each<[Response | (() => never), string[], DetailState]>([
+    [networkDown, ["show", "retried common.network_check"], shown(STRIPE_FAILED)],
+    [json(500, {}), ["show", "retried common.error_retry"], shown(STRIPE_FAILED)],
+    [json(404, { detail: "not_found" }), ["show", "retried null"], { status: "missing" }],
+  ])("handles a failed reload after a retry (%#)", async (reread, events, state) => {
+    stubFetch(json(200, { result: "retried" }), reread);
+    const moves = fakeRetryMoves();
+    await submitRetry("9", STRIPE_FAILED, "en", new AbortController().signal, moves.target);
+    expect(moves.events).toEqual(events);
+    expect(moves.states).toEqual([state]);
+  });
+
+  // 本任务验收「重试的 POST 不中止（与审核相同），离开页面或换申请之后其结果与重新读取都不再更新页面」：signal 中止之后不显示、不跳转、不给提示。
+  it.each([json(200, { result: "retried" }), json(401, {}), json(409, { detail: "stripe_refund_cap" }), json(403, { detail: "csrf_failed" }), json(500, {})])(
+    "does nothing after leaving the page (%#)",
+    async (reply) => {
+      stubFetch(reply, json(200, retried("pending")));
+      const moves = fakeRetryMoves();
+      const controller = new AbortController();
+      const pending = submitRetry("9", STRIPE_FAILED, "en", controller.signal, moves.target);
+      controller.abort();
+      await pending;
+      expect(moves.events).toEqual([]);
+    },
+  );
+
+  // 同一组规则写成纯函数（本任务验收「结果」一条与 HANDOFF 0.57 第（2）项）。
+  it("chooses the next step from the retry reply", () => {
+    expect(retryStep("done")).toEqual({ kind: "reread", notice: null });
+    expect(retryStep("not_retryable")).toEqual({ kind: "reread", notice: "common.error_retry" });
+    expect(retryStep("csrf")).toEqual({ kind: "reread", notice: "common.error_retry" });
+    expect(retryStep("cap")).toEqual({ kind: "notice", notice: "admin.stripe_refund_blocked" });
+    expect(retryStep("none")).toBe("login");
+    expect(retryStep("network")).toEqual({ kind: "notice", notice: "common.network_check" });
+    expect(retryStep("failed")).toEqual({ kind: "notice", notice: "common.error_retry" });
+  });
+
+  // 本任务验收「页面文字全部来自字典」与「需要 UX-COPY 里没有的界面文字时停下」：有按钮、提交中、各种提示与重新读取后的详情，每段文字都是当前语言的
+  // 字典文案，或接口给的订单号、商品、时间、金额与 Stripe 退款 ID；此外只有视觉稿给定的符号 ·、/ 与 —。
+  it.each(LANGUAGES)("shows only dictionary text around the retry in %s", (language) => {
+    const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language]));
+    const refunds = [STRIPE_FAILED, retried("pending"), retried("succeeded"), retried("failed")];
+    for (const refund of refunds) {
+      allowed.add(refund.order_number);
+      allowed.add(methodLine(refund.payment_method_type, language));
+      for (const line of refund.lines) {
+        allowed.add(line.name);
+        allowed.add(line.variant_label);
+        allowed.add(qty(line, language));
+      }
+      for (const text of amountLines(refund, language)) {
+        allowed.add(text);
+      }
+      allowed.add(reviewedBy(refund, language));
+      for (const attempt of refund.stripe_refunds) {
+        allowed.add(formatDateTime(attempt.created_at, language));
+        allowed.add(price(attempt.amount_sen, language));
+        if (attempt.stripe_refund_id !== null) {
+          allowed.add(attempt.stripe_refund_id);
+        }
+      }
+    }
+    for (const symbol of ["·", "/", "—"]) {
+      allowed.add(symbol);
+    }
+    const notices: (CopyKey | null)[] = [null, "admin.stripe_refund_blocked", "common.error_retry", "common.network_check"];
+    for (const refund of refunds) {
+      for (const retryNotice of notices) {
+        for (const retrying of [false, true]) {
+          const html = render({ state: shown(refund), retrying, retryNotice }, language);
+          expect(html).not.toMatch(/\s(title|placeholder)=/i);
+          for (const value of visibleTexts(html)) {
+            expect(allowed.has(value), value).toBe(true);
+          }
+        }
       }
     }
   });
