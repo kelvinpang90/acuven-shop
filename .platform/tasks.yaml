@@ -4029,7 +4029,7 @@ tasks:
       不改发送、核验与限流的规则，不改前端，不改设计。
       设计闸门：不适用（只把已有配置传进容器，新增的 site key 是公开值；短信与人机挑战的规则不变）。
       拆分：后端配置层，6 个允许路径；前台读取由 SHOP-TASK-144 接上。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - docker-compose.yml 的 shop_api.environment 加入 SHOP_TWILIO_ACCOUNT_SID、SHOP_TWILIO_AUTH_TOKEN、SHOP_TWILIO_VERIFY_SERVICE_SID、SHOP_TWILIO_VERIFY_BASE_URL、SHOP_TURNSTILE_SECRET_KEY、SHOP_TURNSTILE_VERIFY_URL、SHOP_TURNSTILE_SITE_KEY 与 SHOP_WHATSAPP_CONTACT_URL（写法为 ${变量名:-}），以及 SHOP_SMS_DAILY_COUNT_LIMIT、SHOP_SMS_DAILY_COST_LIMIT_MICRO_USD、SHOP_SMS_MAX_COST_MICRO_USD_MY、SHOP_SMS_MAX_COST_MICRO_USD_SG、SHOP_SMS_PHONE_LIMIT_PER_MINUTE、SHOP_SMS_PHONE_LIMIT_PER_HOUR、SHOP_SMS_PHONE_LIMIT_PER_DAY、SHOP_SMS_SOURCE_LIMIT_PER_HOUR（写法为 ${变量名:-默认值}，默认值与 app/core/config.py 的默认值相同——200、20000000、0、0、1、5、10、10）；未设置时照常部署；shop_jobs 不加（定时任务不发短信）；照现有 Stripe 一组的写法加一行注释说明可以不设
