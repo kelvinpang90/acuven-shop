@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { reviewAttempt } from "../api/adminRefunds";
-import type { AdminRefundDetail, RefundStatus, ReviewAction, ReviewAttempt } from "../api/adminRefunds";
+import type { AdminRefundDetail, AdminRefundStripeRefund, RefundStatus, ReviewAction, ReviewAttempt } from "../api/adminRefunds";
 import { formatSen } from "../format";
 import { COPY, LANGUAGES, translate } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
@@ -18,6 +18,10 @@ import {
   keptAttempt,
   openDetail,
   REASON_MAX_LENGTH,
+  STRIPE_REFUND_LABEL,
+  stripeDeadline,
+  stripeRefundHint,
+  stripeRefundSection,
   submitReview,
 } from "./AdminRefundDetail";
 import type { AdminRefundDetailViewProps, DetailState, ReviewMoves } from "./AdminRefundDetail";
@@ -100,6 +104,16 @@ const REJECTED: AdminRefundDetail = {
 const MEMBER_REQUESTED: AdminRefundDetail = { ...REQUESTED, placed_by_member: true, points_returned: 146, points_reversed: 27, points_estimated: true };
 const MEMBER_APPROVED: AdminRefundDetail = { ...APPROVED, placed_by_member: true, points_returned: 120, points_reversed: 8, points_estimated: false };
 const MEMBER_REJECTED: AdminRefundDetail = { ...REJECTED, placed_by_member: true };
+
+// 经 Stripe 测试付款的两次尝试（视觉稿 A03-stripe-approved：最新的处理中在上、有 Stripe 退款 ID；较早的失败在下、没有 ID），
+// 金额等于本次批准的现金退款额（UX A03「Stripe 测试（0.11）」M4）。
+const LATEST_ATTEMPT: AdminRefundStripeRefund = { id: 12, created_at: "2026-10-02T07:25:00Z", amount_sen: 3400, status: "pending", stripe_refund_id: "re_3QxPending0T8kP" };
+const EARLIER_ATTEMPT: AdminRefundStripeRefund = { id: 11, created_at: "2026-10-02T07:10:00Z", amount_sen: 3400, status: "failed", stripe_refund_id: null };
+
+// 经 Stripe 测试付款（FPX，A03-stripe-review 与 A03-stripe-approved）的三种状态；审核中与已拒绝没有尝试（SHOP-TASK-130 记录段）。
+const STRIPE_REQUESTED: AdminRefundDetail = { ...REQUESTED, paid_via_stripe: true, payment_method_type: "fpx" };
+const STRIPE_APPROVED: AdminRefundDetail = { ...APPROVED, paid_via_stripe: true, payment_method_type: "fpx", stripe_refunds: [LATEST_ATTEMPT, EARLIER_ATTEMPT] };
+const STRIPE_REJECTED: AdminRefundDetail = { ...REJECTED, paid_via_stripe: true, payment_method_type: "fpx" };
 
 const STATUS_KEY: Readonly<Record<RefundStatus, CopyKey>> = {
   requested: "order.refund_requested",
@@ -853,6 +867,311 @@ describe("dictionary", () => {
         for (const value of visibleTexts(html)) {
           expect(allowed.has(value), value).toBe(true);
         }
+      }
+    }
+  });
+});
+
+function methodLine(methodType: string | null, language: Language): string {
+  return methodType === null ? COPY["admin.stripe_method_unknown"][language] : translate(language, "admin.stripe_method", { type: methodType });
+}
+
+function price(sen: number, language: Language): string {
+  return translate(language, "common.price_myr", { amount: formatSen(sen) });
+}
+
+// 内容面板里金额之后的付款方式区块（商品、金额之后的第三个区块）。
+function paymentBlock(html: string): string {
+  return elements(html, "div", "site-admin-refund__block")[2] ?? "";
+}
+
+// 已批准时的 Stripe 退款段（没有时为空串）。
+function stripeSection(html: string): string {
+  return elements(html, "div", "site-admin-refund__stripe")[0] ?? "";
+}
+
+function withAttempts(...attempts: AdminRefundStripeRefund[]): AdminRefundDetail {
+  return { ...STRIPE_APPROVED, stripe_refunds: attempts };
+}
+
+// 所有 Stripe 的文案（含 admin.stripe_method 填入变量之前的前缀）。
+function stripeTexts(language: Language): string[] {
+  return (Object.keys(COPY) as CopyKey[])
+    .filter((key) => key.startsWith("admin.stripe_") || key === "admin.paid_via_stripe" || key === "admin.col_stripe_refund_id")
+    .map((key) => COPY[key][language].split("{")[0] ?? "");
+}
+
+describe("paid with Stripe test mode", () => {
+  // UX A03「Stripe 测试（0.11）」线框「[admin.paid_via_stripe] [admin.stripe_method] 或 [admin.stripe_method_unknown] 审核中、已批准：期限提示」与
+  // 说明第 1 条「[admin.paid_via_stripe] 与付款方式在审核中、已批准、已拒绝三种状态都显示；期限提示只在审核中与已批准显示…原样作为 {type} 显示」：
+  // 金额区块之后为一个区块，依次为 admin.paid_via_stripe、付款方式类型与期限提示（已拒绝没有期限提示），其后才是理由输入框或审核记录。
+  it.each(LANGUAGES)("shows the payment method after the amounts in all three states in %s", (language) => {
+    const cases: [AdminRefundDetail, string[]][] = [
+      [STRIPE_REQUESTED, [COPY["admin.paid_via_stripe"][language], methodLine("fpx", language), COPY["admin.stripe_deadline_fpx"][language]]],
+      [STRIPE_APPROVED, [COPY["admin.paid_via_stripe"][language], methodLine("fpx", language), COPY["admin.stripe_deadline_fpx"][language]]],
+      [STRIPE_REJECTED, [COPY["admin.paid_via_stripe"][language], methodLine("fpx", language)]],
+    ];
+    for (const [refund, texts] of cases) {
+      const html = render({ state: shown(refund) }, language);
+      const blocks = elements(html, "div", "site-admin-refund__block");
+      expect(textNodes(blocks[1] ?? "")).toEqual(amountLines(refund, language));
+      expect(textNodes(blocks[2] ?? "")).toEqual(texts);
+      if (refund.status === "requested") {
+        expect(blocks[3]).toContain("<textarea");
+      } else {
+        expect(textNodes(blocks[3] ?? "")[0]).toBe(reviewedBy(refund, language));
+      }
+    }
+    expect(methodLine("fpx", "en")).toBe("Payment method type: fpx");
+  });
+
+  // 同一条「尚未补齐时显示 [admin.stripe_method_unknown]」（视觉稿 A03-stripe-states 第一块）：类型为 null 时三种状态都显示
+  // admin.stripe_method_unknown，审核中与已批准的期限提示为 admin.stripe_deadline_other。
+  it.each(LANGUAGES)("shows the unknown method type in %s", (language) => {
+    for (const refund of [STRIPE_REQUESTED, STRIPE_APPROVED, STRIPE_REJECTED]) {
+      const html = render({ state: shown({ ...refund, payment_method_type: null }) }, language);
+      const expected: string[] = [COPY["admin.paid_via_stripe"][language], COPY["admin.stripe_method_unknown"][language]];
+      if (refund.status !== "rejected") {
+        expected.push(COPY["admin.stripe_deadline_other"][language]);
+      }
+      expect(textNodes(paymentBlock(html))).toEqual(expected);
+    }
+  });
+
+  // UX A03「Stripe 测试（0.11）」说明第 2 条「fpx 用 [admin.stripe_deadline_fpx]，grabpay 用 [admin.stripe_deadline_grabpay]，其他类型或类型为空用
+  // [admin.stripe_deadline_other]；只给提示、不计算具体日期」与说明第 1 条「期限提示只在审核中与已批准显示」：按类型选一条，已拒绝时哪一条都不显示。
+  it.each(LANGUAGES)("chooses the refund time limit hint by the method type in %s", (language) => {
+    const cases: [string | null, CopyKey][] = [
+      ["fpx", "admin.stripe_deadline_fpx"],
+      ["grabpay", "admin.stripe_deadline_grabpay"],
+      ["card", "admin.stripe_deadline_other"],
+      [null, "admin.stripe_deadline_other"],
+    ];
+    const deadlines: string[] = (["admin.stripe_deadline_fpx", "admin.stripe_deadline_grabpay", "admin.stripe_deadline_other"] as const).map((key) => COPY[key][language]);
+    for (const [methodType, key] of cases) {
+      expect(stripeDeadline(methodType)).toBe(key);
+      for (const refund of [STRIPE_REQUESTED, STRIPE_APPROVED]) {
+        const texts = textNodes(paymentBlock(render({ state: shown({ ...refund, payment_method_type: methodType }) }, language)));
+        expect(texts.slice(1)).toEqual([methodLine(methodType, language), COPY[key][language]]);
+      }
+      const rejected = textNodes(render({ state: shown({ ...STRIPE_REJECTED, payment_method_type: methodType }) }, language));
+      expect(rejected).toContain(methodLine(methodType, language));
+      expect(rejected.filter((text) => deadlines.includes(text))).toEqual([]);
+    }
+  });
+
+  // UX A03「Stripe 测试（0.11）」线框「[admin.refund_hint] ◆ [admin.stripe_refund_hint]」：审核中在 admin.refund_hint 之后以同样的 ◆ 标记
+  // （读屏不读出的图标）显示 admin.stripe_refund_hint；已批准与已拒绝不显示。
+  it.each(LANGUAGES)("adds the Stripe hint after the demo hint while under review in %s", (language) => {
+    const actions = element(render({ state: shown(STRIPE_REQUESTED) }, language), "div", "site-admin-refund__actions");
+    const hints = elements(actions, "div", "site-admin-refund__hint");
+    expect(hints.map(textNodes)).toEqual([[COPY["admin.refund_hint"][language]], [COPY["admin.stripe_refund_hint"][language]]]);
+    for (const hint of hints) {
+      expect(attributes(tags(hint, "svg")[0] ?? "").get("aria-hidden")).toBe("true");
+    }
+    expect(actions.indexOf(hints[1] ?? "")).toBeGreaterThan(actions.indexOf(hints[0] ?? ""));
+    for (const refund of [STRIPE_APPROVED, STRIPE_REJECTED]) {
+      expect(textNodes(render({ state: shown(refund) }, language))).not.toContain(COPY["admin.stripe_refund_hint"][language]);
+    }
+  });
+
+  // UX A03「Stripe 测试（0.11）」线框「已批准：[admin.reviewed_by] … [admin.stripe_refund_title] [admin.col_time] [admin.col_amount] [admin.filter_status]
+  // [admin.col_stripe_refund_id] <时间> [M4] <金额> [状态] <Stripe 退款 ID 或 —>（每次尝试一行，最新的在最上）」与说明第 3 条的状态映射：
+  // 审核记录之后为标题与尝试表，每次尝试一行、照接口给的顺序，时间照 formatDateTime、金额为 RM 加 formatSen，状态为对应的标签，
+  // 没有 ID 时为次要文字 —（照 AdminOrdersPage 的写法）。
+  it.each(LANGUAGES)("shows the Stripe refund attempts after the review record in %s", (language) => {
+    const html = render({ state: shown(STRIPE_APPROVED) }, language);
+    const section = stripeSection(html);
+    expect(html.indexOf(section)).toBeGreaterThan(html.indexOf(escapeHtml(reviewedBy(STRIPE_APPROVED, language))));
+    expect(textNodes(all(section, "h3")[0] ?? "")).toEqual([COPY["admin.stripe_refund_title"][language]]);
+    const table = element(section, "div", "site-admin-refund__stripe-table");
+    expect(all(table, "th").map(textNodes)).toEqual([
+      [COPY["admin.col_time"][language]],
+      [COPY["admin.col_amount"][language]],
+      [COPY["admin.filter_status"][language]],
+      [COPY["admin.col_stripe_refund_id"][language]],
+    ]);
+    const rows = all(all(table, "tbody")[0] ?? "", "tr");
+    expect(rows.map((row) => all(row, "td").map((td) => textNodes(td).join("")))).toEqual([
+      [formatDateTime(LATEST_ATTEMPT.created_at, language), price(3400, language), COPY["admin.stripe_refund_pending"][language], "re_3QxPending0T8kP"],
+      [formatDateTime(EARLIER_ATTEMPT.created_at, language), price(3400, language), COPY["admin.stripe_refund_failed"][language], "—"],
+    ]);
+    expect(rows[1]).toContain(`<td class="acs-admin__muted">—</td>`);
+    // 视觉稿 A03-stripe-approved：处理中为中性标签、失败为危险标签；金额列靠右。
+    expect(rows.map((row) => classes(tags(row, "span")[0] ?? ""))).toEqual([
+      ["acs-tag", "acs-tag--neutral"],
+      ["acs-tag", "acs-tag--danger"],
+    ]);
+    expect(classes(tags(table, "th")[1] ?? "")).toContain("site-admin-refund__num");
+    expect(price(3400, "en")).toBe("RM 34.00");
+    expect(STRIPE_REFUND_LABEL).toEqual({
+      pending: "admin.stripe_refund_pending",
+      succeeded: "admin.stripe_refund_succeeded",
+      failed: "admin.stripe_refund_failed",
+    });
+  });
+
+  // UX A03「Stripe 测试（0.11）」手机线框「<时间> [M4] <金额> [状态] [admin.col_stripe_refund_id] <ID>」（视觉稿 A03-stripe-phone-failed）：
+  // 每次尝试另有一张卡片（由 site.css 在手机显示），依次为时间、金额、状态，再一行 admin.col_stripe_refund_id 与 ID（没有时为 —）；
+  // 视觉稿把状态标签放在首行右侧，与 UX 冲突，以 UX 为准。
+  it.each(LANGUAGES)("shows each attempt as a phone card in %s", (language) => {
+    const cards = element(stripeSection(render({ state: shown(STRIPE_APPROVED) }, language)), "ul", "site-admin-refund__stripe-cards");
+    expect(all(cards, "li").map(textNodes)).toEqual([
+      [
+        formatDateTime(LATEST_ATTEMPT.created_at, language),
+        price(3400, language),
+        COPY["admin.stripe_refund_pending"][language],
+        COPY["admin.col_stripe_refund_id"][language],
+        "re_3QxPending0T8kP",
+      ],
+      [
+        formatDateTime(EARLIER_ATTEMPT.created_at, language),
+        price(3400, language),
+        COPY["admin.stripe_refund_failed"][language],
+        COPY["admin.col_stripe_refund_id"][language],
+        "—",
+      ],
+    ]);
+  });
+
+  // UX A03「Stripe 测试（0.11）」线框「最新一次处理中：[admin.stripe_refund_pending_hint] 最新一次失败：[admin.stripe_refund_failed_hint]」：
+  // 表下的提示只看第一条（最新）尝试——处理中为状态提示，失败为提示框（A03-stripe-phone-failed），已退不显示提示。
+  // admin.stripe_refund_failed_hint 提到的重试按钮由 SHOP-TASK-142 加入，这里照原文显示、页面没有按钮。
+  it.each(LANGUAGES)("shows the hint for the latest attempt in %s", (language) => {
+    const succeeded: AdminRefundStripeRefund = { ...LATEST_ATTEMPT, id: 13, status: "succeeded" };
+    const cases: [AdminRefundStripeRefund[], CopyKey | null][] = [
+      [[LATEST_ATTEMPT, EARLIER_ATTEMPT], "admin.stripe_refund_pending_hint"],
+      [[EARLIER_ATTEMPT], "admin.stripe_refund_failed_hint"],
+      [[{ ...EARLIER_ATTEMPT, id: 14 }, succeeded], "admin.stripe_refund_failed_hint"],
+      [[succeeded, EARLIER_ATTEMPT], null],
+    ];
+    for (const [attempts, hint] of cases) {
+      const section = stripeSection(render({ state: shown(withAttempts(...attempts)) }, language));
+      const notes = elements(section, "div", "site-admin-refund__stripe-note");
+      const alerts = elements(section, "div", "acs-admin__alert");
+      expect(section).not.toContain("<button");
+      if (hint === "admin.stripe_refund_pending_hint") {
+        expect(notes.map(textNodes)).toEqual([[COPY[hint][language]]]);
+        expect(attributes(tags(notes[0] ?? "", "div")[0] ?? "").get("role")).toBe("status");
+        expect(alerts).toEqual([]);
+      } else if (hint === "admin.stripe_refund_failed_hint") {
+        expect(alerts.map(textNodes)).toEqual([[COPY[hint][language]]]);
+        expect(notes).toEqual([]);
+      } else {
+        expect(notes).toEqual([]);
+        expect(alerts).toEqual([]);
+      }
+      // 提示在尝试表与卡片之后。
+      expect(textNodes(section).at(-1)).toBe(hint === null ? "—" : COPY[hint][language]);
+    }
+    expect(stripeRefundHint("pending")).toBe("admin.stripe_refund_pending_hint");
+    expect(stripeRefundHint("failed")).toBe("admin.stripe_refund_failed_hint");
+    expect(stripeRefundHint("succeeded")).toBeNull();
+  });
+
+  // UX A03「Stripe 测试（0.11）」线框「现金退款额为 0：[admin.stripe_refund_none]（不显示尝试表）」与「现金退款额大于 0 却没有尝试：
+  // [admin.stripe_refund_not_sent]（不显示尝试表与重试，0.12）」及说明第 5 条（Kelvin 2026-10-23 决定）：标题之下只有这一条提示，
+  // 没有表格、卡片与处理中或失败的提示。
+  it.each(LANGUAGES)("shows only one message when there is nothing or nothing was sent in %s", (language) => {
+    const cases: [AdminRefundDetail, CopyKey][] = [
+      [{ ...STRIPE_APPROVED, amount_sen: 0, stripe_refunds: [] }, "admin.stripe_refund_none"],
+      [{ ...STRIPE_APPROVED, stripe_refunds: [] }, "admin.stripe_refund_not_sent"],
+    ];
+    for (const [refund, key] of cases) {
+      const section = stripeSection(render({ state: shown(refund) }, language));
+      expect(textNodes(section)).toEqual([COPY["admin.stripe_refund_title"][language], COPY[key][language]]);
+      expect(section).not.toMatch(/<(table|ul|button)\b/);
+      expect(attributes(tags(element(section, "div", "site-admin-refund__stripe-note"), "div")[0] ?? "").get("role")).toBe("status");
+    }
+  });
+
+  // 同一组规则写成纯函数（UX 说明第 5 条与「已批准：」线框）：只有已批准且经 Stripe 付款时才有这一段；现金退款额为 0 时为 none，
+  // 大于 0 而没有尝试时为 not_sent，否则为尝试表，提示按第一条（最新）尝试。
+  it("decides what the Stripe refund section shows", () => {
+    for (const refund of [STRIPE_REQUESTED, STRIPE_REJECTED, REQUESTED, APPROVED, REJECTED]) {
+      expect(stripeRefundSection(refund)).toEqual({ kind: "hidden" });
+    }
+    expect(stripeRefundSection({ ...STRIPE_APPROVED, amount_sen: 0, stripe_refunds: [] })).toEqual({ kind: "none" });
+    expect(stripeRefundSection({ ...STRIPE_APPROVED, stripe_refunds: [] })).toEqual({ kind: "not_sent" });
+    expect(stripeRefundSection(STRIPE_APPROVED)).toEqual({ kind: "attempts", attempts: [LATEST_ATTEMPT, EARLIER_ATTEMPT], hint: "admin.stripe_refund_pending_hint" });
+    expect(stripeRefundSection(withAttempts(EARLIER_ATTEMPT, LATEST_ATTEMPT))).toEqual({
+      kind: "attempts",
+      attempts: [EARLIER_ATTEMPT, LATEST_ATTEMPT],
+      hint: "admin.stripe_refund_failed_hint",
+    });
+  });
+
+  // UX A03「Stripe 测试（0.11）」说明第 1 条「已拒绝」与线框只在「已批准：」下列出这一段：审核中与已拒绝的 Stripe 付款申请没有 Stripe 退款段。
+  it.each(LANGUAGES)("has no Stripe refund section under review or when rejected in %s", (language) => {
+    for (const refund of [STRIPE_REQUESTED, STRIPE_REJECTED]) {
+      const html = render({ state: shown(refund) }, language);
+      expect(stripeSection(html)).toBe("");
+      expect(html).not.toMatch(/<(table|h3)\b/);
+      expect(textNodes(html)).not.toContain(COPY["admin.stripe_refund_title"][language]);
+    }
+  });
+
+  // UX A03「Stripe 测试（0.11）」开头「只对经 Stripe 测试付款的订单的申请显示下面的内容；经模拟支付的订单与上面相同」：模拟支付的
+  // 三种状态（含会员订单）没有任何一段 Stripe 文字，也没有 Stripe 的区块与退款段。
+  it.each(LANGUAGES)("shows no Stripe text for a simulated payment in %s", (language) => {
+    const prefixes = stripeTexts(language);
+    for (const refund of [REQUESTED, APPROVED, REJECTED, MEMBER_REQUESTED, MEMBER_APPROVED, MEMBER_REJECTED]) {
+      const html = render({ state: shown(refund) }, language);
+      for (const text of textNodes(html)) {
+        for (const prefix of prefixes) {
+          expect(text.startsWith(prefix), text).toBe(false);
+        }
+      }
+      expect(html).not.toContain("site-admin-refund__stripe");
+      expect(elements(html, "div", "site-admin-refund__hint")).toHaveLength(refund.status === "requested" ? 1 : 0);
+    }
+  });
+
+  // 验收「页面文字全部来自字典」与「需要 UX-COPY 里没有的界面文字时停下…不自行编写文案」：Stripe 付款的三种状态、类型为 null、各种最新状态、
+  // 现金退款额为 0 与没有尝试时，每段文字都是当前语言的字典文案（含填入变量后的付款方式类型、金额与审核记录），或接口给的订单号、商品、理由、
+  // 时间与 Stripe 退款 ID；此外只有视觉稿给定的符号 ·、/ 与 —（照 AdminOrdersPage.test.tsx 单独加入）。
+  it.each(LANGUAGES)("shows only dictionary text for a Stripe payment in %s", (language) => {
+    const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language]));
+    const refunds: AdminRefundDetail[] = [
+      STRIPE_REQUESTED,
+      STRIPE_APPROVED,
+      STRIPE_REJECTED,
+      { ...STRIPE_REQUESTED, payment_method_type: null },
+      { ...STRIPE_APPROVED, payment_method_type: "grabpay", stripe_refunds: [{ ...LATEST_ATTEMPT, status: "succeeded" }] },
+      { ...STRIPE_APPROVED, payment_method_type: "card", stripe_refunds: [EARLIER_ATTEMPT] },
+      { ...STRIPE_APPROVED, amount_sen: 0, stripe_refunds: [] },
+      { ...STRIPE_APPROVED, stripe_refunds: [] },
+    ];
+    for (const refund of refunds) {
+      allowed.add(refund.order_number);
+      allowed.add(methodLine(refund.payment_method_type, language));
+      for (const line of refund.lines) {
+        allowed.add(line.name);
+        allowed.add(line.variant_label);
+        allowed.add(qty(line, language));
+      }
+      for (const text of amountLines(refund, language)) {
+        allowed.add(text);
+      }
+      if (refund.reviewer_username !== null) {
+        allowed.add(reviewedBy(refund, language));
+      }
+      for (const attempt of refund.stripe_refunds) {
+        allowed.add(formatDateTime(attempt.created_at, language));
+        allowed.add(price(attempt.amount_sen, language));
+        if (attempt.stripe_refund_id !== null) {
+          allowed.add(attempt.stripe_refund_id);
+        }
+      }
+    }
+    for (const symbol of [REASON, "·", "/", "—"]) {
+      allowed.add(symbol);
+    }
+    for (const refund of refunds) {
+      const html = render({ state: shown(refund), reason: REASON }, language);
+      expect(html).not.toMatch(/\s(title|placeholder)=/i);
+      for (const value of visibleTexts(html)) {
+        expect(allowed.has(value), value).toBe(true);
       }
     }
   });

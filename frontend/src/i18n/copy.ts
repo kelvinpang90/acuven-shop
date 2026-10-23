@@ -1750,6 +1750,86 @@ export const COPY = {
     zh: "无法选择 Stripe 测试环境：测试密钥或 webhook 签名密钥未配置或无效。只接受测试密钥，正式环境密钥一律不接受。",
     ms: "Mod ujian Stripe tidak boleh dipilih: kunci rahsia ujian atau rahsia tandatangan webhook tiada atau tidak sah. Hanya kunci ujian diterima, bukan kunci langsung.",
   },
+  "admin.paid_via_stripe": {
+    en: "Paid with Stripe test mode",
+    zh: "经 Stripe 测试环境付款",
+    ms: "Dibayar dengan mod ujian Stripe",
+  },
+  "admin.stripe_method": {
+    en: "Payment method type: {type}",
+    zh: "付款方式类型：{type}",
+    ms: "Jenis kaedah pembayaran: {type}",
+  },
+  "admin.stripe_method_unknown": {
+    en: "Payment method type: not known yet",
+    zh: "付款方式类型：尚未取得",
+    ms: "Jenis kaedah pembayaran: belum diketahui",
+  },
+  "admin.stripe_deadline_fpx": {
+    en: "Stripe allows FPX refunds within 60 days of payment.",
+    zh: "Stripe 允许 FPX 付款在付款后 60 天内退款。",
+    ms: "Stripe membenarkan bayaran balik FPX dalam tempoh 60 hari selepas pembayaran.",
+  },
+  "admin.stripe_deadline_grabpay": {
+    en: "Stripe allows GrabPay refunds within 90 days of payment.",
+    zh: "Stripe 允许 GrabPay 付款在付款后 90 天内退款。",
+    ms: "Stripe membenarkan bayaran balik GrabPay dalam tempoh 90 hari selepas pembayaran.",
+  },
+  "admin.stripe_deadline_other": {
+    en: "The refund time limit for this payment method is set by Stripe.",
+    zh: "此付款方式的退款期限以 Stripe 为准。",
+    ms: "Had masa bayaran balik untuk kaedah pembayaran ini ditetapkan oleh Stripe.",
+  },
+  "admin.stripe_refund_hint": {
+    en: "Approving also sends a refund request for the cash amount above to Stripe's test mode (nothing is sent if it is RM 0.00); after approval, its status is shown on this page. No real money moves. If Stripe doesn't complete the refund, the approval still stands.",
+    zh: "批准时也会就上面的现金金额向 Stripe 测试环境发出退款请求（为 RM 0.00 时不发送），批准后在本页查看其状态。不会有真实资金流动。Stripe 未完成退款时，批准依然有效。",
+    ms: "Kelulusan juga menghantar permintaan bayaran balik bagi amaun tunai di atas ke mod ujian Stripe (tiada apa dihantar jika RM 0.00); selepas kelulusan, statusnya dipaparkan di halaman ini. Tiada wang sebenar berpindah. Jika Stripe tidak melengkapkan bayaran balik, kelulusan tetap berkuat kuasa.",
+  },
+  "admin.stripe_refund_title": {
+    en: "Stripe test refunds",
+    zh: "Stripe 测试环境退款",
+    ms: "Bayaran balik ujian Stripe",
+  },
+  "admin.col_stripe_refund_id": {
+    en: "Stripe refund ID",
+    zh: "Stripe 退款 ID",
+    ms: "ID bayaran balik Stripe",
+  },
+  "admin.stripe_refund_pending": {
+    en: "Processing",
+    zh: "处理中",
+    ms: "Sedang diproses",
+  },
+  "admin.stripe_refund_succeeded": {
+    en: "Refunded in Stripe",
+    zh: "已在 Stripe 退回",
+    ms: "Dikembalikan di Stripe",
+  },
+  "admin.stripe_refund_failed": {
+    en: "Failed",
+    zh: "失败",
+    ms: "Gagal",
+  },
+  "admin.stripe_refund_pending_hint": {
+    en: "Waiting for Stripe's result. Open this page again later to see the update. If it stays processing for a long time, check it in the Stripe dashboard.",
+    zh: "正在等待 Stripe 的结果，请稍后重新打开本页查看。若长时间仍在处理中，请到 Stripe 后台查看。",
+    ms: "Menunggu keputusan Stripe. Buka halaman ini semula kemudian untuk melihat kemas kini. Jika ia kekal diproses untuk masa yang lama, semak di papan pemuka Stripe.",
+  },
+  "admin.stripe_refund_failed_hint": {
+    en: "Stripe didn't complete this refund. Check the time limit above and the Stripe dashboard, then retry. Retrying sends a new refund request.",
+    zh: "Stripe 未完成这笔退款。请先核对上面的期限与 Stripe 后台，再重试；重试会发出一笔新的退款请求。",
+    ms: "Stripe tidak melengkapkan bayaran balik ini. Semak had masa di atas dan papan pemuka Stripe, kemudian cuba semula. Cubaan semula menghantar permintaan bayaran balik baharu.",
+  },
+  "admin.stripe_refund_none": {
+    en: "Nothing to refund in Stripe: the approved items were fully paid with coupons or points.",
+    zh: "无需在 Stripe 退款：所退商品已全部由优惠券或积分抵扣。",
+    ms: "Tiada apa untuk dikembalikan di Stripe: item yang diluluskan dibayar sepenuhnya dengan kupon atau mata.",
+  },
+  "admin.stripe_refund_not_sent": {
+    en: "This refund couldn't be sent to Stripe. The operator has been alerted; check this payment in the Stripe dashboard.",
+    zh: "这笔退款未能发送到 Stripe，已告警运营者；请到 Stripe 后台核对这笔付款。",
+    ms: "Bayaran balik ini tidak dapat dihantar ke Stripe. Pengendali telah dimaklumkan; semak pembayaran ini di papan pemuka Stripe.",
+  },
 } as const satisfies Record<string, CopyEntry>;
 
 export type CopyKey = keyof typeof COPY;
