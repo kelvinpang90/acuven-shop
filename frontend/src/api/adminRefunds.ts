@@ -4,8 +4,9 @@ import type { OrderStatus } from "./adminOrders";
 import { CSRF_HEADER, IDEMPOTENCY_HEADER } from "./pay";
 
 // 后台退款审核 A03 的接口（app/api/admin_refunds.py，SHOP-TASK-041 与 SHOP-TASK-046）：申请列表 POST /api/admin/refunds/query?lang=、
-// 申请详情 GET /api/admin/refunds/{内部 ID}?lang=、批准与拒绝 POST /api/admin/refunds/{内部 ID}/approve 与 /reject。
-// 后台会话凭服务端发的 HttpOnly cookie；列表与详情只读，不要求 CSRF；批准与拒绝带详情返回的 CSRF 令牌与幂等键。
+// 申请详情 GET /api/admin/refunds/{内部 ID}?lang=、批准与拒绝 POST /api/admin/refunds/{内部 ID}/approve 与 /reject，
+// 以及 Stripe 退款的手动重试 POST /api/admin/refunds/{内部 ID}/stripe-retry（SHOP-TASK-131）。
+// 后台会话凭服务端发的 HttpOnly cookie；列表与详情只读，不要求 CSRF；批准与拒绝带详情返回的 CSRF 令牌与幂等键；重试只带 CSRF 令牌。
 // 唯一的查询参数是语言 lang；路径只用申请的内部 ID；状态、订单内部 ID 与页码只在列表的请求体里，理由只在审核的请求体里。
 // 列表不含收货资料与理由；订单号、理由、审核人邮箱与令牌只在响应体、请求与页面内存里，不进路径、查询参数、localStorage、
 // sessionStorage、cookie 或日志。金额为接口给的整数仙快照，页面只格式化、不计算。错误体为 {"detail": ...}；
@@ -182,6 +183,27 @@ export function adminRefundReviewUrl(id: number, action: ReviewAction): string {
   return `${ADMIN_REFUNDS_URL}/${String(id)}/${action}`;
 }
 
+export function adminRefundStripeRetryUrl(id: number): string {
+  return `${ADMIN_REFUNDS_URL}/${String(id)}/stripe-retry`;
+}
+
+// SHOP-TASK-130 记录段的 Stripe 退款尝试状态（服务端原样给出）：处理中、已退、失败。
+export const STRIPE_REFUND_STATUSES = ["pending", "succeeded", "failed"] as const;
+export type StripeRefundStatus = (typeof STRIPE_REFUND_STATUSES)[number];
+
+function isStripeRefundStatus(value: unknown): value is StripeRefundStatus {
+  return typeof value === "string" && (STRIPE_REFUND_STATUSES as readonly string[]).includes(value);
+}
+
+// 一次 Stripe 退款尝试：尝试的内部 ID、建立时间（带时区的 ISO 字符串）、金额（整数仙）、状态与 Stripe 退款 ID（还没有时为 null）。
+export interface AdminRefundStripeRefund {
+  id: number;
+  created_at: string;
+  amount_sen: number;
+  status: StripeRefundStatus;
+  stripe_refund_id: string | null;
+}
+
 // 详情的一行商品：名称与规格（按请求的语言）、申请件数、该行购买件数与该行被已批准申请占用的件数。
 export interface AdminRefundDetailLine {
   name: string;
@@ -195,6 +217,8 @@ export interface AdminRefundDetailLine {
 // （管理员邮箱）未审核时为 null；review_reason 未审核或批准时没写理由为 null；refunded_sen 与 refundable_left_sen 为该单累计已退
 // 与剩余可退；csrf_token 只用于审核的请求头。placed_by_member 为会员下的订单；points_returned（返还的抵扣积分）、
 // points_reversed（追回的获得积分，含记入待抵扣）与 points_estimated（审核中的预估为真）三者同为 null（已拒绝）或同不为 null。
+// 另取 SHOP-TASK-130 记录段的三个 Stripe 字段：paid_via_stripe 为该单经 Stripe 付款；payment_method_type 为记下的实际付款方式类型
+// （尚未补齐或不是 Stripe 付款时为 null）；stripe_refunds 为本申请的各次退款尝试，按接口给的顺序（最新在前）。
 export interface AdminRefundDetail {
   id: number;
   status: RefundStatus;
@@ -214,6 +238,9 @@ export interface AdminRefundDetail {
   points_returned: number | null;
   points_reversed: number | null;
   points_estimated: boolean | null;
+  paid_via_stripe: boolean;
+  payment_method_type: string | null;
+  stripe_refunds: AdminRefundStripeRefund[];
 }
 
 // 读取详情的结果：取到（200）、没有会话（401）、申请不存在（404，路径 ID 不合法时不发请求也归为此类）、
@@ -254,6 +281,41 @@ function readPoints(returned: unknown, reversed: unknown, estimated: unknown): D
   return { points_returned: returned, points_reversed: reversed, points_estimated: estimated };
 }
 
+// 每条尝试只取 SHOP-TASK-130 记录段列出的五个字段；ID 与金额为正整数，时间能解析成日期，状态是三种之一（照原样的小写）。
+function readStripeRefund(value: unknown): AdminRefundStripeRefund | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const { id, created_at, amount_sen, status, stripe_refund_id } = value as Record<string, unknown>;
+  if (!isPositive(id) || !isTime(created_at) || !isPositive(amount_sen) || !isStripeRefundStatus(status) || !(stripe_refund_id === null || typeof stripe_refund_id === "string")) {
+    return null;
+  }
+  return { id, created_at, amount_sen, status, stripe_refund_id };
+}
+
+type DetailStripe = Pick<AdminRefundDetail, "paid_via_stripe" | "payment_method_type" | "stripe_refunds">;
+
+// 三个 Stripe 字段：不是 Stripe 付款（paid_via_stripe 为假）时类型须为 null、尝试须为空列表，否则算不合格。
+// 尝试按接口给的顺序原样保留，不重新排序。
+function readStripe(paid: unknown, methodType: unknown, refunds: unknown): DetailStripe | null {
+  if (typeof paid !== "boolean" || !(methodType === null || typeof methodType === "string") || !Array.isArray(refunds)) {
+    return null;
+  }
+  const items = refunds as unknown[];
+  if (!paid && (methodType !== null || items.length > 0)) {
+    return null;
+  }
+  const attempts: AdminRefundStripeRefund[] = [];
+  for (const item of items) {
+    const attempt = readStripeRefund(item);
+    if (attempt === null) {
+      return null;
+    }
+    attempts.push(attempt);
+  }
+  return { paid_via_stripe: paid, payment_method_type: methodType, stripe_refunds: attempts };
+}
+
 function readDetail(value: unknown): AdminRefundDetail | null {
   if (typeof value !== "object" || value === null) {
     return null;
@@ -262,6 +324,7 @@ function readDetail(value: unknown): AdminRefundDetail | null {
   const { id, status, created_at, reviewed_at, reviewer_username, review_reason, order_id, order_number, order_status } = body;
   const { amount_sen, refunded_sen, refundable_left_sen, csrf_token } = body;
   const { placed_by_member, points_returned, points_reversed, points_estimated } = body;
+  const { paid_via_stripe, payment_method_type, stripe_refunds } = body;
   if (
     !isPositive(id) ||
     !isRefundStatus(status) ||
@@ -281,6 +344,10 @@ function readDetail(value: unknown): AdminRefundDetail | null {
   }
   const points = readPoints(points_returned, points_reversed, points_estimated);
   if (points === null) {
+    return null;
+  }
+  const stripe = readStripe(paid_via_stripe, payment_method_type, stripe_refunds);
+  if (stripe === null) {
     return null;
   }
   // 审核中的申请没有审核时间与审核人；已批准或已拒绝的两者都有（页面据此显示 admin.reviewed_by）。
@@ -313,6 +380,7 @@ function readDetail(value: unknown): AdminRefundDetail | null {
     csrf_token,
     placed_by_member,
     ...points,
+    ...stripe,
   };
 }
 
@@ -407,6 +475,51 @@ export async function reviewAdminRefund(id: string, action: ReviewAction, reason
     case 409: {
       const code = await errorCode(response);
       return (code === null ? undefined : REVIEW_CONFLICTS.get(code)) ?? "failed";
+    }
+    default:
+      return "failed";
+  }
+}
+
+// 重试的回答（SHOP-TASK-131 记录段）：done 为 200（新建了一条尝试，页面随后重新读取详情）；cap 为 409 stripe_refund_cap（会超过 Stripe
+// 付款金额）；not_retryable 为 409 stripe_refund_not_retryable 或 refund_not_approved；csrf 为 403；none 为 401；failed 为其他
+// （含别的 409、404 与 422）；network 为网络中断。
+export type StripeRetryReply = "done" | "cap" | "not_retryable" | "csrf" | "none" | "failed" | "network";
+
+const RETRY_CONFLICTS: ReadonlyMap<string, StripeRetryReply> = new Map<string, StripeRetryReply>([
+  ["stripe_refund_cap", "cap"],
+  ["stripe_refund_not_retryable", "not_retryable"],
+  ["refund_not_approved", "not_retryable"],
+]);
+
+// POST /api/admin/refunds/{内部 ID}/stripe-retry：没有查询参数与请求体，请求头只带 Accept 与详情给的 CSRF 令牌（接口不要幂等键）；
+// 同源 cookie、不缓存。路径 ID 不合法时不发请求。200 的响应体不读。
+export async function retryStripeRefund(id: string, csrfToken: string): Promise<StripeRetryReply> {
+  const refundId = parseRefundId(id);
+  if (refundId === null) {
+    return "failed";
+  }
+  let response: Response;
+  try {
+    response = await fetch(adminRefundStripeRetryUrl(refundId), {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { Accept: "application/json", [CSRF_HEADER]: csrfToken },
+    });
+  } catch {
+    return "network";
+  }
+  switch (response.status) {
+    case 200:
+      return "done";
+    case 401:
+      return "none";
+    case 403:
+      return "csrf";
+    case 409: {
+      const code = await errorCode(response);
+      return (code === null ? undefined : RETRY_CONFLICTS.get(code)) ?? "failed";
     }
     default:
       return "failed";

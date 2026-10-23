@@ -10,11 +10,14 @@ import {
   parseRefundId,
   queryAdminRefunds,
   readAdminRefund,
+  adminRefundStripeRetryUrl,
   REFUND_STATUSES,
+  retryStripeRefund,
   reviewAdminRefund,
   reviewAttempt,
+  STRIPE_REFUND_STATUSES,
 } from "./adminRefunds";
-import type { AdminRefundDetail, RefundsQuery, ReviewAction } from "./adminRefunds";
+import type { AdminRefundDetail, AdminRefundStripeRefund, RefundsQuery, ReviewAction } from "./adminRefunds";
 import { CSRF_HEADER, IDEMPOTENCY_HEADER } from "./pay";
 
 afterEach(() => {
@@ -235,6 +238,11 @@ const DETAIL: AdminRefundDetail = {
   points_returned: 146,
   points_reversed: 27,
   points_estimated: true,
+  // SHOP-TASK-140 改动：详情另取三个 Stripe 字段，补上模拟支付订单的取值（SHOP-TASK-130 记录段「模拟支付订单…为假、null 与空列表」），
+  // REJECTED_DETAIL 与 APPROVED_DETAIL 由此展开得到同样的值，原有断言不变。
+  paid_via_stripe: false,
+  payment_method_type: null,
+  stripe_refunds: [],
 };
 
 // 已拒绝的申请：有审核时间、审核人邮箱与理由；三个积分字段都为 null（SHOP-TASK-106 记录段「rejected：三个积分字段都为 null」）。
@@ -503,6 +511,193 @@ describe("reviewing a refund request", () => {
       for (const secret of [REASON, REVIEWER, TOKEN, KEY, ORDER_NUMBER, encodeURIComponent(REASON)]) {
         expect(call.url).not.toContain(secret);
       }
+    }
+    for (const target of [browser.local, browser.session]) {
+      expect(target.setItem).not.toHaveBeenCalled();
+    }
+    expect(browser.cookieWrites).toEqual([]);
+    expect(browser.history.pushState).not.toHaveBeenCalled();
+    expect(browser.history.replaceState).not.toHaveBeenCalled();
+    for (const log of browser.logs) {
+      expect(log).not.toHaveBeenCalled();
+    }
+  });
+});
+
+// Stripe 付款、已批准的申请的两次退款尝试（SHOP-TASK-130 记录段「按尝试 ID 从大到小（最新在前）」）：先失败、后重试为处理中。
+const OLDER_ATTEMPT: AdminRefundStripeRefund = { id: 31, created_at: "2026-10-03T10:05:00Z", amount_sen: 2763, status: "failed", stripe_refund_id: "re_test_31" };
+const NEWER_ATTEMPT: AdminRefundStripeRefund = { id: 34, created_at: "2026-10-04T09:00:00Z", amount_sen: 2763, status: "pending", stripe_refund_id: null };
+const STRIPE_APPROVED_DETAIL: AdminRefundDetail = { ...APPROVED_DETAIL, paid_via_stripe: true, payment_method_type: "fpx", stripe_refunds: [NEWER_ATTEMPT, OLDER_ATTEMPT] };
+
+describe("reading the Stripe fields of a refund request", () => {
+  // SHOP-TASK-130 记录段「stripe_refunds：…按尝试 ID 从大到小（最新在前），每条只有 id、created_at、amount_sen、status 与 stripe_refund_id」
+  // 与「payment_method_type：该记录的 payment_method_type 原样」：Stripe 付款已批准的申请，三个字段原样取到，两条尝试的顺序不变。
+  it("keeps the payment method and the attempts in the given order", async () => {
+    stubFetch(json(200, STRIPE_APPROVED_DETAIL));
+    const read = await readAdminRefund("9", "en");
+    expect(read).toEqual({ kind: "ok", refund: STRIPE_APPROVED_DETAIL });
+    expect(read.kind === "ok" ? read.refund.stripe_refunds.map((attempt) => attempt.id) : []).toEqual([34, 31]);
+  });
+
+  // 同一条「最新在前」由服务端排好：页面层不重新排序，即使接口给的顺序是从旧到新也原样保留。
+  it("does not sort the attempts", async () => {
+    const refund: AdminRefundDetail = { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [OLDER_ATTEMPT, NEWER_ATTEMPT] };
+    stubFetch(json(200, refund));
+    await expect(readAdminRefund("9", "en")).resolves.toEqual({ kind: "ok", refund });
+  });
+
+  // SHOP-TASK-130 记录段「payment_method_type：…尚未补齐时为 null」「审核中、已拒绝…的 Stripe 付款申请为真且列表为空」
+  // 与「模拟支付订单…为假、null 与空列表」：这些组合都合格；三种尝试状态各自合格，Stripe 退款 ID 可以为 null。
+  it.each<AdminRefundDetail>([
+    { ...STRIPE_APPROVED_DETAIL, payment_method_type: null },
+    { ...STRIPE_APPROVED_DETAIL, payment_method_type: "grabpay", stripe_refunds: [] },
+    { ...DETAIL, paid_via_stripe: true, payment_method_type: "card" },
+    { ...REJECTED_DETAIL, paid_via_stripe: true, payment_method_type: "fpx" },
+    DETAIL,
+    APPROVED_DETAIL,
+    REJECTED_DETAIL,
+    ...STRIPE_REFUND_STATUSES.map((status) => ({ ...STRIPE_APPROVED_DETAIL, stripe_refunds: [{ ...OLDER_ATTEMPT, status }] })),
+  ])("accepts the Stripe fields %#", async (refund) => {
+    stubFetch(json(200, refund));
+    await expect(readAdminRefund("9", "en")).resolves.toEqual({ kind: "ok", refund });
+    expect(STRIPE_REFUND_STATUSES).toEqual(["pending", "succeeded", "failed"]);
+  });
+
+  // SHOP-TASK-130 记录段「查询只选这五列，last_error_type、调用次数、告警与复查时间、PaymentIntent ID 与会话 ID 不读也不返回」与 UX 0.12 A03
+  // 「不显示 Stripe 返回的客户资料、卡号片段、账单地址或错误原文」：即使响应多出这些字段，也不带进结果。
+  it("keeps only the five attempt fields", async () => {
+    stubFetch(
+      json(200, {
+        ...STRIPE_APPROVED_DETAIL,
+        stripe_payment_intent_id: "pi_test_1",
+        stripe_refunds: STRIPE_APPROVED_DETAIL.stripe_refunds.map((attempt) => ({
+          ...attempt,
+          last_error_type: "card_error",
+          attempt_count: 2,
+          stripe_payment_intent_id: "pi_test_1",
+        })),
+      }),
+    );
+    const read = await readAdminRefund("9", "en");
+    expect(read).toEqual({ kind: "ok", refund: STRIPE_APPROVED_DETAIL });
+    const attempts = read.kind === "ok" ? read.refund.stripe_refunds : [];
+    for (const attempt of attempts) {
+      expect(Object.keys(attempt).sort()).toEqual(["amount_sen", "created_at", "id", "status", "stripe_refund_id"]);
+    }
+    expect(read.kind === "ok" ? Object.keys(read.refund) : []).not.toContain("stripe_payment_intent_id");
+  });
+
+  // SHOP-TASK-130 记录段的三个字段与取值（「status（pending / succeeded / failed 原样）」「没有记录…时为假」，
+  // 不是 Stripe 付款时类型为 null）：字段缺少或类型不对、任何一条尝试不合格（大写或别的状态值、金额为 0 或负数、时间不能解析）、
+  // paid_via_stripe 为假却给了类型或尝试，都算响应体不合格，归为失败。
+  it.each<Record<string, unknown>>([
+    { ...DETAIL, paid_via_stripe: undefined },
+    { ...DETAIL, paid_via_stripe: null },
+    { ...DETAIL, paid_via_stripe: "false" },
+    { ...DETAIL, paid_via_stripe: 0 },
+    { ...STRIPE_APPROVED_DETAIL, payment_method_type: undefined },
+    { ...STRIPE_APPROVED_DETAIL, payment_method_type: 7 },
+    { ...STRIPE_APPROVED_DETAIL, payment_method_type: ["fpx"] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: undefined },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: null },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: NEWER_ATTEMPT },
+    { ...DETAIL, payment_method_type: "card" },
+    { ...DETAIL, payment_method_type: "" },
+    { ...DETAIL, stripe_refunds: [OLDER_ATTEMPT] },
+    { ...REJECTED_DETAIL, payment_method_type: "fpx" },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: ["re_test_31"] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [null] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [NEWER_ATTEMPT, { ...OLDER_ATTEMPT, status: "FAILED" }] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [{ ...OLDER_ATTEMPT, status: "Succeeded" }] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [{ ...OLDER_ATTEMPT, status: "canceled" }] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [{ ...OLDER_ATTEMPT, status: "requires_action" }] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [{ ...OLDER_ATTEMPT, status: undefined }] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [{ ...OLDER_ATTEMPT, amount_sen: 0 }] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [{ ...OLDER_ATTEMPT, amount_sen: -2763 }] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [{ ...OLDER_ATTEMPT, amount_sen: 27.63 }] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [{ ...OLDER_ATTEMPT, amount_sen: "2763" }] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [{ ...OLDER_ATTEMPT, id: 0 }] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [{ ...OLDER_ATTEMPT, id: "31" }] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [{ ...OLDER_ATTEMPT, created_at: "yesterday" }] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [{ ...OLDER_ATTEMPT, created_at: null }] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [{ ...OLDER_ATTEMPT, stripe_refund_id: 31 }] },
+    { ...STRIPE_APPROVED_DETAIL, stripe_refunds: [{ ...OLDER_ATTEMPT, stripe_refund_id: undefined }] },
+  ])("rejects malformed Stripe fields %#", async (reply) => {
+    stubFetch(json(200, reply));
+    await expect(readAdminRefund("9", "en")).resolves.toEqual({ kind: "failed" });
+  });
+});
+
+describe("retrying a Stripe refund", () => {
+  // SHOP-TASK-131 记录段「手动重试（POST /api/admin/refunds/{refund_id}/stripe-retry…）：不读请求体、不要 Idempotency-Key」与
+  // 「require_admin_csrf（403 csrf_failed）」：地址只有申请的内部 ID 与 stripe-retry，没有查询参数；POST、同源 cookie、不缓存、没有请求体；
+  // 请求头只有 Accept 与详情给的 X-CSRF-Token，没有 Idempotency-Key 与 Content-Type。
+  it("posts nothing but the CSRF token", async () => {
+    const calls = stubFetch(json(200, { result: "retried" }));
+    await expect(retryStripeRefund("9", TOKEN)).resolves.toBe("done");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("/api/admin/refunds/9/stripe-retry");
+    expect(adminRefundStripeRetryUrl(9)).toBe("/api/admin/refunds/9/stripe-retry");
+    expect(calls[0]?.init).toMatchObject({ method: "POST", credentials: "same-origin", cache: "no-store" });
+    expect(calls[0]?.init.body).toBeUndefined();
+    expect(CSRF_HEADER).toBe("X-CSRF-Token");
+    expect(headers(calls[0])[CSRF_HEADER]).toBe(TOKEN);
+    expect(Object.keys(headers(calls[0])).sort()).toEqual(["Accept", CSRF_HEADER]);
+    expect(headers(calls[0])).not.toHaveProperty(IDEMPOTENCY_HEADER);
+    expect(headers(calls[0])).not.toHaveProperty("Content-Type");
+  });
+
+  // SHOP-TASK-131 记录段「路径里的申请 ID（照 _refund_id_errors，422 不回显）」与本模块 parseRefundId：路径 ID 不合法时不发请求，归为失败。
+  it.each(["0", "09", "+9", "-1", "4.2", "", "2147483648", "order"])("sends nothing for the refund ID %j", async (value) => {
+    const calls = stubFetch(json(200, { result: "retried" }));
+    await expect(retryStripeRefund(value, TOKEN)).resolves.toBe("failed");
+    expect(calls).toEqual([]);
+  });
+
+  // SHOP-TASK-131 记录段「成功时…回 200 {"result": "retried"}；响应不带 Stripe 退款 ID…页面随后重新读取详情」：200 即为 done，
+  // 不读响应体（响应体不是 JSON 也一样）。
+  it("does not read the body of a success", async () => {
+    const reply = new Response("not json", { status: 200 });
+    stubFetch(reply);
+    await expect(retryStripeRefund("9", TOKEN)).resolves.toBe("done");
+    expect(reply.bodyUsed).toBe(false);
+  });
+
+  // SHOP-TASK-131 记录段的错误码（「RefundRequestNotApproved 409 refund_not_approved；NoRefundAttempt 与 RetryNotAllowed…409
+  // stripe_refund_not_retryable；RefundCapExceeded 409 stripe_refund_cap」「RetryRequestNotFound 404 not_found」「401 admin_session_required」
+  // 「403 csrf_failed」「422 不回显」）与 UX 0.12 A03「重试被拒（会超过 Stripe 付款金额）：按钮下显示 [admin.stripe_refund_blocked]」：
+  // 回答按状态码（409 另按错误码）归类；别的 409 错误码、不是 JSON 的 409、404、422 与其他状态为 failed；网络中断为 network。
+  it.each<[Response | (() => never), string]>([
+    [json(200, { result: "retried" }), "done"],
+    [json(409, { detail: "stripe_refund_cap" }), "cap"],
+    [json(409, { detail: "stripe_refund_not_retryable" }), "not_retryable"],
+    [json(409, { detail: "refund_not_approved" }), "not_retryable"],
+    [json(409, { detail: "idempotency_conflict" }), "failed"],
+    [json(409, { detail: "refund_already_reviewed", status: "approved" }), "failed"],
+    [json(409, { detail: ["stripe_refund_cap"] }), "failed"],
+    [new Response("not json", { status: 409 }), "failed"],
+    [json(403, { detail: "csrf_failed" }), "csrf"],
+    [json(401, { detail: "admin_session_required" }), "none"],
+    [json(404, { detail: "not_found" }), "failed"],
+    [json(422, { detail: "invalid_refund_id" }), "failed"],
+    [json(500, {}), "failed"],
+    [networkDown, "network"],
+  ])("reports the reply %#", async (reply, kind) => {
+    stubFetch(reply);
+    await expect(retryStripeRefund("9", TOKEN)).resolves.toBe(kind);
+  });
+
+  // SHOP-TASK-131 记录段「响应不带 Stripe 退款 ID、错误类别或其他 Stripe 内容」与 UX 0.12 A03「不显示 Stripe 返回的…错误原文」：
+  // 令牌只在请求头，不进地址；重试过程不写浏览器存储、cookie 或历史记录，也不写 console。
+  it("keeps the token out of the address, storage and the console", async () => {
+    const browser = stubBrowser();
+    const calls = stubFetch(json(200, { result: "retried" }), json(409, { detail: "stripe_refund_cap" }), networkDown);
+    await retryStripeRefund("9", TOKEN);
+    await retryStripeRefund("9", TOKEN);
+    await retryStripeRefund("9", TOKEN);
+    expect(calls).toHaveLength(3);
+    for (const call of calls) {
+      expect(call.url).toBe("/api/admin/refunds/9/stripe-retry");
     }
     for (const target of [browser.local, browser.session]) {
       expect(target.setItem).not.toHaveBeenCalled();
