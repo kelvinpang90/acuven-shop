@@ -4196,7 +4196,7 @@ tasks:
       不装依赖，不改后端，不改设计。
       设计闸门：DESIGN 1.12（提交 acf576e）「权限与资料保护」第 3 条与「失败、并发与重试」（注册即短信验证；短信失败不创建账号；自动认领由服务端完成）与 HANDOFF 0.58。
       拆分：P11 注册，12 个允许路径（PayResultPage 两个文件只为 P07 的注册链接列入）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-147
     acceptance_criteria:
