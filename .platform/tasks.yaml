@@ -4028,22 +4028,21 @@ tasks:
       运营者在服务器 .env 里填了也不生效。本任务把它们传进 shop_api，并新增人机挑战的公开 site key 配置 SHOP_TURNSTILE_SITE_KEY，由 GET /api/site-settings 下发给前台的短信验证组件 V1（docs/UX.md V1 的托管人机挑战组件）。
       不改发送、核验与限流的规则，不改前端，不改设计。
       设计闸门：不适用（只把已有配置传进容器，新增的 site key 是公开值；短信与人机挑战的规则不变）。
-      拆分：后端配置层，7 个允许路径；前台读取由 SHOP-TASK-144 接上。
+      拆分：后端配置层，6 个允许路径；前台读取由 SHOP-TASK-144 接上。
     status: ready
     depends_on: []
     acceptance_criteria:
       - docker-compose.yml 的 shop_api.environment 加入 SHOP_TWILIO_ACCOUNT_SID、SHOP_TWILIO_AUTH_TOKEN、SHOP_TWILIO_VERIFY_SERVICE_SID、SHOP_TWILIO_VERIFY_BASE_URL、SHOP_TURNSTILE_SECRET_KEY、SHOP_TURNSTILE_VERIFY_URL、SHOP_TURNSTILE_SITE_KEY 与 SHOP_WHATSAPP_CONTACT_URL（写法为 ${变量名:-}），以及 SHOP_SMS_DAILY_COUNT_LIMIT、SHOP_SMS_DAILY_COST_LIMIT_MICRO_USD、SHOP_SMS_MAX_COST_MICRO_USD_MY、SHOP_SMS_MAX_COST_MICRO_USD_SG、SHOP_SMS_PHONE_LIMIT_PER_MINUTE、SHOP_SMS_PHONE_LIMIT_PER_HOUR、SHOP_SMS_PHONE_LIMIT_PER_DAY、SHOP_SMS_SOURCE_LIMIT_PER_HOUR（写法为 ${变量名:-默认值}，默认值与 app/core/config.py 的默认值相同——200、20000000、0、0、1、5、10、10）；未设置时照常部署；shop_jobs 不加（定时任务不发短信）；照现有 Stripe 一组的写法加一行注释说明可以不设
-      - app/core/config.py 新增 turnstile_site_key（字符串，默认空串），写在 Turnstile 两项旁边并照它们的写法注释；.env.example 在 SHOP_TURNSTILE_VERIFY_URL 之后加 SHOP_TURNSTILE_SITE_KEY=TURNSTILE_SITE_KEY，注释写明它是公开值、由 GET /api/site-settings 下发给前台
+      - app/core/config.py 新增 turnstile_site_key（字符串，默认空串），写在 Turnstile 两项旁边并照它们的写法注释；.env.example 里的 SHOP_TURNSTILE_SITE_KEY 一行已由登记 PR 加入（Worker 不能改该文件），本任务不改它
       - app/api/site_settings.py 的响应多出 turnstile_site_key——配置值去掉首尾空白后非空、不超过 256 个字符、不含空白与控制字符时原样返回，否则（含未配置）为 null；配置不合格时不报错、不写日志（照 whatsapp_contact_url 的写法另写一个函数）；不读、不返回 secret key 与核验地址；其余字段、no-store 与只发 SELECT 不变；模块文档字符串补上这一项
       - 用 pytest 在 tests/test_site_settings.py 验证意图——配置为合格值时原样返回、首尾空白去掉、空串、超长、含空白或控制字符时为 null；响应只有三个字段（secret key 与核验地址的配置值不出现在响应体里）；现有断言里对响应整体做相等比较的，期望补上 turnstile_site_key（取未配置的 null）并在改动处注明原因
       - 新文件 tests/test_compose_env.py 照 tests/test_stripe_gateway.py 的 test_compose_passes_all_six_variables_to_api_and_jobs 的写法，读取 docker-compose.yml，断言第一条列出的 16 个变量在 shop_api.environment 里且写法逐字相同、都不在 shop_jobs.environment 里，并断言 app/core/config.py 的 Settings 每个字段（git_sha 除外）对应的 SHOP_ 变量都出现在 shop_api.environment 里（以后新增配置漏传时失败）；每条测试的文档字符串写明它守住的是什么
       - 由 PR 的必需 CI 检查 backend 执行 pytest（含 docker compose config 校验）并全部通过（Worker 沙箱不跑 pytest）；docs/task-records/SHOP-TASK-143.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；传入的变量、新字段与取值规则、偏离、验证到什么程度，并写明前台读取留给 SHOP-TASK-144、运营者要在服务器 .env 里填写的变量名）
-      - 改动只落在 allowed_change_paths；不改 app/services/captcha.py、app/services/sms_provider.py 与其他短信规则，不改前端、迁移、CI、deploy/deploy.sh、.platform/ 与 docs/TODO.md；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+      - 改动只落在 allowed_change_paths；不改 app/services/captcha.py、app/services/sms_provider.py 与其他短信规则，不改 .env.example、前端、迁移、CI、deploy/deploy.sh、.platform/ 与 docs/TODO.md；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
     allowed_change_paths:
       - docker-compose.yml
       - app/core/config.py
       - app/api/site_settings.py
-      - .env.example
       - tests/test_site_settings.py
       - tests/test_compose_env.py
       - docs/task-records/SHOP-TASK-143.md
