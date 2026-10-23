@@ -620,6 +620,81 @@ export const COPY = {
     zh: "登录",
     ms: "Log masuk",
   },
+  "auth.sms_scope": {
+    en: "SMS verification is currently available for Malaysia (+60) and Singapore (+65) mobile numbers only.",
+    zh: "短信验证目前仅支持马来西亚（+60）和新加坡（+65）手机号。",
+    ms: "Pengesahan SMS kini hanya untuk nombor telefon bimbit Malaysia (+60) dan Singapura (+65).",
+  },
+  "auth.challenge": {
+    en: "Please complete the check below first.",
+    zh: "请先完成下方人机验证。",
+    ms: "Sila lengkapkan semakan di bawah dahulu.",
+  },
+  "auth.challenge_failed": {
+    en: "The check wasn't completed. Please try again.",
+    zh: "人机验证未完成，请重试。",
+    ms: "Semakan tidak dilengkapkan. Sila cuba lagi.",
+  },
+  "auth.send_code": {
+    en: "Send code",
+    zh: "发送验证码",
+    ms: "Hantar kod",
+  },
+  "auth.resend_code": {
+    en: "Send a new code",
+    zh: "重新发送验证码",
+    ms: "Hantar kod baharu",
+  },
+  "auth.code_sent": {
+    en: "We sent a code by SMS to {phoneMasked}.",
+    zh: "验证码已通过短信发送至 {phoneMasked}。",
+    ms: "Kami telah menghantar kod melalui SMS ke {phoneMasked}.",
+  },
+  "auth.code": {
+    en: "Verification code",
+    zh: "验证码",
+    ms: "Kod pengesahan",
+  },
+  "auth.verify_submit": {
+    en: "Verify",
+    zh: "验证",
+    ms: "Sahkan",
+  },
+  "auth.code_wrong": {
+    en: "That code is incorrect or has expired.",
+    zh: "验证码错误或已过期。",
+    ms: "Kod itu salah atau telah tamat tempoh.",
+  },
+  "auth.not_supported_country": {
+    en: "We can't send SMS to this number yet. You can still check out as a guest.",
+    zh: "暂时无法向此号码发送短信。您仍可以游客身份下单。",
+    ms: "Kami belum dapat menghantar SMS ke nombor ini. Anda masih boleh membuat pesanan sebagai tetamu.",
+  },
+  "auth.sms_failed": {
+    en: "The SMS could not be sent, so no account was created or changed. You can still check out as a guest.",
+    zh: "短信发送失败，账号未创建或更改。您仍可以游客身份下单。",
+    ms: "SMS tidak dapat dihantar, jadi tiada akaun dicipta atau diubah. Anda masih boleh membuat pesanan sebagai tetamu.",
+  },
+  "auth.sms_paused": {
+    en: "SMS is currently switched off, so registration, SMS login and password reset are unavailable. Members who have set a password can still log in with it.",
+    zh: "短信目前已关闭，暂不能注册、短信登录或重设密码。已设置密码的会员仍可用密码登录。",
+    ms: "SMS kini dimatikan, jadi pendaftaran, log masuk SMS dan tetapan semula kata laluan tidak tersedia. Ahli yang telah menetapkan kata laluan masih boleh log masuk dengannya.",
+  },
+  "auth.sms_not_sent_no_change": {
+    en: "The SMS was not sent, and nothing about your account has been changed. Please try again later.",
+    zh: "短信未发出，您的账号未作任何更改。请稍后再试。",
+    ms: "SMS tidak dihantar, dan tiada apa-apa pada akaun anda telah diubah. Sila cuba lagi kemudian.",
+  },
+  "auth.continue_guest": {
+    en: "Continue as guest",
+    zh: "以游客身份继续",
+    ms: "Teruskan sebagai tetamu",
+  },
+  "auth.claim_notice": {
+    en: "Once verified, guest orders placed with this number in the last 30 days are added to your account. Points are not added for past orders.",
+    zh: "验证通过后，近 30 天内用此号码下单的游客订单会自动归入您的账号；过去的订单不补发积分。",
+    ms: "Setelah disahkan, pesanan tetamu dengan nombor ini dalam 30 hari lalu akan ditambah ke akaun anda. Mata tidak ditambah untuk pesanan lalu.",
+  },
   "pay.title": {
     en: "Simulated payment",
     zh: "模拟支付",
