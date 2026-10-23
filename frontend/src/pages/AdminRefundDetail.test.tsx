@@ -1012,21 +1012,22 @@ describe("paid with Stripe test mode", () => {
   });
 
   // UX A03「Stripe 测试（0.11）」手机线框「<时间> [M4] <金额> [状态] [admin.col_stripe_refund_id] <ID>」（视觉稿 A03-stripe-phone-failed）：
-  // 每次尝试另有一张卡片（由 site.css 在手机显示），依次为时间、状态、金额，再一行 admin.col_stripe_refund_id 与 ID（没有时为 —）。
+  // 每次尝试另有一张卡片（由 site.css 在手机显示），依次为时间、金额、状态，再一行 admin.col_stripe_refund_id 与 ID（没有时为 —）；
+  // 视觉稿把状态标签放在首行右侧，与 UX 冲突，以 UX 为准。
   it.each(LANGUAGES)("shows each attempt as a phone card in %s", (language) => {
     const cards = element(stripeSection(render({ state: shown(STRIPE_APPROVED) }, language)), "ul", "site-admin-refund__stripe-cards");
     expect(all(cards, "li").map(textNodes)).toEqual([
       [
         formatDateTime(LATEST_ATTEMPT.created_at, language),
-        COPY["admin.stripe_refund_pending"][language],
         price(3400, language),
+        COPY["admin.stripe_refund_pending"][language],
         COPY["admin.col_stripe_refund_id"][language],
         "re_3QxPending0T8kP",
       ],
       [
         formatDateTime(EARLIER_ATTEMPT.created_at, language),
-        COPY["admin.stripe_refund_failed"][language],
         price(3400, language),
+        COPY["admin.stripe_refund_failed"][language],
         COPY["admin.col_stripe_refund_id"][language],
         "—",
       ],

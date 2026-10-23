@@ -409,8 +409,8 @@ function StripeRefundTag({ status }: { status: StripeRefundStatus }) {
   return <span className={STRIPE_REFUND_TAG_CLASS[status]}>{t(STRIPE_REFUND_LABEL[status])}</span>;
 }
 
-// 尝试表：桌面为表格（时间、金额靠右、状态标签与 Stripe 退款 ID，没有 ID 时为 —），手机为每次尝试一张卡片（时间与状态标签、金额，
-// 再一行 admin.col_stripe_refund_id 与 ID），由 site.css 按宽度显隐。
+// 尝试表：桌面为表格（时间、金额靠右、状态标签与 Stripe 退款 ID，没有 ID 时为 —），手机为每次尝试一张卡片（照 UX 依次为时间、金额、
+// 状态标签，再一行 admin.col_stripe_refund_id 与 ID；视觉稿把状态标签放在首行右侧，以 UX 为准），由 site.css 按宽度显隐。
 function StripeRefundAttempts({ attempts }: { attempts: AdminRefundStripeRefund[] }) {
   const t = useCopy();
   const price = usePrice();
@@ -444,11 +444,11 @@ function StripeRefundAttempts({ attempts }: { attempts: AdminRefundStripeRefund[
       <ul className="site-admin-refund__stripe-cards">
         {attempts.map((attempt) => (
           <li key={attempt.id} className="acs-admin__panel site-admin-refund__stripe-card">
-            <div className="site-admin-refund__stripe-card-head">
-              <span>{formatDateTime(attempt.created_at, language)}</span>
-              <StripeRefundTag status={attempt.status} />
-            </div>
+            <span>{formatDateTime(attempt.created_at, language)}</span>
             <span>{price(attempt.amount_sen)}</span>
+            <span>
+              <StripeRefundTag status={attempt.status} />
+            </span>
             <span className="acs-admin__muted site-admin-refund__stripe-id">
               <span>{t("admin.col_stripe_refund_id")}</span>
               <span>{attempt.stripe_refund_id ?? "—"}</span>

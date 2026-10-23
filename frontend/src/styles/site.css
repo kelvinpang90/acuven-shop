@@ -729,12 +729,12 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-refund__buttons .acs-admin__btn { justify-content: center; min-height: 44px; }
 
   /* 后台退款详情经 Stripe 付款（A03-stripe-phone-failed）：Stripe 退款段在内容面板之外，标题、卡片与提示间距 14px；表格不显示，
-     每次尝试一张卡片（内边距 14px，间距 6px），首行时间与状态标签分列两端，其下为金额，再一行 Stripe 退款 ID 与 ID */
+     每次尝试一张卡片（内边距 14px，间距 6px），照 UX 依次为时间、金额、状态标签，再一行 Stripe 退款 ID 与 ID
+     （视觉稿把状态标签放在首行右侧，与 UX 冲突，以 UX 为准） */
   .site-admin-refund__stripe { gap: 14px; padding-top: 0; }
   .site-admin-refund__stripe-table { display: none; }
   .site-admin-refund__stripe-cards { display: grid; gap: 14px; }
-  .site-admin-refund__stripe-card { display: grid; gap: 6px; padding: 14px; }
-  .site-admin-refund__stripe-card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .site-admin-refund__stripe-card { display: grid; justify-items: start; gap: 6px; padding: 14px; }
   .site-admin-refund__stripe-id { display: flex; flex-wrap: wrap; gap: 4px; }
 
   /* 后台库存重置结果的页头（A07-phone）：标题与说明间距 10px */
