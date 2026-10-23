@@ -4125,7 +4125,7 @@ tasks:
       不装依赖，不改后端，不改设计。
       设计闸门：DESIGN 1.12（提交 acf576e）「权限与资料保护」第 3 条（密码登录对未设密码账号与错误密码同一失败提示；开关关闭时已设密码者仍可密码登录）与 HANDOFF 0.58。
       拆分：P12 登录，9 个允许路径（CheckoutPage.test.tsx 只为上面那一条断言列入）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-145
     acceptance_criteria:
