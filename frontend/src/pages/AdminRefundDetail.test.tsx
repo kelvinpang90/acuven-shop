@@ -63,6 +63,11 @@ const REQUESTED: AdminRefundDetail = {
   points_returned: 0,
   points_reversed: 0,
   points_estimated: true,
+  // SHOP-TASK-140 改动：详情另取三个 Stripe 字段，补上模拟支付订单的取值（SHOP-TASK-130 记录段「模拟支付订单…为假、null 与空列表」），
+  // APPROVED、REJECTED 与会员样例由此展开得到同样的值，原有断言不变。
+  paid_via_stripe: false,
+  payment_method_type: null,
+  stripe_refunds: [],
 };
 
 // 已批准、没写理由（A03-desktop-reviewed）；游客订单，没有积分流水即为 0。
