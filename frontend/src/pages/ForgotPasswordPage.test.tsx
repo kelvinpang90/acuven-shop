@@ -330,7 +330,8 @@ describe("submit results", () => {
     expect(changes).toEqual([]);
   });
 
-  // resetStep 只按回答改动：提交进行中收起，先前的提示在 startResetting 时已收起。
+  // 验收第 4 条「too_short 留在表单并显示 auth.password_rule」与「unavailable 显示 common.service_unavailable、failed 显示 common.error_retry，都留在表单可再提交」：
+  // 再次提交时先前的提示收起，表单留着；这次的回答只显示这次的提示，不叠上一次的 auth.password_rule。
   it("clears earlier notices when a new submit starts", () => {
     const submitting = startResetting({ ...FILLED, tooShort: true, notice: "common.error_retry" });
     expect(submitting).toEqual({ ...FILLED, submitting: true });
@@ -354,7 +355,9 @@ describe("number not registered", () => {
     expect(withLink).toContain(`</span></div><a class="acs-btn acs-btn--secondary site-reset__link" href="/privacy">${copy("common.nav_register", language)}</a></div></section>`);
   });
 
-  // 注册 / 短信登录的结果不属于这一用途，页面不因它改变。
+  // 任务目的「嵌入 SHOP-TASK-145 的 V1（用途 reset_password），号码已注册时显示新密码输入…未注册时显示 auth.reset_not_registered」
+  // 与 DESIGN 1.12「权限与资料保护」第 3 条「未注册号码不创建账号」：页面只按 registered 与 not_registered 两种结果改变，
+  // 注册 / 短信登录用途的 member 结果（含 created）不属于这一用途，页面不因它显示表单或已登录状态。
   it("ignores a member result", () => {
     expect(verifiedStep({ kind: "member", created: true })(INITIAL_RESET)).toBe(INITIAL_RESET);
   });

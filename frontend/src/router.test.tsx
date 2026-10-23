@@ -155,7 +155,8 @@ describe("route table", () => {
     expect(html).not.toContain(`type="password"`);
   });
 
-  // 路径里不带段值（号码、新密码与 CSRF 令牌只在页面内存与请求里）：多出一段不匹配、按未知路径落到首页。
+  // SHOP-TASK-147 验收第 4 条「新密码与 csrf_token 只在页面状态与请求里，不进地址、日志或浏览器存储」：
+  // 重设页的路径不带任何段值，多出一段（如把号码或新密码放进路径）不匹配、按未知路径落到首页。
   it("gives the password reset page no path parameters", () => {
     expect(matchRoute("/forgot-password")).toEqual({ pattern: "/forgot-password", params: {} });
     for (const path of ["/forgot-password/", "/forgot-password/60123456789", "/forgot-password/reset"]) {
