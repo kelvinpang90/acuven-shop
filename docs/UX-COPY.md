@@ -5,7 +5,7 @@
 
 ## 0.14 修订要点
 
-- 新增 `pay.member_reopen`（P06、P07，UX 0.13，Kelvin 2026-10-23 决定）：会员刷新或直接打开支付页、结果页，页面内存里没有订单号、游客凭据也取不到订单而有会员会话时显示，旁边是去 P13 我的订单的 `account.orders`。没有会员会话时仍显示 `pay.session_expired`。
+- 新增 `pay.member_reopen`（P06、P07，UX 0.13，Kelvin 2026-10-23 决定）：会员打开支付页或结果页，页面内存与本标签页暂存里都没有订单号（例如在新标签页直接打开）、或订单不是本人的，而有会员会话时显示，旁边是去 P13 我的订单的 `account.orders`。没有会员会话时仍显示 `pay.session_expired`。文字不提「刷新」：会员刷新或从 Stripe 返回时凭暂存的订单号照常显示，不会看到它。
 - 已有键未改动、未删除。马来文随其他文案在上线后母语审校。
 
 ## 0.13 修订要点
@@ -260,7 +260,7 @@
 | `pay.save_order_no` | Save this order number. You'll need it with your phone number to track the order. | 请保存订单号，查询订单时需要它和您的电话号码。 | Simpan nombor pesanan ini. Anda perlukannya bersama nombor telefon untuk menyemak pesanan. | — |
 | `pay.amount_due` | Amount due (demo) | 应付金额（演示） | Jumlah perlu dibayar (demo) | — |
 | `pay.guest_access` | For your privacy, only this browser can open this order's payment and result pages, for 30 minutes after the order was placed. | 为保护您的资料，只有本浏览器能在下单后 30 分钟内打开此订单的支付与结果页。 | Demi privasi anda, hanya pelayar ini boleh membuka halaman pembayaran dan keputusan pesanan ini, selama 30 minit selepas pesanan dibuat. | 游客短期凭据；DESIGN「权限与资料保护」 |
-| `pay.member_reopen` | This page can't be shown again after a refresh. Open the order from My orders to continue payment or view it. | 刷新后本页无法再次显示。请到「我的订单」重新打开这笔订单，继续支付或查看。 | Halaman ini tidak dapat dipaparkan semula selepas dimuat semula. Buka pesanan daripada Pesanan saya untuk meneruskan pembayaran atau melihatnya. | P06、P07 会员刷新后，页面内存里没有订单号（0.14） |
+| `pay.member_reopen` | This page can't show the order right now. Open it from My orders to continue payment or view it. | 本页暂时无法显示这笔订单。请到我的订单重新打开，继续支付或查看。 | Halaman ini tidak dapat memaparkan pesanan sekarang. Bukanya daripada Pesanan saya untuk meneruskan pembayaran atau melihatnya. | P06、P07 会员找不到这笔订单时（0.14） |
 | `pay.session_expired` | This page is no longer available in this browser. To view the order, confirm receipt or request a refund, track it with your order number and phone number. | 本浏览器已无法打开此页面。如需查看订单、确认收货或申请退款，请凭订单号和电话查询订单。 | Halaman ini tidak lagi tersedia dalam pelayar ini. Untuk melihat pesanan, mengesahkan penerimaan atau memohon bayaran balik, semak pesanan dengan nombor pesanan dan nombor telefon anda. | 游客凭据过期或不属于该单 |
 | `pay.choose_method` | Choose a demo payment method | 选择演示支付方式 | Pilih kaedah pembayaran demo | — |
 | `pay.method_card` | Demo credit/debit card (no card number needed) | 演示信用卡/借记卡（无需输入卡号） | Kad kredit/debit demo (tiada nombor kad diperlukan) | Q6 已决 |
