@@ -342,6 +342,15 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-refund__hint { display: flex; gap: 8px; padding: 8px 10px; }
 .site-admin-refund__hint svg { flex-shrink: 0; margin-top: 2px; }
 
+/* A03 经 Stripe 付款（A03-stripe-approved、A03-stripe-states）：Stripe 退款段在审核记录之后（上内边距 12px），标题、尝试表与提示
+   间距 10px；金额列靠右；手机卡片在桌面不显示；提示内边距 10px 12px。标签、提示框与 ID 的底色、字体与字号 site.css 写不了，
+   记在 docs/task-records/SHOP-TASK-141.md 的偏离里 */
+.site-admin-refund__stripe { display: grid; gap: 10px; padding-top: 12px; }
+.site-admin-refund__stripe-table { overflow-x: auto; }
+.site-admin-refund__num { text-align: right; }
+.site-admin-refund__stripe-cards { display: none; margin: 0; padding: 0; list-style: none; }
+.site-admin-refund__stripe-note { padding: 10px 12px; }
+
 /* 后台库存重置结果 A07 的页头（A07-desktop）：内容最宽 960px，标题与说明上下排列（间距 16px）；说明内边距 10px 12px。
    说明的底色、文字颜色、字号与圆角 site.css 写不了，记在 docs/TODO.md 的偏离里 */
 .site-admin-stock-resets { display: grid; gap: 16px; max-width: 960px; }
@@ -718,6 +727,15 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-refund__hint { order: -1; }
   .site-admin-refund__buttons { flex-direction: column; gap: 14px; }
   .site-admin-refund__buttons .acs-admin__btn { justify-content: center; min-height: 44px; }
+
+  /* 后台退款详情经 Stripe 付款（A03-stripe-phone-failed）：Stripe 退款段在内容面板之外，标题、卡片与提示间距 14px；表格不显示，
+     每次尝试一张卡片（内边距 14px，间距 6px），首行时间与状态标签分列两端，其下为金额，再一行 Stripe 退款 ID 与 ID */
+  .site-admin-refund__stripe { gap: 14px; padding-top: 0; }
+  .site-admin-refund__stripe-table { display: none; }
+  .site-admin-refund__stripe-cards { display: grid; gap: 14px; }
+  .site-admin-refund__stripe-card { display: grid; gap: 6px; padding: 14px; }
+  .site-admin-refund__stripe-card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .site-admin-refund__stripe-id { display: flex; flex-wrap: wrap; gap: 4px; }
 
   /* 后台库存重置结果的页头（A07-phone）：标题与说明间距 10px */
   .site-admin-stock-resets { gap: 10px; }

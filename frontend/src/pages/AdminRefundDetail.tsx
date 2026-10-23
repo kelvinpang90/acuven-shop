@@ -2,7 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 
 import { readAdminRefund, reviewAdminRefund, reviewAttempt } from "../api/adminRefunds";
-import type { AdminRefundDetail, AdminRefundDetailLine, RefundDetailRead, RefundStatus, ReviewAction, ReviewAttempt, ReviewReply } from "../api/adminRefunds";
+import type {
+  AdminRefundDetail,
+  AdminRefundDetailLine,
+  AdminRefundStripeRefund,
+  RefundDetailRead,
+  RefundStatus,
+  ReviewAction,
+  ReviewAttempt,
+  ReviewReply,
+  StripeRefundStatus,
+} from "../api/adminRefunds";
 import { AdminAlert } from "../components/AdminFrame";
 import { formatSen } from "../format";
 import type { CopyKey, Language } from "../i18n/copy";
@@ -10,7 +20,7 @@ import { useCopy, useLanguage } from "../i18n/language";
 import { ADMIN_LOGIN_PATH, adminOrderPath, Link, useRouter } from "../router";
 import type { RoutePath } from "../router";
 import { startDeferred } from "./AdminOrderDetail";
-import { formatDateTime } from "./TrackOrderPage";
+import { formatDateTime, usePrice } from "./TrackOrderPage";
 
 // 后台退款审核 A03 的申请详情与审核（docs/UX.md 0.10 A03 与「状态与补充（0.9）」，视觉稿 A03-desktop、A03-phone-detail、
 // A03-desktop-order、A03-desktop-reviewed 与 A03-phone-detail-rejected）：路由 /admin/refunds/:id，桌面在列表右侧、
@@ -25,6 +35,10 @@ import { formatDateTime } from "./TrackOrderPage";
 // 有理由时其下为 admin.refund_reason 与理由原文。申请不存在（404）或路径 ID 不合法时只显示 common.error_retry 与返回
 // （Kelvin 2026-10-07）；401 换成登录页 A01。理由、审核人邮箱、CSRF 令牌与幂等键只在 React 状态、ref 与请求里；
 // 离开页面或换申请时中止请求，旧请求的结果不再更新页面。
+// 经 Stripe 测试付款的订单（UX 0.12 A03「Stripe 测试（0.11）」，视觉稿 A03-stripe-review、A03-stripe-approved、A03-stripe-phone-failed 与
+// A03-stripe-states）：金额区块之后为 admin.paid_via_stripe 与付款方式类型，审核中与已批准另有按类型的期限提示；审核中在
+// admin.refund_hint 之后另有 ◆ admin.stripe_refund_hint；已批准在审核记录之后为 Stripe 退款段（尝试表或 none / not_sent 提示）。
+// 状态与金额由服务端给出，页面只显示、不自动刷新；手动重试留给 SHOP-TASK-142。经模拟支付的订单与上面相同。
 
 // 退款申请状态与它的名称、标签样式（视觉稿 A03-desktop：审核中为演示标签、已批准为成功标签、已拒绝为描边标签）；列表与详情共用。
 export const REFUND_STATUS_LABEL: Readonly<Record<RefundStatus, CopyKey>> = {
@@ -53,6 +67,66 @@ export function canReview(refund: AdminRefundDetail, action: ReviewAction, reaso
     return false;
   }
   return action === "approve" || reason.trim() !== "";
+}
+
+// 期限提示按付款方式类型选一条（UX A03「Stripe 测试（0.11）」说明第 2 条）：fpx、grabpay 各有一条，其他类型或为 null 时为
+// admin.stripe_deadline_other；只给提示，不计算日期。
+export function stripeDeadline(methodType: string | null): CopyKey {
+  switch (methodType) {
+    case "fpx":
+      return "admin.stripe_deadline_fpx";
+    case "grabpay":
+      return "admin.stripe_deadline_grabpay";
+    default:
+      return "admin.stripe_deadline_other";
+  }
+}
+
+// Stripe 退款尝试的状态名称与标签样式（视觉稿 A03-stripe-approved：处理中为中性标签、失败为危险标签；已退沿用成功标签）。
+export const STRIPE_REFUND_LABEL: Readonly<Record<StripeRefundStatus, CopyKey>> = {
+  pending: "admin.stripe_refund_pending",
+  succeeded: "admin.stripe_refund_succeeded",
+  failed: "admin.stripe_refund_failed",
+};
+
+const STRIPE_REFUND_TAG_CLASS: Readonly<Record<StripeRefundStatus, string>> = {
+  pending: "acs-tag acs-tag--neutral",
+  succeeded: "acs-tag acs-tag--success",
+  failed: "acs-tag acs-tag--danger",
+};
+
+// 尝试表之下的提示按最新一次尝试的状态选：处理中与失败各有一条，已退不显示。
+export function stripeRefundHint(status: StripeRefundStatus): CopyKey | null {
+  switch (status) {
+    case "pending":
+      return "admin.stripe_refund_pending_hint";
+    case "failed":
+      return "admin.stripe_refund_failed_hint";
+    case "succeeded":
+      return null;
+  }
+}
+
+// Stripe 退款段显示什么：hidden 不显示这一段（经模拟支付，或申请审核中、已拒绝）；none 为现金退款额为 0；not_sent 为现金退款额大于 0
+// 却没有尝试（UX 0.12，Kelvin 2026-10-23 决定）；attempts 为尝试表（按接口给的顺序，第一条为最新）。
+export type StripeRefundSection =
+  | { kind: "hidden" }
+  | { kind: "none" }
+  | { kind: "not_sent" }
+  | { kind: "attempts"; attempts: AdminRefundStripeRefund[]; hint: CopyKey | null };
+
+export function stripeRefundSection(refund: AdminRefundDetail): StripeRefundSection {
+  if (!refund.paid_via_stripe || refund.status !== "approved") {
+    return { kind: "hidden" };
+  }
+  if (refund.amount_sen === 0) {
+    return { kind: "none" };
+  }
+  const [latest] = refund.stripe_refunds;
+  if (latest === undefined) {
+    return { kind: "not_sent" };
+  }
+  return { kind: "attempts", attempts: refund.stripe_refunds, hint: stripeRefundHint(latest.status) };
 }
 
 // 详情区的状态：读取中、申请不存在（含路径 ID 不合法）、读取失败（提示）、已取到
@@ -245,7 +319,8 @@ function ReasonField({ reason, busy, onReason }: Pick<ReadyProps, "reason" | "bu
   );
 }
 
-// 审核中：批准与拒绝两个按钮，其后为提示与 admin.refund_hint（手机由 site.css 把 admin.refund_hint 排在按钮之前）。
+// 审核中：批准与拒绝两个按钮，其后为提示与 admin.refund_hint，经 Stripe 付款时再以同样的 ◆ 标记显示 admin.stripe_refund_hint
+// （手机由 site.css 把两条 ◆ 提示排在按钮之前）。
 function ReviewActions({ refund, reason, busy, notice, onReview }: Omit<ReadyProps, "onReason">) {
   const t = useCopy();
   return (
@@ -277,6 +352,12 @@ function ReviewActions({ refund, reason, busy, notice, onReview }: Omit<ReadyPro
         <DemoMark />
         <span>{t("admin.refund_hint")}</span>
       </div>
+      {refund.paid_via_stripe && (
+        <div className="site-admin-refund__hint">
+          <DemoMark />
+          <span>{t("admin.stripe_refund_hint")}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -307,7 +388,116 @@ function PointsLine({ refund }: { refund: AdminRefundDetail }) {
   return <span>{t("admin.refund_points", { returned: refund.points_returned, reversed: refund.points_reversed })}</span>;
 }
 
-// 已取到的详情：桌面为一张面板；手机外层面板不绘制（site.css），标题、内容面板（商品、金额与理由或审核记录）、提示与按钮依次排列。
+// 经 Stripe 付款的一个区块：admin.paid_via_stripe、付款方式类型（{type} 原样；为 null 时为 admin.stripe_method_unknown），
+// 审核中与已批准另有期限提示（已拒绝不显示）。经模拟支付时不显示。
+function StripePaymentBlock({ refund }: { refund: AdminRefundDetail }) {
+  const t = useCopy();
+  if (!refund.paid_via_stripe) {
+    return null;
+  }
+  return (
+    <div className="site-admin-refund__block">
+      <span>{t("admin.paid_via_stripe")}</span>
+      <span>{refund.payment_method_type === null ? t("admin.stripe_method_unknown") : t("admin.stripe_method", { type: refund.payment_method_type })}</span>
+      {refund.status !== "rejected" && <span className="acs-admin__muted">{t(stripeDeadline(refund.payment_method_type))}</span>}
+    </div>
+  );
+}
+
+function StripeRefundTag({ status }: { status: StripeRefundStatus }) {
+  const t = useCopy();
+  return <span className={STRIPE_REFUND_TAG_CLASS[status]}>{t(STRIPE_REFUND_LABEL[status])}</span>;
+}
+
+// 尝试表：桌面为表格（时间、金额靠右、状态标签与 Stripe 退款 ID，没有 ID 时为 —），手机为每次尝试一张卡片（时间与状态标签、金额，
+// 再一行 admin.col_stripe_refund_id 与 ID），由 site.css 按宽度显隐。
+function StripeRefundAttempts({ attempts }: { attempts: AdminRefundStripeRefund[] }) {
+  const t = useCopy();
+  const price = usePrice();
+  const { language } = useLanguage();
+  return (
+    <>
+      <div className="site-admin-refund__stripe-table">
+        <table className="acs-admin__table">
+          <thead>
+            <tr>
+              <th>{t("admin.col_time")}</th>
+              <th className="site-admin-refund__num">{t("admin.col_amount")}</th>
+              <th>{t("admin.filter_status")}</th>
+              <th>{t("admin.col_stripe_refund_id")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {attempts.map((attempt) => (
+              <tr key={attempt.id}>
+                <td>{formatDateTime(attempt.created_at, language)}</td>
+                <td className="site-admin-refund__num">{price(attempt.amount_sen)}</td>
+                <td>
+                  <StripeRefundTag status={attempt.status} />
+                </td>
+                {attempt.stripe_refund_id === null ? <td className="acs-admin__muted">—</td> : <td>{attempt.stripe_refund_id}</td>}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <ul className="site-admin-refund__stripe-cards">
+        {attempts.map((attempt) => (
+          <li key={attempt.id} className="acs-admin__panel site-admin-refund__stripe-card">
+            <div className="site-admin-refund__stripe-card-head">
+              <span>{formatDateTime(attempt.created_at, language)}</span>
+              <StripeRefundTag status={attempt.status} />
+            </div>
+            <span>{price(attempt.amount_sen)}</span>
+            <span className="acs-admin__muted site-admin-refund__stripe-id">
+              <span>{t("admin.col_stripe_refund_id")}</span>
+              <span>{attempt.stripe_refund_id ?? "—"}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+// 已批准、经 Stripe 付款时审核记录之后的 Stripe 退款段：标题 admin.stripe_refund_title，其下按 stripeRefundSection 显示
+// admin.stripe_refund_none、admin.stripe_refund_not_sent，或尝试表与最新一次尝试的提示（失败为提示框）。
+function StripeRefundBlock({ refund }: { refund: AdminRefundDetail }) {
+  const t = useCopy();
+  const section = stripeRefundSection(refund);
+  if (section.kind === "hidden") {
+    return null;
+  }
+  return (
+    <div className="site-admin-refund__stripe">
+      <h3 className="acs-admin__h">{t("admin.stripe_refund_title")}</h3>
+      {section.kind === "none" && (
+        <div className="site-admin-refund__stripe-note" role="status">
+          {t("admin.stripe_refund_none")}
+        </div>
+      )}
+      {section.kind === "not_sent" && (
+        <div className="site-admin-refund__stripe-note" role="status">
+          {t("admin.stripe_refund_not_sent")}
+        </div>
+      )}
+      {section.kind === "attempts" && (
+        <>
+          <StripeRefundAttempts attempts={section.attempts} />
+          {section.hint === "admin.stripe_refund_failed_hint" && <AdminAlert error={section.hint} />}
+          {section.hint === "admin.stripe_refund_pending_hint" && (
+            <div className="site-admin-refund__stripe-note" role="status">
+              {t(section.hint)}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// 已取到的详情：桌面为一张面板；手机外层面板不绘制（site.css），标题、内容面板（商品、金额、经 Stripe 付款时的付款方式，以及理由或审核记录）、
+// 已批准时的 Stripe 退款段、提示与按钮依次排列。
 function RefundDetail({ refund, reason, busy, notice, onReason, onReview }: ReadyProps) {
   const t = useCopy();
   const requested = refund.status === "requested";
@@ -335,8 +525,10 @@ function RefundDetail({ refund, reason, busy, notice, onReason, onReview }: Read
           <span>{t("order.refundable_left", { amount: formatSen(refund.refundable_left_sen) })}</span>
           <span className="acs-admin__muted">{t("refund.shipping_not_refunded")}</span>
         </div>
+        <StripePaymentBlock refund={refund} />
         {requested ? <ReasonField reason={reason} busy={busy} onReason={onReason} /> : <ReviewedBlock refund={refund} />}
       </div>
+      <StripeRefundBlock refund={refund} />
       {requested && <ReviewActions refund={refund} reason={reason} busy={busy} notice={notice} onReview={onReview} />}
     </div>
   );
