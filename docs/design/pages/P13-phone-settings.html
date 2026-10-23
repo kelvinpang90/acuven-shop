@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=390">
+<title>P13 My account, settings tab — phone</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}</style>
+</head>
+<body>
+<div class="acs acs--phone" data-shop-theme="pandan" data-mode="light" style="width: 390px; height: 2470px; display: flex; flex-direction: column; overflow: hidden">
+
+<div class="acs-banner"><span class="acs-tag acs-tag--demo">DEMO</span><span>Demo only — no real transactions</span></div>
+<header class="acs-header" style="gap: 10px; padding-top: 6px">
+<div class="acs-header__row" style="gap: 4px; flex-wrap: nowrap"><button class="acs-btn acs-btn--quiet" type="button" aria-label="Menu" style="color: var(--ink); padding: 0; min-width: 44px; margin-left: -10px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></button><a class="acs-brand" href="#" style="font-size: calc(18px * var(--display-scale))">ACUVEN SHOP</a><button class="acs-btn acs-btn--quiet" type="button" style="margin-left: auto; color: var(--ink); text-decoration: none; font-weight: 500; font-size: 14px; padding: 0 6px">English ▾</button><a href="#" style="color: var(--ink); font-weight: 600; font-size: 14px; text-decoration: none">Cart (0)</a></div>
+</header>
+
+<section style="display: grid; gap: 16px; padding: 28px 16px 40px">
+<h1 class="acs-display-l">My account</h1>
+<p class="acs-hint" style="margin: 0"><svg class="acs-hint__mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.8l2.8 5.8 6.3.9-4.6 4.4 1.1 6.3L12 17.2l-5.6 3 1.1-6.3L2.9 9.5l6.3-.9z"></path></svg><span>Points and coupons are demo only and have no cash value.</span></p>
+<div class="acs-tabs" role="tablist" style="margin: 0 -16px; padding: 0 16px; justify-content: flex-end"><button class="acs-tab" role="tab" aria-selected="false" type="button">My orders</button><button class="acs-tab" role="tab" aria-selected="false" type="button">My points</button><button class="acs-tab" role="tab" aria-selected="false" type="button">My coupons</button><button class="acs-tab" role="tab" aria-selected="true" type="button">Settings</button></div>
+<span class="acs-num acs-muted">+60 12•••• XXX</span>
+<p class="acs-caption acs-muted" lang="zh" style="margin: 0; padding-top: 16px; border-top: 1px dashed var(--border)">标注（不向用户显示）：未设密码</p>
+<h3 class="acs-display-s">Password</h3>
+<p style="margin: 0">You haven't set a password yet. You can keep logging in with an SMS code, or set a password now.</p>
+<div class="acs-field" style=""><label class="acs-field__label" for="cnp">New password</label><input class="acs-input" id="cnp" type="password"><span class="acs-field__hint">At least 8 characters.</span></div>
+<button class="acs-btn acs-btn--primary" type="button" style="justify-self: start">Set password</button>
+<p class="acs-caption acs-muted" lang="zh" style="margin: 0; padding-top: 16px; border-top: 1px dashed var(--border)">标注（不向用户显示）：已设密码</p>
+<h3 class="acs-display-s">Password</h3>
+<p style="margin: 0">A password is set. Changing it requires SMS verification.</p>
+<a href="#" style="justify-self: start">Change password</a>
+<button class="acs-btn acs-btn--secondary acs-btn--block" type="button" style="margin-top: 8px">Log out</button>
+<div style="display: grid; gap: 14px; margin-top: 16px; padding-top: 24px; border-top: 1px solid var(--rule)">
+<h3 class="acs-display-s">Delete account</h3>
+<p style="margin: 0">Deleting your account removes your mobile number and password, logs you out everywhere, and forfeits your points and unused coupons. Your orders, including their shipping details, stay in our records but are no longer linked to you, and registering again with the same number will not restore them. This cannot be undone.</p>
+<p class="acs-body-s" style="margin: 0; font-weight: 600">To confirm, verify your mobile number by SMS first.</p>
+<p class="acs-caption acs-muted" lang="zh" style="margin: 0; padding-top: 16px; border-top: 1px dashed var(--border)">标注（不向用户显示）：验证前：号码固定为本账号、不可编辑</p>
+<div class="acs-field"><label class="acs-field__label" for="cdph">Mobile number</label><input class="acs-input" id="cdph" value="+60 12•••• XXX" readonly></div>
+<p class="acs-body-s acs-muted" style="margin: 0">SMS verification is currently available for Malaysia (+60) and Singapore (+65) mobile numbers only.</p>
+<span class="acs-body-s">Please complete the check below first.</span>
+<div style="display: flex; align-items: center; gap: 12px; min-height: 64px; padding: 0 16px; border: 1px dashed var(--border); border-radius: var(--radius-control); background: var(--surface-raised); color: var(--ink-muted)"><span style="width: 22px; height: 22px; border: 2px solid var(--border); border-radius: 4px"></span><span class="acs-caption">Hosted check (rendered by the provider)</span></div>
+<button class="acs-btn acs-btn--secondary acs-btn--block" type="button">Send code</button>
+<p class="acs-caption acs-muted" lang="zh" style="margin: 0; padding-top: 16px; border-top: 1px dashed var(--border)">标注（不向用户显示）：已发送验证码</p>
+<div class="acs-alert acs-alert--info" role="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg><span>We sent a code by SMS to +60 12•••• XXX.</span></div>
+<div class="acs-field"><label class="acs-field__label" for="ccode">Verification code</label><div style="display: flex; gap: 10px"><input class="acs-input acs-otp" id="ccode" inputmode="numeric"><button class="acs-btn acs-btn--primary" type="button">Verify</button></div></div>
+<button class="acs-btn acs-btn--quiet" type="button" style="justify-self: start">Send a new code</button>
+<p class="acs-caption acs-muted" lang="zh" style="margin: 0; padding-top: 16px; border-top: 1px dashed var(--border)">标注（不向用户显示）：验证通过后</p>
+<button class="acs-btn acs-btn--danger acs-btn--block" type="button">Delete my account</button>
+</div>
+</section>
+
+<footer class="acs-footer" style="margin-top: auto">
+<span class="acs-brand" style="color: var(--on-footer)">ACUVEN SHOP</span>
+<p class="acs-body-s" style="margin: 0">Acuven demo store for showcasing online store solutions. All products, prices, stock, payments, shipping and refunds are simulated.</p>
+<a href="#" style="font-weight: 600">Privacy</a>
+<a class="acs-btn acs-btn--secondary acs-btn--block" href="#" style="justify-content: flex-start; text-align: left; padding: 12px 16px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true" style="flex-shrink: 0"><path d="M4 20l1.4-4A8 8 0 1 1 8 18.6z"></path></svg>Interested in a store like this? Chat with Acuven on WhatsApp</a>
+</footer>
+
+</div>
+</body>
+</html>
