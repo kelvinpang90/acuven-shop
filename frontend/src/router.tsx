@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 
 // 用浏览器 History 接口实现的前台路由，不引入依赖。
@@ -19,6 +19,7 @@ import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 // 退款详情 /admin/refunds/:id 的段值是申请的内部 ID，订单号、理由、审核人邮箱、令牌与幂等键只在页面内存与请求里，
 // 列表的筛选与页码只在页面模块的内存里；库存重置结果 /admin/stock-resets、店铺装修 /admin/store-design 与站点设置 /admin/settings 不带段值）：
 // App.tsx 不给它们套前台框架，前台页头、菜单与页脚也没有指向它们的入口（UX A01「前台不放入口链接」）。
+// 会员登录 /login 的号码与密码只在页面内存与请求体里；登录成功后回到的来源页只记在路由的内存里（见下方「来源页」）。
 export const ROUTE_PATHS = [
   "/",
   "/products",
@@ -31,6 +32,7 @@ export const ROUTE_PATHS = [
   "/track/order",
   "/track/order/refund",
   "/privacy",
+  "/login",
   "/admin/login",
   "/admin/orders",
   "/admin/orders/:id",
@@ -218,6 +220,37 @@ export function isPlainLeftClick(event: ClickLike): boolean {
   );
 }
 
+// 来源页（UX P12「登录成功 → 来源页或 P13」，HANDOFF 0.58 第（d）条）：站内跳转（push、replace 与浏览器的前进后退）时
+// 以切换前的路径为准，只在内存里记下最近一个离开的前台路径（只记路径、不含查询参数）；登录（之后还有注册与重设）成功后回到那里。
+// 离开的是后台页或会员登录、注册、重设页时不更新，所以经登录页再进注册或重设页仍保留原来的来源。
+// 不进地址、历史状态与浏览器存储，刷新后没有来源。
+const CHECKOUT_PATH: RoutePath = "/checkout";
+const MEMBER_AUTH_PATHS: ReadonlySet<string> = new Set(["/login", "/register", "/forgot-password"]);
+
+// 可作来源的路径：前台页，且不是会员登录、注册与重设页。
+export function isSourcePath(path: string): boolean {
+  return !path.startsWith("/admin") && !MEMBER_AUTH_PATHS.has(path);
+}
+
+// 从 from 换到 to 之后记下的来源：换了路径且离开的是可作来源的页时为 from，否则不变。
+export function nextSource(source: RoutePath | null, from: RoutePath, to: RoutePath): RoutePath | null {
+  return from !== to && isSourcePath(from) ? from : source;
+}
+
+// 成功文案显示之后的去向：记下的来源；没有来源（或不是可作来源的路径）时去首页 P01。
+// 会员中心 P13 上线后由那个任务改为没有来源时去 P13。
+export function verifiedPath(source: RoutePath | null): RoutePath {
+  return source !== null && isSourcePath(source) ? source : HOME_PATH;
+}
+
+// auth.continue_guest 的去向：来源为结账页时回结账，否则去首页 P01。
+export function guestPath(source: RoutePath | null): RoutePath {
+  return source === CHECKOUT_PATH ? CHECKOUT_PATH : HOME_PATH;
+}
+
+// 成功文案显示多久之后以 replace 前往 verifiedPath（毫秒）。
+export const VERIFIED_REDIRECT_MS = 1500;
+
 interface RouterContextValue {
   // 当前实际路径（如 /products/crew-neck-tee）。
   path: RoutePath;
@@ -229,6 +262,8 @@ interface RouterContextValue {
   navigate: (path: RoutePath, search?: string) => void;
   // 替换当前历史记录，不新增一条。
   replace: (path: RoutePath, search?: string) => void;
+  // 读取记下的来源页（没有时为 null）。
+  source: () => RoutePath | null;
 }
 
 const RouterContext = createContext<RouterContextValue | null>(null);
@@ -249,16 +284,27 @@ export function RouterProvider({ children, initialPath }: RouterProviderProps) {
   );
   const { path, search } = location;
   const match = useMemo(() => matchRoute(path) ?? HOME_MATCH, [path]);
+  // 路由状态里当前的路径（每次换位置时与状态一起更新），换位置时以它为切换前的路径记下来源。
+  const current = useRef<RoutePath>(location.path);
+  const source = useRef<RoutePath | null>(null);
+
+  const moveTo = useCallback((next: RouteLocation) => {
+    source.current = nextSource(source.current, current.current, next.path);
+    current.current = next.path;
+    setLocation(next);
+  }, []);
+
+  const readSource = useCallback(() => source.current, []);
 
   useEffect(() => {
     const onPopState = () => {
-      setLocation(resolveLocation(window.location.pathname, window.location.search));
+      moveTo(resolveLocation(window.location.pathname, window.location.search));
     };
     window.addEventListener("popstate", onPopState);
     return () => {
       window.removeEventListener("popstate", onPopState);
     };
-  }, []);
+  }, [moveTo]);
 
   // 只在换页面时回到顶部；同一页面只改查询串（如商品列表换筛选）时不动。
   useEffect(() => {
@@ -268,21 +314,21 @@ export function RouterProvider({ children, initialPath }: RouterProviderProps) {
   const navigate = useCallback((next: RoutePath, nextSearch = "") => {
     const normalized = normalizeSearch(nextSearch);
     if (pushPath(window, next, normalized)) {
-      setLocation(resolveLocation(next, normalized));
+      moveTo(resolveLocation(next, normalized));
     } else {
       window.scrollTo(0, 0);
     }
-  }, []);
+  }, [moveTo]);
 
   const replace = useCallback((next: RoutePath, nextSearch = "") => {
     const normalized = normalizeSearch(nextSearch);
     replacePath(window, next, normalized);
-    setLocation(resolveLocation(next, normalized));
-  }, []);
+    moveTo(resolveLocation(next, normalized));
+  }, [moveTo]);
 
   const value = useMemo(
-    () => ({ path, search, pattern: match.pattern, params: match.params, navigate, replace }),
-    [path, search, match, navigate, replace],
+    () => ({ path, search, pattern: match.pattern, params: match.params, navigate, replace, source: readSource }),
+    [path, search, match, navigate, replace, readSource],
   );
   return <RouterContext.Provider value={value}>{children}</RouterContext.Provider>;
 }

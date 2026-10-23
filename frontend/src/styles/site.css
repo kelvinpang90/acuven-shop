@@ -469,6 +469,20 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-sms__code { display: flex; gap: 10px; }
 .site-sms .acs-field__error svg { flex-shrink: 0; margin-top: 2px; }
 
+/* 会员登录 P12 的登录部分（SHOP-TASK-146，P12-desktop）：居中的 480px 卡片（页面上 64px、下 96px，卡片内边距 32px），
+   标题、★ 提示、页签与页签内容上下排列（间距 18px）；页签内容（未选的页签 hidden）与密码表单同样间距 18px；国家码下拉 96px、号码占余下；
+   auth.forgot 与 common.nav_register 靠左，common.nav_register 上方 14px。视觉稿 common.nav_register 之上的分隔线（颜色）
+   site.css 不搬，记在任务记录的偏离里 */
+.site-login { display: grid; justify-content: center; align-items: start; padding: 64px 0 96px; }
+.site-login__card { display: grid; gap: 18px; width: 480px; padding: 32px; }
+.site-login__panels { display: grid; }
+.site-login__panel:not([hidden]), .site-login__form { display: grid; gap: 18px; align-content: start; }
+.site-login__text { margin: 0; }
+.site-login__phone { grid-template-columns: 96px minmax(0, 1fr); }
+.site-login__forgot, .site-login__register { justify-self: start; }
+.site-login__register { padding-top: 14px; }
+.site-login .acs-field__error svg { flex-shrink: 0; margin-top: 2px; }
+
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
 
@@ -831,4 +845,12 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-settings__body, .site-admin-settings__form { gap: 14px; }
   .site-admin-settings__save { display: grid; gap: 10px; }
   .site-admin-settings__save .acs-admin__btn { justify-content: center; min-height: 44px; }
+
+  /* 会员登录 P12（P12-phone）：不画卡片（display: contents），标题、★ 提示、页签与页签内容在内容区（上 28px、左右 16px、下 40px）里
+     上下排列，间距 16px，页签内容与密码表单同样 16px；auth.forgot 与 common.nav_register 居中 */
+  .site-login { justify-content: stretch; gap: 16px; padding: 28px 16px 40px; }
+  .site-login__card { display: contents; }
+  .site-login__panel:not([hidden]), .site-login__form { gap: 16px; }
+  .site-login__forgot, .site-login__register { justify-self: center; }
+  .site-login__register { padding-top: 0; }
 }

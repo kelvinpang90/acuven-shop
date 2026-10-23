@@ -9,17 +9,22 @@ import {
   adminRefundPath,
   adminRefundsOrderPath,
   canonicalizeLocation,
+  guestPath,
   isPlainLeftClick,
   isRoutePath,
+  isSourcePath,
   matchRoute,
+  nextSource,
   productPath,
   pushPath,
   replacePath,
   resolveHref,
   resolvePath,
   settleLocation,
+  VERIFIED_REDIRECT_MS,
+  verifiedPath,
 } from "./router";
-import type { BrowserLike } from "./router";
+import type { BrowserLike, RoutePath } from "./router";
 
 function fakeBrowser(pathname: string, search = "") {
   const calls: string[] = [];
@@ -83,7 +88,9 @@ describe("route table", () => {
   // 店铺装修进表，在库存重置结果之后；其余页面尚未实现，不在表里。
   // SHOP-TASK-100 验收第 2 条：优惠券页进表，在退款详情之后。
   // SHOP-TASK-137 验收第 2 条「路由 /admin/settings（router.tsx、App.tsx 与 router.test.tsx 各加一项）」：站点设置进表，在店铺装修之后。
-  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page and the admin pages", () => {
+  // SHOP-TASK-146 验收第 2 条「路由 /login 加进 frontend/src/router.tsx 的路由表」：会员登录进表，在隐私说明之后、后台页之前；
+  // 原来断言 /login 不在表里的一行随之改为在表里，忘记密码与注册仍不在表里。
+  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page, the member login and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
       "/products",
@@ -96,6 +103,7 @@ describe("route table", () => {
       "/track/order",
       "/track/order/refund",
       "/privacy",
+      "/login",
       "/admin/login",
       "/admin/orders",
       "/admin/orders/:id",
@@ -128,7 +136,31 @@ describe("route table", () => {
     expect(isRoutePath("/track/order")).toBe(true);
     expect(isRoutePath("/track/order/refund")).toBe(true);
     expect(isRoutePath("/account/order/refund")).toBe(false);
-    expect(isRoutePath("/login")).toBe(false);
+    expect(isRoutePath("/login")).toBe(true);
+    expect(isRoutePath("/forgot-password")).toBe(false);
+    expect(isRoutePath("/register")).toBe(false);
+  });
+
+  // SHOP-TASK-146 验收第 2 条「页面为 frontend/src/pages/LoginPage.tsx…套前台框架」与「读取完成之前只显示标题、★ 提示与两个页签，页签内容区标 aria-busy、不渲染表单与 V1」：
+  // /login 在前台框架里渲染登录页，服务端渲染时站点设置还没读到，没有表单与号码输入；页头的 common.nav_login 指向 /login 并标为当前。
+  it("renders the member login page for /login inside the site frame", () => {
+    const html = render("/login");
+    expect(html).toContain(COPY["common.demo_banner"].en);
+    expect(html).toContain(`<h1 class="acs-display-l">${COPY["auth.login_title"].en}</h1>`);
+    expect(html).toContain(`<div class="site-login__panels" aria-busy="true"></div>`);
+    expect(html).not.toContain("<form class=\"site-login__form\"");
+    expect(html).not.toContain(`type="password"`);
+    expect(html).toContain(`<a aria-current="page" href="/login">${COPY["common.nav_login"].en}</a>`);
+  });
+
+  // 路径里不带段值（号码与密码只在页面内存与请求体里）：多出一段不匹配、按未知路径落到首页；/admin/login 仍是后台登录。
+  it("gives the member login page no path parameters", () => {
+    expect(matchRoute("/login")).toEqual({ pattern: "/login", params: {} });
+    expect(matchRoute("/admin/login")).toEqual({ pattern: "/admin/login", params: {} });
+    for (const path of ["/login/", "/login/60123456789", "/login/sms"]) {
+      expect(isRoutePath(path), path).toBe(false);
+      expect(resolvePath(path)).toBe("/");
+    }
   });
 
   // SHOP-TASK-100 验收第 2 条：/admin/coupons 用后台框架渲染，当前项为优惠券，不套前台框架。
@@ -449,6 +481,59 @@ describe("in-site navigation", () => {
     expect(isPlainLeftClick({ ...plainClick, shiftKey: true })).toBe(false);
     expect(isPlainLeftClick({ ...plainClick, altKey: true })).toBe(false);
     expect(isPlainLeftClick({ ...plainClick, defaultPrevented: true })).toBe(false);
+  });
+
+  // SHOP-TASK-146 验收第 5 条「来源页为进入 /login 之前所在的站内前台页面…只记路径、不含查询参数…离开的是后台页或 /login、/register、/forgot-password 时不更新」
+  // 与 HANDOFF 0.58 第（d）条「路由只在内存里记下上一个前台路径」：push、replace 与前进后退都经同一规则 nextSource，以切换前的路径为准。
+  // 依次走过的路径（RouteLocation 的 path 已不含查询串）：首页 → 商品列表 → 结账 → 登录 → 后台登录 → 登录，来源一直是结账；
+  // 同一路径只换查询串时不算离开；从登录页回到隐私说明再离开，来源才换成隐私说明。
+  it("remembers the last storefront path left, skipping admin and member sign-in pages", () => {
+    const visits: RoutePath[] = ["/", "/products", "/products", "/checkout", "/login", "/admin/login", "/login", "/privacy", "/cart"];
+    const sources: (RoutePath | null)[] = [];
+    let source: RoutePath | null = null;
+    for (const [index, to] of visits.entries()) {
+      const from = visits[index - 1];
+      if (from !== undefined) {
+        source = nextSource(source, from, to);
+      }
+      sources.push(source);
+    }
+    expect(sources).toEqual([null, "/", "/", "/products", "/checkout", "/checkout", "/checkout", "/checkout", "/privacy"]);
+  });
+
+  // 同一条「离开的是后台页或 /login、/register、/forgot-password 时不更新，所以经登录页再进注册或重设页仍保留原来的来源」：
+  // 三个会员页与以 /admin 开头的路径都不可作来源，其余前台页可以。
+  it("treats admin pages and the member login, register and reset pages as no source", () => {
+    for (const path of ["/login", "/register", "/forgot-password", "/admin/login", "/admin/orders/42", "/admin/settings"]) {
+      expect(isSourcePath(path), path).toBe(false);
+    }
+    for (const path of ["/", "/products", "/products/crew-neck-tee", "/cart", "/checkout", "/pay", "/track/order", "/privacy"]) {
+      expect(isSourcePath(path), path).toBe(true);
+    }
+    expect(nextSource("/cart", "/admin/orders", "/login")).toBe("/cart");
+    expect(nextSource(null, "/login", "/")).toBeNull();
+  });
+
+  // 同一条「成功后的去向（来源 → 路径）…没有记下时去首页 P01」：来源为前台页时回到来源；没有来源、来源为后台页或登录页本身时去首页。
+  it("sends a verified member back to the source page or the home page", () => {
+    expect(verifiedPath("/checkout")).toBe("/checkout");
+    expect(verifiedPath("/products/crew-neck-tee")).toBe("/products/crew-neck-tee");
+    expect(verifiedPath(null)).toBe("/");
+    expect(verifiedPath("/admin/orders")).toBe("/");
+    expect(verifiedPath("/login")).toBe("/");
+  });
+
+  // 同一条「auth.continue_guest 的去向（来源为 /checkout 时 /checkout，否则 /）」与 HANDOFF 0.58 第（d）条「auth.continue_guest 在来源为结账时回结账，否则去首页」。
+  it("sends continue as guest back to the checkout only when the checkout is the source", () => {
+    expect(guestPath("/checkout")).toBe("/checkout");
+    expect(guestPath("/cart")).toBe("/");
+    expect(guestPath("/admin/login")).toBe("/");
+    expect(guestPath(null)).toBe("/");
+  });
+
+  // HANDOFF 0.58 第（d）条「登录、注册成功后显示 auth.verified_* 1.5 秒」：常量为 1500 毫秒。
+  it("waits 1.5 seconds before leaving a verified page", () => {
+    expect(VERIFIED_REDIRECT_MS).toBe(1500);
   });
 
   // 验收：路由表是唯一来源，站内链接只指向表里的路径；路径与查询参数里没有订单号或电话。

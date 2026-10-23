@@ -15,6 +15,7 @@ import AdminStoreDesignPage from "./pages/AdminStoreDesignPage";
 import CartPage from "./pages/CartPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import HomePage from "./pages/HomePage";
+import LoginPage from "./pages/LoginPage";
 import PayPage from "./pages/PayPage";
 import PayResultPage from "./pages/PayResultPage";
 import PrivacyPage from "./pages/PrivacyPage";
@@ -40,6 +41,7 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   "/track/order": TrackOrderPage,
   "/track/order/refund": RefundPage,
   "/privacy": PrivacyPage,
+  "/login": LoginPage,
   "/admin/login": AdminLoginPage,
   "/admin/orders": AdminOrdersPage,
   // 订单详情与列表是同一页（桌面列表在左、详情在右，手机只显示详情）。
