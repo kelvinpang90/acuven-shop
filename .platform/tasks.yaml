@@ -4225,3 +4225,256 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  - id: SHOP-TASK-149
+    title: 查单请求模块补会员下单的券与积分字段，新增游客积分预估请求
+    purpose: >-
+      按 docs/UX.md 0.13 的 P09（M3——下单时是会员的订单显示优惠与积分两行，游客订单与后来被认领的游客订单不显示）与 P10（M3——会员订单另见积分返还与追回），
+      让 frontend/src/api/orderLookup.ts 的 LookupOrder 另取后端查单视图已有的 placed_by_member、coupon_discount_sen 与 points_redeemed（SHOP-TASK-103），
+      并新增调用游客积分预估 POST /api/orders/refunds/points-estimate（SHOP-TASK-093，至今前端没有调用）的请求函数，供 SHOP-TASK-150、154、155 使用。
+      不做页面，不改路由与页头，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 5 条（访客仅能访问已通过查询验证的订单）与「计价、优惠、积分与库存」第 3、5、7 条（100 积分抵 RM1；退款时返还未过期的抵扣积分、追回获得积分；已有订单按快照）与 HANDOFF 0.61。
+      拆分：会员前端第二批的请求层之一，5 个允许路径（TrackOrderPage.test.tsx 与 RefundPage.test.tsx 只为补样例字段列入）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-148
+    acceptance_criteria:
+      - frontend/src/api/orderLookup.ts 的 LookupOrder 另有三个必填字段，取值照后端 app/services/order_lookup.py 的 LookupOrder——placed_by_member（布尔；下单时是会员为真，后端以 claim_status 为 not_claimable 判定，会员注销后仍为真；游客订单与后来被认领的游客订单为假）、coupon_discount_sen（非负整数仙，下单时的优惠券抵扣快照）与 points_redeemed（非负整数，下单时抵扣的积分数；100 积分抵 RM1，即 1 积分抵 1 仙，这个数同时是抵扣金额的仙数）；照本文件现有写法不另加订单响应的解析器（仍以类型断言读取），在字段旁的注释写明取值；文件开头与类型上方「不含优惠券与积分两项」的说法随之改写；其余类型、函数与行为不变
+      - 游客积分预估——新函数（名称自定，接收 AbortSignal）调用 POST /api/orders/refunds/points-estimate，写法沿用本文件的 submitRefund（同源 cookie，cache 为 no-store，Accept 与 Content-Type 为 application/json，不带查询参数）；请求体只有 order_number 与 lines（行序与件数，即 refundLines 的结果），不带 CSRF 令牌与幂等键；结果归为 ok（200 且响应体的 member_order 为布尔、points_back 与 points_reversed 为非负整数，取成 memberOrder、pointsBack 与 pointsReversed）、expired（401）、failed（其他，含 409 order_not_refundable、refund_window_closed、refund_nothing_left，422，以及 200 而响应体不合格）与 network；响应体的检查写成导出的纯函数（不合格时返回 null），供 SHOP-TASK-150 的会员预估复用
+      - 导出纯函数判断是否显示积分三行——预估结果的 memberOrder 为真且 pointsBack 与 pointsReversed 不全为 0 时为真，其余为假（UX P10 说明「积分行只在该单属于会员（下单时为会员）时显示；由会员认领的游客订单…服务端返回零时不显示积分行」），供 SHOP-TASK-155 的两种模式共用
+      - 三个测试文件——frontend/src/api/orderLookup.test.ts、frontend/src/pages/TrackOrderPage.test.tsx 与 frontend/src/pages/RefundPage.test.tsx 里构造 LookupOrder 样例的函数只补上三个新字段（placed_by_member 为假、两个数为 0，即游客订单）使类型检查通过，现有断言一字不改
+      - 用 vitest（不加测试依赖，fetch 以替身代替）在 frontend/src/api/orderLookup.test.ts 验证意图——预估请求的地址、方法、请求头与请求体（只有 order_number 与 lines，没有 X-CSRF-Token 与 Idempotency-Key，不带查询参数）；各状态码与 409 各错误码的归类、响应体不合格（缺字段、负数、小数、member_order 不是布尔）归 failed 与网络中断；显示判断（游客订单、认领单的两个 0、只有一个数非零）；每条测试写明它守住的是哪个接口记录或 UX 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出（CI 的 eslint 带类型规则）；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-149.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；新字段与取值、预估请求的归类与显示判断、偏离、验证到什么程度，只写实际存在的测试，并写明页面显示留给 SHOP-TASK-154、155）
+      - 改动只落在 allowed_change_paths（不做页面，不改路由与页头，不改 TrackOrderPage.tsx 与 RefundPage.tsx）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.13 提交 450c2fa 与 HANDOFF 0.61），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/orderLookup.ts
+      - frontend/src/api/orderLookup.test.ts
+      - frontend/src/pages/TrackOrderPage.test.tsx
+      - frontend/src/pages/RefundPage.test.tsx
+      - docs/task-records/SHOP-TASK-149.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-150
+    title: 会员订单的请求模块（我的订单列表、详情、确认收货、退款申请与积分预估）
+    purpose: >-
+      按 docs/UX.md 0.13 的 P13「我的订单」与 P09、P10 的会员模式，新建前台请求模块，调用已有的会员订单接口（app/api/account_orders.py，SHOP-TASK-104、105）——
+      列表 GET /api/member/orders、详情 POST /api/member/orders/view、确认收货 POST /api/member/orders/confirm-receipt、退款申请 POST /api/member/orders/refunds 与积分预估 POST /api/member/orders/refunds/points-estimate，
+      并提供从我的订单进入订单详情时订单号的模块内存交接，供 SHOP-TASK-152、154、155 使用。
+      运营者落实写法（HANDOFF 0.61）：订单号只经本模块的变量交接，不进地址、历史状态与浏览器存储。
+      不做页面，不改路由与页头，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 3、5 条（会话到期、退出与服务端授权检查；会员仅能访问自己认领或下单的订单，确认收货与退款申请规则与查单页相同，写操作另须 CSRF 令牌）与「订单与退款状态」「失败、并发与重试」（确认收货与退款申请幂等）与 HANDOFF 0.61。
+      拆分：会员前端第二批的请求层之二，3 个允许路径。
+    status: ready
+    depends_on:
+      - SHOP-TASK-149
+    acceptance_criteria:
+      - 新文件 frontend/src/api/memberOrders.ts，写法沿用 frontend/src/api/orderLookup.ts（同源 cookie，cache 为 no-store，Accept 与 Content-Type 为 application/json；409 的 detail 照该文件读取；IDEMPOTENCY_HEADER、CSRF_HEADER 与 RECHECK_DELAY_MS 取自 frontend/src/api/pay.ts；幂等键沿用 orderLookup.ts 的 receiptKey 与 refundKey，申请行沿用 RefundLineRequest）；订单号只在请求体里，CSRF 令牌只在 X-CSRF-Token 请求头里，都不进地址、日志或浏览器存储；除详情带 lang 查询参数（写法同 orderLookup.ts 的 lookupOrdersUrl）外都不带查询参数；五个接口的 401（member_session_required）都归 signed_out，详情、确认收货、退款申请与预估的 404（order_not_found）都归 not_found
+      - 列表与详情——列表请求 GET /api/member/orders，不带 page（服务端默认第 1 页，每页 20 张，按时间倒序）；结果归为 ok（200，取 total 与 orders，每项为 order_number、created_at、status 与 total_sen；照 orderLookup.ts 以类型断言读取，不是 JSON 归 failed）、signed_out、failed 与 network；详情请求 POST /api/member/orders/view，请求体只有 order_number；结果归为 ok（200，响应体是单张订单，类型为 orderLookup.ts 的 LookupOrder，没有 csrf_token）、signed_out、not_found、failed 与 network；两个函数都接收 AbortSignal
+      - 写操作与预估——确认收货的请求体只有 order_number，请求头带幂等键与 CSRF 令牌，结果归为 done（200）、closed（409 order_not_confirmable）、signed_out、not_found、csrf（403 csrf_failed）、failed（其他，含 409 fulfilment_frozen 与 idempotency_conflict）与 network；退款申请的请求体只有 order_number 与 lines，请求头带幂等键与 CSRF 令牌，结果归为 done（201 新写或 200 重放）、duplicate、nothing_left、window_closed、not_refundable、conflict（409 按 detail 分，同 orderLookup.ts 的 submitRefund）、signed_out、not_found、csrf、failed 与 network；积分预估的请求体只有 order_number 与 lines，不带 CSRF 令牌与幂等键，接收 AbortSignal，响应体用 SHOP-TASK-149 在 orderLookup.ts 导出的检查函数，结果归为 ok、signed_out、not_found、failed（其他，含 409 与响应体不合格）与 network
+      - 提交之后的去向——照 orderLookup.ts 的 runConfirmReceipt 与 runRefund 各写一个会员版：重新读取订单改用本模块的详情请求（网络中断后的确认照 recheckOrder 写法重读到 ok、signed_out 或 not_found 为止，间隔可注入）；结果里带的是 LookupOrder（令牌不随订单返回）；查单版的 expired 换成 signed_out，另有 not_found；403 csrf 归一个单独的结果（带重新读取到的订单，没有则为空），由页面重读会员会话取得新令牌后提示重试；其余去向（read、error、retry，退款另有 submitted、leave、refused）与网络中断后沿用同一幂等键的条件都与查单版相同；页面已离开（中止）时返回 null
+      - 订单号交接——照 orderLookup.ts 的 handOffSubmittedRefund、submittedRefundOrder 与 clearSubmittedRefund 写三个函数，交出、读取与清除「正在查看的会员订单号」；只在模块变量里，不进地址、历史状态或任何浏览器存储，整页刷新即消失；读取不清除（P09 与 P10 的会员模式先后读同一个值；P13 交出新值时覆盖；退出登录时清除）（运营者落实写法，HANDOFF 0.61）
+      - 用 vitest（不加测试依赖，fetch 与等待以替身代替）在 frontend/src/api/memberOrders.test.ts 验证意图——五个请求的地址、方法、请求头与请求体（只有约定字段；写操作带 Idempotency-Key 与 X-CSRF-Token，预估不带；只有详情带 lang）；各状态码与错误码的归类（含 401、404、未列出的 409 与 422 归 failed）与网络中断；两个会员版提交去向的各分支（含 csrf、signed_out、not_found 与网络中断后的确认与重试条件、中止返回 null）；交接的交出、读取不清除、覆盖与清除；每条测试写明它守住的是哪个接口记录、UX 的哪一句或 Kelvin 的哪个决定；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-150.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；五个请求、归类、提交去向、交接、偏离、验证到什么程度，只写实际存在的测试，并写明页面留给 SHOP-TASK-152、154、155）
+      - 改动只落在 allowed_change_paths（不改 orderLookup.ts 与 pay.ts，只引用它们导出的内容；不做页面，不改路由与页头）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.13 提交 450c2fa 与 HANDOFF 0.61），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/memberOrders.ts
+      - frontend/src/api/memberOrders.test.ts
+      - docs/task-records/SHOP-TASK-150.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-151
+    title: 会员会话的请求模块与全站共享的会话状态
+    purpose: >-
+      按 docs/UX.md 0.13 的 P13（页头「My account」入口、遮掩后的手机号与退出登录）与 docs/DESIGN.md 1.13「权限与资料保护」第 3 条，新建前台请求模块，
+      调用已有的读取会话 GET /api/member/session 与退出 POST /api/member/logout（app/api/member_auth.py，SHOP-TASK-076），
+      并提供一个跨页共享的会员会话状态，供 SHOP-TASK-152 至 155 取得登录状态、遮掩后的手机号与会员写操作所需的 CSRF 令牌（会员 CSRF 令牌只能从读取会话取得）。
+      本任务不挂载到 App、不改页面与页头（挂载与页头切换由 SHOP-TASK-153 完成）。不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 3、5 条（会话到期、退出与服务端授权检查；会话 cookie 不交给页面脚本，写操作另须 CSRF 令牌）与 HANDOFF 0.61。
+      拆分：会员前端第二批的请求层之三，3 个允许路径。
+    status: ready
+    depends_on:
+      - SHOP-TASK-148
+    acceptance_criteria:
+      - 新文件 frontend/src/api/memberSession.ts，写法沿用 frontend/src/api/memberAuth.ts（同源 cookie，cache 为 no-store，Accept 为 application/json，不带查询参数；CSRF_HEADER 取自 frontend/src/api/pay.ts）；读取会话接收 AbortSignal，结果归为 ok（200 且 phone_masked 为非空字符串、has_password 为布尔、csrf_token 为非空字符串，取成遮掩后的手机号、是否设了密码与 CSRF 令牌；不取 expires_at）、none（401 member_session_required）、failed（其他，含 200 而响应体不合格）与 network；响应体的检查写成导出的纯函数
+      - 退出——请求体为空，请求头带调用方给出的 CSRF 令牌，接收 AbortSignal；结果归为 ok（204）、signed_out（401，会话已不在）、csrf（403 csrf_failed，服务端此时不撤销会话）、failed 与 network；CSRF 令牌与遮掩后的手机号只在内存里，不进地址、日志或浏览器存储（遮掩由服务端完成，前端取不到完整号码）
+      - 共享状态——照 frontend/src/api/siteSettings.ts 的读取对象与 Provider 写法（导出新建读取对象的函数、本次页面加载唯一的默认读取、以 Context 提供并允许测试传入替身，没有 Provider 时用默认读取）与 frontend/src/cart.ts 的 listeners 与 useSyncExternalStore 写法；状态为 unknown（尚未读完）、member（带最近一次 ok 取到的三项）、guest（none）与 failed（failed 或 network）之一；读取对象提供当前状态、首次读取（只请求一次，之后返回同一结果）、重读（每次都发新请求并返回新状态；读完之前保持原状态）与订阅；首次读取与重读按发出先后统一排序，先发而后到的旧结果不覆盖后发的结果；状态不变（种类相同，member 时三项值也都相同）时当前状态返回同一个对象
+      - hook——导出返回当前状态的 hook（服务端渲染与首次水合时取读取对象当前的状态，新建或默认读取为 unknown），挂载后触发首次读取；另导出取得读取对象的 hook，供页面在登录、退出之后调用重读；本任务不在 frontend/src/App.tsx 挂载 Provider，不改任何页面与页头
+      - 用 vitest（不加测试依赖，fetch 以替身代替）在 frontend/src/api/memberSession.test.ts 验证意图——两个请求的地址、方法、请求头与请求体（退出带 X-CSRF-Token、请求体为空；都不带查询参数）；各状态码的归类、响应体不合格（缺字段、空串、has_password 不是布尔）归 failed 与网络中断；读取对象的四种状态、首次读取只请求一次、重读每次请求、读完前保持原状态、旧结果不覆盖新结果、订阅者在状态改变时收到通知、状态不变时返回同一对象；每条测试写明它守住的是哪个接口记录、UX 或 DESIGN 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-151.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；两个请求、归类、共享状态的读取与重读规则、偏离、验证到什么程度，只写实际存在的测试，并写明挂载与页头留给 SHOP-TASK-153、页面留给 SHOP-TASK-152、154、155）
+      - 改动只落在 allowed_change_paths（不挂载 Provider，不改页面、页头、路由与 memberAuth.ts）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.13 提交 450c2fa 与 HANDOFF 0.61），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/memberSession.ts
+      - frontend/src/api/memberSession.test.ts
+      - docs/task-records/SHOP-TASK-151.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-152
+    title: 会员中心 P13 的框架与我的订单
+    purpose: >-
+      按 docs/UX.md 0.13 的 P13 与 docs/DESIGN.md 1.13「权限与资料保护」第 3、5 条，新增路由 /account 与会员中心页：标题行（common.nav_account、遮掩后的手机号与 common.nav_logout）、
+      桌面左侧导航与手机分段标签、★ account.demo_hint 与「我的订单」段，经 SHOP-TASK-150 读取本人订单、经 SHOP-TASK-151 读取会话与退出；登录与注册成功而没有来源时改去 /account。
+      积分、优惠券与设置三段由之后的任务各自加入；页头的会员中心入口由 SHOP-TASK-153 接入；订单详情的会员模式由 SHOP-TASK-154 加入路由表，在那之前我的订单不渲染查看入口。
+      运营者落实写法（HANDOFF 0.61）：未登录时用路由的 replace 进入 /login；我的订单不翻页，只显示第一页（最多 20 张）；导航只显示已实现的段；
+      手机的遮掩手机号与退出暂放在标题之下（UX 放在设置段，设置段由之后的任务加入时移过去）。
+      不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 3、5 条（会话到期、退出与服务端授权检查；会员仅能访问自己认领或下单的订单；手机号部分遮盖显示）与 HANDOFF 0.61。
+      拆分：P13 框架与我的订单，11 个允许路径（LoginPage.test.tsx、RegisterPage.test.tsx 与 TrackOrderPage.test.tsx 只为下面写明的断言列入）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-150
+      - SHOP-TASK-151
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.13 的 P13、docs/UX-COPY.md 0.14 与 docs/HANDOFF.md 0.61 为准，样式以 docs/design/pages/ 的 P13-desktop 与 P13-phone 的标题、导航与我的订单部分为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色（如桌面导航当前项的底色与字重）不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.14 逐字加入本页用到而字典里还没有的键（common.nav_account、common.nav_logout、account.orders、account.orders_hint、account.orders_empty、account.order_view、account.demo_hint），写法与相邻条目相同（每种语言一行）
+      - 路由 /account 加进 frontend/src/router.tsx 的路由表与 frontend/src/App.tsx 的页面表，套前台框架；页面为 frontend/src/pages/AccountPage.tsx——打开时经 SHOP-TASK-151 的读取对象重读一次会话（不直接用之前读到的状态：登录后来到本页时共享状态可能还是旧的），读完之前只显示标 aria-busy 的空主体（frontend/src/App.test.tsx 按路由表检查初始渲染只有字典文字）；guest 时用路由的 replace 进入 /login（离开 /account 时路由记下的来源为 /account，登录成功后回到这里）；这一判断只在打开页面时的那次读取后做，之后共享会话状态的变化（例如退出后重读得到未登录）不触发去 /login，退出的去向以下面退出一条为准；failed 时只显示 common.error_retry；member 时显示标题行——h1 为 common.nav_account，其后遮掩后的手机号（acs-num）与 common.nav_logout 按钮，桌面与手机都显示（手机暂放标题之下，记入任务记录的偏离）
+      - 导航与段——段表只有「我的订单」（account.orders）一项，按表渲染（表只有一项时仍渲染该项），之后加入积分、优惠券与设置的任务只在表里加项；桌面为左侧导航，每项是跳到本页该段的页内锚点，当前段标 aria-current；手机为分段标签（acs-tabs，role 为 tablist 的容器与 role 为 tab 的按钮，选中项 aria-selected，写法照 frontend/src/pages/LoginPage.tsx 的页签），段内容为 tabpanel；★ account.demo_hint 在桌面右栏顶部，手机在标题行（含暂放的手机号与退出按钮）之后
+      - 我的订单——会话为 member 后经 SHOP-TASK-150 读取列表（只取第一页，按服务端顺序显示，不翻页，记入任务记录）；读取中该段标 aria-busy；每张为日期（照 frontend/src/pages/TrackOrderPage.tsx 导出的 formatDate，按浏览器时区）、订单号（acs-num）、状态名（order.status_* 中对应的键；标签样式照视觉稿——已完成为 acs-tag--success，待支付与已取消为 acs-tag--outline，其余为 acs-tag--accent）、合计（common.price_myr，原样格式化 total_sen）与 account.order_view；桌面的 account.order_view 是行末的次要小按钮样式链接，手机整行是链接、读屏标签为 account.order_view，行尾的 › 用 aria-hidden 的图标而不是文字；account.orders_hint 桌面在列表之后、手机在列表之前；没有订单时段标题照常，列表与 account.orders_hint 换成 account.orders_empty；列表 signed_out 时重读会话并用 replace 进入 /login，failed 显示 common.error_retry，network 显示 common.network_check
+      - 进入订单详情与退出——点 account.order_view 时先经 SHOP-TASK-150 的交接函数交出该单订单号，再前往 /account/order（订单号不进地址、历史状态与浏览器存储，运营者落实写法，HANDOFF 0.61）；/account/order 进入路由表（SHOP-TASK-154）之前不渲染该链接（桌面没有 account.order_view，手机行不作为链接），照 frontend/src/pages/CheckoutPage.tsx 的 loginPath 写法以 isRoutePath 判断，并以 props 传给 View；点 common.nav_logout 经 SHOP-TASK-151 以会话里的 CSRF 令牌退出，进行中按钮禁用；ok 与 signed_out 时清除 SHOP-TASK-150 交接的订单号、重读会话并用 replace 前往首页 P01（UX P13「P01（退出或注销后）」）；csrf 时重读会话并显示 common.error_retry；failed 显示 common.error_retry；network 显示 common.network_check
+      - 登录与注册成功后的去向——frontend/src/router.tsx 的 verifiedPath 在没有来源（或来源不能作来源）时改为 /account（SHOP-TASK-146 验收「会员中心 P13 上线后由那个任务改为没有来源时去 P13」），isSourcePath 不变（/account 可以作来源），同步改掉该处注释；代码结构照 frontend/src/pages/AdminStoreDesignPage.tsx——导出把请求结果变成页面状态（或跳转）的纯函数、接收 AbortSignal 与回调的异步函数，以及只依赖 props 的 View 组件；离开页面时中止请求，之后不再更新；会员会话的重读是共享读取，不中止，离开页面后不再据其结果更新或跳转；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AccountPage.test.tsx 验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——打开时重读会话与三种结果（guest 的 replace 去向、failed、member 的标题行）；导航与标签只有我的订单一项；列表各项的内容与顺序、状态标签样式、空列表与各读取结果；查看链接在 props 给出去向时渲染、没有时不渲染，点击时先交出订单号（测试不断言 /account/order 不在路由表，以免 SHOP-TASK-154 加路由后失败）；退出的各结果与去向；页面文字全部来自字典，带变量的条目按模板匹配（照 frontend/src/pages/AdminRefundDetail.test.tsx 的 visibleTexts、textNodes 与 unescapeHtml）；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）；现有测试只在必要时修改并写明原因——frontend/src/router.test.tsx 的路由表断言与 verifiedPath 没有来源及来源不能作来源（后台页、登录页）时的期望（改为 /account）；frontend/src/pages/LoginPage.test.tsx 与 frontend/src/pages/RegisterPage.test.tsx 里没有来源、来源为后台页或登录页时去向为首页的几组期望（改为 /account）；frontend/src/pages/TrackOrderPage.test.tsx「renders no member-mode links」一条只删去断言 /account 不在路由表的那一行，其余断言（查单模式没有 My orders、Continue payment 与指向 /account 的链接）不变
+      - docs/task-records/SHOP-TASK-152.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；会话判断、导航与段表、我的订单、退出、登录后去向、偏离（含不翻页、手机标题下的手机号与退出、视觉稿未搬的颜色与字重）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不改 frontend/src/components/SiteFrame.tsx、frontend/src/api/ 与 TrackOrderPage.tsx）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.13 提交 450c2fa 与 HANDOFF 0.61），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/AccountPage.tsx
+      - frontend/src/pages/AccountPage.test.tsx
+      - frontend/src/pages/LoginPage.test.tsx
+      - frontend/src/pages/RegisterPage.test.tsx
+      - frontend/src/pages/TrackOrderPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-152.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-153
+    title: 页头的登录入口按会员会话切换为会员中心
+    purpose: >-
+      按 docs/UX.md 0.13 的「全局框架」（页头与 ☰ 菜单为 common.nav_login 或 common.nav_account）与 P13 入口（页头「My account」；P11、P12 登录成功），
+      让全站页头 frontend/src/components/SiteFrame.tsx 按 SHOP-TASK-151 的会员会话状态显示：已登录时把 common.nav_login 换成去 /account 的 common.nav_account，未登录、未知或读取失败时仍为 common.nav_login；
+      frontend/src/App.tsx 挂载会话的 Provider；登录与注册成功后要求重读会话，使页头随之切换（P13 退出后的重读已由 SHOP-TASK-152 完成）。
+      不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 3 条（会话到期、退出与服务端授权检查；页头显示不是授权依据）与 HANDOFF 0.61。
+      拆分：页头切换，11 个允许路径（router.tsx、copy.ts 与 site.css 按页面任务的固定写法列入，不需要时不改）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-152
+    acceptance_criteria:
+      - 内容与文案以 docs/UX.md 0.13 的「全局框架」与 P13 入口、docs/UX-COPY.md 0.14 与 docs/HANDOFF.md 0.61 为准，样式以 docs/design/pages/ 的 P13-desktop 页头为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 不需要新键（common.nav_account 已由 SHOP-TASK-152 加入）
+      - 页头切换——桌面导航行与手机 ☰ 菜单里现在的 /login 那一项按会话状态显示：member 时为指向 /account 的 common.nav_account（在 /account 时标 aria-current），unknown、guest 与 failed 时为现在的 common.nav_login；位置与现在的登录项相同（视觉稿把它画在导航行右侧购物车之前，不挪位置，记入任务记录的偏离）；两个路径各自仍按路由表判断是否渲染；页头不显示手机号或其他会话内容；服务端渲染与首次水合时状态为 unknown，输出与现在相同（frontend/src/components/SiteFrame.test.tsx 与 frontend/src/App.test.tsx 现有断言不变）
+      - 挂载——frontend/src/App.tsx 挂载 SHOP-TASK-151 的 Provider，写法照 WhatsAppContactProvider（App 的 props 另有可选的会话读取对象，测试传入替身，浏览器里不传时用默认读取）；只有前台页头读取会话，后台页不因此发请求
+      - 登录与注册成功——frontend/src/pages/LoginPage.tsx 的密码登录 ok 与短信验证通过、frontend/src/pages/RegisterPage.tsx 的验证通过之后，经 SHOP-TASK-151 取得的读取对象要求重读一次会话（不等待结果，不改变现有的成功文案、计时与去向）；提交失败时不重读；不改 AccountPage.tsx
+      - 代码结构——LoginPage.tsx 与 RegisterPage.tsx 沿用现有的写法（导出的纯函数与异步函数、只依赖 props 的 View；重读经回调传入，便于测试），SiteFrame.tsx 按现有写法以 hook 取会话状态；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）验证意图——frontend/src/components/SiteFrame.test.tsx 以会话读取的替身（照该文件 settledReader 的写法先读完一次）断言 member 时桌面导航与手机菜单都是去 /account 的 common.nav_account、没有 common.nav_login，guest、failed 与未读时仍为 common.nav_login，在 /account 页面标 aria-current；frontend/src/pages/LoginPage.test.tsx 与 frontend/src/pages/RegisterPage.test.tsx 断言成功后要求重读会话恰一次、失败时不要求；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）；现有测试只在必要时修改并写明原因
+      - docs/task-records/SHOP-TASK-153.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；切换规则、挂载、重读时机、偏离（含入口位置）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收，并写明结账页 P05 短信验证通过后的重读留给会员结账任务）
+      - 改动只落在 allowed_change_paths（不改 frontend/src/api/ 与 frontend/src/pages/AccountPage.tsx；router.tsx、copy.ts 与 site.css 不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.13 提交 450c2fa 与 HANDOFF 0.61），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/components/SiteFrame.tsx
+      - frontend/src/components/SiteFrame.test.tsx
+      - frontend/src/App.tsx
+      - frontend/src/pages/LoginPage.tsx
+      - frontend/src/pages/LoginPage.test.tsx
+      - frontend/src/pages/RegisterPage.tsx
+      - frontend/src/pages/RegisterPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-153.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-154
+    title: 订单详情 P09 的会员模式与会员下单订单的券、积分两行
+    purpose: >-
+      按 docs/UX.md 0.13 的 P09（会员模式；M3——下单时是会员的订单显示优惠与积分两行，游客订单与后来被认领的游客订单不显示，查单模式与会员模式相同），新增路由 /account/order：
+      frontend/src/pages/TrackOrderPage.tsx 支持会员模式——经 SHOP-TASK-150 取单与确认收货，CSRF 令牌取自 SHOP-TASK-151 的会话，以 account.orders 返回 /account；
+      两种模式下 placed_by_member 为真的订单在金额明细显示 checkout.summary_coupon 与 checkout.summary_points 两行。
+      运营者落实写法（HANDOFF 0.61）：订单号只经 SHOP-TASK-150 的模块内存交接，刷新后没有订单号时用路由的 replace 回到 /account（Kelvin 2026-10-24 决定）；未登录时用 replace 进入 /login；
+      会员模式的待支付订单本批不显示 account.order_pay（由结账会员路径的任务加入），也不显示查单模式的 order.lookup_no_pay；从 P07 的 result.track 进入会员模式也留给那个任务。
+      退款入口指向 /account/order/refund，在 SHOP-TASK-155 把它加进路由表之前不渲染。不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 3、5 条（会话到期与服务端授权检查；会员仅能访问自己认领或下单的订单，确认收货规则与查单页相同，写操作另须 CSRF 令牌）、「订单与退款状态」「失败、并发与重试」（确认收货幂等）与「计价、优惠、积分与库存」第 3、7 条（100 积分抵 RM1；已有订单按快照）与 HANDOFF 0.61。
+      拆分：P09 会员模式，9 个允许路径（PayResultPage.test.tsx 只为下面那一条断言列入）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-152
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.13 的 P09、docs/UX-COPY.md 0.14 与 docs/HANDOFF.md 0.61 为准，样式以 docs/design/pages/ 的 P09-desktop、P09-phone 与 P09-pending（account.orders 链接）为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.14 逐字加入本页用到而字典里还没有的键（预计没有），写法与相邻条目相同（每种语言一行）
+      - 路由 /account/order 加进 frontend/src/router.tsx 的路由表与 frontend/src/App.tsx 的页面表（指向 TrackOrderPage.tsx 另导出的会员模式页面组件），套前台框架；会员模式打开时先经 SHOP-TASK-151 的读取对象重读会话（读完前为 aria-busy 的空主体；guest 时用 replace 进入 /login；failed 时只显示 common.error_retry），member 时取订单号——先取 orderLookup.ts 的 submittedRefundOrder（从 P10 提交回来），取到后即照查单模式调用 clearSubmittedRefund 清除（只在页面状态里记下，用来判断是否显示 refund.submitted），没有时取 SHOP-TASK-150 交接的订单号；都没有时用 replace 回到 /account；有时经 SHOP-TASK-150 读取详情——signed_out 时重读会话并用 replace 进入 /login，not_found 时用 replace 回到 /account，failed 与 network 照查单模式显示 common.error_retry；切换语言时重新读取同一订单；会员模式不出现 order.session_expired 整页
+      - 会员模式的内容——与查单模式相同（标题、状态、★ order.demo_hint、进度、各行、金额明细、收货资料、确认收货、退款部分、全部已退冻结、refund.submitted），不同处只有——order.lookup_access 与 order.lookup_another 换成去 /account 的 account.orders（桌面与手机各一处，UX P09 线框「会员模式：([account.orders]) → P13」）；order.request_refund 指向 /account/order/refund，该路径进入路由表之前不渲染这个链接（截止时间、已退与可退照常），照 frontend/src/pages/CheckoutPage.tsx 的 loginPath 写法以 isRoutePath 判断并以 props 传给 View；待支付订单不显示 order.lookup_no_pay 与 account.order_pay（记入任务记录）
+      - 确认收货——会员模式经 SHOP-TASK-150 的会员版提交去向，以会话里的 CSRF 令牌提交，幂等键规则与查单模式相同（receiptKey）；signed_out 时重读会话并用 replace 进入 /login；not_found 时用 replace 回到 /account；csrf 时重读会话——member 时换用新令牌并显示 common.error_retry，guest 时用 replace 进入 /login，重读得到 failed（含网络中断）时保留原令牌并显示 common.error_retry；read、error 与 retry 与查单模式相同；查单模式的行为不变
+      - 券与积分两行——两种模式下 placed_by_member 为真时，金额明细（桌面与手机折叠）依次为 cart.subtotal、checkout.summary_coupon（coupon_discount_sen）、checkout.summary_points（points_redeemed，1 积分抵 1 仙，按仙格式化）、checkout.summary_shipping 与 checkout.summary_total，两行为 0 时也显示，金额原样格式化、不加负号（照视觉稿 P09-desktop），不在浏览器计算；placed_by_member 为假（游客订单与后来被认领的游客订单）时仍只有三行（UX P09 M3）
+      - 代码结构——新增的会员模式照 frontend/src/pages/AdminStoreDesignPage.tsx 的写法（导出把请求结果变成页面状态或跳转的纯函数、接收 AbortSignal 与回调的异步函数，TrackOrderView 只依赖 props，以 props 区分两种模式）；查单模式现有的结构与行为不重构；不改 RefundPage.tsx 引用的 TrackOrderPage.tsx 导出（OrderScreen、SessionExpired、LineName、usePrice、TRACK_ORDER_PATH）的类型与签名，会员模式需要的新状态另立类型；离开页面时中止请求，之后不再更新；会员会话的重读是共享读取，不中止，离开页面后不再据其结果更新或跳转；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/TrackOrderPage.test.tsx 验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——会员模式打开时的各分支（guest、没有订单号、not_found、signed_out 的去向，submittedRefundOrder 优先于交接，读取后即清除，之后从 P13 交出别的订单号时取交接的值）；会员模式有 account.orders、没有 order.lookup_access、order.lookup_another、order.lookup_no_pay 与 account.order_pay；退款入口在 props 给出去向时指向 /account/order/refund、没有时不渲染（测试不断言该路径不在路由表，以免 SHOP-TASK-155 加路由后失败）；确认收货各结果；两种模式下会员下单订单的五行顺序与金额、游客订单仍为三行；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）；现有测试只在必要时修改并写明原因——frontend/src/router.test.tsx 的路由表断言；frontend/src/pages/PayResultPage.test.tsx「has the register link but no order detail or points」一条只删去断言 /account/order 不在路由表的那一行（游客结果页仍没有 result.track），其余不改；TrackOrderPage.test.tsx 查单模式的现有断言不变
+      - docs/task-records/SHOP-TASK-154.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；会员模式的打开、内容、确认收货、券与积分两行、偏离（含待支付订单本批不显示 account.order_pay、result.track 留给会员结账任务）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不改 frontend/src/api/、RefundPage.tsx 与 PayResultPage.tsx）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.13 提交 450c2fa 与 HANDOFF 0.61），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/TrackOrderPage.tsx
+      - frontend/src/pages/TrackOrderPage.test.tsx
+      - frontend/src/pages/PayResultPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-154.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-155
+    title: 退款申请 P10 的会员模式与积分返还、追回三行
+    purpose: >-
+      按 docs/UX.md 0.13 的 P10（会员模式凭会员会话；会员订单另见积分返还与追回）与 docs/DESIGN.md 1.13「计价、优惠、积分与库存」第 5 条，新增路由 /account/order/refund：
+      frontend/src/pages/RefundPage.tsx 支持会员模式——经 SHOP-TASK-150 取单、提交退款申请与积分预估，CSRF 令牌取自 SHOP-TASK-151 的会话，提交后回到 /account/order 显示 refund.submitted（沿用 handOffSubmittedRefund 交接）；
+      两种模式下下单时是会员的订单经对应的积分预估（查单模式用 SHOP-TASK-149 的游客预估）显示 refund.points_back、refund.points_reversed 与 refund.expired_points_note。
+      /account/order/refund 进入路由表后，SHOP-TASK-154 会员模式 P09 的退款入口随之出现。
+      运营者落实写法（HANDOFF 0.61）：刷新后没有订单号时用路由的 replace 回到 /account（Kelvin 2026-10-24 决定）；未登录时用 replace 进入 /login；只在 placed_by_member 为真时请求预估；预估失败不阻止提交，不显示积分行，不另加提示。
+      不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 3、5 条（会话到期与服务端授权检查；会员仅能访问自己认领或下单的订单，退款申请规则与查单页相同，写操作另须 CSRF 令牌）、「订单与退款状态」「失败、并发与重试」（退款申请幂等）与「计价、优惠、积分与库存」第 5 条（返还未过期的抵扣积分、追回获得积分，以批准时为准）与 HANDOFF 0.61。
+      拆分：P10 会员模式与积分行，9 个允许路径（TrackOrderPage.test.tsx 只在退款入口的断言需要时修改）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-154
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.13 的 P10、docs/UX-COPY.md 0.14 与 docs/HANDOFF.md 0.61 为准，样式以 docs/design/pages/ 的 P10-desktop-member 与 P10-phone-member 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.14 逐字加入 refund.points_back、refund.points_reversed 与 refund.expired_points_note，写法与相邻条目相同（每种语言一行）
+      - 路由 /account/order/refund 加进 frontend/src/router.tsx 的路由表与 frontend/src/App.tsx 的页面表（指向 RefundPage.tsx 另导出的会员模式页面组件），套前台框架；会员模式打开时先经 SHOP-TASK-151 的读取对象重读会话（读完前为 aria-busy 的空主体；guest 时用 replace 进入 /login；failed 时只显示 common.error_retry），member 时取 SHOP-TASK-150 交接的订单号——没有时用 replace 回到 /account；有时经 SHOP-TASK-150 读取详情——signed_out 时重读会话并用 replace 进入 /login，not_found 时用 replace 回到 /account，failed 与 network 照查单模式显示 common.error_retry；切换语言时重新读取同一订单；会员模式不显示 order.lookup_access，不出现 order.session_expired 整页；其余内容（标题、各行、加减控件、预计金额、两句说明、提交与 ◆ 提示）与查单模式相同
+      - 提交——会员模式经 SHOP-TASK-150 的会员版提交去向，以会话里的 CSRF 令牌提交，幂等键规则与查单模式相同（refundKey）；submitted 时以 orderLookup.ts 的 handOffSubmittedRefund 交出订单号并前往 /account/order（P09 会员模式显示 refund.submitted）；leave 时前往 /account/order；signed_out 时重读会话并用 replace 进入 /login；not_found 时用 replace 回到 /account；csrf 时重读会话——member 时换用新令牌并显示 common.error_retry，guest 时用 replace 进入 /login，重读得到 failed（含网络中断）时保留原令牌并显示 common.error_retry；refused、error 与 retry 与查单模式相同；查单模式的提交行为不变
+      - 积分三行——两种模式下 placed_by_member 为真时，所选件数每次变化且至少一行大于 0 就请求积分预估（查单模式用 SHOP-TASK-149 的游客预估，会员模式用 SHOP-TASK-150 的会员预估），发出新请求时中止上一个未完成的，离开页面时中止；placed_by_member 为假（游客订单与后来被认领的游客订单）或没有选择时不请求；只有与当前所选件数对应的预估为 ok 且 SHOP-TASK-149 的显示判断为真时，显示 refund.points_back 与 refund.points_reversed（{points} 为接口给的整数，原样显示）与 refund.expired_points_note，件数改变后、新的预估返回前不显示旧数；预估的任何失败（含 401、409 与 network）都不显示积分行、不另加提示，不改变提交按钮是否可用，也不切换整页状态（记入任务记录）；位置照视觉稿——桌面在 refund.estimate 之下、两句说明之前；手机 refund.expired_points_note 在各行之后的说明里，两个数在底部固定栏的合计之下
+      - 代码结构——新增的会员模式与积分预估照 frontend/src/pages/AdminStoreDesignPage.tsx 的写法（导出把请求结果变成页面状态或跳转的纯函数、接收 AbortSignal 与回调的异步函数，RefundView 只依赖 props，以 props 区分两种模式与给出预估）；查单模式现有的结构与行为不重构；离开页面时中止请求，之后不再更新；会员会话的重读是共享读取，不中止，离开页面后不再据其结果更新或跳转；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/RefundPage.test.tsx 验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——会员模式打开时的各分支（guest、没有订单号、not_found、signed_out 的去向）；会员模式没有 order.lookup_access；会员提交的各结果与去向（submitted 交出订单号并前往 /account/order）；两种模式的预估请求条件（游客订单与认领单不请求、没有选择不请求、改件数中止旧请求）、三行的显示条件与位置（两个数为 0、member_order 为假、预估失败、件数改变后旧数不显示）；页面文字全部来自字典，带变量的条目按模板匹配；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - 现有测试只在必要时修改并写明原因——frontend/src/router.test.tsx 的路由表断言，以及把 /account/order/refund 当作未知路径的两处（isRoutePath 为假的一行与「renders the home page for an unknown path」，改用另一个不存在的路径）；RefundPage.test.tsx「has no points rows and no member-mode link」一条只改断言字典没有三个积分键的三行（键已加入），改为断言游客订单（placed_by_member 为假）不显示三行，其余断言不变；frontend/src/pages/TrackOrderPage.test.tsx 只在退款入口因 /account/order/refund 进入路由表而失败时修改
+      - docs/task-records/SHOP-TASK-155.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；会员模式的打开与提交、积分预估的请求条件与显示、偏离（含预估失败的处理）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不改 frontend/src/api/ 与 TrackOrderPage.tsx）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.13 提交 450c2fa 与 HANDOFF 0.61），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/RefundPage.tsx
+      - frontend/src/pages/RefundPage.test.tsx
+      - frontend/src/pages/TrackOrderPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-155.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
