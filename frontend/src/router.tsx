@@ -23,7 +23,8 @@ import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 // 忘记密码 /forgot-password 的号码、验证码、新密码与 CSRF 令牌只在页面内存与请求里。
 // 注册 /register 的号码与验证码只在页面内存与请求体里；成功后的去向同会员登录。
 // 会员中心 /account 凭服务端会员会话读取，遮掩后的手机号与 CSRF 令牌只在页面内存里，订单号只在页面内存与会员订单的交接里
-// （api/memberOrders.ts 的 handOffMemberOrder）。
+// （api/memberOrders.ts 的 handOffMemberOrder）。订单详情会员模式 /account/order 凭服务端会员会话读取，订单号只经这一交接
+// （或退款申请提交后的交接）取得，只在页面内存与请求体里，CSRF 令牌只在页面内存与写接口的请求头里。
 export const ROUTE_PATHS = [
   "/",
   "/products",
@@ -40,6 +41,7 @@ export const ROUTE_PATHS = [
   "/forgot-password",
   "/register",
   "/account",
+  "/account/order",
   "/admin/login",
   "/admin/orders",
   "/admin/orders/:id",

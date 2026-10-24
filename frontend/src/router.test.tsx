@@ -95,7 +95,9 @@ describe("route table", () => {
   // SHOP-TASK-148 验收第 2 条「路由 /register 加进 frontend/src/router.tsx 的路由表」：注册进表，在忘记密码之后；
   // 原来断言 /register 不在表里的一行随之改为在表里。
   // SHOP-TASK-152 验收第 2 条「路由 /account 加进 frontend/src/router.tsx 的路由表」：会员中心进表，在注册之后、后台页之前。
-  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page, the member login, the password reset, the register page, the member centre and the admin pages", () => {
+  // SHOP-TASK-154 验收第 2 条「路由 /account/order 加进 frontend/src/router.tsx 的路由表」：订单详情的会员模式进表，在会员中心之后；
+  // 会员模式的退款申请 /account/order/refund 仍不在表里（SHOP-TASK-155 加入）。
+  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page, the member login, the password reset, the register page, the member centre, the member order detail and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
       "/products",
@@ -112,6 +114,7 @@ describe("route table", () => {
       "/forgot-password",
       "/register",
       "/account",
+      "/account/order",
       "/admin/login",
       "/admin/orders",
       "/admin/orders/:id",
@@ -148,6 +151,27 @@ describe("route table", () => {
     expect(isRoutePath("/forgot-password")).toBe(true);
     expect(isRoutePath("/register")).toBe(true);
     expect(isRoutePath("/account")).toBe(true);
+    expect(isRoutePath("/account/order")).toBe(true);
+  });
+
+  // SHOP-TASK-154 验收第 2 条「订单号只经 SHOP-TASK-150 的模块内存交接」与 UX「阅读说明」订单号不进路径：会员模式订单详情的路径不带段值，
+  // 多出一段（如把订单号放进路径）不匹配、按未知路径落到首页。
+  it("gives the member order detail no path parameters", () => {
+    expect(matchRoute("/account/order")).toEqual({ pattern: "/account/order", params: {} });
+    for (const path of ["/account/order/", "/account/order/B6TN2RJD8K4M0QXZ", "/account/orders"]) {
+      expect(isRoutePath(path), path).toBe(false);
+      expect(resolvePath(path)).toBe("/");
+    }
+  });
+
+  // SHOP-TASK-154 验收第 2 条「套前台框架；会员模式打开时先…重读会话（读完前为 aria-busy 的空主体…）」：/account/order 在前台框架里渲染，
+  // 服务端渲染时会话还没读到，主体为空并标 aria-busy，不出现订单内容或 order.session_expired。
+  it("renders the member order detail for /account/order inside the site frame", () => {
+    const html = render("/account/order");
+    expect(html).toContain(COPY["common.demo_banner"].en);
+    expect(html).toContain(`<main class="site-order" aria-busy="true"></main>`);
+    expect(html).not.toContain(COPY["order.session_expired"].en);
+    expect(html).not.toContain(COPY["home.demo_hint"].en);
   });
 
   // SHOP-TASK-147 验收第 2 条「页面为 frontend/src/pages/ForgotPasswordPage.tsx…套前台框架」与「读取完成前不渲染 V1、标 aria-busy」：
