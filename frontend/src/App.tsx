@@ -1,5 +1,7 @@
 import type { ComponentType } from "react";
 
+import { MemberSessionProvider } from "./api/memberSession";
+import type { MemberSessionReader } from "./api/memberSession";
 import { WhatsAppContactProvider } from "./api/siteSettings";
 import type { WhatsAppContactReader } from "./api/siteSettings";
 import SiteFrame from "./components/SiteFrame";
@@ -84,20 +86,24 @@ function CurrentPage({ storage }: { storage: LanguageStorage | null | undefined 
 }
 
 interface AppProps {
-  // 测试用：给定初始路径与语言、店铺装修所用的存储、WhatsApp 联系链接的读取；浏览器里不传，
-  // 分别读地址栏、localStorage 与本次页面加载唯一的读取（api/siteSettings.ts）。
+  // 测试用：给定初始路径与语言、店铺装修所用的存储、WhatsApp 联系链接的读取与会员会话的读取；浏览器里不传，
+  // 分别读地址栏、localStorage 与本次页面加载唯一的读取（api/siteSettings.ts、api/memberSession.ts）。
   initialPath?: string | undefined;
   storage?: LanguageStorage | null | undefined;
   whatsAppContact?: WhatsAppContactReader | undefined;
+  memberSession?: MemberSessionReader | undefined;
 }
 
-export default function App({ initialPath, storage, whatsAppContact }: AppProps) {
+// 会员会话只由前台页头（SiteFrame）与会员页面读取，后台页不读取，也不因此发请求。
+export default function App({ initialPath, storage, whatsAppContact, memberSession }: AppProps) {
   return (
     <LanguageProvider storage={storage}>
       <WhatsAppContactProvider reader={whatsAppContact}>
-        <RouterProvider initialPath={initialPath}>
-          <CurrentPage storage={storage} />
-        </RouterProvider>
+        <MemberSessionProvider reader={memberSession}>
+          <RouterProvider initialPath={initialPath}>
+            <CurrentPage storage={storage} />
+          </RouterProvider>
+        </MemberSessionProvider>
       </WhatsAppContactProvider>
     </LanguageProvider>
   );

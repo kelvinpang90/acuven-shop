@@ -1,6 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
+import { createMemberSessionReader, MEMBER_SESSION_URL } from "../api/memberSession";
+import type { MemberSessionReader } from "../api/memberSession";
 import { createWhatsAppContactReader } from "../api/siteSettings";
 import type { WhatsAppContactReader } from "../api/siteSettings";
 import App from "../App";
@@ -10,13 +12,14 @@ import { LANGUAGE_STORAGE_KEY } from "../i18n/language";
 import { isRoutePath, ROUTE_PATHS } from "../router";
 
 // SHOP-TASK-074 起可传入 WhatsApp 联系链接的读取（替身）；不传时为新建、尚未请求的读取，即取得前的首次渲染，现有测试不受影响。
-function render(path: string, language: Language = "en", whatsAppContact?: WhatsAppContactReader): string {
+// SHOP-TASK-153 起另可传入会员会话的读取（替身）；不传时为 App 的默认读取，服务端渲染时为 unknown，现有测试不受影响。
+function render(path: string, language: Language = "en", whatsAppContact?: WhatsAppContactReader, memberSession?: MemberSessionReader): string {
   const storage = {
     getItem: (key: string) => (key === LANGUAGE_STORAGE_KEY ? language : null),
     setItem: () => undefined,
   };
   return renderToStaticMarkup(
-    <App initialPath={path} storage={storage} whatsAppContact={whatsAppContact ?? createWhatsAppContactReader()} />,
+    <App initialPath={path} storage={storage} whatsAppContact={whatsAppContact ?? createWhatsAppContactReader()} memberSession={memberSession} />,
   );
 }
 
@@ -34,6 +37,34 @@ async function settledReader(respond: () => Promise<Response>): Promise<WhatsApp
     vi.unstubAllGlobals();
   }
 }
+
+// 测试里的遮掩手机号与令牌都是虚构值。
+const MASKED_PHONE = "+60 12•••• 6789";
+const SESSION_TOKEN = "session-csrf-token";
+
+// 照 settledReader：以替身 fetch 读完一次会话后的读取；respond 决定 GET /api/member/session 的回答，只发这一次请求。
+async function settledSession(respond: () => Promise<Response>): Promise<MemberSessionReader> {
+  const request = vi.fn((input: string | URL, init?: RequestInit) => {
+    expect(`${String(init?.method)} ${String(input)}`).toBe(`GET ${MEMBER_SESSION_URL}`);
+    return respond();
+  });
+  vi.stubGlobal("fetch", request);
+  try {
+    const reader = createMemberSessionReader();
+    await reader.load();
+    expect(request).toHaveBeenCalledTimes(1);
+    return reader;
+  } finally {
+    vi.unstubAllGlobals();
+  }
+}
+
+function sessionReply(status: number, body: unknown): () => Promise<Response> {
+  return () => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }));
+}
+
+const MEMBER = sessionReply(200, { phone_masked: MASKED_PHONE, has_password: true, csrf_token: SESSION_TOKEN });
+const GUEST = sessionReply(401, { detail: "member_session_required" });
 
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -60,6 +91,9 @@ function section(html: string, pattern: RegExp): string {
 const banner = (html: string) => section(html, /<div class="acs-banner">[\s\S]*?<\/div>/);
 const header = (html: string) => section(html, /<header[\s\S]*<\/header>/);
 const footer = (html: string) => section(html, /<footer[\s\S]*<\/footer>/);
+// 桌面导航行左侧的导航与手机 ☰ 菜单里的页面导航。
+const desktopNav = (html: string) => section(header(html), /<div class="acs-header__row site-desktop-only"><nav class="acs-nav">[\s\S]*?<\/nav>/);
+const phoneNav = (html: string) => section(header(html), /<nav class="acs-nav site-header__stack">[\s\S]*?<\/nav>/);
 
 // 路由表里不以 /admin 开头的路由：后台页不套前台框架（SHOP-TASK-038，docs/UX.md「管理后台总体」），没有这里检查的横幅、页头与页脚。
 const paths = ROUTE_PATHS.filter((path) => !path.startsWith("/admin"));
@@ -276,6 +310,75 @@ describe("header", () => {
     expect(html).toMatch(new RegExp(`<button[^>]*aria-label="${COPY["common.nav_menu"][language]}"[^>]*aria-expanded="false"`));
     expect(html).toMatch(new RegExp(`aria-expanded="false"[^>]*><span>${COPY[languageLabel[language]][language]}</span>`));
     expect(html).toContain(`href="/privacy">${COPY["common.nav_privacy"][language]}</a>`);
+  });
+});
+
+describe("member session entry", () => {
+  // 页头各导航项的期望：桌面导航行左侧与手机 ☰ 菜单（菜单最后另有隐私说明）。
+  function expectedNavs(language: Language, last: string): { desktop: string; phone: string } {
+    const items = `<a href="/products">${COPY["common.nav_shop"][language]}</a><a href="/track">${COPY["common.nav_track"][language]}</a>${last}`;
+    return {
+      desktop: `<div class="acs-header__row site-desktop-only"><nav class="acs-nav">${items}</nav>`,
+      phone: `<nav class="acs-nav site-header__stack">${items}<a href="/privacy">${COPY["common.nav_privacy"][language]}</a></nav>`,
+    };
+  }
+
+  // UX 0.13「全局框架」页头与 ☰ 菜单「common.nav_login 或 common.nav_account」、P13 入口「页头 My account」与 SHOP-TASK-153 验收「member 时为指向 /account 的
+  // common.nav_account…位置与现在的登录项相同」：读到会话后，桌面导航与手机菜单都在原登录项的位置（查询订单之后）是去 /account 的 common.nav_account，没有 common.nav_login。
+  it.each(languages)("shows common.nav_account instead of common.nav_login for a member in %s", async (language) => {
+    const reader = await settledSession(MEMBER);
+    const html = render("/", language, undefined, reader);
+    const last = `<a href="/account">${COPY["common.nav_account"][language]}</a>`;
+    const expected = expectedNavs(language, last);
+    expect(desktopNav(html)).toBe(expected.desktop);
+    expect(phoneNav(html)).toBe(expected.phone);
+    expect(header(html)).not.toContain(`href="/login"`);
+    expect(header(html)).not.toContain(`>${COPY["common.nav_login"][language]}<`);
+  });
+
+  // 同一条验收「页头不显示手机号或其他会话内容」与 DESIGN 1.13「权限与资料保护」第 3 条（页头显示不是授权依据，令牌只在页面内存中）：
+  // 会员时页头里没有遮掩后的手机号，也没有 CSRF 令牌。
+  it("shows no session content in the header", async () => {
+    const reader = await settledSession(MEMBER);
+    for (const path of paths) {
+      const head = header(render(path, "en", undefined, reader));
+      expect(head, path).not.toContain(MASKED_PHONE);
+      expect(head, path).not.toContain(SESSION_TOKEN);
+    }
+  });
+
+  // 同一条验收「在 /account 时标 aria-current」：会员在会员中心页时，桌面与手机两处的 common.nav_account 都标为当前。
+  it.each(languages)("marks common.nav_account as current on /account in %s", async (language) => {
+    const reader = await settledSession(MEMBER);
+    const head = header(render("/account", language, undefined, reader));
+    expect(head.match(new RegExp(`<a aria-current="page" href="/account">${COPY["common.nav_account"][language]}</a>`, "g"))).toHaveLength(2);
+  });
+
+  // 同一条验收「unknown、guest 与 failed 时为现在的 common.nav_login」：未登录（401 member_session_required）、读取失败（500、网络中断）与尚未读取时，
+  // 两处仍是去 /login 的 common.nav_login，没有 common.nav_account 与指向 /account 的链接。
+  it.each([
+    ["guest", () => settledSession(GUEST)],
+    ["failed", () => settledSession(sessionReply(500, {}))],
+    ["network failure", () => settledSession(() => Promise.reject(new TypeError("Failed to fetch")))],
+    ["unread", () => Promise.resolve(createMemberSessionReader())],
+  ] as [string, () => Promise<MemberSessionReader>][])("keeps common.nav_login when the session is %s", async (_name, make) => {
+    const reader = await make();
+    for (const language of LANGUAGES) {
+      const html = render("/", language, undefined, reader);
+      const expected = expectedNavs(language, `<a href="/login">${COPY["common.nav_login"][language]}</a>`);
+      expect(desktopNav(html)).toBe(expected.desktop);
+      expect(phoneNav(html)).toBe(expected.phone);
+      expect(header(html)).not.toContain(`href="/account"`);
+      expect(header(html)).not.toContain(`>${COPY["common.nav_account"][language]}<`);
+    }
+  });
+
+  // 同一条验收「服务端渲染与首次水合时状态为 unknown，输出与现在相同」：不传读取时（App 的默认读取）页头与传入尚未读取的读取完全相同，仍为登录入口。
+  it("renders the header as before when no reader is given", () => {
+    for (const path of ["/", "/login", "/account"]) {
+      expect(header(render(path)), path).toBe(header(render(path, "en", undefined, createMemberSessionReader())));
+    }
+    expect(header(render("/login"))).toContain(`<a aria-current="page" href="/login">${COPY["common.nav_login"].en}</a>`);
   });
 });
 

@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import type { FormEvent, MouseEvent, ReactNode } from "react";
 
+import { useMemberSession } from "../api/memberSession";
 import { useWhatsAppContactUrl } from "../api/siteSettings";
 import { cartItemCount, useCartLines } from "../cart";
 import { BRAND, LANGUAGES } from "../i18n/copy";
@@ -25,12 +26,16 @@ interface NavItem {
 }
 
 // 页头导航（UX「全局框架」的顺序）；只渲染路由表里已有的项，尚未实现的页面一律不出现。
-// 登录与会员中心二选一随会员任务加入。
 const HEADER_NAV: readonly NavItem[] = [
   { path: "/products", label: "common.nav_shop" },
   { path: "/track", label: "common.nav_track" },
-  { path: "/login", label: "common.nav_login" },
 ];
+
+// 登录与会员中心二选一（UX「全局框架」common.nav_login 或 common.nav_account，P13 入口「页头 My account」），排在导航最后：
+// 会员会话（api/memberSession.ts）为 member 时为会员中心，unknown、guest 与 failed 时为登录。页头不显示会话里的手机号等内容；
+// 这只是显示，授权一律由服务端检查（DESIGN 1.13「权限与资料保护」第 3 条）。
+const LOGIN_NAV: NavItem = { path: "/login", label: "common.nav_login" };
+const ACCOUNT_NAV: NavItem = { path: "/account", label: "common.nav_account" };
 
 const LANGUAGE_LABEL: Readonly<Record<Language, CopyKey>> = {
   en: "common.lang_en",
@@ -38,9 +43,10 @@ const LANGUAGE_LABEL: Readonly<Record<Language, CopyKey>> = {
   ms: "common.lang_ms",
 };
 
-function availableNav(): { path: RoutePath; label: CopyKey }[] {
+// member 为真时最后一项是会员中心，否则是登录；两者各自按路由表判断是否渲染。
+function availableNav(member: boolean): { path: RoutePath; label: CopyKey }[] {
   const items: { path: RoutePath; label: CopyKey }[] = [];
-  for (const item of HEADER_NAV) {
+  for (const item of [...HEADER_NAV, member ? ACCOUNT_NAV : LOGIN_NAV]) {
     if (isRoutePath(item.path)) {
       items.push({ path: item.path, label: item.label });
     }
@@ -177,7 +183,9 @@ function SiteHeader() {
   const [openPanel, setOpenPanel] = useState<OpenPanel>(null);
   const menuId = useId();
   const languageId = useId();
-  const nav = availableNav();
+  // 服务端渲染与首次水合时为读取对象当前的状态（页面加载时为 unknown，即登录），挂载后读取会话。
+  const session = useMemberSession();
+  const nav = availableNav(session.kind === "member");
   const cart = cartPath();
   const close = () => {
     setOpenPanel(null);
