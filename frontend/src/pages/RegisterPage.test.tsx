@@ -251,13 +251,14 @@ describe("embedded V1", () => {
 describe("after verifying", () => {
   // SHOP-TASK-148 验收第 3 条「按 created 显示 auth.verified_registered 或 auth.verified_login，1.5 秒后用路由的 replace 前往来源页，来源与去向复用
   // router.tsx 导出的函数与 VERIFIED_REDIRECT_MS」与 DESIGN 1.12「权限与资料保护」第 3 条（号码已注册则登录，未注册则创建无密码会员并登录）：
-  // 先显示文字，再等 VERIFIED_REDIRECT_MS，然后以 replace 前往 verifiedPath（来源为前台页时回到来源，后台页、登录页与没有来源时去首页 P01）。
+  // 先显示文字，再等 VERIFIED_REDIRECT_MS，然后以 replace 前往 verifiedPath（来源为前台页时回到来源，后台页、登录页与没有来源时去会员中心 P13；
+  // SHOP-TASK-152 验收第 6 条与 HANDOFF 0.61 第（5）条「登录与注册成功没有来源时改去 /account」，原期望为首页 P01）。
   it.each([
     [true, "auth.verified_registered", "/checkout", "/checkout"],
     [false, "auth.verified_login", "/products/crew-neck-tee", "/products/crew-neck-tee"],
-    [true, "auth.verified_registered", "/admin/orders", "/"],
-    [false, "auth.verified_login", "/login", "/"],
-    [true, "auth.verified_registered", null, "/"],
+    [true, "auth.verified_registered", "/admin/orders", "/account"],
+    [false, "auth.verified_login", "/login", "/account"],
+    [true, "auth.verified_registered", null, "/account"],
   ] as const)("finishes with created = %s as %s and goes from %s to %s", async (created, key, source, expected) => {
     const { moves, events } = fakeMoves();
     await finishRegister({ kind: "member", created }, source, new AbortController().signal, fakeWait(events), moves);

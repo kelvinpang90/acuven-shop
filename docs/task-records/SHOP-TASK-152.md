@@ -1,0 +1,53 @@
+# SHOP-TASK-152 会员中心 P13 的框架与我的订单
+
+设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 3、5 条（会话到期、退出与服务端授权检查；会员仅能访问自己认领或下单的订单；手机号部分遮盖显示）与 HANDOFF 0.61。依据 docs/UX.md 0.13 的 P13、docs/UX-COPY.md 0.14，样式取视觉稿 `docs/design/pages/P13-desktop.html` 与 `P13-phone.html` 的标题、导航与我的订单部分。读取会话与退出经 SHOP-TASK-151（`api/memberSession.ts`），我的订单与订单号交接经 SHOP-TASK-150（`api/memberOrders.ts`）。
+
+- [x] 路由与页面表：`/account` 加进 `frontend/src/router.tsx` 的路由表（注册之后、后台页之前，并导出 `ACCOUNT_PATH`）与 `frontend/src/App.tsx` 的页面表，套前台框架；页面为新文件 `frontend/src/pages/AccountPage.tsx`。
+- [x] 文案：`frontend/src/i18n/copy.ts` 按 UX-COPY 0.14 逐字加入 `common.nav_account`、`common.nav_logout`（放在 `common.nav_register` 之后，照文档顺序）与 `account.orders`、`account.orders_hint`、`account.orders_empty`、`account.order_view`、`account.demo_hint`（新的 account 一组，放在 refund 一组之后），写法同相邻条目。没有用到 UX-COPY 以外的文字。
+- [x] 会话判断（`openAccount`、纯函数 `sessionStep`）：
+  - 打开时（effect 里经 `AdminOrderDetail.tsx` 的 `startDeferred`）调用读取对象的 `reload` 重读一次会话，不用共享状态里之前的值；读完之前只渲染 `<main class="site-account" aria-busy="true">` 的空主体。
+  - guest：以路由的 replace 进入 `/login`，不读我的订单；路由离开 `/account` 时记下的来源即 `/account`（`isSourcePath` 不变），登录成功后回到本页。
+  - failed（含网络中断）：页面只有 `common.error_retry`。重读之后的状态不会是 unknown，万一是也按 failed。
+  - member：显示标题行与各段，并开始读取我的订单。页面不订阅共享会话状态，这一判断只在打开时的那次读取后做，之后共享状态变化（如退出后重读为未登录）不触发去 `/login`。
+- [x] 标题行：h1 `common.nav_account`，其后遮掩后的手机号（`acs-num acs-muted`，取自打开时重读到的会话，服务端已遮掩）与 `common.nav_logout`（次要小按钮，桌面靠右）；桌面与手机共用同一份，手机由 site.css 排在标题之下。
+- [x] 导航与段表：`ACCOUNT_SECTIONS` 只有「我的订单」（`account.orders`）一项，导航与标签都按表渲染（之后的任务只在表里加项，并在 `SectionPanel`、`sectionBusy` 里加对应分支）。
+  - 桌面：左侧 `<nav>`，每项是指向本页段内容的页内锚点（`#account-orders`），当前段标 `aria-current="true"`；点击时页面记下当前段。
+  - 手机：`acs-tabs` 分段标签，照 `LoginPage.tsx` 的页签写法（role 为 tablist 的容器、role 为 tab 的按钮、选中项 `aria-selected`、`aria-controls` 指向段内容）；段内容为 `role="tabpanel"` 的 section（`aria-labelledby` 为标签），不是当前段的加 `site-account__section--off`，只在手机隐藏。
+  - ★ `account.demo_hint` 只有一份，在右栏顶部；手机隐藏导航后即在标题行（含暂放的手机号与退出）之后、标签之前。
+- [x] 我的订单（`loadOrders`、纯函数 `ordersStep`、`statusTag`）：
+  - 会话为 member 后经 `readMemberOrders` 读取（不带页码，只取第一页），`total` 不用；按服务端顺序显示，不排序、不翻页。读取中该段标 `aria-busy`。
+  - 每张为日期（`TrackOrderPage.tsx` 的 `formatDate`，按浏览器时区）、订单号（`acs-num`）、状态名（`order.status_*`；`demo_completed` 为 `acs-tag--success`，待支付与已取消为 `acs-tag--outline`，其余为 `acs-tag--accent`；未知状态不显示标签）、合计（`common.price_myr`，原样格式化 `total_sen`）与 `account.order_view`。
+  - 桌面与手机各一份列表，由 site.css 按宽度显隐：桌面每行末是次要小按钮样式的 `account.order_view` 链接，`account.orders_hint` 在列表之后；手机整行是链接（读屏标签 `account.order_view`，行尾 › 为 `aria-hidden` 的图标），`account.orders_hint` 在列表之前。
+  - 段标题 h2 `account.orders` 只在桌面显示（手机由标签代替）；没有订单时段标题照常，列表与 `account.orders_hint` 换成 `account.orders_empty`。
+  - signed_out：重读会话后以 replace 进入 `/login`；failed 显示 `common.error_retry`；network 显示 `common.network_check`（都在该段里）。
+- [x] 进入订单详情：`orderPath()` 照 `CheckoutPage.tsx` 的 `loginPath` 以 `isRoutePath("/account/order")` 判断，以 props（`orderTo`）传给 View；为 null 时桌面没有 `account.order_view`，手机行是 div（不作为链接、没有 ›）。有去向时链接为站内 `Link`，点击先调用 `onView`（页面传入 `viewOrder`，即 `handOffMemberOrder` 交出该行订单号），再由 `Link` 前往 `/account/order`；订单号不进地址、历史状态与浏览器存储。`/account/order` 由 SHOP-TASK-154 加入路由表，在那之前不渲染查看入口。
+- [x] 退出（`logOut`、纯函数 `logoutStep`、`startLogout`、`canLogout`、`logoutFailed`）：以打开时读到的会话里的 CSRF 令牌调用 `memberLogout`，进行中按钮禁用并标 `aria-busy`。ok 与 signed_out：清除 `handOffMemberOrder` 交接的订单号（`clearMemberOrder`），重读会话，再以 replace 前往首页 `/`。csrf：重读会话，已登录时换用新令牌，显示 `common.error_retry`。failed：`common.error_retry`。network：`common.network_check`。提示在标题行之下、两栏之前。
+- [x] 登录与注册成功后的去向：`router.tsx` 的 `verifiedPath` 在没有来源或来源不能作来源时改为 `/account`，同步改了注释；`isSourcePath` 不变（`/account` 可作来源）。
+- [x] 代码结构照 `AdminStoreDesignPage.tsx`：导出把请求结果变成页面状态或跳转的纯函数（`sessionStep`、`ordersStep`、`logoutStep` 等）、接收 AbortSignal 与回调（`AccountMoves`：show、update、replace）的异步函数（`openAccount`、`loadOrders`、`logOut`），以及只依赖 props 的 `AccountView`。离开页面时中止我的订单与退出的请求（页面的 AbortController），之后不再更新；会话的重读（`reader.reload()`）是共享读取，不带 signal、不中止，离开页面后不再据其结果更新或跳转。传给事件属性的处理函数都不返回 Promise。
+- [x] 布局与显隐写在 `frontend/src/styles/site.css`（桌面一段与 767px 及以下一段），不声明颜色、字体与圆角；链接只写 `color: inherit`（`.site-account__nav a` 与 `a.site-account__item`）与不加下划线。视觉稿的固定间距与尺寸直接写像素值。未改 `acuven-shop.css`。
+- [x] 测试 `frontend/src/pages/AccountPage.test.tsx`（vitest 与 react-dom/server，不加测试依赖；fetch 替身为参数带类型的 `vi.fn((input, init) => …)`，会话读取用 `createMemberSessionReader()` 配同一个 fetch 替身，路由的 replace 以回调替身代替；以 `renderToStaticMarkup` 渲染 View、直接调用导出的函数，点击处理从元素树取出后直接调用，不模拟点击）：
+  - 打开时重读会话（共享状态先为未登录仍重读）与三种结果：guest 的 replace 去向与登录后回到 `/account`、failed（含网络中断）只有 `common.error_retry`、member 的标题行（三语）；读完之前的空主体与 App 渲染 `/account` 时套前台框架；打开之后共享状态变化不跳转；离开页面后不更新，会话读取不带页面的 signal 而我的订单带。
+  - 导航与标签只有我的订单一项（锚点、`aria-current`、tablist、tab、tabpanel 的关系），点击交给页面；★ 提示的位置。
+  - 列表各项的内容与顺序（桌面与手机，三语）、各状态的标签样式与未知状态、提示的位置、空列表、只读第一页、读取中的 `aria-busy`、signed_out 先重读会话再去 `/login`、failed 与 network 的提示、离开页面后不更新。
+  - 查看链接在 props 给出去向时渲染、没有时不渲染；去向由路由表判断（不断言 `/account/order` 不在路由表）；点击时交出该行订单号，链接地址里没有订单号。
+  - 退出的 ok、signed_out（清除交接、重读会话、replace 到 `/`，请求头带令牌）、csrf（换用新令牌并提示）、failed、network、进行中按钮禁用与离开页面后不更新。
+  - 页面文字全部来自字典（带变量的条目按模板匹配，照 `AdminRefundDetail.test.tsx` 的 `visibleTexts`、`textNodes` 与 `unescapeHtml`），订单数据与遮掩手机号除外。
+  - 每条测试的注释写明守住的是验收、UX 或 HANDOFF 0.61 的哪一句。
+- [x] 现有测试只在必要时修改：
+  - `frontend/src/router.test.tsx`：路由表断言加入 `/account`（并断言 `isRoutePath("/account")`）；`verifiedPath` 没有来源、来源为后台页或登录页时的期望由 `/` 改为 `/account`，其余期望不变。
+  - `frontend/src/pages/LoginPage.test.tsx` 与 `frontend/src/pages/RegisterPage.test.tsx`：没有来源、来源为后台页或登录页三组去向的期望由 `/` 改为 `/account`，同步改了该处注释；`guestPath` 的期望不变。
+  - `frontend/src/pages/TrackOrderPage.test.tsx`「renders no member-mode links」：只删去断言 `/account` 不在路由表的一行，其余断言不变；删去后 `isRoutePath` 不再被用到，类型检查（noUnusedLocals）要求同时从 import 里去掉，并在注释里写明原因。
+- 偏离与验收未写死之处的取法（未改设计，未发现须停下的设计问题）：
+  - 我的订单不翻页，只显示第一页（最多 20 张，后端按时间倒序），UX 未写分页（HANDOFF 0.61 第（1）条）。
+  - 手机的遮掩手机号与退出按钮暂放在标题之下（UX 与视觉稿在设置段），等设置段的任务移过去（HANDOFF 0.61 第（7）条）。
+  - 视觉稿里 site.css 写不了的样式不搬：桌面导航当前项的底色、圆角与字重，订单各行之间的分隔线（颜色）。没有借用其他组件的类来取颜色。
+  - 视觉稿把导航的四项都画出，本任务只渲染已实现的我的订单一项（HANDOFF 0.61 第（2）条）。
+  - 视觉稿手机行把 › 写成合计后的文字，按验收改为 `aria-hidden` 的图标；合计与图标之间的 4px 间距是取的值（视觉稿为一个空格）。
+  - 视觉稿没有画读取会话失败、退出失败与我的订单读取失败的提示：前两者为 `acs-alert--danger` 提示条，左右与标题行对齐，位置见 site.css 的注释；我的订单的提示在段标题之下。
+  - 桌面段标题 h2 照视觉稿显示；手机视觉稿没有段标题，由分段标签代替，h2 在手机隐藏。
+  - 桌面导航当前项的 `aria-current` 取值为 `true`（页内锚点，不是另一页）；点导航锚点时由浏览器跳到段内容（不拦截），页面同时记下当前段。
+  - 退出只清除 SHOP-TASK-150 交接的会员订单号；P06 暂存的清除留给会员结账任务（HANDOFF 0.61 第（7）条）。
+  - UX 与视觉稿在本任务范围内没有相互冲突之处，PR 里不另作说明。
+- 留给后续任务：积分、优惠券与设置三段由之后的任务各自加入段表；页头的会员中心入口由 SHOP-TASK-153 接入；`/account/order`（P09 会员模式）由 SHOP-TASK-154 加入路由表，届时查看入口自动出现。
+- 改动只在 `frontend/src/pages/AccountPage.tsx`、`frontend/src/pages/AccountPage.test.tsx`、`frontend/src/pages/LoginPage.test.tsx`、`frontend/src/pages/RegisterPage.test.tsx`、`frontend/src/pages/TrackOrderPage.test.tsx`、`frontend/src/router.tsx`、`frontend/src/router.test.tsx`、`frontend/src/App.tsx`、`frontend/src/i18n/copy.ts`、`frontend/src/styles/site.css` 与本文件；未改 `frontend/src/components/SiteFrame.tsx`、`frontend/src/api/`、`TrackOrderPage.tsx`、后端、`docs/TODO.md`、`.platform/`、CI、部署配置、`package.json` 与 `package-lock.json`，未装依赖。
+- 验证到什么程度：人工逐条对照验收标准、UX P13、HANDOFF 0.61 与 `api/memberOrders.ts`、`api/memberSession.ts` 的回答归类自查。上面列的测试只是写入的测试。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查；检查命令结果由 Worker 另行记录。未做浏览器验收（桌面与手机的实际排版、锚点跳转与分段标签的观感都未在浏览器里看过），未对真实后端接口验证。

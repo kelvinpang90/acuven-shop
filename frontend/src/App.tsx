@@ -5,6 +5,7 @@ import type { WhatsAppContactReader } from "./api/siteSettings";
 import SiteFrame from "./components/SiteFrame";
 import { LanguageProvider } from "./i18n/language";
 import type { LanguageStorage } from "./i18n/language";
+import AccountPage from "./pages/AccountPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminCouponsPage from "./pages/AdminCouponsPage";
 import AdminOrdersPage from "./pages/AdminOrdersPage";
@@ -46,6 +47,7 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   "/login": LoginPage,
   "/forgot-password": ForgotPasswordPage,
   "/register": RegisterPage,
+  "/account": AccountPage,
   "/admin/login": AdminLoginPage,
   "/admin/orders": AdminOrdersPage,
   // 订单详情与列表是同一页（桌面列表在左、详情在右，手机只显示详情）。

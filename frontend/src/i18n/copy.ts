@@ -65,6 +65,16 @@ export const COPY = {
     zh: "注册",
     ms: "Daftar",
   },
+  "common.nav_account": {
+    en: "My account",
+    zh: "会员中心",
+    ms: "Akaun saya",
+  },
+  "common.nav_logout": {
+    en: "Log out",
+    zh: "退出登录",
+    ms: "Log keluar",
+  },
   "common.nav_cart": {
     en: "Cart ({count})",
     zh: "购物车（{count}）",
@@ -1299,6 +1309,31 @@ export const COPY = {
     en: "Refunds are reviewed by the admin in the demo back office.",
     zh: "退款由管理员在演示后台审核。",
     ms: "Bayaran balik disemak oleh pentadbir dalam pejabat belakang demo.",
+  },
+  "account.orders": {
+    en: "My orders",
+    zh: "我的订单",
+    ms: "Pesanan saya",
+  },
+  "account.orders_hint": {
+    en: "Open an order to confirm receipt or request a refund.",
+    zh: "打开订单可确认收货或申请退款。",
+    ms: "Buka pesanan untuk mengesahkan penerimaan atau memohon bayaran balik.",
+  },
+  "account.orders_empty": {
+    en: "No orders yet.",
+    zh: "还没有订单。",
+    ms: "Tiada pesanan lagi.",
+  },
+  "account.order_view": {
+    en: "View",
+    zh: "查看",
+    ms: "Lihat",
+  },
+  "account.demo_hint": {
+    en: "Points and coupons are demo only and have no cash value.",
+    zh: "积分与优惠券均为演示，没有现金价值。",
+    ms: "Mata dan kupon adalah demo sahaja dan tiada nilai tunai.",
   },
   "privacy.title": {
     en: "Privacy",

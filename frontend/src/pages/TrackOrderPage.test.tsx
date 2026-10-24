@@ -8,7 +8,7 @@ import { formatSen } from "../format";
 import { BRAND, COPY, formatCopy, LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
-import { isRoutePath, RouterProvider } from "../router";
+import { RouterProvider } from "../router";
 import { countryName } from "./PayPage";
 import { formatDate, formatDateTime, stepState, TrackOrderView } from "./TrackOrderPage";
 import type { TrackOrderViewProps } from "./TrackOrderPage";
@@ -420,9 +420,9 @@ describe("unpaid orders and missing entries", () => {
     }
   });
 
-  // SHOP-TASK-030 验收第 6 条「会员模式（account.orders 与积分行）在会员中心实现前不渲染」：会员中心不在路由表里，各状态下都不出现会员模式的文案（UX-COPY 原文）或链接。
+  // SHOP-TASK-030 验收第 6 条「会员模式（account.orders 与积分行）在会员中心实现前不渲染」：查单模式在各状态下都不出现会员模式的文案（UX-COPY 原文）或链接
+  // （会员中心 /account 由 SHOP-TASK-152 加入路由表，该行断言随之删去）。
   it("renders no member-mode links", () => {
-    expect(isRoutePath("/account")).toBe(false);
     for (const status of STATUSES) {
       const html = render(ready(lookupOrder({ status, refund_requests: REQUESTS })));
       for (const text of ["My orders", "Continue payment"]) {
