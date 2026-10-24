@@ -16,7 +16,7 @@
   - `runMemberRefund` → `MemberRefundOutcome`：submitted、leave、signed_out、not_found、refused（带重读到的订单或空）、csrf（同上）、error（含 idempotency_conflict 后重读）、retry（网络中断后申请记录没有多一笔，带同一幂等键与同一请求行）。
   - 结果里带的是 `LookupOrder`（令牌不随订单返回，csrf 由页面重读会员会话取得新令牌后提示重试）；页面已离开（中止）时返回 null。
 - [x] 订单号交接：`handOffMemberOrder(orderNumber)`、`memberOrderInView()`、`clearMemberOrder()`，只在模块变量里；读取不清除，交出新值时覆盖，退出登录时由页面调用清除；整页刷新即消失（HANDOFF 0.61）。
-- [x] 测试 `frontend/src/api/memberOrders.test.ts`（vitest，fetch 替身为参数带类型的 `vi.fn((input, init) => …)`，地址从 `mock.calls` 取时用 `String(…)`；等待以注入的 `delay` 代替）：
+- [x] 测试 `frontend/src/api/memberOrders.test.ts`（vitest，fetch 替身为参数带类型的 `vi.fn((input, init) => …)`，地址从 `mock.calls` 取时用 `String(…)`，请求体用 `typeof body === "string"` 收窄后再 `JSON.parse`；等待以注入的 `delay` 代替）：
   - 五个请求的地址、方法、同源 cookie、no-store、signal（列表、详情、预估）、请求头（写操作恰有 Idempotency-Key 与 X-CSRF-Token，列表只有 Accept，详情与预估恰为 Accept 与 Content-Type）、请求体只有约定字段；只有详情带 lang，其余地址不带查询参数与订单号；列表 GET 没有请求体。
   - 各接口状态码与错误码的归类：401 member_session_required、404 order_not_found（另有 detail 不是 order_not_found 的 404 归 failed）、403 csrf_failed、409 各错误码与未列出的 409、422、500、200 以外的 2xx、不是 JSON、预估响应体不合格与网络中断。
   - `runMemberConfirmReceipt`：done 与 closed 改用会员详情重读、重读失败为 error、csrf 带订单与为空、提交与重读的 signed_out 与 not_found、fulfilment_frozen 不重读、网络中断后 retry 并以 `receiptKey` 沿用同一键、重读到新状态、重读中断按 `RECHECK_DELAY_MS` 间隔重读、中止返回 null。

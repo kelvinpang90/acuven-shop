@@ -135,7 +135,11 @@ function headersOf(fetchMock: FetchMock, index = 0): Record<string, string> {
 }
 
 function bodyOf(fetchMock: FetchMock, index = 0): unknown {
-  return JSON.parse(String(initOf(fetchMock, index).body));
+  const body = initOf(fetchMock, index).body;
+  if (typeof body !== "string") {
+    throw new Error("request body is not a JSON string");
+  }
+  return JSON.parse(body) as unknown;
 }
 
 function methods(fetchMock: FetchMock): string[] {
