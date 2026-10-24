@@ -94,7 +94,8 @@ describe("route table", () => {
   // 原来断言 /forgot-password 不在表里的一行随之改为在表里，注册仍不在表里。
   // SHOP-TASK-148 验收第 2 条「路由 /register 加进 frontend/src/router.tsx 的路由表」：注册进表，在忘记密码之后；
   // 原来断言 /register 不在表里的一行随之改为在表里。
-  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page, the member login, the password reset, the register page and the admin pages", () => {
+  // SHOP-TASK-152 验收第 2 条「路由 /account 加进 frontend/src/router.tsx 的路由表」：会员中心进表，在注册之后、后台页之前。
+  it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page, the member login, the password reset, the register page, the member centre and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
       "/products",
@@ -110,6 +111,7 @@ describe("route table", () => {
       "/login",
       "/forgot-password",
       "/register",
+      "/account",
       "/admin/login",
       "/admin/orders",
       "/admin/orders/:id",
@@ -145,6 +147,7 @@ describe("route table", () => {
     expect(isRoutePath("/login")).toBe(true);
     expect(isRoutePath("/forgot-password")).toBe(true);
     expect(isRoutePath("/register")).toBe(true);
+    expect(isRoutePath("/account")).toBe(true);
   });
 
   // SHOP-TASK-147 验收第 2 条「页面为 frontend/src/pages/ForgotPasswordPage.tsx…套前台框架」与「读取完成前不渲染 V1、标 aria-busy」：
@@ -541,13 +544,15 @@ describe("in-site navigation", () => {
     expect(nextSource(null, "/login", "/")).toBeNull();
   });
 
-  // 同一条「成功后的去向（来源 → 路径）…没有记下时去首页 P01」：来源为前台页时回到来源；没有来源、来源为后台页或登录页本身时去首页。
-  it("sends a verified member back to the source page or the home page", () => {
+  // 同一条「成功后的去向（来源 → 路径）」与 SHOP-TASK-152 验收第 6 条「verifiedPath 在没有来源（或来源不能作来源）时改为 /account」
+  // （HANDOFF 0.61 第（5）条「登录与注册成功没有来源时改去 /account」）：来源为前台页时回到来源；
+  // 没有来源、来源为后台页或登录页本身时去会员中心（原期望为首页，随本任务改）。
+  it("sends a verified member back to the source page or the member centre", () => {
     expect(verifiedPath("/checkout")).toBe("/checkout");
     expect(verifiedPath("/products/crew-neck-tee")).toBe("/products/crew-neck-tee");
-    expect(verifiedPath(null)).toBe("/");
-    expect(verifiedPath("/admin/orders")).toBe("/");
-    expect(verifiedPath("/login")).toBe("/");
+    expect(verifiedPath(null)).toBe("/account");
+    expect(verifiedPath("/admin/orders")).toBe("/account");
+    expect(verifiedPath("/login")).toBe("/account");
   });
 
   // 同一条「auth.continue_guest 的去向（来源为 /checkout 时 /checkout，否则 /）」与 HANDOFF 0.58 第（d）条「auth.continue_guest 在来源为结账时回结账，否则去首页」。

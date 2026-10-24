@@ -412,13 +412,14 @@ describe("SMS code tab", () => {
 
 describe("after logging in", () => {
   // 同一条「密码登录 ok 显示 auth.verified_login…1.5 秒后用路由的 replace 前往来源页」与「来源为后台页、登录页本身与没有来源」：
-  // 先显示已登录，再等 VERIFIED_REDIRECT_MS，然后以 replace 前往 router.tsx 的 verifiedPath（来源为前台页时回到来源，其余去首页）。
+  // 先显示已登录，再等 VERIFIED_REDIRECT_MS，然后以 replace 前往 router.tsx 的 verifiedPath（来源为前台页时回到来源，其余去会员中心 /account；
+  // SHOP-TASK-152 验收第 6 条与 HANDOFF 0.61 第（5）条「登录与注册成功没有来源时改去 /account」，原期望为首页）。
   it.each([
     ["/checkout", "/checkout"],
     ["/products/crew-neck-tee", "/products/crew-neck-tee"],
-    ["/admin/orders", "/"],
-    ["/login", "/"],
-    [null, "/"],
+    ["/admin/orders", "/account"],
+    ["/login", "/account"],
+    [null, "/account"],
   ] as const)("logs in with a password and goes from source %s to %s", async (source, expected) => {
     const { form, events } = await login(() => new Response(null, { status: 204 }), true, source);
     expect(form()).toEqual({ ...FILLED, password: "", verified: true });

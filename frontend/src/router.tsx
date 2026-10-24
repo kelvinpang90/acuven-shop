@@ -22,6 +22,8 @@ import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 // 会员登录 /login 的号码与密码只在页面内存与请求体里；登录成功后回到的来源页只记在路由的内存里（见下方「来源页」）。
 // 忘记密码 /forgot-password 的号码、验证码、新密码与 CSRF 令牌只在页面内存与请求里。
 // 注册 /register 的号码与验证码只在页面内存与请求体里；成功后的去向同会员登录。
+// 会员中心 /account 凭服务端会员会话读取，遮掩后的手机号与 CSRF 令牌只在页面内存里，订单号只在页面内存与会员订单的交接里
+// （api/memberOrders.ts 的 handOffMemberOrder）。
 export const ROUTE_PATHS = [
   "/",
   "/products",
@@ -37,6 +39,7 @@ export const ROUTE_PATHS = [
   "/login",
   "/forgot-password",
   "/register",
+  "/account",
   "/admin/login",
   "/admin/orders",
   "/admin/orders/:id",
@@ -56,6 +59,7 @@ export type RoutePath = ActualPath<RoutePattern>;
 
 export const HOME_PATH: RoutePath = "/";
 export const PRODUCTS_PATH: RoutePath = "/products";
+export const ACCOUNT_PATH: RoutePath = "/account";
 export const ADMIN_LOGIN_PATH: RoutePath = "/admin/login";
 export const ADMIN_ORDERS_PATH: RoutePath = "/admin/orders";
 export const ADMIN_REFUNDS_PATH: RoutePath = "/admin/refunds";
@@ -241,10 +245,9 @@ export function nextSource(source: RoutePath | null, from: RoutePath, to: RouteP
   return from !== to && isSourcePath(from) ? from : source;
 }
 
-// 成功文案显示之后的去向：记下的来源；没有来源（或不是可作来源的路径）时去首页 P01。
-// 会员中心 P13 上线后由那个任务改为没有来源时去 P13。
+// 成功文案显示之后的去向：记下的来源；没有来源（或不是可作来源的路径）时去会员中心 P13（UX P11、P12「去来源页或 P13」，HANDOFF 0.61 第（5）条）。
 export function verifiedPath(source: RoutePath | null): RoutePath {
-  return source !== null && isSourcePath(source) ? source : HOME_PATH;
+  return source !== null && isSourcePath(source) ? source : ACCOUNT_PATH;
 }
 
 // auth.continue_guest 的去向：来源为结账页时回结账，否则去首页 P01。

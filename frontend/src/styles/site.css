@@ -505,6 +505,27 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-register .site-sms__send { justify-self: stretch; }
 .site-register__login { justify-self: center; padding-top: 8px; }
 
+/* 会员中心 P13 的框架与我的订单（SHOP-TASK-152，P13-desktop 的标题、导航与我的订单）：标题行为 h1、遮掩后的手机号与靠右的退出按钮
+   （间距 20px，内边距 48px 80px 24px）；其下两栏为 240px 导航与右栏（间距 56px，内边距 0 80px 96px）；导航各项上下排列（间距 4px），
+   每项内边距 10px 14px、不加下划线、颜色随上级；右栏的 ★ 提示与各段上下排列（间距 48px），段内间距 12px；我的订单每行为
+   日期 140px、订单号 160px、状态、合计 140px（靠右）与查看按钮五列（间距 16px，上下内边距 14px）。手机用的标签、提示与各行在桌面不显示。
+   导航当前项的底色与字重、各行之间的分隔线（颜色）site.css 写不了，记在任务记录的偏离里。视觉稿没有画读取会话失败与退出失败的提示：
+   提示左右与标题行对齐（80px），在标题行之下、两栏之前（下 24px）；读取会话失败时页面只有提示，上方留出标题行的 48px */
+.site-account { display: grid; align-content: start; }
+.site-account p { margin: 0; }
+.site-account > .site-notice { margin: 0 80px 24px; }
+.site-account > .site-notice:first-child { margin-top: 48px; }
+.site-account__head { display: flex; align-items: center; gap: 20px; padding: 48px 80px 24px; }
+.site-account__logout { margin-left: auto; }
+.site-account__body { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 56px; padding: 0 80px 96px; }
+.site-account__nav { display: grid; gap: 4px; align-content: start; }
+.site-account__nav a { padding: 10px 14px; color: inherit; text-decoration: none; }
+.site-account__main { display: grid; gap: 48px; align-content: start; }
+.site-account__section { display: grid; gap: 12px; align-content: start; }
+.site-account__list { margin: 0; padding: 0; list-style: none; }
+.site-account__row { display: grid; grid-template-columns: 140px 160px minmax(0, 1fr) 140px auto; gap: 16px; align-items: center; padding: 14px 0; }
+.site-account__total { text-align: right; }
+
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
 
@@ -889,4 +910,23 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-register .site-sms__code { display: grid; gap: 16px; }
   .site-register .site-sms__resend { justify-self: center; }
   .site-register__login { padding-top: 0; }
+
+  /* 会员中心 P13（P13-phone）：一栏，各块在内容区（上 28px、左右 16px、下 40px）里上下排列，间距 16px；遮掩后的手机号与退出按钮
+     暂放在标题之下、靠左（UX 与视觉稿在设置段，记在任务记录的偏离里）；导航换成分段标签（左右伸到屏幕边缘，内边距 0 16px），
+     只显示当前段；我的订单为 account.orders_hint 与其后的各行，每行是两列（间距 6px 12px，上下内边距 14px）的整行链接，
+     不加下划线、颜色随上级，合计与行尾 › 同一行（间距 4px）。各行之间的分隔线（颜色）site.css 写不了，记在任务记录的偏离里 */
+  .site-account { gap: 16px; padding: 28px 16px 40px; }
+  .site-account > .site-notice, .site-account > .site-notice:first-child { margin: 0; }
+  .site-account__head { display: grid; justify-items: start; gap: 16px; padding: 0; }
+  .site-account__logout { margin-left: 0; }
+  .site-account__body { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 0; }
+  .site-account__main { gap: 16px; }
+  .site-account__tabs { display: flex; margin: 0 -16px; padding: 0 16px; }
+  .site-account__section { gap: 16px; }
+  .site-account__section--off { display: none; }
+  .site-account__hint { display: block; }
+  .site-account__list.site-phone-only { display: block; }
+  .site-account__item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; padding: 14px 0; }
+  a.site-account__item { color: inherit; text-decoration: none; }
+  .site-account__amount { display: inline-flex; align-items: center; gap: 4px; }
 }
