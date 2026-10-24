@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import { useMemberSessionReader } from "../api/memberSession";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
 import SmsVerify from "../components/SmsVerify";
 import type { SmsVerified, SmsVerifyProps } from "../components/SmsVerify";
@@ -28,16 +29,23 @@ export function registerVerify(settings: { smsEnabled: boolean; siteKey: string 
   return { purpose: "register", smsEnabled: settings.smsEnabled, siteKey: settings.siteKey, guestTo, onVerified };
 }
 
-// 页面对结果的处理：显示验证通过的文字，或用路由的 replace 前往成功后的去向。
+// 页面对结果的处理：显示验证通过的文字、用路由的 replace 前往成功后的去向，或要求重读会员会话
+// （页面传入共享读取的 reload，不等待结果；页头随之切换为 common.nav_account）。
 export interface RegisterMoves {
   verified: (copy: CopyKey) => void;
   replace: (path: RoutePath) => void;
+  reloadSession: () => void;
 }
 
-// 短信验证通过（V1 的回调）：显示 auth.verified_*，VERIFIED_REDIRECT_MS 之后以 replace 前往来源页（没有来源时首页）；
-// signal 中止（离开页面）之后不再更新、不再跳转。重设密码的结果不会出现在这一用途，忽略。
+// 短信验证通过（V1 的回调）：先要求重读一次会话（服务端已发出会话，离开页面也照样重读），再显示 auth.verified_*，
+// VERIFIED_REDIRECT_MS 之后以 replace 前往来源页（router.tsx 的 verifiedPath）；signal 中止（离开页面）之后不再更新、不再跳转。
+// 重设密码的结果不会出现在这一用途，忽略（不重读）。
 export async function finishRegister(verified: SmsVerified, source: RoutePath | null, signal: AbortSignal, wait: Wait, moves: RegisterMoves): Promise<void> {
-  if (signal.aborted || verified.kind !== "member") {
+  if (verified.kind !== "member") {
+    return;
+  }
+  moves.reloadSession();
+  if (signal.aborted) {
     return;
   }
   moves.verified(smsVerifiedCopy(verified));
@@ -90,6 +98,7 @@ export function RegisterView({ settings, done, guestTo, onVerified }: RegisterVi
 
 export default function RegisterPage() {
   const { replace, source } = useRouter();
+  const sessionReader = useMemberSessionReader();
   // 打开页面时读一次来源页（在本页期间不会改变）。
   const [origin] = useState<RoutePath | null>(() => source());
   const [settings, setSettings] = useState<RegisterSettings>(LOADING_SETTINGS);
@@ -125,6 +134,9 @@ export default function RegisterPage() {
           },
           replace: (path) => {
             replace(path);
+          },
+          reloadSession: () => {
+            void sessionReader.reload();
           },
         });
       }}

@@ -140,9 +140,11 @@ function bodyOf(init: RequestInit | undefined): unknown {
 }
 
 // 页面对结果的处理的替身：按顺序记下事件，并把改动套在表单上。
+// SHOP-TASK-153 加入的重读会话另行计数（reloads），不记进 events，现有对 events 的断言不变。
 function fakeMoves(start: PasswordForm = FILLED) {
   const events: string[] = [];
   let form = start;
+  let reloads = 0;
   const moves: LoginMoves = {
     update: (change) => {
       form = change(form);
@@ -154,8 +156,11 @@ function fakeMoves(start: PasswordForm = FILLED) {
     replace: (path) => {
       events.push(`replace ${path}`);
     },
+    reloadSession: () => {
+      reloads += 1;
+    },
   };
-  return { moves, events, form: () => form };
+  return { moves, events, form: () => form, reloads: () => reloads };
 }
 
 // 计时替身：记下等待的毫秒数，不真的等待；run 在完成前执行（如模拟期间离开页面）。
@@ -494,6 +499,53 @@ describe("after logging in", () => {
     expect(vi.getTimerCount()).toBe(0);
     await Promise.resolve();
     expect(cancelled).toBe(true);
+  });
+});
+
+describe("session reload", () => {
+  // UX 0.13 P13 入口「P11、P12 登录成功」与 SHOP-TASK-153 验收「密码登录 ok…之后，经 SHOP-TASK-151 取得的读取对象要求重读一次会话」：
+  // 密码登录 ok 时恰重读一次，成功文案、计时与去向不变（事件同 after logging in）。
+  it("asks for one session reload after a password login", async () => {
+    const { events, reloads } = await login(() => new Response(null, { status: 204 }), true, "/cart");
+    expect(reloads()).toBe(1);
+    expect(events).toEqual(["update", `wait ${String(VERIFIED_REDIRECT_MS)}`, "replace /cart"]);
+  });
+
+  // 同一条「提交失败时不重读」：login_failed、phone_invalid、unavailable、failed 与 network 都不要求重读会话。
+  const failures: [string, Reply][] = [
+    ["login_failed", () => json(401, { detail: "login_failed" })],
+    ["phone_invalid", () => json(422, { detail: [{ loc: ["body", "phone"], type: "phone_invalid", msg: "invalid" }] })],
+    ["unavailable", () => json(503, { detail: "service_unavailable" })],
+    ["failed", () => json(500, {})],
+    ["network", () => "network"],
+  ];
+  it.each(failures)("does not reload the session after %s", async (_name, reply) => {
+    const { reloads } = await login(reply, true);
+    expect(reloads()).toBe(0);
+  });
+
+  // 同一条「短信验证通过之后…要求重读一次会话」：先重读一次，再照旧显示 auth.verified_* 并计时跳转。
+  it.each([true, false])("asks for one session reload after an SMS login with created = %s", async (created) => {
+    const target = fakeMoves();
+    await finishSms({ kind: "member", created }, "/cart", new AbortController().signal, fakeWait(target.events), target.moves);
+    expect(target.reloads()).toBe(1);
+    expect(target.events).toEqual([`sms ${smsVerifiedCopy({ kind: "member", created })}`, `wait ${String(VERIFIED_REDIRECT_MS)}`, "replace /cart"]);
+  });
+
+  // 派生实现约束（实现选择）：守住同一条「登录成功之后要求重读一次会话」——服务端已发出会话，回答到达时已离开页面也照样重读一次，
+  // 页面本身照旧不更新、不跳转（同 after logging in 的「stops after leaving the page」）。
+  it("still reloads once when the page was left before the result", async () => {
+    stubFetch(() => new Response(null, { status: 204 }));
+    const gone = new AbortController();
+    gone.abort();
+    const password = fakeMoves();
+    await submitPassword({ input: PHONE_INPUT, region: "MY" }, PASSWORD, true, "/cart", gone.signal, fakeWait(password.events), password.moves);
+    expect(password.reloads()).toBe(1);
+    expect(password.events).toEqual([]);
+    const sms = fakeMoves();
+    await finishSms({ kind: "member", created: false }, "/cart", gone.signal, fakeWait(sms.events), sms.moves);
+    expect(sms.reloads()).toBe(1);
+    expect(sms.events).toEqual([]);
   });
 });
 

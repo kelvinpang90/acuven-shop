@@ -3,6 +3,7 @@ import type { FormEvent } from "react";
 
 import { passwordLogin } from "../api/memberAuth";
 import type { PasswordLoginReply } from "../api/memberAuth";
+import { useMemberSessionReader } from "../api/memberSession";
 import { fetchSiteSettings } from "../api/siteSettings";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
 import SmsVerify, { SMS_REGIONS } from "../components/SmsVerify";
@@ -142,11 +143,13 @@ export const timerWait: Wait = (ms, signal) =>
     );
   });
 
-// 页面对结果的处理：改动密码页签、显示短信验证通过的文字，或用路由的 replace 前往成功后的去向。
+// 页面对结果的处理：改动密码页签、显示短信验证通过的文字、用路由的 replace 前往成功后的去向，
+// 或在登录成功后要求重读会员会话（页面传入共享读取的 reload，不等待结果；页头随之切换为 common.nav_account）。
 export interface LoginMoves {
   update: (change: PasswordChange) => void;
   smsVerified: (copy: CopyKey) => void;
   replace: (path: RoutePath) => void;
+  reloadSession: () => void;
 }
 
 // 成功文案显示 VERIFIED_REDIRECT_MS 之后以 replace 前往来源页（没有来源时首页）；signal 中止（离开页面）之后不再跳转。
@@ -158,7 +161,8 @@ export async function redirectLater(source: RoutePath | null, signal: AbortSigna
   replace(verifiedPath(source));
 }
 
-// 密码登录：请求体只有号码与密码（api/memberAuth.ts）。signal 中止之后不再更新；ok 时显示 auth.verified_login 后计时跳转。
+// 密码登录：请求体只有号码与密码（api/memberAuth.ts）。ok 时先要求重读一次会话（服务端已发出会话，离开页面也照样重读），
+// 提交失败时不重读。signal 中止之后不再更新；ok 时显示 auth.verified_login 后计时跳转。
 export async function submitPassword(
   phone: SmsPhone,
   password: string,
@@ -169,6 +173,9 @@ export async function submitPassword(
   moves: LoginMoves,
 ): Promise<void> {
   const reply = await passwordLogin(phone, password, signal);
+  if (reply === "ok") {
+    moves.reloadSession();
+  }
   if (signal.aborted) {
     return;
   }
@@ -178,8 +185,9 @@ export async function submitPassword(
   }
 }
 
-// 短信验证通过（V1 的回调）：显示 auth.verified_* 后计时跳转。
+// 短信验证通过（V1 的回调）：先要求重读一次会话（同上，离开页面也照样重读），再显示 auth.verified_* 后计时跳转。
 export async function finishSms(verified: SmsVerified, source: RoutePath | null, signal: AbortSignal, wait: Wait, moves: LoginMoves): Promise<void> {
+  moves.reloadSession();
   if (signal.aborted) {
     return;
   }
@@ -415,6 +423,7 @@ export function LoginView({ settings, tab, form, smsDone, guestTo, forgotTo, reg
 
 export default function LoginPage() {
   const { replace, source } = useRouter();
+  const sessionReader = useMemberSessionReader();
   // 打开页面时读一次来源页（在本页期间不会改变）。
   const [origin] = useState<RoutePath | null>(() => source());
   const [settings, setSettings] = useState<LoginSettings>(LOADING_SETTINGS);
@@ -445,6 +454,9 @@ export default function LoginPage() {
     },
     replace: (path) => {
       replace(path);
+    },
+    reloadSession: () => {
+      void sessionReader.reload();
     },
   };
 

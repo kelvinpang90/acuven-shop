@@ -113,8 +113,10 @@ function stubFetch(reply: Reply) {
 }
 
 // 页面对结果的处理的替身：按顺序记下事件。
+// SHOP-TASK-153 加入的重读会话另行计数（reloads），不记进 events，现有对 events 的断言不变。
 function fakeMoves() {
   const events: string[] = [];
+  let reloads = 0;
   const moves: RegisterMoves = {
     verified: (key) => {
       events.push(`verified ${key}`);
@@ -122,8 +124,11 @@ function fakeMoves() {
     replace: (path) => {
       events.push(`replace ${path}`);
     },
+    reloadSession: () => {
+      reloads += 1;
+    },
   };
-  return { moves, events };
+  return { moves, events, reloads: () => reloads };
 }
 
 // 计时替身：记下等待的毫秒数，不真的等待；run 在完成前执行（如模拟期间离开页面）。
@@ -304,6 +309,40 @@ describe("after verifying", () => {
       during.moves,
     );
     expect(during.events).toEqual(["verified auth.verified_login", `wait ${String(VERIFIED_REDIRECT_MS)}`]);
+  });
+});
+
+describe("session reload", () => {
+  // UX 0.13 P13 入口「P11、P12 登录成功」与 SHOP-TASK-153 验收「RegisterPage.tsx 的验证通过之后，经 SHOP-TASK-151 取得的读取对象要求重读一次会话」：
+  // 验证通过（新建与已有会员）时恰重读一次，成功文案、计时与去向不变（事件同 after verifying）。
+  it.each([
+    [true, "auth.verified_registered"],
+    [false, "auth.verified_login"],
+  ] as const)("asks for one session reload after verifying with created = %s", async (created, key) => {
+    const { moves, events, reloads } = fakeMoves();
+    await finishRegister({ kind: "member", created }, "/cart", new AbortController().signal, fakeWait(events), moves);
+    expect(reloads()).toBe(1);
+    expect(events).toEqual([`verified ${key}`, `wait ${String(VERIFIED_REDIRECT_MS)}`, "replace /cart"]);
+  });
+
+  // 同一条「提交失败时不重读」：没有登录的结果（重设密码用途的两种）不要求重读会话；短信失败时 V1 不调用 onVerified，页面也就不重读。
+  it("does not reload the session for results that do not log in", async () => {
+    const { moves, events, reloads } = fakeMoves();
+    for (const verified of [{ kind: "registered", csrfToken: "x" }, { kind: "not_registered" }] as const) {
+      await finishRegister(verified, "/cart", new AbortController().signal, fakeWait(events), moves);
+    }
+    expect(reloads()).toBe(0);
+  });
+
+  // 派生实现约束（实现选择）：守住同一条「验证通过之后要求重读一次会话」——服务端已发出会话，已离开页面时也照样重读一次，
+  // 页面本身照旧不更新、不跳转（同 after verifying 的「stops after leaving the page」）。
+  it("still reloads once when the page was left before the result", async () => {
+    const { moves, events, reloads } = fakeMoves();
+    const gone = new AbortController();
+    gone.abort();
+    await finishRegister({ kind: "member", created: true }, "/cart", gone.signal, fakeWait(events), moves);
+    expect(reloads()).toBe(1);
+    expect(events).toEqual([]);
   });
 });
 
