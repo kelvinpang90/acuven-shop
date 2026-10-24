@@ -44,6 +44,9 @@ function lookupOrder(overrides: Partial<LookupOrder> = {}): LookupOrder {
       orderLine({ line_index: 1, name: "Soy Wax Candle", variant_label: "", quantity: 1, unit_price_sen: 3200, line_subtotal_sen: 3200, unit_cash_paid_sen: [2763], refundable_quantity: 1, refund_estimates_sen: [2763] }),
     ],
     subtotal_sen: 11000,
+    placed_by_member: false,
+    coupon_discount_sen: 0,
+    points_redeemed: 0,
     shipping_fee_sen: 800,
     total_sen: 11800,
     recipient: {

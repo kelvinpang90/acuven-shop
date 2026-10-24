@@ -4,7 +4,8 @@ import type { PayRecipient } from "./pay";
 
 // 订单查询 P08、订单详情 P09 与退款申请 P10（查单模式）的游客接口（app/api/order_lookup.py，SHOP-TASK-027；
 // app/api/refunds.py，SHOP-TASK-029）：POST /api/orders/lookup、GET /api/orders/lookup、POST /api/orders/confirm-receipt、
-// POST /api/orders/refunds。
+// POST /api/orders/refunds；以及退款积分预估 POST /api/orders/refunds/points-estimate（SHOP-TASK-093）。
+// 订单另带下单时是否为会员与优惠券、积分抵扣快照（SHOP-TASK-103）；只有下单时是会员的订单才显示这两项（UX P09 M3）。
 // 查单授权凭本浏览器的订单访问 cookie（服务端发的 HttpOnly cookie，页面脚本读不到也不写）；订单号与电话只放在请求体里，
 // CSRF 令牌只放在请求头里，三者都只在页面内存中，不进路径、查询参数、localStorage、sessionStorage 或 cookie（UX「阅读说明」）。
 // 金额是服务端算好的整数仙，页面只格式化，不计算；预计退款只把接口给的各行金额相加。
@@ -12,6 +13,7 @@ import type { PayRecipient } from "./pay";
 export const LOOKUP_URL = "/api/orders/lookup";
 export const CONFIRM_RECEIPT_URL = "/api/orders/confirm-receipt";
 export const REFUNDS_URL = "/api/orders/refunds";
+export const POINTS_ESTIMATE_URL = "/api/orders/refunds/points-estimate";
 
 export const SHIPPED = "demo_shipped";
 
@@ -50,7 +52,8 @@ export interface LookupRefund {
   lines: LookupRefundLine[];
 }
 
-// 查单模式的一张订单。时间都是带时区的 ISO 字符串。不含优惠券与积分两项（游客订单，UX 0.5），退款部分也不含积分。
+// 查单模式的一张订单。时间都是带时区的 ISO 字符串。优惠券与积分两项是下单时的快照，只在下单时是会员的订单显示
+// （UX P09 M3）；退款部分不含积分，退款积分另由积分预估接口给出（estimateRefundPoints）。
 export interface LookupOrder {
   order_number: string;
   status: string;
@@ -59,6 +62,12 @@ export interface LookupOrder {
   server_time: string;
   lines: LookupLine[];
   subtotal_sen: number;
+  // 下单时是会员（服务端以 claim_status 为 not_claimable 判定，会员注销后仍为真）；游客订单与后来被认领的游客订单为假。
+  placed_by_member: boolean;
+  // 下单时的优惠券抵扣快照，非负整数仙。
+  coupon_discount_sen: number;
+  // 下单时抵扣的积分数，非负整数；100 积分抵 RM1，即 1 积分抵 1 仙，这个数同时是抵扣金额的仙数。
+  points_redeemed: number;
   shipping_fee_sen: number;
   total_sen: number;
   recipient: PayRecipient | null;
@@ -408,6 +417,71 @@ export async function submitRefund(orderNumber: string, csrfToken: string, key: 
     return (detail === null ? undefined : REFUND_CONFLICTS.get(detail)) ?? "failed";
   }
   return "failed";
+}
+
+// 退款积分预估：该单是否为会员订单（订单的 member_id 不为空，含被认领的游客订单）、预估返还的抵扣积分（已过期批次的部分不返还）
+// 与预估追回的获得积分（从余额追回与记入待抵扣之和）。预估与批准时可能不同，以批准时为准。
+export interface PointsEstimate {
+  memberOrder: boolean;
+  pointsBack: number;
+  pointsReversed: number;
+}
+
+function isPoints(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+// 积分预估的响应体：member_order 为布尔、points_back 与 points_reversed 为非负整数时取出，否则为 null。
+// 游客查单与会员两种模式的预估响应体相同，共用这一检查。
+export function parsePointsEstimate(body: unknown): PointsEstimate | null {
+  if (typeof body !== "object" || body === null) {
+    return null;
+  }
+  const { member_order, points_back, points_reversed } = body as Record<string, unknown>;
+  if (typeof member_order !== "boolean" || !isPoints(points_back) || !isPoints(points_reversed)) {
+    return null;
+  }
+  return { memberOrder: member_order, pointsBack: points_back, pointsReversed: points_reversed };
+}
+
+// 积分预估的结果：ok 为 200 且响应体合格；expired 为 401；failed 为其他（含 409 order_not_refundable、refund_window_closed、
+// refund_nothing_left，422，200 以外的 2xx，以及 200 而响应体不合格）；network 为网络中断。
+export type PointsEstimateRead = ({ kind: "ok" } & PointsEstimate) | { kind: "expired" } | { kind: "failed" } | { kind: "network" };
+
+// POST /api/orders/refunds/points-estimate：请求体只有订单号与申请行（即 refundLines 的结果）；只读，不带幂等键与 CSRF 令牌。
+export async function estimateRefundPoints(orderNumber: string, lines: readonly RefundLineRequest[], signal?: AbortSignal): Promise<PointsEstimateRead> {
+  let response: Response;
+  try {
+    response = await fetch(POINTS_ESTIMATE_URL, {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({ order_number: orderNumber, lines }),
+      signal: signal ?? null,
+    });
+  } catch {
+    return { kind: "network" };
+  }
+  if (response.status === 401) {
+    return { kind: "expired" };
+  }
+  if (response.status !== 200) {
+    return { kind: "failed" };
+  }
+  let estimate: PointsEstimate | null;
+  try {
+    estimate = parsePointsEstimate(await response.json());
+  } catch {
+    return { kind: "failed" };
+  }
+  return estimate === null ? { kind: "failed" } : { kind: "ok", ...estimate };
+}
+
+// P10 的积分三行：只在会员订单且两个数不全为 0 时显示
+// （UX P10「积分行只在该单属于会员（下单时为会员）时显示；由会员认领的游客订单…服务端返回零时不显示积分行」）。
+export function showsRefundPoints(estimate: PointsEstimate): boolean {
+  return estimate.memberOrder && (estimate.pointsBack !== 0 || estimate.pointsReversed !== 0);
 }
 
 // 被拒的申请（409）各自的提示：refund.duplicate、refund.nothing_left、refund.window_closed。
