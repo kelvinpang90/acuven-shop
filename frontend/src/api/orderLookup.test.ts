@@ -5,9 +5,12 @@ import {
   clampQuantities,
   clearSubmittedRefund,
   CONFIRM_RECEIPT_URL,
+  estimateRefundPoints,
   handOffSubmittedRefund,
   LOOKUP_URL,
   lookupOrdersUrl,
+  parsePointsEstimate,
+  POINTS_ESTIMATE_URL,
   readLookupOrder,
   receiptKey,
   recheckOrder,
@@ -18,6 +21,7 @@ import {
   runConfirmReceipt,
   runRefund,
   showsRefundEntry,
+  showsRefundPoints,
   submitConfirmReceipt,
   submitLookup,
   submitRefund,
@@ -58,6 +62,9 @@ function lookupOrder(overrides: Partial<LookupOrder> = {}): LookupOrder {
       },
     ],
     subtotal_sen: 7800,
+    placed_by_member: false,
+    coupon_discount_sen: 0,
+    points_redeemed: 0,
     shipping_fee_sen: 1500,
     total_sen: 9300,
     recipient: {
@@ -571,6 +578,110 @@ describe("refund requests", () => {
     expect(submittedRefundOrder()).toBe(ORDER_NUMBER);
     clearSubmittedRefund();
     expect(submittedRefundOrder()).toBeNull();
+  });
+});
+
+describe("refund points estimate", () => {
+  const LINES = [
+    { line_index: 0, quantity: 2 },
+    { line_index: 3, quantity: 1 },
+  ];
+
+  // SHOP-TASK-093 的接口记录（app/api/refunds.py「只读、不写库，不要求幂等键与 CSRF；授权与请求体同上」）与 UX「阅读说明」订单号只在请求体里：
+  // 同源 cookie、不缓存的 POST；请求体只有订单号与申请行；没有 X-CSRF-Token 与 Idempotency-Key，地址不带查询参数与订单号。
+  it("posts only the order number and lines, without token or key", async () => {
+    // 地址不是预估接口或 signal 已中止时拒绝；请求从 mock.calls 取。
+    const fetchMock = vi.fn((input: string | URL, init?: RequestInit) =>
+      String(input) !== POINTS_ESTIMATE_URL || init?.signal?.aborted === true
+        ? Promise.reject(new Error("unexpected request"))
+        : Promise.resolve(json(200, { member_order: true, points_back: 120, points_reversed: 45 })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const controller = new AbortController();
+    await expect(estimateRefundPoints(ORDER_NUMBER, LINES, controller.signal)).resolves.toEqual({
+      kind: "ok",
+      memberOrder: true,
+      pointsBack: 120,
+      pointsReversed: 45,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const url = String(fetchMock.mock.calls[0]?.[0]);
+    const init = fetchMock.mock.calls[0]?.[1] ?? {};
+    expect(url).toBe(POINTS_ESTIMATE_URL);
+    expect(url).not.toContain("?");
+    expect(url).not.toContain(ORDER_NUMBER);
+    expect(init).toMatchObject({ method: "POST", credentials: "same-origin", cache: "no-store", signal: controller.signal });
+    const sent = (init.headers ?? {}) as Record<string, string>;
+    expect(sent).toEqual({ Accept: "application/json", "Content-Type": "application/json" });
+    expect(sent[CSRF_HEADER]).toBeUndefined();
+    expect(sent[IDEMPOTENCY_HEADER]).toBeUndefined();
+    const sentBody: unknown = JSON.parse(init.body as string);
+    expect(sentBody).toEqual({ order_number: ORDER_NUMBER, lines: LINES });
+  });
+
+  // SHOP-TASK-030 验收第 5 条的请求行与本任务验收第 2 条「请求体只有 order_number 与 lines（行序与件数，即 refundLines 的结果）」：
+  // 由选定件数换成的行原样作为预估的 lines。
+  it("sends the lines built by refundLines", async () => {
+    const calls = stubFetch(json(200, { member_order: false, points_back: 0, points_reversed: 0 }));
+    const lines = refundLines([line({ line_index: 2 }), line({ line_index: 4 })], [0, 3]);
+    await estimateRefundPoints(ORDER_NUMBER, lines);
+    expect(body(calls[0])).toEqual({ order_number: ORDER_NUMBER, lines: [{ line_index: 4, quantity: 3 }] });
+  });
+
+  // SHOP-TASK-093 的接口记录「授权…同上（413 → 415 → 422 → 401）…订单未支付 409 order_not_refundable，退款期已过 409 refund_window_closed，
+  // 行序不属于该订单 422，件数超过该行可退件 409 refund_nothing_left」：401 为 expired，这些拒绝与其他回答都是 failed，网络中断为 network。
+  it.each<[Response | (() => never), string]>([
+    [json(401, { detail: "access_expired" }), "expired"],
+    [json(409, { detail: "order_not_refundable" }), "failed"],
+    [json(409, { detail: "refund_window_closed" }), "failed"],
+    [json(409, { detail: "refund_nothing_left" }), "failed"],
+    [json(422, { detail: [] }), "failed"],
+    [json(413, {}), "failed"],
+    [json(500, {}), "failed"],
+    [json(201, { member_order: true, points_back: 1, points_reversed: 1 }), "failed"],
+    [empty(204), "failed"],
+    [networkDown, "network"],
+  ])("reports the reply %#", async (reply, kind) => {
+    stubFetch(reply);
+    await expect(estimateRefundPoints(ORDER_NUMBER, LINES)).resolves.toEqual({ kind });
+  });
+
+  // SHOP-TASK-093 的 PointsEstimateOut（member_order 为布尔，points_back 与 points_reversed 为积分数）：200 但响应体不合格
+  // （缺字段、负数、小数、member_order 不是布尔、不是 JSON）时不当作预估，归 failed。
+  it.each<[string, Response]>([
+    ["missing points_back", json(200, { member_order: true, points_reversed: 0 })],
+    ["missing member_order", json(200, { points_back: 0, points_reversed: 0 })],
+    ["negative", json(200, { member_order: true, points_back: -1, points_reversed: 0 })],
+    ["fraction", json(200, { member_order: true, points_back: 0, points_reversed: 1.5 })],
+    ["string number", json(200, { member_order: true, points_back: "10", points_reversed: 0 })],
+    ["member_order not boolean", json(200, { member_order: "true", points_back: 10, points_reversed: 0 })],
+    ["null body", json(200, null)],
+    ["not json", new Response("oops", { status: 200 })],
+  ])("treats a malformed 200 as failed (%s)", async (_, reply) => {
+    stubFetch(reply);
+    await expect(estimateRefundPoints(ORDER_NUMBER, LINES)).resolves.toEqual({ kind: "failed" });
+  });
+
+  // 本任务验收第 2 条「响应体的检查写成导出的纯函数（不合格时返回 null）」：合格时取成 memberOrder、pointsBack 与 pointsReversed，不合格时为 null。
+  it("parses the estimate body or gives null", () => {
+    expect(parsePointsEstimate({ member_order: true, points_back: 300, points_reversed: 0 })).toEqual({ memberOrder: true, pointsBack: 300, pointsReversed: 0 });
+    expect(parsePointsEstimate({ member_order: false, points_back: 0, points_reversed: 0 })).toEqual({ memberOrder: false, pointsBack: 0, pointsReversed: 0 });
+    expect(parsePointsEstimate({ member_order: 1, points_back: 0, points_reversed: 0 })).toBeNull();
+    expect(parsePointsEstimate({ member_order: true, points_back: 0, points_reversed: -3 })).toBeNull();
+    expect(parsePointsEstimate({ member_order: true, points_back: Number.NaN, points_reversed: 0 })).toBeNull();
+    expect(parsePointsEstimate([])).toBeNull();
+    expect(parsePointsEstimate("member_order")).toBeNull();
+    expect(parsePointsEstimate(null)).toBeNull();
+  });
+
+  // UX P10「积分行只在该单属于会员（下单时为会员）时显示；由会员认领的游客订单没有获得积分，也没有积分抵扣，服务端返回零时不显示积分行」：
+  // 游客订单不显示；认领单（member_order 为真）两个数都为 0 时不显示；只要有一个数非零就显示。
+  it("shows the points rows only for a member order with points to show", () => {
+    expect(showsRefundPoints({ memberOrder: false, pointsBack: 0, pointsReversed: 0 })).toBe(false);
+    expect(showsRefundPoints({ memberOrder: true, pointsBack: 0, pointsReversed: 0 })).toBe(false);
+    expect(showsRefundPoints({ memberOrder: true, pointsBack: 250, pointsReversed: 0 })).toBe(true);
+    expect(showsRefundPoints({ memberOrder: true, pointsBack: 0, pointsReversed: 39 })).toBe(true);
+    expect(showsRefundPoints({ memberOrder: true, pointsBack: 250, pointsReversed: 39 })).toBe(true);
   });
 });
 
