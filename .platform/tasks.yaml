@@ -4412,7 +4412,7 @@ tasks:
       退款入口指向 /account/order/refund，在 SHOP-TASK-155 把它加进路由表之前不渲染。不装依赖，不改后端，不改设计。
       设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 3、5 条（会话到期与服务端授权检查；会员仅能访问自己认领或下单的订单，确认收货规则与查单页相同，写操作另须 CSRF 令牌）、「订单与退款状态」「失败、并发与重试」（确认收货幂等）与「计价、优惠、积分与库存」第 3、7 条（100 积分抵 RM1；已有订单按快照）与 HANDOFF 0.61。
       拆分：P09 会员模式，9 个允许路径（PayResultPage.test.tsx 只为下面那一条断言列入）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-152
     acceptance_criteria:
