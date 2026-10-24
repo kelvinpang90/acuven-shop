@@ -1,17 +1,45 @@
 import { createElement, isValidElement } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { clearMemberOrder, handOffMemberOrder, MEMBER_CONFIRM_RECEIPT_URL, memberOrderInView, memberOrderViewUrl } from "../api/memberOrders";
+import { createMemberSessionReader, MEMBER_SESSION_URL } from "../api/memberSession";
+import { clearSubmittedRefund, handOffSubmittedRefund, receiptKey, submittedRefundOrder } from "../api/orderLookup";
 import type { LookupLine, LookupOrder, LookupRefund } from "../api/orderLookup";
+import { CSRF_HEADER, IDEMPOTENCY_HEADER } from "../api/pay";
 import { formatSen } from "../format";
 import { BRAND, COPY, formatCopy, LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
-import { RouterProvider } from "../router";
+import { isRoutePath, RouterProvider } from "../router";
+import type { RoutePath } from "../router";
 import { countryName } from "./PayPage";
-import { formatDate, formatDateTime, stepState, TrackOrderView } from "./TrackOrderPage";
-import type { TrackOrderViewProps } from "./TrackOrderPage";
+import {
+  confirmMemberOrder,
+  formatDate,
+  formatDateTime,
+  loadMemberOrder,
+  MEMBER_LOADING,
+  memberRefundPath,
+  memberScreen,
+  openMemberOrder,
+  openStep,
+  readStep,
+  startConfirm,
+  stepState,
+  takeMemberOrder,
+  TrackOrderView,
+} from "./TrackOrderPage";
+import type { MemberOrderMoves, MemberOrderState, TrackOrderViewProps } from "./TrackOrderPage";
+
+// 会员模式的测试会改动两个模块内存里的交接（P13 交出的订单号与 P10 提交后交来的订单号）与全局 fetch，每条之后复原。
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  clearMemberOrder();
+  clearSubmittedRefund();
+});
 
 const ORDER_NUMBER = "B6TN2RJD8K4M0QXZ";
 const STATES = new Map([["MY-10", "Selangor"]]);
@@ -638,6 +666,580 @@ describe("dictionary", () => {
       for (const value of visibleTexts(render(state, language))) {
         const known = orderData.has(value) || /^× \d+$/.test(value) || patterns.some((pattern) => pattern.test(value));
         expect(known, value).toBe(true);
+      }
+    }
+  });
+});
+
+// 以下为 SHOP-TASK-154 的会员模式（/account/order）与两种模式共有的券与积分两行。令牌、幂等键与手机号都是虚构值。
+const TOKEN = "csrf-token-1";
+const NEW_TOKEN = "csrf-token-2";
+const KEY = "receipt-key-1";
+const MASKED = "+60 12•••• 678";
+// P13 交出的另一张订单。
+const OTHER_ORDER = "K7Q29MXAB6TN2RJD";
+// 会员模式退款申请的路径（SHOP-TASK-155 才加进路由表）：测试只把它当作 View 的去向，不断言它在不在路由表里。
+const REFUND_TO_PATH: string = "/account/order/refund";
+const REFUND_TO = REFUND_TO_PATH as RoutePath;
+const VIEW_EN = memberOrderViewUrl("en");
+
+type SignedIn = Extract<MemberOrderState, { status: "member" }>;
+
+// 已登录、已取到订单的会员模式状态。
+function signedIn(overrides: Partial<SignedIn> = {}): MemberOrderState {
+  return { status: "member", orderNumber: ORDER_NUMBER, submitted: false, csrfToken: TOKEN, order: lookupOrder(), busy: null, failed: false, retryKey: null, ...overrides };
+}
+
+// 照 MemberOrderPage 把会员模式的状态交给 View 渲染。
+function memberView(state: MemberOrderState, language: Language = "en", refundTo: RoutePath | null = REFUND_TO): string {
+  const member = state.status === "member" ? state : null;
+  return render(
+    {
+      screen: memberScreen(state),
+      busy: member === null ? null : member.busy,
+      failed: member !== null && member.failed,
+      submitted: member !== null && member.submitted,
+      mode: { kind: "member", refundTo },
+    },
+    language,
+  );
+}
+
+type Reply = Response | "network";
+
+interface Call {
+  url: string;
+  init: RequestInit;
+}
+
+// fetch 替身：按地址各取一串回答，依次用掉；没有准备的请求一律失败。
+function stubFetch(routes: Record<string, Reply[]>): Call[] {
+  const calls: Call[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      calls.push({ url, init: init ?? {} });
+      const next = routes[url]?.shift();
+      if (next === undefined) {
+        return Promise.reject(new Error(`unexpected request ${url}`));
+      }
+      return next === "network" ? Promise.reject(new TypeError("Failed to fetch")) : Promise.resolve(next);
+    }),
+  );
+  return calls;
+}
+
+function json(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+}
+
+const memberReply = (token = TOKEN) => json(200, { phone_masked: MASKED, has_password: true, expires_at: "2026-11-24T00:00:00Z", csrf_token: token });
+const guestReply = () => json(401, { detail: "member_session_required" });
+const orderReply = (order: LookupOrder = lookupOrder()) => json(200, order);
+
+function initOf(calls: readonly Call[], index: number): RequestInit {
+  return calls[index]?.init ?? {};
+}
+
+function headerOf(init: RequestInit, name: string): string | undefined {
+  return (init.headers as Record<string, string> | undefined)?.[name];
+}
+
+function bodyOf(init: RequestInit): unknown {
+  return JSON.parse(typeof init.body === "string" ? init.body : "null") as unknown;
+}
+
+// 页面的处理替身：按顺序记下 show、update（及改动后的 busy）与 replace，并按它们推演页面状态。
+function fakeMoves(initial: MemberOrderState = MEMBER_LOADING) {
+  const events: string[] = [];
+  let state = initial;
+  const moves: MemberOrderMoves = {
+    show: (next) => {
+      state = next;
+      events.push(`show ${next.status}`);
+    },
+    update: (change) => {
+      state = change(state);
+      events.push(`update ${state.status === "member" ? String(state.busy) : state.status}`);
+    },
+    replace: (path) => {
+      events.push(`replace ${path}`);
+    },
+  };
+  return { moves, events, current: () => state };
+}
+
+describe("member mode: opening", () => {
+  // SHOP-TASK-154 验收第 2 条「会员模式打开时先经 SHOP-TASK-151 的读取对象重读会话…guest 时用 replace 进入 /login」与 HANDOFF 0.61 第（5）条
+  // 「会员页打开时都重读一次会话」：未登录时只读会话、不读订单，replace 到 /login。
+  it("replaces the page with /login for a guest", async () => {
+    handOffMemberOrder(ORDER_NUMBER);
+    const calls = stubFetch({ [MEMBER_SESSION_URL]: [guestReply()] });
+    const { moves, events } = fakeMoves();
+    await openMemberOrder(createMemberSessionReader(), new AbortController().signal, moves);
+    expect(events).toEqual(["replace /login"]);
+    expect(calls.map((call) => call.url)).toEqual([MEMBER_SESSION_URL]);
+  });
+
+  // 同一条「failed 时只显示 common.error_retry」：读取会话失败与网络中断都只有这一句提示，不读订单、不跳转。
+  it.each<[string, () => Reply]>([
+    ["failed", () => new Response(null, { status: 500 })],
+    ["network", () => "network"],
+  ])("shows only common.error_retry when reading the session %s", async (_name, reply) => {
+    handOffMemberOrder(ORDER_NUMBER);
+    const calls = stubFetch({ [MEMBER_SESSION_URL]: [reply()] });
+    const { moves, events, current } = fakeMoves();
+    await openMemberOrder(createMemberSessionReader(), new AbortController().signal, moves);
+    expect(events).toEqual(["show failed"]);
+    expect(calls).toHaveLength(1);
+    expect(visibleTexts(memberView(current()))).toEqual([COPY["common.error_retry"].en]);
+    expect(openStep({ kind: "unknown" }, takeMemberOrder)).toEqual({ status: "failed" });
+  });
+
+  // Kelvin 2026-10-24 决定「会员在 P09（/account/order）刷新、页面内存里没有订单号时，用 replace 回到 P13 我的订单」：
+  // 已登录而既没有 P10 交来的、也没有 P13 交接的订单号时，replace 到 /account，不读订单。
+  it("goes back to /account without an order number", async () => {
+    const calls = stubFetch({ [MEMBER_SESSION_URL]: [memberReply()] });
+    const { moves, events } = fakeMoves();
+    await openMemberOrder(createMemberSessionReader(), new AbortController().signal, moves);
+    expect(events).toEqual(["replace /account"]);
+    expect(calls.map((call) => call.url)).toEqual([MEMBER_SESSION_URL]);
+  });
+
+  // 验收第 2 条「读完前为 aria-busy 的空主体…member 时…取 SHOP-TASK-150 交接的订单号…经 SHOP-TASK-150 读取详情」与 HANDOFF 0.61 第（4）条
+  // 「订单号经会员订单请求模块的模块内存交接…读取后不清除」：会话读完后记下订单号与令牌（订单读完前仍为空主体），再以请求体里的订单号读取该单；
+  // 会话读取不带页面的 signal（共享读取），订单读取带。
+  it("reads the handed-off order after the session", async () => {
+    handOffMemberOrder(ORDER_NUMBER);
+    const calls = stubFetch({ [MEMBER_SESSION_URL]: [memberReply()], [VIEW_EN]: [orderReply()] });
+    const reader = createMemberSessionReader();
+    const page = new AbortController();
+    const { moves, events, current } = fakeMoves();
+    expect(memberView(current())).toBe(`<main class="site-order" aria-busy="true"></main>`);
+    await openMemberOrder(reader, page.signal, moves);
+    expect(events).toEqual(["show member"]);
+    expect(current()).toEqual(signedIn({ order: null }));
+    expect(memberView(current())).toBe(`<main class="site-order" aria-busy="true"></main>`);
+    await loadMemberOrder(reader, "en", ORDER_NUMBER, page.signal, moves);
+    expect(current()).toEqual(signedIn());
+    expect(calls.map((call) => call.url)).toEqual([MEMBER_SESSION_URL, VIEW_EN]);
+    expect(initOf(calls, 0).signal ?? null).toBeNull();
+    expect(initOf(calls, 1).method).toBe("POST");
+    expect(initOf(calls, 1).signal).toBe(page.signal);
+    expect(bodyOf(initOf(calls, 1))).toEqual({ order_number: ORDER_NUMBER });
+    expect(memberOrderInView()).toBe(ORDER_NUMBER);
+    expect(memberView(current())).toContain(`<h1 class="acs-display-l">${escapeHtml(formatCopy(COPY["order.title"].en, { orderNo: ORDER_NUMBER }))}</h1>`);
+  });
+
+  // 验收第 2 条「先取 orderLookup.ts 的 submittedRefundOrder（从 P10 提交回来），取到后即照查单模式调用 clearSubmittedRefund 清除（只在页面状态里记下，
+  // 用来判断是否显示 refund.submitted），没有时取 SHOP-TASK-150 交接的订单号」与 HANDOFF 0.61 第（4）条「点下一张时覆盖」：
+  // P10 交来的订单号优先，取到即清除并记下 submitted；交接的订单号不清除，之后再打开时取它；P13 交出别的订单号后取新值。
+  it("prefers the order just refunded, clears it and later takes the handed-off order", async () => {
+    handOffMemberOrder(OTHER_ORDER);
+    handOffSubmittedRefund(ORDER_NUMBER);
+    stubFetch({ [MEMBER_SESSION_URL]: [memberReply()] });
+    const { moves, current } = fakeMoves();
+    await openMemberOrder(createMemberSessionReader(), new AbortController().signal, moves);
+    expect(current()).toEqual(signedIn({ order: null, submitted: true }));
+    expect(submittedRefundOrder()).toBeNull();
+    expect(memberOrderInView()).toBe(OTHER_ORDER);
+    expect(takeMemberOrder()).toEqual({ orderNumber: OTHER_ORDER, submitted: false });
+    handOffMemberOrder("H3PZ4W8CD8K4M0QX");
+    expect(takeMemberOrder()).toEqual({ orderNumber: "H3PZ4W8CD8K4M0QX", submitted: false });
+    expect(memberView(signedIn({ submitted: true }))).toContain(`<p class="acs-alert acs-alert--success" role="status">${escapeHtml(COPY["refund.submitted"].en)}</p>`);
+    expect(has(memberView(signedIn()), "refund.submitted")).toBe(false);
+  });
+
+  // 验收第 2 条「not_found 时用 replace 回到 /account」（HANDOFF 0.61 第（5）条「P09、P10 会员模式回 404 时 replace 到 /account」）：不重读会话。
+  it("goes back to /account when the order is not found", async () => {
+    const calls = stubFetch({ [VIEW_EN]: [json(404, { detail: "order_not_found" })] });
+    const { moves, events } = fakeMoves(signedIn({ order: null }));
+    await loadMemberOrder(createMemberSessionReader(), "en", ORDER_NUMBER, new AbortController().signal, moves);
+    expect(events).toEqual(["replace /account"]);
+    expect(calls).toHaveLength(1);
+  });
+
+  // 验收第 2 条「signed_out 时重读会话并用 replace 进入 /login」（HANDOFF 0.61 第（5）条「任何会员接口回 401 时重读会话并 replace 到 /login」）：
+  // 先重读会话（共享状态随之成为未登录，页头跟着变），再 replace。
+  it("rereads the session and goes to /login when signed out", async () => {
+    const calls = stubFetch({ [VIEW_EN]: [json(401, { detail: "member_session_required" })], [MEMBER_SESSION_URL]: [guestReply()] });
+    const reader = createMemberSessionReader();
+    const { moves, events } = fakeMoves(signedIn({ order: null }));
+    await loadMemberOrder(reader, "en", ORDER_NUMBER, new AbortController().signal, moves);
+    expect(events).toEqual(["replace /login"]);
+    expect(calls.map((call) => call.url)).toEqual([VIEW_EN, MEMBER_SESSION_URL]);
+    expect(reader.current().kind).toBe("guest");
+  });
+
+  // 验收第 2 条「failed 与 network 照查单模式显示 common.error_retry」：首次读取失败时页面只有这一句；已显示订单之后再读失败（如切换语言）保留订单并显示提示。
+  it.each<[string, () => Reply]>([
+    ["failed", () => new Response(null, { status: 500 })],
+    ["network", () => "network"],
+  ])("shows common.error_retry when reading the order %s", async (_name, reply) => {
+    stubFetch({ [VIEW_EN]: [reply(), reply()] });
+    const reader = createMemberSessionReader();
+    const first = fakeMoves(signedIn({ order: null }));
+    await loadMemberOrder(reader, "en", ORDER_NUMBER, new AbortController().signal, first.moves);
+    expect(visibleTexts(memberView(first.current()))).toEqual([COPY["common.error_retry"].en]);
+    const later = fakeMoves(signedIn());
+    await loadMemberOrder(reader, "en", ORDER_NUMBER, new AbortController().signal, later.moves);
+    expect(later.current()).toEqual(signedIn({ failed: true }));
+    const html = memberView(later.current());
+    expect(has(html, "common.error_retry")).toBe(true);
+    expect(html).toContain(escapeHtml(formatCopy(COPY["order.title"].en, { orderNo: ORDER_NUMBER })));
+  });
+
+  // 验收第 2 条「切换语言时重新读取同一订单」：以该语言的地址、同一订单号读取。
+  it.each(LANGUAGES)("reads the same order again in %s", async (language) => {
+    const calls = stubFetch({ [memberOrderViewUrl(language)]: [orderReply()] });
+    const { moves, current } = fakeMoves(signedIn());
+    await loadMemberOrder(createMemberSessionReader(), language, ORDER_NUMBER, new AbortController().signal, moves);
+    expect(calls.map((call) => call.url)).toEqual([memberOrderViewUrl(language)]);
+    expect(bodyOf(initOf(calls, 0))).toEqual({ order_number: ORDER_NUMBER });
+    expect(current()).toEqual(signedIn());
+  });
+
+  // 验收第 6 条「离开页面时中止请求，之后不再更新；会员会话的重读是共享读取，不中止，离开页面后不再据其结果更新或跳转」：
+  // 重读会话期间已离开时不显示、不跳转，也不取走 P10 交来的订单号（共享状态照常更新）；订单读取回来时已离开也不更新、不重读会话。
+  it("stops after leaving the page", async () => {
+    handOffSubmittedRefund(ORDER_NUMBER);
+    const calls = stubFetch({ [MEMBER_SESSION_URL]: [memberReply()], [VIEW_EN]: [json(401, { detail: "member_session_required" })] });
+    const reader = createMemberSessionReader();
+    const gone = new AbortController();
+    gone.abort();
+    const { moves, events } = fakeMoves();
+    await openMemberOrder(reader, gone.signal, moves);
+    expect(reader.current().kind).toBe("member");
+    expect(submittedRefundOrder()).toBe(ORDER_NUMBER);
+    await loadMemberOrder(reader, "en", ORDER_NUMBER, gone.signal, moves);
+    expect(events).toEqual([]);
+    expect(calls.map((call) => call.url)).toEqual([MEMBER_SESSION_URL, VIEW_EN]);
+  });
+
+  // 验收第 2 条「会员模式不出现 order.session_expired 整页」：会员模式的各种状态都不会成为过期画面，401 是去 /login。
+  it("never shows order.session_expired", () => {
+    const states: MemberOrderState[] = [MEMBER_LOADING, { status: "failed" }, signedIn({ order: null }), signedIn({ order: null, failed: true }), signedIn(), signedIn({ failed: true })];
+    for (const state of states) {
+      expect(memberScreen(state).status).not.toBe("expired");
+      expect(memberView(state)).not.toContain(escapeHtml(COPY["order.session_expired"].en));
+    }
+    expect(readStep({ kind: "signed_out" })).toBe("login");
+  });
+});
+
+describe("member mode: content", () => {
+  // UX P09 线框「会员模式：([account.orders]) → P13」与验收第 3 条「order.lookup_access 与 order.lookup_another 换成去 /account 的 account.orders
+  // （桌面与手机各一处）」「与查单模式相同（标题、状态、★ order.demo_hint、进度、各行、金额明细、收货资料、确认收货、退款部分…）」：
+  // 两处都是去 /account 的 account.orders，没有查单授权说明与回 /track 的链接；其余各项照常。
+  it.each(LANGUAGES)("links back to My orders instead of the lookup notice in %s", (language) => {
+    const html = memberView(signedIn(), language);
+    const orders = escapeHtml(COPY["account.orders"][language]);
+    expect(html).toContain(`<a class="site-desktop-only site-order__orders" href="/account">${orders}</a>`);
+    expect(html).toContain(`<a class="site-phone-only site-order__orders" href="/account">${orders}</a>`);
+    expect(html.match(/href="\/account"/g)).toHaveLength(2);
+    expect(has(html, "order.lookup_access", language)).toBe(false);
+    expect(has(html, "order.lookup_another", language)).toBe(false);
+    expect(html).not.toContain(`href="/track`);
+    expect(html).toContain(`<h1 class="acs-display-l">${escapeHtml(formatCopy(COPY["order.title"][language], { orderNo: ORDER_NUMBER }))}</h1>`);
+    const keys: CopyKey[] = [
+      "order.current_status",
+      "order.status_shipped",
+      "order.demo_hint",
+      "order.progress",
+      "order.items",
+      "order.unit_price",
+      "order.cash_paid",
+      "cart.subtotal",
+      "checkout.summary_shipping",
+      "checkout.summary_total",
+      "checkout.recipient_title",
+      "order.amount_breakdown",
+      "order.confirm_receipt",
+      "order.confirm_receipt_hint",
+      "order.request_refund",
+    ];
+    for (const key of keys) {
+      expect(has(html, key, language), key).toBe(true);
+    }
+  });
+
+  // UX P09 桌面线框的顺序：[order.title] … ★ [order.demo_hint]，会员模式 ([account.orders])，之后 [order.progress]。
+  it("puts My orders between the demo hint and the progress", () => {
+    const html = memberView(signedIn());
+    const positions = [
+      html.indexOf(`Order ${ORDER_NUMBER}`),
+      html.indexOf(COPY["order.demo_hint"].en),
+      html.indexOf(`>${COPY["account.orders"].en}<`),
+      html.indexOf(COPY["order.progress"].en),
+    ];
+    for (const position of positions) {
+      expect(position).toBeGreaterThanOrEqual(0);
+    }
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+  });
+
+  // HANDOFF 0.61 第（3）条「P09 会员模式的待支付订单本批不显示 account.order_pay…也不显示查单模式的 order.lookup_no_pay」：
+  // 待支付订单两者都没有（account.order_pay 尚未进字典，按 UX-COPY 的三语原文检查），也没有去支付页的链接与任何按钮。
+  it.each(LANGUAGES)("shows neither order.lookup_no_pay nor account.order_pay for an unpaid order in %s", (language) => {
+    const unpaid = lookupOrder({ status: "awaiting_demo_payment", paid_at: null, refund_deadline: null, refund_window_open: false, lines: [orderLine({ unit_cash_paid_sen: [] })] });
+    const html = memberView(signedIn({ order: unpaid }), language);
+    expect(has(html, "order.lookup_no_pay", language)).toBe(false);
+    for (const text of ["Continue payment", "继续支付", "Teruskan pembayaran"]) {
+      expect(html).not.toContain(text);
+    }
+    expect(html).not.toContain(`href="/pay`);
+    expect(html).not.toContain("<button");
+    expect(has(html, "order.status_awaiting", language)).toBe(true);
+  });
+
+  // 验收第 3 条「与查单模式相同（…全部已退冻结、refund.submitted）」：全部已退时显示 order.fulfilment_frozen，没有确认收货与退款入口。
+  it("freezes a fully refunded order as in lookup mode", () => {
+    const frozen = lookupOrder({ fully_refunded: true, refundable_left_sen: 0, refunded_total_sen: 9500, refund_requests: REQUESTS });
+    const html = memberView(signedIn({ order: frozen }));
+    expect(has(html, "order.fulfilment_frozen")).toBe(true);
+    expect(has(html, "order.confirm_receipt")).toBe(false);
+    expect(has(html, "order.request_refund")).toBe(false);
+    expect(has(html, "order.refund_requests")).toBe(true);
+  });
+
+  // 验收第 7 条「页面文字全部来自字典」：会员模式各状态下（含券与积分两行、退款入口有无、待支付、全部已退、刚提交回来、确认中与失败），
+  // 除订单数据（订单号、商品名与规格、件数、收货资料、州属与国家名、申请日期、分隔符号）外，每段文字都是当前语言的某条字典文案。
+  it.each(LANGUAGES)("shows only dictionary text besides order data in %s", (language) => {
+    const states: [MemberOrderState, RoutePath | null][] = [
+      ...STATUSES.map((status): [MemberOrderState, RoutePath | null] => [signedIn({ order: lookupOrder({ status }) }), REFUND_TO]),
+      [signedIn({ order: lookupOrder({ placed_by_member: true, coupon_discount_sen: 1000, points_redeemed: 500, refund_requests: REQUESTS }) }), null],
+      [signedIn({ order: lookupOrder({ fully_refunded: true, refundable_left_sen: 0, refund_requests: REQUESTS }) }), REFUND_TO],
+      [signedIn({ submitted: true }), REFUND_TO],
+      [signedIn({ busy: "checking" }), REFUND_TO],
+      [signedIn({ failed: true }), REFUND_TO],
+      [{ status: "failed" }, REFUND_TO],
+    ];
+    const orderData = new Set([
+      "Crew Neck Tee",
+      "Black, M",
+      "Soy Wax Candle",
+      "Aina Rahman",
+      "+60123456789",
+      "12 Jalan Contoh 3",
+      "47000",
+      "Selangor",
+      countryName("MY", language),
+      ...REQUESTS.map((request) => formatDate(request.created_at, language)),
+      "·",
+      ",",
+    ]);
+    const patterns = [BRAND, ...Object.values(COPY).map((entry) => entry[language])].map(copyPattern);
+    for (const [state, refundTo] of states) {
+      for (const value of visibleTexts(memberView(state, language, refundTo))) {
+        const known = orderData.has(value) || /^× \d+$/.test(value) || patterns.some((pattern) => pattern.test(value));
+        expect(known, value).toBe(true);
+      }
+    }
+  });
+});
+
+describe("member mode: refund entry", () => {
+  // 验收第 3 条「order.request_refund 指向 /account/order/refund，该路径进入路由表之前不渲染这个链接（截止时间、已退与可退照常）」与
+  // UX P09「已支付且在退款期内：( [order.request_refund] ) [order.refund_deadline]」：props 给出去向时链接去会员模式的退款页（不去查单模式的），
+  // 没有去向时不渲染链接，截止时间、累计已退与剩余可退照常。
+  it.each(LANGUAGES)("links to the member refund page only when given in %s", (language) => {
+    const deadline = escapeHtml(formatCopy(COPY["order.refund_deadline"][language], { date: formatDateTime(DEADLINE, language) }));
+    const withLink = memberView(signedIn(), language);
+    expect(withLink).toContain(`<a class="acs-btn acs-btn--secondary acs-btn--block" href="/account/order/refund">${escapeHtml(COPY["order.request_refund"][language])}</a>`);
+    expect(withLink).not.toContain(`href="/track/order/refund"`);
+    const without = memberView(signedIn(), language, null);
+    expect(has(without, "order.request_refund", language)).toBe(false);
+    expect(without).not.toContain("/order/refund");
+    for (const html of [withLink, without]) {
+      expect(html).toContain(`<p class="acs-body-s acs-muted">${deadline}</p>`);
+      expect(html).toContain(escapeHtml(formatCopy(COPY["order.refunded_total"][language], { amount: "0.00" })));
+      expect(html).toContain(escapeHtml(formatCopy(COPY["order.refundable_left"][language], { amount: "95.00" })));
+    }
+  });
+
+  // 同一条「照 frontend/src/pages/CheckoutPage.tsx 的 loginPath 写法以 isRoutePath 判断并以 props 传给 View」：去向随路由表而定
+  // （不断言 /account/order/refund 现在在不在表里，以免 SHOP-TASK-155 加路由后失败）。
+  it("derives the refund destination from the route table", () => {
+    expect(memberRefundPath()).toBe(isRoutePath(REFUND_TO_PATH) ? REFUND_TO_PATH : null);
+  });
+});
+
+describe("member mode: confirm receipt", () => {
+  const target = { orderNumber: ORDER_NUMBER, csrfToken: TOKEN, key: KEY };
+  const completed = lookupOrder({ status: "demo_completed" });
+  const csrfReply = () => json(403, { detail: "csrf_failed" });
+
+  // 验收第 4 条「会员模式经 SHOP-TASK-150 的会员版提交去向，以会话里的 CSRF 令牌提交，幂等键规则与查单模式相同（receiptKey）」「read…与查单模式相同」
+  // 与 UX P09「确认收货…幂等，须 CSRF 令牌」：请求体只有订单号，请求头带会话的令牌与幂等键；200 与 409 order_not_confirmable 之后按重新读取到的订单显示，
+  // 确认收货按钮随之消失。
+  it.each<[string, () => Response]>([
+    ["done", () => json(200, {})],
+    ["closed", () => json(409, { detail: "order_not_confirmable" })],
+  ])("shows the re-read order after %s", async (_name, reply) => {
+    const calls = stubFetch({ [MEMBER_CONFIRM_RECEIPT_URL]: [reply()], [VIEW_EN]: [orderReply(completed)] });
+    const { moves, events, current } = fakeMoves(signedIn({ busy: "confirming" }));
+    await confirmMemberOrder(createMemberSessionReader(), "en", target, new AbortController().signal, moves);
+    expect(events).toEqual(["update null"]);
+    expect(current()).toEqual(signedIn({ order: completed }));
+    expect(calls.map((call) => call.url)).toEqual([MEMBER_CONFIRM_RECEIPT_URL, VIEW_EN]);
+    const submit = initOf(calls, 0);
+    expect(submit.method).toBe("POST");
+    expect(headerOf(submit, CSRF_HEADER)).toBe(TOKEN);
+    expect(headerOf(submit, IDEMPOTENCY_HEADER)).toBe(KEY);
+    expect(bodyOf(submit)).toEqual({ order_number: ORDER_NUMBER });
+    expect(has(memberView(current()), "order.confirm_receipt")).toBe(false);
+  });
+
+  // 同一条「幂等键规则与查单模式相同（receiptKey）」与 UX P09「提交期间按钮禁用」：点击时进入 confirming（按钮禁用、先前的提示收起），
+  // 只有网络中断后确认仍为 demo_shipped 时才沿用记下的键，否则新生成。
+  it("disables the button while confirming and reuses only the retry key", () => {
+    expect(startConfirm(signedIn({ failed: true, retryKey: KEY }))).toEqual(signedIn({ busy: "confirming", failed: false, retryKey: KEY }));
+    expect(receiptKey(KEY, () => "fresh")).toBe(KEY);
+    expect(receiptKey(null, () => "fresh")).toBe("fresh");
+    expect(memberView(signedIn({ busy: "confirming" }))).toMatch(/<button class="acs-btn acs-btn--primary acs-btn--block" type="button" disabled="">/);
+  });
+
+  // 验收第 4 条「signed_out 时重读会话并用 replace 进入 /login」：
+  it("rereads the session and goes to /login when signed out", async () => {
+    const calls = stubFetch({ [MEMBER_CONFIRM_RECEIPT_URL]: [json(401, { detail: "member_session_required" })], [MEMBER_SESSION_URL]: [guestReply()] });
+    const { moves, events } = fakeMoves(signedIn({ busy: "confirming" }));
+    await confirmMemberOrder(createMemberSessionReader(), "en", target, new AbortController().signal, moves);
+    expect(events).toEqual(["replace /login"]);
+    expect(calls.map((call) => call.url)).toEqual([MEMBER_CONFIRM_RECEIPT_URL, MEMBER_SESSION_URL]);
+  });
+
+  // 验收第 4 条「not_found 时用 replace 回到 /account」：
+  it("goes back to /account when the order is not found", async () => {
+    const calls = stubFetch({ [MEMBER_CONFIRM_RECEIPT_URL]: [json(404, { detail: "order_not_found" })] });
+    const { moves, events } = fakeMoves(signedIn({ busy: "confirming" }));
+    await confirmMemberOrder(createMemberSessionReader(), "en", target, new AbortController().signal, moves);
+    expect(events).toEqual(["replace /account"]);
+    expect(calls).toHaveLength(1);
+  });
+
+  // 验收第 4 条「csrf 时重读会话——member 时换用新令牌并显示 common.error_retry」：先重新读取订单，再重读会话，换用新令牌，按钮恢复并显示提示。
+  it("switches to the new token and shows common.error_retry after csrf", async () => {
+    const calls = stubFetch({ [MEMBER_CONFIRM_RECEIPT_URL]: [csrfReply()], [VIEW_EN]: [orderReply()], [MEMBER_SESSION_URL]: [memberReply(NEW_TOKEN)] });
+    const { moves, events, current } = fakeMoves(signedIn({ busy: "confirming" }));
+    await confirmMemberOrder(createMemberSessionReader(), "en", target, new AbortController().signal, moves);
+    expect(events).toEqual(["update null"]);
+    expect(current()).toEqual(signedIn({ csrfToken: NEW_TOKEN, failed: true }));
+    expect(calls.map((call) => call.url)).toEqual([MEMBER_CONFIRM_RECEIPT_URL, VIEW_EN, MEMBER_SESSION_URL]);
+    expect(has(memberView(current()), "common.error_retry")).toBe(true);
+  });
+
+  // 同一条「guest 时用 replace 进入 /login」：
+  it("goes to /login when the reread after csrf finds no session", async () => {
+    stubFetch({ [MEMBER_CONFIRM_RECEIPT_URL]: [csrfReply()], [VIEW_EN]: [orderReply()], [MEMBER_SESSION_URL]: [guestReply()] });
+    const { moves, events } = fakeMoves(signedIn({ busy: "confirming" }));
+    await confirmMemberOrder(createMemberSessionReader(), "en", target, new AbortController().signal, moves);
+    expect(events).toEqual(["replace /login"]);
+  });
+
+  // 同一条「重读得到 failed（含网络中断）时保留原令牌并显示 common.error_retry」：
+  it.each<[string, () => Reply]>([
+    ["failed", () => new Response(null, { status: 500 })],
+    ["network", () => "network"],
+  ])("keeps the old token when the reread after csrf is %s", async (_name, reply) => {
+    stubFetch({ [MEMBER_CONFIRM_RECEIPT_URL]: [csrfReply()], [VIEW_EN]: [orderReply()], [MEMBER_SESSION_URL]: [reply()] });
+    const { moves, events, current } = fakeMoves(signedIn({ busy: "confirming" }));
+    await confirmMemberOrder(createMemberSessionReader(), "en", target, new AbortController().signal, moves);
+    expect(events).toEqual(["update null"]);
+    expect(current()).toEqual(signedIn({ failed: true }));
+    expect(has(memberView(current()), "common.error_retry")).toBe(true);
+  });
+
+  // 验收第 4 条「read、error 与 retry 与查单模式相同」：其他失败（如 500）显示 common.error_retry，订单沿用原来的，下一次另生成幂等键。
+  it("keeps the order and shows common.error_retry after another failure", async () => {
+    stubFetch({ [MEMBER_CONFIRM_RECEIPT_URL]: [new Response(null, { status: 500 })] });
+    const { moves, current } = fakeMoves(signedIn({ busy: "confirming" }));
+    await confirmMemberOrder(createMemberSessionReader(), "en", target, new AbortController().signal, moves);
+    expect(current()).toEqual(signedIn({ failed: true }));
+  });
+
+  // 同一条与 UX「全局框架」网络中断「先显示 [common.network_check] 并查询原订单…再允许重试」：网络中断时先进入 checking（显示 common.network_check），
+  // 重新读取到仍为 demo_shipped 时显示 common.error_retry 并记下同一幂等键；已不是 demo_shipped 时按读取到的订单显示，不再沿用键。
+  it("checks the order after a network failure and keeps the key only while still shipped", async () => {
+    stubFetch({ [MEMBER_CONFIRM_RECEIPT_URL]: ["network", "network"], [VIEW_EN]: [orderReply(), orderReply(completed)] });
+    const shipped = fakeMoves(signedIn({ busy: "confirming" }));
+    await confirmMemberOrder(createMemberSessionReader(), "en", target, new AbortController().signal, shipped.moves);
+    expect(shipped.events).toEqual(["update checking", "update null"]);
+    expect(has(memberView(signedIn({ busy: "checking" })), "common.network_check")).toBe(true);
+    expect(shipped.current()).toEqual(signedIn({ failed: true, retryKey: KEY }));
+    const done = fakeMoves(signedIn({ busy: "confirming" }));
+    await confirmMemberOrder(createMemberSessionReader(), "en", target, new AbortController().signal, done.moves);
+    expect(done.current()).toEqual(signedIn({ order: completed }));
+  });
+
+  // 验收第 6 条「离开页面时中止请求，之后不再更新」：提交回来时已离开，不更新、不再读取。
+  it("stops after leaving the page", async () => {
+    const calls = stubFetch({ [MEMBER_CONFIRM_RECEIPT_URL]: [json(200, {})] });
+    const gone = new AbortController();
+    gone.abort();
+    const { moves, events } = fakeMoves(signedIn({ busy: "confirming" }));
+    await confirmMemberOrder(createMemberSessionReader(), "en", target, gone.signal, moves);
+    expect(events).toEqual([]);
+    expect(calls).toHaveLength(1);
+  });
+});
+
+describe("coupon and points rows", () => {
+  const rowsOf = (amounts: string) =>
+    [...amounts.matchAll(/<div class="acs-row[^"]*"><span>([^<]*)<\/span><span class="acs-num">([^<]*)<\/span><\/div>/g)].map((m) => [unescapeHtml(m[1] ?? ""), m[2] ?? ""]);
+  const priceIn = (language: Language, amount: string) => formatCopy(COPY["common.price_myr"][language], { amount });
+  // 视觉稿 P09-desktop 的金额：小计 RM 110.00、优惠券 RM 10.00、积分 500（RM 5.00）、运费 RM 8.00、合计 RM 103.00。
+  const placed = lookupOrder({ placed_by_member: true, coupon_discount_sen: 1000, points_redeemed: 500, total_sen: 10300 });
+  // 两种模式各渲染一次。
+  const both = (order: LookupOrder, language: Language) => [render(ready(order), language), memberView(signedIn({ order }), language)];
+
+  // UX P09 线框金额明细「[cart.subtotal] [checkout.summary_coupon] [checkout.summary_points] [checkout.summary_shipping] [checkout.summary_total]」、
+  // M3「…查单模式与会员模式相同」与 HANDOFF 0.61 第（8）条「金额为正数、不加负号，积分抵扣按仙数格式化为金额（100 积分抵 RM 1）」（视觉稿 P09-desktop）：
+  // 下单时是会员的订单在两种模式、桌面与手机折叠里都是五行，按此顺序，金额不带负号。
+  it.each(LANGUAGES)("shows five rows for an order placed by a member in both modes in %s", (language) => {
+    const keys: CopyKey[] = ["cart.subtotal", "checkout.summary_coupon", "checkout.summary_points", "checkout.summary_shipping", "checkout.summary_total"];
+    const amounts = ["110.00", "10.00", "5.00", "8.00", "103.00"];
+    const expected = keys.map((key, index) => [COPY[key][language], priceIn(language, amounts[index] ?? "")]);
+    for (const html of both(placed, language)) {
+      for (const block of [desktopAmounts(html), phoneAmounts(html)]) {
+        expect(rowsOf(block)).toEqual(expected);
+      }
+    }
+  });
+
+  // HANDOFF 0.61 第（8）条「券与积分两行在会员下单的订单上即使为 0 也显示」：
+  it("shows the two rows at zero", () => {
+    const zero = lookupOrder({ placed_by_member: true, coupon_discount_sen: 0, points_redeemed: 0 });
+    for (const html of both(zero, "en")) {
+      for (const block of [desktopAmounts(html), phoneAmounts(html)]) {
+        const rows = rowsOf(block);
+        expect(rows[1]).toEqual([COPY["checkout.summary_coupon"].en, "RM 0.00"]);
+        expect(rows[2]).toEqual([COPY["checkout.summary_points"].en, "RM 0.00"]);
+      }
+    }
+  });
+
+  // UX P09 M3「游客订单（下单时不是会员的，含之后被认领的）不显示优惠与积分两行，查单模式与会员模式相同」与验收第 5 条「placed_by_member 为假…时仍只有三行」：
+  // 会员模式里的认领订单同样只有三行，快照里有非零的数也不显示。
+  it.each(LANGUAGES)("keeps three rows for a guest order in both modes in %s", (language) => {
+    const claimed = lookupOrder({ placed_by_member: false, coupon_discount_sen: 1000, points_redeemed: 500 });
+    const labels = (["cart.subtotal", "checkout.summary_shipping", "checkout.summary_total"] as const).map((key) => COPY[key][language]);
+    for (const html of both(claimed, language)) {
+      for (const block of [desktopAmounts(html), phoneAmounts(html)]) {
+        expect(rowsOf(block).map(([label]) => label)).toEqual(labels);
+      }
+      expect(has(html, "checkout.summary_coupon", language)).toBe(false);
+      expect(has(html, "checkout.summary_points", language)).toBe(false);
+    }
+  });
+
+  // 验收第 5 条「金额原样格式化…不在浏览器计算」与 DESIGN 1.13「计价、优惠、积分与库存」第 7 条（已有订单按快照）：五行照接口的数显示，
+  // 彼此对不上也不改；积分数原样当作仙数（1 积分即 RM 0.01）。
+  it("shows every amount exactly as the order returns it", () => {
+    const odd = lookupOrder({ placed_by_member: true, subtotal_sen: 10000, coupon_discount_sen: 1234, points_redeemed: 1, shipping_fee_sen: 1000, total_sen: 99999 });
+    for (const html of both(odd, "en")) {
+      for (const block of [desktopAmounts(html), phoneAmounts(html)]) {
+        expect(rowsOf(block).map(([, amount]) => amount)).toEqual(["RM 100.00", "RM 12.34", "RM 0.01", "RM 10.00", "RM 999.99"]);
       }
     }
   });

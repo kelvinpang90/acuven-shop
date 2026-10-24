@@ -225,6 +225,8 @@ body { margin: 0; }
 .site-order__requests { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
 .site-order__request { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
 .site-order__request-items { display: grid; gap: 2px; }
+/* P09 会员模式：去 P13 的 account.orders 代替查单授权一行，单独一行靠左（视觉稿 P09-pending）；桌面与手机各一份 */
+.site-order__orders { justify-self: start; }
 
 /* 退款申请 P10：居中 960px 单列；标题与订单号在左、★ 提示在右；各行为 名称与实付 | 数量 | 最多件数；
    合计与说明在汇总块里，提交按钮靠左，◆ 提示在其下 */
@@ -683,6 +685,7 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-order { gap: 16px; padding: 28px var(--gutter) 40px; }
   .site-order__head { display: grid; gap: 16px; }
   .site-order__access-phone { display: grid; gap: 8px; justify-items: start; }
+  .site-order__orders.site-phone-only { display: block; }
   .site-order__progress { gap: 6px; }
   .site-order__body { grid-template-columns: minmax(0, 1fr); gap: 16px; }
   .site-order__line { grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 12px 0; }

@@ -137,9 +137,9 @@ describe("success", () => {
   // SHOP-TASK-148 验收「PayResultPage.test.tsx 只改『has no register, order detail or points』一条…改为断言成功页恰有去 /register 与去 /products
   // 两个链接、仍没有 result.track 与获得积分」：注册页进表后，原来断言 /register 不在路由表的一行不再成立。UX P07 线框
   // 「游客：[result.guest_next] [result.guest_register] → P11」：注册链接紧跟 result.guest_next；只加在成功页，Stripe 确认中（也显示 result.guest_next）没有。
+  // SHOP-TASK-154 验收「只删去断言 /account/order 不在路由表的那一行」：会员模式订单详情进表后该行不再成立；游客结果页仍没有 result.track。
   it("has the register link but no order detail or points", () => {
     const html = render(ready(payOrder()));
-    expect(isRoutePath("/account/order")).toBe(false);
     for (const key of ["result.track", "result.points_earned", "result.retry"]) {
       expect(html).not.toContain(key);
     }
