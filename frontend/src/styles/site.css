@@ -242,6 +242,7 @@ body { margin: 0; }
 .site-refund__qty { display: flex; gap: 12px; align-items: center; }
 .site-refund__max { width: 80px; }
 .site-refund__summary { gap: 12px; }
+.site-refund__points { display: flex; flex-wrap: wrap; gap: 24px; }
 .site-refund__submit { display: grid; gap: 16px; justify-items: start; }
 
 /* 隐私说明 P14 */
@@ -708,6 +709,9 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-refund__max { grid-area: max; width: auto; }
   .site-refund__notes { display: grid; gap: 16px; }
   .site-refund__bar { display: grid; gap: 10px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 14px var(--gutter) 20px; border-top: 1px solid var(--rule); }
+  .site-refund__bar-points { display: grid; }
+  /* 底部栏多了积分两行，主体底部留白相应加高，免得最后的说明被盖住。 */
+  .site-refund:has(.site-refund__bar-points) { padding-bottom: 300px; }
 
   .site-privacy { grid-template-columns: minmax(0, 1fr); gap: 24px; padding: 28px var(--gutter) 40px; }
   .site-privacy__aside { gap: 24px; }
