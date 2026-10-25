@@ -97,6 +97,8 @@ describe("route table", () => {
   // SHOP-TASK-152 验收第 2 条「路由 /account 加进 frontend/src/router.tsx 的路由表」：会员中心进表，在注册之后、后台页之前。
   // SHOP-TASK-154 验收第 2 条「路由 /account/order 加进 frontend/src/router.tsx 的路由表」：订单详情的会员模式进表，在会员中心之后；
   // 会员模式的退款申请 /account/order/refund 仍不在表里（SHOP-TASK-155 加入）。
+  // SHOP-TASK-155 验收第 2 条「路由 /account/order/refund 加进 frontend/src/router.tsx 的路由表」：退款申请的会员模式进表，在订单详情会员模式之后；
+  // 原来断言它不在表里的一行改用另一个不存在的路径 /account/order/refunds（验收第 7 条），并断言 /account/order/refund 在表里。
   it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page, the member login, the password reset, the register page, the member centre, the member order detail and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
@@ -115,6 +117,7 @@ describe("route table", () => {
       "/register",
       "/account",
       "/account/order",
+      "/account/order/refund",
       "/admin/login",
       "/admin/orders",
       "/admin/orders/:id",
@@ -146,12 +149,33 @@ describe("route table", () => {
     expect(isRoutePath("/track")).toBe(true);
     expect(isRoutePath("/track/order")).toBe(true);
     expect(isRoutePath("/track/order/refund")).toBe(true);
-    expect(isRoutePath("/account/order/refund")).toBe(false);
+    expect(isRoutePath("/account/order/refunds")).toBe(false);
     expect(isRoutePath("/login")).toBe(true);
     expect(isRoutePath("/forgot-password")).toBe(true);
     expect(isRoutePath("/register")).toBe(true);
     expect(isRoutePath("/account")).toBe(true);
     expect(isRoutePath("/account/order")).toBe(true);
+    expect(isRoutePath("/account/order/refund")).toBe(true);
+  });
+
+  // SHOP-TASK-155 验收第 2 条与 HANDOFF 0.61 第（4）条「订单号经会员订单请求模块的模块内存交接，不进地址」：会员模式退款申请的路径不带段值，
+  // 多出一段（如把订单号放进路径）不匹配、按未知路径落到首页。
+  it("gives the member refund page no path parameters", () => {
+    expect(matchRoute("/account/order/refund")).toEqual({ pattern: "/account/order/refund", params: {} });
+    for (const path of ["/account/order/refund/", "/account/order/refund/B6TN2RJD8K4M0QXZ", "/account/refund"]) {
+      expect(isRoutePath(path), path).toBe(false);
+      expect(resolvePath(path)).toBe("/");
+    }
+  });
+
+  // SHOP-TASK-155 验收第 2 条「套前台框架；会员模式打开时先…重读会话（读完前为 aria-busy 的空主体…）」与「不出现 order.session_expired 整页」：
+  // /account/order/refund 在前台框架里渲染，服务端渲染时会话还没读到，主体为空并标 aria-busy。
+  it("renders the member refund page for /account/order/refund inside the site frame", () => {
+    const html = render("/account/order/refund");
+    expect(html).toContain(COPY["common.demo_banner"].en);
+    expect(html).toContain(`<main class="site-refund" aria-busy="true"></main>`);
+    expect(html).not.toContain(COPY["order.session_expired"].en);
+    expect(html).not.toContain(COPY["home.demo_hint"].en);
   });
 
   // SHOP-TASK-154 验收第 2 条「订单号只经 SHOP-TASK-150 的模块内存交接」与 UX「阅读说明」订单号不进路径：会员模式订单详情的路径不带段值，
@@ -460,8 +484,9 @@ describe("route table", () => {
     expect(html).not.toContain("site-detail");
   });
 
+  // SHOP-TASK-155 验收第 7 条：/account/order/refund 进表后不再是未知路径，改用另一个不存在的路径。
   it("renders the home page for an unknown path", () => {
-    const html = render("/account/order/refund");
+    const html = render("/account/refund");
     expect(html).toContain(COPY["home.demo_hint"].en);
     expect(html).not.toContain(COPY["privacy.intro"].en);
   });

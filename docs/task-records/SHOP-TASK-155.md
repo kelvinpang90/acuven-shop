@@ -1,0 +1,47 @@
+# SHOP-TASK-155 退款申请 P10 的会员模式与积分返还、追回三行
+
+设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 3、5 条（会话到期与服务端授权检查；会员仅能访问自己认领或下单的订单，退款申请规则与查单页相同，写操作另须 CSRF 令牌）、「订单与退款状态」「失败、并发与重试」（退款申请幂等）与「计价、优惠、积分与库存」第 5 条（返还未过期的抵扣积分、追回获得积分，以批准时为准），以及 HANDOFF 0.61。依据 docs/UX.md 0.13 的 P10（会员模式凭会员会话；会员订单另见积分返还与追回）、docs/UX-COPY.md 0.14，样式取视觉稿 `docs/design/pages/P10-desktop-member.html` 与 `P10-phone-member.html`。读取会话经 SHOP-TASK-151（`api/memberSession.ts`），会员订单的读取、提交、会员预估与订单号交接经 SHOP-TASK-150（`api/memberOrders.ts`），游客预估经 SHOP-TASK-149（`api/orderLookup.ts`）。
+
+- [x] 路由与页面表：`/account/order/refund` 加进 `frontend/src/router.tsx` 的路由表（`/account/order` 之后、后台页之前，并补了路由表注释）与 `frontend/src/App.tsx` 的页面表，指向 `RefundPage.tsx` 另导出的 `MemberRefundPage`，套前台框架。进表后 SHOP-TASK-154 的 `memberRefundPath()` 返回该路径，P09 会员模式的 `order.request_refund` 随之出现（`TrackOrderPage.tsx` 未改）。
+- [x] 文案：`frontend/src/i18n/copy.ts` 按 UX-COPY 0.14 逐字加入 `refund.points_back`、`refund.points_reversed`、`refund.expired_points_note`，放在 `refund.coupon_not_restored` 之后，写法与相邻条目相同。没有用到 UX-COPY 以外的文字。
+- [x] 会员模式的打开（`openMemberRefund`、纯函数 `openRefundStep`）：
+  - 打开时（effect 里经 `AdminOrderDetail.tsx` 的 `startDeferred`）调用读取对象的 `reload` 重读一次会话；读完之前为 `<main class="site-refund" aria-busy="true">` 的空主体。
+  - guest：以路由的 replace 进入 `/login`。failed（含网络中断）：只显示 `common.error_retry`。重读之后状态不会是 unknown，万一是也按 failed。
+  - member：取 `memberOrderInView()`（P13 交接的订单号，读取不清除）；没有时（如整页刷新后）以 replace 回到 `/account`（Kelvin 2026-10-24 决定）。
+  - 取到订单号后另一个 effect 经 `readMemberOrder` 读取（`loadMemberRefundOrder`、纯函数 `readRefundStep`），切换语言时以新语言重新读取同一订单并中止上一次读取，已选件数照查单模式保留（不超过新的可退件数）。signed_out：重读会话后以 replace 进入 `/login`；not_found：以 replace 回到 `/account`；failed 与 network：照查单模式显示 `common.error_retry`（首次读取失败时页面只有这一句，已显示订单时保留订单）。
+  - 会员模式没有 `order.session_expired` 整页：页面状态 `MemberRefundState` 经 `memberRefundScreen` 换成 View 的 `OrderScreen` 时只有 loading、error、ready。
+- [x] 会员模式的内容：`RefundView` 新增可选的 `mode`（`"lookup" | "member"`，不给时为查单模式）与 `points` 属性，只依赖 props。会员模式不显示 `order.lookup_access`；标题、各行、加减控件、预计金额、两句说明、提交与 ◆ 提示与查单模式相同。
+- [x] 提交（`sendMemberRefund`、纯函数 `submitStep`、`refundCsrfStep`、`startRefund`、`startRefundChecking`、`chooseQuantity`）：
+  - 经 `runMemberRefund` 提交，带打开时会话里的 CSRF 令牌，幂等键照查单模式用 `refundKey`（只有网络中断后以同一请求内容重试时沿用）；进行中按钮与加减控件禁用，网络中断后确认订单期间显示 `common.network_check`。
+  - submitted（含网络中断后确认已写入）：以 `handOffSubmittedRefund` 交出订单号并前往 `/account/order`（P09 会员模式据此显示 `refund.submitted`）；leave：前往 `/account/order`，不交出订单号；signed_out：重读会话后以 replace 进入 `/login`；not_found：以 replace 回到 `/account`。
+  - csrf：重读会话——member 时换用新令牌并显示 `common.error_retry`；guest 时以 replace 进入 `/login`；failed（含网络中断）时保留原令牌并显示 `common.error_retry`；同时按接口重新读取到的订单显示（没有时沿用原来的）。
+  - refused、error、retry 与查单模式相同。查单模式的打开、读取与提交代码未改。
+- [x] 积分三行（两种模式；纯函数 `pointsRequest`、`pointsStep`、`shownPoints`，异步函数 `estimatePoints`，`startPointsEstimate`，页面内的 `useRefundPoints`）：
+  - 请求条件：`pointsRequest` 只在订单 `placed_by_member` 为真且至少一行大于 0 时给出请求（订单号、申请行与由两者得出的 key）；游客订单与后来被认领的游客订单（`placed_by_member` 为假）、全部为 0 件或订单还没取到时不请求。查单模式用 `estimateRefundPoints`，会员模式用 `estimateMemberRefundPoints`。
+  - 请求由订单与所选件数决定（`useMemo`），变化时 effect 的清理中止上一个未完成的请求再发新的；离开页面时中止，中止后回来的结果不再交出。
+  - 显示：页面只把 key 与当前请求相同的结果交给 View（件数改变后、新的预估返回前不显示旧数）；View 再要求订单 `placed_by_member` 为真、预估为 ok 且 `showsRefundPoints`（SHOP-TASK-149）为真，才显示 `refund.points_back`、`refund.points_reversed`（`{points}` 为接口给的整数，原样显示）与 `refund.expired_points_note`。两个数都为 0、`member_order` 为假时不显示。
+  - 位置照视觉稿：桌面在汇总块里 `refund.estimate` 之下（两个数一行，之后是 `refund.expired_points_note`）、两句说明之前；手机 `refund.expired_points_note` 在各行之后的说明里（两句说明之后），两个数在底部固定栏的合计之下、◆ 提示之前。
+  - 预估失败：任何失败（游客预估的 401、409、422、响应体不合格与网络中断，会员预估的 401、404、409 与网络中断）都只得到空预估——不显示积分行、不另加提示，不改变提交按钮是否可用，也不切换整页状态（不进 `order.session_expired`，会员预估的 401 也不重读会话或跳转；会话是否到期由读取订单与提交的回答处理）。
+- [x] 代码结构照 `AdminStoreDesignPage.tsx`：导出把请求结果变成页面状态或跳转的纯函数、接收 AbortSignal 与回调（`MemberRefundMoves`：show、update、replace、navigate）的异步函数与只依赖 props 的 View。离开页面时中止订单读取、提交与预估，之后不再更新或跳转；会话的重读（`reader.reload()`）是共享读取，不带 signal、不中止，回来时已离开则不据其结果更新或跳转。传给事件属性的处理函数不返回 Promise。查单模式只加了 `useRefundPoints` 与传给 View 的 `points`，其余结构与行为未改。
+- [x] 样式写在 `frontend/src/styles/site.css`：`.site-refund__points` 桌面两个数一行、间距 24px（视觉稿）；767px 及以下 `.site-refund__bar-points` 把两个数各排一行，底部栏有积分两行时主体底部留白由 260px 加到 300px（`:has`）。不声明颜色、字体与圆角。未改 `acuven-shop.css`。
+- [x] 测试 `frontend/src/pages/RefundPage.test.tsx` 新增（vitest 与 react-dom/server，不加测试依赖；fetch 替身为参数带类型的 `vi.fn((input, init) => …)`，会话读取用 `createMemberSessionReader()` 配同一个 fetch 替身，路由的 replace 与 navigate 以回调替身代替；以 `renderToStaticMarkup` 渲染 View、直接调用导出的函数，不模拟点击）：
+  - 积分三行：两种模式、三种语言下桌面三行在合计之下、两句说明之前；手机说明在各行之后、两个数在底部栏合计之下与 ◆ 提示之前；两个数为 0、`member_order` 为假、没有预估、游客订单都没有三行且提交按钮可用；数字原样（1000 不加分隔，0 照常显示）。
+  - 预估请求：游客订单与认领单、没有选择、订单未取到不请求，件数不同 key 不同；两种模式各自的地址、请求体与 signal；改件数时中止旧请求、只交出新结果；离开页面后不交出；件数改变后旧数不给出；八种失败只得到空预估，页面仍是订单页、没有 `common.error_retry`、提交可用。
+  - 会员模式内容：没有 `order.lookup_access`、其余各项都在（三语）；读取中为空主体，会话失败与首次读取失败只有 `common.error_retry`，各状态都不是 `order.session_expired`；会员模式与积分三行的文字全部来自字典（三语）。
+  - 会员模式打开：guest 去 `/login`；读取会话失败与网络中断；没有订单号回 `/account`；交接的订单号读取（会话读取不带页面的 signal、订单读取带，请求体只有订单号）；三种语言以同一订单号重新读取；not_found 回 `/account`；signed_out 先重读会话再去 `/login`；读取 failed 与 network；离开页面后不更新。
+  - 会员模式提交：submitted 交出订单号并前往 `/account/order`（请求头带令牌与幂等键、请求体只有订单号与申请行）；进入 submitting、`refundKey` 规则与件数锁定；leave；signed_out 与 not_found；csrf 后重读为 member、guest、failed、network；被拒按重新读取的订单显示、其他失败；网络中断后的 retry 与已写入；离开页面后不更新。
+  - 每条测试的注释写明守住的是验收、UX、HANDOFF 0.61 或 Kelvin 决定的哪一句。
+- [x] 现有测试只在必要时修改：
+  - `frontend/src/router.test.tsx`：路由表断言加入 `/account/order/refund` 并断言它在表里；原来断言它不在表里的一行改用另一个不存在的路径 `/account/order/refunds`；「renders the home page for an unknown path」改用 `/account/refund`（该路径进表后不再是未知路径）。另加两条：会员模式退款页的路径不带段值、`/account/order/refund` 在前台框架里渲染为空主体。
+  - `frontend/src/pages/RefundPage.test.tsx`「has no points rows and no member-mode link」：只把断言字典没有三个积分键的三行（键已加入）改为断言游客订单（`placed_by_member` 为假）即使给了预估也不显示三行，其余断言不变。
+  - `frontend/src/pages/TrackOrderPage.test.tsx` 未改：退款入口的断言按 props 与 `isRoutePath` 推出去向，不依赖该路径在不在表里。
+- 偏离与验收未写死之处的取法（未改设计，未发现须停下的设计问题）：
+  - 视觉稿 P10-phone-member 把两个数写在一行、以「 · 」分隔；UX P10 手机线框是两行，且「·」不在 UX-COPY 里，按 UX 排成两行，不加分隔符。
+  - 视觉稿里 site.css 写不了的样式不搬：桌面合计的字号与字重（沿用查单模式已有的 `acs-price acs-price--l`）、手机底部栏的底色与阴影、各行名称的字重。没有借用其他组件的类来取颜色。
+  - 手机主体底部留白 300px 不是视觉稿的数（视觉稿的底部栏不是固定定位），按底部栏多出的两行估算，免得最后的说明被盖住。
+  - 预估请求由订单与所选件数一起决定：重新读取订单（切换语言、提交被拒之后）时即使件数不变也会重发一次；此时旧结果的 key 与新请求相同，在新结果回来之前照常显示（同一选择的预估，不算旧数）。
+  - 预估失败的处理见上（记入本记录）：会员预估的 401 也只是不显示积分行，不按「会员接口回 401 时重读会话并进入 /login」处理——验收第 4 条写明预估失败不切换整页状态。
+  - 会员模式打开时只取 P13 交接的订单号，不读也不清除 `submittedRefundOrder`（它由 P09 读取）。
+  - 开发模式 StrictMode 下预估 effect 会先发一次再中止，只在开发构建出现。
+- 改动只在 `frontend/src/pages/RefundPage.tsx`、`frontend/src/pages/RefundPage.test.tsx`、`frontend/src/router.tsx`、`frontend/src/router.test.tsx`、`frontend/src/App.tsx`、`frontend/src/i18n/copy.ts`、`frontend/src/styles/site.css` 与本文件；未改 `frontend/src/api/`、`TrackOrderPage.tsx`、`TrackOrderPage.test.tsx`、后端、`docs/TODO.md`、`.platform/`、CI、部署配置、`package.json` 与 `package-lock.json`，未装依赖。
+- 验证到什么程度：人工逐条对照验收标准、UX P10、HANDOFF 0.61 与 `api/memberOrders.ts`、`api/memberSession.ts`、`api/orderLookup.ts` 的回答归类自查。上面列的测试只是写入的测试。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查；检查命令结果由 Worker 另行记录。未做浏览器验收（桌面与手机的实际排版、底部栏高度、刷新后回到 `/account`、切换语言与改件数时的预估都未在浏览器里看过），未对真实后端接口验证。

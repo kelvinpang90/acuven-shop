@@ -25,7 +25,7 @@ import PayResultPage from "./pages/PayResultPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import ProductDetailPage from "./pages/ProductDetailPage";
 import ProductListPage from "./pages/ProductListPage";
-import RefundPage from "./pages/RefundPage";
+import RefundPage, { MemberRefundPage } from "./pages/RefundPage";
 import RegisterPage from "./pages/RegisterPage";
 import TrackOrderPage, { MemberOrderPage } from "./pages/TrackOrderPage";
 import TrackPage from "./pages/TrackPage";
@@ -52,6 +52,8 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   "/account": AccountPage,
   // 订单详情的会员模式与查单模式在同一文件里（TrackOrderPage.tsx 另导出的页面组件）。
   "/account/order": MemberOrderPage,
+  // 退款申请的会员模式与查单模式在同一文件里（RefundPage.tsx 另导出的页面组件）。
+  "/account/order/refund": MemberRefundPage,
   "/admin/login": AdminLoginPage,
   "/admin/orders": AdminOrdersPage,
   // 订单详情与列表是同一页（桌面列表在左、详情在右，手机只显示详情）。

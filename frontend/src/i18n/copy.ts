@@ -1275,6 +1275,21 @@ export const COPY = {
     zh: "已使用的优惠券不恢复。",
     ms: "Kupon yang telah digunakan tidak dipulihkan.",
   },
+  "refund.points_back": {
+    en: "Points returned: {points}",
+    zh: "返还积分：{points}",
+    ms: "Mata dikembalikan: {points}",
+  },
+  "refund.points_reversed": {
+    en: "Points taken back: {points}",
+    zh: "追回积分：{points}",
+    ms: "Mata ditarik balik: {points}",
+  },
+  "refund.expired_points_note": {
+    en: "Points that have already expired are not returned.",
+    zh: "已过期的积分不返还。",
+    ms: "Mata yang telah tamat tempoh tidak dikembalikan.",
+  },
   "refund.submit": {
     en: "Submit refund request",
     zh: "提交退款申请",
