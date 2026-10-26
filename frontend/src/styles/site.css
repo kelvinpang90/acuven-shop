@@ -136,6 +136,10 @@ body { margin: 0; }
 .site-checkout__readonly { display: flex; gap: 8px; align-items: center; }
 .site-checkout__readonly .acs-input { max-width: 320px; }
 .site-checkout__members { display: grid; gap: 8px; padding-top: 28px; border-top: 1px solid var(--rule); }
+.site-checkout__member-phone { max-width: 320px; }
+.site-checkout__perks { display: grid; gap: 20px; padding-top: 28px; border-top: 1px solid var(--rule); }
+.site-checkout__coupon { display: flex; gap: 10px; max-width: 420px; }
+.site-checkout__points { max-width: 200px; }
 .site-checkout__aside { display: grid; gap: 16px; }
 .site-checkout__item { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .site-checkout__option { display: inline-flex; align-items: center; gap: 4px; }
@@ -640,6 +644,10 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-checkout__wide { grid-column: auto; }
   .site-checkout__readonly .acs-input { max-width: none; }
   .site-checkout__members { padding-top: 16px; }
+  .site-checkout__member-phone { max-width: none; }
+  .site-checkout__perks { gap: 18px; padding-top: 16px; }
+  .site-checkout__coupon { gap: 8px; max-width: none; }
+  .site-checkout__points { max-width: none; }
   .site-checkout__amounts { display: grid; padding: 18px; }
   .site-checkout__bar { display: grid; gap: 10px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 14px var(--gutter) 20px; border-top: 1px solid var(--rule); }
   .site-checkout__place { gap: 10px; }

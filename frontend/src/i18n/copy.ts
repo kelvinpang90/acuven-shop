@@ -510,6 +510,16 @@ export const COPY = {
     zh: "电话",
     ms: "Nombor telefon",
   },
+  "checkout.phone_hint": {
+    en: "The country above sets the default country code. Start with + to use a different one.",
+    zh: "默认按上方国家补全区号；以 + 开头可输入其他国家码。",
+    ms: "Kod negara lalai mengikut negara di atas. Mulakan dengan + untuk kod lain.",
+  },
+  "checkout.member_phone_hint": {
+    en: "Defaults to your member mobile number. You can change it to another number, including a fictional one.",
+    zh: "默认为您的会员手机号，可改为其他号码或虚构号码。",
+    ms: "Lalai kepada nombor telefon bimbit ahli anda. Anda boleh menukarnya kepada nombor lain, termasuk nombor rekaan.",
+  },
   "checkout.phone_invalid": {
     en: "This phone number doesn't look valid. Please check the country code and number.",
     zh: "该电话号码格式不符，请检查国家码和号码。",
@@ -555,15 +565,45 @@ export const COPY = {
     zh: "我们如何处理您的资料",
     ms: "Cara kami mengendalikan butiran anda",
   },
+  "checkout.coupon": {
+    en: "Coupon code",
+    zh: "优惠券代码",
+    ms: "Kod kupon",
+  },
+  "checkout.coupon_apply": {
+    en: "Apply",
+    zh: "使用",
+    ms: "Guna",
+  },
   "checkout.coupon_members_only": {
     en: "Coupons are for members only.",
     zh: "优惠券仅限会员使用。",
     ms: "Kupon untuk ahli sahaja.",
   },
+  "checkout.coupon_invalid": {
+    en: "This coupon can't be used for this order.",
+    zh: "此优惠券不适用于本订单。",
+    ms: "Kupon ini tidak boleh digunakan untuk pesanan ini.",
+  },
+  "checkout.points": {
+    en: "Use points",
+    zh: "使用积分",
+    ms: "Guna mata",
+  },
+  "checkout.points_available": {
+    en: "{points} points available (100 points = RM1)",
+    zh: "可用 {points} 积分（100 积分抵 RM1）",
+    ms: "{points} mata tersedia (100 mata = RM1)",
+  },
   "checkout.points_guest": {
     en: "Guests don't earn points. Members with a Malaysian or Singapore mobile number earn 1 point for every RM1 paid.",
     zh: "游客不累积积分。以马来西亚或新加坡手机号注册的会员每实付 RM1 得 1 积分。",
     ms: "Tetamu tidak mengumpul mata. Ahli dengan nombor telefon bimbit Malaysia atau Singapura mendapat 1 mata bagi setiap RM1 dibayar.",
+  },
+  "checkout.points_not_shipping": {
+    en: "Coupons and points reduce the item amount only, not shipping.",
+    zh: "优惠券与积分只抵商品金额，不抵运费。",
+    ms: "Kupon dan mata hanya mengurangkan jumlah item, bukan kos penghantaran.",
   },
   "checkout.summary_title": {
     en: "Order summary",

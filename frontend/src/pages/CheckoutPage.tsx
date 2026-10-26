@@ -1,9 +1,12 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { Dispatch, ReactNode, SetStateAction } from "react";
 
 import { fetchCheckoutQuote, fetchRegions, latestRuns, quoteRequestBody } from "../api/checkout";
 import type { CheckoutDestination, CheckoutRegions, DestinationQuote, MyState, Outcome, PhoneRegion, QuoteLine } from "../api/checkout";
 import type { LocalizedText } from "../api/catalog";
+import { fetchMemberQuote, memberOrderAttemptFor, memberOrderBody } from "../api/memberCheckout";
+import type { MemberQuoteRead } from "../api/memberCheckout";
+import { useMemberSessionReader } from "../api/memberSession";
 import { guestOrderBody, orderAttemptFor, runGuestOrder } from "../api/orders";
 import type { GuestOrderReply, GuestRecipient, OrderAttempt } from "../api/orders";
 import { fetchSiteSettings } from "../api/siteSettings";
@@ -16,6 +19,37 @@ import { browserStorage, useCopy, useLanguage } from "../i18n/language";
 import { isRoutePath, Link, PRODUCTS_PATH, useRouter } from "../router";
 import type { RoutePath } from "../router";
 import { hasChangedLine } from "./CartPage";
+import {
+  afterMemberQuote,
+  applyCoupon,
+  changePoints,
+  completeMemberOrder,
+  editPhone,
+  enterAsMember,
+  fillPhone,
+  formAfterMemberReply,
+  lapseToGuest,
+  memberAfterReply,
+  memberForm,
+  MemberDiscounts,
+  memberOrderChoice,
+  MemberPerks,
+  MemberPhoneField,
+  memberPlaceable,
+  memberQuoteKey,
+  memberQuoteOutcome,
+  memberReplyRequotes,
+  memberSummary,
+  openCheckout,
+  pointsCount,
+  prefillPhone,
+  renewMember,
+  retryNotice,
+  settleMemberQuote,
+  settleSignedOut,
+  submitMemberCheckout,
+} from "./CheckoutMember";
+import type { CheckoutMemberProps, MemberActions, MemberForm, SessionMoves, SettledMemberQuote } from "./CheckoutMember";
 import { decidePhone, displayPhone, MALAYSIA, regionOptions } from "./checkoutPhone";
 import type { GuestNotice, RegionOption } from "./checkoutPhone";
 import { InfoIcon, PAY_PATH } from "./PayPage";
@@ -26,7 +60,9 @@ import { InfoIcon, PAY_PATH } from "./PayPage";
 // 第 1 步：手机号（国家码下拉列出全部地区、默认 MY，以加号开头时以输入为准），旁边常显开关对应的告知；
 // 继续后按 checkoutPhone.ts 的规则以游客进入第 3 步，或（开关开启时的马新号码）停在第 1 步显示 common.service_unavailable。
 // 第 3 步：游客提示、收货资料（姓名、国家、马来西亚州属或其他国家的地区、地址、邮编）、只读的第 1 步号码，摘要与下单。
-// 会员路径、短信验证、优惠券与积分不在本页（之后的任务）；游客摘要不显示优惠券与积分两行。
+// 打开时另经会员会话的读取对象重读一次会话（读完之前与参考数据未读完时相同）：已登录会员跳过第 1、2 步，以会员身份进入第 3 步，
+// 会员的收货电话、优惠券、积分与摘要两行见 CheckoutMember.tsx（docs/UX.md 0.13 P05，HANDOFF 0.63）；第 2 步短信验证不在本页（SHOP-TASK-160）。
+// 游客摘要不显示优惠券与积分两行。
 //
 // 摘要用购物车各行 SKU 与件数（选定国家，马来西亚另须选定州属后，加国家与州属）调用计价接口，只采用最后一次请求的结果；
 // 金额只格式化接口返回的整数（formatSen、formatMinorUnits），不在浏览器相加或相乘。
@@ -316,8 +352,8 @@ function SummaryLine({ row }: { row: QuoteLine }) {
 }
 
 // 摘要的金额：商品小计；未选定目的地时 cart.shipping_later，选定后示例运费、合计与参考外币（或 checkout.fx_none）。
-// 游客不显示 checkout.summary_coupon 与 checkout.summary_points。
-function SummaryAmounts({ quote }: { quote: DestinationQuote }) {
+// 游客不显示 checkout.summary_coupon 与 checkout.summary_points；会员的这两行由 discounts 给出，选定目的地后放在小计与运费之间。
+function SummaryAmounts({ quote, discounts }: { quote: DestinationQuote; discounts?: ReactNode }) {
   const t = useCopy();
   const price = usePrice();
   return (
@@ -328,6 +364,7 @@ function SummaryAmounts({ quote }: { quote: DestinationQuote }) {
       </div>
       {hasDestination(quote) ? (
         <>
+          {discounts}
           <div className="acs-row">
             <span>{t("checkout.summary_shipping")}</span>
             <span>{price(quote.shipping.fee_sen)}</span>
@@ -357,7 +394,7 @@ function SummaryAmounts({ quote }: { quote: DestinationQuote }) {
   );
 }
 
-function SummaryContent({ quote, rows }: { quote: SummaryQuote; rows: readonly QuoteLine[] }) {
+function SummaryContent({ quote, rows, discounts }: { quote: SummaryQuote; rows: readonly QuoteLine[]; discounts?: ReactNode }) {
   if (quote.status === "loading") {
     return null;
   }
@@ -369,7 +406,7 @@ function SummaryContent({ quote, rows }: { quote: SummaryQuote; rows: readonly Q
       {rows.map((row) => (
         <SummaryLine key={row.sku} row={row} />
       ))}
-      <SummaryAmounts quote={quote.quote} />
+      <SummaryAmounts quote={quote.quote} discounts={discounts} />
     </>
   );
 }
@@ -426,6 +463,8 @@ interface StepProps {
   reference: Reference;
   options: readonly RegionOption[];
   actions: CheckoutActions;
+  // 会员第 3 步；不给时为游客。
+  member?: CheckoutMemberProps | undefined;
 }
 
 function PhoneStep({ form, reference, options, actions }: StepProps) {
@@ -506,7 +545,9 @@ function PhoneStep({ form, reference, options, actions }: StepProps) {
 
 const NO_REGIONS: readonly PhoneRegion[] = [];
 
-function RecipientStep({ form, reference, options, actions }: StepProps) {
+// 第 3 步：顶部的提示区（游客为 checkout.guest_other_country 等，会员已登录直接进入时没有）、收货资料；
+// 收货电话与其后的优惠券、积分一段，游客为只读的第 1 步号码与两句说明，会员见 CheckoutMember.tsx。
+function RecipientStep({ form, reference, options, actions, member }: StepProps) {
   const t = useCopy();
   const nameId = useId();
   const countryId = useId();
@@ -520,7 +561,7 @@ function RecipientStep({ form, reference, options, actions }: StepProps) {
   const states: readonly MyState[] = reference.status === "ready" ? reference.regions.my_states : [];
   return (
     <>
-      {form.guestNotice !== null && (
+      {member === undefined && form.guestNotice !== null && (
         <div className="site-checkout__guest">
           <div className="acs-alert acs-alert--info" role="status">
             <InfoIcon />
@@ -644,26 +685,34 @@ function RecipientStep({ form, reference, options, actions }: StepProps) {
               }}
             />
           </div>
-          <div className="acs-field site-checkout__wide">
-            <label className="acs-field__label" htmlFor={phoneId}>
-              {t("checkout.phone")}
-            </label>
-            <div className="site-checkout__readonly">
-              <input className="acs-input" id={phoneId} type="tel" readOnly value={displayPhone(form.phoneRegion, form.phoneInput, regions)} aria-describedby={phoneHintId} />
-              <button className="acs-btn acs-btn--quiet" type="button" disabled={submitting} onClick={actions.onChangePhone}>
-                {t("checkout.phone_change")}
-              </button>
+          {member === undefined ? (
+            <div className="acs-field site-checkout__wide">
+              <label className="acs-field__label" htmlFor={phoneId}>
+                {t("checkout.phone")}
+              </label>
+              <div className="site-checkout__readonly">
+                <input className="acs-input" id={phoneId} type="tel" readOnly value={displayPhone(form.phoneRegion, form.phoneInput, regions)} aria-describedby={phoneHintId} />
+                <button className="acs-btn acs-btn--quiet" type="button" disabled={submitting} onClick={actions.onChangePhone}>
+                  {t("checkout.phone_change")}
+                </button>
+              </div>
+              <span className="acs-field__hint" id={phoneHintId}>
+                {t("checkout.phone_lookup_hint")}
+              </span>
             </div>
-            <span className="acs-field__hint" id={phoneHintId}>
-              {t("checkout.phone_lookup_hint")}
-            </span>
-          </div>
+          ) : (
+            <MemberPhoneField member={member} submitting={submitting} />
+          )}
         </div>
       </section>
-      <div className="site-checkout__members">
-        <p className="acs-body-s">{t("checkout.coupon_members_only")}</p>
-        <p className="acs-body-s acs-muted">{t("checkout.points_guest")}</p>
-      </div>
+      {member === undefined ? (
+        <div className="site-checkout__members">
+          <p className="acs-body-s">{t("checkout.coupon_members_only")}</p>
+          <p className="acs-body-s acs-muted">{t("checkout.points_guest")}</p>
+        </div>
+      ) : (
+        <MemberPerks member={member} submitting={submitting} />
+      )}
     </>
   );
 }
@@ -701,9 +750,11 @@ export interface CheckoutViewProps {
   quote: SummaryQuote;
   form: CheckoutForm;
   actions: CheckoutActions;
+  // 会员第 3 步（CheckoutMember.tsx；此时 quote 即 member.quote）；不给时为游客。
+  member?: CheckoutMemberProps | undefined;
 }
 
-export function CheckoutView({ lines, reference, quote, form, actions }: CheckoutViewProps) {
+export function CheckoutView({ lines, reference, quote, form, actions, member }: CheckoutViewProps) {
   const t = useCopy();
   const { language } = useLanguage();
   const regions = reference.status === "ready" ? reference.regions.regions : NO_REGIONS;
@@ -736,8 +787,9 @@ export function CheckoutView({ lines, reference, quote, form, actions }: Checkou
   const inCart = new Set(lines.map((line) => line.sku));
   const rows = ready === null ? [] : ready.lines.filter((row) => inCart.has(row.sku));
   const changed = (ready !== null && hasChangedLine(rows)) || form.notice === "changed";
-  const placeable = canPlaceOrder(form, quote, lines);
-  const step = { form, reference, options, actions };
+  const placeable = canPlaceOrder(form, quote, lines) && (member === undefined || memberPlaceable(member.form, member.quote));
+  const step = { form, reference, options, actions, member };
+  const discounts = member === undefined || member.quote.status !== "ready" ? undefined : <MemberDiscounts quote={member.quote.quote} />;
 
   return (
     <main className="site-checkout" aria-busy={busy}>
@@ -747,7 +799,7 @@ export function CheckoutView({ lines, reference, quote, form, actions }: Checkou
           <span>{t("checkout.summary_title")}</span>
           {ready !== null && <HeadlineAmount quote={ready} className="acs-num site-checkout__fold-amount" />}
         </summary>
-        <SummaryContent quote={quote} rows={rows} />
+        <SummaryContent quote={quote} rows={rows} discounts={discounts} />
       </details>
       <div className="site-checkout__body">
         <div className="site-checkout__main">
@@ -756,14 +808,14 @@ export function CheckoutView({ lines, reference, quote, form, actions }: Checkou
           {form.step === 3 && (
             <div className="acs-summary site-phone-only site-checkout__amounts">
               {quote.status === "error" && <ErrorNotice />}
-              {ready !== null && <SummaryAmounts quote={ready} />}
+              {ready !== null && <SummaryAmounts quote={ready} discounts={discounts} />}
             </div>
           )}
         </div>
         <aside className="site-desktop-only site-checkout__aside">
           <div className="acs-summary">
             <h2 className="acs-display-s acs-summary__title">{t("checkout.summary_title")}</h2>
-            <SummaryContent quote={quote} rows={rows} />
+            <SummaryContent quote={quote} rows={rows} discounts={discounts} />
           </div>
           {form.step === 3 && <PlaceOrder form={form} placeable={placeable} onPlaceOrder={actions.onPlaceOrder} />}
         </aside>
@@ -778,23 +830,56 @@ export function CheckoutView({ lines, reference, quote, form, actions }: Checkou
   );
 }
 
+// 打开时会话重读完之前，与参考数据未读完时相同。
+const OPENING: Reference = { status: "loading" };
+
+// 会员会话重读之后的页面处理：renew 留在会员第 3 步（有新令牌时换用）并显示 common.error_retry；lapse 回到第 1 步按游客路径继续。
+// 页头随共享的会话状态（重读已更新）回到未登录。
+function sessionMoves(setForm: Dispatch<SetStateAction<CheckoutForm>>, setMember: Dispatch<SetStateAction<MemberForm | null>>): SessionMoves {
+  return {
+    renew: (csrfToken) => {
+      if (csrfToken !== null) {
+        setMember((current) => (current === null ? null : renewMember(current, csrfToken)));
+      }
+      setForm(retryNotice);
+    },
+    lapse: () => {
+      setMember(null);
+      setForm(lapseToGuest);
+    },
+  };
+}
+
 export default function CheckoutPage() {
   const { language } = useLanguage();
   const { navigate } = useRouter();
+  const reader = useMemberSessionReader();
   const storage = browserStorage();
   const lines = useCartLines(storage);
   const [reference, setReference] = useState<Reference>({ status: "loading" });
   const [form, setForm] = useState<CheckoutForm>(INITIAL_FORM);
+  // 打开时的会话重读已返回。
+  const [opened, setOpened] = useState(false);
+  // 会员第 3 步的状态；游客（含会话失效之后）为 null。
+  const [member, setMember] = useState<MemberForm | null>(null);
   const [quoter] = useState(() => latestRuns<DestinationQuote>());
   const [settled, setSettled] = useState<SettledCheckoutQuote | null>(null);
+  const [memberQuoter] = useState(() => latestRuns<MemberQuoteRead>());
+  const [memberSettled, setMemberSettled] = useState<SettledMemberQuote | null>(null);
   // 409 order_not_placeable 后加一，重新计价。
   const [round, setRound] = useState(0);
   // 离开页面时中止进行中的下单与重试。
   const lifetime = useRef<AbortController | null>(null);
 
   const destination = useMemo(() => quoteDestination(form.recipient.country, form.recipient.state), [form.recipient.country, form.recipient.state]);
-  const key = checkoutQuoteKey(language, lines, destination, round);
+  const baseKey = checkoutQuoteKey(language, lines, destination, round);
+  // 游客计价只在不是会员时请求；会员计价经会员接口，另带所用券代码与积分数。
+  const key = member === null ? baseKey : null;
   const quote = summaryQuote(key, settled);
+  const memberKey = member === null ? null : memberQuoteKey(baseKey, member);
+  const memberQuote = memberSummary(memberKey, memberSettled);
+  const memberCoupon = member?.appliedCoupon ?? null;
+  const memberPoints = member === null ? 0 : pointsCount(member.points);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -823,6 +908,31 @@ export default function CheckoutPage() {
     };
   }, []);
 
+  // 打开时经读取对象重读一次会话：member 以会员身份进入第 3 步并取本人号码一次（只在电话栏为空时填入），guest 与 failed 照游客路径。
+  // 会话重读是共享读取，不中止；离开页面（controller 中止）之后不再据其结果更新。
+  useEffect(() => {
+    const controller = new AbortController();
+    void openCheckout(reader, controller.signal).then((identity) => {
+      if (identity === null) {
+        return;
+      }
+      setOpened(true);
+      if (identity.kind === "member") {
+        setMember(memberForm(identity.csrfToken));
+        setForm(enterAsMember);
+        void prefillPhone(reader, controller.signal, {
+          ...sessionMoves(setForm, setMember),
+          fill: (phone) => {
+            setMember((current) => (current === null ? null : fillPhone(current, phone)));
+          },
+        });
+      }
+    });
+    return () => {
+      controller.abort();
+    };
+  }, [reader]);
+
   // 购物车、语言或目的地变了就重新计价；作废的请求由 latestRuns 中止并丢弃。
   useEffect(() => {
     if (key === null) {
@@ -842,7 +952,71 @@ export default function CheckoutPage() {
     };
   }, [key, language, lines, destination, quoter]);
 
+  // 会员计价：另在所用券代码、积分数或会员的轮次变了时重新计价，同样只认最后一次请求的结果。返回后清除下单回答后的提示，
+  // 积分栏大于该次 points_max 时改成它（标识随之改变，再计价一次）；回 401 时摘要按失败显示并重读会话。
+  useEffect(() => {
+    if (memberKey === null) {
+      return undefined;
+    }
+    const page = lifetime.current?.signal;
+    void memberQuoter.run((signal) => fetchMemberQuote(language, lines, destination, memberCoupon, memberPoints, signal)).then((run) => {
+      if (run === null) {
+        return;
+      }
+      const { outcome, signedOut } = memberQuoteOutcome(run);
+      setMemberSettled((previous) => settleMemberQuote(previous, memberKey, memberCoupon, memberPoints, outcome));
+      setMember((current) => (current === null ? null : afterMemberQuote(current, outcome.status === "ready" ? outcome.quote : null)));
+      if (signedOut && page !== undefined) {
+        void settleSignedOut(reader, page, sessionMoves(setForm, setMember));
+      }
+    });
+    return () => {
+      memberQuoter.cancel();
+    };
+  }, [memberKey, language, lines, destination, memberCoupon, memberPoints, memberQuoter, reader]);
+
+  // 会员下单：只带最近一次计价接受的券与积分，以会话里的 CSRF 令牌提交；幂等键规则同游客（请求体不变时沿用）。
+  const placeMemberOrder = (current: MemberForm) => {
+    const signal = lifetime.current?.signal;
+    if (signal === undefined || !canPlaceOrder(form, memberQuote, lines) || !memberPlaceable(current, memberQuote)) {
+      return;
+    }
+    const choice = memberOrderChoice(memberQuote);
+    const body = memberOrderBody(lines, current.phone, guestRecipient(form.recipient), choice.coupon, choice.points);
+    const attempt = memberOrderAttemptFor(form.attempt, body);
+    setForm((previous) => ({ ...previous, attempt, submitting: true, checking: false, notice: null }));
+    void submitMemberCheckout(
+      body,
+      attempt.key,
+      current.csrfToken,
+      reader,
+      {
+        signal,
+        onChecking: () => {
+          setForm((previous) => ({ ...previous, checking: true }));
+        },
+      },
+      {
+        ...sessionMoves(setForm, setMember),
+        placed: (orderNumber) => {
+          completeMemberOrder(storage, orderNumber, navigate);
+        },
+        answer: (reply) => {
+          if (memberReplyRequotes(reply)) {
+            setRound((count) => count + 1);
+          }
+          setForm((previous) => formAfterMemberReply(previous, reply));
+          setMember((previous) => (previous === null ? null : memberAfterReply(previous, reply)));
+        },
+      },
+    );
+  };
+
   const placeOrder = () => {
+    if (member !== null) {
+      placeMemberOrder(member);
+      return;
+    }
     if (!canPlaceOrder(form, quote, lines)) {
       return;
     }
@@ -881,7 +1055,7 @@ export default function CheckoutPage() {
       setForm((current) => ({ ...current, phoneInput: value, phoneError: null }));
     },
     onContinue: () => {
-      if (reference.status === "ready") {
+      if (opened && reference.status === "ready") {
         const { smsEnabled } = reference;
         setForm((current) => continueFromPhone(current, smsEnabled));
       }
@@ -895,5 +1069,37 @@ export default function CheckoutPage() {
     onPlaceOrder: placeOrder,
   };
 
-  return <CheckoutView lines={lines} reference={reference} quote={quote} form={form} actions={actions} />;
+  const editMember = (change: (current: MemberForm) => MemberForm) => {
+    setMember((current) => (current === null ? null : change(current)));
+  };
+  const memberActions: MemberActions = {
+    onPhone: (value) => {
+      editMember((current) => editPhone(current, value));
+    },
+    onCoupon: (value) => {
+      editMember((current) => ({ ...current, coupon: value }));
+    },
+    onApplyCoupon: () => {
+      editMember(applyCoupon);
+    },
+    onPoints: (value) => {
+      editMember((current) => changePoints(current, value));
+    },
+  };
+
+  // 会员在参考数据读完之前（或读取失败时）与游客一样停在第 1 步、不能继续；读完后显示会员第 3 步。
+  if (member !== null) {
+    const shown = reference.status === "ready";
+    return (
+      <CheckoutView
+        lines={lines}
+        reference={reference}
+        quote={memberQuote}
+        form={shown ? form : { ...form, step: 1 }}
+        actions={actions}
+        member={shown ? { form: member, quote: memberQuote, actions: memberActions } : undefined}
+      />
+    );
+  }
+  return <CheckoutView lines={lines} reference={opened ? reference : OPENING} quote={quote} form={form} actions={actions} />;
 }

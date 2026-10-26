@@ -824,6 +824,35 @@ describe("browser storage and addresses", () => {
   });
 });
 
+describe("the guest path next to the member path (SHOP-TASK-159)", () => {
+  // SHOP-TASK-159 验收「游客下单仍不写 sessionStorage」与 DESIGN 1.14 第 7 条「只有会员流程写入，游客流程不读也不写」：游客下单成功清空购物车并进入 /pay，不读也不写 sessionStorage。
+  it("does not touch sessionStorage when a guest order is placed", () => {
+    const session = { getItem: vi.fn(() => null), setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn() };
+    vi.stubGlobal("sessionStorage", session);
+    const data: Record<string, string> = { [CART_STORAGE_KEY]: JSON.stringify(CART) };
+    const storage: CartStorage = { getItem: (key) => data[key] ?? null, setItem: (key, value) => void (data[key] = value) };
+    const visited: RoutePath[] = [];
+    completeOrder(storage, (path) => visited.push(path));
+    expect(visited).toEqual(["/pay"]);
+    expect(session.getItem).not.toHaveBeenCalled();
+    expect(session.setItem).not.toHaveBeenCalled();
+    expect(session.removeItem).not.toHaveBeenCalled();
+  });
+
+  // SHOP-TASK-159 验收「CheckoutView 只依赖 props，以 props 区分游客与会员」「游客路径现有的结构与行为不重构」：不给 member 时第 3 步照游客显示（只读号码、checkout.phone_change、
+  // 两句说明），没有会员的电话说明、券与积分输入框。
+  it.each(LANGUAGES)("renders the guest step 3 when no member is given in %s", (language) => {
+    const html = render({ form: step3(), quote: readyQuote(TO_BRITAIN), language });
+    expect(html).toContain(copy("checkout.phone_lookup_hint", language));
+    expect(html).toContain(copy("checkout.phone_change", language));
+    expect(html).toContain(copy("checkout.coupon_members_only", language));
+    for (const key of ["checkout.member_phone_hint", "checkout.phone_hint", "checkout.coupon", "checkout.points", "checkout.points_not_shipping"] as const) {
+      expect(html).not.toContain(copy(key, language));
+    }
+    expect(html).not.toContain("site-checkout__perks");
+  });
+});
+
 describe("dictionary", () => {
   // SHOP-TASK-025 验收第 10 条「页面文字全部来自字典」：除接口返回的商品数据（名称、规格值、不可购买行的 SKU）、件数（× n）、
   // 地区名称（按 Intl.DisplayNames，带或不带 +呼叫码）与州属名称外，各状态下每段文字都是当前语言的某条字典文案（带变量的按模板匹配）。
