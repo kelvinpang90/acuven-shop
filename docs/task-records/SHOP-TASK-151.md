@@ -29,3 +29,18 @@
 - 留给后续任务：Provider 的挂载与页头的登录入口切换由 SHOP-TASK-153 完成；页面由 SHOP-TASK-152、154、155 接入。本任务未改 `frontend/src/App.tsx`、页面、页头、路由与 `memberAuth.ts`。
 - 改动只在 `frontend/src/api/memberSession.ts`、`frontend/src/api/memberSession.test.ts` 与本文件；未改后端、`docs/TODO.md`、`.platform/`、CI、部署配置、`package.json` 与 `package-lock.json`，未装依赖。
 - 验证到什么程度：人工逐条对照验收标准与 `app/api/member_auth.py`（`current_session`、`logout`、`require_member`、`require_member_csrf` 的状态码与错误码）自查。上面列的测试只是写入的测试。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查；检查命令结果由 Worker 另行记录。未对真实后端接口验证。
+
+## 登记时的验收标准（原文）
+
+2026-10-26 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 新文件 frontend/src/api/memberSession.ts，写法沿用 frontend/src/api/memberAuth.ts（同源 cookie，cache 为 no-store，Accept 为 application/json，不带查询参数；CSRF_HEADER 取自 frontend/src/api/pay.ts）；读取会话接收 AbortSignal，结果归为 ok（200 且 phone_masked 为非空字符串、has_password 为布尔、csrf_token 为非空字符串，取成遮掩后的手机号、是否设了密码与 CSRF 令牌；不取 expires_at）、none（401 member_session_required）、failed（其他，含 200 而响应体不合格）与 network；响应体的检查写成导出的纯函数
+      - 退出——请求体为空，请求头带调用方给出的 CSRF 令牌，接收 AbortSignal；结果归为 ok（204）、signed_out（401，会话已不在）、csrf（403 csrf_failed，服务端此时不撤销会话）、failed 与 network；CSRF 令牌与遮掩后的手机号只在内存里，不进地址、日志或浏览器存储（遮掩由服务端完成，前端取不到完整号码）
+      - 共享状态——照 frontend/src/api/siteSettings.ts 的读取对象与 Provider 写法（导出新建读取对象的函数、本次页面加载唯一的默认读取、以 Context 提供并允许测试传入替身，没有 Provider 时用默认读取）与 frontend/src/cart.ts 的 listeners 与 useSyncExternalStore 写法；状态为 unknown（尚未读完）、member（带最近一次 ok 取到的三项）、guest（none）与 failed（failed 或 network）之一；读取对象提供当前状态、首次读取（只请求一次，之后返回同一结果）、重读（每次都发新请求并返回新状态；读完之前保持原状态）与订阅；首次读取与重读按发出先后统一排序，先发而后到的旧结果不覆盖后发的结果；状态不变（种类相同，member 时三项值也都相同）时当前状态返回同一个对象
+      - hook——导出返回当前状态的 hook（服务端渲染与首次水合时取读取对象当前的状态，新建或默认读取为 unknown），挂载后触发首次读取；另导出取得读取对象的 hook，供页面在登录、退出之后调用重读；本任务不在 frontend/src/App.tsx 挂载 Provider，不改任何页面与页头
+      - 用 vitest（不加测试依赖，fetch 以替身代替）在 frontend/src/api/memberSession.test.ts 验证意图——两个请求的地址、方法、请求头与请求体（退出带 X-CSRF-Token、请求体为空；都不带查询参数）；各状态码的归类、响应体不合格（缺字段、空串、has_password 不是布尔）归 failed 与网络中断；读取对象的四种状态、首次读取只请求一次、重读每次请求、读完前保持原状态、旧结果不覆盖新结果、订阅者在状态改变时收到通知、状态不变时返回同一对象；每条测试写明它守住的是哪个接口记录、UX 或 DESIGN 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-151.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；两个请求、归类、共享状态的读取与重读规则、偏离、验证到什么程度，只写实际存在的测试，并写明挂载与页头留给 SHOP-TASK-153、页面留给 SHOP-TASK-152、154、155）
+      - 改动只落在 allowed_change_paths（不挂载 Provider，不改页面、页头、路由与 memberAuth.ts）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.13 提交 450c2fa 与 HANDOFF 0.61），不合并、不直推
+```

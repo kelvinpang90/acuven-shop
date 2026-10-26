@@ -19,3 +19,17 @@
 - 测试：新文件 `tests/test_stripe_pay_api.py` 用 TestClient 与 SQLite 内存库（夹具照 `tests/test_demo_payment.py`），订单、Stripe 会话记录与退款尝试在本文件里按模型写入，以 `app.state.stripe_gateway` 注入 `FakeStripeGateway`。覆盖：发起时建会话，只返回付款页地址（响应里没有会话 ID、PaymentIntent ID 与创建幂等键），locale 随 lang；已有 open 会话直接返回原地址，不调用 Stripe、不另建记录；complete 会话为 complete；模拟途径 409 `method_changed`；非待支付 409 `order_not_payable`（带 status）；转人工 409 `stripe_under_review`；Stripe 不可用 503，记录保持 creating，接口不写日志。确认的 paid、confirming（Stripe 不可用）、not_paid、refunded 各一例。两个接口各验证：没有订单访问 cookie 401、缺 CSRF 403、未知字段 422 不回显，以及请求体超过 8 KB 时 413 先于授权；发起另验证非法 lang 422 不回显。所有响应（含错误）都断言带 no-store。每条测试的文档字符串写明它守住的设计、UX 或 HANDOFF 原句；只出自验收标准的注明「验收：」。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.12 第 3、4、9 条、UX 0.11 P06、P07 与 HANDOFF 0.54 自查，并核对 `start_checkout`、`confirm_order_payment` 各结果的映射。测试由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。SQLite 不支持行锁，加锁行为只按代码审阅；未连真实的 Stripe 测试环境。检查命令结果由 Worker 另行记录。
 - [ ] 会员的发起与确认接口（SHOP-TASK-121），以及 P06、P07 的前端页面，留给之后的任务。
+
+## 登记时的验收标准（原文）
+
+2026-10-26 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 新文件 app/api/stripe_pay.py 建路由器（前缀 /api/pay/stripe，route_class 用 app/api/order_lookup.py 的 _NoStoreRoute），app/main.py 注册它；这些接口的处理函数与依赖产生的响应（含错误）都带 no-store，路径存在而方法不匹配时由框架返回的 405 不在此列；授权、CSRF、请求体读取与 422 写法复用 app/api/pay.py 的 _authorized_order_id、_require_csrf、_json_body、_body_errors、LanguageDep（不改 pay.py），检查顺序与 POST /api/pay/cancel 相同（413 → 415 → 422 → 401 → 403）；适配器经 get_stripe_gateway 取得；接口不写日志（服务层按设计记的 error 日志除外）
+      - POST /api/pay/stripe/start——请求体只有 order_number（extra forbid、strict），查询参数 lang 照 LanguageDep；调用 start_checkout，Settings 取 request.app.state.settings；redirect 回 200 {"result":"redirect","checkout_url":付款页地址}，complete 回 200 {"result":"complete","checkout_url":null}（前端随后调用确认接口）；not_payable 回 409 order_not_payable（带订单当前 status，照现有 _conflict）、method_changed 回 409 method_changed、under_review 回 409 stripe_under_review、unavailable 回 503 stripe_unavailable；响应里除付款页地址外不带任何 Stripe ID
+      - POST /api/pay/stripe/confirm——请求体只有 order_number，要求 CSRF；调用 SHOP-TASK-119 的 confirm_order_payment，回 200 {"result":值}，值为 paid、confirming、not_paid、refunded 之一；Stripe 不可用不回 503，由函数归为 confirming
+      - 测试验证意图——新文件 tests/test_stripe_pay_api.py 用 TestClient 与 SQLite 内存库（夹具照 tests/test_demo_payment.py，Stripe 记录的准备在本文件里另写），以 app.state.stripe_gateway 注入 FakeStripeGateway，验证——发起建会话并只返回付款页地址、已有 open 会话直接返回原地址而不再创建、模拟途径回 409 method_changed、非待支付回 409 order_not_payable、转人工回 409 stripe_under_review、不可用回 503；确认的四种结果各一例；没有订单访问 cookie 401、缺 CSRF 403、未知字段与非法 lang 422 且不回显输入；所有响应（含错误）带 no-store；每条测试写明它守住的是设计或 UX 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/task-records/SHOP-TASK-120.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；两个接口、结果映射、偏离、验证到什么程度，并写明会员接口与 P06、P07 页面留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/api/pay.py、app/api/member_pay.py、app/services/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
+```

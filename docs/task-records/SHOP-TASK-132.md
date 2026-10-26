@@ -18,3 +18,19 @@
 - 留给之后的任务：会员的两个 Stripe 接口与会员支付页留给会员支付页的任务（前端还没有会员支付页）；P07 的确认中与重查（SHOP-TASK-133）、P06 的 Stripe 显示与跳转（SHOP-TASK-134）、P06 的取消与交接调用（SHOP-TASK-135）接上本模块。
 - 改动只在 `frontend/src/api/pay.ts`、`frontend/src/api/pay.test.ts`、`frontend/src/pages/PayPage.test.tsx`、`frontend/src/pages/PayResultPage.test.tsx` 与本文件；未改页面、路由、后端、`docs/TODO.md`、`.platform/`、CI、部署配置、`package.json` 与 `package-lock.json`，未装依赖。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.12 第 2、3、4、5、9 条、HANDOFF 0.54、0.55 与 `app/api/stripe_pay.py`、`app/api/pay.py` 的回答表自查，并核对 `PayPage.tsx` 对新 `WriteOutcome` 的类型兼容（它的 switch 不做穷举检查）。前端的 lint、类型检查、测试、构建与镜像构建只由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查。检查命令结果由 Worker 另行记录。
+
+## 登记时的验收标准（原文）
+
+2026-10-26 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - PayOrder 加三个字段——payment_route（"stripe"、"simulated" 或 null）、stripe_state（"creating"、"open"、"complete"、"under_review" 或 null）与 stripe_refunded（布尔），含义照 app/services/payment.py 的 PayOrder 注释写在类型注释里；readPayOrder 的读取与校验写法不变（与现有字段一样不另做字段校验）
+      - 新函数 startStripe(language, orderNumber, csrfToken, signal?) 调用 POST /api/pay/stripe/start?lang=（查询参数只有 lang），新函数 confirmStripe(orderNumber, csrfToken, signal?) 调用 POST /api/pay/stripe/confirm（不带任何查询参数）；两者都是同源 cookie、cache 为 no-store、Accept 与 Content-Type 为 application/json、X-CSRF-Token 为调用方给出的令牌，JSON 请求体只有 order_number；订单号与令牌不进路径、查询参数或任何浏览器存储；写法沿用本文件 postWrite 与 readPayOrder 的现有做法，中止与网络中断一样归 network
+      - startStripe 的结果归为 redirect（200 且 result 为 redirect、checkout_url 是字符串且以 new URL 解析后 protocol 为 "https:"，结果带这个地址）、complete（200 且 result 为 complete、checkout_url 为 null）、closed（409 且 detail 为 order_not_payable）、method_changed（409 且 detail 为 method_changed）、under_review（409 且 detail 为 stripe_under_review）、unavailable（503 且 detail 为 stripe_unavailable）、expired（401）、csrf（403）、failed（其他状态、其他 detail、响应体不是 JSON 或不合格，含 200 而地址缺少、不是字符串、解析不了或不是 https）与 network；confirmStripe 的结果归为 paid、confirming、not_paid、refunded（200 且 result 为这四个值之一）、expired（401）、csrf（403）、failed（其他，含 200 而 result 为其他值）与 network
+      - 现有写接口的回答——WriteReply 加 method_changed（409 且 detail 为 method_changed，支付与取消都适用）与 unavailable（503 且 detail 为 stripe_unavailable）；其他 409 与 503 的归类不变；settle 把它们分别变成 kind 为 method_changed 与 unavailable 的两种新 WriteOutcome，runPayment 与 runCancel 的签名不变；frontend/src/pages/PayPage.tsx 不改，它对这两种新结果暂时落到现有的 common.error_retry（与此前归 failed 时相同），由 SHOP-TASK-134、135 接上
+      - 交接——新函数 rememberPaidNotCancelled(orderNumber) 与 takePaidNotCancelled(orderNumber)，把「取消时会话已付款」的订单号只放在模块内的变量里（不进地址、history 的 state、localStorage、sessionStorage 或 cookie）；take 只在记下的订单号与给出的相同时返回 true，不论是否相同都清除记录（读一次即失效，重新打开或刷新页面后不再显示）；P06 在 SHOP-TASK-135 调用 remember，P07 在 SHOP-TASK-133 调用 take
+      - 用 vitest（不加测试依赖，fetch 以替身代替）在 frontend/src/api/pay.test.ts 验证意图——两个新接口的地址、方法、查询参数、请求头与请求体（只有 order_number）；上面每种归类各一例，含 409 的其他 detail、503 的其他 detail、200 而地址不是 https 或缺少时归 failed；支付与取消遇到 409 method_changed 与 503 stripe_unavailable 时的回答与 settle 的结果；交接读一次即失效、订单号不同时返回 false 且同样清除、不写任何浏览器存储；每条测试写明它守住的是设计、UX 或 HANDOFF 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)（input 为 RequestInfo | URL，init 为 RequestInit 可省），从 mock.calls 取值时用 String(…) 收窄，不让 any 流出（CI 的 eslint 带类型规则）；现有测试的断言不改
+      - frontend/src/pages/PayPage.test.tsx 与 frontend/src/pages/PayResultPage.test.tsx 只许在各自的 payOrder 夹具默认值里补上三个新字段（payment_route 为 "simulated"、stripe_state 为 null、stripe_refunded 为 false），其余一字不改；frontend/src/api/pay.test.ts 的夹具同样补上；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-132.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；三个字段、两个接口与归类、两种新的写接口回答、交接、偏离、验证到什么程度，并写明会员接口与页面留给之后的任务）；改动只落在 allowed_change_paths（不改页面与路由）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
+```

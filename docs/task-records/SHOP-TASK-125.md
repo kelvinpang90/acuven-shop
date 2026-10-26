@@ -27,3 +27,17 @@
 - 测试（`tests/test_stripe_refund_approval.py`，SQLite 内存库，照 `tests/test_refund_review.py` 由引擎发 BEGIN 以使保存点与 MySQL 一致；订单与会话记录照 SHOP-TASK-117 的测试直接按模型写入）：Stripe 付款订单批准后一条 pending 尝试、金额等于申请的现金退款额（不含用券抵掉的件与运费）、来源为该申请；锁顺序与事务边界；按幂等键重放不再建；金额为 0 时不建、不读 Stripe 记录；模拟支付订单不锁不写；已有 pending 或 succeeded 尝试加本次超过付款金额时不建且告警一次、批准照常成功，failed 不计入，正好相等时照建；缺 PaymentIntent 时不建且告警；手动重试在最新为 failed 时新建，在 pending 或 succeeded 时拒绝，未批准、不存在与没有尝试时各抛异常，超额时抛 `RefundCapExceeded` 且不写库；第二次并发插入被唯一约束拒绝。每条测试的文档字符串写明它守住的设计原句。`tests/test_refund_review.py` 未改。
 - 改动只在 `app/services/refund_review.py`、`app/services/stripe_refund.py`、`tests/test_stripe_refund_approval.py` 与本文件；未改 `app/api/`、`app/jobs.py`、`app/services/stripe_confirm.py`、模型、迁移、`.platform/`、CI、部署配置、前端与 `docs/TODO.md`，未装依赖。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.12 第 8 条与 HANDOFF 0.54 原句自查，并核对与 `app/models/stripe.py` 的列与检查约束、`tests/test_refund_review.py` 的现有约束（锁订单是新事务的第一条语句、只有一次锁订单、保存点冲突只回滚保存点）一致。SQLite 不支持行锁，锁定只以 MySQL 方言编译检查含 FOR UPDATE 与先后顺序，并发排队按代码审阅。新增测试与已有后端测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest。检查命令结果由 Worker 另行记录。
+
+## 登记时的验收标准（原文）
+
+2026-10-26 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - approve_refund 的签名、返回值与现有行为不变；在现有保存点内、apply_refund_points 之后（锁顺序为订单、会员、Stripe 会话记录、退款尝试），只在批准且不是按幂等键重放时，查该订单由 Stripe 付款的会话记录（order_id 等于该订单且确认时间非空，至多一条）——有且退款申请的 amount_sen 大于 0 时锁住该记录，以 SHOP-TASK-124 的 refunded_total 核对已有合计加本次金额不超过该记录的 amount_sen，未超过则写一条 pending 尝试（来源 refund_request、PaymentIntent 取该记录、金额为申请的 amount_sen、活动来源列为该申请）；超过则不建并告警（类别 stripe_refund_cap），该记录缺 PaymentIntent ID 时不建并告警（类别 stripe_refund_unrefundable）；金额为 0 的申请不读 Stripe 记录；经模拟支付的订单只会查到没有确认时间非空的会话记录，不锁也不写
+      - approve_refund 保持现有的开头 rollback 与锁订单写法，不新增 begin、rollback 或 commit，提交仍由调用方完成（tests/test_refund_review.py 的现有约束）；retry_request_attempt 照 _review 的写法先 rollback 再锁订单；新增的读取都在锁订单之后；告警的日志在保存点成功之后记（外层提交失败时可能多一条告警，只供人工核对，PR 写明）；模块说明里「本模块不写日志」一句随之改写
+      - app/services/stripe_refund.py 新增公开函数 retry_request_attempt（入参数据库会话、退款申请 ID、当前时间）——锁顺序同上；只在申请已批准、该申请最新一条尝试（按尝试 ID 取最大者）为 failed 时新建一条 pending 尝试，返回新尝试的 ID；核对合计同上，超过则不建、记一条告警日志（类别 stripe_refund_cap，这一情形不写库，日志在抛出前记）并抛 RefundCapExceeded；申请不存在、未批准、没有尝试或最新一条不是 failed 时抛各自的异常、不写库；同一来源并发重试由活动来源列的唯一约束保证只有一个成功，失败的一方回滚保存点并抛「不能重试」；只 flush 不提交，由之后的接口提交并调用 submit_refund_attempt
+      - 测试验证意图——新文件 tests/test_stripe_refund_approval.py 用 SQLite 内存库与 SHOP-TASK-117 测试里的写法准备 Stripe 付款的订单与退款申请，验证——Stripe 付款订单批准后有一条 pending 尝试、金额等于申请的现金退款额（不含运费）、来源为该申请；按幂等键重放不再建；金额为 0 时不建；模拟支付订单不建；同一 PaymentIntent 已有的 pending 或 succeeded 尝试（测试直接插入复用该付款 PaymentIntent ID 的尝试来构造）加本次超过付款金额时不建且告警一次、批准照常成功、failed 的尝试不计入；缺 PaymentIntent 时不建且告警；手动重试在最新为 failed 时新建、在 pending 或 succeeded 时拒绝、未批准时拒绝、超额时抛 RefundCapExceeded 且不写库；第二次并发插入被唯一约束拒绝；每条测试写明它守住的是设计的哪一句；tests/test_refund_review.py 一字不改且照常通过；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/task-records/SHOP-TASK-125.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；批准时建尝试的条件、合计核对、手动重试、偏离、验证到什么程度，并写明调用 Stripe 由定时任务与之后的后台接口发起），不改 docs/TODO.md，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/api/、app/jobs.py、app/services/stripe_confirm.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
+```

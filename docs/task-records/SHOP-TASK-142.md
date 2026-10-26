@@ -32,3 +32,18 @@
 - 页面组件里的点按处理（`onRetry`：ref 挡住重复点按、点按时收起提示、提交中状态的设置与结束）没有测试覆盖：测试不模拟点击，只验证导出的函数与 View。
 - 改动只在 `frontend/src/pages/AdminRefundDetail.tsx`、`frontend/src/pages/AdminRefundDetail.test.tsx`、`frontend/src/i18n/copy.ts`、`frontend/src/styles/site.css` 与本文件；未改 `router.tsx`、`App.tsx`（不新增路由、不改导航）、`frontend/src/api/adminRefunds.ts`、生成的 `acuven-shop.css`、`docs/TODO.md`、`.platform/`、CI、部署配置与后端，未装依赖。
 - 验证到什么程度：人工逐条对照验收标准、UX A03「Stripe 测试（0.11）」原句、UX-COPY 0.13 的文案、HANDOFF 0.57 第（2）至（4）项、SHOP-TASK-131 记录与两张视觉稿自查。上面列出的测试由 PR 的必需 CI 检查 frontend 执行（lint、类型检查、测试、构建与镜像构建），Worker 沙箱不跑前端检查；检查命令结果由 Worker 另行记录。未做浏览器验收（桌面与手机的实际排版与点按未在浏览器里看过）。
+
+## 登记时的验收标准（原文）
+
+2026-10-26 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.12 的 A03「Stripe 测试（0.11）」、docs/UX-COPY.md 0.13 与 docs/HANDOFF.md 0.57 为准，样式以 docs/design/pages/ 的 A03-stripe-phone-failed 与 A03-stripe-states 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.13 逐字加入 admin.stripe_refund_retry 与 admin.stripe_refund_blocked，写法与相邻条目相同（每种语言一行）
+      - 按钮——admin.stripe_refund_retry 只在已批准、paid_via_stripe 为真、stripe_refunds 不为空且第一条（最新）为 failed 时显示，位于 admin.stripe_refund_failed_hint 之下；最新为 pending 或 succeeded、没有尝试（admin.stripe_refund_not_sent）、amount_sen 为 0（admin.stripe_refund_none）、审核中、已拒绝与模拟支付都不显示；处理中的尝试不提供改为失败或取消的按钮
+      - 提交——点按以详情给的 csrf_token 调用 SHOP-TASK-140 的重试请求函数；进行中按钮禁用并标 aria-busy，再点不发第二次请求；重试的 POST 不中止（与审核相同），离开页面或换申请之后其结果与重新读取都不再更新页面；重试不让左侧列表重新查询（申请状态不变）
+      - 结果——done 照现有 reread 重新读取详情（取到后显示新详情，多出的一条尝试按 SHOP-TASK-141 的显示规则显示；接口在回 200 之前已调用 Stripe（SHOP-TASK-131 记录），新尝试可能已是 pending、succeeded 或 failed，页面不假定它为处理中）；cap 保留当前详情，在按钮下方显示 admin.stripe_refund_blocked；not_retryable 与 csrf 重新读取后显示 common.error_retry；none 用路由的 replace 进入 /admin/login；network 显示 common.network_check；failed 显示 common.error_retry；这些提示显示在 Stripe 退款段里按钮所在的位置，重新读取后按钮不再显示时仍显示；再次点按或重新读取成功时收起
+      - 代码结构沿用 frontend/src/pages/AdminRefundDetail.tsx 的 reviewStep、submitReview 写法——导出把重试结果变成下一步（显示、进入登录或重新读取）的纯函数与接收 AbortSignal 与回调的异步函数，View 组件只依赖 props（新增按钮的回调与提交中状态）；不改审核与幂等键的现有逻辑；传给 onClick 等事件属性的处理函数不返回 Promise（异步调用前加 void）；页面组件与函数的排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改（copy.ts 的写法照上一条）
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AdminRefundDetail.test.tsx 验证意图，写法照该文件现有测试（以 renderToStaticMarkup 渲染 View、直接调用导出的纯函数与异步函数，不模拟点击）——按钮只在最新为 failed 时出现（含较早一条 failed 而最新为 pending 时不出现）；提交中按钮禁用与 aria-busy；done 后重新读取并显示多出的一行（覆盖新尝试为 pending 的情形，以及新尝试已为 failed 时按钮仍按最新一条显示）；cap 显示 admin.stripe_refund_blocked 且详情不变；not_retryable 与 csrf 重新读取后的 common.error_retry（按钮已不显示时提示仍在）；none 进入 /admin/login；network 与 failed；中止后不再更新；重试请求带详情的 csrf_token；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 SHOP-TASK-131 记录的哪一句；现有测试只在必要时修改并写明原因；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出（CI 的 eslint 带类型规则）；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-142.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；按钮条件、提交、结果、偏离、验证到什么程度，只写实际存在的测试，并写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由，不改导航，不改 frontend/src/api/adminRefunds.ts）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.57），不合并、不直推
+```

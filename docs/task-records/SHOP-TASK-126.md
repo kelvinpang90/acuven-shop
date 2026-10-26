@@ -21,3 +21,18 @@
   - 告警的去重：`stripe_refund_unresolved` 只在第一次找不到或列不完时记，之后每小时照列、找到即采用，不再告警。
 - 留给之后的任务：webhook 的退款事件（第 7、8 条「退款事件只作触发，收到后先查询再更新」）与后台退款详情及重试接口另行登记；批准请求里提交之后立即调用退款接口由之后的后台接口任务接入，在那之前由本任务的定时处理在下一轮发起。本任务未加接口，未改 `app/services/stripe_refund.py` 与其他已有服务、`app/api/`、模型、迁移、`.platform/`、CI、部署配置与前端，未装依赖。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.12 第 8、9 条与 HANDOFF 0.54 原句自查，并核对与 `app/services/stripe_refund.py`、`app/services/stripe_gateway.py` 的函数与适配器接口、`app/models/stripe.py` 的列与检查约束一致。新增与改动的测试用 SQLite 内存库与 `FakeStripeGateway`，只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest；SQLite 不支持行锁，「调用 Stripe 时不持有任何数据库锁」在测试里以调用时会话不在事务中检查，MySQL 上的加锁与并发按代码审阅。检查命令结果由 Worker 另行记录。
+
+## 登记时的验收标准（原文）
+
+2026-10-26 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 新文件 app/services/stripe_refund_overdue.py 的 process_stripe_refunds（入参数据库会话、适配器、当前时间、上限）只选到期的尝试——pending 且没有 Stripe 退款 ID、创建未满 24 小时，调用次数为 0 或上次复查时间为空或早于 5 分钟前的，调用 submit_refund_attempt；pending 且没有 ID、创建满 24 小时，上次复查时间为空或早于 1 小时前的，逐页调用 list_refunds 列出该 PaymentIntent 的全部退款、按元数据的尝试 ID 找到就经 apply_refund_object 采用，找不到或无法列完保持 pending、写上次复查时间并告警一次（类别 stripe_refund_unresolved）；pending 且有 ID、上次复查时间为空或早于 10 分钟前的，调用 refresh_refund_attempt；succeeded 的，上次复查时间为空、或成功时间在 30 天内且上次复查时间早于 1 天前、或成功时间满 30 天且上次复查时间早于 7 天前的，调用 refresh_refund_attempt（改为 failed 时由 SHOP-TASK-124 的规则告警）
+      - 选取按上次复查时间从早到晚、从没查过的排最前（同时刻按 ID），最多 limit 条，逐条在各自的事务里处理；调用 Stripe 时不持有任何数据库锁；Stripe 不可用时这一条写上次复查时间、留到下一轮；告警照 SHOP-TASK-124 的写法（提交后 error 日志；stripe_refund_unresolved 是会反复出现的告警，以告警时间去重，每条尝试至多一次）；返回处理条数；另有 has_due_refunds（入参数据库会话、当前时间）判断是否有到期的尝试
+      - app/jobs.py 在现有任务之后追加任务 stripe_refunds（每轮最多 CANCEL_BATCH_LIMIT 条，own_transactions，逐条提交），适配器照 stripe_checkouts_job 的写法按配置建；Stripe 未配置且没有到期的尝试时静默跳过、算成功，有到期的尝试则照常处理（不可用时留到下一轮）；另加手动补跑命令 process-stripe-refunds（写法照 process-stripe）；模块说明与用法随之补充
+      - 测试验证意图——新文件 tests/test_stripe_refund_overdue.py 用 SQLite 内存库与 FakeStripeGateway 验证——从未调用的尝试在下一轮调用、5 分钟内不重复、24 小时内同一幂等键重试、满 24 小时不再调用 create_refund 而改为分页对账（找到采用、第二页才找到也采用、找不到或列到一半不可用时保持 pending 且只告警一次、1 小时内不重复对账）；有 ID 的 pending 每 10 分钟查询；succeeded 在 30 天内每天、之后每周查询，变为 failed 时释放活动来源并告警；上限与轮转（长期不能确定的不挤掉新尝试）；处理条数；每条测试写明它守住的是设计或 HANDOFF 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - tests/test_jobs.py 补任务顺序、未配置且没有到期尝试时跳过、手动补跑命令；tests/test_jobs.py、tests/test_auto_complete.py 与 tests/test_sms_retention.py 里断言 default_jobs 位置与个数的测试随新任务改为新的位置与个数并写明原因，其余断言一字不改
+      - docs/task-records/SHOP-TASK-126.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；四种到期规则与频率、告警、任务顺序、手动补跑、偏离、验证到什么程度，并写明 webhook 的退款事件留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/stripe_refund.py 与其他已有服务、app/api/、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
+```
