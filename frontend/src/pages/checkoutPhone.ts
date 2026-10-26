@@ -7,9 +7,10 @@ import { htmlLang } from "../i18n/language";
 //
 // 继续后的判定：
 // - 开关关闭：任何号码（含马新号码）都以游客继续，第 3 步顶部显示 checkout.guest_sms_off。
-// - 开关开启：马新号码（下拉选 MY 或 SG 且输入不以加号开头，或输入以 +60、+65 开头）在短信验证组件 V1 实现之前停在第 1 步，
-//   显示 common.service_unavailable（Kelvin 2026-10-01 批准的过渡规则，记录见 docs/HANDOFF.md 0.25，由之后的 V1 与会员路径任务取消）；
+// - 开关开启：马新号码（下拉选 MY 或 SG 且输入不以加号开头，或输入以 +60、+65 开头）进入第 2 步短信验证（V1 的结账用途，
+//   docs/UX.md 0.13 P05；SHOP-TASK-160 取消了 HANDOFF 0.25 停在第 1 步显示 common.service_unavailable 的过渡规则）；
 //   其他号码以游客继续，第 3 步顶部显示 checkout.guest_other_country。
+// 第 2 步之后的游客提示另有 checkout.sms_unavailable（服务端判定短信无法送达或停发、访客点了 checkout.continue_guest）。
 
 export const MALAYSIA = "MY";
 const SMS_REGIONS: ReadonlySet<string> = new Set([MALAYSIA, "SG"]);
@@ -29,15 +30,15 @@ export function isMalaysiaOrSingapore(region: string, input: string): boolean {
   return SMS_REGIONS.has(region);
 }
 
-export type GuestNotice = "checkout.guest_sms_off" | "checkout.guest_other_country";
+export type GuestNotice = "checkout.guest_sms_off" | "checkout.guest_other_country" | "checkout.sms_unavailable";
 
-export type PhoneDecision = { kind: "guest"; notice: GuestNotice } | { kind: "unavailable" };
+export type PhoneDecision = { kind: "guest"; notice: GuestNotice } | { kind: "verify" };
 
 export function decidePhone(smsEnabled: boolean, region: string, input: string): PhoneDecision {
   if (!smsEnabled) {
     return { kind: "guest", notice: "checkout.guest_sms_off" };
   }
-  return isMalaysiaOrSingapore(region, input) ? { kind: "unavailable" } : { kind: "guest", notice: "checkout.guest_other_country" };
+  return isMalaysiaOrSingapore(region, input) ? { kind: "verify" } : { kind: "guest", notice: "checkout.guest_other_country" };
 }
 
 // 国家名称：用浏览器的 Intl.DisplayNames 按当前界面语言取得；取不到（不支持、抛错或没有名称）时为两位代码。

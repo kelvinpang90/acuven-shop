@@ -16,8 +16,12 @@ import type { ChallengeLoader, ChallengeWidget } from "./turnstile";
 // 号码为国家码（只有 +60、+65，默认 +60）与输入原文，格式、规范化、白名单、限流与能否降级都由服务端判定，组件只按回答显示提示。
 // 发送前须完成托管人机挑战（turnstile.ts），每次发送之后重置挑战、取新令牌。手机号、验证码与令牌只在组件状态与请求体里，
 // 组件不跳转、不写浏览器存储；验证通过后调用 onVerified，结果文字由嵌入的页面显示。卸载时中止进行中的请求，之后的结果不再更新。
+// 结账验证（checkout，SHOP-TASK-160，docs/UX.md 0.13 V1 与 P05 第 2 步，DESIGN 1.14，HANDOFF 0.63）：号码为结账第 1 步的输入原文与所选地区
+// （任何国家），由页面给出，组件不显示号码输入、国家码选择与 auth.sms_scope；通过时与注册 / 短信登录相同（kind 为 member、带 created）。
+// 离开第 2 步的去向（号码格式不成立、不在白名单、开关途中被关闭、短信无法送达或停发后改为游客）经 onLeave 交给页面；
+// 验证码错误不降级（不出现游客选项）。没有人机挑战公开 key 时只显示 common.service_unavailable，不给游客选项（HANDOFF 0.63 第（4）项）。
 
-export type SmsPurpose = "register" | "login" | "reset_password";
+export type SmsPurpose = "register" | "login" | "reset_password" | "checkout";
 
 export type SmsRegion = "MY" | "SG";
 
@@ -32,6 +36,15 @@ const CALLING_CODE: Readonly<Record<SmsRegion, string>> = { MY: "60", SG: "65" }
 // 组件提交的号码：输入原文与下拉所选的地区。
 export type SmsPhone = MemberPhone & { region: SmsRegion };
 
+// 结账用途的号码：第 1 步的输入原文与所选地区（任何国家，以加号开头时服务端以输入为准）；callingCode 为该地区的呼叫码，只用于 {phoneMasked}，不提交。
+export type CheckoutSmsPhone = MemberPhone & { callingCode: string };
+
+// 已发出验证码的号码（验证码以它提交）与 auth.code_sent 的 {phoneMasked}。
+export interface SentPhone {
+  phone: MemberPhone;
+  masked: string;
+}
+
 // 与 app/api/member_auth.py 的 mask_phone 相同：保留前 3 个与最后 4 个字符，中间每个字符换成星号；不足 8 个字符时整串换成星号。
 const MASK_HEAD = 3;
 const MASK_TAIL = 4;
@@ -45,17 +58,31 @@ export function maskPhone(phone: string): string {
 
 // auth.code_sent 的 {phoneMasked}：输入以 + 开头时为 + 与其后的全部数字，否则为国家码加输入里的数字（去掉开头的一个 0），再遮掩。
 // 只用于显示；提交的是输入原文与地区，由服务端规范化。
-export function maskedPhone(phone: SmsPhone): string {
-  const trimmed = phone.input.trim();
+function maskInput(input: string, callingCode: string): string {
+  const trimmed = input.trim();
   const digits = trimmed.replace(/\D/g, "");
-  const full = trimmed.startsWith("+") ? `+${digits}` : `+${CALLING_CODE[phone.region]}${digits.replace(/^0/, "")}`;
+  const full = trimmed.startsWith("+") ? `+${digits}` : `+${callingCode}${digits.replace(/^0/, "")}`;
   return maskPhone(full);
+}
+
+export function maskedPhone(phone: SmsPhone): string {
+  return maskInput(phone.input, CALLING_CODE[phone.region]);
+}
+
+// 结账用途的 {phoneMasked}（也是 P05 第 2 步号码的遮掩显示）：规则同 maskedPhone，国家码取所选地区的呼叫码。
+export function maskedCheckoutPhone(phone: CheckoutSmsPhone): string {
+  return maskInput(phone.input, phone.callingCode);
+}
+
+// 结账用途发出验证码的号码：只提交输入原文与地区。
+export function checkoutSent(phone: CheckoutSmsPhone): SentPhone {
+  return { phone: { input: phone.input, region: phone.region }, masked: maskedCheckoutPhone(phone) };
 }
 
 // 验证通过时回调收到的值：注册 / 短信登录为 created（是否新建了会员）；重设密码为号码已注册（带随后提交新密码用的 CSRF 令牌）或未注册。
 export type SmsVerified = { kind: "member"; created: boolean } | { kind: "registered"; csrfToken: string } | { kind: "not_registered" };
 
-// 组件的状态。region、input 与 code 为输入；token 为完成挑战取得的令牌（null 时发送按钮禁用）；challengeLost 为挑战加载失败或令牌过期；
+// 组件的状态。region、input 与 code 为输入（结账用途不用 region 与 input）；token 为完成挑战取得的令牌（null 时发送按钮禁用）；challengeLost 为挑战加载失败或令牌过期；
 // sending、verifying 为请求进行中；sent 为最近一次 sent 的号码（验证码以它提交，masked 为 auth.code_sent 的 {phoneMasked}）；
 // phoneInvalid 为号码下的 checkout.phone_invalid；codeWrong 为验证码下的 auth.code_wrong；notice 为其他提示；
 // paused 为流程中开关被关闭（disabled）；verified 为已验证。
@@ -67,7 +94,7 @@ export interface SmsState {
   challengeLost: boolean;
   sending: boolean;
   verifying: boolean;
-  sent: { phone: SmsPhone; masked: string } | null;
+  sent: SentPhone | null;
   phoneInvalid: boolean;
   codeWrong: boolean;
   notice: CopyKey | null;
@@ -146,13 +173,26 @@ export function startVerifying(state: SmsState): SmsState {
 
 const REGISTER_PURPOSES: ReadonlySet<SmsPurpose> = new Set<SmsPurpose>(["register", "login"]);
 
-// 号码不在白名单（UX V1）：注册 / 短信登录为 auth.not_supported_country，重设密码为 auth.sms_not_sent_no_change。
-function notWhitelisted(purpose: SmsPurpose): CopyKey {
+// 显示 auth.claim_notice 的用途（UX V1「仅结账验证、注册、短信登录显示」）。
+const CLAIM_PURPOSES: ReadonlySet<SmsPurpose> = new Set<SmsPurpose>(["register", "login", "checkout"]);
+
+// 结账用途里同一行显示 checkout.continue_guest 的提示（服务端判定短信无法送达或停发）；验证码错误不在其中。
+export const CHECKOUT_GUEST_NOTICE: CopyKey = "checkout.sms_unavailable";
+
+// 号码不在白名单（UX V1）：注册 / 短信登录为 auth.not_supported_country，重设密码为 auth.sms_not_sent_no_change；
+// 结账用途没有组件内的提示（页面以游客进入第 3 步并显示 checkout.guest_other_country）。
+function notWhitelisted(purpose: SmsPurpose): CopyKey | null {
+  if (purpose === "checkout") {
+    return null;
+  }
   return REGISTER_PURPOSES.has(purpose) ? "auth.not_supported_country" : "auth.sms_not_sent_no_change";
 }
 
-// 短信无法送达或停发（UX V1）：注册 / 短信登录为 auth.sms_failed，重设密码为 auth.sms_not_sent_no_change。
+// 短信无法送达或停发（UX V1）：注册 / 短信登录为 auth.sms_failed，重设密码为 auth.sms_not_sent_no_change，结账为 checkout.sms_unavailable。
 function notSent(purpose: SmsPurpose): CopyKey {
+  if (purpose === "checkout") {
+    return CHECKOUT_GUEST_NOTICE;
+  }
   return REGISTER_PURPOSES.has(purpose) ? "auth.sms_failed" : "auth.sms_not_sent_no_change";
 }
 
@@ -162,12 +202,13 @@ export const GUEST_NOTICES: ReadonlySet<CopyKey> = new Set<CopyKey>(["auth.not_s
 // 按发送的结果决定（每种结果都收起进行中、作废已用的令牌）：sent 记下号码并显示验证码输入（重发时清空已填的验证码）；
 // disabled 整个组件换成暂停提示；phone_invalid 在号码下显示 checkout.phone_invalid；not_whitelisted、undeliverable 与 suspended 按用途显示；
 // captcha_failed 为 auth.challenge_failed，rate_limited 为 common.rate_limited，network 为 common.network_check，其他失败为 common.error_retry。
-export function sendStep(reply: SmsSendReply, purpose: SmsPurpose, phone: SmsPhone): SmsChange {
+// 结账用途的 disabled、phone_invalid 与 not_whitelisted 另由页面离开第 2 步（checkoutSendLeave）。
+export function sendStep(reply: SmsSendReply, purpose: SmsPurpose, sent: SentPhone): SmsChange {
   return (current) => {
     const settled: SmsState = { ...current, sending: false, token: null };
     switch (reply) {
       case "sent":
-        return { ...settled, sent: { phone, masked: maskedPhone(phone) }, code: "" };
+        return { ...settled, sent, code: "" };
       case "disabled":
         return { ...settled, paused: true };
       case "phone_invalid":
@@ -232,18 +273,18 @@ export interface SmsMoves {
   verified: (verified: SmsVerified) => void;
 }
 
-// 发送（与重发）验证码：register 与 login 以同名 purpose 发送，reset_password 亦然。signal 中止（组件已卸载）之后不再更新；
+// 发送（与重发）验证码：register 与 login 以同名 purpose 发送，reset_password 亦然（结账用途见 sendCheckoutCode）。signal 中止（组件已卸载）之后不再更新；
 // 否则无论结果都在更新状态之后重置挑战，下一次发送要重新完成挑战。
 export async function sendCode(purpose: SmsPurpose, phone: SmsPhone, token: string, signal: AbortSignal, moves: SmsMoves): Promise<void> {
   const reply = await sendSmsCode(phone, purpose, token, signal);
   if (signal.aborted) {
     return;
   }
-  moves.update(sendStep(reply, purpose, phone));
+  moves.update(sendStep(reply, purpose, { phone, masked: maskedPhone(phone) }));
   moves.resetChallenge();
 }
 
-// 提交验证码：register 与 login 提交短信登录（同名 purpose），reset_password 提交重设验证。signal 中止之后不再更新；
+// 提交验证码：register 与 login 提交短信登录（同名 purpose），reset_password 提交重设验证（结账用途见 submitCheckoutCode）。signal 中止之后不再更新；
 // 通过时先调用回调，再进入已验证状态。
 export async function submitCode(purpose: SmsPurpose, phone: MemberPhone, code: string, signal: AbortSignal, moves: SmsMoves): Promise<void> {
   const reply = purpose === "reset_password" ? await verifyPasswordReset(phone, code, signal) : await smsLogin(phone, purpose, code, signal);
@@ -255,6 +296,66 @@ export async function submitCode(purpose: SmsPurpose, phone: MemberPhone, code: 
     moves.verified(step.verified);
   }
   moves.update(step.change);
+}
+
+// 结账用途离开第 2 步的去向（经 onLeave 交给页面）：phone_invalid 回第 1 步显示 checkout.phone_invalid；not_whitelisted 以游客进入第 3 步、
+// 显示 checkout.guest_other_country；disabled（开关在流程途中被关闭）回第 1 步按开关关闭继续；guest 为短信无法送达或停发后点了 checkout.continue_guest。
+export type CheckoutLeave = "phone_invalid" | "not_whitelisted" | "disabled" | "guest";
+
+// 发送的结果在结账用途里是否离开第 2 步；null 为留在第 2 步（含 undeliverable 与 suspended：先显示 checkout.sms_unavailable，由访客选择改为游客）。
+export function checkoutSendLeave(reply: SmsSendReply): CheckoutLeave | null {
+  switch (reply) {
+    case "phone_invalid":
+    case "not_whitelisted":
+    case "disabled":
+      return reply;
+    default:
+      return null;
+  }
+}
+
+// 核验的结果在结账用途里是否离开第 2 步：phone_invalid 与 disabled 离开；验证码错误或过期（wrong）与其他失败留在第 2 步，不降级。
+export function checkoutVerifyLeave(reply: SmsLoginReply): CheckoutLeave | null {
+  return reply.kind === "phone_invalid" || reply.kind === "disabled" ? reply.kind : null;
+}
+
+// 结账用途对结果的处理：另有离开第 2 步的去向。
+export interface CheckoutSmsMoves extends SmsMoves {
+  leave: (leave: CheckoutLeave) => void;
+}
+
+// 结账用途发送（与重发）验证码：以 checkout 发送第 1 步的输入原文与地区；状态的改动与重置挑战同 sendCode，之后按 checkoutSendLeave 离开。
+// signal 中止之后不再更新。
+export async function sendCheckoutCode(phone: CheckoutSmsPhone, token: string, signal: AbortSignal, moves: CheckoutSmsMoves): Promise<void> {
+  const sent = checkoutSent(phone);
+  const reply = await sendSmsCode(sent.phone, "checkout", token, signal);
+  if (signal.aborted) {
+    return;
+  }
+  moves.update(sendStep(reply, "checkout", sent));
+  moves.resetChallenge();
+  const leave = checkoutSendLeave(reply);
+  if (leave !== null) {
+    moves.leave(leave);
+  }
+}
+
+// 结账用途提交验证码：以 checkout 提交短信登录（服务端对已注册号码登录、未注册号码创建会员，回调收到 created）；
+// 通过时先调用回调再进入已验证状态，之后按 checkoutVerifyLeave 离开。signal 中止之后不再更新。
+export async function submitCheckoutCode(phone: MemberPhone, code: string, signal: AbortSignal, moves: CheckoutSmsMoves): Promise<void> {
+  const reply = await smsLogin(phone, "checkout", code, signal);
+  if (signal.aborted) {
+    return;
+  }
+  const step = verifyStep(reply);
+  if (step.verified !== null) {
+    moves.verified(step.verified);
+  }
+  moves.update(step.change);
+  const leave = checkoutVerifyLeave(reply);
+  if (leave !== null) {
+    moves.leave(leave);
+  }
 }
 
 // 挑战的处理：token 为取得令牌，lost 为加载失败、出错或过期，widget 为已渲染（或已移除，null）的挑战。
@@ -369,23 +470,31 @@ export interface SmsVerifyViewProps extends SmsHandlers {
   purpose: SmsPurpose;
   smsEnabled: boolean;
   siteKey: string | null;
-  // auth.continue_guest 的去向；只有注册 / 短信登录用到，重设密码为 null。
+  // auth.continue_guest 的去向；只有注册 / 短信登录用到，重设密码与结账为 null。
   guestTo: RoutePath | null;
   state: SmsState;
   // 托管挑战的容器（View 只放一个空的 div，挑战由组件经 turnstile.ts 渲染进去）。
   challengeRef: (element: HTMLDivElement | null) => void;
+  // checkout.continue_guest（只有结账用途用到）；不给时不显示该按钮。
+  onContinueGuest?: (() => void) | undefined;
 }
 
 // 整个组件替换为一条提示（不显示号码、挑战与发送按钮）：开关关闭或流程中被关闭时为 auth.sms_paused；公开 key 为 null 时注册 / 短信登录为
-// auth.sms_failed、重设密码为 auth.sms_not_sent_no_change。注册 / 短信登录另有 auth.continue_guest。
+// auth.sms_failed、重设密码为 auth.sms_not_sent_no_change、结账为 common.service_unavailable（HANDOFF 0.63 第（4）项）。注册 / 短信登录另有 auth.continue_guest。
 function replacement(props: Pick<SmsVerifyViewProps, "purpose" | "smsEnabled" | "siteKey" | "state">): CopyKey | null {
   if (!props.smsEnabled || props.state.paused) {
     return "auth.sms_paused";
   }
-  return props.siteKey === null ? notSent(props.purpose) : null;
+  if (props.siteKey !== null) {
+    return null;
+  }
+  return props.purpose === "checkout" ? "common.service_unavailable" : notSent(props.purpose);
 }
 
-export function SmsVerifyView({ purpose, smsEnabled, siteKey, guestTo, state, challengeRef, onRegion, onPhone, onCode, onSend, onVerify }: SmsVerifyViewProps) {
+// 替换提示里以 info（role="status"）显示的两条；其余为 danger。
+const INFO_REPLACEMENTS: ReadonlySet<CopyKey> = new Set<CopyKey>(["auth.sms_paused", "auth.sms_failed"]);
+
+export function SmsVerifyView({ purpose, smsEnabled, siteKey, guestTo, state, challengeRef, onRegion, onPhone, onCode, onSend, onVerify, onContinueGuest }: SmsVerifyViewProps) {
   const t = useCopy();
   const labelId = useId();
   const phoneId = useId();
@@ -393,11 +502,13 @@ export function SmsVerifyView({ purpose, smsEnabled, siteKey, guestTo, state, ch
   const codeId = useId();
   const codeErrorId = useId();
   const guest = REGISTER_PURPOSES.has(purpose) ? guestTo : null;
+  // 结账用途：号码由页面给出，不显示号码输入、国家码选择与 auth.sms_scope（P05 第 2 步线框与视觉稿 P05-desktop-2、P05-phone-2）。
+  const checkout = purpose === "checkout";
   const replaced = replacement({ purpose, smsEnabled, siteKey, state });
   if (replaced !== null) {
     return (
       <div className="site-sms">
-        <Notice copy={replaced} info={replaced !== "auth.sms_not_sent_no_change"} />
+        <Notice copy={replaced} info={INFO_REPLACEMENTS.has(replaced)} />
         {guest !== null && <GuestLink to={guest} />}
       </div>
     );
@@ -405,58 +516,63 @@ export function SmsVerifyView({ purpose, smsEnabled, siteKey, guestTo, state, ch
   const { sent, verified } = state;
   // 服务端的 captcha_failed 与挑战本身的失败是同一条提示，只显示一次。
   const notice = state.notice === "auth.challenge_failed" && state.challengeLost ? null : state.notice;
+  // 结账用途的发送按钮为次要按钮（视觉稿 P05-desktop-2、P05-phone-2），其余用途为主按钮（V1-start）。
+  const sendClass = checkout ? "acs-btn acs-btn--secondary site-sms__send" : "acs-btn acs-btn--primary site-sms__send";
+  const phoneField = (
+    <div className={state.phoneInvalid ? "acs-field acs-field--invalid" : "acs-field"}>
+      <label className="acs-field__label" id={labelId} htmlFor={phoneId}>
+        {t("auth.phone")}
+      </label>
+      <div className="acs-phone site-sms__phone">
+        <select
+          className="acs-select"
+          aria-labelledby={labelId}
+          value={state.region}
+          onChange={(event) => {
+            onRegion(event.target.value === "SG" ? "SG" : "MY");
+          }}
+        >
+          {SMS_REGIONS.map((option) => (
+            <option key={option.region} value={option.region}>
+              {`+${option.callingCode}`}
+            </option>
+          ))}
+        </select>
+        <input
+          className="acs-input"
+          id={phoneId}
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
+          value={state.input}
+          aria-invalid={state.phoneInvalid ? true : undefined}
+          aria-describedby={state.phoneInvalid ? phoneErrorId : undefined}
+          onChange={(event) => {
+            onPhone(event.target.value);
+          }}
+        />
+      </div>
+      {state.phoneInvalid && (
+        <span className="acs-field__error" id={phoneErrorId}>
+          <AlertIcon size={16} />
+          {t("checkout.phone_invalid")}
+        </span>
+      )}
+    </div>
+  );
   return (
     <div className="site-sms">
       {!verified && (
         <>
-          <div className={state.phoneInvalid ? "acs-field acs-field--invalid" : "acs-field"}>
-            <label className="acs-field__label" id={labelId} htmlFor={phoneId}>
-              {t("auth.phone")}
-            </label>
-            <div className="acs-phone site-sms__phone">
-              <select
-                className="acs-select"
-                aria-labelledby={labelId}
-                value={state.region}
-                onChange={(event) => {
-                  onRegion(event.target.value === "SG" ? "SG" : "MY");
-                }}
-              >
-                {SMS_REGIONS.map((option) => (
-                  <option key={option.region} value={option.region}>
-                    {`+${option.callingCode}`}
-                  </option>
-                ))}
-              </select>
-              <input
-                className="acs-input"
-                id={phoneId}
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                value={state.input}
-                aria-invalid={state.phoneInvalid ? true : undefined}
-                aria-describedby={state.phoneInvalid ? phoneErrorId : undefined}
-                onChange={(event) => {
-                  onPhone(event.target.value);
-                }}
-              />
-            </div>
-            {state.phoneInvalid && (
-              <span className="acs-field__error" id={phoneErrorId}>
-                <AlertIcon size={16} />
-                {t("checkout.phone_invalid")}
-              </span>
-            )}
-          </div>
-          <p className="acs-body-s acs-muted site-sms__text">{t("auth.sms_scope")}</p>
-          {REGISTER_PURPOSES.has(purpose) && <p className="acs-body-s site-sms__text">{t("auth.claim_notice")}</p>}
+          {!checkout && phoneField}
+          {!checkout && <p className="acs-body-s acs-muted site-sms__text">{t("auth.sms_scope")}</p>}
+          {CLAIM_PURPOSES.has(purpose) && <p className="acs-body-s site-sms__text">{t("auth.claim_notice")}</p>}
           <span className="acs-body-s">{t("auth.challenge")}</span>
           <div className="site-sms__challenge" ref={challengeRef} />
           {state.challengeLost && <Notice copy="auth.challenge_failed" info={false} />}
           {sent === null && (
             <button
-              className="acs-btn acs-btn--primary site-sms__send"
+              className={sendClass}
               type="button"
               disabled={!canSend(state)}
               aria-busy={state.sending}
@@ -513,8 +629,13 @@ export function SmsVerifyView({ purpose, smsEnabled, siteKey, guestTo, state, ch
           )}
         </div>
       )}
-      {!verified && notice !== null && <Notice copy={notice} info={GUEST_NOTICES.has(notice)} />}
+      {!verified && notice !== null && <Notice copy={notice} info={GUEST_NOTICES.has(notice) || notice === CHECKOUT_GUEST_NOTICE} />}
       {!verified && notice !== null && GUEST_NOTICES.has(notice) && guest !== null && <GuestLink to={guest} />}
+      {!verified && checkout && notice === CHECKOUT_GUEST_NOTICE && onContinueGuest !== undefined && (
+        <button className="acs-btn acs-btn--secondary site-sms__guest" type="button" onClick={onContinueGuest}>
+          {t("checkout.continue_guest")}
+        </button>
+      )}
       {sent !== null && !verified && (
         <button
           className="acs-btn acs-btn--quiet site-sms__resend"
@@ -541,8 +662,15 @@ interface CommonProps {
   challenge?: ChallengeLoader;
 }
 
-// 注册 / 短信登录须给出 auth.continue_guest 的去向（站内前台路径），重设密码不传。
-export type SmsVerifyProps = CommonProps & ({ purpose: "register" | "login"; guestTo: RoutePath } | { purpose: "reset_password" });
+// 结账用途的属性：phone 为第 1 步的号码；onLeave 收到离开第 2 步的去向（不给时不处理，也不显示 checkout.continue_guest）。
+export interface CheckoutSmsProps {
+  purpose: "checkout";
+  phone: CheckoutSmsPhone;
+  onLeave?: ((leave: CheckoutLeave) => void) | undefined;
+}
+
+// 注册 / 短信登录须给出 auth.continue_guest 的去向（站内前台路径），重设密码不传；结账给出号码与离开第 2 步的回调。
+export type SmsVerifyProps = CommonProps & ({ purpose: "register" | "login"; guestTo: RoutePath } | { purpose: "reset_password" } | CheckoutSmsProps);
 
 function smsMoves(setState: Dispatch<SetStateAction<SmsState>>, widget: RefObject<ChallengeWidget | null>, onVerified: (verified: SmsVerified) => void): SmsMoves {
   return {
@@ -556,10 +684,21 @@ function smsMoves(setState: Dispatch<SetStateAction<SmsState>>, widget: RefObjec
   };
 }
 
+function checkoutMoves(moves: SmsMoves, onLeave: ((leave: CheckoutLeave) => void) | undefined): CheckoutSmsMoves {
+  return {
+    ...moves,
+    leave: (leave) => {
+      onLeave?.(leave);
+    },
+  };
+}
+
 export default function SmsVerify(props: SmsVerifyProps) {
   const { purpose, smsEnabled, siteKey, onVerified } = props;
   const loader = props.challenge ?? TURNSTILE;
-  const guestTo = props.purpose === "reset_password" ? null : props.guestTo;
+  const guestTo = props.purpose === "register" || props.purpose === "login" ? props.guestTo : null;
+  const checkout = props.purpose === "checkout" ? props : null;
+  const onLeave = checkout?.onLeave;
   const { language } = useLanguage();
   const [state, setState] = useState<SmsState>(INITIAL_SMS);
   const [box, setBox] = useState<HTMLDivElement | null>(null);
@@ -624,7 +763,12 @@ export default function SmsVerify(props: SmsVerifyProps) {
           return;
         }
         setState(startSending);
-        void sendCode(purpose, phoneOf(state), token, controller.signal, smsMoves(setState, widget, onVerified));
+        const moves = smsMoves(setState, widget, onVerified);
+        if (checkout !== null) {
+          void sendCheckoutCode(checkout.phone, token, controller.signal, checkoutMoves(moves, onLeave));
+        } else {
+          void sendCode(purpose, phoneOf(state), token, controller.signal, moves);
+        }
       }}
       onVerify={() => {
         const controller = lifetime.current;
@@ -632,8 +776,20 @@ export default function SmsVerify(props: SmsVerifyProps) {
           return;
         }
         setState(startVerifying);
-        void submitCode(purpose, state.sent.phone, state.code.trim(), controller.signal, smsMoves(setState, widget, onVerified));
+        const moves = smsMoves(setState, widget, onVerified);
+        if (checkout !== null) {
+          void submitCheckoutCode(state.sent.phone, state.code.trim(), controller.signal, checkoutMoves(moves, onLeave));
+        } else {
+          void submitCode(purpose, state.sent.phone, state.code.trim(), controller.signal, moves);
+        }
       }}
+      onContinueGuest={
+        onLeave === undefined
+          ? undefined
+          : () => {
+              onLeave("guest");
+            }
+      }
     />
   );
 }

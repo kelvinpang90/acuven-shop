@@ -1,33 +1,46 @@
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CheckoutRegions, DestinationQuote, PricedQuoteLine, QuoteLine } from "../api/checkout";
+import { SMS_LOGIN_URL } from "../api/memberAuth";
+import { createMemberSessionReader, MEMBER_SESSION_URL } from "../api/memberSession";
 import { guestOrderBody, orderAttemptFor, runGuestOrder } from "../api/orders";
 import App from "../App";
 import { CART_STORAGE_KEY, readCart } from "../cart";
 import type { CartLine, CartStorage } from "../cart";
+import SmsVerify, { checkoutSent, INITIAL_SMS, SmsVerifyView, startVerifying, submitCheckoutCode } from "../components/SmsVerify";
+import type { CheckoutLeave, CheckoutSmsMoves, SmsState } from "../components/SmsVerify";
 import { BRAND, COPY, LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { RouterProvider } from "../router";
 import type { RoutePath } from "../router";
+import { enterAsMember, memberForm } from "./CheckoutMember";
+import type { CheckoutMemberProps } from "./CheckoutMember";
 import {
   afterReply,
   backToPhone,
   canContinue,
   canPlaceOrder,
   checkoutQuoteKey,
+  checkoutSmsPhone,
   CheckoutView,
   completeOrder,
   continueFromPhone,
+  enterVerified,
   guestRecipient,
   INITIAL_FORM,
+  leaveTurnsSmsOff,
+  leaveVerify,
   quoteDestination,
   recipientComplete,
   replyEffects,
+  settleVerified,
   summaryQuote,
+  verifiedButSignedOut,
 } from "./CheckoutPage";
-import type { CheckoutActions, CheckoutForm, Reference, SummaryQuote } from "./CheckoutPage";
+import type { CheckoutActions, CheckoutForm, CheckoutVerified, Reference, SummaryQuote } from "./CheckoutPage";
 import { countryNames } from "./checkoutPhone";
 
 afterEach(() => {
@@ -136,6 +149,71 @@ const noActions: CheckoutActions = {
   onPlaceOrder: () => undefined,
 };
 
+const noop = () => undefined;
+
+// SHOP-TASK-160 的第 2 步：开关开启时第 1 步填了马来西亚号码（已填了收货资料）再继续。号码、令牌与公开 key 都是虚构值。
+const SITE_KEY = "1x00000000000000000000AA";
+const CSRF = "csrf-token-example";
+const CODE = "123456";
+const MASKED = "+60*****6789";
+const STEP_2: CheckoutForm = continueFromPhone({ ...STEP_1, phoneInput: "12-345 6789", recipient: step3().recipient }, true);
+
+// 第 2 步嵌入的结账用途 SmsVerify（同页面的接法）；siteKey 为 null 时为没有人机挑战公开 key。
+function checkoutVerify(siteKey: string | null): ReactNode {
+  return <SmsVerify purpose="checkout" smsEnabled siteKey={siteKey} phone={checkoutSmsPhone(STEP_2, REGIONS.regions)} onVerified={noop} onLeave={noop} />;
+}
+
+// 第 2 步的短信验证 View（给定状态），结账用途。
+function checkoutVerifyView(state: SmsState): ReactNode {
+  return (
+    <SmsVerifyView
+      purpose="checkout"
+      smsEnabled
+      siteKey={SITE_KEY}
+      guestTo={null}
+      state={state}
+      challengeRef={noop}
+      onRegion={noop}
+      onPhone={noop}
+      onCode={noop}
+      onSend={noop}
+      onVerify={noop}
+      onContinueGuest={noop}
+    />
+  );
+}
+
+// 会员第 3 步（计价未返回），用于已验证横幅。
+function memberStep(): CheckoutMemberProps {
+  return { form: memberForm(CSRF), quote: { status: "loading" }, actions: { onPhone: noop, onCoupon: noop, onApplyCoupon: noop, onPoints: noop } };
+}
+
+const VERIFIED_NEW = enterVerified(STEP_2, { created: true, phoneMasked: MASKED });
+const VERIFIED_MEMBER = enterVerified(STEP_2, { created: false, phoneMasked: MASKED });
+
+function json(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+}
+
+// fetch 替身：按地址取回答；记下每次请求的地址与 init。
+function stubFetch(replies: Readonly<Record<string, () => Response>>) {
+  const calls: { url: string; init: RequestInit | undefined }[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: string | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, init });
+      const reply = replies[url];
+      return reply === undefined ? Promise.reject(new TypeError(`unexpected request: ${url}`)) : Promise.resolve(reply());
+    }),
+  );
+  return calls;
+}
+
+function memberSession(): Response {
+  return json(200, { phone_masked: MASKED, has_password: false, csrf_token: CSRF });
+}
+
 function languageStorage(language: Language) {
   return {
     getItem: (key: string) => (key === LANGUAGE_STORAGE_KEY ? language : null),
@@ -149,13 +227,16 @@ interface RenderOptions {
   quote?: SummaryQuote;
   form?: CheckoutForm;
   language?: Language;
+  // 会员第 3 步（SHOP-TASK-160 的已验证横幅用到）与第 2 步嵌入的短信验证。
+  member?: CheckoutMemberProps;
+  verify?: ReactNode;
 }
 
-function render({ lines = CART, reference = referenceOf(false), quote = readyQuote(NO_COUNTRY), form = STEP_1, language = "en" }: RenderOptions = {}): string {
+function render({ lines = CART, reference = referenceOf(false), quote = readyQuote(NO_COUNTRY), form = STEP_1, language = "en", member, verify }: RenderOptions = {}): string {
   return renderToStaticMarkup(
     <LanguageProvider storage={languageStorage(language)}>
       <RouterProvider initialPath="/checkout">
-        <CheckoutView lines={lines} reference={reference} quote={quote} form={form} actions={noActions} />
+        <CheckoutView lines={lines} reference={reference} quote={quote} form={form} actions={noActions} member={member} verify={verify} />
       </RouterProvider>
     </LanguageProvider>,
   );
@@ -305,21 +386,27 @@ describe("deciding after continue", () => {
     expect(next.phoneError).toBeNull();
   });
 
-  // SHOP-TASK-025 验收第 5 条「开关开启时，号码属于马新…在短信验证组件实现前停在第 1 步并显示 common.service_unavailable（Kelvin 2026-10-01 批准的过渡规则，docs/HANDOFF.md 0.25）」。
+  // UX 0.13 P05「未登录，马来西亚/新加坡号码 | 填手机号 | V1：人机挑战 → 短信验证码 → 注册或登录」与 SHOP-TASK-160 验收「continueFromPhone 据此进入第 2 步」。
+  // 原为「stays on step 1 with SMS on」（HANDOFF 0.25 的过渡规则），过渡规则由本任务取消，改为进入第 2 步、没有错误与游客提示，已填内容保留。
   it.each([
     ["MY", "12-345 6789"],
     ["SG", "8123 4567"],
     ["GB", "+60 12-345 6789"],
-  ])("stays on step 1 with SMS on for %s %j", (region, input) => {
-    const next = continueFromPhone({ ...STEP_1, phoneRegion: region, phoneInput: input }, true);
-    expect(next.step).toBe(1);
-    expect(next.phoneError).toBe("unavailable");
+  ])("goes to step 2 with SMS on for %s %j", (region, input) => {
+    const form = { ...STEP_1, phoneRegion: region, phoneInput: input, recipient: step3().recipient };
+    const next = continueFromPhone(form, true);
+    expect(next.step).toBe(2);
+    expect(next.phoneError).toBeNull();
+    expect(next.guestNotice).toBeNull();
+    expect(next.phoneInput).toBe(input);
+    expect(next.recipient).toEqual(form.recipient);
   });
 
-  // 同一条：停在第 1 步时显示 common.service_unavailable 提示条，号码仍在输入框里。
-  it.each(LANGUAGES)("shows common.service_unavailable on step 1 in %s", (language) => {
-    const html = render({ reference: referenceOf(true), form: { ...STEP_1, phoneInput: "12-345 6789", phoneError: "unavailable" }, language });
-    expect(html).toContain(`<p class="acs-alert acs-alert--danger site-notice" role="alert">${copy("common.service_unavailable", language)}</p>`);
+  // SHOP-TASK-160 验收「去掉第 1 步的 common.service_unavailable 过渡提示」。原为「shows common.service_unavailable on step 1」，随过渡提示取消改为：
+  // 开关开启时第 1 步（含刚回到第 1 步、号码仍在输入框里）没有 common.service_unavailable。
+  it.each(LANGUAGES)("shows no service_unavailable notice on step 1 in %s", (language) => {
+    const html = render({ reference: referenceOf(true), form: { ...STEP_1, phoneInput: "12-345 6789" }, language });
+    expect(html).not.toContain(copy("common.service_unavailable", language));
     expect(html).toContain(`value="12-345 6789"`);
     expect(html).not.toContain(copy("checkout.recipient_title", language));
   });
@@ -348,6 +435,250 @@ describe("deciding after continue", () => {
       expect(html.indexOf(copy(shown, language))).toBeLessThan(html.indexOf(copy("checkout.recipient_title", language)));
       expect(html.indexOf(copy("checkout.guest_notice", language))).toBeLessThan(html.indexOf(copy("checkout.recipient_title", language)));
     }
+  });
+});
+
+describe("step 2: SMS verification (SHOP-TASK-160)", () => {
+  function escapeRegExp(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  // UX 0.13 P05 第 2 步线框「[checkout.phone_step_title] / [P4] <号码部分遮盖> ([checkout.phone_change]) / [checkout.phone_notice]（常显） / [auth.claim_notice] /
+  // [auth.challenge] / <托管人机挑战组件> / ( [auth.send_code] )」与视觉稿 P05-desktop-2：依次为标题、遮掩号码与更改按钮、常显告知（带 P14 链接）与嵌入的 V1；
+  // 没有号码输入、国家码、auth.sms_scope、继续按钮与收货资料。
+  it.each(LANGUAGES)("shows the title, the masked number with change and the phone notice before the embedded V1 in %s", (language) => {
+    const html = render({ reference: referenceOf(true), form: STEP_2, verify: checkoutVerify(SITE_KEY), language });
+    const order = [
+      `<h2 class="acs-display-s">${copy("checkout.phone_step_title", language)}</h2>`,
+      `<div class="site-checkout__number"><span class="acs-num">${MASKED}</span><button class="acs-btn acs-btn--quiet" type="button">${copy("checkout.phone_change", language)}</button></div>`,
+      `<div class="acs-hint acs-hint--block"><span>${copy("checkout.phone_notice", language)}</span><a href="/privacy">${copy("checkout.form_notice_link", language)}</a></div>`,
+      copy("auth.claim_notice", language),
+      copy("auth.challenge", language),
+      copy("auth.send_code", language),
+    ];
+    const positions = order.map((piece) => html.indexOf(piece));
+    expect(positions.every((position) => position >= 0), String(positions)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    expect(html).toContain(`<section class="site-checkout__step site-checkout__verify">`);
+    expect(count(html, "<input")).toBe(0);
+    expect(count(html, "<select")).toBe(0);
+    for (const key of ["auth.sms_scope", "checkout.phone_notice_sms_off", "checkout.place_order_hint"] as const) {
+      expect(html, key).not.toContain(copy(key, language));
+    }
+    // 没有第 1 步的继续按钮与收货资料。
+    expect(html).not.toContain(`type="submit"`);
+    expect(html).not.toContain("site-checkout__fields");
+    expect(html).not.toContain("12-345 6789");
+  });
+
+  // UX P05 第 2 步线框「<摘要同第 1 步>」：桌面摘要与第 1 步相同（各行、小计、cart.shipping_later），没有下单按钮。
+  it("keeps the step 1 summary", () => {
+    const aside = (html: string) => part(html, /<aside[\s\S]*?<\/aside>/);
+    const step2 = render({ reference: referenceOf(true), form: STEP_2, verify: checkoutVerify(SITE_KEY) });
+    expect(aside(step2)).toBe(aside(render({ reference: referenceOf(true), form: { ...STEP_2, step: 1 } })));
+    expect(step2).not.toContain(copy("checkout.place_order_hint"));
+  });
+
+  // 验收「号码取第 1 步的输入原文与所选地区（地区可为任何国家，以加号开头时服务端以输入为准）」与「第 1 步号码的遮掩显示（规则同 SmsVerify.tsx 的 maskedPhone）」：
+  // 下拉为 GB 而输入 +65 号码时，组件拿到的是原文与 GB，遮掩按输入里的国家码。
+  it("hands the raw number and the chosen region to the verification", () => {
+    const typed = continueFromPhone({ ...STEP_1, phoneRegion: "GB", phoneInput: "+65 8123 4567" }, true);
+    expect(typed.step).toBe(2);
+    expect(checkoutSmsPhone(typed, REGIONS.regions)).toEqual({ input: "+65 8123 4567", region: "GB", callingCode: "44" });
+    expect(checkoutSent(checkoutSmsPhone(typed, REGIONS.regions))).toEqual({ phone: { input: "+65 8123 4567", region: "GB" }, masked: "+65****4567" });
+    expect(render({ reference: referenceOf(true), form: typed })).toContain(`<span class="acs-num">+65****4567</span>`);
+  });
+
+  // 验收「checkout.phone_change（回到第 1 步，保留已填内容）」：号码、地区与收货资料都在，第 1 步输入框里仍是原号码。
+  it("goes back to step 1 keeping what was entered", () => {
+    const back = backToPhone(STEP_2);
+    expect(back).toEqual({ ...STEP_2, step: 1 });
+    expect(render({ reference: referenceOf(true), form: back })).toContain(`value="12-345 6789"`);
+  });
+
+  // 没有人机挑战公开 key（HANDOFF 0.63 第（4）项「显示 common.service_unavailable、不给游客选项」）：第 2 步只有标题、号码、告知与 common.service_unavailable，
+  // 仍可点 checkout.phone_change 回第 1 步。
+  it("shows only common.service_unavailable in the verification without a challenge key", () => {
+    const html = render({ reference: referenceOf(true), form: STEP_2, verify: checkoutVerify(null) });
+    expect(html).toContain(copy("common.service_unavailable"));
+    expect(html).toContain(copy("checkout.phone_change"));
+    expect(html).not.toContain(copy("checkout.continue_guest"));
+    expect(html).not.toContain(copy("auth.continue_guest"));
+    expect(html).not.toContain(copy("auth.send_code"));
+  });
+
+  // UX P05「未登录，马新号码，短信无法送达或停发（服务端判定）| …可点 [checkout.continue_guest] | 游客表单（降级）」、第 3 步线框「游客：…或（降级时）[checkout.sms_unavailable]
+  // [checkout.guest_notice]」与验收「点后以游客进入第 3 步、顶部显示 checkout.sms_unavailable 与 checkout.guest_notice」：已填内容保留，游客摘要没有券与积分两行。
+  it.each(LANGUAGES)("continues to the guest step 3 after the SMS cannot be sent in %s", (language) => {
+    const next = leaveVerify(STEP_2, "guest");
+    expect(next).toEqual({ ...STEP_2, step: 3, guestNotice: "checkout.sms_unavailable" });
+    const html = render({ form: next, quote: readyQuote(TO_SELANGOR), language });
+    expect(html).toMatch(new RegExp(`<div class="acs-alert acs-alert--info" role="status"><svg[^>]*aria-hidden="true">[\\s\\S]*?</svg><span>${escapeRegExp(copy("checkout.sms_unavailable", language))}</span></div>`));
+    expect(html).toContain(`<p class="acs-body-s">${copy("checkout.guest_notice", language)}</p>`);
+    expect(html.indexOf(copy("checkout.sms_unavailable", language))).toBeLessThan(html.indexOf(copy("checkout.recipient_title", language)));
+    expect(html).toContain(copy("checkout.phone_lookup_hint", language));
+    expect(html).not.toContain(COUPON_ROW[language]);
+    expect(html).not.toContain(POINTS_ROW[language]);
+  });
+
+  // UX P05「未登录，白名单外号码 | 不发短信，显示 [checkout.guest_other_country] | 游客表单」与验收「回 not_whitelisted 时以游客进入第 3 步并显示 checkout.guest_other_country」
+  // （HANDOFF 0.63 运营者落实写法）。
+  it("continues to the guest step 3 when the server says the number is not whitelisted", () => {
+    const next = leaveVerify(STEP_2, "not_whitelisted");
+    expect(next).toEqual({ ...STEP_2, step: 3, guestNotice: "checkout.guest_other_country" });
+    const html = render({ form: next, quote: readyQuote(TO_SELANGOR) });
+    expect(html).toContain(copy("checkout.guest_other_country"));
+    expect(html).toContain(copy("checkout.guest_notice"));
+  });
+
+  // UX V1「开关在流程途中被关闭时……在结账中则回到 P05 第 1 步按关闭状态继续」与验收「发送或验证回 disabled（开关在流程途中被关闭）时回到第 1 步按开关关闭继续」：
+  // 回第 1 步没有错误，页面把开关当作已关闭（第 1 步换成 checkout.phone_notice_sms_off），再继续以游客进入第 3 步、显示 checkout.guest_sms_off。
+  it("returns to step 1 with SMS off after disabled", () => {
+    expect(leaveTurnsSmsOff("disabled")).toBe(true);
+    for (const other of ["phone_invalid", "not_whitelisted", "guest"] as const) {
+      expect(leaveTurnsSmsOff(other), other).toBe(false);
+    }
+    const back = leaveVerify(STEP_2, "disabled");
+    expect(back).toEqual({ ...STEP_2, step: 1 });
+    const html = render({ reference: referenceOf(false), form: back });
+    expect(html).toContain(copy("checkout.phone_notice_sms_off"));
+    expect(html).not.toContain(copy("common.service_unavailable"));
+    expect(continueFromPhone(back, false)).toMatchObject({ step: 3, guestNotice: "checkout.guest_sms_off" });
+  });
+
+  // 验收「结账用途发送或核验回 phone_invalid 时回到第 1 步并显示 checkout.phone_invalid」：字段标为错误，提示在号码字段下。
+  it("returns to step 1 with checkout.phone_invalid", () => {
+    const back = leaveVerify(STEP_2, "phone_invalid");
+    expect(back).toEqual({ ...STEP_2, step: 1, phoneError: "invalid" });
+    const html = render({ reference: referenceOf(true), form: back });
+    expect(html).toContain(`<div class="acs-field acs-field--invalid">`);
+    expect(html).toContain(copy("checkout.phone_invalid"));
+  });
+
+  // 派生实现约束（实现选择）：已不在第 2 步（例如点了 checkout.phone_change）时晚到的去向不改表单。
+  it("ignores a leave once off step 2", () => {
+    const step1 = backToPhone(STEP_2);
+    expect(leaveVerify(step1, "guest")).toBe(step1);
+    expect(leaveVerify(step3(), "disabled")).toEqual(step3());
+  });
+
+  // UX P05「未登录，马新号码，验证码错误或超过尝试次数 | 留在 V1，显示 [auth.code_wrong]……不显示游客选项 | —（不降级）」与 UX-COPY checkout.sms_unavailable
+  // 「验证码错误不显示」：以 checkout 核验回 code_wrong 时不交回任何去向，页面留在第 2 步，只有 auth.code_wrong，没有游客提示与 checkout.continue_guest。
+  it("stays on step 2 without a guest option after a wrong code", async () => {
+    const calls = stubFetch({ [SMS_LOGIN_URL]: () => json(422, { detail: "code_wrong" }) });
+    let page = STEP_2;
+    let state: SmsState = startVerifying({ ...INITIAL_SMS, sent: checkoutSent(checkoutSmsPhone(STEP_2, REGIONS.regions)), code: CODE });
+    const left: CheckoutLeave[] = [];
+    const moves: CheckoutSmsMoves = {
+      update: (change) => {
+        state = change(state);
+      },
+      resetChallenge: noop,
+      verified: noop,
+      leave: (leave) => {
+        left.push(leave);
+        page = leaveVerify(page, leave);
+      },
+    };
+    await submitCheckoutCode({ input: STEP_2.phoneInput, region: STEP_2.phoneRegion }, CODE, new AbortController().signal, moves);
+    expect(calls.map((call) => call.url)).toEqual([SMS_LOGIN_URL]);
+    expect(left).toEqual([]);
+    expect(page).toBe(STEP_2);
+    const html = render({ reference: referenceOf(true), form: page, verify: checkoutVerifyView(state) });
+    expect(html).toContain(copy("auth.code_wrong"));
+    expect(html).not.toContain(copy("checkout.continue_guest"));
+    expect(html).not.toContain(copy("checkout.sms_unavailable"));
+    expect(html).not.toContain(copy("checkout.guest_notice"));
+  });
+
+  // 验收「验证通过——经读取对象重读会话（页头随共享会话状态切换为 common.nav_account）：member 时以会员身份进入……第 3 步……{phoneMasked} 取自重读到的会话」：
+  // 重读是共享读取（请求不带页面的 signal），共享状态随之成为 member；created 取自验证结果。
+  it.each([true, false])("re-reads the session and enters step 3 as a member when created is %s", async (created) => {
+    const reader = createMemberSessionReader();
+    const calls = stubFetch({ [MEMBER_SESSION_URL]: memberSession });
+    const entered: [string, CheckoutVerified][] = [];
+    let retried = 0;
+    await settleVerified({ kind: "member", created }, reader, new AbortController().signal, {
+      member: (csrfToken, verified) => {
+        entered.push([csrfToken, verified]);
+      },
+      retry: () => {
+        retried += 1;
+      },
+    });
+    expect(entered).toEqual([[CSRF, { created, phoneMasked: MASKED }]]);
+    expect(retried).toBe(0);
+    expect(calls.map((call) => call.url)).toEqual([MEMBER_SESSION_URL]);
+    expect(calls[0]?.init?.signal).toBeNull();
+    expect(reader.current().kind).toBe("member");
+  });
+
+  // HANDOFF 0.63 第（4）项「验证通过后重读会话不是会员时回第 1 步显示 common.error_retry」：未登录与读取失败都回第 1 步，已填内容保留，没有已验证横幅。
+  it.each<[string, () => Response]>([
+    ["no session", () => json(401, { detail: "member_session_required" })],
+    ["a failed read", () => json(500, {})],
+  ])("returns to step 1 with common.error_retry after %s", async (_name, reply) => {
+    stubFetch({ [MEMBER_SESSION_URL]: reply });
+    let retried = 0;
+    await settleVerified({ kind: "member", created: true }, createMemberSessionReader(), new AbortController().signal, {
+      member: () => {
+        throw new Error("not a member");
+      },
+      retry: () => {
+        retried += 1;
+      },
+    });
+    expect(retried).toBe(1);
+    const back = verifiedButSignedOut(STEP_2);
+    expect(back).toEqual({ ...STEP_2, step: 1, phoneError: "retry" });
+    const html = render({ reference: referenceOf(true), form: back });
+    expect(html).toContain(`<p class="acs-alert acs-alert--danger site-notice" role="alert">${copy("common.error_retry")}</p>`);
+    expect(html).toContain(`value="12-345 6789"`);
+    expect(html).not.toContain("acs-alert--success");
+  });
+
+  // 验收「会员会话的重读是共享读取，不中止，离开页面后不再据其结果更新或跳转」：重读期间离开页面，不进入第 3 步也不回第 1 步，共享状态照常更新。
+  it("does nothing after the page is left during the re-read", async () => {
+    const page = new AbortController();
+    const reader = createMemberSessionReader();
+    stubFetch({
+      [MEMBER_SESSION_URL]: () => {
+        page.abort();
+        return memberSession();
+      },
+    });
+    const events: string[] = [];
+    await settleVerified({ kind: "member", created: false }, reader, page.signal, {
+      member: () => {
+        events.push("member");
+      },
+      retry: () => {
+        events.push("retry");
+      },
+    });
+    expect(events).toEqual([]);
+    expect(reader.current().kind).toBe("member");
+  });
+
+  // 验收「第 3 步顶部的提示区……显示 checkout.verified_member（created 为假）或 checkout.verified_new（created 为真）」「已验证横幅只在本次验证之后显示，已登录直接进入时没有」、
+  // UX P05 第 2 步线框「✓ [checkout.verified_member] 或 ✓ [checkout.verified_new] → 进入第 3 步会员表单」与视觉稿 V1-verified、P05-desktop-3-member（成功提示条，桌面其上为标题）：
+  // 横幅在收货资料标题之前，{phoneMasked} 为会话给的遮掩号码。
+  it.each(LANGUAGES)("shows the verified banner on the member step 3 only after verifying in %s", (language) => {
+    expect(VERIFIED_NEW).toMatchObject({ step: 3, guestNotice: null, phoneError: null, verified: { created: true, phoneMasked: MASKED } });
+    for (const [form, key] of [
+      [VERIFIED_MEMBER, "checkout.verified_member"],
+      [VERIFIED_NEW, "checkout.verified_new"],
+    ] as const) {
+      const html = render({ form, member: memberStep(), quote: { status: "loading" }, language });
+      const banner = `<div class="acs-alert acs-alert--success" role="status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M8 12.5l3 3 5-6"></path></svg><span>${escapeHtml(COPY[key][language].replace("{phoneMasked}", MASKED))}</span></div>`;
+      expect(html).toContain(`<div class="site-checkout__verified"><h2 class="acs-display-s site-desktop-only">${copy("checkout.phone_step_title", language)}</h2>${banner}</div>`);
+      expect(html.indexOf(banner)).toBeLessThan(html.indexOf(copy("checkout.recipient_title", language)));
+      expect(html).not.toContain(copy("checkout.guest_notice", language));
+    }
+    const direct = render({ form: enterAsMember({ ...STEP_1, recipient: step3().recipient }), member: memberStep(), quote: { status: "loading" }, language });
+    expect(direct).not.toContain("acs-alert--success");
+    // 会员会话失效、回到游客路径后不再显示横幅。
+    expect(render({ form: VERIFIED_NEW, quote: readyQuote(TO_SELANGOR), language })).not.toContain("acs-alert--success");
   });
 });
 
@@ -686,21 +1017,24 @@ describe("answers to the order", () => {
     expect(checkoutQuoteKey("en", CART, quoteDestination("GB", ""), 1)).not.toBe(checkoutQuoteKey("en", CART, quoteDestination("GB", ""), 0));
   });
 
-  // SHOP-TASK-025 验收第 9 条「403 sms_verification_required（开关在填表途中被打开）时回第 1 步按开启状态重新判定」与 UX 0.7「开关在填表途中被打开时下单被拒，页面回到第 1 步重新判定」：
-  // 页面把开关当作已开启；马新号码回第 1 步显示 common.service_unavailable，其他号码回第 1 步无错误、继续后为 checkout.guest_other_country。
+  // SHOP-TASK-025 验收第 9 条「403 sms_verification_required（开关在填表途中被打开）时回第 1 步按开启状态重新判定」、UX 0.7「开关在填表途中被打开时下单被拒，页面回到第 1 步重新判定」
+  // 与 SHOP-TASK-160 验收「游客下单回 sms_required 时回到第 1 步、把开关当作已开启、不显示错误（再继续即进入第 2 步）」。原条目期望马新号码回第 1 步显示
+  // common.service_unavailable（过渡规则），随过渡规则取消改为：马新号码回第 1 步没有错误、再继续进入第 2 步；其他号码继续后仍为 checkout.guest_other_country。
   it("returns to step 1 and decides again with SMS on after sms_verification_required", () => {
     expect(replyEffects("sms_required").smsEnabled).toBe(true);
     const malaysian = afterReply({ ...form, phoneRegion: "MY", phoneInput: "12-345 6789" }, "sms_required");
     expect(malaysian.step).toBe(1);
-    expect(malaysian.phoneError).toBe("unavailable");
+    expect(malaysian.phoneError).toBeNull();
     expect(malaysian.recipient).toEqual(form.recipient);
+    expect(continueFromPhone(malaysian, true).step).toBe(2);
     const other = afterReply(form, "sms_required");
     expectKept(other);
     expect(other.step).toBe(1);
     expect(other.phoneError).toBeNull();
     expect(continueFromPhone(other, true).guestNotice).toBe("checkout.guest_other_country");
     const html = render({ reference: referenceOf(true), form: malaysian });
-    expect(html).toContain(copy("common.service_unavailable"));
+    expect(html).not.toContain(copy("common.service_unavailable"));
+    expect(html).not.toContain(copy("common.error_retry"));
     expect(html).toContain(copy("checkout.phone_notice"));
   });
 
@@ -859,7 +1193,8 @@ describe("dictionary", () => {
   it.each(LANGUAGES)("shows only dictionary text besides product and region data in %s", (language) => {
     const names = countryNames(language);
     const regionNames = new Set(REGIONS.regions.flatMap((region) => [names(region.code), `${names(region.code)} +${String(region.calling_code)}`]));
-    const data = new Set(["Crew Neck Tee", "Soy Wax Candle", "Black", "M", "gone-sku", ...REGIONS.my_states.map((state) => state.name), ...regionNames]);
+    // 第 2 步另有第 1 步号码的遮掩显示（号码数据，不是文案）。
+    const data = new Set(["Crew Neck Tee", "Soy Wax Candle", "Black", "M", "gone-sku", MASKED, ...REGIONS.my_states.map((state) => state.name), ...regionNames]);
     const patterns = [BRAND, ...Object.values(COPY).map((entry) => entry[language])].map(copyPattern);
     const withGone = quoteOf({ ...TO_BRITAIN, lines: [...ROWS, { sku: "gone-sku", quantity: 2, status: "unavailable" }] });
     const states: RenderOptions[] = [
@@ -867,7 +1202,13 @@ describe("dictionary", () => {
       { language, lines: [] },
       { language, reference: { status: "loading" }, quote: { status: "loading" } },
       { language, reference: { status: "error" }, quote: { status: "error" } },
-      { language, reference: referenceOf(true), form: { ...STEP_1, phoneInput: "12", phoneError: "unavailable" } },
+      // 原为第 1 步 phoneError 为 unavailable 的一项（过渡提示），随过渡提示取消改为第 2 步（有、没有人机挑战公开 key）与验证后重读失败回第 1 步的状态。
+      { language, reference: referenceOf(true), form: STEP_2, verify: checkoutVerify(SITE_KEY) },
+      { language, reference: referenceOf(true), form: STEP_2, verify: checkoutVerify(null) },
+      { language, reference: referenceOf(true), form: verifiedButSignedOut(STEP_2) },
+      { language, form: step3({ guestNotice: "checkout.sms_unavailable" }), quote: readyQuote(TO_BRITAIN) },
+      { language, form: VERIFIED_NEW, member: memberStep(), quote: { status: "loading" } },
+      { language, form: VERIFIED_MEMBER, member: memberStep(), quote: { status: "loading" } },
       { language, form: { ...STEP_1, phoneInput: "12", phoneError: "invalid" } },
       { language, form: step3(), quote: readyQuote(TO_BRITAIN) },
       { language, form: step3({ guestNotice: "checkout.guest_sms_off", submitting: true, checking: true }), quote: readyQuote(TO_BRITAIN) },
@@ -908,6 +1249,11 @@ const CHECKOUT_KEYS: readonly CopyKey[] = [
   "checkout.guest_other_country",
   "checkout.guest_sms_off",
   "checkout.guest_notice",
+  // SHOP-TASK-160 按 UX-COPY 0.14 加入的四条。
+  "checkout.sms_unavailable",
+  "checkout.continue_guest",
+  "checkout.verified_member",
+  "checkout.verified_new",
   "checkout.recipient_title",
   "checkout.form_notice",
   "checkout.name",

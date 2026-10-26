@@ -1,0 +1,45 @@
+# SHOP-TASK-160 短信验证组件的结账用途与 P05 第 2 步
+
+设计闸门：DESIGN 1.14（提交 00f8f34）「边界与原则」第 3、4 条（白名单号码须验证；无法送达或停发时允许改为游客；短信验证开关与流程途中的切换）、「权限与资料保护」第 1、3 条（结账身份；注册、短信登录与结账验证是同一流程，验证后认领游客订单）与「失败、并发与重试」（短信失败不创建已验证账号），以及 HANDOFF 0.63（运营者落实写法第（4）项）。依据 docs/UX.md 0.13 的 P05 与 V1、docs/UX-COPY.md 0.14，样式取视觉稿 `docs/design/pages/` 的 P05-desktop-2、P05-phone-2、V1-checkout-unavailable、V1-verified 与 P05-desktop-3-member、P05-phone-3-member 的已验证横幅。短信请求经 `api/memberAuth.ts` 的 `sendSmsCode` 与 `smsLogin`（用途 checkout），会话重读经 SHOP-TASK-151 的读取对象，会员第 3 步照 SHOP-TASK-159。
+
+- [x] 文案：`frontend/src/i18n/copy.ts` 按 UX-COPY 0.14 逐字加入 `checkout.sms_unavailable`、`checkout.continue_guest`、`checkout.verified_member` 与 `checkout.verified_new`（放在 `checkout.guest_sms_off` 与 `checkout.guest_notice` 之间，顺序同 UX-COPY），写法与相邻条目相同（每种语言一行）。没有用到 UX-COPY 以外的文字。
+- [x] 判定（`checkoutPhone.ts` 的 `decidePhone`，`CheckoutPage.tsx` 的 `continueFromPhone`、`afterReply`）：
+  - 开关开启且号码属于马新时 `decidePhone` 由 `unavailable` 改为 `verify`，文件开头过渡规则的说明改为进入第 2 步；开关关闭（任何号码为 `checkout.guest_sms_off`）与其他号码（`checkout.guest_other_country`）的判定不变。`GuestNotice` 另加 `checkout.sms_unavailable`（第 2 步改为游客时的第 3 步提示）。
+  - `CheckoutForm` 的步骤为 1、2、3；`continueFromPhone` 遇到 `verify` 时进入第 2 步（清除第 1 步错误与游客提示，已填内容保留）。
+  - 去掉第 1 步的 `common.service_unavailable` 过渡提示：`phoneError` 不再有 `unavailable`，另有 `retry`（`common.error_retry`，见「验证通过」）。
+  - 游客下单回 sms_required 时回到第 1 步、不显示错误；页面照旧把开关当作已开启（`replyEffects`），再继续时马新号码进入第 2 步。
+- [x] 第 2 步（`VerifyStep`）：`checkout.phone_step_title`、第 1 步号码的遮掩显示（`maskedCheckoutPhone`，规则同 `maskedPhone`：以加号开头时取输入里的号码，否则为所选地区的呼叫码加输入数字、去掉开头的一个 0，再按 `mask_phone` 遮掩）与 `checkout.phone_change`（`backToPhone`，回到第 1 步，保留已填内容）、常显的 `checkout.phone_notice`（带 P14 链接），之后嵌入结账用途的 SmsVerify；摘要与第 1 步相同，没有下单按钮。SmsVerify 由页面构造，以可选的 `verify` 属性交给 `CheckoutView`（View 仍只依赖 props），只在第 2 步渲染，离开第 2 步即卸载。
+- [x] 结账用途的组件（`SmsVerify.tsx`）：
+  - `SmsPurpose` 加 `checkout`；新类型另立：`CheckoutSmsPhone`（第 1 步的输入原文、所选地区——任何国家——与只用于遮掩的呼叫码）、`SentPhone`、`CheckoutLeave`、`CheckoutSmsMoves`、`CheckoutSmsProps`。`SmsVerified`、`SmsPhone` 与 `SmsRegion` 的现有成员未改（`SmsPhone` 的地区仍只有 MY、SG）；`SmsState.sent` 改为 `SentPhone`（号码为 `MemberPhone`，现有用途的值照旧可用）。
+  - 不显示号码输入、国家码选择与 `auth.sms_scope`；显示 `auth.claim_notice`、`auth.challenge`、人机挑战、发送（视觉稿的次要按钮）、`auth.code_sent` 与验证码。以 checkout 用途调用 `sendSmsCode` 与 `smsLogin`（`sendCheckoutCode`、`submitCheckoutCode`，只提交输入原文与地区，不提交呼叫码）；每次发送后照旧重置挑战。
+  - 去向经新增的可选回调属性 `onLeave` 交给页面，组件仍不跳转、不写浏览器存储；通过时复用 `SmsVerified` 里 kind 为 member、带 created 的结果，经 `onVerified` 交给页面。卸载时中止请求，之后不再更新。register、login 与 reset_password 的显示、请求与去向未改。
+- [x] 各种回答：
+  - 验证码错误或过期（code_wrong、code_expired 同为 wrong）：验证码下显示 `auth.code_wrong`，留在第 2 步，不出现游客选项。
+  - 发送或核验回 phone_invalid：回到第 1 步，号码字段显示 `checkout.phone_invalid`。
+  - 发送回 undeliverable 或 suspended：留在第 2 步，显示 `checkout.sms_unavailable`（info 提示条）与 `checkout.continue_guest` 次要按钮；点后以游客进入第 3 步，顶部显示 `checkout.sms_unavailable` 与 `checkout.guest_notice`。
+  - 发送回 not_whitelisted：以游客进入第 3 步并显示 `checkout.guest_other_country`（组件里不显示注册用途的 `auth.not_supported_country`）。
+  - 发送或核验回 disabled（开关在流程途中被关闭）：回到第 1 步，页面把开关当作已关闭（第 1 步换成 `checkout.phone_notice_sms_off`，再继续以游客进入第 3 步、显示 `checkout.guest_sms_off`）。
+  - 没有人机挑战公开 key（站点设置 `turnstile_site_key` 为 null，页面另存一份，`Reference` 未改）：组件只显示 `common.service_unavailable`，没有挑战、发送与游客选项；仍可点 `checkout.phone_change` 回第 1 步。
+  - 其余（`auth.challenge_failed`、`common.rate_limited`、`common.network_check`、`common.error_retry`、验证时的 `common.service_unavailable`）照组件现有写法留在第 2 步。
+  - 已不在第 2 步时晚到的去向不改表单（`leaveVerify` 只处理第 2 步）。
+- [x] 验证通过（`settleVerified`、`enterVerified`、`verifiedButSignedOut`、`VerifiedBanner`）：经读取对象的 `reload` 重读会话（共享读取，不带页面的 signal、不中止；页头随共享会话状态切换为 `common.nav_account`）。member 时以会话的 CSRF 令牌建立会员表单，以会员身份进入 SHOP-TASK-159 的第 3 步，并照打开时的写法取本人号码一次（`prefillPhone`，只在电话栏为空时填入）；第 3 步顶部的提示区由 `CheckoutPage.tsx` 的 `RecipientStep` 渲染已验证横幅——`checkout.verified_member`（created 为假）或 `checkout.verified_new`（created 为真），`{phoneMasked}` 取自重读到的会话。重读得到的不是 member（guest 或 failed）时回到第 1 步并显示 `common.error_retry`，已填内容保留。横幅记在表单的 `verified` 里，只在本次验证之后设置；已登录直接进入时没有。离开页面（页面的 `lifetime` 中止）之后不再据重读结果更新。`CheckoutMember.tsx` 未改。
+- [x] 样式写在 `frontend/src/styles/site.css`：`.site-checkout__verify`（第 2 步最宽 640px，嵌入的 V1 各块间距 22px）、`.site-checkout__number`（遮掩号码与更改按钮同一行，间距 12px）、`.site-checkout__verified`（标题与横幅间距 12px，下内边距 28px，下分隔线同 `.site-checkout__members` 的写法）；767px 及以下 V1 各块间距 18px、号码行间距 8px、发送按钮占满宽度、验证码输入与验证按钮上下排列、重发居中、横幅下方不留空也没有分隔线。不声明颜色、字体与圆角属性，未改 `acuven-shop.css`。
+- [x] 测试（vitest 与 react-dom/server，不加测试依赖；fetch 替身为参数带类型的 `vi.fn((input, init) => …)`，会话读取用 `createMemberSessionReader()` 配同一个替身；以 `renderToStaticMarkup` 渲染 View、直接调用导出的函数，不模拟点击；每条注释写明守住的是 UX、设计、HANDOFF 0.63 或验收的哪一句）：
+  - `frontend/src/pages/checkoutPhone.test.ts`：马新号码在开关开启时进入验证。
+  - `frontend/src/components/SmsVerify.test.tsx` 新增「checkout purpose」一组：初始没有号码输入、国家码与 `auth.sms_scope`，有 `auth.claim_notice`、挑战与禁用的次要发送按钮；经组件本身渲染相同；没有公开 key 时只有 `common.service_unavailable`；遮掩规则同 `maskedPhone`；以 checkout 发送原文与所选地区（GB 加 +60 号码）并重置挑战；发送回 phone_invalid、not_whitelisted、disabled 时交回去向；undeliverable 与 suspended 显示 `checkout.sms_unavailable` 与 `checkout.continue_guest` 按钮（不给回调时没有按钮，没有 `auth.sms_failed` 与链接）；captcha_failed、rate_limited、network、failed 留在第 2 步；以 checkout 核验并交回 created；code_wrong 与 code_expired 显示 `auth.code_wrong`、没有游客选项；核验回 phone_invalid、disabled 交回去向；核验回 unavailable、network、failed 留在第 2 步；卸载后不再更新；结账用途各状态文字全部来自字典。
+  - `frontend/src/pages/CheckoutPage.test.tsx` 新增「step 2: SMS verification」一组：第 2 步内容与顺序（标题、遮掩号码与 `checkout.phone_change`、`checkout.phone_notice`、嵌入的 V1），没有输入框、继续按钮与收货资料；摘要与第 1 步相同；组件拿到的是原文与所选地区；`checkout.phone_change` 回第 1 步保留内容；没有公开 key 时只有 `common.service_unavailable`；降级（`checkout.continue_guest`）与 not_whitelisted 进入游客第 3 步及其提示；disabled 回第 1 步按开关关闭继续；phone_invalid 回第 1 步；离开第 2 步后的去向不改表单；验证码错误不降级（经 `submitCheckoutCode` 与 fetch 替身）；通过后重读会话（共享读取、共享状态成为 member）、重读为 guest 或 500 时回第 1 步显示 `common.error_retry`、重读期间离开页面不再处理；两种横幅在会员第 3 步顶部、已登录直接进入与回到游客路径时没有横幅。字典键清单加入四条新键。
+  - 现有测试的修改与原因：`checkoutPhone.test.ts`「stops at step 1 with SMS on」改为进入验证；`CheckoutPage.test.tsx`「stays on step 1 with SMS on」改为进入第 2 步，「shows common.service_unavailable on step 1」改为第 1 步没有该提示，「returns to step 1 and decides again with SMS on after sms_verification_required」改为马新号码回第 1 步没有错误、再继续进入第 2 步，「shows only dictionary text besides product and region data」状态表里 phoneError 为 unavailable 的一项改为第 2 步（有、没有公开 key）、重读失败回第 1 步、降级第 3 步与两种横幅的状态（数据集加入遮掩号码）——都是过渡规则取消后的期望。`CheckoutPage.test.tsx` 的渲染辅助函数另加可选的 `member` 与 `verify`。`SmsVerify.test.tsx` 按 PURPOSES 遍历的几条不需要调整（清单仍是三种原有用途），三种原有用途的期望未改。
+- 偏离与验收未写死之处的取法（未改设计，未发现须停下的设计问题）：
+  - `auth.code_too_many` 不用：后端没有「尝试次数过多」的独立错误码，过期与不存在都是 code_expired，与 code_wrong 同样显示 `auth.code_wrong`（HANDOFF 0.63）；字典里也没有这一条。
+  - not_whitelisted：UX P05 说白名单外号码不出现第 2 步，第 1 步的判定只看国家码；服务端仍答不在白名单时（例如号码规范化后不属于马新）照 HANDOFF 0.63 以游客进入第 3 步并显示 `checkout.guest_other_country`，不在组件里显示提示。
+  - 没有人机挑战公开 key：照 HANDOFF 0.63 只显示 `common.service_unavailable`（danger 提示条），不给游客选项（服务端只在该号码 30 分钟内的结账短信发送结果为无法送达或停发时放行游客单）。
+  - 验证通过后重读会话不是 member：照 HANDOFF 0.63 第（4）项回第 1 步显示 `common.error_retry`；提示放在第 1 步号码字段之后、继续按钮之前（原过渡提示的位置），改号码或地区时收起。服务端此时可能已发出会员会话，重读失败（failed）也同样回第 1 步。
+  - 结账用途不显示 `auth.sms_scope`：UX V1 的通用线框列了这一行，P05 第 2 步线框与视觉稿 P05-desktop-2、P05-phone-2 都没有；号码由第 1 步给出、范围已由 `checkout.phone_notice` 说明，按 P05 第 2 步取。
+  - 号码的遮掩：视觉稿画成「+60 12•••• XXX」，UX 与验收要求规则同 `maskedPhone`，按后者显示（如 `+60*****6789`）。
+  - 开关途中被关闭：回到第 1 步后不自动继续，由访客再点继续（UX「回到 P05 第 1 步按关闭状态继续」）。
+  - 视觉稿 P05-desktop-2 的重发按钮与验证码、验证按钮同一行；组件的结构由各用途共用，重发仍在验证码与提示之后单独一行。视觉稿的挑战说明与挑战框为一组（间距 10px，框宽 300px、虚线框与底色），组件照现有写法与其他块同间距，挑战由托管服务渲染，框的样式不搬。
+  - 视觉稿遮掩号码的字号（18px）与字重 site.css 写不了，不搬（沿用 `acs-num`）；没有借用其他组件的类来取颜色。已验证横幅之下的分隔线照 SHOP-TASK-159 的 `.site-checkout__members` 写成 `border-bottom: 1px solid var(--rule)`。
+  - `checkout.sms_unavailable` 在组件里与其他提示放在同一位置（验证码之后），`checkout.continue_guest` 紧随其后靠左；页面不给 `onLeave` 时不显示按钮。
+  - 会员会话在验证之后失效（回到游客路径）时，表单里的横幅记录不清除，但游客第 3 步不渲染横幅；再次以会员进入只会经过新的一次验证（会覆盖）。
+- 改动只在 `frontend/src/components/SmsVerify.tsx`、`frontend/src/components/SmsVerify.test.tsx`、`frontend/src/pages/CheckoutPage.tsx`、`frontend/src/pages/CheckoutPage.test.tsx`、`frontend/src/pages/checkoutPhone.ts`、`frontend/src/pages/checkoutPhone.test.ts`、`frontend/src/i18n/copy.ts`、`frontend/src/styles/site.css` 与本文件；`router.tsx` 与 `App.tsx` 不需要改（`/checkout` 已在路由表里，会员会话的 Provider 已由 App 提供）。`LoginPage.tsx`、`RegisterPage.tsx`、`ForgotPasswordPage.tsx` 与 `CheckoutMember.tsx` 未改。未改 `frontend/src/api/`、后端、`docs/TODO.md`、`.platform/`、CI、部署配置、`package.json` 与 `package-lock.json`，未装依赖。
+- 验证到什么程度：人工逐条对照验收标准、UX P05 与 V1、HANDOFF 0.63 与 `api/memberAuth.ts`、`api/memberSession.ts` 的回答归类自查。上面列的测试只是写入的测试。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查；检查命令结果由 Worker 另行记录。未做浏览器验收（第 2 步与已验证横幅在桌面与手机的实际排版、托管人机挑战的渲染、发送与核验的交互、页头切换都未在浏览器里看过），未对真实后端接口与短信服务验证。

@@ -8,22 +8,37 @@ import type { CopyKey, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { RouterProvider } from "../router";
 import type { RoutePath } from "../router";
-import {
+import SmsVerify, {
   canSend,
   canVerify,
   challengeLost,
   challengeToken,
+  checkoutSent,
   INITIAL_SMS,
+  maskedCheckoutPhone,
   maskedPhone,
   maskPhone,
   mountChallenge,
+  sendCheckoutCode,
   sendCode,
   SmsVerifyView,
   startSending,
   startVerifying,
+  submitCheckoutCode,
   submitCode,
 } from "./SmsVerify";
-import type { ChallengeMoves, SmsMoves, SmsPhone, SmsPurpose, SmsState, SmsVerified, SmsVerifyViewProps } from "./SmsVerify";
+import type {
+  ChallengeMoves,
+  CheckoutLeave,
+  CheckoutSmsMoves,
+  CheckoutSmsPhone,
+  SmsMoves,
+  SmsPhone,
+  SmsPurpose,
+  SmsState,
+  SmsVerified,
+  SmsVerifyViewProps,
+} from "./SmsVerify";
 import { TURNSTILE_SCRIPT_URL, turnstileLanguage } from "./turnstile";
 import type { ChallengeHandlers, ChallengeLoader, ChallengeWidget } from "./turnstile";
 
@@ -580,6 +595,252 @@ describe("challenge", () => {
     await flush();
     expect(calls).toEqual(["remove"]);
     expect(moves.events).toEqual(["widget none"]);
+  });
+});
+
+describe("checkout purpose", () => {
+  // 结账第 1 步的号码：所选地区可为任何国家，以加号开头时服务端以输入为准（这里下拉为 GB、输入为马来西亚号码）。
+  const CHECKOUT_PHONE: CheckoutSmsPhone = { input: "+60 12-345 6789", region: "GB", callingCode: "44" };
+  const CHECKOUT_SENDING: SmsState = startSending({ ...INITIAL_SMS, token: CAPTCHA });
+  const CHECKOUT_SENT: SmsState = { ...INITIAL_SMS, sent: checkoutSent(CHECKOUT_PHONE), code: CODE };
+  const CHECKOUT_VERIFYING: SmsState = startVerifying(CHECKOUT_SENT);
+
+  function renderCheckout(overrides: Partial<SmsVerifyViewProps> = {}, language: Language = "en"): string {
+    return render({ purpose: "checkout", guestTo: null, onContinueGuest: noop, ...overrides }, language);
+  }
+
+  // 结账用途对结果的处理的替身：另记下离开第 2 步的去向。
+  function fakeCheckoutMoves(start: SmsState) {
+    const base = fakeMoves(start);
+    const left: CheckoutLeave[] = [];
+    const target: CheckoutSmsMoves = {
+      ...base.target,
+      leave: (leave) => {
+        left.push(leave);
+        base.events.push(`leave ${leave}`);
+      },
+    };
+    return { ...base, target, left };
+  }
+
+  // UX P05 第 2 步线框「[auth.claim_notice] [auth.challenge] <托管人机挑战组件> ( [auth.send_code] )」（没有号码输入与国家码）、UX V1
+  // 「[auth.claim_notice]（仅结账验证、注册、短信登录显示）」与验收「checkout 用途的组件……不显示号码输入、国家码选择与 auth.sms_scope」；
+  // 发送按钮为视觉稿 P05-desktop-2 的次要按钮，完成挑战前禁用。
+  it("shows the claim notice, the check and the send button without a number field, country code or scope", () => {
+    const html = renderCheckout();
+    const texts = textNodes(html);
+    expect(texts).toEqual([t("auth.claim_notice"), t("auth.challenge"), t("auth.send_code")]);
+    expect(tags(html, "input")).toEqual([]);
+    expect(tags(html, "select")).toEqual([]);
+    expect(texts).not.toContain(t("auth.sms_scope"));
+    expect(texts).not.toContain(t("auth.phone"));
+    expect(tags(html, "div").filter((tag) => tag.includes("site-sms__challenge"))).toHaveLength(1);
+    const send = button(html, t("auth.send_code"));
+    expect(send).toContain(`class="acs-btn acs-btn--secondary site-sms__send"`);
+    expect(disabled(send)).toBe(true);
+    expect(hrefs(html)).toEqual([]);
+  });
+
+  // 同一条，经组件本身：结账用途的 SmsVerify 渲染出与 View 相同的初始内容（号码由页面给出，不出现在组件里）。
+  it("renders the same through the component", () => {
+    const html = renderToStaticMarkup(
+      wrap(<SmsVerify purpose="checkout" smsEnabled siteKey={SITE_KEY} phone={CHECKOUT_PHONE} onVerified={noop} onLeave={noop} />, "en"),
+    );
+    expect(textNodes(html)).toEqual([t("auth.claim_notice"), t("auth.challenge"), t("auth.send_code")]);
+    expect(html).not.toContain("12-345");
+  });
+
+  // HANDOFF 0.63 第（4）项「V1 结账用途没有人机挑战公开 key 时显示 common.service_unavailable、不给游客选项」与验收「没有人机挑战公开 key 时组件只显示
+  // common.service_unavailable、没有游客选项」。
+  it("shows only common.service_unavailable without a challenge key", () => {
+    const html = renderCheckout({ siteKey: null });
+    expect(textNodes(html)).toEqual([t("common.service_unavailable")]);
+    expect(html).toContain(`<div class="acs-alert acs-alert--danger" role="alert">`);
+    expect(tags(html, "button")).toEqual([]);
+    expect(tags(html, "input")).toEqual([]);
+    expect(hrefs(html)).toEqual([]);
+  });
+
+  // 验收「第 1 步号码的遮掩显示（规则同 SmsVerify.tsx 的 maskedPhone）」：以加号开头时取输入里的号码，否则为所选地区的呼叫码加输入（去掉开头的一个 0）。
+  it("masks the step 1 number by the maskedPhone rule", () => {
+    expect(maskedCheckoutPhone(CHECKOUT_PHONE)).toBe("+60*****6789");
+    expect(maskedCheckoutPhone({ input: "012-345 6789", region: "MY", callingCode: "60" })).toBe(maskedPhone({ input: "012-345 6789", region: "MY" }));
+    expect(maskedCheckoutPhone({ input: "8123 4567", region: "SG", callingCode: "65" })).toBe(maskedPhone({ input: "8123 4567", region: "SG" }));
+  });
+
+  // 验收「号码取第 1 步的输入原文与所选地区（地区可为任何国家……）」「以 checkout 用途调用 memberAuth.ts 的 sendSmsCode」与 UX V1「人机挑战在发送短信前完成」
+  // （每次发送之后重置挑战）：请求体是输入原文、所选地区、checkout 与令牌，不带呼叫码；发出后 auth.code_sent 显示遮掩号码，不离开第 2 步。
+  it("sends the raw step 1 number and region for checkout", async () => {
+    const request = stubFetch(() => json(200, {}));
+    const moves = fakeCheckoutMoves(CHECKOUT_SENDING);
+    await sendCheckoutCode(CHECKOUT_PHONE, CAPTCHA, new AbortController().signal, moves.target);
+    expect(requests(request)).toEqual([
+      { url: SMS_SEND_URL, method: "POST", body: { phone: CHECKOUT_PHONE.input, phone_region: "GB", purpose: "checkout", captcha_token: CAPTCHA } },
+    ]);
+    expect(moves.events).toEqual(["update", "reset"]);
+    expect(moves.left).toEqual([]);
+    expect(moves.state()).toMatchObject({ sending: false, token: null, sent: { phone: { input: CHECKOUT_PHONE.input, region: "GB" }, masked: "+60*****6789" } });
+    expect(textNodes(renderCheckout({ state: moves.state() }))).toContain(t("auth.code_sent", { phoneMasked: "+60*****6789" }));
+  });
+
+  // 验收「结账用途发送或核验回 phone_invalid 时回到第 1 步」「回 not_whitelisted 时以游客进入第 3 步」「发送或验证回 disabled（开关在流程途中被关闭）时回到第 1 步」：
+  // 这三种去向在更新状态与重置挑战之后交给页面（组件不跳转），组件里不显示 auth.not_supported_country 等注册用途的提示。
+  it.each<[string, Reply, CheckoutLeave]>([
+    ["phone_invalid", phoneInvalid, "phone_invalid"],
+    ["not_whitelisted", () => json(422, { detail: "not_whitelisted" }), "not_whitelisted"],
+    ["disabled", () => json(403, { detail: "sms_disabled" }), "disabled"],
+  ])("hands %s to the page when sending", async (_name, reply, leave) => {
+    stubFetch(reply);
+    const moves = fakeCheckoutMoves(CHECKOUT_SENDING);
+    await sendCheckoutCode(CHECKOUT_PHONE, CAPTCHA, new AbortController().signal, moves.target);
+    expect(moves.events).toEqual(["update", "reset", `leave ${leave}`]);
+    expect(moves.left).toEqual([leave]);
+    expect(moves.state().notice).toBeNull();
+    expect(moves.state().sent).toBeNull();
+  });
+
+  // UX P05「未登录，马新号码，短信无法送达或停发（服务端判定）| 显示 [checkout.sms_unavailable]，可点 [checkout.continue_guest]」、UX-COPY checkout.sms_unavailable
+  // 「仅在服务端判定短信无法送达或停发时显示」与视觉稿 V1-checkout-unavailable（info 提示条与靠左的次要按钮）：留在第 2 步，由访客点按钮改为游客；
+  // 不出现注册用途的 auth.sms_failed 与 auth.continue_guest 链接。
+  it.each<[string, Reply]>([
+    ["undeliverable", () => json(422, { detail: "sms_undeliverable" })],
+    ["suspended", () => json(503, { detail: "sms_suspended" })],
+  ])("offers checkout.continue_guest after %s", async (_name, reply) => {
+    stubFetch(reply);
+    const moves = fakeCheckoutMoves(CHECKOUT_SENDING);
+    await sendCheckoutCode(CHECKOUT_PHONE, CAPTCHA, new AbortController().signal, moves.target);
+    expect(moves.left).toEqual([]);
+    expect(moves.state().notice).toBe("checkout.sms_unavailable");
+    const html = renderCheckout({ state: moves.state() });
+    expect(html).toContain(`<div class="acs-alert acs-alert--info" role="status">`);
+    expect(textNodes(html)).toContain(t("checkout.sms_unavailable"));
+    expect(button(html, t("checkout.continue_guest"))).toBe(`<button class="acs-btn acs-btn--secondary site-sms__guest" type="button">`);
+    expect(textNodes(html)).not.toContain(t("auth.sms_failed"));
+    expect(textNodes(html)).not.toContain(t("auth.continue_guest"));
+    expect(hrefs(html)).toEqual([]);
+    // 页面不给去向时不显示按钮。
+    expect(textNodes(renderCheckout({ state: moves.state(), onContinueGuest: undefined }))).not.toContain(t("checkout.continue_guest"));
+  });
+
+  // 验收「其余（auth.challenge_failed、common.rate_limited、common.network_check、common.error_retry……）照组件现有写法留在第 2 步」：不离开，没有游客选项。
+  it.each<[string, Reply, CopyKey]>([
+    ["captcha_failed", () => json(403, { detail: "captcha_failed" }), "auth.challenge_failed"],
+    ["rate_limited", () => json(429, { detail: "rate_limited" }), "common.rate_limited"],
+    ["network", () => "network", "common.network_check"],
+    ["failed", () => json(500, {}), "common.error_retry"],
+  ])("stays on step 2 after sending gets %s", async (_name, reply, key) => {
+    stubFetch(reply);
+    const moves = fakeCheckoutMoves(CHECKOUT_SENDING);
+    await sendCheckoutCode(CHECKOUT_PHONE, CAPTCHA, new AbortController().signal, moves.target);
+    expect(moves.left).toEqual([]);
+    expect(moves.state().notice).toBe(key);
+    const html = renderCheckout({ state: moves.state() });
+    expect(textNodes(html)).toContain(t(key));
+    expect(textNodes(html)).not.toContain(t("checkout.continue_guest"));
+  });
+
+  // 验收「以 checkout 用途调用……smsLogin」「结账用途通过时复用现有 SmsVerified 里 kind 为 member、带 created 的那种结果」与 DESIGN 1.14「注册、短信登录与结账验证是同一流程」：
+  // 以发出验证码的号码提交，通过时先交给回调再进入已验证状态，不离开（去向由页面在重读会话后决定）。
+  it("logs in for checkout with the sent number and reports created", async () => {
+    for (const created of [true, false]) {
+      const request = stubFetch(() => json(200, { created }));
+      const moves = fakeCheckoutMoves(CHECKOUT_VERIFYING);
+      await submitCheckoutCode(checkoutSent(CHECKOUT_PHONE).phone, CODE, new AbortController().signal, moves.target);
+      expect(requests(request)).toEqual([{ url: SMS_LOGIN_URL, method: "POST", body: { phone: CHECKOUT_PHONE.input, phone_region: "GB", purpose: "checkout", code: CODE } }]);
+      expect(moves.verified).toEqual<SmsVerified[]>([{ kind: "member", created }]);
+      expect(moves.events).toEqual(["verified", "update"]);
+      expect(moves.state()).toMatchObject({ verifying: false, verified: true });
+    }
+  });
+
+  // UX P05「验证码错误或超过尝试次数 | 留在 V1……不显示游客选项」「(不降级)」与 HANDOFF 0.63「后端没有『尝试次数过多』的独立错误码（过期与不存在都是 code_expired），
+  // auth.code_too_many 不用」（字典里也没有这一条）：code_wrong 与 code_expired 都在验证码下显示 auth.code_wrong，不离开第 2 步，
+  // 没有 checkout.sms_unavailable 与 checkout.continue_guest。
+  it.each(["code_wrong", "code_expired"])("shows auth.code_wrong without a guest option after %s", async (code) => {
+    stubFetch(() => json(422, { detail: code }));
+    const moves = fakeCheckoutMoves(CHECKOUT_VERIFYING);
+    await submitCheckoutCode(checkoutSent(CHECKOUT_PHONE).phone, CODE, new AbortController().signal, moves.target);
+    expect(moves.verified).toEqual([]);
+    expect(moves.left).toEqual([]);
+    expect(moves.state()).toMatchObject({ codeWrong: true, verified: false, notice: null });
+    const texts = textNodes(renderCheckout({ state: moves.state() }));
+    expect(texts).toContain(t("auth.code_wrong"));
+    expect(texts).not.toContain(t("checkout.sms_unavailable"));
+    expect(texts).not.toContain(t("checkout.continue_guest"));
+  });
+
+  // 验收「结账用途发送或核验回 phone_invalid 时回到第 1 步」「发送或验证回 disabled……时回到第 1 步按开关关闭继续」：核验的这两种结果也交给页面。
+  it.each<[string, Reply, CheckoutLeave]>([
+    ["phone_invalid", phoneInvalid, "phone_invalid"],
+    ["disabled", () => json(403, { detail: "sms_disabled" }), "disabled"],
+  ])("hands %s to the page when verifying", async (_name, reply, leave) => {
+    stubFetch(reply);
+    const moves = fakeCheckoutMoves(CHECKOUT_VERIFYING);
+    await submitCheckoutCode(checkoutSent(CHECKOUT_PHONE).phone, CODE, new AbortController().signal, moves.target);
+    expect(moves.verified).toEqual([]);
+    expect(moves.events).toEqual(["update", `leave ${leave}`]);
+    expect(moves.left).toEqual([leave]);
+  });
+
+  // 验收「验证时的 common.service_unavailable……照组件现有写法留在第 2 步」与同条的 common.network_check、common.error_retry。
+  it.each<[string, Reply, CopyKey]>([
+    ["unavailable", () => json(503, { detail: "verify_unavailable" }), "common.service_unavailable"],
+    ["network", () => "network", "common.network_check"],
+    ["failed", () => json(500, {}), "common.error_retry"],
+  ])("stays on step 2 after verifying gets %s", async (_name, reply, key) => {
+    stubFetch(reply);
+    const moves = fakeCheckoutMoves(CHECKOUT_VERIFYING);
+    await submitCheckoutCode(checkoutSent(CHECKOUT_PHONE).phone, CODE, new AbortController().signal, moves.target);
+    expect(moves.left).toEqual([]);
+    expect(moves.state().notice).toBe(key);
+    const html = renderCheckout({ state: challengeToken(moves.state(), CAPTCHA) });
+    expect(textNodes(html)).toContain(t(key));
+    expect(disabled(button(html, t("auth.verify_submit")))).toBe(false);
+    expect(textNodes(html)).not.toContain(t("checkout.continue_guest"));
+  });
+
+  // 验收「离开页面或组件卸载时中止请求，之后不再更新」：发送与核验都不再更新、不交回调或去向。
+  it("does nothing once the component is gone", async () => {
+    stubFetch(() => json(200, { created: false }));
+    const moves = fakeCheckoutMoves(CHECKOUT_SENDING);
+    const controller = new AbortController();
+    const sending = sendCheckoutCode(CHECKOUT_PHONE, CAPTCHA, controller.signal, moves.target);
+    const verifying = submitCheckoutCode(checkoutSent(CHECKOUT_PHONE).phone, CODE, controller.signal, moves.target);
+    controller.abort();
+    await Promise.all([sending, verifying]);
+    expect(moves.events).toEqual([]);
+    expect(moves.verified).toEqual([]);
+    expect(moves.left).toEqual([]);
+  });
+
+  // 验收「页面内容与文案以 docs/UX.md 0.13 的 P05 与 V1、docs/UX-COPY.md 0.14 为准……不自行编写文案」：结账用途各状态的文字都是当前语言的字典文案（带变量的按模板匹配）。
+  it.each(LANGUAGES)("shows only dictionary text for checkout in %s", (language) => {
+    const plain = new Set<string>();
+    const templates: RegExp[] = [];
+    for (const entry of Object.values(COPY)) {
+      const text = entry[language];
+      if (/\{\w+\}/.test(text)) {
+        templates.push(new RegExp(`^${text.split(/\{\w+\}/).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".+")}$`));
+      } else {
+        plain.add(text);
+      }
+    }
+    const notices: CopyKey[] = ["checkout.sms_unavailable", "auth.challenge_failed", "common.rate_limited", "common.service_unavailable", "common.network_check", "common.error_retry"];
+    const pages = [
+      renderCheckout({}, language),
+      renderCheckout({ state: challengeLost(INITIAL_SMS) }, language),
+      renderCheckout({ state: CHECKOUT_SENT }, language),
+      renderCheckout({ state: { ...CHECKOUT_SENT, codeWrong: true } }, language),
+      renderCheckout({ state: { ...CHECKOUT_SENT, verified: true } }, language),
+      renderCheckout({ siteKey: null }, language),
+      ...notices.map((notice) => renderCheckout({ state: { ...CHECKOUT_SENT, notice } }, language)),
+    ];
+    for (const html of pages) {
+      expect(html).not.toMatch(/\s(title|placeholder)=/i);
+      for (const value of visibleTexts(html)) {
+        expect(plain.has(value) || templates.some((pattern) => pattern.test(value)), value).toBe(true);
+      }
+    }
   });
 });
 

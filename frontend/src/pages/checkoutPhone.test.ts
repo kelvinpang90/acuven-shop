@@ -47,14 +47,15 @@ describe("continuing from step 1", () => {
     expect(decidePhone(false, region, input)).toEqual({ kind: "guest", notice: "checkout.guest_sms_off" });
   });
 
-  // SHOP-TASK-025 验收第 5 条「开关开启时，号码属于马新…在短信验证组件实现前停在第 1 步并显示 common.service_unavailable（Kelvin 2026-10-01 批准的过渡规则，docs/HANDOFF.md 0.25）」。
+  // UX 0.13 P05「未登录，马来西亚/新加坡号码 | 填手机号 | V1：人机挑战 → 短信验证码 → 注册或登录」与 SHOP-TASK-160 验收「decidePhone 在开关开启且号码属于马新时改为进入验证」。
+  // 原为「stops at step 1 with SMS on」（HANDOFF 0.25 的过渡规则），过渡规则由本任务取消，改为过渡规则取消后的期望。
   it.each([
     ["MY", "12-345 6789"],
     ["SG", "8123 4567"],
     ["GB", "+60 12-345 6789"],
     ["DE", "+65 8123 4567"],
-  ])("stops at step 1 with SMS on for %s %j", (region, input) => {
-    expect(decidePhone(true, region, input)).toEqual({ kind: "unavailable" });
+  ])("goes to SMS verification with SMS on for %s %j", (region, input) => {
+    expect(decidePhone(true, region, input)).toEqual({ kind: "verify" });
   });
 
   // SHOP-TASK-025 验收第 5 条「其他号码以游客继续并在第 3 步顶部显示 checkout.guest_other_country」与 UX P05「白名单外号码…直接在第 3 步顶部显示」；
