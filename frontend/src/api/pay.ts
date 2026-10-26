@@ -49,8 +49,13 @@ export interface PayOrder {
   payment_expires_at: string;
   server_time: string;
   subtotal_sen: number;
+  // 券折扣（整数仙）与积分抵扣（积分数，1 积分抵 1 仙）取订单快照，非负；游客订单都为 0。
+  coupon_discount_sen: number;
+  points_redeemed: number;
   shipping_fee_sen: number;
   total_sen: number;
+  // 本单获得积分（积分数）取订单快照，非负；游客订单为 0。
+  points_earned: number;
   recipient: PayRecipient | null;
   last_payment: LastPayment | null;
   cancelled_by: "self" | "timeout" | null;
@@ -134,7 +139,7 @@ export type WriteReply = "done" | "closed" | "method_changed" | "unavailable" | 
 
 const CLOSED_DETAILS: ReadonlySet<string> = new Set(["order_expired", "order_not_payable", "order_not_cancellable"]);
 
-async function conflictDetail(response: Response): Promise<string | null> {
+export async function conflictDetail(response: Response): Promise<string | null> {
   try {
     const body = (await response.json()) as { detail?: unknown };
     return typeof body.detail === "string" ? body.detail : null;
@@ -144,7 +149,7 @@ async function conflictDetail(response: Response): Promise<string | null> {
 }
 
 // 同源 cookie、不缓存的 JSON POST；网络中断与中止都返回 null。
-async function postJson(url: string, headers: Record<string, string>, body: unknown, signal?: AbortSignal): Promise<Response | null> {
+export async function postJson(url: string, headers: Record<string, string>, body: unknown, signal?: AbortSignal): Promise<Response | null> {
   try {
     return await fetch(url, {
       method: "POST",
@@ -226,7 +231,7 @@ export function stripeStartUrl(language: Language): string {
   return `${STRIPE_START_URL}?${new URLSearchParams({ lang: language }).toString()}`;
 }
 
-function isHttpsUrl(value: string): boolean {
+export function isHttpsUrl(value: string): boolean {
   try {
     return new URL(value).protocol === "https:";
   } catch {
@@ -235,7 +240,7 @@ function isHttpsUrl(value: string): boolean {
 }
 
 // 200 的响应体：不是 JSON 或不是对象时为 null。
-async function replyObject(response: Response): Promise<Record<string, unknown> | null> {
+export async function replyObject(response: Response): Promise<Record<string, unknown> | null> {
   let body: unknown;
   try {
     body = await response.json();
@@ -283,7 +288,7 @@ export type StripeConfirmResult = (typeof STRIPE_CONFIRM_RESULTS)[number];
 
 export type StripeConfirm = { kind: StripeConfirmResult } | { kind: "expired" } | { kind: "csrf" } | { kind: "failed" } | { kind: "network" };
 
-function isConfirmResult(value: unknown): value is StripeConfirmResult {
+export function isConfirmResult(value: unknown): value is StripeConfirmResult {
   return (STRIPE_CONFIRM_RESULTS as readonly unknown[]).includes(value);
 }
 

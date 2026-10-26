@@ -32,8 +32,11 @@ function payOrder(overrides: Partial<PayOrder> = {}): PayOrder {
     payment_expires_at: "2026-10-05T10:15:00Z",
     server_time: "2026-10-05T10:03:00Z",
     subtotal_sen: 12000,
+    coupon_discount_sen: 0,
+    points_redeemed: 0,
     shipping_fee_sen: 1500,
     total_sen: 13500,
+    points_earned: 0,
     recipient: {
       name: "Aina Rahman",
       phone: "+60123456789",
