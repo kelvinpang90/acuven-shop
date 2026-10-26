@@ -18,3 +18,17 @@
 - 运营者在合并部署后完成（本任务未做）：在 Stripe 测试环境（acuven-shop-test）建 webhook 端点，地址为站点的 `/api/stripe/webhook`；订阅 `CHECKOUT_EVENT_TYPES` 与 `REFUND_EVENT_TYPES` 的六种事件（`checkout.session.completed`、`checkout.session.async_payment_succeeded`、`checkout.session.async_payment_failed`、`refund.created`、`refund.updated`、`refund.failed`）；把该端点的签名密钥（`whsec_` 开头）写进私有配置的 `stripe_webhook_secret`。在那之前 `stripe_configured` 为假，接口一律回 503。
 - 本任务未改 `app/services/`、`app/api/` 下的其他文件、模型、迁移、现有测试、`.platform/`、CI、部署配置与前端，未装依赖，未改 `docs/TODO.md`。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.12 第 1、2、7 条与 HANDOFF 0.55 原句自查，并核对与 `stripe_configured`、`verify_webhook_signature`、`parse_webhook_event`、`handle_webhook_event` 及 `_NoStoreRoute` 的实际代码一致。新增的测试只由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest；检查命令结果由 Worker 另行记录。
+
+## 登记时的验收标准（原文）
+
+2026-10-26 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 新文件 app/api/stripe_webhook.py 建路由器（前缀 /api/stripe，route_class 用 app/api/order_lookup.py 的 _NoStoreRoute），app/main.py 只加 import 与 include_router 注册它；POST /api/stripe/webhook 的处理函数与依赖产生的响应（含错误）都带 no-store，路径存在而方法不匹配时由框架返回的 405 不在此列，未预期异常由框架回的 500 也不在此列（不在接口里捕获，会话关闭时未提交的改动回滚）；不读订单访问 cookie、会员或管理员会话，不要求 CSRF；接口不写日志（下面 livemode 一条与服务层按设计记的 error 日志除外），不记录请求体、请求头与事件内容
+      - 检查顺序，每一步不通过即停止、之前不读写数据库也不调用 Stripe——请求体照 app/api/pay.py 的 _json_body 逐块读，超过 256 KB（模块常量 MAX_WEBHOOK_BODY_BYTES = 256 * 1024）即 413 {"detail":"request body too large"}，不看 Content-Type；app/services/stripe_gateway.py 的 stripe_configured(request.app.state.settings) 为假（含签名密钥未配置、密钥不是测试密钥）回 503 {"detail":"stripe_unavailable"}，不验签；verify_webhook_signature（原始请求体、Stripe-Signature 请求头、settings 的 stripe_webhook_secret、当前时间）为假回 400 {"detail":"signature_invalid"}；parse_webhook_event 返回 None 回 400 {"detail":"event_invalid"}；livemode 为真回 400 {"detail":"livemode_rejected"} 并记一条 error 日志 stripe_livemode（只含类别），不写事件记录
+      - 之后调用 handle_webhook_event（适配器经 get_stripe_gateway 取得，当前时间取 app/api/pay.py 的 _utcnow，在本模块以同名导入以便测试替换）——processed、ignored、duplicate 都回 200 {"received":true}；unavailable 回 503 {"detail":"stripe_unavailable"}；响应体不回显任何输入，不带事件 ID 或任何 Stripe ID
+      - 测试验证意图——新文件 tests/test_stripe_webhook_api.py 用 TestClient 与 SQLite 内存库（夹具照 tests/test_stripe_pay_api.py，Stripe 配置照 tests/test_stripe_gateway.py 的 make_settings 写法在本文件里另写），以 app.state.stripe_gateway 注入 FakeStripeGateway，在测试里用测试签名密钥与替换后的当前时间计算 Stripe-Signature，验证——completed 已付款事件回 200、订单进入 demo_paid、有事件记录；同一事件再来回 200 且不调用 Stripe；缺签名头、签名不符、时间戳超出容差回 400，不写数据库、不调用 Stripe；签名密钥为空或密钥为正式环境前缀时回 503，即使签名按空密钥计算；超过 256 KB 回 413 且先于验签；签名正确而 JSON 不合格回 400 event_invalid；livemode 为真回 400 且没有事件记录；其他类型回 200 并记为 ignored；Stripe 不可用回 503 且没有事件记录；refund.updated 事件更新退款尝试；不带任何 cookie 与 CSRF 也能处理；所有列出的响应带 no-store 且不回显输入；每条测试写明它守住的是设计的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - docs/task-records/SHOP-TASK-129.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；检查顺序、各响应、偏离、验证到什么程度，并写明在 Stripe 测试环境建 webhook 端点、订阅 CHECKOUT_EVENT_TYPES 与 REFUND_EVENT_TYPES 六种事件、把签名密钥写进私有配置由运营者在合并部署后完成），不改 docs/TODO.md，复选框只允许 [ ] / [x]
+      - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、app/api/ 下的其他文件、模型、迁移、现有测试、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
+```

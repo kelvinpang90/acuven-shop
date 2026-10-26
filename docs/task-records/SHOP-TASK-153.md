@@ -25,3 +25,19 @@
 - 留给后续任务：结账页 P05 短信验证通过后的重读会话留给会员结账任务。
 - 改动只在 `frontend/src/components/SiteFrame.tsx`、`frontend/src/components/SiteFrame.test.tsx`、`frontend/src/App.tsx`、`frontend/src/pages/LoginPage.tsx`、`frontend/src/pages/LoginPage.test.tsx`、`frontend/src/pages/RegisterPage.tsx`、`frontend/src/pages/RegisterPage.test.tsx` 与本文件；未改 `frontend/src/api/`、`AccountPage.tsx`、`router.tsx`、`copy.ts`、`site.css`、`acuven-shop.css`、后端、`docs/TODO.md`、`.platform/`、CI、部署配置、`package.json` 与 `package-lock.json`，未装依赖。
 - 验证到什么程度：人工逐条对照验收标准、UX「全局框架」与 P13 入口、HANDOFF 0.61 与 `api/memberSession.ts` 的状态归类自查。上面列的测试只是写入的测试。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查；检查命令结果由 Worker 另行记录。未做浏览器验收（挂载后读取会话、登录成功后页头切换的实际观感都未在浏览器里看过），未对真实后端接口验证。
+
+## 登记时的验收标准（原文）
+
+2026-10-26 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 内容与文案以 docs/UX.md 0.13 的「全局框架」与 P13 入口、docs/UX-COPY.md 0.14 与 docs/HANDOFF.md 0.61 为准，样式以 docs/design/pages/ 的 P13-desktop 页头为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 不需要新键（common.nav_account 已由 SHOP-TASK-152 加入）
+      - 页头切换——桌面导航行与手机 ☰ 菜单里现在的 /login 那一项按会话状态显示：member 时为指向 /account 的 common.nav_account（在 /account 时标 aria-current），unknown、guest 与 failed 时为现在的 common.nav_login；位置与现在的登录项相同（视觉稿把它画在导航行右侧购物车之前，不挪位置，记入任务记录的偏离）；两个路径各自仍按路由表判断是否渲染；页头不显示手机号或其他会话内容；服务端渲染与首次水合时状态为 unknown，输出与现在相同（frontend/src/components/SiteFrame.test.tsx 与 frontend/src/App.test.tsx 现有断言不变）
+      - 挂载——frontend/src/App.tsx 挂载 SHOP-TASK-151 的 Provider，写法照 WhatsAppContactProvider（App 的 props 另有可选的会话读取对象，测试传入替身，浏览器里不传时用默认读取）；只有前台页头读取会话，后台页不因此发请求
+      - 登录与注册成功——frontend/src/pages/LoginPage.tsx 的密码登录 ok 与短信验证通过、frontend/src/pages/RegisterPage.tsx 的验证通过之后，经 SHOP-TASK-151 取得的读取对象要求重读一次会话（不等待结果，不改变现有的成功文案、计时与去向）；提交失败时不重读；不改 AccountPage.tsx
+      - 代码结构——LoginPage.tsx 与 RegisterPage.tsx 沿用现有的写法（导出的纯函数与异步函数、只依赖 props 的 View；重读经回调传入，便于测试），SiteFrame.tsx 按现有写法以 hook 取会话状态；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）验证意图——frontend/src/components/SiteFrame.test.tsx 以会话读取的替身（照该文件 settledReader 的写法先读完一次）断言 member 时桌面导航与手机菜单都是去 /account 的 common.nav_account、没有 common.nav_login，guest、failed 与未读时仍为 common.nav_login，在 /account 页面标 aria-current；frontend/src/pages/LoginPage.test.tsx 与 frontend/src/pages/RegisterPage.test.tsx 断言成功后要求重读会话恰一次、失败时不要求；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）；现有测试只在必要时修改并写明原因
+      - docs/task-records/SHOP-TASK-153.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；切换规则、挂载、重读时机、偏离（含入口位置）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收，并写明结账页 P05 短信验证通过后的重读留给会员结账任务）
+      - 改动只落在 allowed_change_paths（不改 frontend/src/api/ 与 frontend/src/pages/AccountPage.tsx；router.tsx、copy.ts 与 site.css 不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.13 提交 450c2fa 与 HANDOFF 0.61），不合并、不直推
+```

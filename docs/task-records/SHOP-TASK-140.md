@@ -16,3 +16,18 @@
 - 改动只在 `frontend/src/api/adminRefunds.ts`、`frontend/src/api/adminRefunds.test.ts`、`frontend/src/pages/AdminRefundDetail.test.tsx` 与本文件；未改 `pages/AdminRefundDetail.tsx` 与其他页面、路由与导航、`docs/TODO.md`、`.platform/`、CI、部署配置、`package.json` 与锁文件、后端与设计。
 - 留给之后的任务：A03 的付款方式、期限提示与尝试表的显示（SHOP-TASK-141）；重试按钮、提交中禁用、成功后重新读取与 `[admin.stripe_refund_blocked]` 的提示（SHOP-TASK-142）。
 - 验证到什么程度：人工逐条对照验收标准、SHOP-TASK-130 与 131 记录段的字段、错误码与请求约定，以及 UX 0.12 A03 自查。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查。未做浏览器验收，未连真实后端。检查命令结果由 Worker 另行记录。
+
+## 登记时的验收标准（原文）
+
+2026-10-26 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - AdminRefundDetail 另取三个字段，写法沿用该文件对积分字段的做法（SHOP-TASK-107）——paid_via_stripe（布尔）；payment_method_type（字符串或 null）；stripe_refunds（数组，每条只取 id、created_at、amount_sen、status 与 stripe_refund_id 五个字段，id 与 amount_sen 为正整数，created_at 照 isTime 能解析成日期，status 为 pending、succeeded、failed 之一，stripe_refund_id 为字符串或 null；多出的字段不带进结果）；数组按接口给的顺序原样保留（最新在前），不重新排序
+      - 响应体不合格算 failed——三个字段缺少或类型不对、任何一条尝试不合格（含大写的状态值、金额为 0 或负数、时间不能解析）、paid_via_stripe 为假而 payment_method_type 不为 null 或 stripe_refunds 不为空；其余字段、检查与 readAdminRefund 的归类不变
+      - 新函数调用 POST /api/admin/refunds/{内部 ID}/stripe-retry（同源 cookie，cache 为 no-store，不带查询参数与请求体，请求头只带 Accept 与 X-CSRF-Token（调用方给出的详情 csrf_token，CSRF_HEADER 取自 frontend/src/api/pay.ts），不带 Idempotency-Key；路径 ID 照 parseRefundId，不合法时不发请求、归 failed）；结果归为 done（200，不读响应体）、cap（409 且 detail 为 stripe_refund_cap）、not_retryable（409 且 detail 为 stripe_refund_not_retryable 或 refund_not_approved）、csrf（403）、none（401）、failed（其他，含别的 409、404 与 422）与 network（网络中断）；409 的错误码照 reviewAdminRefund 的 errorCode 写法读取
+      - 用 vitest（不加测试依赖，fetch 以替身代替）在 frontend/src/api/adminRefunds.test.ts 验证意图——三个字段原样取到（Stripe 付款已批准有两条尝试且顺序不变、类型为 null、模拟支付的 false、null 与空列表），多出的字段（如 last_error_type）不带进结果；上一条列出的各种不合格；重试请求的地址、方法、请求头（有 X-CSRF-Token，没有 Idempotency-Key 与 Content-Type）与没有请求体；各状态码与错误码的归类（409 的其他错误码归 failed）与网络中断；现有样例补上三个字段（取模拟支付的值）使原有断言不变；每条测试写明它守住的是 SHOP-TASK-130、131 记录或 UX 0.12 A03 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出（CI 的 eslint 带类型规则）
+      - frontend/src/pages/AdminRefundDetail.test.tsx 只改共用的申请样例（REQUESTED、APPROVED、REJECTED 等），补上三个字段并取模拟支付的值（false、null、空列表），使类型检查通过、原有断言不变；不新增、不删除测试，改动处注明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-140.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；字段、不合格的情形、重试请求与归类、偏离、验证到什么程度，并写明页面显示与重试留给 SHOP-TASK-141、142）
+      - 改动只落在 allowed_change_paths（不改 frontend/src/pages/AdminRefundDetail.tsx 与其他页面，不改路由与导航）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.57），不合并、不直推
+```
