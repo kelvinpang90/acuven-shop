@@ -980,6 +980,11 @@ export const COPY = {
     zh: "未扣任何真实款项。订单状态为“已支付（演示）”。",
     ms: 'Tiada wang sebenar diambil. Pesanan anda kini "Dibayar (demo)".',
   },
+  "result.points_earned": {
+    en: "You earned {points} demo points.",
+    zh: "您获得了 {points} 演示积分。",
+    ms: "Anda memperoleh {points} mata demo.",
+  },
   "result.guest_next": {
     en: 'To view this order later, confirm receipt or request a refund, use "Track order" with your order number and phone number.',
     zh: "之后如需查看此订单、确认收货或申请退款，请在“查询订单”中输入订单号和电话。",
@@ -1014,6 +1019,11 @@ export const COPY = {
     en: "You cancelled this demo order. The held stock, coupon and points have been released.",
     zh: "您已取消此演示订单，保留的库存、优惠券与积分已释放。",
     ms: "Anda telah membatalkan pesanan demo ini. Stok, kupon dan mata yang ditahan telah dilepaskan.",
+  },
+  "result.track": {
+    en: "View this order",
+    zh: "查看订单",
+    ms: "Lihat pesanan ini",
   },
   "result.continue": {
     en: "Continue shopping",
