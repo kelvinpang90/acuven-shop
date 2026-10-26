@@ -1,6 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { clearMemberOrder, memberOrderInView } from "../api/memberOrders";
+import { MEMBER_STRIPE_CONFIRM_URL, memberPayOrderUrl } from "../api/memberPay";
+import { createMemberSessionReader, MEMBER_SESSION_URL } from "../api/memberSession";
 import { CSRF_HEADER, payOrdersUrl, rememberPaidNotCancelled, STRIPE_CONFIRM_URL, takePaidNotCancelled } from "../api/pay";
 import type { PayOrder } from "../api/pay";
 import { BRAND, COPY, LANGUAGES } from "../i18n/copy";
@@ -9,18 +12,25 @@ import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { isRoutePath, RouterProvider } from "../router";
 import type { RoutePath } from "../router";
 import { countryName } from "./PayPage";
+import type { MemberTarget, PayStash } from "./PayPage";
 import {
   AUTO_RECHECK_MS,
   AUTO_RECHECKS,
   checkAgain,
+  checkAgainAsMember,
   confirming,
   keepOnFailure,
   LOADING,
+  memberOrderPath,
   openResult,
+  openTrack,
   PayResultView,
+  readMemberResult,
+  REOPEN,
+  settlesStash,
   startChecking,
 } from "./PayResultPage";
-import type { ResultMoves, ResultScreen } from "./PayResultPage";
+import type { Delay, ResultAccess, ResultMoves, ResultScreen } from "./PayResultPage";
 
 const ORDER_NUMBER = "B6TN2RJD8K4M0QXZ";
 
@@ -312,23 +322,27 @@ function urls(fetchMock: FetchMock): string[] {
   return fetchMock.mock.calls.map(([input]) => String(input));
 }
 
-// 每次确认请求带的 CSRF 令牌与请求体。
-function confirmCalls(fetchMock: FetchMock): { token: string; body: string }[] {
+// 每次确认请求带的 CSRF 令牌与请求体（url 默认游客的确认接口）。
+function confirmCalls(fetchMock: FetchMock, url: string = STRIPE_CONFIRM_URL): { token: string; body: string }[] {
   return fetchMock.mock.calls
-    .filter(([input]) => String(input) === STRIPE_CONFIRM_URL)
+    .filter(([input]) => String(input) === url)
     .map(([, init]) => ({
       token: String((init?.headers as Record<string, string> | undefined)?.[CSRF_HEADER]),
       body: typeof init?.body === "string" ? init.body : "",
     }));
 }
 
-// 页面替身：保存当前状态（update 按它改动），记录每次显示、经 replace 去的地址与 takePaidNotCancelled 的结果。
+// 页面替身：保存当前状态（update 按它改动），记录每次显示、经 replace 去的地址、takePaidNotCancelled 的结果与判定出的访问方式。
 function fakeMoves(initial: ResultScreen = LOADING) {
   let current = initial;
   const screens: ResultScreen[] = [];
   const replaced: RoutePath[] = [];
   const notices: boolean[] = [];
+  const accesses: (ResultAccess | null)[] = [];
   const target: ResultMoves = {
+    access: (access) => {
+      accesses.push(access);
+    },
     show: (screen) => {
       current = screen;
       screens.push(screen);
@@ -344,7 +358,12 @@ function fakeMoves(initial: ResultScreen = LOADING) {
       notices.push(shown);
     },
   };
-  return { target, screens, replaced, notices };
+  return { target, screens, replaced, notices, accesses };
+}
+
+// 会员会话的读取替身：真实的读取对象，请求经 fetch 替身回答；游客的打开（游客读取不回 401）不会用到它。
+function guestReader() {
+  return createMemberSessionReader();
 }
 
 // delay 替身：立即结束，记录等待的毫秒数；onCall 收到第几次等待（可在其中中止）。
@@ -374,7 +393,7 @@ describe("stripe decision", () => {
   it("confirms once with the read token and shows the paid order", async () => {
     const fetchMock = stubFetch(ordersReply(stripePending, "token-a"), confirmReply("paid"), ordersReply(paidOrder, "token-b"));
     const moves = fakeMoves();
-    await openResult("en", new AbortController().signal, moves.target, { delay: fakeDelay().delay });
+    await openResult("en", guestReader(), new AbortController().signal, moves.target, { delay: fakeDelay().delay });
     expect(urls(fetchMock)).toEqual([ORDERS, STRIPE_CONFIRM_URL, ORDERS]);
     expect(confirmCalls(fetchMock)).toEqual([{ token: "token-a", body: JSON.stringify({ order_number: ORDER_NUMBER }) }]);
     expect(moves.screens).toEqual([LOADING, ready(paidOrder)]);
@@ -387,7 +406,7 @@ describe("stripe decision", () => {
     const refunded = payOrder({ status: "demo_cancelled", last_payment: null, cancelled_by: "timeout", payment_route: null, stripe_state: null, stripe_refunded: true });
     const fetchMock = stubFetch(ordersReply(stripePending), confirmReply("refunded"), ordersReply(refunded));
     const moves = fakeMoves();
-    await openResult("en", new AbortController().signal, moves.target, { delay: fakeDelay().delay });
+    await openResult("en", guestReader(), new AbortController().signal, moves.target, { delay: fakeDelay().delay });
     expect(urls(fetchMock)).toEqual([ORDERS, STRIPE_CONFIRM_URL, ORDERS]);
     expect(moves.screens).toEqual([LOADING, ready(refunded)]);
     expect(has(render(ready(refunded)), "result.stripe_late_refund")).toBe(true);
@@ -398,7 +417,7 @@ describe("stripe decision", () => {
     stubFetch(ordersReply(stripePending), confirmReply("not_paid"));
     const moves = fakeMoves();
     const { delay, waits } = fakeDelay();
-    await openResult(language, new AbortController().signal, moves.target, { delay });
+    await openResult(language, guestReader(), new AbortController().signal, moves.target, { delay });
     expect(moves.screens).toEqual([LOADING, { status: "not_paid" }]);
     expect(waits).toEqual([]);
     const html = render({ status: "not_paid" }, language);
@@ -420,7 +439,7 @@ describe("stripe decision", () => {
     stubFetch(ordersReply(stripePending), reply);
     const controller = new AbortController();
     const moves = fakeMoves();
-    await openResult("en", controller.signal, moves.target, { delay: stopAtFirstWait(controller) });
+    await openResult("en", guestReader(), controller.signal, moves.target, { delay: stopAtFirstWait(controller) });
     expect(moves.screens).toEqual([LOADING, confirming(stripePending, false)]);
   });
 
@@ -428,7 +447,7 @@ describe("stripe decision", () => {
   it("shows the expired page when the confirmation is 401", async () => {
     stubFetch(ordersReply(stripePending), json(401, {}));
     const moves = fakeMoves();
-    await openResult("en", new AbortController().signal, moves.target, { delay: fakeDelay().delay });
+    await openResult("en", guestReader(), new AbortController().signal, moves.target, { delay: fakeDelay().delay });
     expect(moves.screens).toEqual([LOADING, { status: "expired" }]);
   });
 
@@ -440,14 +459,14 @@ describe("stripe decision", () => {
     stubFetch(ordersReply(stripePending), confirmReply("paid"), reply);
     const controller = new AbortController();
     const moves = fakeMoves();
-    await openResult("en", controller.signal, moves.target, { delay: stopAtFirstWait(controller) });
+    await openResult("en", guestReader(), controller.signal, moves.target, { delay: stopAtFirstWait(controller) });
     expect(moves.screens).toEqual([LOADING, confirming(stripePending, false)]);
   });
 
   it("shows the expired page when the reread after paid is 401", async () => {
     stubFetch(ordersReply(stripePending), confirmReply("paid"), json(401, {}));
     const moves = fakeMoves();
-    await openResult("en", new AbortController().signal, moves.target, { delay: fakeDelay().delay });
+    await openResult("en", guestReader(), new AbortController().signal, moves.target, { delay: fakeDelay().delay });
     expect(moves.screens).toEqual([LOADING, { status: "expired" }]);
   });
 
@@ -465,7 +484,7 @@ describe("stripe decision", () => {
     for (const [order, screens, replaced] of cases) {
       const fetchMock = stubFetch(ordersReply(order));
       const moves = fakeMoves();
-      await openResult("en", new AbortController().signal, moves.target, { delay: fakeDelay().delay });
+      await openResult("en", guestReader(), new AbortController().signal, moves.target, { delay: fakeDelay().delay });
       expect(urls(fetchMock)).toEqual([ORDERS]);
       expect(moves.screens).toEqual(screens);
       expect(moves.replaced).toEqual(replaced);
@@ -528,7 +547,7 @@ describe("stripe confirming", () => {
     const fetchMock = stubFetch(...replies);
     const moves = fakeMoves();
     const { delay, waits } = fakeDelay();
-    await openResult("en", new AbortController().signal, moves.target, { delay });
+    await openResult("en", guestReader(), new AbortController().signal, moves.target, { delay });
     expect(AUTO_RECHECKS).toBe(12);
     expect(waits).toEqual(Array.from({ length: 12 }, () => AUTO_RECHECK_MS));
     expect(AUTO_RECHECK_MS).toBe(5000);
@@ -550,7 +569,7 @@ describe("stripe confirming", () => {
     const fetchMock = stubFetch(...replies);
     const moves = fakeMoves();
     const { delay, waits } = fakeDelay();
-    await openResult("en", new AbortController().signal, moves.target, { delay });
+    await openResult("en", guestReader(), new AbortController().signal, moves.target, { delay });
     expect(waits).toHaveLength(12);
     expect(confirmCalls(fetchMock)).toHaveLength(1);
     expect(moves.screens.at(-1)).toEqual(confirming(stripePending, true));
@@ -562,7 +581,7 @@ describe("stripe confirming", () => {
     const fetchMock = stubFetch(ordersReply(stripePending), confirmReply("confirming"), "network", ordersReply(paidOrder));
     const moves = fakeMoves();
     const { delay, waits } = fakeDelay();
-    await openResult("en", new AbortController().signal, moves.target, { delay });
+    await openResult("en", guestReader(), new AbortController().signal, moves.target, { delay });
     expect(waits).toHaveLength(2);
     expect(confirmCalls(fetchMock)).toHaveLength(1);
     expect(moves.screens).toEqual([LOADING, confirming(stripePending, false), confirming(stripePending, false), ready(paidOrder)]);
@@ -572,7 +591,7 @@ describe("stripe confirming", () => {
   it("shows success when a recheck confirms the payment", async () => {
     const fetchMock = stubFetch(ordersReply(stripePending), confirmReply("confirming"), ordersReply(stripePending, "token-1"), confirmReply("paid"), ordersReply(paidOrder));
     const moves = fakeMoves();
-    await openResult("en", new AbortController().signal, moves.target, { delay: fakeDelay().delay });
+    await openResult("en", guestReader(), new AbortController().signal, moves.target, { delay: fakeDelay().delay });
     expect(confirmCalls(fetchMock).map((call) => call.token)).toEqual(["token-0", "token-1"]);
     expect(moves.screens.at(-1)).toEqual(ready(paidOrder));
   });
@@ -582,7 +601,7 @@ describe("stripe confirming", () => {
     stubFetch(ordersReply(stripePending), confirmReply("confirming"), json(401, {}));
     const moves = fakeMoves();
     const { delay, waits } = fakeDelay();
-    await openResult("en", new AbortController().signal, moves.target, { delay });
+    await openResult("en", guestReader(), new AbortController().signal, moves.target, { delay });
     expect(waits).toHaveLength(1);
     expect(moves.screens.at(-1)).toEqual({ status: "expired" });
   });
@@ -592,7 +611,7 @@ describe("stripe confirming", () => {
     const waiting = new AbortController();
     const first = stubFetch(ordersReply(stripePending), confirmReply("confirming"), ordersReply(stripePending), confirmReply("confirming"));
     const moves = fakeMoves();
-    await openResult("en", waiting.signal, moves.target, {
+    await openResult("en", guestReader(), waiting.signal, moves.target, {
       delay: fakeDelay((count) => {
         if (count === 2) {
           waiting.abort();
@@ -608,7 +627,7 @@ describe("stripe confirming", () => {
       return confirmReply("paid");
     });
     const left = fakeMoves();
-    await openResult("en", confirmingNow.signal, left.target, { delay: fakeDelay().delay });
+    await openResult("en", guestReader(), confirmingNow.signal, left.target, { delay: fakeDelay().delay });
     expect(second).toHaveBeenCalledTimes(2);
     expect(left.screens).toEqual([LOADING]);
   });
@@ -650,23 +669,23 @@ describe("paid not cancelled", () => {
     rememberPaidNotCancelled(ORDER_NUMBER);
     stubFetch(ordersReply(paidOrder));
     const later = fakeMoves();
-    await openResult("en", new AbortController().signal, later.target, { takeNotice: false });
+    await openResult("en", guestReader(), new AbortController().signal, later.target, { takeNotice: false });
     expect(later.notices).toEqual([]);
 
     stubFetch(ordersReply(paidOrder));
     const first = fakeMoves();
-    await openResult("en", new AbortController().signal, first.target, { takeNotice: true });
+    await openResult("en", guestReader(), new AbortController().signal, first.target, { takeNotice: true });
     expect(first.notices).toEqual([true]);
 
     stubFetch(ordersReply(paidOrder));
     const again = fakeMoves();
-    await openResult("en", new AbortController().signal, again.target, { takeNotice: true });
+    await openResult("en", guestReader(), new AbortController().signal, again.target, { takeNotice: true });
     expect(again.notices).toEqual([false]);
 
     rememberPaidNotCancelled("OTHER0ORDER0NO00");
     stubFetch(ordersReply(paidOrder));
     const other = fakeMoves();
-    await openResult("en", new AbortController().signal, other.target, { takeNotice: true });
+    await openResult("en", guestReader(), new AbortController().signal, other.target, { takeNotice: true });
     expect(other.notices).toEqual([false]);
   });
 
@@ -696,6 +715,459 @@ describe("stripe dictionary", () => {
     const patterns = [BRAND, ...Object.values(COPY).map((entry) => entry[language])].map(copyPattern);
     for (const [screen, notice] of screens) {
       for (const value of visibleTexts(render(screen, language, 12, notice))) {
+        const known = orderData.has(value) || patterns.some((pattern) => pattern.test(value));
+        expect(known, value).toBe(true);
+      }
+    }
+  });
+});
+
+// —— 会员模式（SHOP-TASK-162）——
+
+const MEMBER_TOKEN = "member-token-0";
+const MEMBER_ORDER_EN = memberPayOrderUrl("en");
+const TARGET: MemberTarget = { orderNumber: ORDER_NUMBER, csrfToken: MEMBER_TOKEN };
+const MEMBER_ACCESS: ResultAccess = { kind: "member", ...TARGET };
+const GUEST_ACCESS: ResultAccess = { kind: "guest" };
+
+function memberRead(order: PayOrder): Response {
+  return json(200, order);
+}
+
+function memberSession(token = MEMBER_TOKEN): Response {
+  return json(200, { phone_masked: "+60 12-XXX 6789", has_password: true, csrf_token: token });
+}
+
+// 会员会话读取与会员接口的 401 都是 member_session_required。
+function signedOut(): Response {
+  return json(401, { detail: "member_session_required" });
+}
+
+function notFound(): Response {
+  return json(404, { detail: "order_not_found" });
+}
+
+// sessionStorage 暂存的替身：current 先给出 orderNumber，clear 之后为 null。
+function fakeStash(orderNumber: string | null) {
+  let value = orderNumber;
+  const clear = vi.fn(() => {
+    value = null;
+  });
+  const stash: PayStash = { current: () => value, clear };
+  return { stash, clear };
+}
+
+// 会员成功页等：以 props 给出会员模式与 result.track 的去向。
+function renderMember(screen: ResultScreen, language: Language = "en", paidNotCancelled = false): string {
+  return renderToStaticMarkup(
+    <LanguageProvider storage={languageStorage(language)}>
+      <RouterProvider initialPath="/pay/result">
+        <PayResultView
+          screen={screen}
+          minutes={12}
+          states={STATES}
+          paidNotCancelled={paidNotCancelled}
+          onCheckAgain={() => undefined}
+          member
+          track={memberOrderPath()}
+          onTrack={() => undefined}
+        />
+      </RouterProvider>
+    </LanguageProvider>,
+  );
+}
+
+// 暂存里有本单订单号时打开（判定顺序 ①）；返回 fetch 替身、页面替身与暂存的清除记录。
+async function openAsMember(fetchReplies: Reply[], options: { takeNotice?: boolean; delay?: Delay; signal?: AbortSignal } = {}) {
+  const { stash, clear } = fakeStash(ORDER_NUMBER);
+  const fetchMock = stubFetch(...fetchReplies);
+  const moves = fakeMoves();
+  await openResult("en", createMemberSessionReader(), options.signal ?? new AbortController().signal, moves.target, {
+    delay: options.delay ?? fakeDelay().delay,
+    stash,
+    takeNotice: options.takeNotice ?? false,
+  });
+  return { fetchMock, moves, clear };
+}
+
+describe("member opening", () => {
+  // UX 0.13 P07「会员结果页按 P06 说明的『会员的当前订单』取单」与验收「打开——照 SHOP-TASK-161 的判定顺序 ①②」：有暂存时经会员接口读取（订单号只在请求体里），
+  // 令牌取自会员会话，不调用游客接口；DESIGN 1.14「权限与资料保护」第 7 条「结果确定后清除」：读到已付款的订单时清除暂存，本次照常显示成功。
+  it("opens the stashed order through the member interface", async () => {
+    const { fetchMock, moves, clear } = await openAsMember([memberRead(paidOrder), memberSession()]);
+    expect(urls(fetchMock)).toEqual([MEMBER_ORDER_EN, MEMBER_SESSION_URL]);
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBe(JSON.stringify({ order_number: ORDER_NUMBER }));
+    expect(moves.accesses).toEqual([MEMBER_ACCESS]);
+    expect(moves.screens).toEqual([ready(paidOrder)]);
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  // 验收「① 会员读取 signed_out 时清除暂存转 ②」：清除一次后照游客读取，读到的订单照游客显示。
+  it("clears the stash and opens as a guest when signed out", async () => {
+    const { fetchMock, moves, clear } = await openAsMember([signedOut(), ordersReply(paidOrder)]);
+    expect(urls(fetchMock)).toEqual([MEMBER_ORDER_EN, ORDERS]);
+    expect(moves.accesses).toEqual([GUEST_ACCESS]);
+    expect(moves.screens).toEqual([ready(paidOrder)]);
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  // 验收「not_found 时清除暂存并整页显示 pay.member_reopen 与 account.orders」、UX P07 线框「会员找不到这笔订单（0.13）[pay.member_reopen] ( [account.orders] ) → P13」
+  // 与视觉稿 P06-P07-member-reopen（整页只留提示与 account.orders 主按钮）。
+  it.each(LANGUAGES)("shows pay.member_reopen when the order is not found in %s", async (language) => {
+    const { stash, clear } = fakeStash(ORDER_NUMBER);
+    const fetchMock = stubFetch(notFound());
+    const moves = fakeMoves();
+    await openResult(language, createMemberSessionReader(), new AbortController().signal, moves.target, { stash });
+    expect(urls(fetchMock)).toEqual([memberPayOrderUrl(language)]);
+    expect(moves.screens).toEqual([REOPEN]);
+    expect(clear).toHaveBeenCalledTimes(1);
+    const html = render(REOPEN, language);
+    expect(visibleTexts(html)).toEqual([COPY["pay.member_reopen"][language], COPY["account.orders"][language]]);
+    expect([...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1])).toEqual(["/account"]);
+  });
+
+  // 验收「failed 与 network 时 common.error_retry、不清除」。
+  it.each<[string, Reply]>([
+    ["failed", json(500, {})],
+    ["network", "network"],
+  ])("keeps the stash and shows common.error_retry when the member read is %s", async (_name, reply) => {
+    const { fetchMock, moves, clear } = await openAsMember([reply]);
+    expect(urls(fetchMock)).toEqual([MEMBER_ORDER_EN]);
+    expect(moves.screens).toEqual([{ status: "error" }]);
+    expect(moves.accesses).toEqual([]);
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  // 验收「② 游客读取回 401 时按会员会话显示 pay.member_reopen 与 account.orders、pay.session_expired 或 common.error_retry」与 HANDOFF 0.63 第（1）项
+  // 「P06、P07 打开时游客读取回 401 才读会员会话」。
+  it.each<[string, () => Response, ResultScreen]>([
+    ["member", () => memberSession(), REOPEN],
+    ["guest", signedOut, { status: "expired" }],
+    ["failed", () => json(500, {}), { status: "error" }],
+  ])("reads the session after a guest 401 (%s)", async (_name, session, screen) => {
+    const { stash, clear } = fakeStash(null);
+    const fetchMock = stubFetch(json(401, {}), session());
+    const moves = fakeMoves();
+    await openResult("en", createMemberSessionReader(), new AbortController().signal, moves.target, { stash });
+    expect(urls(fetchMock)).toEqual([ORDERS, MEMBER_SESSION_URL]);
+    expect(moves.screens).toEqual([screen]);
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  // 验收「游客结果页其余行为不变」与 HANDOFF 0.63 第（1）项：没有暂存、游客读取成功时不读会员会话，按游客显示。
+  it("does not read the session when the guest read succeeds", async () => {
+    const { stash } = fakeStash(null);
+    const fetchMock = stubFetch(ordersReply(paidOrder));
+    const moves = fakeMoves();
+    await openResult("en", createMemberSessionReader(), new AbortController().signal, moves.target, { stash });
+    expect(urls(fetchMock)).toEqual([ORDERS]);
+    expect(moves.accesses).toEqual([GUEST_ACCESS]);
+    expect(moves.screens).toEqual([ready(paidOrder)]);
+  });
+});
+
+describe("member stripe confirmation", () => {
+  // UX 0.13 P07「从 Stripe 成功返回时由暂存的订单号调用会员的确认接口（Stripe 节第 4 条）」、DESIGN 1.14「Stripe 测试环境支付」第 4 条与验收
+  // 「以会话里的 CSRF 令牌经 SHOP-TASK-158 调用会员确认接口一次，再以会员接口重读」：确认返回前按读取中显示，不调用游客的确认与读取接口。
+  it("confirms with the session token and rereads as a member", async () => {
+    const { fetchMock, moves, clear } = await openAsMember([memberRead(stripePending), memberSession(), confirmReply("paid"), memberRead(paidOrder)]);
+    expect(urls(fetchMock)).toEqual([MEMBER_ORDER_EN, MEMBER_SESSION_URL, MEMBER_STRIPE_CONFIRM_URL, MEMBER_ORDER_EN]);
+    expect(confirmCalls(fetchMock, MEMBER_STRIPE_CONFIRM_URL)).toEqual([{ token: MEMBER_TOKEN, body: JSON.stringify({ order_number: ORDER_NUMBER }) }]);
+    expect(moves.screens).toEqual([LOADING, ready(paidOrder)]);
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  // UX 0.11「尚未付款：显示 [result.stripe_not_paid]」与验收「尚未付款不清除」。
+  it("shows not_paid and keeps the stash", async () => {
+    const { delay, waits } = fakeDelay();
+    const { moves, clear } = await openAsMember([memberRead(stripePending), memberSession(), confirmReply("not_paid")], { delay });
+    expect(moves.screens).toEqual([LOADING, { status: "not_paid" }]);
+    expect(waits).toEqual([]);
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  // 验收「确认中每 5 秒重查、最多 12 次与 result.check_again 的规则与游客相同」与 DESIGN 1.14 第 7 条「确认中不清除」：每次重查以会员接口读取再确认，
+  // 令牌都取自会话；12 次之后显示 result.check_again，暂存保留。
+  it("rechecks as a member every 5 seconds at most 12 times", async () => {
+    const replies: Reply[] = [memberRead(stripePending), memberSession(), confirmReply("confirming")];
+    for (let count = 1; count <= AUTO_RECHECKS; count += 1) {
+      replies.push(memberRead(stripePending), confirmReply("confirming"));
+    }
+    const { delay, waits } = fakeDelay();
+    const { fetchMock, moves, clear } = await openAsMember(replies, { delay });
+    expect(waits).toEqual(Array.from({ length: 12 }, () => AUTO_RECHECK_MS));
+    expect(confirmCalls(fetchMock, MEMBER_STRIPE_CONFIRM_URL).map((call) => call.token)).toEqual(Array.from({ length: 13 }, () => MEMBER_TOKEN));
+    expect(urls(fetchMock).filter((url) => url === ORDERS || url === STRIPE_CONFIRM_URL)).toEqual([]);
+    expect(moves.screens).toEqual([LOADING, ...Array.from({ length: 12 }, () => confirming(stripePending, false)), confirming(stripePending, true)]);
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  // 同一条与验收「结果确定时清除暂存」：重查时确认得到 paid，会员重读后显示成功，此时才清除。
+  it("clears the stash when a recheck confirms the payment", async () => {
+    const { moves, clear } = await openAsMember([
+      memberRead(stripePending),
+      memberSession(),
+      confirmReply("confirming"),
+      memberRead(stripePending),
+      confirmReply("paid"),
+      memberRead(paidOrder),
+    ]);
+    expect(moves.screens).toEqual([LOADING, confirming(stripePending, false), ready(paidOrder)]);
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  // 验收「signed_out 时清除暂存并按 ② 重新判定」：回到读取中，暂存已清除，照游客读取。
+  it("clears the stash and goes to ② when the confirmation is signed out", async () => {
+    const { fetchMock, moves, clear } = await openAsMember([memberRead(stripePending), memberSession(), signedOut(), ordersReply(paidOrder)]);
+    expect(urls(fetchMock)).toEqual([MEMBER_ORDER_EN, MEMBER_SESSION_URL, MEMBER_STRIPE_CONFIRM_URL, ORDERS]);
+    expect(moves.accesses).toEqual([MEMBER_ACCESS, null, GUEST_ACCESS]);
+    expect(moves.screens).toEqual([LOADING, LOADING, ready(paidOrder)]);
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  // 验收「not_found 时清除暂存并显示 pay.member_reopen」。
+  it("clears the stash and shows pay.member_reopen when the confirmation is not found", async () => {
+    const { fetchMock, moves, clear } = await openAsMember([memberRead(stripePending), memberSession(), notFound()]);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(moves.screens).toEqual([LOADING, REOPEN]);
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  // 验收「csrf 时重读会话——member 时换用新令牌并显示 common.error_retry」：不清除暂存。
+  it("takes the new token after csrf while still a member", async () => {
+    const { fetchMock, moves, clear } = await openAsMember([memberRead(stripePending), memberSession(), json(403, { detail: "csrf_failed" }), memberSession("member-token-1")]);
+    expect(urls(fetchMock)).toEqual([MEMBER_ORDER_EN, MEMBER_SESSION_URL, MEMBER_STRIPE_CONFIRM_URL, MEMBER_SESSION_URL]);
+    expect(moves.accesses).toEqual([MEMBER_ACCESS, { ...MEMBER_ACCESS, csrfToken: "member-token-1" }]);
+    expect(moves.screens).toEqual([LOADING, { status: "error" }]);
+    expect(visibleTexts(render({ status: "error" }))).toEqual([COPY["common.error_retry"].en]);
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  // 同一条「重读得到 failed 时保留原令牌并显示 common.error_retry」。
+  it("keeps the token after csrf when the session read fails", async () => {
+    const { moves, clear } = await openAsMember([memberRead(stripePending), memberSession(), json(403, { detail: "csrf_failed" }), json(500, {})]);
+    expect(moves.accesses).toEqual([MEMBER_ACCESS]);
+    expect(moves.screens).toEqual([LOADING, { status: "error" }]);
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  // 同一条「guest 时清除暂存并按 ② 重新判定」。
+  it("clears the stash and goes to ② after csrf when the session is a guest", async () => {
+    const { fetchMock, moves, clear } = await openAsMember([memberRead(stripePending), memberSession(), json(403, { detail: "csrf_failed" }), signedOut(), ordersReply(paidOrder)]);
+    expect(urls(fetchMock)).toEqual([MEMBER_ORDER_EN, MEMBER_SESSION_URL, MEMBER_STRIPE_CONFIRM_URL, MEMBER_SESSION_URL, ORDERS]);
+    expect(moves.accesses).toEqual([MEMBER_ACCESS, null, GUEST_ACCESS]);
+    expect(moves.screens).toEqual([LOADING, LOADING, ready(paidOrder)]);
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  // 验收「会员会话的重读是共享读取，不中止，离开页面后不再据其结果更新或跳转」：csrf 之后重读会话期间离开页面，会话的回答不再改动令牌与页面。
+  it("ignores the session reread after leaving the page", async () => {
+    const page = new AbortController();
+    const { moves } = await openAsMember(
+      [
+        memberRead(stripePending),
+        memberSession(),
+        json(403, { detail: "csrf_failed" }),
+        () => {
+          page.abort();
+          return memberSession("member-token-1");
+        },
+      ],
+      { signal: page.signal },
+    );
+    expect(moves.accesses).toEqual([MEMBER_ACCESS]);
+    expect(moves.screens).toEqual([LOADING]);
+  });
+
+  // 验收「takePaidNotCancelled 的用法与游客相同」与 UX 0.11「从 P06 取消时会话已付款进入的，成功区顶部另显示 [result.paid_not_cancelled]」：
+  // 首次读到会员订单时以其订单号取一次，读一次即失效。
+  it("takes the paid-not-cancelled notice once as a member", async () => {
+    rememberPaidNotCancelled(ORDER_NUMBER);
+    const first = await openAsMember([memberRead(paidOrder), memberSession()], { takeNotice: true });
+    expect(first.moves.notices).toEqual([true]);
+    const again = await openAsMember([memberRead(paidOrder), memberSession()], { takeNotice: true });
+    expect(again.moves.notices).toEqual([false]);
+    const html = renderMember(ready(paidOrder), "en", true);
+    expect(html.indexOf(escapeHtml(COPY["result.paid_not_cancelled"].en))).toBeLessThan(html.indexOf(COPY["result.success_title"].en));
+  });
+});
+
+describe("member stash clearing", () => {
+  // DESIGN 1.14「权限与资料保护」第 7 条「暂存在结果确定后清除，失败与确认中不清除」与验收「resultKind 为 success、cancelled 或 cancelled_by_you
+  // （含超时取消与迟到付款按已取消处理）时清除…模拟支付失败…不清除」：本次照常显示该结果。
+  it.each<[string, PayOrder, boolean]>([
+    ["paid", paidOrder, true],
+    ["shipped", payOrder({ status: "demo_shipped" }), true],
+    ["timed out", timedOut, true],
+    ["cancelled by you", cancelledByYou, true],
+    ["late payment refunded", { ...timedOut, stripe_refunded: true }, true],
+    ["failed", failed, false],
+  ])("decides on the stash for a %s order", async (_name, order, cleared) => {
+    expect(settlesStash(order)).toBe(cleared);
+    const { moves, clear } = await openAsMember([memberRead(order), memberSession()]);
+    expect(moves.screens).toEqual([ready(order)]);
+    expect(clear).toHaveBeenCalledTimes(cleared ? 1 : 0);
+  });
+
+  // 同一条「尚未付款不清除」：仍待支付、没有失败记录的模拟途径订单回 P06，暂存保留给 P06。
+  it("keeps the stash when the order still waits for payment", async () => {
+    const fresh = payOrder({ status: "awaiting_demo_payment", last_payment: null, payment_route: "simulated", stripe_state: null });
+    const { moves, clear } = await openAsMember([memberRead(fresh), memberSession()]);
+    expect(moves.replaced).toEqual(["/pay"]);
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  // 验收「清除后本页仍以页面内存里的订单号经会员接口重读同一张订单（例如切换语言），不因暂存已清除转 ②」。
+  it("rereads the same member order after the stash is cleared", async () => {
+    const { stash } = fakeStash(null);
+    const fetchMock = stubFetch(memberRead(paidOrder));
+    const moves = fakeMoves(ready(paidOrder));
+    await readMemberResult(TARGET, "zh", createMemberSessionReader(), new AbortController().signal, moves.target, { stash });
+    expect(urls(fetchMock)).toEqual([memberPayOrderUrl("zh")]);
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBe(JSON.stringify({ order_number: ORDER_NUMBER }));
+    expect(moves.screens).toEqual([ready(paidOrder)]);
+  });
+
+  // 验收「失败页的 result.retry 前往 /pay（暂存保留）」：失败页倒计时到 0 的会员重读仍为失败时照常显示，不清除；重读失败时保留已显示的结果。
+  it("keeps the stash on the failure page", async () => {
+    const { stash, clear } = fakeStash(ORDER_NUMBER);
+    stubFetch(memberRead(failed), json(500, {}));
+    const moves = fakeMoves(ready(failed));
+    await readMemberResult(TARGET, "en", createMemberSessionReader(), new AbortController().signal, moves.target, { stash });
+    await readMemberResult(TARGET, "en", createMemberSessionReader(), new AbortController().signal, moves.target, { stash });
+    expect(moves.screens).toEqual([ready(failed), ready(failed)]);
+    expect(clear).not.toHaveBeenCalled();
+    expect(renderMember(ready(failed))).toContain(`<a class="acs-btn acs-btn--primary site-result__retry" href="/pay">${COPY["result.retry"].en}</a>`);
+  });
+});
+
+describe("member check again", () => {
+  // UX 0.11「每点一次重查一次」与验收「result.check_again 的规则与游客相同」：经会员接口读取并以会话令牌确认一次，仍为确认中时按钮恢复，不清除暂存；
+  // 已付款时显示成功并清除。
+  it("checks once per click as a member", async () => {
+    const waiting = fakeStash(ORDER_NUMBER);
+    const fetchMock = stubFetch(memberRead(stripePending), confirmReply("confirming"));
+    const moves = fakeMoves(startChecking(confirming(stripePending, true)));
+    await checkAgainAsMember(stripePending, TARGET, "en", createMemberSessionReader(), new AbortController().signal, moves.target, { stash: waiting.stash });
+    expect(urls(fetchMock)).toEqual([MEMBER_ORDER_EN, MEMBER_STRIPE_CONFIRM_URL]);
+    expect(confirmCalls(fetchMock, MEMBER_STRIPE_CONFIRM_URL).map((call) => call.token)).toEqual([MEMBER_TOKEN]);
+    expect(moves.screens).toEqual([confirming(stripePending, true)]);
+    expect(waiting.clear).not.toHaveBeenCalled();
+
+    const paid = fakeStash(ORDER_NUMBER);
+    stubFetch(memberRead(stripePending), confirmReply("paid"), memberRead(paidOrder));
+    const done = fakeMoves();
+    await checkAgainAsMember(stripePending, TARGET, "en", createMemberSessionReader(), new AbortController().signal, done.target, { stash: paid.stash });
+    expect(done.screens).toEqual([ready(paidOrder)]);
+    expect(paid.clear).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("member success page", () => {
+  // UX P07 线框「会员：[result.points_earned] [M2] ( [result.track] ) → P09 会员模式」、UX-COPY「result.guest_next 仅游客」「result.guest_register 仅游客」
+  // 与 HANDOFF 0.63 第（5）项「P07 会员成功页 result.points_earned 为 0 也显示」：积分原样显示，result.track 链到 /account/order，没有游客的两项。
+  it.each(LANGUAGES)("shows the points and the way to the order in %s", (language) => {
+    for (const points of [95, 0]) {
+      const html = renderMember(ready(payOrder({ points_earned: points })), language);
+      expect(html).toContain(`<span>${escapeHtml(COPY["result.points_earned"][language].replace("{points}", String(points)))}</span>`);
+      expect(html).toContain(`<a class="acs-btn acs-btn--primary site-result__track" href="/account/order">${escapeHtml(COPY["result.track"][language])}</a>`);
+      expect(has(html, "result.guest_next", language)).toBe(false);
+      expect(has(html, "result.guest_register", language)).toBe(false);
+      expect(html).not.toContain(`href="/register"`);
+      for (const key of ["result.success_title", "result.demo_hint", "result.continue"] as const) {
+        expect(has(html, key, language), key).toBe(true);
+      }
+    }
+  });
+
+  // UX P07 线框的顺序：收货资料、会员一行（result.points_earned 与 result.track）、★ result.demo_hint、result.continue。
+  it("follows the order of the member wireframe", () => {
+    const html = renderMember(ready(payOrder({ points_earned: 95 })));
+    const positions = [
+      html.indexOf(COPY["checkout.recipient_title"].en),
+      html.indexOf(COPY["result.points_earned"].en.replace("{points}", "95")),
+      html.indexOf(COPY["result.track"].en),
+      html.indexOf(escapeHtml(COPY["result.demo_hint"].en)),
+      html.indexOf(COPY["result.continue"].en),
+    ];
+    for (const position of positions) {
+      expect(position).toBeGreaterThanOrEqual(0);
+    }
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+  });
+
+  // 验收「照 CheckoutPage.tsx 的 loginPath 写法以 isRoutePath 判断」：订单详情会员模式已在路由表里。
+  it("takes the order detail path from the route table", () => {
+    expect(isRoutePath("/account/order")).toBe(true);
+    expect(memberOrderPath()).toBe("/account/order");
+  });
+
+  // 验收「点 result.track 时先经 handOffMemberOrder 交出订单号，再前往 /account/order」与 HANDOFF 0.61 第（4）项（订单号经会员订单请求模块的模块内存交接）：
+  // 前往时交接里已是这张订单号。
+  it("hands off the order number before going to the order", () => {
+    clearMemberOrder();
+    const seen: (string | null)[] = [];
+    const navigate = vi.fn((path: RoutePath) => {
+      seen.push(memberOrderInView());
+      expect(path).toBe("/account/order");
+    });
+    openTrack(ORDER_NUMBER, "/account/order", navigate);
+    expect(navigate).toHaveBeenCalledTimes(1);
+    expect(seen).toEqual([ORDER_NUMBER]);
+    clearMemberOrder();
+    const events: string[] = [];
+    openTrack(
+      ORDER_NUMBER,
+      "/account/order",
+      () => {
+        events.push("navigate");
+      },
+      (orderNumber) => {
+        events.push(`hand off ${orderNumber}`);
+      },
+    );
+    expect(events).toEqual([`hand off ${ORDER_NUMBER}`, "navigate"]);
+  });
+
+  // 验收「游客成功页仍没有 result.track 与 result.points_earned」：订单有获得积分时游客也不显示。
+  it("still has no points or order link for guests", () => {
+    const html = render(ready(payOrder({ points_earned: 95 })));
+    expect(html).not.toContain(COPY["result.points_earned"].en.replace("{points}", "95"));
+    expect(has(html, "result.track")).toBe(false);
+    expect(html).not.toContain(`href="/account/order"`);
+  });
+
+  // UX 0.11 确认中线框「游客：[G] [result.guest_next]」：会员确认中不显示 result.guest_next，其余与游客相同；已取消与尚未付款与游客相同。
+  it("keeps the other screens as for guests without result.guest_next", () => {
+    for (const slow of [false, true]) {
+      const html = renderMember(confirming(stripePending, slow));
+      expect(has(html, "result.confirming_title")).toBe(true);
+      expect(has(html, "result.guest_next")).toBe(false);
+      expect(has(html, "result.check_again")).toBe(slow);
+    }
+    expect(renderMember(ready(cancelledByYou))).toBe(render(ready(cancelledByYou)));
+    expect(renderMember({ status: "not_paid" })).toBe(render({ status: "not_paid" }));
+  });
+});
+
+describe("member dictionary", () => {
+  // 验收「页面文字全部来自字典，带变量的条目按模板匹配」：会员的各个画面里，除订单数据外每段文字都是当前语言的某条字典文案。
+  it.each(LANGUAGES)("shows only dictionary text besides order data in %s", (language) => {
+    const screens: ResultScreen[] = [
+      ready(payOrder({ points_earned: 95 })),
+      ready(payOrder({ points_earned: 0 })),
+      ready(failed),
+      ready(timedOut),
+      confirming(stripePending, false),
+      startChecking(confirming(stripePending, true)),
+      { status: "not_paid" },
+      REOPEN,
+      { status: "error" },
+    ];
+    const orderData = new Set([ORDER_NUMBER, "Aina Rahman", "+60123456789", "12 Jalan Contoh 3", "47000", "Selangor", countryName("MY", language), "·", ","]);
+    const patterns = [BRAND, ...Object.values(COPY).map((entry) => entry[language])].map(copyPattern);
+    for (const screen of screens) {
+      for (const value of visibleTexts(renderMember(screen, language, true))) {
         const known = orderData.has(value) || patterns.some((pattern) => pattern.test(value));
         expect(known, value).toBe(true);
       }
