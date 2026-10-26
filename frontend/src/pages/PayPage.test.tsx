@@ -1,31 +1,49 @@
 import { createElement, isValidElement } from "react";
 import type { ReactElement, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { takePaidNotCancelled } from "../api/pay";
-import type { PayOrder, StripeStart, WriteOutcome } from "../api/pay";
+import { MEMBER_ATTEMPTS_URL, MEMBER_CANCEL_URL, memberPayOrderUrl, memberStripeStartUrl } from "../api/memberPay";
+import type { MemberPayRead, MemberStripeStart, MemberWriteOutcome } from "../api/memberPay";
+import { createMemberSessionReader, MEMBER_SESSION_URL } from "../api/memberSession";
+import { CSRF_HEADER, IDEMPOTENCY_HEADER, payOrdersUrl, takePaidNotCancelled } from "../api/pay";
+import type { PaymentAttempt, PayOrder, StripeStart, WriteOutcome } from "../api/pay";
 import { BRAND, COPY, LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { RouterProvider } from "../router";
 import type { RoutePath } from "../router";
 import {
+  cancelAsMember,
   cancelMove,
   canSubmit,
   confirmsStripeCancel,
   copyText,
   countryName,
+  guestExpiredStep,
   leaveAfterCancel,
   leavesPayPage,
+  memberReadStep,
+  memberStripeStep,
+  memberWriteStep,
+  openPayOrder,
   PAY_RESULT_PATH,
+  payAsMember,
   PayView,
   recipientParts,
+  rereadMemberOrder,
   showsCountdown,
+  startStripeAsMember,
   stripeAction,
   stripeMove,
 } from "./PayPage";
-import type { CancelMove, PayViewProps, StripeMove } from "./PayPage";
+import type { CancelMove, MemberMoves, MemberStep, PayOpening, PayStash, PayViewProps, StripeMove } from "./PayPage";
+
+// 会员模式的测试替换全局 fetch，每条之后复原。
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 const ORDER_NUMBER = "B6TN2RJD8K4M0QXZ";
 
@@ -871,6 +889,555 @@ describe("Stripe cancel dictionary", () => {
         const known = orderData.has(value) || patterns.some((pattern) => pattern.test(value));
         expect(known, value).toBe(true);
       }
+    }
+  });
+});
+
+// ---- 会员模式（SHOP-TASK-161） ----
+
+const TOKEN = "csrf-member";
+const NEW_TOKEN = "csrf-member-new";
+const GUEST_TOKEN = "csrf-guest";
+const MEMBER_ORDER_EN = memberPayOrderUrl("en");
+const GUEST_ORDERS_EN = payOrdersUrl("en");
+
+// 回答：Response、网络中断，或在被请求时才生成的 Response（可在其中模拟离开页面）。
+type Reply = Response | "network" | (() => Response);
+
+interface Call {
+  url: string;
+  init: RequestInit;
+}
+
+// fetch 替身：按地址各取一串回答，依次用掉；没有准备的请求一律失败。
+function stubFetch(routes: Record<string, Reply[]>): Call[] {
+  const calls: Call[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      calls.push({ url, init: init ?? {} });
+      const next = routes[url]?.shift();
+      if (next === undefined) {
+        return Promise.reject(new Error(`unexpected request ${url}`));
+      }
+      if (next === "network") {
+        return Promise.reject(new TypeError("Failed to fetch"));
+      }
+      return Promise.resolve(typeof next === "function" ? next() : next);
+    }),
+  );
+  return calls;
+}
+
+function json(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+}
+
+const memberSession = (token = TOKEN) => json(200, { phone_masked: "+60 12-*** 6789", has_password: true, expires_at: "2026-11-24T00:00:00Z", csrf_token: token });
+const guestSession = () => json(401, { detail: "member_session_required" });
+const memberOrder = (order: PayOrder = payOrder()) => json(200, order);
+const guestOrders = (order: PayOrder = payOrder()) => json(200, { orders: [order], csrf_token: GUEST_TOKEN });
+const notFound = () => json(404, { detail: "order_not_found" });
+const unauthorized = () => json(401, { detail: "not_authenticated" });
+const serverError = () => new Response(null, { status: 500 });
+
+function urls(calls: readonly Call[]): string[] {
+  return calls.map((call) => call.url);
+}
+
+function initOf(calls: readonly Call[], index: number): RequestInit {
+  return calls[index]?.init ?? {};
+}
+
+function headerOf(init: RequestInit, name: string): string | undefined {
+  return (init.headers as Record<string, string> | undefined)?.[name];
+}
+
+function bodyOf(init: RequestInit): unknown {
+  return JSON.parse(typeof init.body === "string" ? init.body : "null") as unknown;
+}
+
+// 暂存替身：current 取当前值，clear 清除并记下次数（真实暂存在 api/memberPay.ts，先内存、后 sessionStorage）。
+function fakeStash(orderNumber: string | null) {
+  let value = orderNumber;
+  const clear = vi.fn(() => {
+    value = null;
+  });
+  const stash: PayStash = { current: () => value, clear };
+  return { stash, clear, current: () => value };
+}
+
+// 页面的处理替身：按顺序记下 same、reopen、redetermine 与 retry。
+function fakeMemberMoves<T>() {
+  const events: string[] = [];
+  const values: T[] = [];
+  const retries: [string | null, PayOrder | null][] = [];
+  const moves: MemberMoves<T> = {
+    same: (value) => {
+      values.push(value);
+      events.push("same");
+    },
+    reopen: () => {
+      events.push("reopen");
+    },
+    redetermine: () => {
+      events.push("redetermine");
+    },
+    retry: (token, order) => {
+      retries.push([token, order]);
+      events.push("retry");
+    },
+  };
+  return { moves, events, values, retries };
+}
+
+const GUEST_READ = { kind: "ok", order: payOrder(), csrfToken: GUEST_TOKEN } as const;
+
+describe("member mode: opening order ①", () => {
+  // UX 0.13 P06「会员的当前订单」「本页与 P07 打开时先取页面内存里的订单号，没有再取 sessionStorage…① 有订单号时调用会员接口——回答正常照会员显示」
+  // 与验收「ok 后经读取对象重读会话取 CSRF 令牌（会员读取不返回令牌），member 时显示会员 P06」：先以请求体里的订单号读会员订单（带页面的 signal），
+  // 再重读会话（共享读取，不带页面的 signal），结果是会员订单与会话的令牌；暂存不清除，不读游客接口。
+  it("reads the stashed order through the member API and takes the token from the session", async () => {
+    const { stash, clear } = fakeStash(ORDER_NUMBER);
+    const calls = stubFetch({ [MEMBER_ORDER_EN]: [memberOrder()], [MEMBER_SESSION_URL]: [memberSession()] });
+    const page = new AbortController();
+    const opening = await openPayOrder("en", createMemberSessionReader(), page.signal, stash);
+    expect(opening).toEqual<PayOpening>({ kind: "member", orderNumber: ORDER_NUMBER, order: payOrder(), csrfToken: TOKEN });
+    expect(urls(calls)).toEqual([MEMBER_ORDER_EN, MEMBER_SESSION_URL]);
+    expect(bodyOf(initOf(calls, 0))).toEqual({ order_number: ORDER_NUMBER });
+    expect(initOf(calls, 0).signal).toBe(page.signal);
+    expect(initOf(calls, 1).signal).toBeNull();
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  // 同一段「回 401（会员会话已到期或已退出）清除暂存并按 ② 处理」与验收「guest 时与会员读取回 401 相同」「signed_out 时清除暂存并转 ②」：
+  // 两种情形都清除暂存一次，再照游客读取，取到的订单照游客显示。
+  it.each<[string, Record<string, Reply[]>, string[]]>([
+    ["signed out", { [MEMBER_ORDER_EN]: [unauthorized()], [GUEST_ORDERS_EN]: [guestOrders()] }, [MEMBER_ORDER_EN, GUEST_ORDERS_EN]],
+    [
+      "read but the session is a guest",
+      { [MEMBER_ORDER_EN]: [memberOrder()], [MEMBER_SESSION_URL]: [guestSession()], [GUEST_ORDERS_EN]: [guestOrders()] },
+      [MEMBER_ORDER_EN, MEMBER_SESSION_URL, GUEST_ORDERS_EN],
+    ],
+  ])("clears the stash and goes to ② when %s", async (_name, routes, expected) => {
+    const { stash, clear, current } = fakeStash(ORDER_NUMBER);
+    const calls = stubFetch(routes);
+    const opening = await openPayOrder("en", createMemberSessionReader(), new AbortController().signal, stash);
+    expect(opening).toEqual<PayOpening>({ kind: "guest", read: GUEST_READ });
+    expect(urls(calls)).toEqual(expected);
+    expect(clear).toHaveBeenCalledTimes(1);
+    expect(current()).toBeNull();
+  });
+
+  // 同一段「回 404（不是本人的订单）清除暂存并显示 [pay.member_reopen]」：清除暂存，不读会话与游客接口。
+  it("clears the stash and shows pay.member_reopen when the order is not found", async () => {
+    const { stash, clear } = fakeStash(ORDER_NUMBER);
+    const calls = stubFetch({ [MEMBER_ORDER_EN]: [notFound()] });
+    const opening = await openPayOrder("en", createMemberSessionReader(), new AbortController().signal, stash);
+    expect(opening).toEqual<PayOpening>({ kind: "reopen" });
+    expect(urls(calls)).toEqual([MEMBER_ORDER_EN]);
+    expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  // 同一段「回 5xx 或网络中断显示 [common.error_retry]，不清除暂存」与验收「failed 与 network（含重读会话 failed）时显示 common.error_retry、不清除暂存」。
+  it.each<[string, Record<string, Reply[]>]>([
+    ["the order read fails", { [MEMBER_ORDER_EN]: [serverError()] }],
+    ["the network drops", { [MEMBER_ORDER_EN]: ["network"] }],
+    ["the session read fails", { [MEMBER_ORDER_EN]: [memberOrder()], [MEMBER_SESSION_URL]: [serverError()] }],
+    ["the session read drops", { [MEMBER_ORDER_EN]: [memberOrder()], [MEMBER_SESSION_URL]: ["network"] }],
+  ])("shows common.error_retry and keeps the stash when %s", async (_name, routes) => {
+    const { stash, clear, current } = fakeStash(ORDER_NUMBER);
+    const calls = stubFetch(routes);
+    const opening = await openPayOrder("en", createMemberSessionReader(), new AbortController().signal, stash);
+    expect(opening).toEqual<PayOpening>({ kind: "error" });
+    expect(urls(calls)).not.toContain(GUEST_ORDERS_EN);
+    expect(clear).not.toHaveBeenCalled();
+    expect(current()).toBe(ORDER_NUMBER);
+  });
+
+  // 验收「离开页面时中止请求，之后不再更新」「会员会话的重读是共享读取，不中止，离开页面后不再据其结果更新」：
+  // 读取回来时已离开不再读会话；重读会话期间离开则不给结果；两种情形都不清除暂存。
+  it("gives no result after the page is left", async () => {
+    const left = new AbortController();
+    left.abort();
+    const first = fakeStash(ORDER_NUMBER);
+    const calls = stubFetch({ [MEMBER_ORDER_EN]: [memberOrder()] });
+    await expect(openPayOrder("en", createMemberSessionReader(), left.signal, first.stash)).resolves.toBeNull();
+    expect(urls(calls)).toEqual([MEMBER_ORDER_EN]);
+
+    const page = new AbortController();
+    const second = fakeStash(ORDER_NUMBER);
+    stubFetch({
+      [MEMBER_ORDER_EN]: [memberOrder()],
+      [MEMBER_SESSION_URL]: [
+        () => {
+          page.abort();
+          return guestSession();
+        },
+      ],
+    });
+    await expect(openPayOrder("en", createMemberSessionReader(), page.signal, second.stash)).resolves.toBeNull();
+    expect(first.clear).not.toHaveBeenCalled();
+    expect(second.clear).not.toHaveBeenCalled();
+  });
+});
+
+describe("member mode: opening order ②", () => {
+  // UX 0.13 P06「② 没有订单号时调用游客接口——取到订单照游客显示」与验收「游客路径其余行为不变」：只读游客接口，不读会员会话。
+  it("reads the guest order without touching the member session", async () => {
+    const { stash } = fakeStash(null);
+    const calls = stubFetch({ [GUEST_ORDERS_EN]: [guestOrders()] });
+    const opening = await openPayOrder("en", createMemberSessionReader(), new AbortController().signal, stash);
+    expect(opening).toEqual<PayOpening>({ kind: "guest", read: GUEST_READ });
+    expect(urls(calls)).toEqual([GUEST_ORDERS_EN]);
+  });
+
+  // 同一段「回 401 时读会员会话：有会话显示 [pay.member_reopen]…没有会话显示 [pay.session_expired]，读取会话失败显示 [common.error_retry]」
+  // 与 HANDOFF 0.63 第（1）项「打开时游客读取回 401 才读会员会话」。
+  it.each<[string, Reply, PayOpening]>([
+    ["member", memberSession(), { kind: "reopen" }],
+    ["guest", guestSession(), { kind: "expired" }],
+    ["failed", serverError(), { kind: "error" }],
+    ["network", "network", { kind: "error" }],
+  ])("reads the member session after a guest 401 (%s)", async (_name, session, expected) => {
+    const { stash } = fakeStash(null);
+    const calls = stubFetch({ [GUEST_ORDERS_EN]: [unauthorized()], [MEMBER_SESSION_URL]: [session] });
+    const opening = await openPayOrder("en", createMemberSessionReader(), new AbortController().signal, stash);
+    expect(opening).toEqual(expected);
+    expect(urls(calls)).toEqual([GUEST_ORDERS_EN, MEMBER_SESSION_URL]);
+    expect(initOf(calls, 1).signal).toBeNull();
+  });
+
+  // 同一条「游客路径其余行为不变」：游客读取失败照现有写法为 common.error_retry，不读会员会话。
+  it("shows common.error_retry for a failed guest read without reading the session", async () => {
+    const { stash } = fakeStash(null);
+    const calls = stubFetch({ [GUEST_ORDERS_EN]: [serverError()] });
+    await expect(openPayOrder("en", createMemberSessionReader(), new AbortController().signal, stash)).resolves.toEqual({ kind: "error" });
+    expect(urls(calls)).toEqual([GUEST_ORDERS_EN]);
+  });
+
+  // 同一段的三种会话结果，按纯函数逐一列出；尚未读完（unknown）按失败处理。
+  it("maps the session after a guest 401", () => {
+    expect(guestExpiredStep({ kind: "member", phoneMasked: "+60 12-*** 6789", hasPassword: true, csrfToken: TOKEN })).toEqual({ kind: "reopen" });
+    expect(guestExpiredStep({ kind: "guest" })).toEqual({ kind: "expired" });
+    expect(guestExpiredStep({ kind: "failed" })).toEqual({ kind: "error" });
+    expect(guestExpiredStep({ kind: "unknown" })).toEqual({ kind: "error" });
+  });
+});
+
+describe("member mode: content", () => {
+  // HANDOFF 0.63「会员 P06 正常态照游客 P06 去掉 pay.guest_access（没有会员正常态的视觉稿）」与验收「会员 P06 的内容——与游客 P06 相同…不显示 pay.guest_access」：
+  // 模拟途径与 Stripe 各状态下，会员页与游客页去掉 pay.guest_access 那一条提示之后逐字相同；游客页仍有。
+  it.each(LANGUAGES)("is the guest page without pay.guest_access in %s", (language) => {
+    const guestAccess = escapeHtml(COPY["pay.guest_access"][language]);
+    const notice = new RegExp(`<div class="acs-alert acs-alert--info"><svg[^>]*>(?:(?!</svg>)[\\s\\S])*</svg><span>${guestAccess.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</span></div>`);
+    const states: Partial<PayViewProps>[] = [
+      {},
+      { method: "card", failed: true },
+      { screen: stripeScreen(null) },
+      { screen: stripeScreen("open"), confirming: true },
+      { screen: stripeScreen("under_review"), cancelTryLater: true },
+    ];
+    for (const state of states) {
+      const guest = render(state, language);
+      const member = render({ ...state, member: true }, language);
+      expect(guest).toMatch(notice);
+      expect(member).not.toContain(guestAccess);
+      expect(member).toBe(guest.replace(notice, ""));
+    }
+  });
+
+  // UX 0.13 P06 线框「游客：[G] [pay.guest_access]」只对游客：会员页仍有订单号与复制、应付金额、倒计时、收货资料、支付途径与取消。
+  it.each(LANGUAGES)("keeps every other element of the wireframe for a member in %s", (language) => {
+    const html = render({ member: true }, language);
+    for (const key of ["pay.title", "pay.order_no", "common.copy", "pay.save_order_no", "pay.amount_due", "checkout.recipient_title", "pay.choose_method", "pay.simulate_success", "pay.simulate_failure", "pay.action_hint", "pay.cancel_order"] as const) {
+      expect(shows(html, key, language), key).toBe(true);
+    }
+    expect(html).toContain(escapeHtml(COPY["pay.expires"][language].replace("{minutes}", "14")));
+    expect(shows(render({ member: true, screen: stripeScreen("open") }, language), "pay.stripe_continue", language)).toBe(true);
+  });
+
+  // UX 0.13 P06「会员找不到这笔订单时替换整页 | [pay.member_reopen] | ( [account.orders] ) → P13 我的订单」与视觉稿 P06-P07-member-reopen
+  // （整页只留提示与 account.orders 主按钮）：只有这两段文字，唯一的链接去 /account，没有按钮与订单内容。
+  it.each(LANGUAGES)("replaces the whole page with pay.member_reopen in %s", (language) => {
+    for (const member of [true, false]) {
+      const html = render({ screen: { status: "reopen" }, member }, language);
+      expect(visibleTexts(html)).toEqual([COPY["pay.member_reopen"][language], COPY["account.orders"][language]]);
+      expect(html).toContain(`<a class="acs-btn acs-btn--primary" href="/account">${escapeHtml(COPY["account.orders"][language])}</a>`);
+      expect([...html.matchAll(/href="([^"]*)"/g)].map((m) => m[1])).toEqual(["/account"]);
+      expect(html).toContain(`<main class="site-pay site-pay--reopen">`);
+      expect(html).not.toContain("<button");
+      expect(html).not.toContain(ORDER_NUMBER);
+    }
+  });
+
+  // 验收「页面文字全部来自字典」：会员页各状态与 pay.member_reopen 整页，除订单数据外每段文字都是当前语言的某条字典文案。
+  it.each(LANGUAGES)("shows only dictionary text besides order data in %s", (language) => {
+    const states: Partial<PayViewProps>[] = [
+      { member: true },
+      { member: true, method: "card", busy: "checking" },
+      { member: true, screen: stripeScreen("open"), failed: true, confirming: true },
+      { member: true, screen: { status: "error" } },
+      { screen: { status: "reopen" } },
+    ];
+    const orderData = new Set([ORDER_NUMBER, "Sam Taylor", "+447700900123", "1 Example Street", "AB1 2CD", "Greater London", countryName("GB", language), "·", ","]);
+    const patterns = [BRAND, ...Object.values(COPY).map((entry) => entry[language])].map(copyPattern);
+    for (const state of states) {
+      for (const value of visibleTexts(render(state, language))) {
+        const known = orderData.has(value) || patterns.some((pattern) => pattern.test(value));
+        expect(known, value).toBe(true);
+      }
+    }
+  });
+});
+
+describe("member mode: rereading", () => {
+  // 验收「切换语言时重新读取同一订单」：以各语言读取暂存的同一订单号，结果交给页面（令牌不变）。
+  it.each(LANGUAGES)("rereads the same order in %s", async (language) => {
+    const url = memberPayOrderUrl(language);
+    const calls = stubFetch({ [url]: [memberOrder()] });
+    const { stash } = fakeStash(ORDER_NUMBER);
+    const { moves, events, values } = fakeMemberMoves<PayOrder | null>();
+    await rereadMemberOrder(language, ORDER_NUMBER, createMemberSessionReader(), new AbortController().signal, moves, stash);
+    expect(urls(calls)).toEqual([url]);
+    expect(url).toContain(`lang=${language}`);
+    expect(bodyOf(initOf(calls, 0))).toEqual({ order_number: ORDER_NUMBER });
+    expect(events).toEqual(["same"]);
+    expect(values).toEqual([payOrder()]);
+  });
+
+  // DESIGN 1.14 第 7 条「会员接口对它回答会话无效或订单不存在时」清除，与 UX P06 ① 同一去向：重读回 401 清除并重新判定，404 清除并显示 pay.member_reopen；
+  // failed 与 network 照游客显示 common.error_retry（null），不清除。
+  it.each<[string, Reply, string[], boolean]>([
+    ["signed out", unauthorized(), ["redetermine"], true],
+    ["not found", notFound(), ["reopen"], true],
+    ["failed", serverError(), ["same"], false],
+    ["network", "network", ["same"], false],
+  ])("handles a reread that is %s", async (_name, reply, expected, cleared) => {
+    stubFetch({ [MEMBER_ORDER_EN]: [reply] });
+    const { stash, clear } = fakeStash(ORDER_NUMBER);
+    const { moves, events, values } = fakeMemberMoves<PayOrder | null>();
+    await rereadMemberOrder("en", ORDER_NUMBER, createMemberSessionReader(), new AbortController().signal, moves, stash);
+    expect(events).toEqual(expected);
+    expect(clear).toHaveBeenCalledTimes(cleared ? 1 : 0);
+    if (expected[0] === "same") {
+      expect(values).toEqual([null]);
+    }
+  });
+
+  // 同一去向按纯函数逐一列出：ok 为订单（令牌不变），signed_out 与 not_found 交给会员自己的去向，failed 与 network 为 null。
+  it("maps every member read", () => {
+    const cases: [MemberPayRead, MemberStep<PayOrder | null>][] = [
+      [{ kind: "ok", order: payOrder() }, { kind: "same", value: payOrder() }],
+      [{ kind: "signed_out" }, { kind: "signed_out" }],
+      [{ kind: "not_found" }, { kind: "not_found" }],
+      [{ kind: "failed" }, { kind: "same", value: null }],
+      [{ kind: "network" }, { kind: "same", value: null }],
+    ];
+    for (const [read, step] of cases) {
+      expect(memberReadStep(read), read.kind).toEqual(step);
+    }
+  });
+});
+
+const ATTEMPT: PaymentAttempt = { key: "attempt-key-1", method: "card", result: "success" };
+const TARGET = { orderNumber: ORDER_NUMBER, csrfToken: TOKEN };
+
+describe("member mode: writes", () => {
+  // 验收「会员的写操作——模拟支付…经 SHOP-TASK-158 的会员版，以会话里的 CSRF 令牌提交，幂等键规则与游客相同；result 时与游客相同前往 /pay/result
+  // （不清除暂存，由结果页在结果确定后清除）」：请求头带会话的令牌与给出的幂等键，请求体只有订单号、方式与结果；结果交给游客的处理（result），暂存不清除。
+  it("pays with the session token and goes to the result like a guest without clearing the stash", async () => {
+    const calls = stubFetch({ [MEMBER_ATTEMPTS_URL]: [json(201, { ok: true })] });
+    const { stash, clear } = fakeStash(ORDER_NUMBER);
+    const { moves, events, values } = fakeMemberMoves<WriteOutcome>();
+    const page = new AbortController();
+    await payAsMember("en", TARGET, ATTEMPT, createMemberSessionReader(), { signal: page.signal }, moves, stash);
+    expect(urls(calls)).toEqual([MEMBER_ATTEMPTS_URL]);
+    expect(headerOf(initOf(calls, 0), CSRF_HEADER)).toBe(TOKEN);
+    expect(headerOf(initOf(calls, 0), IDEMPOTENCY_HEADER)).toBe(ATTEMPT.key);
+    expect(bodyOf(initOf(calls, 0))).toEqual({ order_number: ORDER_NUMBER, method: "card", result: "success" });
+    expect(events).toEqual(["same"]);
+    expect(values).toEqual([{ kind: "result" }]);
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  // 同一条「signed_out 时清除暂存并按 ② 重新判定；not_found 时清除暂存并显示 pay.member_reopen」：支付、取消与 Stripe 发起都一样。
+  it.each<[string, Response, string]>([
+    ["signed out", unauthorized(), "redetermine"],
+    ["not found", notFound(), "reopen"],
+  ])("clears the stash when a write is %s", async (_name, reply, expected) => {
+    // 每种写操作返回页面收到的处理顺序。
+    const runs: [string, (stash: PayStash) => Promise<string[]>][] = [
+      [
+        MEMBER_ATTEMPTS_URL,
+        async (stash) => {
+          const { moves, events } = fakeMemberMoves<WriteOutcome>();
+          await payAsMember("en", TARGET, ATTEMPT, createMemberSessionReader(), { signal: new AbortController().signal }, moves, stash);
+          return events;
+        },
+      ],
+      [
+        MEMBER_CANCEL_URL,
+        async (stash) => {
+          const { moves, events } = fakeMemberMoves<WriteOutcome>();
+          await cancelAsMember("en", TARGET, createMemberSessionReader(), { signal: new AbortController().signal }, moves, stash);
+          return events;
+        },
+      ],
+      [
+        memberStripeStartUrl("en"),
+        async (stash) => {
+          const { moves, events } = fakeMemberMoves<StripeStart>();
+          await startStripeAsMember("en", TARGET, createMemberSessionReader(), new AbortController().signal, moves, stash);
+          return events;
+        },
+      ],
+    ];
+    for (const [url, run] of runs) {
+      stubFetch({ [url]: [reply.clone()] });
+      const { stash, clear } = fakeStash(ORDER_NUMBER);
+      expect(await run(stash), url).toEqual([expected]);
+      expect(clear, url).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  // 同一条「csrf 时重读会话——member 时换用新令牌并显示 common.error_retry，guest 时清除暂存并按 ② 重新判定，重读得到 failed 时保留原令牌并显示 common.error_retry」：
+  // 403 之后接口先重新读取订单（仍待支付），再重读会话；retry 带新令牌或 null（保留原令牌）与重新读取到的订单。
+  it.each<[string, Reply, string[], [string | null, PayOrder | null][], boolean]>([
+    ["member", memberSession(NEW_TOKEN), ["retry"], [[NEW_TOKEN, payOrder()]], false],
+    ["guest", guestSession(), ["redetermine"], [], true],
+    ["failed", serverError(), ["retry"], [[null, payOrder()]], false],
+    ["network", "network", ["retry"], [[null, payOrder()]], false],
+  ])("rereads the session after a csrf failure (%s)", async (_name, session, expected, retries, cleared) => {
+    const calls = stubFetch({ [MEMBER_ATTEMPTS_URL]: [json(403, { detail: "csrf_failed" })], [MEMBER_ORDER_EN]: [memberOrder()], [MEMBER_SESSION_URL]: [session] });
+    const { stash, clear } = fakeStash(ORDER_NUMBER);
+    const fake = fakeMemberMoves<WriteOutcome>();
+    await payAsMember("en", TARGET, ATTEMPT, createMemberSessionReader(), { signal: new AbortController().signal }, fake.moves, stash);
+    expect(urls(calls)).toEqual([MEMBER_ATTEMPTS_URL, MEMBER_ORDER_EN, MEMBER_SESSION_URL]);
+    expect(initOf(calls, 2).signal).toBeNull();
+    expect(fake.events).toEqual(expected);
+    expect(fake.retries).toEqual(retries);
+    expect(clear).toHaveBeenCalledTimes(cleared ? 1 : 0);
+  });
+
+  // 同一条用于取消与 Stripe 发起：取消的 403 之后同样重新读取订单再重读会话；Stripe 发起的 403 直接重读会话（没有重新读取到的订单）。
+  it("rereads the session after a csrf failure when cancelling or starting Stripe", async () => {
+    stubFetch({ [MEMBER_CANCEL_URL]: [json(403, { detail: "csrf_failed" })], [MEMBER_ORDER_EN]: [memberOrder()], [MEMBER_SESSION_URL]: [memberSession(NEW_TOKEN)] });
+    const cancel = fakeMemberMoves<WriteOutcome>();
+    await cancelAsMember("en", TARGET, createMemberSessionReader(), { signal: new AbortController().signal }, cancel.moves, fakeStash(ORDER_NUMBER).stash);
+    expect(cancel.retries).toEqual([[NEW_TOKEN, payOrder()]]);
+
+    const calls = stubFetch({ [memberStripeStartUrl("en")]: [json(403, { detail: "csrf_failed" })], [MEMBER_SESSION_URL]: [memberSession(NEW_TOKEN)] });
+    const stripe = fakeMemberMoves<StripeStart>();
+    await startStripeAsMember("en", TARGET, createMemberSessionReader(), new AbortController().signal, stripe.moves, fakeStash(ORDER_NUMBER).stash);
+    expect(urls(calls)).toEqual([memberStripeStartUrl("en"), MEMBER_SESSION_URL]);
+    expect(headerOf(initOf(calls, 0), CSRF_HEADER)).toBe(TOKEN);
+    expect(stripe.retries).toEqual([[NEW_TOKEN, null]]);
+  });
+
+  // 同一条「method_changed、unavailable、error、retry 与 Stripe 跳转与游客相同」「result 时与游客相同前往 /pay/result（不清除暂存）」：
+  // 这些结果（含 409 order_not_payable 归入的 result）原样换成游客的形式交给游客的处理，暂存不清除。
+  it.each<[string, Reply[], WriteOutcome]>([
+    ["method_changed", [json(409, { detail: "method_changed" })], { kind: "method_changed" }],
+    ["unavailable", [json(503, { detail: "stripe_unavailable" })], { kind: "unavailable" }],
+    ["failed", [serverError()], { kind: "error", read: null }],
+    ["closed", [json(409, { detail: "order_not_payable" })], { kind: "result" }],
+  ])("hands %s to the guest handling", async (_name, replies, expected) => {
+    stubFetch({ [MEMBER_ATTEMPTS_URL]: replies });
+    const { stash, clear } = fakeStash(ORDER_NUMBER);
+    const { moves, values } = fakeMemberMoves<WriteOutcome>();
+    await payAsMember("en", TARGET, ATTEMPT, createMemberSessionReader(), { signal: new AbortController().signal }, moves, stash);
+    expect(values).toEqual([expected]);
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  // 同一条「retry 与游客相同」「幂等键规则与游客相同」与 UX「全局框架」网络中断「先显示 [common.network_check] 并查询原订单…再允许重试」：
+  // 网络中断时先通知页面显示 common.network_check，重新读取到仍待支付后为 retry，带提交时的令牌与同一幂等键。
+  it("checks the order after a network failure and offers the same attempt again", async () => {
+    stubFetch({ [MEMBER_ATTEMPTS_URL]: ["network"], [MEMBER_ORDER_EN]: [memberOrder()] });
+    const onChecking = vi.fn();
+    const { moves, values } = fakeMemberMoves<WriteOutcome>();
+    await payAsMember("en", TARGET, ATTEMPT, createMemberSessionReader(), { signal: new AbortController().signal, onChecking }, moves, fakeStash(ORDER_NUMBER).stash);
+    expect(onChecking).toHaveBeenCalledTimes(1);
+    expect(values).toEqual([{ kind: "retry", read: { kind: "ok", order: payOrder(), csrfToken: TOKEN }, attempt: ATTEMPT }]);
+  });
+
+  // 同一条的 Stripe 部分：跳转、转人工核对与不可用原样交给 stripeMove；取消成功交给游客的取消处理（result）。
+  it("hands Stripe starts and cancels to the guest handling", async () => {
+    const url = "https://checkout.stripe.com/c/pay/cs_test_example";
+    const cases: [Response, StripeStart][] = [
+      [json(200, { result: "redirect", checkout_url: url }), { kind: "redirect", url }],
+      [json(409, { detail: "stripe_under_review" }), { kind: "under_review" }],
+      [json(503, { detail: "stripe_unavailable" }), { kind: "unavailable" }],
+    ];
+    for (const [reply, expected] of cases) {
+      stubFetch({ [memberStripeStartUrl("en")]: [reply] });
+      const { moves, values } = fakeMemberMoves<StripeStart>();
+      await startStripeAsMember("en", TARGET, createMemberSessionReader(), new AbortController().signal, moves, fakeStash(ORDER_NUMBER).stash);
+      expect(values).toEqual([expected]);
+    }
+    const calls = stubFetch({ [MEMBER_CANCEL_URL]: [json(200, { ok: true })] });
+    const cancel = fakeMemberMoves<WriteOutcome>();
+    const { stash, clear } = fakeStash(ORDER_NUMBER);
+    await cancelAsMember("en", TARGET, createMemberSessionReader(), { signal: new AbortController().signal }, cancel.moves, stash);
+    expect(headerOf(initOf(calls, 0), CSRF_HEADER)).toBe(TOKEN);
+    expect(bodyOf(initOf(calls, 0))).toEqual({ order_number: ORDER_NUMBER });
+    expect(cancel.values).toEqual([{ kind: "result" }]);
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  // 验收「会员会话的重读是共享读取，不中止，离开页面后不再据其结果更新或跳转」：csrf 之后重读会话期间离开页面，不调用任何处理，也不清除暂存。
+  it("does nothing after the page is left during the session reread", async () => {
+    const page = new AbortController();
+    stubFetch({
+      [MEMBER_ATTEMPTS_URL]: [json(403, { detail: "csrf_failed" })],
+      [MEMBER_ORDER_EN]: [memberOrder()],
+      [MEMBER_SESSION_URL]: [
+        () => {
+          page.abort();
+          return guestSession();
+        },
+      ],
+    });
+    const { stash, clear } = fakeStash(ORDER_NUMBER);
+    const { moves, events } = fakeMemberMoves<WriteOutcome>();
+    await payAsMember("en", TARGET, ATTEMPT, createMemberSessionReader(), { signal: page.signal }, moves, stash);
+    expect(events).toEqual([]);
+    expect(clear).not.toHaveBeenCalled();
+  });
+
+  // 验收「会员的写操作」各结果的去向，按纯函数逐一列出：与游客相同的换成游客的形式（retry 配上提交时的令牌），其余为会员自己的去向。
+  it("maps every member write and Stripe start", () => {
+    const writes: [MemberWriteOutcome, MemberStep<WriteOutcome>][] = [
+      [{ kind: "result" }, { kind: "same", value: { kind: "result" } }],
+      [{ kind: "method_changed" }, { kind: "same", value: { kind: "method_changed" } }],
+      [{ kind: "unavailable" }, { kind: "same", value: { kind: "unavailable" } }],
+      [{ kind: "error" }, { kind: "same", value: { kind: "error", read: null } }],
+      [{ kind: "retry", order: payOrder(), attempt: ATTEMPT }, { kind: "same", value: { kind: "retry", read: { kind: "ok", order: payOrder(), csrfToken: TOKEN }, attempt: ATTEMPT } }],
+      [{ kind: "signed_out" }, { kind: "signed_out" }],
+      [{ kind: "not_found" }, { kind: "not_found" }],
+      [{ kind: "csrf", order: null }, { kind: "csrf", order: null }],
+      [{ kind: "csrf", order: payOrder() }, { kind: "csrf", order: payOrder() }],
+    ];
+    for (const [outcome, step] of writes) {
+      expect(memberWriteStep(outcome, TOKEN), outcome.kind).toEqual(step);
+    }
+    const starts: [MemberStripeStart, MemberStep<StripeStart>][] = [
+      [{ kind: "redirect", url: "https://checkout.stripe.com/x" }, { kind: "same", value: { kind: "redirect", url: "https://checkout.stripe.com/x" } }],
+      [{ kind: "complete" }, { kind: "same", value: { kind: "complete" } }],
+      [{ kind: "closed" }, { kind: "same", value: { kind: "closed" } }],
+      [{ kind: "method_changed" }, { kind: "same", value: { kind: "method_changed" } }],
+      [{ kind: "under_review" }, { kind: "same", value: { kind: "under_review" } }],
+      [{ kind: "unavailable" }, { kind: "same", value: { kind: "unavailable" } }],
+      [{ kind: "failed" }, { kind: "same", value: { kind: "failed" } }],
+      [{ kind: "network" }, { kind: "same", value: { kind: "network" } }],
+      [{ kind: "signed_out" }, { kind: "signed_out" }],
+      [{ kind: "not_found" }, { kind: "not_found" }],
+      [{ kind: "csrf" }, { kind: "csrf", order: null }],
+    ];
+    for (const [start, step] of starts) {
+      expect(memberStripeStep(start), start.kind).toEqual(step);
     }
   });
 });

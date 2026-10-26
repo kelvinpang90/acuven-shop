@@ -825,6 +825,11 @@ export const COPY = {
     zh: "为保护您的资料，只有本浏览器能在下单后 30 分钟内打开此订单的支付与结果页。",
     ms: "Demi privasi anda, hanya pelayar ini boleh membuka halaman pembayaran dan keputusan pesanan ini, selama 30 minit selepas pesanan dibuat.",
   },
+  "pay.member_reopen": {
+    en: "This page can't show the order right now. Open it from My orders to continue payment or view it.",
+    zh: "本页暂时无法显示这笔订单。请到我的订单重新打开，继续支付或查看。",
+    ms: "Halaman ini tidak dapat memaparkan pesanan sekarang. Bukanya daripada Pesanan saya untuk meneruskan pembayaran atau melihatnya.",
+  },
   "pay.session_expired": {
     en: "This page is no longer available in this browser. To view the order, confirm receipt or request a refund, track it with your order number and phone number.",
     zh: "本浏览器已无法打开此页面。如需查看订单、确认收货或申请退款，请凭订单号和电话查询订单。",
