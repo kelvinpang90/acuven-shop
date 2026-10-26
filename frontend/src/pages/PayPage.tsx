@@ -15,12 +15,23 @@ import {
   runPayment,
   startStripe,
 } from "../api/pay";
-import type { PayMethod, PayOrder, PayRead, PayRecipient, PayResult, PaymentAttempt, StripeStart, WriteOutcome } from "../api/pay";
+import type { PayMethod, PayOrder, PayRead, PayRecipient, PayResult, PaymentAttempt, StripeStart, WriteOptions, WriteOutcome } from "../api/pay";
+import {
+  clearMemberPayOrder,
+  readMemberPayOrder,
+  runMemberCancel,
+  runMemberPayment,
+  startMemberStripe,
+  stashedMemberPayOrder,
+} from "../api/memberPay";
+import type { MemberPayRead, MemberStripeStart, MemberWriteOutcome } from "../api/memberPay";
+import { useMemberSessionReader } from "../api/memberSession";
+import type { MemberSessionReader, MemberSessionState } from "../api/memberSession";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
 import { formatSen } from "../format";
 import type { CopyKey, Language } from "../i18n/copy";
 import { htmlLang, useCopy, useLanguage } from "../i18n/language";
-import { isRoutePath, Link, useRouter } from "../router";
+import { ACCOUNT_PATH, isRoutePath, Link, useRouter } from "../router";
 import type { RoutePath } from "../router";
 
 // 模拟支付页 P06（docs/UX.md P06，游客）：打开时以当前语言调用 GET /api/pay/orders，取第一张订单（最近签发的授权）。
@@ -33,7 +44,11 @@ import type { RoutePath } from "../router";
 // 读到已付款完成的会话（complete）时换成 P07，由 P07 调用确认接口（HANDOFF 0.55 第（5）项）。
 // 取消（SHOP-TASK-135）：有进行中的会话时确认框另显示 pay.cancel_confirm_stripe；Stripe 暂不可用时在取消按钮旁显示 pay.cancel_try_later；
 // Stripe 途径的取消转到 P07 之前记下「取消时会话已付款」的交接（rememberPaidNotCancelled），由 P07 按订单已付款决定是否显示。
-// 本文件另导出 P07 共用的订单卡片、收货资料、倒计时与凭据过期整页。
+// 会员模式（UX 0.13 P06「会员的当前订单」，DESIGN 1.14「权限与资料保护」第 5、7 条，HANDOFF 0.63，SHOP-TASK-161）：打开时先取
+// api/memberPay.ts 暂存的订单号（先内存、后 sessionStorage），有时经会员接口读取、CSRF 令牌取自会员会话，内容与游客相同而不显示 pay.guest_access；
+// 写操作经会员接口提交。没有订单号时照游客读取，游客读取回 401 时才读会员会话（只在打开时这一次），有会话时整页显示 pay.member_reopen。
+// 判定写成与页面无关的 openPayOrder，供 P07 复用。
+// 本文件另导出 P07 共用的订单卡片、收货资料、倒计时、凭据过期整页与会员找不到订单的整页。
 
 export const PAY_PATH: RoutePath = "/pay";
 export const PAY_RESULT_PATH: RoutePath = "/pay/result";
@@ -291,6 +306,22 @@ export function SessionExpired() {
   );
 }
 
+// 会员找不到这笔订单时替换整页（UX 0.13 P06，视觉稿 P06-P07-member-reopen）：pay.member_reopen 与去 P13 我的订单（/account）的 account.orders 主按钮。
+export function MemberReopen() {
+  const t = useCopy();
+  return (
+    <main className="site-pay site-pay--reopen">
+      <div className="acs-alert acs-alert--info" role="status">
+        <InfoIcon />
+        <span>{t("pay.member_reopen")}</span>
+      </div>
+      <Link className="acs-btn acs-btn--primary" to={ACCOUNT_PATH}>
+        {t("account.orders")}
+      </Link>
+    </main>
+  );
+}
+
 // 支付时限倒计时：读取时的剩余时间只由接口的支付到期时间与服务器当前时间相减得到，之后的流逝以单调时钟（performance.now）计，
 // 不读访客电脑的时钟；分钟数每变一次（每分钟）更新，到 0 时调用 onZero 一次。订单换了（重新读取）就重新开始。
 export function useCountdown(order: PayOrder | null, onZero: () => void): number {
@@ -349,14 +380,16 @@ export function useMyStates(recipient: PayRecipient | null): ReadonlyMap<string,
   return states;
 }
 
-// 页面看到的订单：读取中、凭据过期、读取失败、已取到。
-export type PayScreen = { status: "loading" } | { status: "expired" } | { status: "error" } | { status: "ready"; order: PayOrder };
+// 页面看到的订单：读取中、凭据过期、会员找不到这笔订单（pay.member_reopen）、读取失败、已取到。
+export type PayScreen = { status: "loading" } | { status: "expired" } | { status: "reopen" } | { status: "error" } | { status: "ready"; order: PayOrder };
 
 // 正在进行的操作：提交支付、取消、网络中断后确认订单、发起 Stripe 跳转（拿到地址后保持到页面离开）；进行中所有按钮禁用。
 export type PayBusy = "paying" | "cancelling" | "checking" | "redirecting" | null;
 
 export interface PayViewProps {
   screen: PayScreen;
+  // 会员模式（UX 0.13 P06，HANDOFF 0.63「会员 P06 正常态照游客 P06 去掉 pay.guest_access」）：不给时为游客。
+  member?: boolean;
   minutes: number;
   states: ReadonlyMap<string, string> | null;
   method: PayMethod | null;
@@ -491,6 +524,286 @@ export function leaveAfterCancel(orderNumber: string, handOver: boolean, replace
   replace(PAY_RESULT_PATH);
 }
 
+// 会员当前订单号的暂存（api/memberPay.ts，DESIGN 1.14「权限与资料保护」第 7 条）：current 先取内存、后取 sessionStorage，读取不清除；clear 清除两处。
+export interface PayStash {
+  current: () => string | null;
+  clear: () => void;
+}
+
+export const MEMBER_PAY_STASH: PayStash = { current: stashedMemberPayOrder, clear: clearMemberPayOrder };
+
+// 打开时的判定结果，与页面无关（P07 可直接复用）：member 为会员订单、暂存的订单号与会话给的 CSRF 令牌；guest 为游客接口取到的订单与令牌；
+// reopen 为整页 pay.member_reopen；expired 为整页 pay.session_expired；error 为 common.error_retry。
+export type PayOpening =
+  | { kind: "member"; orderNumber: string; order: PayOrder; csrfToken: string }
+  | { kind: "guest"; read: Extract<PayRead, { kind: "ok" }> }
+  | { kind: "reopen" }
+  | { kind: "expired" }
+  | { kind: "error" };
+
+// ② 游客读取回 401 之后重读的会员会话：member 为 pay.member_reopen，guest 为 pay.session_expired，failed（与尚未读完）为 common.error_retry。
+export function guestExpiredStep(session: MemberSessionState): PayOpening {
+  switch (session.kind) {
+    case "member":
+      return { kind: "reopen" };
+    case "guest":
+      return { kind: "expired" };
+    default:
+      return { kind: "error" };
+  }
+}
+
+// ② 照现在调用游客接口；只有这里（打开时游客读取回 401 的那一次）读会员会话（HANDOFF 0.63 第（1）项）。
+async function openAsGuest(language: Language, reader: MemberSessionReader, signal: AbortSignal): Promise<PayOpening | null> {
+  const read = await readPayOrder(language, signal);
+  if (signal.aborted) {
+    return null;
+  }
+  switch (read.kind) {
+    case "ok":
+      return { kind: "guest", read };
+    case "expired": {
+      const session = await reader.reload();
+      return signal.aborted ? null : guestExpiredStep(session);
+    }
+    case "failed":
+    case "network":
+      return { kind: "error" };
+  }
+}
+
+// 判定顺序（UX 0.13 P06「会员的当前订单」）：① 有暂存的订单号时经会员接口读取——ok 后重读会话取 CSRF 令牌（会员读取不给令牌），
+// member 为会员订单，guest 与 signed_out 相同：清除暂存并转 ②；not_found 清除暂存并为 pay.member_reopen；failed 与 network（含重读会话 failed）
+// 为 common.error_retry，不清除暂存。② 没有订单号时见 openAsGuest。会话的重读是共享读取，不中止；signal 中止（离开页面）之后返回 null。
+export async function openPayOrder(
+  language: Language,
+  reader: MemberSessionReader,
+  signal: AbortSignal,
+  stash: PayStash = MEMBER_PAY_STASH,
+): Promise<PayOpening | null> {
+  const orderNumber = stash.current();
+  if (orderNumber === null) {
+    return openAsGuest(language, reader, signal);
+  }
+  const read = await readMemberPayOrder(language, orderNumber, signal);
+  if (signal.aborted) {
+    return null;
+  }
+  switch (read.kind) {
+    case "ok": {
+      const session = await reader.reload();
+      if (signal.aborted) {
+        return null;
+      }
+      if (session.kind === "member") {
+        return { kind: "member", orderNumber, order: read.order, csrfToken: session.csrfToken };
+      }
+      if (session.kind !== "guest") {
+        return { kind: "error" };
+      }
+      break;
+    }
+    case "signed_out":
+      break;
+    case "not_found":
+      stash.clear();
+      return { kind: "reopen" };
+    case "failed":
+    case "network":
+      return { kind: "error" };
+  }
+  stash.clear();
+  return openAsGuest(language, reader, signal);
+}
+
+// 会员接口回答之后与游客不同的去向：signed_out 为会员会话已结束；not_found 为订单不存在或不是本人的；
+// csrf 为令牌失效（order 为接口重新读取到的仍待支付的订单，没有时为空）。
+export type MemberTurn = { kind: "signed_out" } | { kind: "not_found" } | { kind: "csrf"; order: PayOrder | null };
+
+// 会员读取与写操作的结果：与游客相同的换成游客的形式（same），交给游客的处理；其余为 MemberTurn。
+export type MemberStep<T> = { kind: "same"; value: T } | MemberTurn;
+
+// 会员重读订单：ok 为订单（令牌不变），failed 与 network 为 null（照游客显示 common.error_retry）。
+export function memberReadStep(read: MemberPayRead): MemberStep<PayOrder | null> {
+  switch (read.kind) {
+    case "ok":
+      return { kind: "same", value: read.order };
+    case "signed_out":
+    case "not_found":
+      return { kind: read.kind };
+    case "failed":
+    case "network":
+      return { kind: "same", value: null };
+  }
+}
+
+// 会员模拟支付与取消：result、method_changed、unavailable、error 与 retry 与游客相同（retry 的订单配上提交时的令牌，沿用原令牌）。
+export function memberWriteStep(outcome: MemberWriteOutcome, csrfToken: string): MemberStep<WriteOutcome> {
+  switch (outcome.kind) {
+    case "signed_out":
+    case "not_found":
+      return { kind: outcome.kind };
+    case "csrf":
+      return { kind: "csrf", order: outcome.order };
+    case "result":
+    case "method_changed":
+    case "unavailable":
+      return { kind: "same", value: { kind: outcome.kind } };
+    case "error":
+      return { kind: "same", value: { kind: "error", read: null } };
+    case "retry":
+      return { kind: "same", value: { kind: "retry", read: { kind: "ok", order: outcome.order, csrfToken }, attempt: outcome.attempt } };
+  }
+}
+
+// 会员 Stripe 发起：跳转、complete、closed、method_changed、under_review、unavailable、failed 与 network 与游客相同（交给 stripeMove）。
+export function memberStripeStep(start: MemberStripeStart): MemberStep<StripeStart> {
+  switch (start.kind) {
+    case "signed_out":
+    case "not_found":
+      return { kind: start.kind };
+    case "csrf":
+      return { kind: "csrf", order: null };
+    default:
+      return { kind: "same", value: start };
+  }
+}
+
+// 页面对 MemberTurn 的处理：reopen 整页 pay.member_reopen；redetermine 按 ② 重新判定；retry 为 csrf 之后重读会话的结果——
+// csrfToken 为新令牌（member）或 null（failed，保留原令牌），order 为重新读取到的订单（没有时沿用原来的），页面显示 common.error_retry。
+export interface MemberTurnMoves {
+  reopen: () => void;
+  redetermine: () => void;
+  retry: (csrfToken: string | null, order: PayOrder | null) => void;
+}
+
+// 另加 same：与游客相同的结果照游客的写法处理。
+export interface MemberMoves<T> extends MemberTurnMoves {
+  same: (value: T) => void;
+}
+
+// MemberTurn 的去向（验收「会员的写操作」）：signed_out 清除暂存并按 ② 重新判定；not_found 清除暂存并显示 pay.member_reopen；
+// csrf 重读会话（共享读取，不中止）——member 换用新令牌，guest 清除暂存并按 ② 重新判定，failed 保留原令牌。signal 中止之后不再更新。
+export async function settleMemberTurn(
+  turn: MemberTurn,
+  reader: MemberSessionReader,
+  signal: AbortSignal,
+  moves: MemberTurnMoves,
+  stash: PayStash = MEMBER_PAY_STASH,
+): Promise<void> {
+  switch (turn.kind) {
+    case "signed_out":
+      stash.clear();
+      moves.redetermine();
+      return;
+    case "not_found":
+      stash.clear();
+      moves.reopen();
+      return;
+    case "csrf": {
+      const session = await reader.reload();
+      if (signal.aborted) {
+        return;
+      }
+      if (session.kind === "guest") {
+        stash.clear();
+        moves.redetermine();
+      } else {
+        moves.retry(session.kind === "member" ? session.csrfToken : null, turn.order);
+      }
+      return;
+    }
+  }
+}
+
+async function settleMemberStep<T>(
+  step: MemberStep<T>,
+  reader: MemberSessionReader,
+  signal: AbortSignal,
+  moves: MemberMoves<T>,
+  stash: PayStash,
+): Promise<void> {
+  if (step.kind === "same") {
+    moves.same(step.value);
+    return;
+  }
+  await settleMemberTurn(step, reader, signal, moves, stash);
+}
+
+// 会员写操作的对象：暂存的订单号与会话给的 CSRF 令牌。
+export interface MemberTarget {
+  orderNumber: string;
+  csrfToken: string;
+}
+
+// 会员写操作的选项：signal 为页面的中止（离开页面），onChecking 为网络中断后开始确认订单。
+export type MemberWriteOptions = WriteOptions & { signal: AbortSignal };
+
+// 以当前语言重新读取同一张会员订单（切换语言、倒计时到 0、支付途径已改变之后）；signal 中止之后不再更新。
+export async function rereadMemberOrder(
+  language: Language,
+  orderNumber: string,
+  reader: MemberSessionReader,
+  signal: AbortSignal,
+  moves: MemberMoves<PayOrder | null>,
+  stash: PayStash = MEMBER_PAY_STASH,
+): Promise<void> {
+  const read = await readMemberPayOrder(language, orderNumber, signal);
+  if (signal.aborted) {
+    return;
+  }
+  await settleMemberStep(memberReadStep(read), reader, signal, moves, stash);
+}
+
+// 会员模拟支付（幂等键规则与游客相同，由页面以 attemptFor 给出）；signal 中止之后不再更新。
+export async function payAsMember(
+  language: Language,
+  target: MemberTarget,
+  attempt: PaymentAttempt,
+  reader: MemberSessionReader,
+  options: MemberWriteOptions,
+  moves: MemberMoves<WriteOutcome>,
+  stash: PayStash = MEMBER_PAY_STASH,
+): Promise<void> {
+  const outcome = await runMemberPayment(language, target.orderNumber, target.csrfToken, attempt, options);
+  if (outcome === null || options.signal.aborted) {
+    return;
+  }
+  await settleMemberStep(memberWriteStep(outcome, target.csrfToken), reader, options.signal, moves, stash);
+}
+
+// 会员取消订单；signal 中止之后不再更新。
+export async function cancelAsMember(
+  language: Language,
+  target: MemberTarget,
+  reader: MemberSessionReader,
+  options: MemberWriteOptions,
+  moves: MemberMoves<WriteOutcome>,
+  stash: PayStash = MEMBER_PAY_STASH,
+): Promise<void> {
+  const outcome = await runMemberCancel(language, target.orderNumber, target.csrfToken, options);
+  if (outcome === null || options.signal.aborted) {
+    return;
+  }
+  await settleMemberStep(memberWriteStep(outcome, target.csrfToken), reader, options.signal, moves, stash);
+}
+
+// 会员发起 Stripe 付款；signal 中止之后不再更新或跳转。
+export async function startStripeAsMember(
+  language: Language,
+  target: MemberTarget,
+  reader: MemberSessionReader,
+  signal: AbortSignal,
+  moves: MemberMoves<StripeStart>,
+  stash: PayStash = MEMBER_PAY_STASH,
+): Promise<void> {
+  const start = await startMemberStripe(language, target.orderNumber, target.csrfToken, signal);
+  if (signal.aborted) {
+    return;
+  }
+  await settleMemberStep(memberStripeStep(start), reader, signal, moves, stash);
+}
+
 // pay.method_changed：服务端按当时的开关拒绝了不符的提交，页面已重新读取（UX 0.11「支付途径已改变」）。
 function MethodChangedNotice() {
   const t = useCopy();
@@ -538,6 +851,7 @@ function CancelDialog({ stripe, onConfirm, onKeep }: { stripe: boolean; onConfir
 
 export function PayView({
   screen,
+  member = false,
   minutes,
   states,
   method,
@@ -562,6 +876,9 @@ export function PayView({
   }
   if (screen.status === "expired") {
     return <SessionExpired />;
+  }
+  if (screen.status === "reopen") {
+    return <MemberReopen />;
   }
 
   // 标题与 ★：Stripe 途径为 pay.stripe_title 与 pay.stripe_demo_hint（UX「演示提示汇总」）。
@@ -600,10 +917,12 @@ export function PayView({
       {head(stripe)}
       <OrderCard order={order}>
         {showsCountdown(order) && <ExpiresLine minutes={minutes} />}
-        <div className="acs-alert acs-alert--info">
-          <LockIcon />
-          <span>{t("pay.guest_access")}</span>
-        </div>
+        {!member && (
+          <div className="acs-alert acs-alert--info">
+            <LockIcon />
+            <span>{t("pay.guest_access")}</span>
+          </div>
+        )}
       </OrderCard>
       <RecipientDetails recipient={order.recipient} states={states} />
       {stripe ? (
@@ -724,11 +1043,15 @@ export function PayView({
   );
 }
 
+// 打开后的访问方式：游客凭订单访问 cookie；会员凭会员会话与暂存的订单号（判定顺序 ①）。
+type PayAccess = { kind: "guest" } | { kind: "member"; orderNumber: string };
+
 export default function PayPage() {
   const { language } = useLanguage();
   const { replace } = useRouter();
+  const reader = useMemberSessionReader();
   const [screen, setScreen] = useState<PayScreen>({ status: "loading" });
-  // CSRF 令牌只在内存里：每次读取订单时由接口给出。
+  // CSRF 令牌只在内存里：游客每次读取订单时由接口给出；会员取自会员会话（打开时与 csrf 之后重读）。
   const [csrfToken, setCsrfToken] = useState<string | null>(null);
   const [method, setMethod] = useState<PayMethod | null>(null);
   const [busy, setBusy] = useState<PayBusy>(null);
@@ -743,8 +1066,12 @@ export default function PayPage() {
   const [reads, setReads] = useState(0);
   // 离开页面时中止进行中的写操作与确认。
   const lifetime = useRef<AbortController | null>(null);
+  // 打开时判定出的访问方式；null 为还没判定（打开时与按 ② 重新判定时）。读取的 effect 取 ref，判定完成本身不再触发一次读取。
+  const [access, setAccess] = useState<PayAccess | null>(null);
+  const accessRef = useRef<PayAccess | null>(null);
 
   const order = screen.status === "ready" ? screen.order : null;
+  const member = access?.kind === "member" ? access : null;
   // 只在显示 pay.expires 时计时，到 0 才重新读取。
   const minutes = useCountdown(order !== null && showsCountdown(order) ? order : null, () => {
     setReads((count) => count + 1);
@@ -784,12 +1111,9 @@ export default function PayPage() {
     };
   }, []);
 
-  useEffect(() => {
-    const controller = new AbortController();
-    void readPayOrder(language, controller.signal).then((read) => {
-      if (controller.signal.aborted) {
-        return;
-      }
+  // 游客读取的结果（重读时照现有写法，401 为 pay.session_expired）；会员重读失败也按这里的 failed 显示。
+  const applyRead = useCallback(
+    (read: PayRead) => {
       if (read.kind === "ok") {
         showOrder(read);
       } else if (read.kind === "expired") {
@@ -798,11 +1122,105 @@ export default function PayPage() {
         setScreen((current) => (current.status === "ready" ? current : { status: "error" }));
         setFailed(true);
       }
-    });
+    },
+    [showOrder],
+  );
+
+  // 会员订单：令牌不变（取自会话）；已不是待支付时照游客转到 P07，不清除暂存（由结果页在结果确定后清除）。
+  const showMemberOrder = useCallback(
+    (memberOrder: PayOrder) => {
+      if (leavesPayPage(memberOrder)) {
+        replace(PAY_RESULT_PATH);
+        return;
+      }
+      setScreen({ status: "ready", order: memberOrder });
+    },
+    [replace],
+  );
+
+  const enterAccess = useCallback((next: PayAccess | null) => {
+    accessRef.current = next;
+    setAccess(next);
+  }, []);
+
+  // 整页 pay.member_reopen（暂存已清除）。
+  const reopen = useCallback(() => {
+    setScreen({ status: "reopen" });
+    setConfirming(false);
+    setBusy(null);
+  }, []);
+
+  // 按 ② 重新判定（暂存已清除）：回到读取中，再走一次打开时的判定。
+  const redetermine = useCallback(() => {
+    enterAccess(null);
+    setScreen({ status: "loading" });
+    setConfirming(false);
+    setRetry(null);
+    setFailed(false);
+    setBusy(null);
+    setReads((count) => count + 1);
+  }, [enterAccess]);
+
+  const applyOpening = useCallback(
+    (opening: PayOpening) => {
+      switch (opening.kind) {
+        case "member":
+          enterAccess({ kind: "member", orderNumber: opening.orderNumber });
+          showOrder({ kind: "ok", order: opening.order, csrfToken: opening.csrfToken });
+          return;
+        case "guest":
+          enterAccess({ kind: "guest" });
+          showOrder(opening.read);
+          return;
+        case "reopen":
+          setScreen({ status: "reopen" });
+          return;
+        case "expired":
+          setScreen({ status: "expired" });
+          return;
+        case "error":
+          applyRead({ kind: "failed" });
+          return;
+      }
+    },
+    [enterAccess, showOrder, applyRead],
+  );
+
+  // 还没判定（打开或重新判定）时按判定顺序打开；之后切换语言、倒计时到 0 等重新读取同一订单：会员经会员接口，游客照现有写法。
+  useEffect(() => {
+    const controller = new AbortController();
+    const { signal } = controller;
+    const current = accessRef.current;
+    if (current === null) {
+      void openPayOrder(language, reader, signal).then((opening) => {
+        if (opening !== null && !signal.aborted) {
+          applyOpening(opening);
+        }
+      });
+    } else if (current.kind === "member") {
+      void rereadMemberOrder(language, current.orderNumber, reader, signal, {
+        same: (memberOrder) => {
+          if (memberOrder === null) {
+            applyRead({ kind: "failed" });
+          } else {
+            showMemberOrder(memberOrder);
+          }
+        },
+        reopen,
+        redetermine,
+        retry: () => undefined,
+      });
+    } else {
+      void readPayOrder(language, signal).then((read) => {
+        if (!signal.aborted) {
+          applyRead(read);
+        }
+      });
+    }
     return () => {
       controller.abort();
     };
-  }, [language, reads, showOrder]);
+  }, [language, reads, reader, applyOpening, applyRead, showMemberOrder, reopen, redetermine]);
 
   // 模拟支付的去向。
   const settle = (outcome: WriteOutcome | null) => {
@@ -876,9 +1294,68 @@ export default function PayPage() {
     },
   });
 
+  // Stripe 发起的去向按 stripeMove（游客与会员相同的部分）。
+  const settleStripe = (start: StripeStart) => {
+    const move = stripeMove(start);
+    switch (move.kind) {
+      case "redirect":
+        // 当前标签页打开服务端返回的地址；按钮保持禁用直到页面离开。
+        window.location.assign(move.url);
+        return;
+      case "result":
+        replace(PAY_RESULT_PATH);
+        return;
+      case "expired":
+        setScreen({ status: "expired" });
+        return;
+      case "unavailable":
+        setStripeUnavailable(true);
+        break;
+      case "method_changed":
+        setMethodChanged(true);
+        reread();
+        break;
+      case "reread":
+        reread();
+        break;
+      case "error":
+        setFailed(true);
+        reread();
+        break;
+    }
+    setBusy(null);
+  };
+
+  // 会员写操作的处理：same 照游客的写法；csrf 之后换用新令牌（没有时保留原令牌）、按重新读取到的订单显示并提示 common.error_retry。
+  const memberMoves = <T,>(same: (value: T) => void): MemberMoves<T> => ({
+    same,
+    reopen,
+    redetermine,
+    retry: (token, memberOrder) => {
+      if (token !== null) {
+        setCsrfToken(token);
+      }
+      if (memberOrder !== null) {
+        showMemberOrder(memberOrder);
+      }
+      setRetry(null);
+      setFailed(true);
+      setBusy(null);
+    },
+  });
+
+  // 只在点击处理里调用：会员写操作的选项（页面的中止与 common.network_check）。
+  const memberOptions = (controller: AbortController): MemberWriteOptions => ({
+    signal: controller.signal,
+    onChecking: () => {
+      setBusy("checking");
+    },
+  });
+
   return (
     <PayView
       screen={screen}
+      member={member !== null}
       minutes={minutes}
       states={states}
       method={method}
@@ -894,6 +1371,16 @@ export default function PayPage() {
           return;
         }
         const attempt = attemptFor(retry, method, result);
+        if (member !== null) {
+          const controller = lifetime.current;
+          if (controller === null) {
+            return;
+          }
+          startOperation("paying");
+          const target = { orderNumber: member.orderNumber, csrfToken };
+          void payAsMember(language, target, attempt, reader, memberOptions(controller), memberMoves(settle));
+          return;
+        }
         startOperation("paying");
         void runPayment(language, order.order_number, csrfToken, attempt, writeOptions()).then((outcome) => {
           settle(outcome);
@@ -903,40 +1390,23 @@ export default function PayPage() {
         if (order === null || csrfToken === null || busy !== null || !isStripeRoute(order)) {
           return;
         }
+        if (member !== null) {
+          const controller = lifetime.current;
+          if (controller === null) {
+            return;
+          }
+          startOperation("redirecting");
+          const target = { orderNumber: member.orderNumber, csrfToken };
+          void startStripeAsMember(language, target, reader, controller.signal, memberMoves(settleStripe));
+          return;
+        }
         const signal = lifetime.current?.signal;
         startOperation("redirecting");
         void startStripe(language, order.order_number, csrfToken, signal).then((start) => {
           if (signal?.aborted) {
             return;
           }
-          const move = stripeMove(start);
-          switch (move.kind) {
-            case "redirect":
-              // 当前标签页打开服务端返回的地址；按钮保持禁用直到页面离开。
-              window.location.assign(move.url);
-              return;
-            case "result":
-              replace(PAY_RESULT_PATH);
-              return;
-            case "expired":
-              setScreen({ status: "expired" });
-              return;
-            case "unavailable":
-              setStripeUnavailable(true);
-              break;
-            case "method_changed":
-              setMethodChanged(true);
-              reread();
-              break;
-            case "reread":
-              reread();
-              break;
-            case "error":
-              setFailed(true);
-              reread();
-              break;
-          }
-          setBusy(null);
+          settleStripe(start);
         });
       }}
       onCancel={() => {
@@ -948,6 +1418,18 @@ export default function PayPage() {
       onConfirmCancel={() => {
         setConfirming(false);
         if (order === null || csrfToken === null || busy !== null) {
+          return;
+        }
+        if (member !== null) {
+          const controller = lifetime.current;
+          if (controller === null) {
+            return;
+          }
+          startOperation("cancelling");
+          const target = { orderNumber: member.orderNumber, csrfToken };
+          void cancelAsMember(language, target, reader, memberOptions(controller), memberMoves((outcome: WriteOutcome) => {
+            settleCancel(outcome, order);
+          }));
           return;
         }
         startOperation("cancelling");
