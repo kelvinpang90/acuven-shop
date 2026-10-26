@@ -1,6 +1,6 @@
-"""会员短信登录或注册、当前会话与退出：POST /api/member/sms-login、GET /api/member/session、
-POST /api/member/logout，以及之后所有会员接口共用的会话依赖 require_member 与 CSRF 校验
-require_member_csrf。
+"""会员短信登录或注册、当前会话、退出与取本人手机号：POST /api/member/sms-login、
+GET /api/member/session、POST /api/member/logout、GET /api/member/phone，以及之后所有会员接口
+共用的会话依赖 require_member 与 CSRF 校验 require_member_csrf。
 
 依据 docs/DESIGN.md 1.11（提交 2d13250）「权限与资料保护」第 3 条（注册、短信登录与结账验证是
 同一个短信验证流程；会话到期、退出与服务端授权检查）与第 5 条（会话以服务端会话实现，经
@@ -31,7 +31,13 @@ docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（会员会话 30 天、
 会话不通过一律 401 member_session_required，不区分会话不存在、已撤销、已到期或会员已注销；
 不受短信验证开关影响。退出另须 CSRF，不通过 403 csrf_failed，此时不撤销会话。
 
-三个接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control: no-store，由 SHOP-TASK-027
+取本人手机号依据 docs/DESIGN.md 1.14（提交 00f8f34）「权限与资料保护」第 8 条（会员结账预填
+本人手机号）与 docs/HANDOFF.md 0.63：只经 require_member 授权，200 {"phone": <会员账号上的
+E.164 号码原文>}，只有这一个字段；会话不通过同上 401，响应体不含号码。只读，不写库、不延长
+会话；用 GET、不要求 CSRF；不受短信验证开关影响；不另设限流与审计记录。读取会话
+GET /api/member/session 仍只给遮掩号码。
+
+四个接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control: no-store，由 SHOP-TASK-027
 的路由类统一加上；路径存在但方法不匹配的 405 由框架在路由之外回答，不在此列。
 本模块不写日志；响应体与错误不含号码原文、验证码、会员 ID、令牌或 cookie 值。
 """
@@ -115,6 +121,14 @@ class MemberSessionOut(BaseModel):
     expires_at: datetime
     # 由 cookie 重新算出的 CSRF 令牌，供页面提交会员写操作。
     csrf_token: str
+
+
+class MemberPhoneOut(BaseModel):
+    """本人完整的 E.164 号码，只此一个字段（DESIGN 1.14 第 8 条）。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    phone: str = Field(repr=False)
 
 
 @dataclass(frozen=True)
@@ -269,6 +283,16 @@ def current_session(member: MemberDep) -> MemberSessionOut:
         expires_at=member.expires_at.replace(tzinfo=UTC),
         csrf_token=csrf_token,
     )
+
+
+@router.get("/phone", response_model=MemberPhoneOut)
+def member_phone(member: MemberDep) -> MemberPhoneOut:
+    """200 {"phone": …}，供结账第 3 步预填收货电话；只读，不要求 CSRF。"""
+    phone = member.member.phone
+    if phone is None:
+        # require_member 通过时会员必然 active 且有号码；这里只为类型收窄。
+        raise HTTPException(status_code=401, detail="member_session_required")
+    return MemberPhoneOut(phone=phone)
 
 
 @router.post("/logout", status_code=204, response_class=Response)
