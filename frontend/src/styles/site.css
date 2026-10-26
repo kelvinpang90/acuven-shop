@@ -242,6 +242,8 @@ body { margin: 0; }
 .site-order__request-items { display: grid; gap: 2px; }
 /* P09 会员模式：去 P13 的 account.orders 代替查单授权一行，单独一行靠左（视觉稿 P09-pending）；桌面与手机各一份 */
 .site-order__orders { justify-self: start; }
+/* P09-pending：会员模式待支付订单的 account.order_pay 为主按钮样式的链接，靠左、不占满宽度（桌面与手机相同） */
+.site-order__pay { justify-self: start; }
 
 /* 退款申请 P10：居中 960px 单列；标题与订单号在左、★ 提示在右；各行为 名称与实付 | 数量 | 最多件数；
    合计与说明在汇总块里，提交按钮靠左，◆ 提示在其下 */

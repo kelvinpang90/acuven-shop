@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { clearMemberOrder, handOffMemberOrder, MEMBER_ORDERS_URL, memberOrderInView } from "../api/memberOrders";
 import type { MemberOrderSummary, MemberOrdersRead } from "../api/memberOrders";
+import { clearMemberPayOrder, MEMBER_PAY_ORDER_KEY, stashedMemberPayOrder, stashMemberPayOrder } from "../api/memberPay";
 import { createMemberSessionReader, MEMBER_LOGOUT_URL, MEMBER_SESSION_URL } from "../api/memberSession";
 import type { MemberLogoutReply, MemberSessionState } from "../api/memberSession";
 import { CSRF_HEADER } from "../api/pay";
@@ -38,6 +39,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   clearMemberOrder();
+  // SHOP-TASK-163 的退出测试会写入 P06 的当前订单暂存（模块变量），每条之后复原。
+  clearMemberPayOrder();
 });
 
 // 测试里的手机号、令牌与订单号都是虚构值。
@@ -642,6 +645,57 @@ describe("logging out", () => {
     const { moves, events } = fakeMoves(startLogout(memberScreen()));
     await logOut(createMemberSessionReader(), TOKEN, gone.signal, moves);
     expect(events).toEqual([]);
+  });
+});
+
+// 本标签页 sessionStorage 的替身：只记 P06 当前订单暂存这类键值。
+function stubSessionStorage(): Map<string, string> {
+  const store = new Map<string, string>();
+  vi.stubGlobal("sessionStorage", {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+  });
+  return store;
+}
+
+describe("logging out clears the current pay order (SHOP-TASK-163)", () => {
+  // DESIGN 1.14「权限与资料保护」第 7 条与 UX 0.13 P06「会员的当前订单」「…会员退出或注销时清除暂存」，SHOP-TASK-163 验收「退出在 ok 与 signed_out 时，
+  // 除现有的 clearMemberOrder 外另经 SHOP-TASK-158 清除当前订单暂存」：退出之后模块变量与 sessionStorage 里都没有暂存，交接同样已清除，照常 replace 到 /。
+  it.each<[string, Response]>([
+    ["ok", new Response(null, { status: 204 })],
+    ["signed_out", json(401, { detail: "member_session_required" })],
+  ])("clears the stash when logging out is %s", async (_name, reply) => {
+    const store = stubSessionStorage();
+    stubFetch({ [MEMBER_LOGOUT_URL]: [reply], [MEMBER_SESSION_URL]: [guestReply()] });
+    handOffMemberOrder("K7Q29MXAB6TN2RJD");
+    stashMemberPayOrder("K7Q29MXAB6TN2RJD");
+    expect(store.get(MEMBER_PAY_ORDER_KEY)).toBe("K7Q29MXAB6TN2RJD");
+    const { moves, events } = fakeMoves(startLogout(memberScreen()));
+    await logOut(createMemberSessionReader(), TOKEN, new AbortController().signal, moves);
+    expect(stashedMemberPayOrder()).toBeNull();
+    expect(store.has(MEMBER_PAY_ORDER_KEY)).toBe(false);
+    expect(memberOrderInView()).toBeNull();
+    expect(events).toEqual(["replace /"]);
+  });
+
+  // 同一条「其余去向（重读会话、replace 前往首页、csrf、failed、network）不变」：退出未成（csrf、failed）时会员仍登录，暂存照旧保留，以便回到 P06 继续支付。
+  it.each<[string, Record<string, Reply[]>]>([
+    ["csrf", { [MEMBER_LOGOUT_URL]: [json(403, { detail: "csrf_failed" })], [MEMBER_SESSION_URL]: [memberReply(NEW_TOKEN)] }],
+    ["failed", { [MEMBER_LOGOUT_URL]: [new Response(null, { status: 500 })] }],
+  ])("keeps the stash when logging out is %s", async (_name, routes) => {
+    const store = stubSessionStorage();
+    stubFetch(routes);
+    stashMemberPayOrder("K7Q29MXAB6TN2RJD");
+    const { moves, events } = fakeMoves(startLogout(memberScreen()));
+    await logOut(createMemberSessionReader(), TOKEN, new AbortController().signal, moves);
+    expect(events).toEqual(["update"]);
+    expect(stashedMemberPayOrder()).toBe("K7Q29MXAB6TN2RJD");
+    expect(store.get(MEMBER_PAY_ORDER_KEY)).toBe("K7Q29MXAB6TN2RJD");
   });
 });
 

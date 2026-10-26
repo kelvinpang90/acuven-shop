@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 
 import { clearMemberOrder, handOffMemberOrder, readMemberOrders } from "../api/memberOrders";
 import type { MemberOrderSummary, MemberOrdersRead } from "../api/memberOrders";
+import { clearMemberPayOrder } from "../api/memberPay";
 import { memberLogout, useMemberSessionReader } from "../api/memberSession";
 import type { MemberLogoutReply, MemberSessionReader, MemberSessionState } from "../api/memberSession";
 import { AWAITING_PAYMENT } from "../api/pay";
@@ -23,6 +24,7 @@ import { formatDate } from "./TrackOrderPage";
 // 手机暂放在标题之下，UX 与视觉稿在设置段，HANDOFF 0.61 第（7）条）、桌面左侧导航或手机分段标签、★ account.demo_hint 与我的订单。
 // 我的订单经 api/memberOrders.ts 只取第一页（最多 20 张，按服务端顺序，不翻页，HANDOFF 0.61 第（1）条）；查看时经交接函数交出订单号，
 // 再前往 /account/order（订单号不进地址、历史状态与浏览器存储），该路径进路由表之前不渲染查看入口。
+// 退出成功（ok 或 signed_out）时同时清除会员订单号的交接与 P06 的当前订单暂存（DESIGN 1.14「权限与资料保护」第 7 条，HANDOFF 0.63）。
 // 离开页面时中止请求，之后不再更新；会话的重读是共享读取，不中止，离开页面后不再据其结果更新或跳转。
 
 const LOGIN_PATH: RoutePath = "/login";
@@ -204,8 +206,8 @@ export async function openAccount(reader: MemberSessionReader, signal: AbortSign
   }
 }
 
-// 退出（带会话里的 CSRF 令牌）：ok 与 signed_out 清除交接的会员订单号、重读会话并以 replace 前往首页；csrf 重读会话（取得新令牌）后
-// 显示 common.error_retry；其余显示对应提示。signal 中止之后不再更新或跳转。
+// 退出（带会话里的 CSRF 令牌）：ok 与 signed_out 清除交接的会员订单号与 P06 的当前订单暂存（DESIGN 1.14「权限与资料保护」第 7 条）、
+// 重读会话并以 replace 前往首页；csrf 重读会话（取得新令牌）后显示 common.error_retry；其余显示对应提示。signal 中止之后不再更新或跳转。
 export async function logOut(reader: MemberSessionReader, csrfToken: string, signal: AbortSignal, moves: AccountMoves): Promise<void> {
   const reply = await memberLogout(csrfToken, signal);
   if (signal.aborted) {
@@ -214,6 +216,7 @@ export async function logOut(reader: MemberSessionReader, csrfToken: string, sig
   const step = logoutStep(reply);
   if (step === "home") {
     clearMemberOrder();
+    clearMemberPayOrder();
     await leaveAfterReload(reader, signal, HOME_PATH, moves.replace);
   } else if (step === "reread") {
     const state = await reader.reload();
