@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from "react";
 
 import { memberOrderInView, readMemberOrder, runMemberConfirmReceipt } from "../api/memberOrders";
 import type { MemberConfirmOutcome, MemberOrderRead } from "../api/memberOrders";
+import { stashMemberPayOrder } from "../api/memberPay";
 import { useMemberSessionReader } from "../api/memberSession";
 import type { MemberSessionReader, MemberSessionState } from "../api/memberSession";
 import {
@@ -24,10 +25,10 @@ import { DemoHint, ErrorNotice } from "../components/SiteFrame";
 import { formatSen } from "../format";
 import type { CopyKey, Language } from "../i18n/copy";
 import { htmlLang, useCopy, useLanguage } from "../i18n/language";
-import { ACCOUNT_PATH, isRoutePath, Link, useRouter } from "../router";
+import { ACCOUNT_PATH, isPlainLeftClick, isRoutePath, Link, useRouter } from "../router";
 import type { RoutePath } from "../router";
 import { startDeferred } from "./AdminOrderDetail";
-import { InfoIcon, recipientParts, useMyStates } from "./PayPage";
+import { InfoIcon, PAY_PATH, recipientParts, useMyStates } from "./PayPage";
 import { TRACK_PATH } from "./TrackPage";
 
 // 订单详情页 P09 的查单模式（docs/UX.md P09）：打开时以当前语言调用 GET /api/orders/lookup，取第一张订单（最近查询的）；
@@ -45,6 +46,8 @@ import { TRACK_PATH } from "./TrackPage";
 // （取到即清除，记下以显示 refund.submitted），没有时取 P13 经 api/memberOrders.ts 交接的订单号，都没有（如整页刷新后）以 replace 回到 /account。
 // 订单经会员接口读取，切换语言时重新读取同一订单；会员接口回 401 时重读会话并以 replace 进入 /login，回 404 时以 replace 回到 /account。
 // 确认收货经会员接口、带会话里的 CSRF 令牌，幂等键规则同查单模式；令牌失效时重读会话换用新令牌。会员模式没有 order.session_expired 整页。
+// 待支付订单有去 /pay 的 account.order_pay（UX P09 会员模式，DESIGN 1.14「权限与资料保护」第 7 条，HANDOFF 0.63）：点击时先经 api/memberPay.ts
+// 把该单订单号写入当前订单暂存（覆盖之前的值），再以站内导航前往 /pay；订单号不进地址、查询参数与历史状态。
 // 离开页面时中止请求，之后不再更新；会话的重读是共享读取，不中止，离开页面后不再据其结果更新或跳转。
 
 export const TRACK_ORDER_PATH: RoutePath = "/track/order";
@@ -332,6 +335,8 @@ export interface TrackOrderViewProps {
   onConfirm: () => void;
   // 不给时为查单模式。
   mode?: TrackOrderMode | undefined;
+  // 会员模式点 account.order_pay（普通左键点击）：写入暂存并前往 /pay（continuePayment）。不给时由链接自己前往 /pay。
+  onPay?: (() => void) | undefined;
 }
 
 // 查单授权过期或不属于该单时替换整页：order.session_expired 与去 P08 的 common.nav_track。P10 共用。
@@ -351,8 +356,8 @@ export function SessionExpired() {
 }
 
 // 查单模式在标题之后是 order.lookup_access 与回 P08 的 order.lookup_another；会员模式换成回 P13 的 account.orders（桌面与手机各一处），
-// 退款入口去会员模式的退款页，待支付订单不显示 order.lookup_no_pay（account.order_pay 由会员结账的任务加入）。其余两种模式相同。
-export function TrackOrderView({ screen, states, busy, failed, submitted, onConfirm, mode = LOOKUP_MODE }: TrackOrderViewProps) {
+// 退款入口去会员模式的退款页，待支付订单在 order.lookup_no_pay 的位置换成去 /pay 的 account.order_pay（主按钮样式的链接）。其余两种模式相同。
+export function TrackOrderView({ screen, states, busy, failed, submitted, onConfirm, mode = LOOKUP_MODE, onPay }: TrackOrderViewProps) {
   const t = useCopy();
   const price = usePrice();
 
@@ -483,12 +488,26 @@ export function TrackOrderView({ screen, states, busy, failed, submitted, onConf
               <span>{t("order.fulfilment_frozen")}</span>
             </div>
           )}
-          {!member && order.status === AWAITING_PAYMENT && (
-            <div className="acs-alert acs-alert--info">
-              <InfoIcon />
-              <span>{t("order.lookup_no_pay")}</span>
-            </div>
-          )}
+          {order.status === AWAITING_PAYMENT &&
+            (member ? (
+              <Link
+                className="acs-btn acs-btn--primary site-order__pay"
+                to={PAY_PATH}
+                onClick={(event) => {
+                  if (onPay !== undefined && isPlainLeftClick(event)) {
+                    event.preventDefault();
+                    onPay();
+                  }
+                }}
+              >
+                {t("account.order_pay")}
+              </Link>
+            ) : (
+              <div className="acs-alert acs-alert--info">
+                <InfoIcon />
+                <span>{t("order.lookup_no_pay")}</span>
+              </div>
+            ))}
         </aside>
       </div>
     </main>
@@ -610,6 +629,12 @@ const LOGIN_PATH: RoutePath = "/login";
 export function memberRefundPath(): RoutePath | null {
   const path: string = "/account/order/refund";
   return isRoutePath(path) ? path : null;
+}
+
+// 点 account.order_pay：先把该单订单号写入当前订单暂存（stashMemberPayOrder，覆盖之前的值，DESIGN 1.14 第 7 条），再以站内导航前往 /pay。
+export function continuePayment(orderNumber: string, navigate: (path: RoutePath) => void, stash: (orderNumber: string) => void = stashMemberPayOrder): void {
+  stash(orderNumber);
+  navigate(PAY_PATH);
 }
 
 // 会员模式打开时取到的订单：订单号，以及是否刚从 P10 提交退款申请回来（显示 refund.submitted）。
@@ -853,7 +878,7 @@ function memberMoves(setState: Dispatch<SetStateAction<MemberOrderState>>, repla
 
 export function MemberOrderPage() {
   const { language } = useLanguage();
-  const { replace } = useRouter();
+  const { navigate, replace } = useRouter();
   const reader = useMemberSessionReader();
   const [state, setState] = useState<MemberOrderState>(MEMBER_LOADING);
   // 确认收货用的中止；离开页面时中止。
@@ -899,6 +924,11 @@ export function MemberOrderPage() {
         const target = { orderNumber: member.orderNumber, csrfToken: member.csrfToken, key: receiptKey(member.retryKey) };
         setState(startConfirm);
         void confirmMemberOrder(reader, language, target, controller.signal, memberMoves(setState, replace));
+      }}
+      onPay={() => {
+        if (member !== null) {
+          continuePayment(member.orderNumber, navigate);
+        }
       }}
     />
   );

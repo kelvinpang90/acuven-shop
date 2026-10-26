@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { clearMemberOrder, handOffMemberOrder, MEMBER_CONFIRM_RECEIPT_URL, memberOrderInView, memberOrderViewUrl } from "../api/memberOrders";
+import { clearMemberPayOrder, MEMBER_PAY_ORDER_KEY, stashedMemberPayOrder, stashMemberPayOrder } from "../api/memberPay";
 import { createMemberSessionReader, MEMBER_SESSION_URL } from "../api/memberSession";
 import { clearSubmittedRefund, handOffSubmittedRefund, receiptKey, submittedRefundOrder } from "../api/orderLookup";
 import type { LookupLine, LookupOrder, LookupRefund } from "../api/orderLookup";
@@ -17,6 +18,7 @@ import type { RoutePath } from "../router";
 import { countryName } from "./PayPage";
 import {
   confirmMemberOrder,
+  continuePayment,
   formatDate,
   formatDateTime,
   loadMemberOrder,
@@ -33,12 +35,13 @@ import {
 } from "./TrackOrderPage";
 import type { MemberOrderMoves, MemberOrderState, TrackOrderViewProps } from "./TrackOrderPage";
 
-// 会员模式的测试会改动两个模块内存里的交接（P13 交出的订单号与 P10 提交后交来的订单号）与全局 fetch，每条之后复原。
+// 会员模式的测试会改动模块内存里的交接（P13 交出的订单号与 P10 提交后交来的订单号）、P06 的当前订单暂存（SHOP-TASK-163）与全局 fetch，每条之后复原。
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   clearMemberOrder();
   clearSubmittedRefund();
+  clearMemberPayOrder();
 });
 
 const ORDER_NUMBER = "B6TN2RJD8K4M0QXZ";
@@ -979,16 +982,15 @@ describe("member mode: content", () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
   });
 
-  // HANDOFF 0.61 第（3）条「P09 会员模式的待支付订单本批不显示 account.order_pay…也不显示查单模式的 order.lookup_no_pay」：
-  // 待支付订单两者都没有（account.order_pay 尚未进字典，按 UX-COPY 的三语原文检查），也没有去支付页的链接与任何按钮。
-  it.each(LANGUAGES)("shows neither order.lookup_no_pay nor account.order_pay for an unpaid order in %s", (language) => {
+  // UX P09「会员模式：( [account.order_pay] ) → P06（继续支付或取消，Q17 已决）」与 SHOP-TASK-163 验收「会员模式下状态为待支付的订单显示指向 /pay 的
+  // account.order_pay（主按钮样式的链接）」。本条原为 HANDOFF 0.61 第（3）条的「两者都不显示」，SHOP-TASK-163 取消了 SHOP-TASK-154 的暂缓，改为：
+  // 待支付订单有去 /pay 的 account.order_pay（地址里没有订单号），仍没有查单模式的 order.lookup_no_pay，也没有任何按钮。
+  it.each(LANGUAGES)("shows account.order_pay but not order.lookup_no_pay for an unpaid order in %s", (language) => {
     const unpaid = lookupOrder({ status: "awaiting_demo_payment", paid_at: null, refund_deadline: null, refund_window_open: false, lines: [orderLine({ unit_cash_paid_sen: [] })] });
     const html = memberView(signedIn({ order: unpaid }), language);
     expect(has(html, "order.lookup_no_pay", language)).toBe(false);
-    for (const text of ["Continue payment", "继续支付", "Teruskan pembayaran"]) {
-      expect(html).not.toContain(text);
-    }
-    expect(html).not.toContain(`href="/pay`);
+    expect(html).toContain(`<a class="acs-btn acs-btn--primary site-order__pay" href="/pay">${escapeHtml(COPY["account.order_pay"][language])}</a>`);
+    expect(html.match(/href="\/pay/g)).toHaveLength(1);
     expect(html).not.toContain("<button");
     expect(has(html, "order.status_awaiting", language)).toBe(true);
   });
@@ -1036,6 +1038,85 @@ describe("member mode: content", () => {
         expect(known, value).toBe(true);
       }
     }
+  });
+});
+
+// 本标签页 sessionStorage 的替身：只记 P06 当前订单暂存这类键值。
+function stubSessionStorage(): Map<string, string> {
+  const store = new Map<string, string>();
+  vi.stubGlobal("sessionStorage", {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+  });
+  return store;
+}
+
+const UNPAID = lookupOrder({ status: "awaiting_demo_payment", paid_at: null, refund_deadline: null, refund_window_open: false, lines: [orderLine({ unit_cash_paid_sen: [] })] });
+
+describe("member mode: continue payment (SHOP-TASK-163)", () => {
+  // SHOP-TASK-163 验收「其他状态不显示」与 UX P09「待支付订单…会员模式：( [account.order_pay] )」：只有待支付订单有 account.order_pay 与去 /pay 的链接。
+  it.each(LANGUAGES)("shows account.order_pay only for an unpaid order in %s", (language) => {
+    for (const status of STATUSES.filter((value) => value !== "awaiting_demo_payment")) {
+      const html = memberView(signedIn({ order: lookupOrder({ status }) }), language);
+      expect(has(html, "account.order_pay", language), status).toBe(false);
+      expect(html, status).not.toContain(`href="/pay`);
+    }
+  });
+
+  // 同一条「放在订单状态区里查单模式显示 order.lookup_no_pay 的位置，桌面与手机相同；account.orders 返回链接的位置不变」：
+  // 两种模式下，待支付的那一项都是右栏的最后一项（只有一份，不分桌面与手机）；会员模式的 account.orders 仍是桌面与手机各一处、在进度之前。
+  it("puts account.order_pay where lookup mode shows order.lookup_no_pay", () => {
+    const member = memberView(signedIn({ order: UNPAID }));
+    const lookup = render(ready(UNPAID));
+    const pay = `<a class="acs-btn acs-btn--primary site-order__pay" href="/pay">${escapeHtml(COPY["account.order_pay"].en)}</a>`;
+    expect(member).toContain(`${pay}</aside>`);
+    expect(member.match(/site-order__pay/g)).toHaveLength(1);
+    expect(lookup).toContain(`<span>${escapeHtml(COPY["order.lookup_no_pay"].en)}</span></div></aside>`);
+    expect(member.match(/class="site-(?:desktop|phone)-only site-order__orders" href="\/account"/g)).toHaveLength(2);
+    expect(member.indexOf(`>${COPY["account.orders"].en}<`)).toBeLessThan(member.indexOf(COPY["order.progress"].en));
+  });
+
+  // 同一条「查单模式不变（待支付仍为 order.lookup_no_pay，没有 account.order_pay）」：各状态的查单模式都没有 account.order_pay 与去 /pay 的链接。
+  it.each(LANGUAGES)("keeps lookup mode without account.order_pay in %s", (language) => {
+    expect(has(render(ready(UNPAID), language), "order.lookup_no_pay", language)).toBe(true);
+    for (const status of STATUSES) {
+      const html = render(ready(lookupOrder({ status })), language);
+      expect(has(html, "account.order_pay", language), status).toBe(false);
+      expect(html, status).not.toContain(`href="/pay`);
+    }
+  });
+
+  // 同一条「点击时先经 SHOP-TASK-158 写入该单订单号，再以站内导航前往 /pay」与 DESIGN 1.14「权限与资料保护」第 7 条：先写入、后导航，导航只带路径。
+  it("writes the stash before going to /pay", () => {
+    const events: string[] = [];
+    continuePayment(
+      ORDER_NUMBER,
+      (path) => {
+        events.push(`navigate ${path}`);
+      },
+      (orderNumber) => {
+        events.push(`stash ${orderNumber}`);
+      },
+    );
+    expect(events).toEqual([`stash ${ORDER_NUMBER}`, "navigate /pay"]);
+  });
+
+  // 同一条「覆盖之前暂存的值」「订单号不进地址、查询参数与历史状态」与 UX 0.13 P06「从 P09 会员模式 [account.order_pay] 进入本页时…暂存在本标签页的 sessionStorage」：
+  // 默认经 stashMemberPayOrder 写入；导航时暂存已是该单（模块变量与 sessionStorage 都是），覆盖了之前的另一张；导航的去向只是 /pay。
+  it("overwrites the previous stash through SHOP-TASK-158", () => {
+    const store = stubSessionStorage();
+    stashMemberPayOrder(OTHER_ORDER);
+    const seen: [RoutePath, string | null, string | undefined][] = [];
+    continuePayment(ORDER_NUMBER, (path) => {
+      seen.push([path, stashedMemberPayOrder(), store.get(MEMBER_PAY_ORDER_KEY)]);
+    });
+    expect(seen).toEqual([["/pay", ORDER_NUMBER, ORDER_NUMBER]]);
+    expect(stashedMemberPayOrder()).toBe(ORDER_NUMBER);
   });
 });
 

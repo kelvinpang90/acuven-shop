@@ -1420,6 +1420,11 @@ export const COPY = {
     zh: "查看",
     ms: "Lihat",
   },
+  "account.order_pay": {
+    en: "Continue payment",
+    zh: "继续支付",
+    ms: "Teruskan pembayaran",
+  },
   "account.demo_hint": {
     en: "Points and coupons are demo only and have no cash value.",
     zh: "积分与优惠券均为演示，没有现金价值。",
