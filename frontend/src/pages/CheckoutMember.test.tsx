@@ -228,7 +228,7 @@ function copy(key: CopyKey, language: Language = "en"): string {
 
 // 带变量的字典条目：变量换成给定的值。
 function filled(key: CopyKey, values: Record<string, string>, language: Language = "en"): string {
-  let template = COPY[key][language];
+  let template: string = COPY[key][language];
   for (const [name, value] of Object.entries(values)) {
     template = template.replace(`{${name}}`, value);
   }
