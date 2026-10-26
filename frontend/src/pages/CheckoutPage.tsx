@@ -7,12 +7,15 @@ import type { LocalizedText } from "../api/catalog";
 import { fetchMemberQuote, memberOrderAttemptFor, memberOrderBody } from "../api/memberCheckout";
 import type { MemberQuoteRead } from "../api/memberCheckout";
 import { useMemberSessionReader } from "../api/memberSession";
+import type { MemberSessionReader } from "../api/memberSession";
 import { guestOrderBody, orderAttemptFor, runGuestOrder } from "../api/orders";
 import type { GuestOrderReply, GuestRecipient, OrderAttempt } from "../api/orders";
 import { fetchSiteSettings } from "../api/siteSettings";
 import { cartItemCount, clearCart, useCartLines } from "../cart";
 import type { CartLine, CartStorage } from "../cart";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
+import SmsVerify, { maskedCheckoutPhone } from "../components/SmsVerify";
+import type { CheckoutLeave, CheckoutSmsPhone, SmsVerified } from "../components/SmsVerify";
 import { formatMinorUnits, formatSen } from "../format";
 import type { CopyKey, Language } from "../i18n/copy";
 import { browserStorage, useCopy, useLanguage } from "../i18n/language";
@@ -49,7 +52,7 @@ import {
   settleSignedOut,
   submitMemberCheckout,
 } from "./CheckoutMember";
-import type { CheckoutMemberProps, MemberActions, MemberForm, SessionMoves, SettledMemberQuote } from "./CheckoutMember";
+import type { CheckoutMemberProps, MemberActions, MemberForm, PhoneMoves, SessionMoves, SettledMemberQuote } from "./CheckoutMember";
 import { decidePhone, displayPhone, MALAYSIA, regionOptions } from "./checkoutPhone";
 import type { GuestNotice, RegionOption } from "./checkoutPhone";
 import { InfoIcon, PAY_PATH } from "./PayPage";
@@ -58,10 +61,16 @@ import { InfoIcon, PAY_PATH } from "./PayPage";
 // 打开时读站点设置（短信验证开关，api/siteSettings.ts）与结账参考数据（地区与呼叫码、马来西亚州属，api/checkout.ts），
 // 读完之前第 1 步不可提交，失败时显示 common.error_retry。
 // 第 1 步：手机号（国家码下拉列出全部地区、默认 MY，以加号开头时以输入为准），旁边常显开关对应的告知；
-// 继续后按 checkoutPhone.ts 的规则以游客进入第 3 步，或（开关开启时的马新号码）停在第 1 步显示 common.service_unavailable。
+// 继续后按 checkoutPhone.ts 的规则以游客进入第 3 步，或（开关开启时的马新号码）进入第 2 步。
+// 第 2 步（SHOP-TASK-160，docs/UX.md 0.13 P05 与 V1，HANDOFF 0.63）：checkout.phone_step_title、第 1 步号码的遮掩显示与 checkout.phone_change、
+// 常显的 checkout.phone_notice，之后嵌入结账用途的 SmsVerify（号码取第 1 步的输入原文与所选地区）；摘要与第 1 步相同。
+// 组件交回的去向：号码格式不成立回第 1 步显示 checkout.phone_invalid；不在白名单以游客进入第 3 步显示 checkout.guest_other_country；
+// 短信无法送达或停发后点 checkout.continue_guest 以游客进入第 3 步显示 checkout.sms_unavailable；开关途中被关闭回第 1 步按关闭继续。
+// 验证通过后经读取对象重读会话（页头随共享状态切换为 common.nav_account）：member 以会员身份进入第 3 步，顶部显示 checkout.verified_member
+// 或 checkout.verified_new；不是 member 时回第 1 步显示 common.error_retry。
 // 第 3 步：游客提示、收货资料（姓名、国家、马来西亚州属或其他国家的地区、地址、邮编）、只读的第 1 步号码，摘要与下单。
-// 打开时另经会员会话的读取对象重读一次会话（读完之前与参考数据未读完时相同）：已登录会员跳过第 1、2 步，以会员身份进入第 3 步，
-// 会员的收货电话、优惠券、积分与摘要两行见 CheckoutMember.tsx（docs/UX.md 0.13 P05，HANDOFF 0.63）；第 2 步短信验证不在本页（SHOP-TASK-160）。
+// 打开时另经会员会话的读取对象重读一次会话（读完之前与参考数据未读完时相同）：已登录会员跳过第 1、2 步，以会员身份进入第 3 步（没有已验证横幅），
+// 会员的收货电话、优惠券、积分与摘要两行见 CheckoutMember.tsx（docs/UX.md 0.13 P05，HANDOFF 0.63）。
 // 游客摘要不显示优惠券与积分两行。
 //
 // 摘要用购物车各行 SKU 与件数（选定国家，马来西亚另须选定州属后，加国家与州属）调用计价接口，只采用最后一次请求的结果；
@@ -92,15 +101,24 @@ export interface RecipientInput {
 // error 为 common.error_retry；unavailable 为 common.service_unavailable。
 export type PlaceNotice = "changed" | "error" | "unavailable" | null;
 
+// 第 2 步验证通过后第 3 步顶部的已验证横幅：created 为是否新建了会员（checkout.verified_new，否则 checkout.verified_member），
+// phoneMasked 取自重读到的会话。
+export interface CheckoutVerified {
+  created: boolean;
+  phoneMasked: string;
+}
+
 export interface CheckoutForm {
-  step: 1 | 3;
+  step: 1 | 2 | 3;
   // 国家码下拉所选的地区代码；参考数据读完前为空串，读完后为接口给的默认地区（MY）。
   phoneRegion: string;
   phoneInput: string;
-  // 第 1 步的错误：invalid 为 checkout.phone_invalid（422 phone_invalid）；unavailable 为 common.service_unavailable（过渡规则）。
-  phoneError: "invalid" | "unavailable" | null;
+  // 第 1 步的错误：invalid 为 checkout.phone_invalid（422 phone_invalid）；retry 为 common.error_retry（验证通过后重读会话不是会员）。
+  phoneError: "invalid" | "retry" | null;
   // 第 3 步顶部的游客提示。
   guestNotice: GuestNotice | null;
+  // 第 3 步顶部的已验证横幅；只在本次第 2 步验证之后出现，已登录直接进入时为 null。
+  verified: CheckoutVerified | null;
   recipient: RecipientInput;
   submitting: boolean;
   // 网络中断、正以同一幂等键重试（显示 common.network_check）。
@@ -116,6 +134,7 @@ export const INITIAL_FORM: CheckoutForm = {
   phoneInput: "",
   phoneError: null,
   guestNotice: null,
+  verified: null,
   recipient: { name: "", country: "", state: "", region: "", address: "", postcode: "" },
   submitting: false,
   checking: false,
@@ -195,25 +214,90 @@ export function canContinue(form: CheckoutForm, reference: Reference): boolean {
   return reference.status === "ready" && form.phoneRegion !== "" && form.phoneInput.trim() !== "";
 }
 
-// 第 1 步继续后的判定（checkoutPhone.ts 的 decidePhone）。
+// 第 1 步继续后的判定（checkoutPhone.ts 的 decidePhone）：马新号码在开关开启时进入第 2 步短信验证，其余以游客进入第 3 步。
 export function continueFromPhone(form: CheckoutForm, smsEnabled: boolean): CheckoutForm {
   if (form.phoneRegion === "" || form.phoneInput.trim() === "") {
     return form;
   }
   const decision = decidePhone(smsEnabled, form.phoneRegion, form.phoneInput);
-  if (decision.kind === "unavailable") {
-    return { ...form, phoneError: "unavailable" };
+  if (decision.kind === "verify") {
+    return { ...form, step: 2, phoneError: null, guestNotice: null, notice: null };
   }
   return { ...form, step: 3, phoneError: null, guestNotice: decision.notice, notice: null };
 }
 
-// checkout.phone_change：回第 1 步，已填的收货资料与号码保留。
+// checkout.phone_change（第 2 步与游客第 3 步）：回第 1 步，已填的收货资料与号码保留。
 export function backToPhone(form: CheckoutForm): CheckoutForm {
   return { ...form, step: 1, notice: null };
 }
 
+// 第 2 步的号码（结账用途 SmsVerify 的 phone）：第 1 步的输入原文与所选地区；callingCode 为该地区的呼叫码，只用于遮掩显示。
+export function checkoutSmsPhone(form: CheckoutForm, regions: readonly PhoneRegion[]): CheckoutSmsPhone {
+  const found = regions.find((option) => option.code === form.phoneRegion);
+  return { input: form.phoneInput, region: form.phoneRegion, callingCode: found === undefined ? "" : String(found.calling_code) };
+}
+
+// 第 2 步交回的去向（SmsVerify 的 onLeave），已填内容一律保留：phone_invalid 回第 1 步显示 checkout.phone_invalid；
+// not_whitelisted 以游客进入第 3 步显示 checkout.guest_other_country；guest（短信无法送达或停发后点 checkout.continue_guest）以游客进入第 3 步
+// 显示 checkout.sms_unavailable；disabled 回第 1 步（页面另把开关当作已关闭，见 leaveTurnsSmsOff）。已不在第 2 步时不改。
+export function leaveVerify(form: CheckoutForm, leave: CheckoutLeave): CheckoutForm {
+  if (form.step !== 2) {
+    return form;
+  }
+  switch (leave) {
+    case "phone_invalid":
+      return { ...form, step: 1, phoneError: "invalid", notice: null };
+    case "disabled":
+      return { ...form, step: 1, phoneError: null, notice: null };
+    case "not_whitelisted":
+      return { ...form, step: 3, phoneError: null, guestNotice: "checkout.guest_other_country", notice: null };
+    case "guest":
+      return { ...form, step: 3, phoneError: null, guestNotice: "checkout.sms_unavailable", notice: null };
+  }
+}
+
+// 开关在流程途中被关闭（发送或核验回 disabled）：页面把开关当作已关闭，第 1 步换成 checkout.phone_notice_sms_off，再继续即以游客进入第 3 步。
+export function leaveTurnsSmsOff(leave: CheckoutLeave): boolean {
+  return leave === "disabled";
+}
+
+// 第 2 步验证通过之后：member 以会员身份进入第 3 步并显示已验证横幅；不是 member 时回第 1 步显示 common.error_retry。
+export interface VerifiedMoves {
+  member: (csrfToken: string, verified: CheckoutVerified) => void;
+  retry: () => void;
+}
+
+// 第 2 步验证通过（SmsVerify 的 onVerified）：经读取对象重读会话（共享读取，不中止；页头随共享状态切换为 common.nav_account），
+// member 时交给 moves.member（created 取自验证结果，phoneMasked 取自重读到的会话），guest 与 failed 交给 moves.retry。
+// signal 中止（离开页面）之后不再据其结果更新。结账用途只会收到 kind 为 member 的结果，其他忽略（不重读）。
+export async function settleVerified(verified: SmsVerified, reader: MemberSessionReader, signal: AbortSignal, moves: VerifiedMoves): Promise<void> {
+  if (verified.kind !== "member") {
+    return;
+  }
+  const session = await reader.reload();
+  if (signal.aborted) {
+    return;
+  }
+  if (session.kind === "member") {
+    moves.member(session.csrfToken, { created: verified.created, phoneMasked: session.phoneMasked });
+  } else {
+    moves.retry();
+  }
+}
+
+// 验证通过且重读为会员：以会员身份进入第 3 步（同 CheckoutMember.tsx 的 enterAsMember），顶部显示已验证横幅。
+export function enterVerified(form: CheckoutForm, verified: CheckoutVerified): CheckoutForm {
+  return { ...enterAsMember(form), verified };
+}
+
+// 验证通过而重读会话不是会员：回第 1 步显示 common.error_retry，已填内容保留（HANDOFF 0.63 第（4）项）。
+export function verifiedButSignedOut(form: CheckoutForm): CheckoutForm {
+  return { ...form, step: 1, phoneError: "retry", verified: null, notice: null };
+}
+
 // 下单回答之后的表单（已填内容一律保留）：
-// 409 order_not_placeable 显示 cart.item_changed（页面另行重新计价）；403 sms_verification_required 回第 1 步按开关开启重新判定；
+// 409 order_not_placeable 显示 cart.item_changed（页面另行重新计价）；403 sms_verification_required 回第 1 步、不显示错误，
+// 页面把开关当作已开启（再继续时马新号码进入第 2 步）；
 // 422 phone_invalid 回第 1 步显示 checkout.phone_invalid；409 idempotency_conflict 换新幂等键并显示 common.error_retry；
 // 503 显示 common.service_unavailable；其他显示 common.error_retry。
 export function afterReply(form: CheckoutForm, reply: Exclude<GuestOrderReply, "network">): CheckoutForm {
@@ -223,10 +307,8 @@ export function afterReply(form: CheckoutForm, reply: Exclude<GuestOrderReply, "
       return { ...settled, notice: null };
     case "not_placeable":
       return { ...settled, notice: "changed" };
-    case "sms_required": {
-      const decision = decidePhone(true, form.phoneRegion, form.phoneInput);
-      return { ...settled, step: 1, notice: null, phoneError: decision.kind === "unavailable" ? "unavailable" : null };
-    }
+    case "sms_required":
+      return { ...settled, step: 1, notice: null, phoneError: null };
     case "phone_invalid":
       return { ...settled, step: 1, notice: null, phoneError: "invalid" };
     case "conflict":
@@ -465,6 +547,8 @@ interface StepProps {
   actions: CheckoutActions;
   // 会员第 3 步；不给时为游客。
   member?: CheckoutMemberProps | undefined;
+  // 第 2 步嵌入的短信验证（结账用途的 SmsVerify，由页面给出）。
+  verify?: ReactNode;
 }
 
 function PhoneStep({ form, reference, options, actions }: StepProps) {
@@ -529,7 +613,7 @@ function PhoneStep({ form, reference, options, actions }: StepProps) {
             </span>
           )}
         </div>
-        {form.phoneError === "unavailable" && <ServiceUnavailable />}
+        {form.phoneError === "retry" && <ErrorNotice />}
         <button className="acs-btn acs-btn--primary site-checkout__continue" type="submit" disabled={!canContinue(form, reference)}>
           {t("checkout.phone_continue")}
         </button>
@@ -545,7 +629,44 @@ function PhoneStep({ form, reference, options, actions }: StepProps) {
 
 const NO_REGIONS: readonly PhoneRegion[] = [];
 
-// 第 3 步：顶部的提示区（游客为 checkout.guest_other_country 等，会员已登录直接进入时没有）、收货资料；
+// 第 2 步（P05 第 2 步线框，视觉稿 P05-desktop-2、P05-phone-2）：标题、第 1 步号码的遮掩显示与 checkout.phone_change（回第 1 步，保留已填内容）、
+// 常显的 checkout.phone_notice，之后是嵌入的短信验证。
+function VerifyStep({ form, reference, actions, verify }: StepProps) {
+  const t = useCopy();
+  const regions = reference.status === "ready" ? reference.regions.regions : NO_REGIONS;
+  return (
+    <section className="site-checkout__step site-checkout__verify">
+      <h2 className="acs-display-s">{t("checkout.phone_step_title")}</h2>
+      <div className="site-checkout__number">
+        <span className="acs-num">{maskedCheckoutPhone(checkoutSmsPhone(form, regions))}</span>
+        <button className="acs-btn acs-btn--quiet" type="button" onClick={actions.onChangePhone}>
+          {t("checkout.phone_change")}
+        </button>
+      </div>
+      <FormNotice>{t("checkout.phone_notice")}</FormNotice>
+      {verify}
+    </section>
+  );
+}
+
+// 第 3 步顶部的已验证横幅（视觉稿 V1-verified 与 P05-desktop-3-member、P05-phone-3-member）：桌面在横幅之上另有 checkout.phone_step_title，手机只有横幅。
+function VerifiedBanner({ verified }: { verified: CheckoutVerified }) {
+  const t = useCopy();
+  return (
+    <div className="site-checkout__verified">
+      <h2 className="acs-display-s site-desktop-only">{t("checkout.phone_step_title")}</h2>
+      <div className="acs-alert acs-alert--success" role="status">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M8 12.5l3 3 5-6" />
+        </svg>
+        <span>{t(verified.created ? "checkout.verified_new" : "checkout.verified_member", { phoneMasked: verified.phoneMasked })}</span>
+      </div>
+    </div>
+  );
+}
+
+// 第 3 步：顶部的提示区（游客为 checkout.guest_other_country 等；会员在本次验证之后为已验证横幅，已登录直接进入时没有）、收货资料；
 // 收货电话与其后的优惠券、积分一段，游客为只读的第 1 步号码与两句说明，会员见 CheckoutMember.tsx。
 function RecipientStep({ form, reference, options, actions, member }: StepProps) {
   const t = useCopy();
@@ -561,6 +682,7 @@ function RecipientStep({ form, reference, options, actions, member }: StepProps)
   const states: readonly MyState[] = reference.status === "ready" ? reference.regions.my_states : [];
   return (
     <>
+      {member !== undefined && form.verified !== null && <VerifiedBanner verified={form.verified} />}
       {member === undefined && form.guestNotice !== null && (
         <div className="site-checkout__guest">
           <div className="acs-alert acs-alert--info" role="status">
@@ -752,9 +874,11 @@ export interface CheckoutViewProps {
   actions: CheckoutActions;
   // 会员第 3 步（CheckoutMember.tsx；此时 quote 即 member.quote）；不给时为游客。
   member?: CheckoutMemberProps | undefined;
+  // 第 2 步嵌入的短信验证（结账用途的 SmsVerify）；只在第 2 步显示。
+  verify?: ReactNode;
 }
 
-export function CheckoutView({ lines, reference, quote, form, actions, member }: CheckoutViewProps) {
+export function CheckoutView({ lines, reference, quote, form, actions, member, verify }: CheckoutViewProps) {
   const t = useCopy();
   const { language } = useLanguage();
   const regions = reference.status === "ready" ? reference.regions.regions : NO_REGIONS;
@@ -788,7 +912,7 @@ export function CheckoutView({ lines, reference, quote, form, actions, member }:
   const rows = ready === null ? [] : ready.lines.filter((row) => inCart.has(row.sku));
   const changed = (ready !== null && hasChangedLine(rows)) || form.notice === "changed";
   const placeable = canPlaceOrder(form, quote, lines) && (member === undefined || memberPlaceable(member.form, member.quote));
-  const step = { form, reference, options, actions, member };
+  const step = { form, reference, options, actions, member, verify };
   const discounts = member === undefined || member.quote.status !== "ready" ? undefined : <MemberDiscounts quote={member.quote.quote} />;
 
   return (
@@ -804,7 +928,9 @@ export function CheckoutView({ lines, reference, quote, form, actions, member }:
       <div className="site-checkout__body">
         <div className="site-checkout__main">
           {changed && <ChangedNotice lines={lines} />}
-          {form.step === 1 ? <PhoneStep {...step} /> : <RecipientStep {...step} />}
+          {form.step === 1 && <PhoneStep {...step} />}
+          {form.step === 2 && <VerifyStep {...step} />}
+          {form.step === 3 && <RecipientStep {...step} />}
           {form.step === 3 && (
             <div className="acs-summary site-phone-only site-checkout__amounts">
               {quote.status === "error" && <ErrorNotice />}
@@ -850,6 +976,16 @@ function sessionMoves(setForm: Dispatch<SetStateAction<CheckoutForm>>, setMember
   };
 }
 
+// 以会员身份进入第 3 步时取本人号码（prefillPhone）的处理：取到后只在电话栏为空时填入，401 照会话重读处理。
+function phoneMoves(setForm: Dispatch<SetStateAction<CheckoutForm>>, setMember: Dispatch<SetStateAction<MemberForm | null>>): PhoneMoves {
+  return {
+    ...sessionMoves(setForm, setMember),
+    fill: (phone) => {
+      setMember((current) => (current === null ? null : fillPhone(current, phone)));
+    },
+  };
+}
+
 export default function CheckoutPage() {
   const { language } = useLanguage();
   const { navigate } = useRouter();
@@ -857,6 +993,8 @@ export default function CheckoutPage() {
   const storage = browserStorage();
   const lines = useCartLines(storage);
   const [reference, setReference] = useState<Reference>({ status: "loading" });
+  // 人机挑战的公开 key（站点设置 turnstile_site_key），供第 2 步的短信验证；没有时组件只显示 common.service_unavailable。
+  const [siteKey, setSiteKey] = useState<string | null>(null);
   const [form, setForm] = useState<CheckoutForm>(INITIAL_FORM);
   // 打开时的会话重读已返回。
   const [opened, setOpened] = useState(false);
@@ -895,6 +1033,7 @@ export default function CheckoutPage() {
     void Promise.all([fetchSiteSettings(controller.signal), fetchRegions(controller.signal)]).then(
       ([settings, regions]) => {
         setReference({ status: "ready", smsEnabled: settings.sms_verification_enabled, regions });
+        setSiteKey(settings.turnstile_site_key);
         setForm((current) => (current.phoneRegion === "" ? { ...current, phoneRegion: regions.default_phone_region } : current));
       },
       () => {
@@ -920,12 +1059,7 @@ export default function CheckoutPage() {
       if (identity.kind === "member") {
         setMember(memberForm(identity.csrfToken));
         setForm(enterAsMember);
-        void prefillPhone(reader, controller.signal, {
-          ...sessionMoves(setForm, setMember),
-          fill: (phone) => {
-            setMember((current) => (current === null ? null : fillPhone(current, phone)));
-          },
-        });
+        void prefillPhone(reader, controller.signal, phoneMoves(setForm, setMember));
       }
     });
     return () => {
@@ -1069,6 +1203,46 @@ export default function CheckoutPage() {
     onPlaceOrder: placeOrder,
   };
 
+  // 第 2 步验证通过：重读会话后以会员身份进入第 3 步（取本人号码照打开时的写法），或回第 1 步显示 common.error_retry。
+  // 重读是共享读取，不中止；离开页面（lifetime 中止）之后不再据其结果更新。
+  const verified = (result: SmsVerified) => {
+    const signal = lifetime.current?.signal;
+    if (signal === undefined) {
+      return;
+    }
+    void settleVerified(result, reader, signal, {
+      member: (csrfToken, banner) => {
+        setMember(memberForm(csrfToken));
+        setForm((current) => enterVerified(current, banner));
+        void prefillPhone(reader, signal, phoneMoves(setForm, setMember));
+      },
+      retry: () => {
+        setForm(verifiedButSignedOut);
+      },
+    });
+  };
+
+  // 第 2 步交回的去向；开关途中被关闭时另把开关当作已关闭。
+  const leave = (next: CheckoutLeave) => {
+    if (leaveTurnsSmsOff(next)) {
+      setReference((current) => (current.status === "ready" ? { ...current, smsEnabled: false } : current));
+    }
+    setForm((current) => leaveVerify(current, next));
+  };
+
+  // 第 2 步嵌入的结账用途 SmsVerify（离开第 2 步时卸载，进行中的请求随之中止）。
+  const verify =
+    form.step === 2 && reference.status === "ready" ? (
+      <SmsVerify
+        purpose="checkout"
+        smsEnabled={reference.smsEnabled}
+        siteKey={siteKey}
+        phone={checkoutSmsPhone(form, reference.regions.regions)}
+        onVerified={verified}
+        onLeave={leave}
+      />
+    ) : null;
+
   const editMember = (change: (current: MemberForm) => MemberForm) => {
     setMember((current) => (current === null ? null : change(current)));
   };
@@ -1101,5 +1275,5 @@ export default function CheckoutPage() {
       />
     );
   }
-  return <CheckoutView lines={lines} reference={opened ? reference : OPENING} quote={quote} form={form} actions={actions} />;
+  return <CheckoutView lines={lines} reference={opened ? reference : OPENING} quote={quote} form={form} actions={actions} verify={verify} />;
 }

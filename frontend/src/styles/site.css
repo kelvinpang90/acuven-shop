@@ -146,6 +146,13 @@ body { margin: 0; }
 .site-checkout__subtotal { padding-top: 10px; border-top: 1px solid var(--rule); }
 .site-checkout__place { display: grid; gap: 16px; }
 .site-checkout__empty { display: grid; gap: 16px; justify-items: start; padding: 0 var(--gutter); }
+/* 结账第 2 步（SHOP-TASK-160，P05-desktop-2）：本步最宽 640px；遮掩后的号码与 checkout.phone_change 同一行（间距 12px，垂直居中）；
+   嵌入的 V1 各块与本步间距相同（22px）。第 3 步顶部的已验证横幅（P05-desktop-3-member）：checkout.phone_step_title 与横幅间距 12px，下内边距 28px、
+   下分隔线（同 .site-checkout__members 的写法）。视觉稿号码的字号与字重 site.css 不搬，记在任务记录的偏离里 */
+.site-checkout__verify { max-width: 640px; }
+.site-checkout__verify .site-sms { gap: 22px; }
+.site-checkout__number { display: flex; gap: 12px; align-items: center; }
+.site-checkout__verified { display: grid; gap: 12px; padding-bottom: 28px; border-bottom: 1px solid var(--rule); }
 
 /* 模拟支付 P06 与结果 P07：居中 880px 单列 */
 .site-pay { box-sizing: border-box; width: min(880px, calc(100% - 2 * var(--gutter))); margin: 0 auto; display: grid; gap: 28px; align-content: start; padding: 56px 0 96px; }
@@ -651,6 +658,14 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-checkout__amounts { display: grid; padding: 18px; }
   .site-checkout__bar { display: grid; gap: 10px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 14px var(--gutter) 20px; border-top: 1px solid var(--rule); }
   .site-checkout__place { gap: 10px; }
+  /* 结账第 2 步（P05-phone-2）：嵌入的 V1 各块与本步间距相同（18px）；号码与 checkout.phone_change 间距 8px；发送按钮占满宽度，
+     验证码输入与验证按钮上下排列（验证按钮占满宽度），重发居中。已验证横幅（P05-phone-3-member）只有横幅，下方不另留空、没有分隔线 */
+  .site-checkout__verify .site-sms { gap: 18px; }
+  .site-checkout__number { gap: 8px; }
+  .site-checkout__verify .site-sms__send { justify-self: stretch; }
+  .site-checkout__verify .site-sms__code { display: grid; }
+  .site-checkout__verify .site-sms__resend { justify-self: center; }
+  .site-checkout__verified { padding-bottom: 0; border-bottom: 0; }
 
   /* 模拟支付与结果：单列；订单号标签与号码分行、应付金额标签与金额分行；收货资料折叠；
      支付方式竖排，◆ 提示在成功、失败按钮之前，按钮与取消占满宽度 */

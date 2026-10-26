@@ -490,6 +490,26 @@ export const COPY = {
     zh: "短信验证已关闭，将以游客身份结账。",
     ms: "Pengesahan SMS dimatikan, jadi anda akan mendaftar keluar sebagai tetamu.",
   },
+  "checkout.sms_unavailable": {
+    en: "We can't send an SMS to this number right now, so you can't be registered. You can place this demo order as a guest instead.",
+    zh: "目前无法向此号码发送短信，因此暂时无法注册。您可以改为以游客身份提交此演示订单。",
+    ms: "Kami tidak dapat menghantar SMS ke nombor ini sekarang, jadi anda tidak boleh didaftarkan. Anda boleh membuat pesanan demo ini sebagai tetamu.",
+  },
+  "checkout.continue_guest": {
+    en: "Continue as a guest",
+    zh: "以游客身份继续",
+    ms: "Teruskan sebagai tetamu",
+  },
+  "checkout.verified_member": {
+    en: "Verified. You're logged in as {phoneMasked}.",
+    zh: "验证成功，您已以 {phoneMasked} 登录。",
+    ms: "Disahkan. Anda telah log masuk sebagai {phoneMasked}.",
+  },
+  "checkout.verified_new": {
+    en: "Verified. We've created a member account for {phoneMasked} and logged you in. You can set a password later in My account.",
+    zh: "验证成功，已为 {phoneMasked} 创建会员账号并登录。您可稍后在会员中心设置密码。",
+    ms: "Disahkan. Kami telah mencipta akaun ahli untuk {phoneMasked} dan melog masuk anda. Anda boleh menetapkan kata laluan kemudian di Akaun saya.",
+  },
   "checkout.guest_notice": {
     en: "You are checking out as a guest. Coupons and points are for members, who register with a Malaysian or Singapore mobile number.",
     zh: "您正以游客身份结账。优惠券与积分仅限会员使用；会员须以马来西亚或新加坡手机号注册。",
