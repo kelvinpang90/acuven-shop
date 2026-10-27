@@ -4749,3 +4749,63 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  - id: SHOP-TASK-170
+    title: 后台运费与演示汇率的读取与保存规则
+    purpose: >-
+      按 docs/DESIGN.md 1.16「计价、优惠、积分与库存」第 9 条（管理员在后台 A06 一次保存整页的运费与演示汇率：州属与兜底只改运费，国家运费与演示汇率可改、可新增、可删除；取值范围；先不碰数据库检查请求本身，再锁行按行 ID 与版本号核对；行 ID 不复用；
+      值未变的行不改版本、不写审计，改了值的行版本号加一，删除即删行，新增的行版本号为 1；每改、增、删一行写一条审计），新增服务层 app/services/admin_shipping_rates.py，读取整页数据、保存整页修改，供 SHOP-TASK-171 的后台接口调用。
+      运营者落实写法（HANDOFF 0.67）：两张表在 app/models/shipping.py 的表参数加 sqlite_autoincrement（测试用的 SQLite 不声明自增时会把删掉的最大 ID 再分配出去），不改迁移（生产 MySQL 8.0 的自增计数持久化，不复用删掉的 ID）；
+      同一事务里先删后增时先 flush 删除再插入；加锁顺序先运费表、再汇率表，各按 id 排序；删后再增各写一条审计。不做接口与前端，不改设计。
+      设计闸门：DESIGN 1.16（提交 e9a1c93）与 HANDOFF 0.67，运费与演示汇率的后台维护。拆分：业务规则层（4 个允许路径），接口由 SHOP-TASK-171 接上，页面待视觉稿补齐后另行登记。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 读取——app/services/admin_shipping_rates.py 的 load_admin_rates(db) 返回整页数据：16 个州属按 MY-01 到 MY-16 排列、兜底一行、国家运费按国家代码排列、汇率按国家代码排列；每行带行 ID 与版本号，运费为整仙；汇率行另带币种代码、小数位与规范形式的汇率字符串（去掉小数部分尾随的零，全为零时连小数点一起去掉，整数部分不带多余的前导零、不用指数，例如 34.000000 为 34、0.310000 为 0.31、100 为 100）；只发 SELECT，不写库、不写审计
+      - 第一步，不碰数据库——保存函数接收四组：州属与兜底的各行只有行 ID、版本号与新运费；国家运费的已有行为行 ID、版本号加新运费或删除，新增行为国家代码与运费；汇率的已有行为行 ID、版本号加新汇率字符串或删除，新增行为国家代码、币种代码、小数位与汇率字符串。先查请求本身，任一不通过即抛 RatesInvalid、不发任何 SQL——运费为 0 到 999,999 的整数（布尔值不算）；汇率字符串整串是一到六位数字、可再跟小数点与一到六位数字，且数值大于 0；新增的国家为两位大写字母、在 app/services/regions.py 的 phone_regions() 里且不是 MY；币种代码为三位大写字母且不是 MYR；小数位为 0 到 3 的整数（布尔值不算）；同一组里行 ID 不重复，新增行之间国家不重复
+      - 第二步，锁行核对——在一个事务里先锁运费表的全部行、再锁汇率表的全部行（SELECT … FOR UPDATE，各按 id 排序，锁定查询以函数给出并带 populate_existing，照 app/services/site_settings.py 的 lock_site_setting_statement），再按行 ID 核对，任一不通过即回滚、抛 RatesChanged、不写入——州属组恰是现有的 16 个州属行，兜底组恰是兜底行，国家组恰是现有的全部国家行，汇率组恰是现有的全部汇率行，一个不多一个不少；每行版本号与锁住的当前值相同；新增的国家在该组没有行（同一请求里把该行列为删除的除外，相当于先删后增）
+      - 写入——运费按整数比较，汇率按数值比较（0.31 与 0.310000 相同）；值与当前相同的行不改；改了值的行写新值、版本号加一；列为删除的行删除；先 flush 删除再插入新增的行（版本号 1）；每改、删、增一行经 app/services/admin_auth.py 的 record_audit 写一条审计——操作名 admin_shipping_rate_changed、admin_shipping_rate_removed、admin_shipping_rate_added、admin_fx_rate_changed、admin_fx_rate_removed、admin_fx_rate_added，对象类别 shipping_rate 或 demo_fx_rate，对象 ID 为该行 ID，旧值与新值为「区域代码 运费仙数 v版本号」或「国家代码 币种代码 小数位 规范汇率 v版本号」（新增的行没有旧值，删除的行没有新值）；整页都未变时回滚、不写审计；否则一并提交，返回保存后的整页数据（同第 1 条）
+      - 行 ID 不复用——app/models/shipping.py 的 ShippingRate 与 DemoFxRate 的表参数在 MYSQL_TABLE_OPTIONS 之外加 sqlite_autoincrement 为真，模块说明写明原因（测试库 SQLite 不声明时会复用删掉的最大 ID；生产 MySQL 8.0 不复用）；列、约束与 MySQL 的建表语句不变，不改迁移
+      - 测试验证意图——新增 tests/test_admin_shipping_rates.py（SQLite 内存库按模型建表，写入与迁移 0005 相同的演示数据或其子集），验证——读取的顺序与规范汇率；第一步每类不合格至少一例（运费为 -1、1,000,000 与布尔值，汇率为 0、七位整数、七位小数、带正负号、指数、空白、以小数点开头或结尾，新增国家为小写、MY 或不在列表里，币种为 MYR 或小写，小数位为 4，组内行 ID 重复，新增行国家重复）都抛 RatesInvalid、不发 SQL、数据与审计不变；第二步版本号不符、漏列现有的行、列了已不存在的行、把州属行 ID 放进国家组、新增已有的国家都抛 RatesChanged 且数据与审计不变；删后再增同一国家成功、新行的 ID 与旧行不同且版本号为 1、写两条审计；删掉 ID 最大的一行后新增的行 ID 仍大于它；拿删除前读到的行 ID 与版本号再保存被拒；改了值的行版本加一，未改的行不变也不写审计，整页未变不写任何审计；现有汇率 0.310000 提交 0.31 视为未变；锁定查询按 MySQL 方言编译带 FOR UPDATE，先运费表后汇率表；删除国家运费后 app/services/shipping.py 的 quote_shipping 对该国返回兜底运费，删除汇率后 reference_amount 返回 None；每条测试写明守住的是 DESIGN 1.16 第 9 条或 HANDOFF 0.67 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑后端测试）
+      - docs/task-records/SHOP-TASK-170.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；服务层的函数与两种异常、两步核对、审计写法、行 ID 不复用的落实、偏离、验证到什么程度，并写明接口留给 SHOP-TASK-171）
+      - 改动只落在 allowed_change_paths；app/services/shipping.py 与现有测试不变，tests/test_shipping.py 与 tests/test_demo_shipping_seed.py 照旧通过；不改迁移、接口、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.16（提交 e9a1c93）与 HANDOFF 0.67），不合并、不直推
+    allowed_change_paths:
+      - app/models/shipping.py
+      - app/services/admin_shipping_rates.py
+      - tests/test_admin_shipping_rates.py
+      - docs/task-records/SHOP-TASK-170.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-171
+    title: 后台运费与演示汇率的读写接口
+    purpose: >-
+      按 docs/DESIGN.md 1.16「计价、优惠、积分与库存」第 9 条与 docs/UX.md 0.15 的 A06（读取整页；整页一次保存；取值不合格与数据已被改动两种拒绝，整次保存不生效），新增 app/api/admin_shipping_rates.py 的 GET /api/admin/shipping-rates 与 PUT /api/admin/shipping-rates，
+      调用 SHOP-TASK-170 的 load_admin_rates 与保存函数，并在 app/main.py 注册路由。
+      运营者落实写法（HANDOFF 0.67）：写法照 app/api/admin_site_settings.py（require_admin、require_admin_csrf、_NoStoreRoute、_body_errors）；请求体上限 64 KB，在本文件里照 app/api/pay.py 的 _json_body 逐块读取（它的上限固定为 8 KB，整页的国家与汇率行可能超过）；
+      取值不合格回 422 {"detail":"rates_invalid"}，数据已被改动回 409 {"detail":"rates_changed"}。不做前端，不改服务层的规则、模型与迁移，不改设计。
+      设计闸门：DESIGN 1.16（提交 e9a1c93）与 HANDOFF 0.67，运费与演示汇率的后台维护。拆分：接口层（4 个允许路径），页面待视觉稿补齐后另行登记。
+    status: ready
+    depends_on:
+      - SHOP-TASK-170
+    acceptance_criteria:
+      - GET /api/admin/shipping-rates——require_admin（没有有效后台会话时 401 admin_session_required）后返回 load_admin_rates 的整页数据与由 cookie 算出的 CSRF 令牌（照 admin_site_settings 的 csrf_token_for_cookie）；字段依次为 states、other、countries、fx 与 csrf_token——states、countries 为数组，other 为一个对象，各行为 id、version、zone_code、fee_sen；fx 为数组，各行为 id、version、country_code、currency_code、currency_decimals、rate（规范形式的字符串）；不写审计
+      - PUT /api/admin/shipping-rates 的请求体——states、other、countries、fx 四项都必填；州属与兜底的行只接受 id、version、fee_sen；国家运费的已有行接受 id、version 与 fee_sen，或 id、version 与值为 true 的 delete；新增行只接受 country_code 与 fee_sen；汇率的已有行接受 id、version 与 rate，或 id、version 与值为 true 的 delete；新增行只接受 country_code、currency_code、currency_decimals 与 rate；整数字段 strict（布尔值、字符串与浮点数一律不收），rate 只接受 JSON 字符串；多出字段或缺字段 422，错误沿用 _body_errors 不回显
+      - 检查顺序——413（64 KB，按实际读到的字节逐块判断，先于一切校验）→ 415（不是 JSON）→ 401 → 403 csrf_failed → 422 请求体 → 服务层 RatesInvalid 回 422 {"detail":"rates_invalid"} → RatesChanged 回 409 {"detail":"rates_changed"}；被拒时不写入、不写审计；成功回 200 与保存后的整页数据（字段同 GET，不含 csrf_token）
+      - 这些接口的处理函数与依赖产生的响应（含错误）都带 Cache-Control 为 no-store（照 _NoStoreRoute），路径存在而方法不匹配时由框架返回的 405 不在此列；接口不写日志；app/main.py 照现有后台路由的写法注册
+      - 测试验证意图——新增 tests/test_admin_shipping_rates_api.py（照 tests/test_admin_site_settings.py 的夹具），验证——GET 的字段与顺序、401；PUT 的 413、415、401、403、请求体 422（布尔值或字符串运费、数字汇率、delete 为 false、已有行带币种、多出字段）且不回显请求内容；取值不合格回 422 rates_invalid、过期的版本号回 409 rates_changed，两者都不改数据、不写审计，两者都有时回 422；成功的保存回 200 与保存后的数据、审计的操作者正确；删后再增同一国家在一次保存里成功；新增的响应（含错误）带 no-store；该路径下只有 GET 与 PUT；每条测试写明守住的是 DESIGN 1.16 第 9 条、UX 0.15 A06 或 HANDOFF 0.67 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑后端测试）
+      - docs/task-records/SHOP-TASK-171.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；两个接口、请求体格式、检查顺序与回答、偏离、验证到什么程度，并写明 A06 页面待视觉稿补齐后另行登记）
+      - 改动只落在 allowed_change_paths；app/services/admin_shipping_rates.py、模型与迁移不变，现有接口与测试不变；不改 .platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.16（提交 e9a1c93）与 HANDOFF 0.67），不合并、不直推
+    allowed_change_paths:
+      - app/api/admin_shipping_rates.py
+      - app/main.py
+      - tests/test_admin_shipping_rates_api.py
+      - docs/task-records/SHOP-TASK-171.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
