@@ -4758,7 +4758,7 @@ tasks:
       运营者落实写法（HANDOFF 0.67）：两张表在 app/models/shipping.py 的表参数加 sqlite_autoincrement（测试用的 SQLite 不声明自增时会把删掉的最大 ID 再分配出去），不改迁移（生产 MySQL 8.0 的自增计数持久化，不复用删掉的 ID）；
       同一事务里先删后增时先 flush 删除再插入；加锁顺序先运费表、再汇率表，各按 id 排序；删后再增各写一条审计。不做接口与前端，不改设计。
       设计闸门：DESIGN 1.16（提交 e9a1c93）与 HANDOFF 0.67，运费与演示汇率的后台维护。拆分：业务规则层（4 个允许路径），接口由 SHOP-TASK-171 接上，页面待视觉稿补齐后另行登记。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 读取——app/services/admin_shipping_rates.py 的 load_admin_rates(db) 返回整页数据：16 个州属按 MY-01 到 MY-16 排列、兜底一行、国家运费按国家代码排列、汇率按国家代码排列；每行带行 ID 与版本号，运费为整仙；汇率行另带币种代码、小数位与规范形式的汇率字符串（去掉小数部分尾随的零，全为零时连小数点一起去掉，整数部分不带多余的前导零、不用指数，例如 34.000000 为 34、0.310000 为 0.31、100 为 100）；只发 SELECT，不写库、不写审计
