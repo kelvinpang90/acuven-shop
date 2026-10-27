@@ -4682,3 +4682,70 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  - id: SHOP-TASK-168
+    title: 后台站点设置的短信验证开关读写接口
+    purpose: >-
+      按 docs/DESIGN.md 1.15「边界与原则」短信验证开关一条（管理员保存「开启」时服务端检查五类短信服务配置，缺一或不合格即拒绝，同一次保存里的其他设置也不生效，当前已开启也一样；保存「关闭」不检查；检查只看配置，不联网）、「数据模型」SiteSetting 一行（每次从数据库读取，后台修改写入 AuditEvent）
+      与 docs/UX.md 0.14 的 A09（页面读取时返回开关当前值与短信服务是否可用；保存一次提交两项，任一项被拒两项都不写入），在 SHOP-TASK-122 的后台站点设置读取与保存接口上加入短信验证开关。
+      运营者落实写法（HANDOFF 0.65）：保存请求的 sms_verification_enabled 可省略，省略时不检查短信配置、不改开关（现有只提交支付方式的页面在 SHOP-TASK-169 合并之前照常可用）；两项检查都在写入之前，先查支付方式再查短信；短信开关的审计操作名为 admin_sms_verification_changed，旧值与新值为 on 或 off；
+      短信服务是否可用的判定写在 app/api/admin_site_settings.py（服务层引用 app/api/site_settings.py 会循环导入）。不做前端，不改模型与迁移，不改设计。
+      设计闸门：DESIGN 1.15（提交 1c668e6）与 HANDOFF 0.65，短信验证开关。拆分：接口层（4 个允许路径），页面由 SHOP-TASK-169 接上。
+    status: ready
+    depends_on:
+      - SHOP-TASK-122
+    acceptance_criteria:
+      - 短信服务是否可用——app/api/admin_site_settings.py 新增 sms_service_configured(settings)，只读传入的配置，不联网、不写日志，五类全部合格才为真：app/services/sms_provider.py 的 TwilioVerifyClient.from_settings(settings).configured 为真；app/services/captcha.py 的 TurnstileVerifier.from_settings(settings).configured 为真，且 app/api/site_settings.py 的 turnstile_site_key(settings.turnstile_site_key) 不为 None；settings.redis_url 非空（照 app/services/rate_limit.py 判断未配置的写法）；sms_max_cost_micro_usd_my 与 sms_max_cost_micro_usd_sg 都为大于 0 的整数；sms_daily_count_limit、sms_daily_cost_limit_micro_usd、sms_phone_limit_per_minute、sms_phone_limit_per_hour、sms_phone_limit_per_day 与 sms_source_limit_per_hour 都为大于 0 的整数（布尔值不算整数）
+      - GET /api/admin/site-settings 在现有三个字段之后加 sms_verification_enabled（照 app/services/site_settings.py 的 is_sms_verification_enabled）与 sms_available（当次请求的 sms_service_configured(request.app.state.settings)）；仍只读、不写审计；这些接口的处理函数与依赖产生的响应（含错误）照旧带 no-store，路径存在而方法不匹配时由框架返回的 405 不在此列；接口不写日志（stripe_configured 遇到非测试密钥时按 SHOP-TASK-111 记的 stripe_key_not_test 除外）
+      - PUT /api/admin/site-settings 的请求体——payment_method 照旧必填；新增可省略的 sms_verification_enabled，只接受 JSON 布尔值（strict，字符串、数字与 null 一律 422，错误沿用 _body_errors 不回显）；extra forbid 不变；检查顺序 413（8 KB）→ 415 → 401 → 403 csrf_failed → 422 请求体 → 支付方式为 stripe_test 而 stripe_available 为假时 422 {"detail":"stripe_not_configured"} → sms_verification_enabled 为 true 而 sms_available 为假时 422 {"detail":"sms_not_configured"}（当前已开启也一样）；两种拒绝都不写入任何一项、不写审计；sms_verification_enabled 为 false 或省略时不看短信配置
+      - 保存——照 app/services/site_settings.py 的 save_payment_method 现有写法在一个事务里锁住站点设置行（行不存在时照它的写法插入），两项各自与当前值比较（短信按 is_sms_verification_enabled 的规则解读，省略时不比较）；都相同时回滚、不写入、不写审计；否则只改有变化的项与更新时间，每项变化各经 record_audit 写一条审计——支付方式照旧 admin_payment_method_changed，短信为 admin_sms_verification_changed（对象类别 site_setting、对象 ID 为该行 ID、旧值与新值为 on 或 off）——一并提交；回 200 与保存后的 payment_method 和 sms_verification_enabled；保存函数可改名或扩展参数（调用方只有该接口），模块说明里「短信验证开关暂不提供写入」「短信验证开关不动」等说法随之改写
+      - 测试验证意图——tests/test_admin_site_settings.py 照现有夹具新增——五类各缺一或不合格时（每类至少一例，含接口地址不是 https、公开 key 只有空白、Redis 连接串为空、某个目的地的费用上限为 0、某个限流阈值为 0）GET 的 sms_available 为假、PUT 开启回 422 sms_not_configured 且数据与审计不变；当前已开启时再保存开启同样被拒；全部合格时开启与关闭都成功、审计的操作者与新旧值正确、is_sms_verification_enabled 随即读到新值；配置不合格时关闭成功；两项同时变化在同一次提交里写两条审计；支付方式被拒时短信开关不写入，短信被拒时支付方式不写入；省略短信字段时只改支付方式、不看短信配置；sms_verification_enabled 为字符串、数字或 null 时 422 且不回显；新增的响应（含错误）带 no-store；每条测试写明它守住的是设计、UX 或 HANDOFF 0.65 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑后端测试）
+      - 现有测试只在必要时修改并写明原因——test_malformed_body_is_422_without_echo 的用例清单去掉不再是 422 的 with-sms-toggle（布尔值的短信字段改由新测试覆盖），sms-toggle-secret 与 only-sms-toggle 仍为 422；test_get_returns_method_availability_and_csrf_token 的整体比较与字段顺序只在末尾补上两个新字段，说明里「不返回短信验证开关」随之改写；其余现有测试的期望不变（test_saving_does_not_touch_the_sms_toggle 照旧守住省略短信字段时不动开关）
+      - docs/task-records/SHOP-TASK-168.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；两个接口的变化、短信服务可用的五类判定、两种拒绝的先后、审计、偏离、验证到什么程度，并写明页面留给 SHOP-TASK-169）
+      - 改动只落在 allowed_change_paths；公开的 GET /api/site-settings 与 tests/test_site_settings.py 不变，短信发送、核验与注销的现有判定不变；不改模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.15 提交 1c668e6 与 HANDOFF 0.65），不合并、不直推
+    allowed_change_paths:
+      - app/api/admin_site_settings.py
+      - app/services/site_settings.py
+      - tests/test_admin_site_settings.py
+      - docs/task-records/SHOP-TASK-168.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+
+  - id: SHOP-TASK-169
+    title: 后台站点设置的短信验证开关 A09
+    purpose: >-
+      在 A09 站点设置页加入短信验证开关：frontend/src/api/adminSiteSettings.ts 读写 SHOP-TASK-168 新增的字段，frontend/src/pages/AdminSiteSettingsPage.tsx 按 docs/UX.md 0.14 的 A09 在支付方式之前加入 admin.sms_toggle 一组
+      （开启与关闭两个单选、admin.sms_toggle_hint 与 admin.sms_toggle_cost；短信服务不可用时开启选项禁用并显示 admin.sms_not_configured，当前已开启时仍可切回关闭；保存一次提交两项，被拒时说明；不加确认框）与 docs/DESIGN.md 1.15「边界与原则」短信验证开关一条。
+      运营者落实写法（HANDOFF 0.65）：短信一组的禁用与说明照现有支付方式一组的 Stripe 写法；视觉稿没画短信服务未配置的状态，照 A09-stripe 两张里 Stripe 未配置的样式。不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.15（提交 1c668e6）与 HANDOFF 0.65，短信验证开关的显示与提交（配置检查与审计在服务端）。
+      拆分：请求模块与页面放在同一个任务——请求模块改了保存的参数与结果，页面的调用必须同时改，分开则前一个任务的类型检查不通过；9 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+    status: ready
+    depends_on:
+      - SHOP-TASK-168
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.14 的 A09、docs/UX-COPY.md 0.15 与 docs/HANDOFF.md 0.65 为准，样式以 docs/design/pages/ 的 A09-stripe-desktop 与 A09-stripe-phone 为准（短信服务未配置的状态照其中 Stripe 未配置的写法），二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.15 逐字加入 admin.sms_toggle、admin.sms_on、admin.sms_off、admin.sms_toggle_hint、admin.sms_toggle_cost 与 admin.sms_not_configured，写法与相邻条目相同（每种语言一行）
+      - 请求模块——读取的响应体另要求 sms_verification_enabled 与 sms_available 为布尔值（缺少或类型不对算不合格）并带进结果；saveAdminSiteSettings 改为同时提交支付方式与短信开关（JSON 请求体只有 payment_method 与 sms_verification_enabled 两项），200 的响应体另要求 sms_verification_enabled 为布尔值并带进 ok 结果；422 且 detail 为 sms_not_configured 时归为新增的 sms_not_configured，detail 为 stripe_not_configured 仍归 not_configured，其他 422 仍为 failed；其余归类、请求头、no-store 与中止处理不变
+      - 表单——标题之下先是 admin.sms_toggle 一组（fieldset 与 legend 照支付方式一组）两个单选 admin.sms_on 与 admin.sms_off（UX 线框的顺序），其下 admin.sms_toggle_hint 与 admin.sms_toggle_cost，再是现有的支付方式一组与 common.save；选中项为读取（或保存后）的当前值；sms_available 为假时 admin.sms_on 禁用（文字为次要文字）、以 aria-describedby 指向其下显示的 admin.sms_not_configured，当前已开启时照常显示为选中、仍可改选关闭并保存；admin.sms_toggle_cost 始终显示；不加确认框
+      - 保存——点 common.save 以两组的当前选择与读取给的 csrf_token 调用保存；ok 以返回的两项更新两组的选中项并显示 admin.settings_saved；sms_not_configured 在保存按钮下方（与 admin.settings_saved 同一位置）显示 admin.sms_not_configured、两组选中项不变、保留表单，与开启选项下方的禁用说明各自独立；not_configured 照旧显示 admin.stripe_not_configured；改选任何一项后收起保存的提示；其余结果（none、csrf、network、failed）与读取的处理照现有写法不变
+      - 代码结构沿用 frontend/src/pages/AdminSiteSettingsPage.tsx 现有写法（导出把结果变成页面状态的纯函数、接收 AbortSignal 与回调的异步函数，以及只依赖 props 的 View；改选短信开关另导出与 chooseMethod 对应的纯函数）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——frontend/src/api/adminSiteSettings.test.ts 的两个新字段与合格判定、请求体只有两项、sms_not_configured 的归类；frontend/src/pages/AdminSiteSettingsPage.test.tsx 的短信一组在支付方式之前、选中项随当前值、sms_available 为假时开启禁用并显示说明且当前已开启时仍选中、关闭可选、admin.sms_toggle_cost 始终显示、保存带两组选择、sms_not_configured 的提示与收起、ok 更新两组；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - 现有测试只在必要时修改并写明原因——adminSiteSettings.test.ts 里「请求体只有 payment_method」「多出的 sms_verification_enabled 不带进结果」与保存调用参数的断言随两项改写；AdminSiteSettingsPage.test.tsx 里「没有任何 admin.sms_* 文字、字典没有 admin.sms_* 条目」的断言（SHOP-TASK-139 按当时的决定写的）删除，改由新的短信一组断言代替，按顺序比较表单文字或单选的断言在支付方式之前补上短信一组，状态与读取结果的整体比较只补新字段的期望；支付方式部分、后台框架与导航的期望不变
+      - docs/task-records/SHOP-TASK-169.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；请求模块的变化、短信一组、保存与被拒、偏离（含短信服务未配置的样式照 Stripe）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由，不改导航；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.15 提交 1c668e6 与 HANDOFF 0.65），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/adminSiteSettings.ts
+      - frontend/src/api/adminSiteSettings.test.ts
+      - frontend/src/pages/AdminSiteSettingsPage.tsx
+      - frontend/src/pages/AdminSiteSettingsPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-169.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
