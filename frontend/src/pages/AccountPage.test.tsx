@@ -3,7 +3,7 @@ import type { ReactElement, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MEMBER_COUPONS_URL, MEMBER_PASSWORD_URL, MEMBER_POINTS_URL } from "../api/memberAccount";
+import { MEMBER_COUPONS_URL, MEMBER_DELETE_URL, MEMBER_PASSWORD_URL, MEMBER_POINTS_URL } from "../api/memberAccount";
 import type { MemberCoupons, MemberPoints } from "../api/memberAccount";
 import { clearMemberOrder, handOffMemberOrder, MEMBER_ORDERS_URL, memberOrderInView } from "../api/memberOrders";
 import type { MemberOrderSummary, MemberOrdersRead } from "../api/memberOrders";
@@ -22,6 +22,7 @@ import {
   ACCOUNT_SECTIONS,
   AccountView,
   canLogout,
+  confirmDelete,
   loadOrders,
   LOADING,
   logOut,
@@ -33,10 +34,12 @@ import {
   setPassword,
   startLogout,
   statusTag,
+  takeDeleteStep,
   viewOrder,
 } from "./AccountPage";
 import type { AccountMoves, AccountScreen, AccountViewProps, OrdersState } from "./AccountPage";
-import { SETTINGS_START } from "./AccountSettingsPanel";
+import { DELETION_START, SETTINGS_START, SITE_LOADING } from "./AccountSettingsPanel";
+import type { SiteState } from "./AccountSettingsPanel";
 import { formatDate } from "./TrackOrderPage";
 
 afterEach(() => {
@@ -98,6 +101,10 @@ const EMPTY_COUPONS: MemberCoupons = { available: [], used: [] };
 
 // SHOP-TASK-166 加入设置段后，已登录的状态另带 hasPassword（默认 false，与 memberReply 的 has_password 一致）与设置段（取初始值）；
 // 设置段的内容由 AccountSettingsPanel.test.tsx 守住。
+// SHOP-TASK-167 加入注销部分后，另带站点设置与注销部分：站点设置默认为已读到 siteReply() 的值（开关开启、没有人机挑战公开 key，与订单等段默认已取到一致），
+// 注销部分取初始值；注销部分的内容由 AccountSettingsPanel.test.tsx 守住。
+const SITE_READ: SiteState = { status: "ready", smsEnabled: true, siteKey: null };
+
 function memberScreen(overrides: Partial<Extract<AccountScreen, { status: "member" }>> = {}): AccountScreen {
   return {
     status: "member",
@@ -110,6 +117,8 @@ function memberScreen(overrides: Partial<Extract<AccountScreen, { status: "membe
     settings: SETTINGS_START,
     loggingOut: false,
     logoutError: null,
+    site: SITE_READ,
+    deletion: DELETION_START,
     ...overrides,
   };
 }
@@ -134,6 +143,12 @@ function props(overrides: Partial<AccountViewProps> = {}): AccountViewProps {
     onPassword: noop,
     onPasswordSubmit: noop,
     onLogout: noop,
+    // SHOP-TASK-167：注销部分的五个处理（随 props 扩展补上）。
+    onDeletePassword: noop,
+    onDeleteAsk: noop,
+    onDeleteKeep: noop,
+    onDeleteConfirm: noop,
+    onDeleteStep: noop,
     ...overrides,
   };
 }
@@ -480,12 +495,13 @@ function bodyOf(init: RequestInit): unknown {
 describe("settings section (SHOP-TASK-166)", () => {
   // 验收第 2 条「会话为 member 后经 frontend/src/api/siteSettings.ts 的 fetchSiteSettings 读取短信验证开关，失败时按开启处理」与
   // HANDOFF 0.63 第（7）条「设置段读取站点设置失败时按开关开启处理」：开关关闭时设置段换上关闭；读取失败（500 或网络中断）时保持开启。
-  it.each<[string, Reply, boolean]>([
-    ["switched on", siteReply(true), true],
-    ["switched off", siteReply(false), false],
-    ["failing", new Response(null, { status: 500 }), true],
-    ["unreachable", "network", true],
-  ])("reads the SMS switch after the session when it is %s", async (_name, reply, enabled) => {
+  // SHOP-TASK-167：同一次读取另换上注销部分的站点设置（读到时为开关与公开 key，失败为 failed），只补了这一项的期望，密码部分的开关取值不变。
+  it.each<[string, Reply, boolean, SiteState]>([
+    ["switched on", siteReply(true), true, SITE_READ],
+    ["switched off", siteReply(false), false, { status: "ready", smsEnabled: false, siteKey: null }],
+    ["failing", new Response(null, { status: 500 }), true, { status: "failed" }],
+    ["unreachable", "network", true, { status: "failed" }],
+  ])("reads the SMS switch after the session when it is %s", async (_name, reply, enabled, site) => {
     stubFetch({
       [MEMBER_SESSION_URL]: [memberReply()],
       [MEMBER_ORDERS_URL]: [ordersReply()],
@@ -495,7 +511,7 @@ describe("settings section (SHOP-TASK-166)", () => {
     });
     const { moves, current } = fakeMoves();
     await openAccount(createMemberSessionReader(), new AbortController().signal, moves);
-    expect(current()).toEqual(memberScreen({ settings: { ...SETTINGS_START, smsEnabled: enabled } }));
+    expect(current()).toEqual(memberScreen({ settings: { ...SETTINGS_START, smsEnabled: enabled }, site }));
   });
 
   // 验收第 2 条「AccountScreen 的 member 另带 hasPassword（取自打开时…的会话）」：打开时读到已设密码，设置段显示已设密码的内容。
@@ -571,6 +587,125 @@ describe("settings section (SHOP-TASK-166)", () => {
   });
 });
 
+describe("deleting the account (SHOP-TASK-167)", () => {
+  const SITE_KEY = "site-key-1";
+
+  // 5 秒等待的替身：记下毫秒数，立即结束。
+  function fakeDelay() {
+    const waits: number[] = [];
+    const delay = vi.fn((ms: number, signal: AbortSignal) => {
+      waits.push(ms);
+      expect(signal.aborted).toBe(false);
+      return Promise.resolve();
+    });
+    return { delay, waits };
+  }
+
+  // 验收「deleted 时注销部分换成 account.deleted（其余各段不再可操作），同时清除 frontend/src/api/memberOrders.ts 交接的订单号与 SHOP-TASK-158 的
+  // 当前订单暂存、经读取对象重读会话（页头随之回到未登录），5 秒后用 replace 前往首页」与 HANDOFF 0.63（Kelvin 2026-10-26 第（1）项）：
+  // 共享会话状态变为未登录，交接与暂存都已清除，等待 5 秒后 replace 到 /；之后两个退出按钮禁用，导航与其他段为 inert。
+  it("shows account.deleted, clears the hand-off and the stash, rereads the session and leaves for home", async () => {
+    const store = stubSessionStorage();
+    handOffMemberOrder("K7Q29MXAB6TN2RJD");
+    stashMemberPayOrder("K7Q29MXAB6TN2RJD");
+    const calls = stubFetch({ [MEMBER_DELETE_URL]: [new Response(null, { status: 204 })], [MEMBER_SESSION_URL]: [memberReply(), guestReply()] });
+    const reader = createMemberSessionReader();
+    expect((await reader.load()).kind).toBe("member");
+    const { delay, waits } = fakeDelay();
+    const { moves, events, current } = fakeMoves(memberScreen({ deletion: { ...DELETION_START, approved: true } }));
+    await confirmDelete(reader, null, TOKEN, new AbortController().signal, moves, delay);
+    expect(calls.map((call) => call.url)).toEqual([MEMBER_SESSION_URL, MEMBER_DELETE_URL, MEMBER_SESSION_URL]);
+    expect(headerOf(calls[1]?.init ?? {}, CSRF_HEADER)).toBe(TOKEN);
+    expect(events).toEqual(["update", "update", "replace /"]);
+    expect(waits).toEqual([5000]);
+    expect(reader.current().kind).toBe("guest");
+    expect(memberOrderInView()).toBeNull();
+    expect(stashedMemberPayOrder()).toBeNull();
+    expect(store.has(MEMBER_PAY_ORDER_KEY)).toBe(false);
+    const screen = current();
+    expect(screen.status === "member" && screen.deletion.deleted).toBe(true);
+    expect(canLogout(screen)).toBe(false);
+    const html = render({ screen, section: "settings" });
+    expect(html).toContain(copy("account.deleted"));
+    expect(html).toContain(`<nav class="site-desktop-only site-account__nav" inert="">`);
+    expect(html.match(/<section[^>]*inert=""/g)).toHaveLength(3);
+    expect(part(html, /<section[^>]* id="account-settings"[^>]*>/)).not.toContain("inert");
+    expect(html).toContain(`<button class="acs-btn acs-btn--secondary acs-btn--sm site-desktop-only site-account__logout" type="button" disabled=""`);
+    expect(html).toContain(`<button class="acs-btn acs-btn--secondary acs-btn--block site-phone-only site-account__signout" type="button" disabled=""`);
+  });
+
+  // HANDOFF 0.63「sms_disabled 与 password_required 时重读站点设置与会员会话，按开关与 hasPassword 改用开关关闭时的确认方式」：页面换上重读到的
+  // 站点设置（密码部分的开关随之为关闭）与会话（hasPassword 与新令牌），注销部分改为当前密码确认。
+  it("switches to the password confirmation after password_required", async () => {
+    stubFetch({
+      [MEMBER_DELETE_URL]: [json(422, { detail: "password_required" })],
+      [SITE_SETTINGS_URL]: [siteReply(false)],
+      [MEMBER_SESSION_URL]: [memberWithPassword(NEW_TOKEN)],
+    });
+    const { moves, current } = fakeMoves(memberScreen({ deletion: { ...DELETION_START, approved: true } }));
+    await confirmDelete(createMemberSessionReader(), null, TOKEN, new AbortController().signal, moves, fakeDelay().delay);
+    expect(current()).toEqual(
+      memberScreen({
+        hasPassword: true,
+        csrfToken: NEW_TOKEN,
+        settings: { ...SETTINGS_START, smsEnabled: false },
+        site: { status: "ready", smsEnabled: false, siteKey: null },
+        deletion: { ...DELETION_START, round: 1 },
+      }),
+    );
+    const html = render({ screen: current(), section: "settings" });
+    expect(html).toContain(copy("account.delete_verify_password"));
+    expect(html).toMatch(/autocomplete="current-password"/i);
+  });
+
+  // HANDOFF 0.63 第（7）条「注销时站点设置读取失败只显示 common.error_retry」：not_verified 之后重读站点设置失败，注销部分只显示 common.error_retry；
+  // 密码部分保持原先读到的开关（这里为关闭）。
+  it("shows only common.error_retry when rereading the site settings fails", async () => {
+    stubFetch({ [MEMBER_DELETE_URL]: [json(403, { detail: "delete_not_verified" })], [SITE_SETTINGS_URL]: [new Response(null, { status: 500 })] });
+    const start = memberScreen({ hasPassword: true, settings: { ...SETTINGS_START, smsEnabled: false }, site: { status: "ready", smsEnabled: false, siteKey: null } });
+    const { moves, current } = fakeMoves(start);
+    await confirmDelete(createMemberSessionReader(), "current-pass-1", TOKEN, new AbortController().signal, moves, fakeDelay().delay);
+    const screen = current();
+    expect(screen.status === "member" && screen.site).toEqual({ status: "failed" });
+    expect(screen.status === "member" && screen.settings.smsEnabled).toBe(false);
+    const settings = part(render({ screen, section: "settings" }), /<div class="site-account__delete">[\s\S]*?<\/p><\/div>/);
+    expect(settings).toBe(`<div class="site-account__delete"><p class="acs-alert acs-alert--danger site-notice" role="alert">${copy("common.error_retry")}</p></div>`);
+  });
+
+  // 验收「csrf 时重读会话——member 时换用新令牌并显示 common.error_retry」：V1 交来的 csrf 同样换用新令牌（V1 之后的发送与核验带新令牌）。
+  it("takes the new token after V1 reports csrf", async () => {
+    stubFetch({ [MEMBER_SESSION_URL]: [memberReply(NEW_TOKEN)] });
+    const { moves, current } = fakeMoves(memberScreen());
+    await takeDeleteStep(createMemberSessionReader(), "csrf", new AbortController().signal, moves);
+    expect(current()).toEqual(memberScreen({ csrfToken: NEW_TOKEN, deletion: { ...DELETION_START, notice: "common.error_retry" } }));
+  });
+
+  // 验收「SmsVerify 的注销确认用途」由页面接上：打开时读到的人机挑战公开 key 交给注销确认用途的 V1，V1 显示本账号的遮掩号码与 auth.sms_scope。
+  it("passes the challenge key read on opening to the deletion purpose of V1", async () => {
+    stubFetch({
+      [MEMBER_SESSION_URL]: [memberReply()],
+      [MEMBER_ORDERS_URL]: [ordersReply()],
+      [MEMBER_POINTS_URL]: [pointsReply()],
+      [MEMBER_COUPONS_URL]: [couponsReply()],
+      [SITE_SETTINGS_URL]: [json(200, { sms_verification_enabled: true, turnstile_site_key: SITE_KEY })],
+    });
+    const { moves, current } = fakeMoves();
+    await openAccount(createMemberSessionReader(), new AbortController().signal, moves);
+    expect(current()).toEqual(memberScreen({ site: { status: "ready", smsEnabled: true, siteKey: SITE_KEY } }));
+    const deletion = part(render({ screen: current(), section: "settings" }), /<div class="site-account__delete"[\s\S]*$/);
+    expect(textNodes(deletion)).toEqual([
+      COPY["account.delete"].en,
+      COPY["account.delete_warning"].en,
+      COPY["account.delete_verify"].en,
+      COPY["auth.phone"].en,
+      MASKED,
+      COPY["auth.sms_scope"].en,
+      COPY["auth.challenge"].en,
+      COPY["auth.send_code"].en,
+    ]);
+  });
+});
+
 describe("title row", () => {
   // 验收第 2 条「member 时显示标题行——h1 为 common.nav_account，其后遮掩后的手机号（acs-num）与 common.nav_logout 按钮，桌面与手机都显示」
   // 与 UX P13 桌面线框「[common.nav_account] <手机号部分遮盖 [P1]> ([common.nav_logout])」：三者依次在同一行里。
@@ -582,6 +717,8 @@ describe("title row", () => {
       `<div class="site-account__head"><h1 class="acs-display-l">${copy("common.nav_account", language)}</h1><span class="acs-num acs-muted site-desktop-only">${MASKED}</span>` +
         `<button class="acs-btn acs-btn--secondary acs-btn--sm site-desktop-only site-account__logout" type="button" aria-busy="false">${copy("common.nav_logout", language)}</button></div>`,
     );
+    // SHOP-TASK-167：注销确认用途的 V1 另显示本账号的遮掩号码；这里的站点设置没有人机挑战公开 key，V1 整个替换为 auth.sms_not_sent_no_change、
+    // 不显示号码，所以次数增加 0。
     expect(html.split(MASKED)).toHaveLength(3);
     expect(html.match(/<h1/g)).toHaveLength(1);
   });
@@ -602,6 +739,7 @@ describe("title row", () => {
     expect(number).toBeGreaterThanOrEqual(0);
     expect(title).toBeGreaterThan(number);
     expect(button).toBeGreaterThan(settings.indexOf(`>${copy("account.password_set_submit", language)}</button>`));
+    // SHOP-TASK-167：同上，这一状态下注销确认用途不显示号码，次数增加 0。
     expect(settings.split(MASKED)).toHaveLength(2);
   });
 });
@@ -1048,8 +1186,17 @@ describe("dictionary", () => {
     }
     // SHOP-TASK-165：sessionStep 的结果多了积分与优惠券两段，三段都从读取中开始（随状态扩展修改）。
     // SHOP-TASK-166：另带会话的 hasPassword（这里为 true）与设置段的初始值（随状态扩展修改）。
+    // SHOP-TASK-167：另带站点设置（读取中）与注销部分的初始值（随状态扩展修改）。
     expect(sessionStep({ kind: "member", phoneMasked: MASKED, hasPassword: true, csrfToken: TOKEN } satisfies MemberSessionState)).toEqual(
-      memberScreen({ hasPassword: true, orders: { status: "loading" }, points: { status: "loading" }, coupons: { status: "loading" }, settings: SETTINGS_START }),
+      memberScreen({
+        hasPassword: true,
+        orders: { status: "loading" },
+        points: { status: "loading" },
+        coupons: { status: "loading" },
+        settings: SETTINGS_START,
+        site: SITE_LOADING,
+        deletion: DELETION_START,
+      }),
     );
   });
 });

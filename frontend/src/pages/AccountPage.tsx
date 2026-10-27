@@ -8,6 +8,7 @@ import { memberLogout, useMemberSessionReader } from "../api/memberSession";
 import type { MemberLogoutReply, MemberSessionInfo, MemberSessionReader, MemberSessionState } from "../api/memberSession";
 import { AWAITING_PAYMENT } from "../api/pay";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
+import type { DeleteSmsStep } from "../components/SmsVerify";
 import { formatSen } from "../format";
 import type { CopyKey } from "../i18n/copy";
 import { useCopy, useLanguage } from "../i18n/language";
@@ -17,8 +18,27 @@ import { CouponsPanel, loadCoupons } from "./AccountCouponsPanel";
 import type { CouponsState } from "./AccountCouponsPanel";
 import { loadPoints, PointsPanel } from "./AccountPointsPanel";
 import type { PointsState } from "./AccountPointsPanel";
-import { canSubmitPassword, loadSmsSwitch, passwordChangePath, SETTINGS_START, SettingsPanel, submitPassword, typePassword, withSmsSwitch } from "./AccountSettingsPanel";
-import type { SettingsChange, SettingsMoves, SettingsState } from "./AccountSettingsPanel";
+import {
+  askDeletion,
+  canConfirmDeletion,
+  canSubmitPassword,
+  deleteAccount,
+  DELETION_START,
+  deletionMode,
+  deletionPassword,
+  keepAccount,
+  loadSmsSwitch,
+  passwordChangePath,
+  SETTINGS_START,
+  SettingsPanel,
+  SITE_LOADING,
+  submitPassword,
+  takeDeleteSmsStep,
+  typeDeletePassword,
+  typePassword,
+  withSmsSwitch,
+} from "./AccountSettingsPanel";
+import type { DeletionChange, DeletionDelay, DeletionMoves, DeletionState, SettingsChange, SettingsMoves, SettingsState, SiteState } from "./AccountSettingsPanel";
 import { startDeferred } from "./AdminOrderDetail";
 import { formatDate } from "./TrackOrderPage";
 
@@ -34,6 +54,8 @@ import { formatDate } from "./TrackOrderPage";
 // 再前往 /account/order（订单号不进地址、历史状态与浏览器存储），该路径进路由表之前不渲染查看入口。我的积分与我的优惠券与我的订单同时读取，
 // 任一段 signed_out 时重读会话并以 replace 进入 /login（同一次打开只重读与跳转一次）。三段之外同时读取站点设置的短信验证开关（失败按开启）。
 // 退出成功（ok 或 signed_out）时同时清除会员订单号的交接与 P06 的当前订单暂存（DESIGN 1.14「权限与资料保护」第 7 条，HANDOFF 0.63）。
+// 设置段末尾的注销部分（SHOP-TASK-167）的状态、纯函数与 View 在 AccountSettingsPanel.tsx，这里接上站点设置（开关与人机挑战公开 key）、
+// 确认注销与注销确认用途的 V1 交来的结果；注销成功之后其余各段不再可操作（退出按钮禁用，导航与其他段 inert），5 秒后以 replace 前往首页。
 // 离开页面时中止请求，之后不再更新；会话的重读是共享读取，不中止，离开页面后不再据其结果更新或跳转。
 
 const LOGIN_PATH: RoutePath = "/login";
@@ -73,7 +95,8 @@ export type OrdersState = { status: "loading" } | { status: "ready"; orders: rea
 
 // 页面的状态：读取会话中（空主体，标 aria-busy）、读取会话失败（只有 common.error_retry）、已登录。已登录时 phoneMasked、hasPassword 与 csrfToken
 // 来自打开时那次读取（csrf 之后的重读更新令牌，设置密码之后的重读更新 hasPassword 与令牌），orders、points 与 coupons 为三段各自的读取状态，
-// settings 为设置段（短信验证开关与首次设置密码），loggingOut 为退出进行中（按钮禁用），logoutError 为退出失败的提示。
+// settings 为设置段（短信验证开关与首次设置密码），loggingOut 为退出进行中（按钮禁用），logoutError 为退出失败的提示；
+// site 为注销部分用到的站点设置（读取中、失败或读到的开关与人机挑战公开 key），deletion 为注销部分。
 export type AccountScreen =
   | { status: "loading" }
   | { status: "failed" }
@@ -88,6 +111,8 @@ export type AccountScreen =
       settings: SettingsState;
       loggingOut: boolean;
       logoutError: CopyKey | null;
+      site: SiteState;
+      deletion: DeletionState;
     };
 
 export const LOADING: AccountScreen = { status: "loading" };
@@ -108,6 +133,8 @@ export function sessionStep(state: MemberSessionState): AccountScreen | "login" 
         settings: SETTINGS_START,
         loggingOut: false,
         logoutError: null,
+        site: SITE_LOADING,
+        deletion: DELETION_START,
       };
     case "guest":
       return "login";
@@ -172,9 +199,29 @@ export function withSession(info: MemberSessionInfo): AccountChange {
   return (current) => (current.status === "member" ? { ...current, hasPassword: info.hasPassword, csrfToken: info.csrfToken } : current);
 }
 
-// 退出进行中与未登录时不再退出（按钮禁用）。
+export function withDeletion(change: DeletionChange): AccountChange {
+  return (current) => (current.status === "member" ? { ...current, deletion: change(current.deletion) } : current);
+}
+
+// 打开时读到的站点设置：密码部分的开关（读取失败按开启）与注销部分的站点设置，一次换上。
+export function withSwitchRead(smsEnabled: boolean, site: SiteState): AccountChange {
+  return (current) => (current.status === "member" ? { ...current, settings: withSmsSwitch(smsEnabled)(current.settings), site } : current);
+}
+
+// 注销途中重读到的站点设置：换上注销部分的站点设置；读到时密码部分的开关随之更新，读取失败时密码部分保持原样。
+export function withSite(site: SiteState): AccountChange {
+  return (current) => {
+    if (current.status !== "member") {
+      return current;
+    }
+    const settings = site.status === "ready" ? withSmsSwitch(site.smsEnabled)(current.settings) : current.settings;
+    return { ...current, settings, site };
+  };
+}
+
+// 退出进行中、已注销与未登录时不再退出（按钮禁用）。
 export function canLogout(screen: AccountScreen): boolean {
-  return screen.status === "member" && !screen.loggingOut;
+  return screen.status === "member" && !screen.loggingOut && !screen.deletion.deleted;
 }
 
 // 点退出：按钮禁用，先前的提示收起。
@@ -287,8 +334,8 @@ export async function openAccount(reader: MemberSessionReader, signal: AbortSign
       loadOrders(reader, signal, moves, leave),
       loadPoints(signal, settleSection(moves, leave, withPoints)),
       loadCoupons(signal, settleSection(moves, leave, withCoupons)),
-      loadSmsSwitch(signal, (smsEnabled) => {
-        moves.update(withSettings(withSmsSwitch(smsEnabled)));
+      loadSmsSwitch(signal, (smsEnabled, site) => {
+        moves.update(withSwitchRead(smsEnabled, site));
       }),
     ]);
   }
@@ -313,6 +360,46 @@ export function settingsMoves(reader: MemberSessionReader, moves: AccountMoves):
 // 首次设置密码（带会话里的 CSRF 令牌，经 AccountSettingsPanel.tsx 的 submitPassword）。signal 中止之后不再更新或跳转。
 export async function setPassword(reader: MemberSessionReader, password: string, csrfToken: string, signal: AbortSignal, moves: AccountMoves): Promise<void> {
   await submitPassword(password, csrfToken, signal, settingsMoves(reader, moves));
+}
+
+// 注销部分的处理：改动注销部分、换上重读到的站点设置、重读会话（共享读取，不中止）、换上重读到的会话、以 replace 进入 /login 或首页。
+export function deletionMoves(reader: MemberSessionReader, moves: AccountMoves): DeletionMoves {
+  return {
+    update: (change) => {
+      moves.update(withDeletion(change));
+    },
+    site: (site) => {
+      moves.update(withSite(site));
+    },
+    reread: () => reader.reload(),
+    session: (info) => {
+      moves.update(withSession(info));
+    },
+    login: () => {
+      moves.replace(LOGIN_PATH);
+    },
+    home: () => {
+      moves.replace(HOME_PATH);
+    },
+  };
+}
+
+// 确认注销（带会话里的 CSRF 令牌，经 AccountSettingsPanel.tsx 的 deleteAccount；password 为 null 时不带密码）。delay 为注销成功之后 5 秒的等待（可注入）。
+// signal 中止之后不再更新或跳转。
+export async function confirmDelete(
+  reader: MemberSessionReader,
+  password: string | null,
+  csrfToken: string,
+  signal: AbortSignal,
+  moves: AccountMoves,
+  delay?: DeletionDelay,
+): Promise<void> {
+  await deleteAccount(password, csrfToken, signal, deletionMoves(reader, moves), delay);
+}
+
+// 注销确认用途的 V1 交来的结果（经 AccountSettingsPanel.tsx 的 takeDeleteSmsStep）。signal 中止之后不再更新或跳转。
+export async function takeDeleteStep(reader: MemberSessionReader, step: DeleteSmsStep, signal: AbortSignal, moves: AccountMoves): Promise<void> {
+  await takeDeleteSmsStep(step, signal, deletionMoves(reader, moves));
 }
 
 // 退出（带会话里的 CSRF 令牌）：ok 与 signed_out 清除交接的会员订单号与 P06 的当前订单暂存（DESIGN 1.14「权限与资料保护」第 7 条）、
@@ -478,7 +565,21 @@ type MemberScreen = Extract<AccountScreen, { status: "member" }>;
 
 type SectionPanelProps = { section: AccountSection; screen: MemberScreen } & Omit<AccountViewProps, "screen" | "section" | "onSection">;
 
-function SectionPanel({ section, screen, orderTo, changeTo, onView, onPassword, onPasswordSubmit, onLogout }: SectionPanelProps) {
+function SectionPanel({
+  section,
+  screen,
+  orderTo,
+  changeTo,
+  onView,
+  onPassword,
+  onPasswordSubmit,
+  onLogout,
+  onDeletePassword,
+  onDeleteAsk,
+  onDeleteKeep,
+  onDeleteConfirm,
+  onDeleteStep,
+}: SectionPanelProps) {
   switch (section) {
     case "orders":
       return <OrdersPanel orders={screen.orders} orderTo={orderTo} onView={onView} />;
@@ -498,6 +599,14 @@ function SectionPanel({ section, screen, orderTo, changeTo, onView, onPassword, 
           onPassword={onPassword}
           onSubmit={onPasswordSubmit}
           onLogout={onLogout}
+          csrfToken={screen.csrfToken}
+          site={screen.site}
+          deletion={screen.deletion}
+          onDeletePassword={onDeletePassword}
+          onDeleteAsk={onDeleteAsk}
+          onDeleteKeep={onDeleteKeep}
+          onDeleteConfirm={onDeleteConfirm}
+          onDeleteStep={onDeleteStep}
         />
       );
   }
@@ -531,11 +640,17 @@ export interface AccountViewProps {
   onPasswordSubmit: () => void;
   // 标题行（桌面）与设置段（手机）的退出共用。
   onLogout: () => void;
+  // 注销部分：当前密码输入、打开与关闭确认框、确认注销与注销确认用途的 V1 交来的结果。
+  onDeletePassword: (password: string) => void;
+  onDeleteAsk: () => void;
+  onDeleteKeep: () => void;
+  onDeleteConfirm: () => void;
+  onDeleteStep: (step: DeleteSmsStep) => void;
 }
 
 // 已登录：标题行之后为两栏——桌面左侧导航（页内锚点）与右栏（★ 提示、各段）；手机为一栏，★ 提示、分段标签与当前段的内容。
-// 标题行的遮掩号码与退出只在桌面显示，手机在设置段。
-export function AccountView({ screen, section, orderTo, changeTo, onSection, onView, onPassword, onPasswordSubmit, onLogout }: AccountViewProps) {
+// 标题行的遮掩号码与退出只在桌面显示，手机在设置段。已注销时导航与设置以外的各段为 inert（不再可操作）。
+export function AccountView({ screen, section, onSection, ...panelProps }: AccountViewProps) {
   const t = useCopy();
   if (screen.status === "loading") {
     return <main className="site-account" aria-busy="true" />;
@@ -547,18 +662,25 @@ export function AccountView({ screen, section, orderTo, changeTo, onSection, onV
       </main>
     );
   }
+  const deleted = screen.deletion.deleted;
   return (
     <main className="site-account">
       <div className="site-account__head">
         <h1 className="acs-display-l">{t("common.nav_account")}</h1>
         <span className="acs-num acs-muted site-desktop-only">{screen.phoneMasked}</span>
-        <button className="acs-btn acs-btn--secondary acs-btn--sm site-desktop-only site-account__logout" type="button" disabled={!canLogout(screen)} aria-busy={screen.loggingOut} onClick={onLogout}>
+        <button
+          className="acs-btn acs-btn--secondary acs-btn--sm site-desktop-only site-account__logout"
+          type="button"
+          disabled={!canLogout(screen)}
+          aria-busy={screen.loggingOut}
+          onClick={panelProps.onLogout}
+        >
           {t("common.nav_logout")}
         </button>
       </div>
       {screen.logoutError !== null && <Notice error={screen.logoutError} />}
       <div className="site-account__body">
-        <nav className="site-desktop-only site-account__nav">
+        <nav className="site-desktop-only site-account__nav" inert={deleted ? true : undefined}>
           {ACCOUNT_SECTIONS.map((item) => (
             <a
               key={item.section}
@@ -600,17 +722,9 @@ export function AccountView({ screen, section, orderTo, changeTo, onSection, onV
               role="tabpanel"
               aria-labelledby={tabId(item.section)}
               aria-busy={sectionBusy(item.section, screen)}
+              inert={deleted && item.section !== "settings" ? true : undefined}
             >
-              <SectionPanel
-                section={item.section}
-                screen={screen}
-                orderTo={orderTo}
-                changeTo={changeTo}
-                onView={onView}
-                onPassword={onPassword}
-                onPasswordSubmit={onPasswordSubmit}
-                onLogout={onLogout}
-              />
+              <SectionPanel section={item.section} screen={screen} {...panelProps} />
             </section>
           ))}
         </div>
@@ -660,6 +774,34 @@ export default function AccountPage() {
         }
         setScreen(startLogout);
         void logOut(reader, screen.csrfToken, controller.signal, pageMoves(setScreen, replace));
+      }}
+      onDeletePassword={(password) => {
+        setScreen(withDeletion(typeDeletePassword(password)));
+      }}
+      onDeleteAsk={() => {
+        setScreen(withDeletion(askDeletion));
+      }}
+      onDeleteKeep={() => {
+        setScreen(withDeletion(keepAccount));
+      }}
+      onDeleteConfirm={() => {
+        const controller = lifetime.current;
+        if (screen.status !== "member" || controller === null) {
+          return;
+        }
+        // 确认方式按页面当前所知的开关与 hasPassword；服务端按当时的开关另行判定（DESIGN 1.14「边界与原则」第 4 条）。
+        const mode = deletionMode(screen.site, screen.hasPassword);
+        if (!canConfirmDeletion(mode, screen.deletion)) {
+          return;
+        }
+        void confirmDelete(reader, deletionPassword(mode, screen.deletion), screen.csrfToken, controller.signal, pageMoves(setScreen, replace));
+      }}
+      onDeleteStep={(step) => {
+        const controller = lifetime.current;
+        if (controller === null) {
+          return;
+        }
+        void takeDeleteStep(reader, step, controller.signal, pageMoves(setScreen, replace));
       }}
     />
   );
