@@ -2220,6 +2220,36 @@ export const COPY = {
     zh: "退出登录",
     ms: "Log keluar",
   },
+  "admin.sms_toggle": {
+    en: "SMS verification",
+    zh: "短信验证",
+    ms: "Pengesahan SMS",
+  },
+  "admin.sms_on": {
+    en: "On",
+    zh: "开启",
+    ms: "Hidup",
+  },
+  "admin.sms_off": {
+    en: "Off (default)",
+    zh: "关闭（默认）",
+    ms: "Mati (lalai)",
+  },
+  "admin.sms_toggle_hint": {
+    en: "When on, Malaysian and Singapore numbers verify by SMS at checkout and become members, and registration, SMS login, password reset and account deletion use SMS. When off, no SMS is sent: visitors who are not logged in check out as guests whatever their number, registration, SMS login and password reset are paused, and members confirm account deletion with their password or, without one, while logged in.",
+    zh: "开启时，马新号码结账须短信验证并成为会员，注册、短信登录、重设密码与注销确认使用短信。关闭时不发送任何短信：未登录的访客无论号码都以游客身份结账，注册、短信登录与重设密码暂停，会员以密码确认注销，未设密码者在登录状态下确认。",
+    ms: "Apabila dihidupkan, nombor Malaysia dan Singapura disahkan melalui SMS semasa daftar keluar dan menjadi ahli, dan pendaftaran, log masuk SMS, tetapan semula kata laluan serta pemadaman akaun menggunakan SMS. Apabila dimatikan, tiada SMS dihantar: pelawat yang tidak log masuk mendaftar keluar sebagai tetamu tanpa mengira nombor mereka, pendaftaran, log masuk SMS dan tetapan semula kata laluan digantung, dan ahli mengesahkan pemadaman akaun dengan kata laluan atau, jika tiada, semasa log masuk.",
+  },
+  "admin.sms_toggle_cost": {
+    en: "Turning this on sends real SMS messages, which cost money. Turn it on only after the SMS service has been set up and checked.",
+    zh: "开启后会发送真实短信并产生费用。请在短信服务开通并核实后再开启。",
+    ms: "Menghidupkan ini akan menghantar SMS sebenar yang dikenakan kos. Hidupkan hanya selepas perkhidmatan SMS disediakan dan disemak.",
+  },
+  "admin.sms_not_configured": {
+    en: "SMS verification can't be turned on: the SMS service, its anti-bot check or its sending limits are not fully set up.",
+    zh: "无法开启短信验证：短信服务、人机验证或发送限额的配置不完整。",
+    ms: "Pengesahan SMS tidak boleh dihidupkan: perkhidmatan SMS, semakan anti-bot atau had penghantarannya belum disediakan sepenuhnya.",
+  },
   "admin.settings_saved": {
     en: "Saved. New requests use this setting.",
     zh: "已保存，之后的请求按此设置执行。",
