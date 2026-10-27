@@ -1,0 +1,46 @@
+# SHOP-TASK-166 会员中心 P13 的设置段（密码、手机版的号码与退出）
+
+设计闸门：DESIGN 1.14（提交 00f8f34）「权限与资料保护」第 3 条（首次设置密码在已登录会话内进行、至少 8 位；已有密码的重设再次短信验证；开关关闭期间首次设置密码不受影响）与第 5 条（写操作另须 CSRF 令牌；手机号部分遮盖显示），以及 HANDOFF 0.63（第（7）条与 Kelvin 2026-10-26 的决定）。依据 docs/UX.md 0.13 的 P13、docs/UX-COPY.md 0.14，样式取视觉稿 `docs/design/pages/P13-desktop-settings.html`、`P13-phone-settings.html` 与 `P13-desktop-settings-sms-off.html` 的密码与号码、退出部分。首次设置经 SHOP-TASK-164（`api/memberAccount.ts` 的 `setMemberPassword`），会话经 SHOP-TASK-151（`api/memberSession.ts`），短信验证开关经 `api/siteSettings.ts` 的 `fetchSiteSettings`。
+
+- [x] 文案：`frontend/src/i18n/copy.ts` 按 UX-COPY 0.14 逐字加入 `account.settings`、`account.password_title`、`account.password_none`、`account.sms_paused_set_password`、`account.password_set_submit`、`account.password_set_done`、`account.password_exists` 与 `account.password_change`（照 UX-COPY 的顺序，放在 `account.coupons_used_empty` 之后、`account.demo_hint` 之前），每种语言一行，写法同相邻条目。没有用到 UX-COPY 以外的文字。
+- [x] 段表（`frontend/src/pages/AccountPage.tsx`）：`ACCOUNT_SECTIONS` 末尾加入设置（`account.settings`）；桌面左侧导航（`#account-settings`）与手机分段标签（`account-settings-tab`，段内容为 tabpanel）照现有写法按表渲染，共四项。`SectionPanel` 与 `sectionBusy` 各加设置的分支（设置段不读取，不标 `aria-busy`）。
+- [x] 状态：`AccountScreen` 的已登录状态加 `hasPassword`（取自打开时的会话，之后设置密码与 csrf 的重读经 `withSession` 换上 hasPassword 与令牌，遮掩号码沿用打开时那次）与 `settings`（`SettingsState`，初始为 `SETTINGS_START`）。会话为 member 后，与三段同时经 `loadSmsSwitch` 读取短信验证开关，结果经 `withSettings(withSmsSwitch(…))` 换上；另导出 `withSettings`、`withSession`、`settingsMoves` 与 `setPassword`（经面板的 `submitPassword` 提交）。
+- [x] 新文件 `frontend/src/pages/AccountSettingsPanel.tsx`：状态类型 `SettingsState`、初始值 `SETTINGS_START`；纯函数 `passwordChangePath`（照 `CheckoutPage.tsx` 的 `loginPath` 以 `isRoutePath` 判断 `/forgot-password`）、`smsEnabledOf`、`withSmsSwitch`、`typePassword`、`passwordLongEnough`（按码点计数不少于 8，取 `ForgotPasswordPage.tsx` 导出的 `PASSWORD_MIN` 与 `passwordLength`）、`canSubmitPassword`、`rejectShort`、`startSetting`、`passwordSet`、`settled`、`alreadySet`、`passwordStep`；接收 AbortSignal 与回调的异步函数 `loadSmsSwitch` 与 `submitPassword`；只依赖 props 的 `SettingsPanel`。
+- [x] 密码两种内容（h3 `account.password_title` 之下）：
+  - 未设密码：`account.password_none`；开关关闭时其后为 `account.sms_paused_set_password`（`acs-alert--info`，照 P13-desktop-settings-sms-off）；表单内为 `auth.new_password` 密码输入框（`autoComplete="new-password"`，照 `ForgotPasswordPage.tsx` 的写法：`acs-field`、其下 `auth.password_rule` 提示，错误时为带图形的字段错误与 `aria-invalid`）与 `account.password_set_submit` 主按钮（进行中禁用并标 `aria-busy`）。
+  - 已设密码：`account.password_exists` 与指向 `/forgot-password` 的 `account.password_change`（站内链接；去向不在路由表时不渲染）。
+  - 站点设置读取完成前与读取失败（非 2xx、网络中断、开关不是布尔值）时都按开启处理，不显示 `account.sms_paused_set_password`。
+- [x] 首次设置的各结果（`submitPassword`）：
+  - 提交前长度不足 8 个字符时不发请求，`auth.password_rule` 显示为字段错误。
+  - 以会话里的 CSRF 令牌提交（令牌只在请求头，请求体只有 password），进行中按钮禁用。
+  - done：先显示 `account.password_set_done`、清空输入，再经读取对象重读会话；member 时换上会话（hasPassword 变为真后显示已设密码的内容，`account.password_set_done` 留在其上方）。
+  - already_set：重读会话，member 时换上会话、清空输入，转为已设密码的内容。
+  - done 与 already_set 后的重读得到 guest 时用 replace 进入 `/login`，得到 failed 时保留当前内容并显示 `common.error_retry`。
+  - too_short：`auth.password_rule` 显示为字段错误；unavailable 为 `common.service_unavailable`；failed 为 `common.error_retry`；network 为 `common.network_check`（都不重读，输入保留）。
+  - signed_out：重读会话后用 replace 进入 `/login`。
+  - csrf：重读会话——member 时换用新令牌并显示 `common.error_retry`；guest 时用 replace 进入 `/login`；failed 时保留原令牌并显示 `common.error_retry`。
+  - 离开页面时中止请求（页面的 AbortController），之后不再更新；会话的重读是共享读取，不中止，离开后不再据其结果更新或跳转。新密码只在输入框、页面状态与请求体里，不进地址、日志或浏览器存储。
+- [x] 手机版的号码与退出：标题行的遮掩号码与 `common.nav_logout` 加 `site-desktop-only`，只在桌面显示（SHOP-TASK-152 在手机标题之下的暂放取消，site.css 里手机的 `.site-account__logout { margin-left: 0; }` 随之去掉）。设置段首另有手机限定的遮掩号码（`acs-num acs-muted`），密码内容之后为手机限定的整宽 `common.nav_logout` 次要按钮（照 P13-phone-settings）；桌面设置段只有 h2 `account.settings` 与密码内容。两个退出按钮共用页面现有的退出处理（`onLogout`）与禁用条件（`canLogout`、`aria-busy`）。
+- [x] 布局与显隐写在 `frontend/src/styles/site.css`：设置段各项上下排列（间距 16px），新密码栏最宽 420px，`account.sms_paused_set_password` 最宽 720px，设置按钮与 `account.password_change` 靠左；767px 及以下取消这两个最宽，退出按钮整宽、上方多 8px。未声明颜色、字体与圆角，未改 `acuven-shop.css`。
+- [x] 测试（vitest 与 react-dom/server，不加测试依赖；fetch 替身为参数带类型的 `vi.fn((input, init) => …)`，路由与会话重读以回调替身或 `createMemberSessionReader()` 配同一个替身；以 `renderToStaticMarkup` 渲染 View、直接调用导出的函数，处理函数从元素树取出后直接调用，不模拟点击；每条注释写明守住的是验收、UX、设计或 HANDOFF 的哪一句）：
+  - `frontend/src/pages/AccountSettingsPanel.test.tsx`：未设密码的内容（三语，依次的文字、密码输入与提示、按钮）；开关关闭且未设密码时的 `account.sms_paused_set_password`（三语，位置）与已设密码时不显示；读取完成前与失败时按开启（`smsEnabledOf`、初始值）；`loadSmsSwitch` 的关闭、开启、500、网络中断、开关不合格与离开页面；已设密码的内容与 `/forgot-password` 链接（三语）、去向为 null 时不渲染、去向随路由表；手机段首的号码与密码之后的退出按钮（三语）、退出共用处理与禁用；长度检查（含码点计数）不发请求；字段错误（三语）；提交的令牌、请求体与进行中禁用；done 先显示再重读；done 与 already_set 之后重读得到 guest 与 failed；already_set；too_short；unavailable、failed、network；signed_out；csrf 的 member、guest 与 failed；离开页面后（回答之前与重读期间）；密码不进存储、日志与地址；输入与表单提交的处理函数返回 undefined；页面文字全部来自字典；用到的键。
+  - `frontend/src/pages/AccountPage.test.tsx` 新增：「settings section」一组——打开后读取开关（开启、关闭、500、网络中断）、hasPassword 取自打开时的会话、经页面设置密码后重读会话换上 hasPassword 与新令牌（`account.password_set_done` 在已设密码的内容上方）、重读得到 guest 时 replace 到 `/login`、csrf 换用新令牌、长度不足不发请求、离开页面后不再更新；「title row」里新增手机设置段的号码与退出（段首号码、密码之后的按钮，标题行没有手机限定的项）。
+- [x] `AccountPage.test.tsx` 中现有测试的修改（只在必要时）：
+  - `memberScreen` 的结果形状加 `hasPassword`（默认 false，与 `memberReply` 的 `has_password` 一致）与 `settings`（`SETTINGS_START`）；View 的 props 多了 `changeTo`、`onPassword` 与 `onPasswordSubmit`，`props()` 随之补上。
+  - 「title row」的标题行整串给号码与退出加了桌面限定，遮掩号码在页面上的出现次数由一次改为两次（设置段另有一份）。
+  - 段表与标签数量：导航、标签、tabpanel 与「hands navigation and tab clicks to the page」改为四项；「marks only the %s section busy」的期望加上设置段（不标 busy）；「lists my orders…」改了名称。
+  - 「has every key this page uses」：键清单加 `account.settings`，`sessionStep` 的期望加 hasPassword（该条的会话为 true）与设置段初始值。
+  - 「opening the page」里的「rereads the session instead of using the earlier shared state」「ignores later changes of the shared session」「stops after leaving the page while the shared reread still settles」，以及「points and coupons sections」里的「rereads the session once and goes to /login when %s says signed out」，只为多出的站点设置读取补了替身、请求清单、一次 update 与 signal 的期望。
+  - 「logging out」里的「disables the button while logging out」：标题行的按钮加了桌面限定、设置段另有一个按钮，改为按两个类名分别查找，两个都检查禁用条件与处理；期望的禁用条件与退出去向不变。
+  - 「reads both sections together with my orders」等把 member 状态整体比较的断言经 `memberScreen` 自动带上 hasPassword 与设置段初始值，断言本身未改。
+- 偏离与验收未写死之处的取法（未改设计，未发现须停下的设计问题）：
+  - 站点设置失败按开启（HANDOFF 0.63 第（7）条）：读取失败与开关不合格时同样交出「开启」（页面照样做一次改动，值不变）；读完之前也按开启，不显示 `account.sms_paused_set_password`。
+  - 设置成功后的显示：`account.password_set_done` 放在 `account.password_title` 之下、密码内容之上，重读前（仍是未设密码的表单，输入已清空）与重读后（已设密码的内容）都在同一位置；视觉稿未设密码时把成功提示画在设置按钮之后，这里按验收「留在其上方」统一放在内容上方。重读得到 failed 时成功提示与 `common.error_retry` 同时显示。
+  - UX 与视觉稿冲突、以 UX 为准之处：验收写「手机顶部另显示遮掩号码与 common.nav_logout」，UX 手机线框与 P13-phone-settings 都把号码放在设置段首、`common.nav_logout` 放在密码之后（注销之前），这里照 UX 与视觉稿；视觉稿手机的号码在分段标签之后、设置段内，与此一致。
+  - 提交失败的提示（`common.service_unavailable`、`common.error_retry`、`common.network_check`）视觉稿没有画，照页面现有的 `acs-alert--danger site-notice` 放在密码内容之后、手机退出按钮之前。too_short 的字段错误同 P12 重设的写法（视觉稿没画错误态，HANDOFF 0.63 记下的 Kelvin 2026-10-26 决定第（3）项：没画的设密码错误态照最接近的画板实现）。
+  - 视觉稿的段内间距为 16px，现有段容器桌面为 12px；设置段内容另包一层 `site-account__settings`（间距 16px），未改其他段。视觉稿手机的小标题层级与桌面相同（h3），未另分。
+  - 视觉稿里 site.css 写不了的样式不搬：桌面导航当前项的底色、圆角与字重（同 SHOP-TASK-152），视觉稿标注里的虚线分隔（标注不向用户显示，不实现）。`account.password_change` 照视觉稿为普通链接，不写颜色；没有借用其他组件的类来取颜色。
+  - 新密码只检查下限 8 个字符（验收与 HANDOFF 只要求下限），过长时由服务端判定（结构不合格的 422 归为 failed，显示 `common.error_retry`）。
+- 留给后续任务：注销部分（`account.delete` 等，含短信关闭时的密码或会话确认）由 SHOP-TASK-167 加入设置段。
+- 改动只在 `frontend/src/pages/AccountPage.tsx`、`frontend/src/pages/AccountPage.test.tsx`、`frontend/src/pages/AccountSettingsPanel.tsx`、`frontend/src/pages/AccountSettingsPanel.test.tsx`、`frontend/src/i18n/copy.ts`、`frontend/src/styles/site.css` 与本文件；`frontend/src/router.tsx` 与 `frontend/src/App.tsx` 不需要改，未改。未改 `frontend/src/api/`、后端、`docs/TODO.md`、`.platform/`、CI、部署配置、`package.json` 与 `package-lock.json`，未装依赖。
+- 验证到什么程度：人工逐条对照验收标准、UX P13、HANDOFF 0.63、三张视觉稿与 `api/memberAccount.ts`、`api/siteSettings.ts` 的回答归类自查。上面列的测试只是写入的测试。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查；检查命令结果由 Worker 另行记录。未做浏览器验收（桌面与手机的实际排版、两个退出按钮的显隐都未在浏览器里看过），未对真实后端接口验证。

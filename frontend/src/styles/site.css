@@ -559,6 +559,15 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-account__coupons > .site-account__coupon { display: grid; gap: 6px; align-content: start; padding: 20px; }
 .site-account__used { display: grid; grid-template-columns: 160px minmax(0, 1fr) 140px; gap: 16px; padding: 12px 0; }
 
+/* 会员中心 P13 的设置段（SHOP-TASK-166，P13-desktop-settings 与 P13-desktop-settings-sms-off 的密码部分）：各项上下排列（间距 16px）；
+   新密码栏最宽 420px，account.sms_paused_set_password 最宽 720px；设置按钮与 account.password_change 靠左、不拉满。
+   手机用的遮掩号码与退出按钮在桌面不显示（桌面在标题行） */
+.site-account__settings { display: grid; gap: 16px; align-content: start; }
+.site-account__password { display: grid; gap: 16px; }
+.site-account__field { max-width: 420px; }
+.site-account__paused { max-width: 720px; }
+.site-account__submit, .site-account__change { justify-self: start; }
+
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
 
@@ -964,14 +973,13 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-register .site-sms__resend { justify-self: center; }
   .site-register__login { padding-top: 0; }
 
-  /* 会员中心 P13（P13-phone）：一栏，各块在内容区（上 28px、左右 16px、下 40px）里上下排列，间距 16px；遮掩后的手机号与退出按钮
-     暂放在标题之下、靠左（UX 与视觉稿在设置段，记在任务记录的偏离里）；导航换成分段标签（左右伸到屏幕边缘，内边距 0 16px），
+  /* 会员中心 P13（P13-phone）：一栏，各块在内容区（上 28px、左右 16px、下 40px）里上下排列，间距 16px；标题行只有标题
+     （遮掩后的手机号与退出按钮在设置段，SHOP-TASK-166）；导航换成分段标签（左右伸到屏幕边缘，内边距 0 16px），
      只显示当前段；我的订单为 account.orders_hint 与其后的各行，每行是两列（间距 6px 12px，上下内边距 14px）的整行链接，
      不加下划线、颜色随上级，合计与行尾 › 同一行（间距 4px）。各行之间的分隔线（颜色）site.css 写不了，记在任务记录的偏离里 */
   .site-account { gap: 16px; padding: 28px 16px 40px; }
   .site-account > .site-notice, .site-account > .site-notice:first-child { margin: 0; }
   .site-account__head { display: grid; justify-items: start; gap: 16px; padding: 0; }
-  .site-account__logout { margin-left: 0; }
   .site-account__body { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 0; }
   .site-account__main { gap: 16px; }
   .site-account__tabs { display: flex; margin: 0 -16px; padding: 0 16px; }
@@ -994,4 +1002,8 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-account__activity { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
   .site-account__coupons { grid-template-columns: minmax(0, 1fr); }
   .site-account__used { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
+
+  /* 设置段（P13-phone-settings）：段首为遮掩后的手机号，新密码栏与提示拉满一栏；密码之后为整宽的退出按钮（上方多 8px） */
+  .site-account__field, .site-account__paused { max-width: none; }
+  .site-account__signout.site-phone-only { display: flex; margin-top: 8px; }
 }

@@ -5,7 +5,7 @@ import { clearMemberOrder, handOffMemberOrder, readMemberOrders } from "../api/m
 import type { MemberOrderSummary, MemberOrdersRead } from "../api/memberOrders";
 import { clearMemberPayOrder } from "../api/memberPay";
 import { memberLogout, useMemberSessionReader } from "../api/memberSession";
-import type { MemberLogoutReply, MemberSessionReader, MemberSessionState } from "../api/memberSession";
+import type { MemberLogoutReply, MemberSessionInfo, MemberSessionReader, MemberSessionState } from "../api/memberSession";
 import { AWAITING_PAYMENT } from "../api/pay";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
 import { formatSen } from "../format";
@@ -17,20 +17,22 @@ import { CouponsPanel, loadCoupons } from "./AccountCouponsPanel";
 import type { CouponsState } from "./AccountCouponsPanel";
 import { loadPoints, PointsPanel } from "./AccountPointsPanel";
 import type { PointsState } from "./AccountPointsPanel";
+import { canSubmitPassword, loadSmsSwitch, passwordChangePath, SETTINGS_START, SettingsPanel, submitPassword, typePassword, withSmsSwitch } from "./AccountSettingsPanel";
+import type { SettingsChange, SettingsMoves, SettingsState } from "./AccountSettingsPanel";
 import { startDeferred } from "./AdminOrderDetail";
 import { formatDate } from "./TrackOrderPage";
 
 // 会员中心 P13 的框架与我的订单（docs/UX.md 0.13 P13，docs/UX-COPY.md 0.14，视觉稿 P13-desktop 与 P13-phone 的标题、导航与我的订单部分；
 // DESIGN 1.13「权限与资料保护」第 3、5 条，HANDOFF 0.61）。我的积分与我的优惠券两段（SHOP-TASK-165，DESIGN 1.14，HANDOFF 0.63）的状态、
 // 纯函数与 View 在 AccountPointsPanel.tsx 与 AccountCouponsPanel.tsx，这里只在段表、AccountScreen、SectionPanel、sectionBusy 与打开时的读取里接上；
-// 设置段由之后的任务在 ACCOUNT_SECTIONS 里加项。
+// 设置段（SHOP-TASK-166，HANDOFF 0.63 第（7）条）在 AccountSettingsPanel.tsx，这里另接上会话的 hasPassword、短信验证开关的读取与首次设置密码。
 // 打开页面时经 api/memberSession.ts 的读取对象重读一次会话（登录后来到本页时共享状态可能还是旧的），读完之前只显示标 aria-busy 的空主体；
 // 未登录时以路由的 replace 进入 /login（路由记下的来源为 /account，登录成功后回到这里），读取失败只显示 common.error_retry。
 // 这一判断只在打开时做，之后共享会话状态的变化不再影响本页。已登录时显示标题行（common.nav_account、遮掩后的手机号与 common.nav_logout；
-// 手机暂放在标题之下，UX 与视觉稿在设置段，HANDOFF 0.61 第（7）条）、桌面左侧导航或手机分段标签、★ account.demo_hint 与我的订单。
+// 号码与退出只在桌面，手机在设置段）、桌面左侧导航或手机分段标签、★ account.demo_hint 与各段。
 // 我的订单经 api/memberOrders.ts 只取第一页（最多 20 张，按服务端顺序，不翻页，HANDOFF 0.61 第（1）条）；查看时经交接函数交出订单号，
 // 再前往 /account/order（订单号不进地址、历史状态与浏览器存储），该路径进路由表之前不渲染查看入口。我的积分与我的优惠券与我的订单同时读取，
-// 任一段 signed_out 时重读会话并以 replace 进入 /login（同一次打开只重读与跳转一次）。
+// 任一段 signed_out 时重读会话并以 replace 进入 /login（同一次打开只重读与跳转一次）。三段之外同时读取站点设置的短信验证开关（失败按开启）。
 // 退出成功（ok 或 signed_out）时同时清除会员订单号的交接与 P06 的当前订单暂存（DESIGN 1.14「权限与资料保护」第 7 条，HANDOFF 0.63）。
 // 离开页面时中止请求，之后不再更新；会话的重读是共享读取，不中止，离开页面后不再据其结果更新或跳转。
 
@@ -43,7 +45,7 @@ export function orderPath(): RoutePath | null {
 }
 
 // 会员中心的段：桌面左侧导航与手机分段标签都按这张表渲染（只列已实现的段，HANDOFF 0.61 第（2）条）。
-export type AccountSection = "orders" | "points" | "coupons";
+export type AccountSection = "orders" | "points" | "coupons" | "settings";
 
 export interface SectionItem {
   section: AccountSection;
@@ -54,6 +56,7 @@ export const ACCOUNT_SECTIONS: readonly SectionItem[] = [
   { section: "orders", label: "account.orders" },
   { section: "points", label: "account.points" },
   { section: "coupons", label: "account.coupons" },
+  { section: "settings", label: "account.settings" },
 ];
 
 // 段内容的 id（桌面导航的页内锚点）与手机标签的 id。
@@ -68,26 +71,28 @@ function tabId(section: AccountSection): string {
 // 我的订单：读取中（该段标 aria-busy）、已取到（第一页，按服务端顺序）、读取失败（common.error_retry 或 common.network_check）。
 export type OrdersState = { status: "loading" } | { status: "ready"; orders: readonly MemberOrderSummary[] } | { status: "failed"; error: CopyKey };
 
-// 页面的状态：读取会话中（空主体，标 aria-busy）、读取会话失败（只有 common.error_retry）、已登录。已登录时 phoneMasked 与 csrfToken
-// 来自打开时那次读取（csrf 之后的重读更新令牌），orders、points 与 coupons 为三段各自的读取状态，loggingOut 为退出进行中（按钮禁用），
-// logoutError 为退出失败的提示。
+// 页面的状态：读取会话中（空主体，标 aria-busy）、读取会话失败（只有 common.error_retry）、已登录。已登录时 phoneMasked、hasPassword 与 csrfToken
+// 来自打开时那次读取（csrf 之后的重读更新令牌，设置密码之后的重读更新 hasPassword 与令牌），orders、points 与 coupons 为三段各自的读取状态，
+// settings 为设置段（短信验证开关与首次设置密码），loggingOut 为退出进行中（按钮禁用），logoutError 为退出失败的提示。
 export type AccountScreen =
   | { status: "loading" }
   | { status: "failed" }
   | {
       status: "member";
       phoneMasked: string;
+      hasPassword: boolean;
       csrfToken: string;
       orders: OrdersState;
       points: PointsState;
       coupons: CouponsState;
+      settings: SettingsState;
       loggingOut: boolean;
       logoutError: CopyKey | null;
     };
 
 export const LOADING: AccountScreen = { status: "loading" };
 
-// 按打开时重读到的会话决定：member 显示标题行并开始读取三段；guest 去 /login（login）；failed 只显示 common.error_retry。
+// 按打开时重读到的会话决定：member 显示标题行并开始读取三段（设置段按开关开启开始）；guest 去 /login（login）；failed 只显示 common.error_retry。
 // 重读的回答处理之后状态不会是 unknown，万一是也按失败处理。
 export function sessionStep(state: MemberSessionState): AccountScreen | "login" {
   switch (state.kind) {
@@ -95,10 +100,12 @@ export function sessionStep(state: MemberSessionState): AccountScreen | "login" 
       return {
         status: "member",
         phoneMasked: state.phoneMasked,
+        hasPassword: state.hasPassword,
         csrfToken: state.csrfToken,
         orders: { status: "loading" },
         points: { status: "loading" },
         coupons: { status: "loading" },
+        settings: SETTINGS_START,
         loggingOut: false,
         logoutError: null,
       };
@@ -154,6 +161,15 @@ export function withPoints(points: PointsState): AccountChange {
 
 export function withCoupons(coupons: CouponsState): AccountChange {
   return (current) => (current.status === "member" ? { ...current, coupons } : current);
+}
+
+export function withSettings(change: SettingsChange): AccountChange {
+  return (current) => (current.status === "member" ? { ...current, settings: change(current.settings) } : current);
+}
+
+// 换上重读到的会话：hasPassword 与 CSRF 令牌（遮掩后的手机号沿用打开时那次）。
+export function withSession(info: MemberSessionInfo): AccountChange {
+  return (current) => (current.status === "member" ? { ...current, hasPassword: info.hasPassword, csrfToken: info.csrfToken } : current);
 }
 
 // 退出进行中与未登录时不再退出（按钮禁用）。
@@ -252,7 +268,8 @@ function settleSection<T extends object>(moves: AccountMoves, leave: () => Promi
   };
 }
 
-// 打开页面：重读一次会话并按结果显示或进入 /login，已登录时接着同时读取我的订单、我的积分与我的优惠券。signal 中止之后不再更新或跳转。
+// 打开页面：重读一次会话并按结果显示或进入 /login，已登录时接着同时读取我的订单、我的积分、我的优惠券与短信验证开关。
+// signal 中止之后不再更新或跳转。
 export async function openAccount(reader: MemberSessionReader, signal: AbortSignal, moves: AccountMoves): Promise<void> {
   const state = await reader.reload();
   if (signal.aborted) {
@@ -270,8 +287,32 @@ export async function openAccount(reader: MemberSessionReader, signal: AbortSign
       loadOrders(reader, signal, moves, leave),
       loadPoints(signal, settleSection(moves, leave, withPoints)),
       loadCoupons(signal, settleSection(moves, leave, withCoupons)),
+      loadSmsSwitch(signal, (smsEnabled) => {
+        moves.update(withSettings(withSmsSwitch(smsEnabled)));
+      }),
     ]);
   }
+}
+
+// 设置段的处理：改动设置段、重读会话（共享读取，不中止）、换上重读到的会话、以 replace 进入 /login。
+export function settingsMoves(reader: MemberSessionReader, moves: AccountMoves): SettingsMoves {
+  return {
+    update: (change) => {
+      moves.update(withSettings(change));
+    },
+    reread: () => reader.reload(),
+    session: (info) => {
+      moves.update(withSession(info));
+    },
+    login: () => {
+      moves.replace(LOGIN_PATH);
+    },
+  };
+}
+
+// 首次设置密码（带会话里的 CSRF 令牌，经 AccountSettingsPanel.tsx 的 submitPassword）。signal 中止之后不再更新或跳转。
+export async function setPassword(reader: MemberSessionReader, password: string, csrfToken: string, signal: AbortSignal, moves: AccountMoves): Promise<void> {
+  await submitPassword(password, csrfToken, signal, settingsMoves(reader, moves));
 }
 
 // 退出（带会话里的 CSRF 令牌）：ok 与 signed_out 清除交接的会员订单号与 P06 的当前订单暂存（DESIGN 1.14「权限与资料保护」第 7 条）、
@@ -435,7 +476,9 @@ function OrdersPanel({ orders, orderTo, onView }: { orders: OrdersState } & Omit
 
 type MemberScreen = Extract<AccountScreen, { status: "member" }>;
 
-function SectionPanel({ section, screen, orderTo, onView }: { section: AccountSection; screen: MemberScreen } & Omit<OrderRowProps, "order">) {
+type SectionPanelProps = { section: AccountSection; screen: MemberScreen } & Omit<AccountViewProps, "screen" | "section" | "onSection">;
+
+function SectionPanel({ section, screen, orderTo, changeTo, onView, onPassword, onPasswordSubmit, onLogout }: SectionPanelProps) {
   switch (section) {
     case "orders":
       return <OrdersPanel orders={screen.orders} orderTo={orderTo} onView={onView} />;
@@ -443,6 +486,20 @@ function SectionPanel({ section, screen, orderTo, onView }: { section: AccountSe
       return <PointsPanel points={screen.points} />;
     case "coupons":
       return <CouponsPanel coupons={screen.coupons} />;
+    case "settings":
+      return (
+        <SettingsPanel
+          settings={screen.settings}
+          hasPassword={screen.hasPassword}
+          phoneMasked={screen.phoneMasked}
+          changeTo={changeTo}
+          logoutDisabled={!canLogout(screen)}
+          loggingOut={screen.loggingOut}
+          onPassword={onPassword}
+          onSubmit={onPasswordSubmit}
+          onLogout={onLogout}
+        />
+      );
   }
 }
 
@@ -455,6 +512,8 @@ function sectionBusy(section: AccountSection, screen: MemberScreen): boolean {
       return screen.points.status === "loading";
     case "coupons":
       return screen.coupons.status === "loading";
+    case "settings":
+      return false;
   }
 }
 
@@ -464,13 +523,19 @@ export interface AccountViewProps {
   section: AccountSection;
   // account.order_view 的去向（orderPath）；为 null 时不渲染查看入口。
   orderTo: RoutePath | null;
+  // account.password_change 的去向（passwordChangePath）；为 null 时不渲染。
+  changeTo: RoutePath | null;
   onSection: (section: AccountSection) => void;
   onView: (orderNumber: string) => void;
+  onPassword: (password: string) => void;
+  onPasswordSubmit: () => void;
+  // 标题行（桌面）与设置段（手机）的退出共用。
   onLogout: () => void;
 }
 
 // 已登录：标题行之后为两栏——桌面左侧导航（页内锚点）与右栏（★ 提示、各段）；手机为一栏，★ 提示、分段标签与当前段的内容。
-export function AccountView({ screen, section, orderTo, onSection, onView, onLogout }: AccountViewProps) {
+// 标题行的遮掩号码与退出只在桌面显示，手机在设置段。
+export function AccountView({ screen, section, orderTo, changeTo, onSection, onView, onPassword, onPasswordSubmit, onLogout }: AccountViewProps) {
   const t = useCopy();
   if (screen.status === "loading") {
     return <main className="site-account" aria-busy="true" />;
@@ -486,8 +551,8 @@ export function AccountView({ screen, section, orderTo, onSection, onView, onLog
     <main className="site-account">
       <div className="site-account__head">
         <h1 className="acs-display-l">{t("common.nav_account")}</h1>
-        <span className="acs-num acs-muted">{screen.phoneMasked}</span>
-        <button className="acs-btn acs-btn--secondary acs-btn--sm site-account__logout" type="button" disabled={!canLogout(screen)} aria-busy={screen.loggingOut} onClick={onLogout}>
+        <span className="acs-num acs-muted site-desktop-only">{screen.phoneMasked}</span>
+        <button className="acs-btn acs-btn--secondary acs-btn--sm site-desktop-only site-account__logout" type="button" disabled={!canLogout(screen)} aria-busy={screen.loggingOut} onClick={onLogout}>
           {t("common.nav_logout")}
         </button>
       </div>
@@ -536,7 +601,16 @@ export function AccountView({ screen, section, orderTo, onSection, onView, onLog
               aria-labelledby={tabId(item.section)}
               aria-busy={sectionBusy(item.section, screen)}
             >
-              <SectionPanel section={item.section} screen={screen} orderTo={orderTo} onView={onView} />
+              <SectionPanel
+                section={item.section}
+                screen={screen}
+                orderTo={orderTo}
+                changeTo={changeTo}
+                onView={onView}
+                onPassword={onPassword}
+                onPasswordSubmit={onPasswordSubmit}
+                onLogout={onLogout}
+              />
             </section>
           ))}
         </div>
@@ -550,7 +624,7 @@ export default function AccountPage() {
   const reader = useMemberSessionReader();
   const [screen, setScreen] = useState<AccountScreen>(LOADING);
   const [section, setSection] = useState<AccountSection>("orders");
-  // 三段的读取与退出共用的中止；离开页面时中止。
+  // 各段的读取、设置密码与退出共用的中止；离开页面时中止。
   const lifetime = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -566,8 +640,19 @@ export default function AccountPage() {
       screen={screen}
       section={section}
       orderTo={orderPath()}
+      changeTo={passwordChangePath()}
       onSection={setSection}
       onView={viewOrder}
+      onPassword={(password) => {
+        setScreen(withSettings(typePassword(password)));
+      }}
+      onPasswordSubmit={() => {
+        const controller = lifetime.current;
+        if (screen.status !== "member" || !canSubmitPassword(screen.settings) || controller === null) {
+          return;
+        }
+        void setPassword(reader, screen.settings.password, screen.csrfToken, controller.signal, pageMoves(setScreen, replace));
+      }}
       onLogout={() => {
         const controller = lifetime.current;
         if (screen.status !== "member" || !canLogout(screen) || controller === null) {

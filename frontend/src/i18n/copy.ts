@@ -1530,6 +1530,46 @@ export const COPY = {
     zh: "您还没有使用过优惠券。",
     ms: "Anda belum menggunakan sebarang kupon.",
   },
+  "account.settings": {
+    en: "Settings",
+    zh: "设置",
+    ms: "Tetapan",
+  },
+  "account.password_title": {
+    en: "Password",
+    zh: "密码",
+    ms: "Kata laluan",
+  },
+  "account.password_none": {
+    en: "You haven't set a password yet. You can keep logging in with an SMS code, or set a password now.",
+    zh: "您尚未设置密码。可继续用短信验证码登录，或现在设置密码。",
+    ms: "Anda belum menetapkan kata laluan. Anda boleh terus log masuk dengan kod SMS, atau tetapkan kata laluan sekarang.",
+  },
+  "account.sms_paused_set_password": {
+    en: "SMS is currently switched off, so you can't log in with an SMS code. Set a password now so you can log in again after you log out.",
+    zh: "短信目前已关闭，暂不能用短信验证码登录。请现在设置密码，以便退出后能再次登录。",
+    ms: "SMS kini dimatikan, jadi anda tidak boleh log masuk dengan kod SMS. Tetapkan kata laluan sekarang supaya anda boleh log masuk semula selepas log keluar.",
+  },
+  "account.password_set_submit": {
+    en: "Set password",
+    zh: "设置密码",
+    ms: "Tetapkan kata laluan",
+  },
+  "account.password_set_done": {
+    en: "Password set. You can now log in with your password or an SMS code.",
+    zh: "密码已设置，之后可用密码或短信验证码登录。",
+    ms: "Kata laluan ditetapkan. Anda kini boleh log masuk dengan kata laluan atau kod SMS.",
+  },
+  "account.password_exists": {
+    en: "A password is set. Changing it requires SMS verification.",
+    zh: "已设置密码；更改密码须经短信验证。",
+    ms: "Kata laluan telah ditetapkan. Menukarnya memerlukan pengesahan SMS.",
+  },
+  "account.password_change": {
+    en: "Change password",
+    zh: "更改密码",
+    ms: "Tukar kata laluan",
+  },
   "account.demo_hint": {
     en: "Points and coupons are demo only and have no cash value.",
     zh: "积分与优惠券均为演示，没有现金价值。",
