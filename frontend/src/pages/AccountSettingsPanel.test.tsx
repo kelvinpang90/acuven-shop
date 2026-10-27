@@ -409,14 +409,14 @@ describe("setting a first password", () => {
   });
 
   // 同一条「done 与 already_set 后的重读得到 guest 时用 replace 进入 /login，得到 failed 时保留当前内容并显示 common.error_retry」。
-  it.each<[string, Reply]>([
-    ["done", new Response(null, { status: 204 })],
-    ["already_set", json(409, { detail: "password_already_set" })],
+  it.each<[string, () => Response]>([
+    ["done", () => new Response(null, { status: 204 })],
+    ["already_set", () => json(409, { detail: "password_already_set" })],
   ])("leaves for /login or asks to retry when the reread after %s says so", async (_name, reply) => {
-    const guest = await submit(reply.clone(), [{ kind: "guest" }]);
+    const guest = await submit(reply(), [{ kind: "guest" }]);
     expect(guest.events.slice(-2)).toEqual(["reread", "login"]);
     expect(guest.sessions).toEqual([]);
-    const failed = await submit(reply.clone(), [{ kind: "failed" }]);
+    const failed = await submit(reply(), [{ kind: "failed" }]);
     expect(failed.events.slice(-2)).toEqual(["reread", "update"]);
     expect(failed.sessions).toEqual([]);
     expect(failed.current().notice).toBe("common.error_retry");
