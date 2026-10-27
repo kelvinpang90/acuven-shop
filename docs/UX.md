@@ -2081,7 +2081,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 |   ( [admin.add_country] )      |
 | [admin.shipping_other][M1 __]  |
 | ▸ [admin.fx_title]             |
-|   <国家> → <币种>               |
+|   <国家> → <币种>（<小数位>）    |
 |   [admin.fx_rate] [M2 ____]    |
 |   [admin.fx_version] ( [admin.remove] ) |
 |   新增的行：<国家>              |
