@@ -19,11 +19,13 @@ import AdminSiteSettingsPage, {
   AdminSiteSettingsContent,
   AdminSiteSettingsView,
   chooseMethod,
+  chooseSms,
   LOADING,
   openSettings,
   readStep,
   saveStep,
   shownState,
+  SMS_NOTE_ID,
   startSaving,
   STRIPE_NOTE_ID,
   submitSettings,
@@ -236,24 +238,57 @@ const LOGIN_PATH = "/admin/login";
 const SETTINGS_URL = "/api/admin/site-settings";
 const METHODS: PaymentMethod[] = ["simulated", "stripe_test"];
 
+// SHOP-TASK-169 改动：读取结果多了 sms_verification_enabled 与 sms_available，下面三个夹具补上短信一项（短信关闭、短信服务可用），
+// 支付方式部分不变。
 // 读取到的设置：当前为模拟，Stripe 测试凭据可用。
-const SETTINGS: AdminSiteSettings = { payment_method: "simulated", stripe_available: true, csrf_token: "settings-csrf-1" };
+const SETTINGS: AdminSiteSettings = {
+  payment_method: "simulated",
+  stripe_available: true,
+  csrf_token: "settings-csrf-1",
+  sms_verification_enabled: false,
+  sms_available: true,
+};
 // 当前已是 Stripe 测试而凭据后来失效（UX A09「当前已是「Stripe 测试」而凭据后来失效时」）。
-const STALE_STRIPE: AdminSiteSettings = { payment_method: "stripe_test", stripe_available: false, csrf_token: "settings-csrf-1" };
+const STALE_STRIPE: AdminSiteSettings = {
+  payment_method: "stripe_test",
+  stripe_available: false,
+  csrf_token: "settings-csrf-1",
+  sms_verification_enabled: false,
+  sms_available: true,
+};
 // 凭据不可用、当前为模拟。
 const UNAVAILABLE: AdminSiteSettings = { ...SETTINGS, stripe_available: false };
+// 短信服务不可用、当前为关闭（SHOP-TASK-169）。
+const SMS_UNAVAILABLE: AdminSiteSettings = { ...SETTINGS, sms_available: false };
+// 当前已开启而短信服务配置后来失效（UX A09「当前已开启而配置后来失效时」，SHOP-TASK-169）。
+const STALE_SMS: AdminSiteSettings = { ...SETTINGS, sms_verification_enabled: true, sms_available: false };
 
 type ReadyState = Extract<SettingsState, { status: "ready" }>;
 
-// 已取到的状态：选中项默认为 base 的当前值。
+// 已取到的状态：两组的选中项默认为 base 的当前值。
+// SHOP-TASK-169 改动：补上短信的选中项（smsChoice）与短信被拒（smsRejected）。
 function readyState(overrides: Partial<ReadyState> = {}): SettingsState {
   const base = overrides.base ?? SETTINGS;
-  return { status: "ready", base, choice: base.payment_method, saving: false, saved: false, rejected: false, alert: null, saveError: null, ...overrides };
+  return {
+    status: "ready",
+    base,
+    choice: base.payment_method,
+    smsChoice: base.sms_verification_enabled,
+    saving: false,
+    saved: false,
+    rejected: false,
+    smsRejected: false,
+    alert: null,
+    saveError: null,
+    ...overrides,
+  };
 }
 
-// 本页内容区的视图（只依赖 props）。
+// 本页内容区的视图（只依赖 props）。SHOP-TASK-169 改动：补上改选短信的处理函数。
 function render(state: SettingsState = readyState(), language: Language = "en"): string {
-  return renderToStaticMarkup(wrap(<AdminSiteSettingsView state={state} onChoose={() => undefined} onSave={() => undefined} />, language));
+  return renderToStaticMarkup(
+    wrap(<AdminSiteSettingsView state={state} onChoose={() => undefined} onChooseSms={() => undefined} onSave={() => undefined} />, language),
+  );
 }
 
 // 表单里的各单选（依出现顺序）的属性。
@@ -263,8 +298,24 @@ function radios(html: string): Map<string, string>[] {
     .filter((input) => input.get("type") === "radio");
 }
 
+// 支付方式一组。SHOP-TASK-169 改动：表单里先是短信一组，改为按支付方式一组自己的 class 取。
 function group(html: string): string {
-  return element(html, "fieldset", "site-admin-settings__group");
+  return element(html, "fieldset", "site-admin-settings__payment");
+}
+
+// 短信验证一组（SHOP-TASK-169）。
+function smsGroup(html: string): string {
+  return element(html, "fieldset", "site-admin-settings__sms");
+}
+
+// 短信的两个单选（依出现顺序）的属性。
+function smsRadios(html: string): Map<string, string>[] {
+  return radios(html).filter((input) => input.get("name") === "sms_verification_enabled");
+}
+
+// 支付方式的两个单选（依出现顺序）的属性。
+function paymentRadios(html: string): Map<string, string>[] {
+  return radios(html).filter((input) => input.get("name") === "payment_method");
 }
 
 function saveArea(html: string): string {
@@ -281,6 +332,10 @@ function alertHtml(text: string): string {
 
 function stripeNoteHtml(language: Language): string {
   return `<div id="${STRIPE_NOTE_ID}" class="acs-admin__alert"><span>${escapeHtml(COPY["admin.stripe_not_configured"][language])}</span></div>`;
+}
+
+function smsNoteHtml(language: Language): string {
+  return `<div id="${SMS_NOTE_ID}" class="acs-admin__alert"><span>${escapeHtml(COPY["admin.sms_not_configured"][language])}</span></div>`;
 }
 
 function occurrences(html: string, text: string): number {
@@ -365,6 +420,13 @@ function allStates(): SettingsState[] {
     readyState({ saveError: "common.network_check" }),
     readyState({ saveError: "common.error_retry" }),
     readyState({ alert: "common.error_retry" }),
+    // SHOP-TASK-169：短信开启、短信服务不可用、开启后配置失效（含改选关闭）与短信被拒。
+    readyState({ base: { ...SETTINGS, sms_verification_enabled: true } }),
+    readyState({ base: SMS_UNAVAILABLE }),
+    readyState({ base: STALE_SMS }),
+    readyState({ base: STALE_SMS, smsChoice: false }),
+    readyState({ smsChoice: true, smsRejected: true }),
+    readyState({ base: STALE_SMS, smsRejected: true }),
   ];
 }
 
@@ -378,11 +440,25 @@ describe("payment method form", () => {
     const h1 = `<h1 class="acs-admin__h site-admin-settings__title">${escapeHtml(COPY["admin.nav_settings"][language])}</h1>`;
     expect(html.startsWith(`<div class="site-admin-settings">${h1}<div class="site-admin-settings__body" aria-busy="false"><form`)).toBe(true);
     const form = element(html, "form", "site-admin-settings__form");
-    const keys: CopyKey[] = ["admin.payment_method", "admin.payment_simulated", "admin.payment_stripe", "admin.payment_method_hint", "common.save"];
+    // SHOP-TASK-169 改动：UX 0.14 A09 线框在支付方式之前是短信一组；按顺序比较的文字与单选在支付方式之前补上短信一组，legend 由 1 个改为 2 个。
+    const keys: CopyKey[] = [
+      "admin.sms_toggle",
+      "admin.sms_on",
+      "admin.sms_off",
+      "admin.sms_toggle_hint",
+      "admin.sms_toggle_cost",
+      "admin.payment_method",
+      "admin.payment_simulated",
+      "admin.payment_stripe",
+      "admin.payment_method_hint",
+      "common.save",
+    ];
     expect(textNodes(form)).toEqual(keys.map((key) => COPY[key][language]));
-    expect(tags(form, "legend")).toHaveLength(1);
+    expect(tags(form, "legend")).toHaveLength(2);
     expect(textNodes(group(form))[0]).toBe(COPY["admin.payment_method"][language]);
     expect(radios(form).map((input) => [input.get("name"), input.get("value"), input.has("disabled")])).toEqual([
+      ["sms_verification_enabled", "on", false],
+      ["sms_verification_enabled", "off", false],
       ["payment_method", "simulated", false],
       ["payment_method", "stripe_test", false],
     ]);
@@ -399,7 +475,10 @@ describe("payment method form", () => {
       if (state === "login") {
         throw new Error("unexpected login");
       }
+      // SHOP-TASK-169 改动：按顺序比较的单选在支付方式之前补上短信一组（SETTINGS 的短信为关闭）。
       expect(radios(render(state)).map((input) => [input.get("value"), input.has("checked")])).toEqual([
+        ["on", false],
+        ["off", true],
         ["simulated", method === "simulated"],
         ["stripe_test", method === "stripe_test"],
       ]);
@@ -431,17 +510,20 @@ describe("payment method form", () => {
   it.each(LANGUAGES)("keeps a stale Stripe choice checked and lets it switch back to simulated in %s", async (language) => {
     const state = readyState({ base: STALE_STRIPE });
     const html = render(state, language);
+    // SHOP-TASK-169 改动：按顺序比较的单选在支付方式之前补上短信一组；保存的调用补短信参数，请求体与 200 的回答改为两项。
     expect(radios(html).map((input) => [input.get("value"), input.has("checked"), input.has("disabled")])).toEqual([
+      ["on", false, false],
+      ["off", true, false],
       ["simulated", false, false],
       ["stripe_test", true, true],
     ]);
     expect(group(html)).toContain(stripeNoteHtml(language));
     const switched = chooseMethod(state, "simulated");
-    expect(radios(render(switched, language)).map((input) => input.has("checked"))).toEqual([true, false]);
-    const request = stubFetch(json(200, { payment_method: "simulated" }));
+    expect(radios(render(switched, language)).map((input) => input.has("checked"))).toEqual([false, true, true, false]);
+    const request = stubFetch(json(200, { payment_method: "simulated", sms_verification_enabled: false }));
     const moves = fakeMoves(startSaving(switched));
-    await submitSettings(STALE_STRIPE, "simulated", new AbortController().signal, moves.target);
-    expect(bodyOf(requests(request)[0]?.init)).toEqual({ payment_method: "simulated" });
+    await submitSettings(STALE_STRIPE, "simulated", false, new AbortController().signal, moves.target);
+    expect(bodyOf(requests(request)[0]?.init)).toEqual({ payment_method: "simulated", sms_verification_enabled: false });
     expect(moves.current).toEqual(readyState({ base: { ...STALE_STRIPE, payment_method: "simulated" }, saved: true }));
   });
 
@@ -456,23 +538,124 @@ describe("payment method form", () => {
   });
 });
 
-describe("no SMS verification", () => {
-  // Kelvin 2026-10-07（docs/HANDOFF.md）「后台站点设置 A09（短信验证开关）的保存接口与页面等短信验证服务与会员结账路径上线后再做…在那之前
-  // 不提供任何打开它的入口」与 2026-10-15「后台站点设置 A09 先只放支付方式开关」，SHOP-TASK-139 验收第 2 条「不出现任何 admin.sms_* 文字
-  // 或短信验证开关」：表单的各状态都没有 UX-COPY 里 admin.sms_* 的文字，单选只有支付方式一组、没有勾选框；字典也没有 admin.sms_* 条目。
-  it.each(LANGUAGES)("shows no SMS text or switch in any state in %s", (language) => {
-    const texts = smsTexts(language);
-    expect(texts.length).toBeGreaterThan(0);
-    for (const state of allStates()) {
-      const html = render(state, language);
-      const shown = visibleTexts(html);
-      for (const text of texts) {
-        expect(shown).not.toContain(text);
+// SHOP-TASK-169 改动：SHOP-TASK-139 按 Kelvin 2026-10-07 与 2026-10-15 的决定写的「各状态都没有 admin.sms_* 文字、字典没有 admin.sms_*
+// 条目」一条（describe "no SMS verification"）已被 DESIGN 1.15 与 HANDOFF 0.65 取代，删除，改由下面短信一组的各条断言代替。
+
+describe("SMS verification group", () => {
+  // UX 0.14 A09 桌面与手机线框「[admin.nav_settings] / [admin.sms_toggle] / ( ) [admin.sms_on] (●) [admin.sms_off] / [admin.sms_toggle_hint] /
+  // [admin.sms_toggle_cost] / … / [admin.payment_method]」与 SHOP-TASK-169 验收第 3 条「标题之下先是 admin.sms_toggle 一组（fieldset 与
+  // legend 照支付方式一组）两个单选 admin.sms_on 与 admin.sms_off……其下 admin.sms_toggle_hint 与 admin.sms_toggle_cost，再是现有的支付方式
+  // 一组」：表单里第一个 fieldset 为短信一组，排在支付方式一组之前，组内依次为 legend、开启与关闭两个同名单选、提示与费用提示。
+  it.each(LANGUAGES)("shows the SMS group before the payment method in %s", (language) => {
+    const form = element(render(readyState(), language), "form", "site-admin-settings__form");
+    const fieldsets = tags(form, "fieldset");
+    expect(fieldsets).toHaveLength(2);
+    expect((attributes(fieldsets[0] ?? "").get("class") ?? "").split(/\s+/)).toEqual([
+      "acs-admin__panel",
+      "site-admin-settings__group",
+      "site-admin-settings__sms",
+    ]);
+    expect(form.indexOf(smsGroup(form))).toBeLessThan(form.indexOf(group(form)));
+    expect(form.indexOf(smsGroup(form))).toBe(form.indexOf("<fieldset"));
+    const sms = smsGroup(form);
+    expect(tags(sms, "legend")).toHaveLength(1);
+    expect(textNodes(sms)).toEqual(
+      (["admin.sms_toggle", "admin.sms_on", "admin.sms_off", "admin.sms_toggle_hint", "admin.sms_toggle_cost"] as const).map((key) => COPY[key][language]),
+    );
+    expect(smsRadios(sms).map((input) => [input.get("value"), input.has("disabled"), input.get("aria-describedby")])).toEqual([
+      ["on", false, undefined],
+      ["off", false, undefined],
+    ]);
+    expect(paymentRadios(sms)).toEqual([]);
+    expect(smsRadios(group(form))).toEqual([]);
+  });
+
+  // UX A09「默认 [admin.sms_off]」与 SHOP-TASK-169 验收第 3 条「选中项为读取（或保存后）的当前值」：读取到开启或关闭，短信一组里就只有那一项
+  // 选中，支付方式一组照旧。
+  it("checks the current SMS value from the read", () => {
+    for (const enabled of [true, false]) {
+      const state = readStep({ kind: "ok", settings: { ...SETTINGS, sms_verification_enabled: enabled } });
+      if (state === "login") {
+        throw new Error("unexpected login");
       }
-      expect(radios(html).every((input) => input.get("name") === "payment_method")).toBe(true);
-      expect(tags(html, "input").filter((tag) => attributes(tag).get("type") !== "radio")).toEqual([]);
+      const html = render(state);
+      expect(smsRadios(html).map((input) => [input.get("value"), input.has("checked")])).toEqual([
+        ["on", enabled],
+        ["off", !enabled],
+      ]);
+      expect(paymentRadios(html).map((input) => input.has("checked"))).toEqual([true, false]);
     }
-    expect(Object.keys(COPY).filter((key) => key.startsWith("admin.sms_"))).toEqual([]);
+  });
+
+  // UX 0.14 A09「服务端告知短信服务的配置不齐全时，[admin.sms_on] 禁用、其下显示 [admin.sms_not_configured]……禁用与提示的写法与
+  // [admin.stripe_not_configured] 相同」、DESIGN 1.15「边界与原则」短信验证开关一条与 SHOP-TASK-169 验收第 3 条「以 aria-describedby 指向紧接
+  // 两个单选之后、admin.sms_toggle_hint 之前显示的 admin.sms_not_configured（照 Stripe 说明的位置）」：sms_available 为假时开启单选禁用、
+  // 文字为次要文字，说明在两个单选之后、提示之前；关闭照常可选。短信服务可用时没有这段说明。
+  it.each(LANGUAGES)("disables On and explains why when the SMS service is unavailable in %s", (language) => {
+    const sms = smsGroup(render(readyState({ base: SMS_UNAVAILABLE }), language));
+    expect(smsRadios(sms).map((input) => [input.get("value"), input.has("disabled"), input.get("aria-describedby")])).toEqual([
+      ["on", true, SMS_NOTE_ID],
+      ["off", false, undefined],
+    ]);
+    expect(tags(sms, "label").map((tag) => attributes(tag).get("class"))).toEqual([
+      "acs-admin__muted site-admin-settings__option",
+      "site-admin-settings__option",
+    ]);
+    expect(sms).toContain(smsNoteHtml(language));
+    expect(textNodes(sms)).toEqual(
+      (["admin.sms_toggle", "admin.sms_on", "admin.sms_off", "admin.sms_not_configured", "admin.sms_toggle_hint", "admin.sms_toggle_cost"] as const).map(
+        (key) => COPY[key][language],
+      ),
+    );
+    const available = render(readyState(), language);
+    expect(available).not.toContain(escapeHtml(COPY["admin.sms_not_configured"][language]));
+    expect(available).not.toContain(SMS_NOTE_ID);
+  });
+
+  // UX 0.14 A09「当前已开启而配置后来失效时，两项照常显示当前值，仍可切回关闭」与 SHOP-TASK-169 验收第 3 条「当前已开启时照常显示为选中、
+  // 仍可改选关闭并保存」：开启单选禁用但仍选中，关闭可选；改选关闭（chooseSms）后保存提交两项，成功后选中关闭。
+  it.each(LANGUAGES)("keeps a stale On checked and lets it switch back to Off in %s", async (language) => {
+    const state = readyState({ base: STALE_SMS });
+    const html = render(state, language);
+    expect(smsRadios(html).map((input) => [input.get("value"), input.has("checked"), input.has("disabled")])).toEqual([
+      ["on", true, true],
+      ["off", false, false],
+    ]);
+    expect(smsGroup(html)).toContain(smsNoteHtml(language));
+    const switched = chooseSms(state, false);
+    expect(switched).toEqual(readyState({ base: STALE_SMS, smsChoice: false }));
+    expect(smsRadios(render(switched, language)).map((input) => input.has("checked"))).toEqual([false, true]);
+    const request = stubFetch(json(200, { payment_method: "simulated", sms_verification_enabled: false }));
+    const moves = fakeMoves(startSaving(switched));
+    await submitSettings(STALE_SMS, "simulated", false, new AbortController().signal, moves.target);
+    expect(bodyOf(requests(request)[0]?.init)).toEqual({ payment_method: "simulated", sms_verification_enabled: false });
+    expect(moves.current).toEqual(readyState({ base: { ...STALE_SMS, sms_verification_enabled: false }, saved: true }));
+    expect(chooseSms(LOADING, false)).toBe(LOADING);
+  });
+
+  // UX A09「演示提示：★ [admin.sms_toggle_cost]」与 0.14「[admin.sms_toggle_cost] 照常显示（Kelvin 2026-10-27 决定）」、SHOP-TASK-169 验收第 3 条
+  // 「admin.sms_toggle_cost 始终显示」：表单的每个状态（开或关、短信服务可用或不可用、保存中、保存后与被拒）都在短信一组里显示一次，
+  // 前面为不读出的菱形标记。
+  it.each(LANGUAGES)("always shows the SMS cost note in %s", (language) => {
+    const cost = COPY["admin.sms_toggle_cost"][language];
+    for (const state of allStates()) {
+      if (state.status !== "ready") {
+        continue;
+      }
+      const html = render(state, language);
+      expect(occurrences(html, cost)).toBe(1);
+      const note = element(smsGroup(html), "div", "site-admin-settings__cost");
+      expect(note).toMatch(new RegExp(`^<div class="site-admin-settings__cost"><svg [^>]*aria-hidden="true"[^>]*>.*</svg><span>`));
+      expect(textNodes(note)).toEqual([cost]);
+    }
+  });
+
+  // UX A09「开启时页面不另加确认框」（Kelvin 2026-10-27 决定）与 SHOP-TASK-169 验收第 3 条「不加确认框」：改选开启只更新选中项，不进入别的状态，
+  // 页面源码里改选短信的处理函数直接调用 chooseSms。
+  it("switches SMS on without a confirmation dialog", () => {
+    expect(chooseSms(readyState(), true)).toEqual(readyState({ smsChoice: true }));
+    expect(pageSource).toMatch(/onChooseSms=\{\(enabled\) => \{\s*setEntry\(\(current\) => \(current\.language === language \? \{ language, state: chooseSms\(current\.state, enabled\) \}/);
+    expect(render(readyState({ smsChoice: true }))).not.toMatch(/<dialog\b|role="(alert)?dialog"/);
   });
 });
 
@@ -552,27 +735,45 @@ describe("language", () => {
   // 同一条「离开页面时中止」：effect 的清理（startDeferred 返回的函数）中止当前语言的 controller，保存用的正是这个 controller 的 signal。
   it("aborts the read and the save together on cleanup", () => {
     expect(pageSource).toMatch(/lifetime\.current = controller;\s*return startDeferred\(controller,/);
-    expect(pageSource).toMatch(/const controller = lifetime\.current;[\s\S]*?submitSettings\(state\.base, state\.choice, controller\.signal,/);
+    // SHOP-TASK-169 改动：submitSettings 多了短信参数，匹配调用的正则随之改写。
+    expect(pageSource).toMatch(/const controller = lifetime\.current;[\s\S]*?submitSettings\(state\.base, state\.choice, state\.smsChoice, controller\.signal,/);
   });
 });
 
 describe("saving", () => {
   // SHOP-TASK-139 验收第 3 条「点 common.save 以当前选择与读取给的 csrf_token 调用保存」：PUT 一次，请求头带读取给的 CSRF 令牌，
   // 请求体为当前选择，带中止用的 signal。
+  // SHOP-TASK-169 改动：submitSettings 多了短信参数、200 的回答补 sms_verification_enabled，请求体的断言改为两项。
   it.each(METHODS)("saves the current choice with the read CSRF token (%s)", async (method) => {
-    const request = stubFetch(json(200, { payment_method: method }));
+    const request = stubFetch(json(200, { payment_method: method, sms_verification_enabled: false }));
     const controller = new AbortController();
-    await submitSettings(SETTINGS, method, controller.signal, fakeMoves(startSaving(readyState({ choice: method }))).target);
+    await submitSettings(SETTINGS, method, false, controller.signal, fakeMoves(startSaving(readyState({ choice: method }))).target);
     const calls = requests(request);
     expect(calls.map((call) => [call.method, call.url])).toEqual([["PUT", SETTINGS_URL]]);
     expect(calls[0]?.init?.signal).toBe(controller.signal);
     expect(new Headers(calls[0]?.init?.headers).get("X-CSRF-Token")).toBe(SETTINGS.csrf_token);
-    expect(bodyOf(calls[0]?.init)).toEqual({ payment_method: method });
+    expect(bodyOf(calls[0]?.init)).toEqual({ payment_method: method, sms_verification_enabled: false });
   });
+
+  // UX 0.14 A09「保存一次提交两项」与 SHOP-TASK-169 验收第 4 条「点 common.save 以两组的当前选择与读取给的 csrf_token 调用保存」：
+  // 两组的四种组合各 PUT 一次，请求体恰为这两项，请求头带读取给的 CSRF 令牌。
+  it.each(METHODS.flatMap((method) => [true, false].map((enabled): [PaymentMethod, boolean] => [method, enabled])))(
+    "saves both choices together (%s, %s)",
+    async (method, enabled) => {
+      const request = stubFetch(json(200, { payment_method: method, sms_verification_enabled: enabled }));
+      await submitSettings(SETTINGS, method, enabled, new AbortController().signal, fakeMoves(startSaving(readyState({ choice: method, smsChoice: enabled }))).target);
+      const calls = requests(request);
+      expect(calls.map((call) => [call.method, call.url])).toEqual([["PUT", SETTINGS_URL]]);
+      expect(new Headers(calls[0]?.init?.headers).get("X-CSRF-Token")).toBe(SETTINGS.csrf_token);
+      const body = bodyOf(calls[0]?.init);
+      expect(body).toEqual({ payment_method: method, sms_verification_enabled: enabled });
+      expect(Object.keys(body as object)).toEqual(["payment_method", "sms_verification_enabled"]);
+    },
+  );
 
   // 同一条「进行中按钮禁用并标 aria-busy」：点保存后 common.save（submit）禁用并标 aria-busy，先前的提示都收起；其余时候可点、aria-busy 为 false。
   it.each(LANGUAGES)("disables the save button while saving in %s", (language) => {
-    const saving = startSaving(readyState({ saved: true, rejected: true, alert: "common.error_retry", saveError: "common.network_check" }));
+    const saving = startSaving(readyState({ saved: true, rejected: true, smsRejected: true, alert: "common.error_retry", saveError: "common.network_check" }));
     expect(saving).toEqual(readyState({ saving: true }));
     const html = render(saving, language);
     expect([saveButton(html).has("disabled"), saveButton(html).get("aria-busy")]).toEqual([true, "true"]);
@@ -584,18 +785,20 @@ describe("saving", () => {
 
   // UX A09「保存成功：[admin.settings_saved]」与 SHOP-TASK-139 验收第 3 条「ok 以返回的值更新选中项并显示 admin.settings_saved」：
   // 保存成功后选中项与之后保存的依据为返回的支付方式（stripe_available 与 CSRF 令牌沿用读取的），保存按钮下方显示 admin.settings_saved。
+  // SHOP-TASK-169 改动：替身的 200 回答与 saveStep 的 ok 结果补 sms_verification_enabled，submitSettings 补短信参数，
+  // 按顺序比较的单选在支付方式之前补上短信一组。
   it.each(LANGUAGES)("updates the choice from the reply and shows the saved message in %s", async (language) => {
-    stubFetch(json(200, { payment_method: "stripe_test" }));
+    stubFetch(json(200, { payment_method: "stripe_test", sms_verification_enabled: false }));
     const moves = fakeMoves(startSaving(readyState({ choice: "stripe_test" })));
-    await submitSettings(SETTINGS, "stripe_test", new AbortController().signal, moves.target);
+    await submitSettings(SETTINGS, "stripe_test", false, new AbortController().signal, moves.target);
     expect(moves.events).toEqual(["update ready"]);
     expect(moves.current).toEqual(readyState({ base: { ...SETTINGS, payment_method: "stripe_test" }, saved: true }));
     const html = render(moves.current, language);
-    expect(radios(html).map((input) => input.has("checked"))).toEqual([false, true]);
+    expect(radios(html).map((input) => input.has("checked"))).toEqual([false, true, false, true]);
     expect(saveArea(html)).toContain(`<span role="status">${escapeHtml(COPY["admin.settings_saved"][language])}</span>`);
     expect(textNodes(saveArea(html))).toEqual([COPY["common.save"][language], COPY["admin.settings_saved"][language]]);
     // 返回的值与提交的不同时，选中项以返回的为准。
-    const step = saveStep({ kind: "ok", payment_method: "simulated" }, SETTINGS);
+    const step = saveStep({ kind: "ok", payment_method: "simulated", sms_verification_enabled: false }, SETTINGS);
     if (typeof step !== "function") {
       throw new Error("expected a change");
     }
@@ -614,16 +817,17 @@ describe("saving", () => {
 
   // UX A09「保存时服务端再次检查，被拒则显示 [admin.stripe_not_configured]、本次保存不生效」与 SHOP-TASK-139 验收第 3 条「not_configured
   // 在保存按钮下方（与 admin.settings_saved 同一位置）显示 admin.stripe_not_configured、保留表单、选中项不变…改选任何一项后收起」。
+  // SHOP-TASK-169 改动：submitSettings 补短信参数，按顺序比较的单选在支付方式之前补上短信一组。
   it.each(LANGUAGES)("shows the rejection under the save button and keeps the choice in %s", async (language) => {
     stubFetch(json(422, { detail: "stripe_not_configured" }));
     const moves = fakeMoves(startSaving(readyState({ choice: "stripe_test" })));
-    await submitSettings(SETTINGS, "stripe_test", new AbortController().signal, moves.target);
+    await submitSettings(SETTINGS, "stripe_test", false, new AbortController().signal, moves.target);
     expect(moves.current).toEqual(readyState({ choice: "stripe_test", rejected: true }));
     const html = render(moves.current, language);
     expect(saveArea(html)).toContain(alertHtml(COPY["admin.stripe_not_configured"][language]));
     expect(textNodes(saveArea(html))).toEqual([COPY["common.save"][language], COPY["admin.stripe_not_configured"][language]]);
     expect(saveButton(html).has("disabled")).toBe(false);
-    expect(radios(html).map((input) => input.has("checked"))).toEqual([false, true]);
+    expect(radios(html).map((input) => input.has("checked"))).toEqual([false, true, false, true]);
     expect(html).not.toContain(escapeHtml(COPY["admin.settings_saved"][language]));
     for (const method of METHODS) {
       const next = chooseMethod(moves.current, method);
@@ -648,22 +852,109 @@ describe("saving", () => {
     }
   });
 
+  // UX 0.14 A09「保存时服务端再次检查，被拒则显示 [admin.sms_not_configured]、本次保存不生效（支付方式也不改）」与 SHOP-TASK-169 验收第 4 条
+  // 「sms_not_configured 在保存按钮下方（与 admin.settings_saved 同一位置）显示 admin.sms_not_configured、两组选中项不变、保留表单」：
+  // 被拒后保存按钮恢复可点，按钮下方只有这一句（role="alert"），两组仍是提交时的选择，不显示 admin.settings_saved 与 admin.stripe_not_configured。
+  it.each(LANGUAGES)("shows the SMS rejection under the save button and keeps both choices in %s", async (language) => {
+    stubFetch(json(422, { detail: "sms_not_configured" }));
+    const moves = fakeMoves(startSaving(readyState({ choice: "stripe_test", smsChoice: true })));
+    await submitSettings(SETTINGS, "stripe_test", true, new AbortController().signal, moves.target);
+    expect(moves.events).toEqual(["update ready"]);
+    expect(moves.current).toEqual(readyState({ choice: "stripe_test", smsChoice: true, smsRejected: true }));
+    const html = render(moves.current, language);
+    expect(saveArea(html)).toContain(alertHtml(COPY["admin.sms_not_configured"][language]));
+    expect(textNodes(saveArea(html))).toEqual([COPY["common.save"][language], COPY["admin.sms_not_configured"][language]]);
+    expect(saveButton(html).has("disabled")).toBe(false);
+    expect(radios(html).map((input) => input.has("checked"))).toEqual([true, false, false, true]);
+    expect(tags(html, "fieldset")).toHaveLength(2);
+    expect(html).not.toContain(escapeHtml(COPY["admin.settings_saved"][language]));
+    expect(html).not.toContain(escapeHtml(COPY["admin.stripe_not_configured"][language]));
+  });
+
+  // SHOP-TASK-169 验收第 4 条「改选任何一项后收起保存的提示」：短信被拒后改选短信的任一项或支付方式的任一项，保存按钮下方的
+  // admin.sms_not_configured 都收起，选中项随改选更新。
+  it.each(LANGUAGES)("hides the SMS rejection after choosing any option in %s", (language) => {
+    const rejected = readyState({ smsChoice: true, smsRejected: true });
+    for (const enabled of [true, false]) {
+      const next = chooseSms(rejected, enabled);
+      expect(next).toEqual(readyState({ smsChoice: enabled }));
+      expect(textNodes(saveArea(render(next, language)))).toEqual([COPY["common.save"][language]]);
+    }
+    for (const method of METHODS) {
+      const next = chooseMethod(rejected, method);
+      expect(next).toEqual(readyState({ choice: method, smsChoice: true }));
+      expect(textNodes(saveArea(render(next, language)))).toEqual([COPY["common.save"][language]]);
+    }
+    // Stripe 被拒后改选短信同样收起保存按钮下方的 admin.stripe_not_configured。
+    expect(chooseSms(readyState({ choice: "stripe_test", rejected: true }), true)).toEqual(readyState({ choice: "stripe_test", smsChoice: true }));
+  });
+
+  // SHOP-TASK-169 验收第 4 条「与开启选项下方的禁用说明各自独立」（照 Stripe 的写法）：开启后配置失效而保存被拒时，说明同时出现在开启选项下方与
+  // 保存按钮下方；改选后只收起保存按钮下方的一处。
+  it.each(LANGUAGES)("shows the SMS rejection and the disabled note independently in %s", (language) => {
+    const text = COPY["admin.sms_not_configured"][language];
+    const both = render(readyState({ base: STALE_SMS, smsRejected: true }), language);
+    expect(smsGroup(both)).toContain(smsNoteHtml(language));
+    expect(saveArea(both)).toContain(alertHtml(text));
+    expect(occurrences(both, text)).toBe(2);
+    for (const enabled of [true, false]) {
+      const after = render(chooseSms(readyState({ base: STALE_SMS, smsRejected: true }), enabled), language);
+      expect(smsGroup(after)).toContain(smsNoteHtml(language));
+      expect(saveArea(after)).not.toContain(escapeHtml(text));
+      expect(occurrences(after, text)).toBe(1);
+    }
+  });
+
+  // UX A09「保存成功：[admin.settings_saved]」与 SHOP-TASK-169 验收第 4 条「ok 以返回的两项更新两组的选中项并显示 admin.settings_saved」：
+  // 保存成功后两组的选中项与之后保存的依据都是返回的值（返回的与提交的不同时以返回的为准；两种可用状态与 CSRF 令牌沿用读取的）。
+  it.each(LANGUAGES)("updates both groups from the reply in %s", async (language) => {
+    stubFetch(json(200, { payment_method: "stripe_test", sms_verification_enabled: true }));
+    const moves = fakeMoves(startSaving(readyState({ choice: "stripe_test", smsChoice: true })));
+    await submitSettings(SETTINGS, "stripe_test", true, new AbortController().signal, moves.target);
+    expect(moves.current).toEqual(readyState({ base: { ...SETTINGS, payment_method: "stripe_test", sms_verification_enabled: true }, saved: true }));
+    const html = render(moves.current, language);
+    expect(radios(html).map((input) => input.has("checked"))).toEqual([true, false, false, true]);
+    expect(textNodes(saveArea(html))).toEqual([COPY["common.save"][language], COPY["admin.settings_saved"][language]]);
+    const step = saveStep({ kind: "ok", payment_method: "simulated", sms_verification_enabled: false }, SETTINGS);
+    if (typeof step !== "function") {
+      throw new Error("expected a change");
+    }
+    expect(step(readyState({ choice: "stripe_test", smsChoice: true, saving: true }))).toEqual(readyState({ saved: true }));
+  });
+
+  // SHOP-TASK-169 验收第 4 条「改选任何一项后收起保存的提示」：保存成功后改选短信的任一项，admin.settings_saved 不再显示。
+  it("hides the saved message after choosing either SMS option", () => {
+    for (const enabled of [true, false]) {
+      const next = chooseSms(readyState({ saved: true }), enabled);
+      expect(next).toEqual(readyState({ smsChoice: enabled }));
+      expect(render(next)).not.toContain(escapeHtml(COPY["admin.settings_saved"].en));
+    }
+  });
+
   // SHOP-TASK-139 验收第 3 条「none 进入 /admin/login」：保存得到 401 时以 replace 进入 /admin/login，不更新表单。
+  // SHOP-TASK-169 改动：本条及以下 submitSettings 的调用补短信参数。
   it("goes to the login page on 401", async () => {
     stubFetch(json(401, { detail: "admin_session_required" }));
     const moves = fakeMoves(startSaving(readyState()));
-    await submitSettings(SETTINGS, "simulated", new AbortController().signal, moves.target);
+    await submitSettings(SETTINGS, "simulated", false, new AbortController().signal, moves.target);
     expect(moves.events).toEqual([`replace ${LOGIN_PATH}`]);
   });
 
   // 同一条「csrf 照 AdminStoreDesignPage.tsx 的写法重新读取后在表单上方显示 common.error_retry」：403 后先显示读取中（不显示表单），
   // 再以同一 signal 读取；取得后选中项按新结果重置，表单最上方为 common.error_retry。
+  // SHOP-TASK-169 改动：403 后的读取结果补 sms_verification_enabled 与 sms_available。
   it.each(LANGUAGES)("reads again after 403 and shows the error above the form in %s", async (language) => {
-    const fresh: AdminSiteSettings = { payment_method: "stripe_test", stripe_available: true, csrf_token: "settings-csrf-2" };
+    const fresh: AdminSiteSettings = {
+      payment_method: "stripe_test",
+      stripe_available: true,
+      csrf_token: "settings-csrf-2",
+      sms_verification_enabled: true,
+      sms_available: true,
+    };
     const request = stubFetch(json(403, { detail: "csrf_invalid" }), json(200, fresh));
     const moves = fakeMoves(startSaving(readyState()));
     const controller = new AbortController();
-    await submitSettings(SETTINGS, "simulated", controller.signal, moves.target);
+    await submitSettings(SETTINGS, "simulated", false, controller.signal, moves.target);
     const calls = requests(request);
     expect(calls.map((call) => [call.method, call.url])).toEqual([
       ["PUT", SETTINGS_URL],
@@ -685,7 +976,7 @@ describe("saving", () => {
   ])("handles the read after 403 like the first read (%#)", async (reread, events, state) => {
     stubFetch(json(403, { detail: "csrf_invalid" }), reread);
     const moves = fakeMoves(startSaving(readyState()));
-    await submitSettings(SETTINGS, "simulated", new AbortController().signal, moves.target);
+    await submitSettings(SETTINGS, "simulated", false, new AbortController().signal, moves.target);
     expect(moves.events).toEqual(events);
     if (state !== null) {
       expect(moves.current).toEqual(state);
@@ -703,33 +994,36 @@ describe("saving", () => {
     stubFetch(reply);
     const moves = fakeMoves(startSaving(readyState({ choice: "stripe_test" })));
     moves.target.update((current) => chooseMethod(current, "simulated"));
-    await submitSettings(SETTINGS, "stripe_test", new AbortController().signal, moves.target);
+    await submitSettings(SETTINGS, "stripe_test", false, new AbortController().signal, moves.target);
     expect(moves.current).toEqual(readyState({ saveError: key }));
     for (const language of LANGUAGES) {
       const html = render(moves.current, language);
       expect(textNodes(saveArea(html))).toEqual([COPY["common.save"][language], COPY[key][language]]);
       expect(saveArea(html)).toContain(alertHtml(COPY[key][language]));
       expect(saveButton(html).has("disabled")).toBe(false);
-      expect(tags(html, "fieldset")).toHaveLength(1);
+      // SHOP-TASK-169 改动：表单里多了短信一组，fieldset 由 1 个改为 2 个；也不按短信被拒显示 admin.sms_not_configured。
+      expect(tags(html, "fieldset")).toHaveLength(2);
       expect(html).not.toContain(escapeHtml(COPY["admin.settings_saved"][language]));
       expect(html).not.toContain(escapeHtml(COPY["admin.stripe_not_configured"][language]));
+      expect(html).not.toContain(escapeHtml(COPY["admin.sms_not_configured"][language]));
     }
   });
 
   // SHOP-TASK-139 验收第 3 条「离开页面时中止，中止后的结果不再更新页面」：保存的 signal 中止后，不论回答什么都不更新、不跳转，
-  // 也不在 403 后重新读取。
+  // 也不在 403 后重新读取。SHOP-TASK-169 改动：200 的回答补 sms_verification_enabled，并加入 422 sms_not_configured。
   it.each([
-    json(200, { payment_method: "simulated" }),
+    json(200, { payment_method: "simulated", sms_verification_enabled: false }),
     json(401, { detail: "admin_session_required" }),
     json(403, { detail: "csrf_invalid" }),
     json(422, { detail: "stripe_not_configured" }),
+    json(422, { detail: "sms_not_configured" }),
     json(500, {}),
     networkDown,
   ])("ignores a save after it was aborted (%#)", async (reply) => {
     const request = stubFetch(reply, json(200, SETTINGS));
     const controller = new AbortController();
     const moves = fakeMoves(startSaving(readyState()));
-    const pending = submitSettings(SETTINGS, "simulated", controller.signal, moves.target);
+    const pending = submitSettings(SETTINGS, "simulated", false, controller.signal, moves.target);
     controller.abort();
     await pending;
     expect(moves.events).toEqual([]);
@@ -753,5 +1047,12 @@ describe("dictionary for the form", () => {
       const row = uxCopy.split("\n").find((line) => line.startsWith(`| \`${key}\` |`)) ?? "";
       expect(row.split("|")[column]?.trim()).toBe(COPY[key][language]);
     }
+  });
+
+  // SHOP-TASK-169 验收第 1 条「copy.ts 按 UX-COPY 0.15 逐字加入 admin.sms_toggle、admin.sms_on、admin.sms_off、admin.sms_toggle_hint、
+  // admin.sms_toggle_cost 与 admin.sms_not_configured」：六条与 UX-COPY 的对应列逐字相同，UX-COPY 里的 admin.sms_* 恰为这六条。
+  it.each(LANGUAGES)("has the six SMS entries word for word from UX-COPY in %s", (language) => {
+    const keys = ["admin.sms_toggle", "admin.sms_on", "admin.sms_off", "admin.sms_toggle_hint", "admin.sms_toggle_cost", "admin.sms_not_configured"] as const;
+    expect(smsTexts(language)).toEqual(keys.map((key) => COPY[key][language]));
   });
 });

@@ -464,7 +464,7 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-store-design__details { display: none; }
 
 /* 后台站点设置 A09 的页头（A09-stripe-desktop）：内容最宽 720px，标题与之后各块上下排列（间距 16px）。
-   支付方式表单由 SHOP-TASK-139 接上；视觉稿的短信验证段按 Kelvin 2026-10-07 与 2026-10-15 的决定不做 */
+   支付方式表单由 SHOP-TASK-139 接上，短信验证一组由 SHOP-TASK-169 接上 */
 .site-admin-settings { display: grid; gap: 16px; max-width: 720px; }
 
 /* A09 的支付方式表单（SHOP-TASK-139，A09-stripe-desktop）：表单区、表单上方的提示、支付方式一组与保存上下排列（间距 16px）；
@@ -478,6 +478,11 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-settings__option input { flex-shrink: 0; width: 18px; height: 18px; margin: 0; }
 .site-admin-settings__save { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .site-admin-settings__save > [role="status"] { padding: 10px 12px; }
+/* A09 短信验证一组（SHOP-TASK-169，A09-stripe-desktop 与 A09-stripe-phone）：一组与选项沿用上面支付方式的写法；★ admin.sms_toggle_cost 为
+   菱形标记（14×14，不收缩，上边距 2px）与文字（间距 8px，内边距 8px 10px）。提示框的底色、文字颜色、圆角、字号与标记的填充色
+   site.css 写不了，记在任务记录的偏离里 */
+.site-admin-settings__cost { display: flex; gap: 8px; padding: 8px 10px; }
+.site-admin-settings__cost svg { flex-shrink: 0; margin-top: 2px; }
 
 /* 短信验证组件 V1（SHOP-TASK-145，V1-start、V1-code-wrong、V1-errors、V1-register-unavailable、V1-no-change 与 V1-verified，
    画板均为 480px 宽、没有另画手机稿，所以没有 767px 及以下的差异）：各块上下排列（间距 16px）；国家码下拉 96px、号码占余下；
