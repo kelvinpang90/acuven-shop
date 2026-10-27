@@ -3,11 +3,13 @@ import type { ReactElement, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { MEMBER_COUPONS_URL, MEMBER_POINTS_URL } from "../api/memberAccount";
+import type { MemberCoupons, MemberPoints } from "../api/memberAccount";
 import { clearMemberOrder, handOffMemberOrder, MEMBER_ORDERS_URL, memberOrderInView } from "../api/memberOrders";
 import type { MemberOrderSummary, MemberOrdersRead } from "../api/memberOrders";
 import { clearMemberPayOrder, MEMBER_PAY_ORDER_KEY, stashedMemberPayOrder, stashMemberPayOrder } from "../api/memberPay";
 import { createMemberSessionReader, MEMBER_LOGOUT_URL, MEMBER_SESSION_URL } from "../api/memberSession";
-import type { MemberLogoutReply, MemberSessionState } from "../api/memberSession";
+import type { MemberLogoutReply, MemberSessionReader, MemberSessionState } from "../api/memberSession";
 import { CSRF_HEADER } from "../api/pay";
 import App from "../App";
 import { formatSen } from "../format";
@@ -87,8 +89,23 @@ function languageStorage(language: Language) {
   };
 }
 
+// SHOP-TASK-165 加入积分与优惠券两段后，已登录的状态多了这两段。这里默认为已取到的空积分与空优惠券（页面上只有字典文字），
+// 我的订单、标题行与退出的断言照旧；两段的内容由 AccountPointsPanel.test.tsx 与 AccountCouponsPanel.test.tsx 守住。
+const EMPTY_POINTS: MemberPoints = { balance: 0, pending: 0, next_expiry: null, history: [] };
+const EMPTY_COUPONS: MemberCoupons = { available: [], used: [] };
+
 function memberScreen(overrides: Partial<Extract<AccountScreen, { status: "member" }>> = {}): AccountScreen {
-  return { status: "member", phoneMasked: MASKED, csrfToken: TOKEN, orders: { status: "ready", orders: ORDERS }, loggingOut: false, logoutError: null, ...overrides };
+  return {
+    status: "member",
+    phoneMasked: MASKED,
+    csrfToken: TOKEN,
+    orders: { status: "ready", orders: ORDERS },
+    points: { status: "ready", points: EMPTY_POINTS },
+    coupons: { status: "ready", coupons: EMPTY_COUPONS },
+    loggingOut: false,
+    logoutError: null,
+    ...overrides,
+  };
 }
 
 function withOrders(orders: OrdersState): AccountScreen {
@@ -223,6 +240,9 @@ function json(status: number, body: unknown): Response {
 const memberReply = (token = TOKEN) => json(200, { phone_masked: MASKED, has_password: false, expires_at: "2026-11-24T00:00:00Z", csrf_token: token });
 const guestReply = () => json(401, { detail: "member_session_required" });
 const ordersReply = (orders: MemberOrderSummary[] = ORDERS) => json(200, { total: orders.length, orders });
+const pointsReply = () => json(200, EMPTY_POINTS);
+const couponsReply = () => json(200, EMPTY_COUPONS);
+const signedOutReply = () => json(401, { detail: "member_session_required" });
 
 // 页面的处理替身：按顺序记下 show、update 与 replace，并按它们推演页面状态。
 function fakeMoves(initial: AccountScreen = LOADING) {
@@ -251,14 +271,20 @@ function headerOf(init: RequestInit, name: string): string | undefined {
 describe("opening the page", () => {
   // 验收第 2 条「打开时经 SHOP-TASK-151 的读取对象重读一次会话（不直接用之前读到的状态：登录后来到本页时共享状态可能还是旧的）」：
   // 共享状态先读成未登录（登录之前的那次），打开页面时仍重读会话，读到已登录后显示标题行，再读我的订单。
+  // SHOP-TASK-165：已登录后与我的订单一起读取积分与优惠券，只为这两个读取补了替身、请求清单与两次 update，会话与我的订单的期望不变。
   it("rereads the session instead of using the earlier shared state", async () => {
-    const calls = stubFetch({ [MEMBER_SESSION_URL]: [guestReply(), memberReply()], [MEMBER_ORDERS_URL]: [ordersReply()] });
+    const calls = stubFetch({
+      [MEMBER_SESSION_URL]: [guestReply(), memberReply()],
+      [MEMBER_ORDERS_URL]: [ordersReply()],
+      [MEMBER_POINTS_URL]: [pointsReply()],
+      [MEMBER_COUPONS_URL]: [couponsReply()],
+    });
     const reader = createMemberSessionReader();
     expect((await reader.load()).kind).toBe("guest");
     const { moves, events, current } = fakeMoves();
     await openAccount(reader, new AbortController().signal, moves);
-    expect(calls.map((call) => call.url)).toEqual([MEMBER_SESSION_URL, MEMBER_SESSION_URL, MEMBER_ORDERS_URL]);
-    expect(events).toEqual(["show member", "update"]);
+    expect(calls.map((call) => call.url)).toEqual([MEMBER_SESSION_URL, MEMBER_SESSION_URL, MEMBER_ORDERS_URL, MEMBER_POINTS_URL, MEMBER_COUPONS_URL]);
+    expect(events).toEqual(["show member", "update", "update", "update"]);
     expect(current()).toEqual(memberScreen());
     expect(reader.current().kind).toBe("member");
   });
@@ -302,19 +328,31 @@ describe("opening the page", () => {
   });
 
   // 同一条「这一判断只在打开页面时的那次读取后做，之后共享会话状态的变化不触发去 /login」：打开完成后共享读取再读到未登录，页面不跳转、不更新。
+  // SHOP-TASK-165：只为积分与优惠券两个读取补了替身与两次 update。
   it("ignores later changes of the shared session", async () => {
-    stubFetch({ [MEMBER_SESSION_URL]: [memberReply(), guestReply()], [MEMBER_ORDERS_URL]: [ordersReply()] });
+    stubFetch({
+      [MEMBER_SESSION_URL]: [memberReply(), guestReply()],
+      [MEMBER_ORDERS_URL]: [ordersReply()],
+      [MEMBER_POINTS_URL]: [pointsReply()],
+      [MEMBER_COUPONS_URL]: [couponsReply()],
+    });
     const reader = createMemberSessionReader();
     const { moves, events } = fakeMoves();
     await openAccount(reader, new AbortController().signal, moves);
     expect((await reader.reload()).kind).toBe("guest");
-    expect(events).toEqual(["show member", "update"]);
+    expect(events).toEqual(["show member", "update", "update", "update"]);
   });
 
   // 验收第 6 条「离开页面时中止请求，之后不再更新；会员会话的重读是共享读取，不中止，离开页面后不再据其结果更新或跳转」：
   // 读取会话不带页面的 signal（共享状态照常更新为已登录），重读期间已离开时不显示、不读我的订单；我的订单的请求带页面的 signal。
+  // SHOP-TASK-165：只为积分与优惠券两个读取补了替身，并期望这两个请求同样带页面的 signal。
   it("stops after leaving the page while the shared reread still settles", async () => {
-    const calls = stubFetch({ [MEMBER_SESSION_URL]: [memberReply(), memberReply()], [MEMBER_ORDERS_URL]: [ordersReply()] });
+    const calls = stubFetch({
+      [MEMBER_SESSION_URL]: [memberReply(), memberReply()],
+      [MEMBER_ORDERS_URL]: [ordersReply()],
+      [MEMBER_POINTS_URL]: [pointsReply()],
+      [MEMBER_COUPONS_URL]: [couponsReply()],
+    });
     const reader = createMemberSessionReader();
     const gone = new AbortController();
     gone.abort();
@@ -329,6 +367,75 @@ describe("opening the page", () => {
     await openAccount(reader, page.signal, staying.moves);
     expect(calls[2]?.url).toBe(MEMBER_ORDERS_URL);
     expect(calls[2]?.init.signal).toBe(page.signal);
+    expect(calls.slice(3).map((call) => call.url)).toEqual([MEMBER_POINTS_URL, MEMBER_COUPONS_URL]);
+    expect(calls[3]?.init.signal).toBe(page.signal);
+    expect(calls[4]?.init.signal).toBe(page.signal);
+  });
+});
+
+describe("points and coupons sections (SHOP-TASK-165)", () => {
+  // 验收第 2 条「会话为 member 后与我的订单一起经 SHOP-TASK-164 读取两段」：sessionStep 让三段都从读取中开始，打开后三个请求都发出，
+  // 结果分别换上各段（积分与优惠券的取值原样来自接口）。
+  it("reads both sections together with my orders", async () => {
+    const points: MemberPoints = { balance: 845, pending: 0, next_expiry: { points: 120, date: "2026-11-15" }, history: [] };
+    const coupons: MemberCoupons = { available: [], used: [{ code: "DEMO10", order_number: "K7Q29MXAB6TN2RJD", discount_sen: 1000 }] };
+    stubFetch({
+      [MEMBER_SESSION_URL]: [memberReply()],
+      [MEMBER_ORDERS_URL]: [ordersReply()],
+      [MEMBER_POINTS_URL]: [json(200, points)],
+      [MEMBER_COUPONS_URL]: [json(200, coupons)],
+    });
+    const { moves, current } = fakeMoves();
+    await openAccount(createMemberSessionReader(), new AbortController().signal, moves);
+    expect(current()).toEqual(memberScreen({ points: { status: "ready", points }, coupons: { status: "ready", coupons } }));
+  });
+
+  // 同一条「signed_out 时照我的订单重读会话并用 replace 进入 /login」与 HANDOFF 0.61 第（5）条：积分或优惠券回 401 时先重读会话、再 replace；
+  // 我的订单照常更新。三段同时读取，几段都回 401 时只重读一次会话、只跳转一次。
+  it.each<[string, Record<string, Reply[]>, number]>([
+    ["points", { [MEMBER_POINTS_URL]: [signedOutReply()], [MEMBER_COUPONS_URL]: [couponsReply()] }, 2],
+    ["coupons", { [MEMBER_POINTS_URL]: [pointsReply()], [MEMBER_COUPONS_URL]: [signedOutReply()] }, 2],
+    ["both", { [MEMBER_POINTS_URL]: [signedOutReply()], [MEMBER_COUPONS_URL]: [signedOutReply()] }, 1],
+  ])("rereads the session once and goes to /login when %s says signed out", async (_name, routes, updates) => {
+    const calls = stubFetch({ [MEMBER_SESSION_URL]: [memberReply(), guestReply()], [MEMBER_ORDERS_URL]: [ordersReply()], ...routes });
+    const reader = createMemberSessionReader();
+    const { moves, events } = fakeMoves();
+    await openAccount(reader, new AbortController().signal, moves);
+    expect(calls.filter((call) => call.url === MEMBER_SESSION_URL)).toHaveLength(2);
+    expect(reader.current().kind).toBe("guest");
+    expect(events.filter((event) => event === "replace /login")).toHaveLength(1);
+    expect(events.filter((event) => event === "update")).toHaveLength(updates);
+    expect(events[0]).toBe("show member");
+  });
+
+  // 验收第 4 条「离开页面时中止请求，之后不再更新；会员会话的重读是共享读取，不中止，离开页面后不再据其结果更新或跳转」：
+  // 积分回 401 时重读会话，重读完成前已离开时不跳转。
+  it("does not leave after the page is gone while the reread settles", async () => {
+    stubFetch({
+      [MEMBER_SESSION_URL]: [memberReply(), guestReply()],
+      [MEMBER_ORDERS_URL]: [ordersReply()],
+      [MEMBER_POINTS_URL]: [signedOutReply()],
+      [MEMBER_COUPONS_URL]: [couponsReply()],
+    });
+    const shared = createMemberSessionReader();
+    const page = new AbortController();
+    let reloads = 0;
+    // 第二次重读（积分回 401 之后的那次）发出时页面已离开。
+    const reader: MemberSessionReader = {
+      ...shared,
+      reload: () => {
+        reloads += 1;
+        if (reloads === 2) {
+          page.abort();
+        }
+        return shared.reload();
+      },
+    };
+    const { moves, events } = fakeMoves();
+    await openAccount(reader, page.signal, moves);
+    expect(reloads).toBe(2);
+    expect(shared.current().kind).toBe("guest");
+    expect(events).not.toContain("replace /login");
   });
 });
 
@@ -347,35 +454,62 @@ describe("title row", () => {
 });
 
 describe("navigation and sections", () => {
-  // 验收第 3 条「段表只有「我的订单」（account.orders）一项，按表渲染…桌面为左侧导航，每项是跳到本页该段的页内锚点，当前段标 aria-current」：
-  // 导航只有一项，指向本页段内容的锚点。
-  it.each(LANGUAGES)("lists only my orders in the desktop navigation in %s", (language) => {
-    expect(ACCOUNT_SECTIONS).toEqual([{ section: "orders", label: "account.orders" }]);
-    const nav = part(render({}, language), /<nav class="site-desktop-only site-account__nav">[\s\S]*?<\/nav>/);
-    expect(nav).toBe(`<nav class="site-desktop-only site-account__nav"><a href="#account-orders" aria-current="true">${copy("account.orders", language)}</a></nav>`);
+  // 验收第 3 条「段表…按表渲染…桌面为左侧导航，每项是跳到本页该段的页内锚点，当前段标 aria-current」与 SHOP-TASK-165 验收第 2 条
+  // 「ACCOUNT_SECTIONS 依次为我的订单、我的积分（account.points）与我的优惠券（account.coupons），导航与标签照现有写法按表渲染」：
+  // 导航依次为三项，各指向本页段内容的锚点，只有当前段标 aria-current（随段表扩展，由「只有一项」改为三项）。
+  it.each(LANGUAGES)("lists my orders, my points and my coupons in the desktop navigation in %s", (language) => {
+    expect(ACCOUNT_SECTIONS).toEqual([
+      { section: "orders", label: "account.orders" },
+      { section: "points", label: "account.points" },
+      { section: "coupons", label: "account.coupons" },
+    ]);
+    const nav = part(render({ section: "points" }, language), /<nav class="site-desktop-only site-account__nav">[\s\S]*?<\/nav>/);
+    expect(nav).toBe(
+      `<nav class="site-desktop-only site-account__nav"><a href="#account-orders">${copy("account.orders", language)}</a>` +
+        `<a href="#account-points" aria-current="true">${copy("account.points", language)}</a><a href="#account-coupons">${copy("account.coupons", language)}</a></nav>`,
+    );
   });
 
   // 同一条「手机为分段标签（acs-tabs，role 为 tablist 的容器与 role 为 tab 的按钮，选中项 aria-selected，写法照 LoginPage.tsx 的页签），段内容为 tabpanel」：
-  // 标签只有一个且已选中，控制的正是段内容（id 为锚点），段内容以标签为名称。
-  it.each(LANGUAGES)("shows a single selected tab for my orders on phones in %s", (language) => {
+  // 三个标签依次排列、只有当前段选中，各控制对应的段内容（id 为锚点），段内容以标签为名称；不是当前段的内容在手机隐藏（随段表扩展，由一个标签改为三个）。
+  it.each(LANGUAGES)("shows a tab for each section on phones in %s", (language) => {
     const html = render({}, language);
     const tabs = part(html, /<div class="acs-tabs site-phone-only site-account__tabs" role="tablist">[\s\S]*?<\/div>/);
+    const tab = (section: string, label: CopyKey, selected: boolean) =>
+      `<button class="acs-tab" id="account-${section}-tab" role="tab" type="button" aria-selected="${String(selected)}" aria-controls="account-${section}">${copy(label, language)}</button>`;
     expect(tabs).toBe(
-      `<div class="acs-tabs site-phone-only site-account__tabs" role="tablist"><button class="acs-tab" id="account-orders-tab" role="tab" type="button" aria-selected="true" aria-controls="account-orders">${copy("account.orders", language)}</button></div>`,
+      `<div class="acs-tabs site-phone-only site-account__tabs" role="tablist">${tab("orders", "account.orders", true)}${tab("points", "account.points", false)}${tab("coupons", "account.coupons", false)}</div>`,
     );
-    expect(html.match(/role="tabpanel"/g)).toHaveLength(1);
+    expect(html.match(/role="tabpanel"/g)).toHaveLength(3);
     expect(html).toContain(`<section class="site-account__section" id="account-orders" role="tabpanel" aria-labelledby="account-orders-tab" aria-busy="false">`);
+    expect(html).toContain(`<section class="site-account__section site-account__section--off" id="account-points" role="tabpanel" aria-labelledby="account-points-tab" aria-busy="false">`);
+    expect(html).toContain(`<section class="site-account__section site-account__section--off" id="account-coupons" role="tabpanel" aria-labelledby="account-coupons-tab" aria-busy="false">`);
+    const panels = [...html.matchAll(/<section[^>]* id="([^"]*)"/g)].map((m) => m[1]);
+    expect(panels).toEqual(["account-orders", "account-points", "account-coupons"]);
   });
 
-  // 同一条：点导航项或标签都交给页面切换当前段。
+  // 同一条：点导航项或标签都交给页面切换当前段（每一项都交出自己的段）。
   it("hands navigation and tab clicks to the page", () => {
     const onSection = vi.fn();
     const elements = tree({ onSection });
-    const anchor = elements.find((element) => element.type === "a" && element.props.href === "#account-orders");
-    const tab = elements.find((element) => element.type === "button" && element.props.role === "tab");
-    (anchor?.props.onClick as () => void)();
-    (tab?.props.onClick as () => void)();
-    expect(onSection.mock.calls).toEqual([["orders"], ["orders"]]);
+    const anchors = elements.filter((element) => element.type === "a" && typeof element.props.href === "string" && element.props.href.startsWith("#account-"));
+    const tabs = elements.filter((element) => element.type === "button" && element.props.role === "tab");
+    for (const element of [...anchors, ...tabs]) {
+      (element.props.onClick as () => void)();
+    }
+    expect(onSection.mock.calls).toEqual([["orders"], ["points"], ["coupons"], ["orders"], ["points"], ["coupons"]]);
+  });
+
+  // SHOP-TASK-165 验收第 2 条「读取中该段标 aria-busy」：积分或优惠券读取中时只有该段标 aria-busy，只有段标题。
+  it.each<["points" | "coupons", CopyKey]>([
+    ["points", "account.points"],
+    ["coupons", "account.coupons"],
+  ])("marks only the %s section busy while it loads", (section, title) => {
+    const html = render({ screen: section === "points" ? memberScreen({ points: { status: "loading" } }) : memberScreen({ coupons: { status: "loading" } }) });
+    const busy = [...html.matchAll(/<section[^>]* id="account-(\w+)"[^>]* aria-busy="(true|false)">/g)].map((m) => [m[1], m[2]]);
+    expect(busy).toEqual(["orders", "points", "coupons"].map((name) => [name, name === section ? "true" : "false"]));
+    const panel = part(html, new RegExp(`<section[^>]* id="account-${section}"[\\s\\S]*?</section>`));
+    expect(textNodes(panel)).toEqual([COPY[title].en]);
   });
 
   // 同一条「★ account.demo_hint 在桌面右栏顶部，手机在标题行（含暂放的手机号与退出按钮）之后」与 UX P13 两份线框：
@@ -732,6 +866,9 @@ describe("dictionary", () => {
         expect(COPY[key][language], key).not.toBe("");
       }
     }
-    expect(sessionStep({ kind: "member", phoneMasked: MASKED, hasPassword: true, csrfToken: TOKEN } satisfies MemberSessionState)).toEqual(withOrders({ status: "loading" }));
+    // SHOP-TASK-165：sessionStep 的结果多了积分与优惠券两段，三段都从读取中开始（随状态扩展修改）。
+    expect(sessionStep({ kind: "member", phoneMasked: MASKED, hasPassword: true, csrfToken: TOKEN } satisfies MemberSessionState)).toEqual(
+      memberScreen({ orders: { status: "loading" }, points: { status: "loading" }, coupons: { status: "loading" } }),
+    );
   });
 });

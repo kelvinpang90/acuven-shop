@@ -13,17 +13,24 @@ import type { CopyKey } from "../i18n/copy";
 import { useCopy, useLanguage } from "../i18n/language";
 import { HOME_PATH, isRoutePath, Link, useRouter } from "../router";
 import type { RoutePath } from "../router";
+import { CouponsPanel, loadCoupons } from "./AccountCouponsPanel";
+import type { CouponsState } from "./AccountCouponsPanel";
+import { loadPoints, PointsPanel } from "./AccountPointsPanel";
+import type { PointsState } from "./AccountPointsPanel";
 import { startDeferred } from "./AdminOrderDetail";
 import { formatDate } from "./TrackOrderPage";
 
 // 会员中心 P13 的框架与我的订单（docs/UX.md 0.13 P13，docs/UX-COPY.md 0.14，视觉稿 P13-desktop 与 P13-phone 的标题、导航与我的订单部分；
-// DESIGN 1.13「权限与资料保护」第 3、5 条，HANDOFF 0.61）。积分、优惠券与设置三段由之后的任务各自在 ACCOUNT_SECTIONS 里加项。
+// DESIGN 1.13「权限与资料保护」第 3、5 条，HANDOFF 0.61）。我的积分与我的优惠券两段（SHOP-TASK-165，DESIGN 1.14，HANDOFF 0.63）的状态、
+// 纯函数与 View 在 AccountPointsPanel.tsx 与 AccountCouponsPanel.tsx，这里只在段表、AccountScreen、SectionPanel、sectionBusy 与打开时的读取里接上；
+// 设置段由之后的任务在 ACCOUNT_SECTIONS 里加项。
 // 打开页面时经 api/memberSession.ts 的读取对象重读一次会话（登录后来到本页时共享状态可能还是旧的），读完之前只显示标 aria-busy 的空主体；
 // 未登录时以路由的 replace 进入 /login（路由记下的来源为 /account，登录成功后回到这里），读取失败只显示 common.error_retry。
 // 这一判断只在打开时做，之后共享会话状态的变化不再影响本页。已登录时显示标题行（common.nav_account、遮掩后的手机号与 common.nav_logout；
 // 手机暂放在标题之下，UX 与视觉稿在设置段，HANDOFF 0.61 第（7）条）、桌面左侧导航或手机分段标签、★ account.demo_hint 与我的订单。
 // 我的订单经 api/memberOrders.ts 只取第一页（最多 20 张，按服务端顺序，不翻页，HANDOFF 0.61 第（1）条）；查看时经交接函数交出订单号，
-// 再前往 /account/order（订单号不进地址、历史状态与浏览器存储），该路径进路由表之前不渲染查看入口。
+// 再前往 /account/order（订单号不进地址、历史状态与浏览器存储），该路径进路由表之前不渲染查看入口。我的积分与我的优惠券与我的订单同时读取，
+// 任一段 signed_out 时重读会话并以 replace 进入 /login（同一次打开只重读与跳转一次）。
 // 退出成功（ok 或 signed_out）时同时清除会员订单号的交接与 P06 的当前订单暂存（DESIGN 1.14「权限与资料保护」第 7 条，HANDOFF 0.63）。
 // 离开页面时中止请求，之后不再更新；会话的重读是共享读取，不中止，离开页面后不再据其结果更新或跳转。
 
@@ -36,14 +43,18 @@ export function orderPath(): RoutePath | null {
 }
 
 // 会员中心的段：桌面左侧导航与手机分段标签都按这张表渲染（只列已实现的段，HANDOFF 0.61 第（2）条）。
-export type AccountSection = "orders";
+export type AccountSection = "orders" | "points" | "coupons";
 
 export interface SectionItem {
   section: AccountSection;
   label: CopyKey;
 }
 
-export const ACCOUNT_SECTIONS: readonly SectionItem[] = [{ section: "orders", label: "account.orders" }];
+export const ACCOUNT_SECTIONS: readonly SectionItem[] = [
+  { section: "orders", label: "account.orders" },
+  { section: "points", label: "account.points" },
+  { section: "coupons", label: "account.coupons" },
+];
 
 // 段内容的 id（桌面导航的页内锚点）与手机标签的 id。
 export function sectionId(section: AccountSection): string {
@@ -58,20 +69,39 @@ function tabId(section: AccountSection): string {
 export type OrdersState = { status: "loading" } | { status: "ready"; orders: readonly MemberOrderSummary[] } | { status: "failed"; error: CopyKey };
 
 // 页面的状态：读取会话中（空主体，标 aria-busy）、读取会话失败（只有 common.error_retry）、已登录。已登录时 phoneMasked 与 csrfToken
-// 来自打开时那次读取（csrf 之后的重读更新令牌），loggingOut 为退出进行中（按钮禁用），logoutError 为退出失败的提示。
+// 来自打开时那次读取（csrf 之后的重读更新令牌），orders、points 与 coupons 为三段各自的读取状态，loggingOut 为退出进行中（按钮禁用），
+// logoutError 为退出失败的提示。
 export type AccountScreen =
   | { status: "loading" }
   | { status: "failed" }
-  | { status: "member"; phoneMasked: string; csrfToken: string; orders: OrdersState; loggingOut: boolean; logoutError: CopyKey | null };
+  | {
+      status: "member";
+      phoneMasked: string;
+      csrfToken: string;
+      orders: OrdersState;
+      points: PointsState;
+      coupons: CouponsState;
+      loggingOut: boolean;
+      logoutError: CopyKey | null;
+    };
 
 export const LOADING: AccountScreen = { status: "loading" };
 
-// 按打开时重读到的会话决定：member 显示标题行并开始读取我的订单；guest 去 /login（login）；failed 只显示 common.error_retry。
+// 按打开时重读到的会话决定：member 显示标题行并开始读取三段；guest 去 /login（login）；failed 只显示 common.error_retry。
 // 重读的回答处理之后状态不会是 unknown，万一是也按失败处理。
 export function sessionStep(state: MemberSessionState): AccountScreen | "login" {
   switch (state.kind) {
     case "member":
-      return { status: "member", phoneMasked: state.phoneMasked, csrfToken: state.csrfToken, orders: { status: "loading" }, loggingOut: false, logoutError: null };
+      return {
+        status: "member",
+        phoneMasked: state.phoneMasked,
+        csrfToken: state.csrfToken,
+        orders: { status: "loading" },
+        points: { status: "loading" },
+        coupons: { status: "loading" },
+        loggingOut: false,
+        logoutError: null,
+      };
     case "guest":
       return "login";
     case "failed":
@@ -116,6 +146,14 @@ export type AccountChange = (current: AccountScreen) => AccountScreen;
 
 export function withOrders(orders: OrdersState): AccountChange {
   return (current) => (current.status === "member" ? { ...current, orders } : current);
+}
+
+export function withPoints(points: PointsState): AccountChange {
+  return (current) => (current.status === "member" ? { ...current, points } : current);
+}
+
+export function withCoupons(coupons: CouponsState): AccountChange {
+  return (current) => (current.status === "member" ? { ...current, coupons } : current);
 }
 
 // 退出进行中与未登录时不再退出（按钮禁用）。
@@ -175,21 +213,46 @@ async function leaveAfterReload(reader: MemberSessionReader, signal: AbortSignal
   }
 }
 
-// 读取我的订单；signal 中止之后不再更新。signed_out 时重读会话并以 replace 进入 /login。
-export async function loadOrders(reader: MemberSessionReader, signal: AbortSignal, moves: AccountMoves): Promise<void> {
+// 段的读取回 signed_out 时的离开：重读会话之后以 replace 进入 /login。三段同时读取、可能都回 signed_out，同一个离开只重读与跳转一次。
+function leaveOnce(reader: MemberSessionReader, signal: AbortSignal, replace: (path: RoutePath) => void): () => Promise<void> {
+  let leaving: Promise<void> | null = null;
+  return () => {
+    leaving ??= leaveAfterReload(reader, signal, LOGIN_PATH, replace);
+    return leaving;
+  };
+}
+
+// 读取我的订单；signal 中止之后不再更新。signed_out 时重读会话并以 replace 进入 /login（leave 为打开时三段共用的离开）。
+export async function loadOrders(
+  reader: MemberSessionReader,
+  signal: AbortSignal,
+  moves: AccountMoves,
+  leave: () => Promise<void> = leaveOnce(reader, signal, moves.replace),
+): Promise<void> {
   const read = await readMemberOrders(signal);
   if (signal.aborted) {
     return;
   }
   const step = ordersStep(read);
   if (step === "login") {
-    await leaveAfterReload(reader, signal, LOGIN_PATH, moves.replace);
+    await leave();
   } else {
     moves.update(withOrders(step));
   }
 }
 
-// 打开页面：重读一次会话并按结果显示或进入 /login，已登录时接着读取我的订单。signal 中止之后不再更新或跳转。
+// 积分与优惠券两段的读取结果：login 时离开，否则按到达时的状态换上该段。
+function settleSection<T extends object>(moves: AccountMoves, leave: () => Promise<void>, change: (state: T) => AccountChange): (step: T | "login") => Promise<void> {
+  return async (step) => {
+    if (step === "login") {
+      await leave();
+    } else {
+      moves.update(change(step));
+    }
+  };
+}
+
+// 打开页面：重读一次会话并按结果显示或进入 /login，已登录时接着同时读取我的订单、我的积分与我的优惠券。signal 中止之后不再更新或跳转。
 export async function openAccount(reader: MemberSessionReader, signal: AbortSignal, moves: AccountMoves): Promise<void> {
   const state = await reader.reload();
   if (signal.aborted) {
@@ -202,7 +265,12 @@ export async function openAccount(reader: MemberSessionReader, signal: AbortSign
   }
   moves.show(step);
   if (step.status === "member") {
-    await loadOrders(reader, signal, moves);
+    const leave = leaveOnce(reader, signal, moves.replace);
+    await Promise.all([
+      loadOrders(reader, signal, moves, leave),
+      loadPoints(signal, settleSection(moves, leave, withPoints)),
+      loadCoupons(signal, settleSection(moves, leave, withCoupons)),
+    ]);
   }
 }
 
@@ -371,6 +439,10 @@ function SectionPanel({ section, screen, orderTo, onView }: { section: AccountSe
   switch (section) {
     case "orders":
       return <OrdersPanel orders={screen.orders} orderTo={orderTo} onView={onView} />;
+    case "points":
+      return <PointsPanel points={screen.points} />;
+    case "coupons":
+      return <CouponsPanel coupons={screen.coupons} />;
   }
 }
 
@@ -379,6 +451,10 @@ function sectionBusy(section: AccountSection, screen: MemberScreen): boolean {
   switch (section) {
     case "orders":
       return screen.orders.status === "loading";
+    case "points":
+      return screen.points.status === "loading";
+    case "coupons":
+      return screen.coupons.status === "loading";
   }
 }
 
@@ -474,7 +550,7 @@ export default function AccountPage() {
   const reader = useMemberSessionReader();
   const [screen, setScreen] = useState<AccountScreen>(LOADING);
   const [section, setSection] = useState<AccountSection>("orders");
-  // 我的订单的读取与退出共用的中止；离开页面时中止。
+  // 三段的读取与退出共用的中止；离开页面时中止。
   const lifetime = useRef<AbortController | null>(null);
 
   useEffect(() => {

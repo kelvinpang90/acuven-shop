@@ -546,6 +546,19 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-account__row { display: grid; grid-template-columns: 140px 160px minmax(0, 1fr) 140px auto; gap: 16px; align-items: center; padding: 14px 0; }
 .site-account__total { text-align: right; }
 
+/* 会员中心 P13 的我的积分与我的优惠券（SHOP-TASK-165，P13-desktop-points 与 P13-desktop-coupons）：余额、退款后尚欠与到期在一行里
+   （间距 32px，按基线对齐，放不下时换行）；明细与使用记录的小标题上方多 8px；积分明细每行为日期 140px、类型、积分数 120px（靠右）
+   与订单号 160px 四列（间距 16px，上下内边距 12px）；可用券为两列卡片（间距 16px），卡片内各项上下排列（间距 6px，内边距 20px）；
+   使用记录每行为代码 160px、account.coupon_used_on 与减免金额 140px（靠右）三列（间距 16px，上下内边距 12px）。手机用的明细折叠与
+   使用记录在桌面不显示。余额与券代码的字号和字重、面额的字重、各行之间与折叠上下的分隔线（颜色）site.css 写不了，记在任务记录的偏离里 */
+.site-account__balance { display: flex; flex-wrap: wrap; align-items: baseline; gap: 32px; }
+.site-account__subhead { margin-top: 8px; }
+.site-account__activity { display: grid; grid-template-columns: 140px minmax(0, 1fr) 120px 160px; gap: 16px; padding: 12px 0; }
+.site-account__figure { text-align: right; }
+.site-account__coupons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; padding: 0; list-style: none; }
+.site-account__coupons > .site-account__coupon { display: grid; gap: 6px; align-content: start; padding: 20px; }
+.site-account__used { display: grid; grid-template-columns: 160px minmax(0, 1fr) 140px; gap: 16px; padding: 12px 0; }
+
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
 
@@ -969,4 +982,16 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-account__item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; padding: 14px 0; }
   a.site-account__item { color: inherit; text-decoration: none; }
   .site-account__amount { display: inline-flex; align-items: center; gap: 4px; }
+
+  /* 我的积分与我的优惠券（P13-phone-points 与 P13-phone-coupons）：余额、尚欠与到期上下排列（间距 6px）；积分明细为默认展开的折叠
+     （上下内边距 12px，summary 至少 32px 高，展开的各行与 summary 间距 8px）。视觉稿的 summary 为 flex，会去掉展开标记；UX 手机线框为
+     「▸ [account.points_history]」，这里保留原生标记，以上下内边距 6px 代替居中。明细每行为日期与积分数（靠右）、类型与订单号两行，
+     使用记录每行为代码与金额（靠右）、account.coupon_used_on 两行（两列，间距 4px 12px）；可用券为一列卡片 */
+  .site-account__balance { display: grid; gap: 6px; }
+  details.site-account__fold { display: block; padding: 12px 0; }
+  .site-account__fold > summary { min-height: 32px; padding: 6px 0; cursor: pointer; }
+  .site-account__fold > .site-account__history { margin-top: 8px; }
+  .site-account__activity { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
+  .site-account__coupons { grid-template-columns: minmax(0, 1fr); }
+  .site-account__used { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
 }
