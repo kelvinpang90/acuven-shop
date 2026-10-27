@@ -420,6 +420,7 @@ describe("opening the page", () => {
 describe("points and coupons sections (SHOP-TASK-165)", () => {
   // 验收第 2 条「会话为 member 后与我的订单一起经 SHOP-TASK-164 读取两段」：sessionStep 让三段都从读取中开始，打开后三个请求都发出，
   // 结果分别换上各段（积分与优惠券的取值原样来自接口）。
+  // SHOP-TASK-167：只为站点设置读取补了替身，使 memberScreen 默认的 site（已读到 siteReply()）成立；积分与优惠券的期望不变。
   it("reads both sections together with my orders", async () => {
     const points: MemberPoints = { balance: 845, pending: 0, next_expiry: { points: 120, date: "2026-11-15" }, history: [] };
     const coupons: MemberCoupons = { available: [], used: [{ code: "DEMO10", order_number: "K7Q29MXAB6TN2RJD", discount_sen: 1000 }] };
@@ -428,6 +429,7 @@ describe("points and coupons sections (SHOP-TASK-165)", () => {
       [MEMBER_ORDERS_URL]: [ordersReply()],
       [MEMBER_POINTS_URL]: [json(200, points)],
       [MEMBER_COUPONS_URL]: [json(200, coupons)],
+      [SITE_SETTINGS_URL]: [siteReply()],
     });
     const { moves, current } = fakeMoves();
     await openAccount(createMemberSessionReader(), new AbortController().signal, moves);
