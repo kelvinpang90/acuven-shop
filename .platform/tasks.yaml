@@ -4691,7 +4691,7 @@ tasks:
       运营者落实写法（HANDOFF 0.65）：保存请求的 sms_verification_enabled 可省略，省略时不检查短信配置、不改开关（现有只提交支付方式的页面在 SHOP-TASK-169 合并之前照常可用）；两项检查都在写入之前，先查支付方式再查短信；短信开关的审计操作名为 admin_sms_verification_changed，旧值与新值为 on 或 off；
       短信服务是否可用的判定写在 app/api/admin_site_settings.py（服务层引用 app/api/site_settings.py 会循环导入）。不做前端，不改模型与迁移，不改设计。
       设计闸门：DESIGN 1.15（提交 1c668e6）与 HANDOFF 0.65，短信验证开关。拆分：接口层（4 个允许路径），页面由 SHOP-TASK-169 接上。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-122
     acceptance_criteria:
