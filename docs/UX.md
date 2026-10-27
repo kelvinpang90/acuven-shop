@@ -1,7 +1,12 @@
 # Acuven Shop 前端页面结构与线框（审阅稿）
 
-> **审阅稿。0.7 已于 2026-10-01 经 Kelvin 审阅通过（记录见 `docs/HANDOFF.md`）；0.8 只在「管理后台总体」与 A09 增加后台退出按钮与视觉稿说明，P01–P14、V1 与 A01–A08 各页内容与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只在 A02、A03 增加状态与补充说明，其余各页与 0.8 相同，Kelvin 已于 2026-10-06 认可；0.10 只把 A01 的登录名改为邮箱（`[admin.email]`），其余各页与 0.9 相同，Kelvin 已于 2026-10-07 批准（记录见 `docs/HANDOFF.md`）。0.11 只在 P06、P07、P14、A03、A09 增加 Stripe 测试环境支付的状态与说明，其余各页与 0.10 相同，Kelvin 已于 2026-10-15 审阅通过（记录见 `docs/HANDOFF.md`）。0.12 只在 A03「Stripe 测试」增加已批准却没有 Stripe 退款尝试时的提示，其余各页与 0.11 相同，Kelvin 已于 2026-10-23 审阅通过（记录见 `docs/HANDOFF.md`）。0.13 只在 P06、P07 增加会员的当前订单（本标签页暂存订单号）与找不到订单时的状态，并在页面地图与 P13 入口同步新的去向，其余各页与 0.12 相同，Kelvin 已于 2026-10-24 审阅通过（记录见 `docs/HANDOFF.md`）。0.14 只在 A09 增加短信服务配置不齐全时 `[admin.sms_on]` 禁用与保存被拒的状态（DESIGN 1.15），其余各页与 0.13 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。**
-> 版本 0.14（2026-10-27），运营者修订（Claude Code），在 0.13（提交 `450c2fa`）上按 Kelvin 2026-10-27 的决定与 `docs/DESIGN.md` 1.15 候批稿，在 A09 增加短信服务配置不齐全时 `[admin.sms_on]` 禁用与保存被拒的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.15。以下为 0.13 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.13（2026-10-23），运营者修订（Claude Code），在 0.12（提交 `5e69c3e`）上按 Kelvin 2026-10-23 的决定与 `docs/DESIGN.md` 1.13 候批稿，在 P06、P07 增加会员的当前订单与找不到订单时的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.14；版本 0.12（2026-10-23），运营者修订（Claude Code），在 0.11（提交 `e922fcf`）上按 Kelvin 2026-10-23 的决定，在 A03「Stripe 测试」增加一种状态（不改设计）；三语文案见 [UX-COPY.md](UX-COPY.md) 0.13；版本 0.11（2026-10-15），运营者修订（Claude Code），在 0.10（提交 `eb2bdc4`）上按已批准的 `docs/DESIGN.md` 1.12「Stripe 测试环境支付」与 `docs/REQUIREMENTS.md` 1.13（Kelvin 2026-10-15 批准，记录见 `docs/HANDOFF.md` 0.50）增加 Stripe 测试环境支付；新增元素的依据写 DESIGN 1.12 的小节与条号；三语文案见 [UX-COPY.md](UX-COPY.md) 0.12；版本 0.10（2026-10-07），运营者修订（Claude Code），在 0.9（提交 `1a65f6b`）上按 Kelvin 2026-10-07 的决定把 A01 的登录名改为邮箱；0.9（2026-10-06）在 0.8（提交 `61f7b8a`）上按 Kelvin 2026-10-06 的决定与认可补充 A02、A03 的状态；0.8（2026-10-05）在 0.7（提交 `2d13250`）上按 Kelvin 2026-10-05 的决定增加后台退出按钮；0.7 在 0.6（提交 `e3b3505`）上按 Kelvin 2026-10-01 的短信验证开关决定修改。依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；未特别注明时，各页「金额与个人资料元素」表引用的小节仍指 DESIGN 1.9（1.10、1.11 未改小节标题）。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。三语文案见 [UX-COPY.md](UX-COPY.md)（0.10）。视觉稿（设计系统、10 款主题、每页静态页面与参考图）见 [design/README.md](design/README.md)，只管样式，内容与流程以本稿为准；本版新增的元素沿用相邻元素的样式。本稿不改设计，冲突之处列入文末「待决问题」。
+> **审阅稿。0.7 已于 2026-10-01 经 Kelvin 审阅通过（记录见 `docs/HANDOFF.md`）；0.8 只在「管理后台总体」与 A09 增加后台退出按钮与视觉稿说明，P01–P14、V1 与 A01–A08 各页内容与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只在 A02、A03 增加状态与补充说明，其余各页与 0.8 相同，Kelvin 已于 2026-10-06 认可；0.10 只把 A01 的登录名改为邮箱（`[admin.email]`），其余各页与 0.9 相同，Kelvin 已于 2026-10-07 批准（记录见 `docs/HANDOFF.md`）。0.11 只在 P06、P07、P14、A03、A09 增加 Stripe 测试环境支付的状态与说明，其余各页与 0.10 相同，Kelvin 已于 2026-10-15 审阅通过（记录见 `docs/HANDOFF.md`）。0.12 只在 A03「Stripe 测试」增加已批准却没有 Stripe 退款尝试时的提示，其余各页与 0.11 相同，Kelvin 已于 2026-10-23 审阅通过（记录见 `docs/HANDOFF.md`）。0.13 只在 P06、P07 增加会员的当前订单（本标签页暂存订单号）与找不到订单时的状态，并在页面地图与 P13 入口同步新的去向，其余各页与 0.12 相同，Kelvin 已于 2026-10-24 审阅通过（记录见 `docs/HANDOFF.md`）。0.14 只在 A09 增加短信服务配置不齐全时 `[admin.sms_on]` 禁用与保存被拒的状态（DESIGN 1.15），其余各页与 0.13 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.15 只在 A06 增加国家运费与演示汇率的增删、保存结果与数据已被改动时的状态（DESIGN 1.16 候批稿），其余各页与 0.14 相同，待 Kelvin 审阅。**
+> 版本 0.15（2026-10-27），运营者修订（Claude Code），在 0.14（提交 `1c668e6`）上按 Kelvin 2026-10-27 的决定与 `docs/DESIGN.md` 1.16 候批稿，在 A06 增加国家运费与演示汇率的增删、保存结果与数据已被改动时的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.16。以下为 0.14 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.14（2026-10-27），运营者修订（Claude Code），在 0.13（提交 `450c2fa`）上按 Kelvin 2026-10-27 的决定与 `docs/DESIGN.md` 1.15 候批稿，在 A09 增加短信服务配置不齐全时 `[admin.sms_on]` 禁用与保存被拒的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.15；版本 0.13（2026-10-23），运营者修订（Claude Code），在 0.12（提交 `5e69c3e`）上按 Kelvin 2026-10-23 的决定与 `docs/DESIGN.md` 1.13 候批稿，在 P06、P07 增加会员的当前订单与找不到订单时的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.14；版本 0.12（2026-10-23），运营者修订（Claude Code），在 0.11（提交 `e922fcf`）上按 Kelvin 2026-10-23 的决定，在 A03「Stripe 测试」增加一种状态（不改设计）；三语文案见 [UX-COPY.md](UX-COPY.md) 0.13；版本 0.11（2026-10-15），运营者修订（Claude Code），在 0.10（提交 `eb2bdc4`）上按已批准的 `docs/DESIGN.md` 1.12「Stripe 测试环境支付」与 `docs/REQUIREMENTS.md` 1.13（Kelvin 2026-10-15 批准，记录见 `docs/HANDOFF.md` 0.50）增加 Stripe 测试环境支付；新增元素的依据写 DESIGN 1.12 的小节与条号；三语文案见 [UX-COPY.md](UX-COPY.md) 0.12；版本 0.10（2026-10-07），运营者修订（Claude Code），在 0.9（提交 `1a65f6b`）上按 Kelvin 2026-10-07 的决定把 A01 的登录名改为邮箱；0.9（2026-10-06）在 0.8（提交 `61f7b8a`）上按 Kelvin 2026-10-06 的决定与认可补充 A02、A03 的状态；0.8（2026-10-05）在 0.7（提交 `2d13250`）上按 Kelvin 2026-10-05 的决定增加后台退出按钮；0.7 在 0.6（提交 `e3b3505`）上按 Kelvin 2026-10-01 的短信验证开关决定修改。依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；未特别注明时，各页「金额与个人资料元素」表引用的小节仍指 DESIGN 1.9（1.10、1.11 未改小节标题）。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。三语文案见 [UX-COPY.md](UX-COPY.md)（0.10）。视觉稿（设计系统、10 款主题、每页静态页面与参考图）见 [design/README.md](design/README.md)，只管样式，内容与流程以本稿为准；本版新增的元素沿用相邻元素的样式。本稿不改设计，冲突之处列入文末「待决问题」。
+
+## 0.15 修订要点
+
+- **A06 运费与演示汇率的增删与保存**（Kelvin 2026-10-27 决定，依据 `docs/DESIGN.md` 1.16 候批稿「计价、优惠、积分与库存」第 9 条）：国家运费与演示汇率每行加 `[admin.remove]`，演示汇率加 `[admin.add_fx]`（未选：国家运费不能删、汇率只改已有的）；保存后显示成功、取值不合格或「数据已被改动」（未选：后保存的覆盖），各状态见 A06「保存与状态」。
+- 新增文案键见 UX-COPY 0.16「0.16 修订要点」。A06 现有视觉稿没有删除、新增汇率与保存后的状态，登记 A06 页面任务之前先补视觉稿、经 Kelvin 审阅。其余各页、V1 与全局框架不变；待决问题未新增。
 
 ## 0.14 修订要点
 
@@ -2050,13 +2055,16 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 |           | [admin.shipping_my_state]                                 |
 |           |   <州属>  [admin.shipping_fee] [M1 ____]  × 各州           |
 |           | [admin.shipping_by_country]                               |
-|           |   [admin.shipping_country] <国家> [admin.shipping_fee] [M1 ____] |
+|           |   [admin.shipping_country] <国家> [admin.shipping_fee] [M1 ____] ( [admin.remove] ) |
 |           |   ( [admin.add_country] )                                 |
 |           | [admin.shipping_other]  [admin.shipping_fee] [M1 ____]    |
 |           |-----------------------------------------------------------|
 |           | [admin.fx_title]                                          |
-|           |  <国家> → <币种>  [admin.fx_rate] [M2 ____]  [admin.fx_version] |
+|           |  <国家> → <币种>  [admin.fx_rate] [M2 ____]  [admin.fx_version] ( [admin.remove] ) |
+|           |  新增的行：[admin.shipping_country] <国家> [admin.fx_currency] [___] [admin.fx_decimals] [___] [admin.fx_rate_new] [M2 ____] ( [admin.remove] ) |
+|           |  ( [admin.add_fx] )                                       |
 |           | [admin.rules_apply_new]      ( [common.save] )            |
+|           | 保存后：[admin.rates_saved] / [admin.rates_invalid] / [admin.rates_changed] ( [admin.reload] ) / [common.error_retry] |
 +-----------+-----------------------------------------------------------+
 ```
 
@@ -2069,23 +2077,35 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 | ▸ [admin.shipping_my_state]    |
 |   <州属> [M1 ____]              |
 | ▸ [admin.shipping_by_country]  |
-|   <国家> [M1 ____]              |
+|   <国家> [M1 ____] ( [admin.remove] ) |
 |   ( [admin.add_country] )      |
 | [admin.shipping_other][M1 __]  |
 | ▸ [admin.fx_title]             |
 |   <国家> → <币种>               |
 |   [admin.fx_rate] [M2 ____]    |
-|   [admin.fx_version]           |
+|   [admin.fx_version] ( [admin.remove] ) |
+|   新增的行：<国家>              |
+|   [admin.fx_currency] [___]    |
+|   [admin.fx_decimals] [___]    |
+|   [admin.fx_rate_new] [M2 ____] |
+|   ( [admin.add_fx] )           |
 | [admin.rules_apply_new]        |
 | ( [common.save] )              |
+| 保存后的提示（同桌面）          |
 ```
 
 金额与个人资料元素：
 
 | 标记 | 元素 | 依据 DESIGN 1.9 小节 |
 | --- | --- | --- |
-| M1 | 国家/州属/兜底示例运费（MYR） | 「数据模型」（`ShippingRate` / `DemoFxRate`） |
-| M2 | 固定演示汇率及版本；只作参考不参与结算 | 「边界与原则」「数据模型」（`ShippingRate` / `DemoFxRate`） |
+| M1 | 国家/州属/兜底示例运费（MYR）；国家运费可增删（0.15） | 「数据模型」（`ShippingRate` / `DemoFxRate`）「计价、优惠、积分与库存」（第 9 条，DESIGN 1.16 候批稿） |
+| M2 | 固定演示汇率及版本；只作参考不参与结算；可增删（0.15） | 「边界与原则」「数据模型」（`ShippingRate` / `DemoFxRate`）「计价、优惠、积分与库存」（第 9 条，DESIGN 1.16 候批稿） |
+
+保存与状态（0.15，DESIGN 1.16 候批稿「计价、优惠、积分与库存」第 9 条，Kelvin 2026-10-27 决定）：
+
+- **增删**：马来西亚 16 个州属与 `[admin.shipping_other]` 只能改运费，没有 `[admin.remove]`。国家运费与演示汇率每行有 `[admin.remove]`，点了该行即从页面上去掉，保存后才生效，不另弹确认框；保存前可再用新增按钮加回。`[admin.add_country]` 与 `[admin.add_fx]` 各加一行空白行，`<国家>` 从结账页的收货国家列表里选（不含马来西亚，也不含该区块已有的国家）。新增的汇率行要填 `[admin.fx_currency]`（三位字母）、`[admin.fx_decimals]`（0–3）与汇率；已有的汇率行只能改汇率，币种与小数位只显示不可改。
+- **取值**：运费按 RM 输入、至多两位小数，提交时换成整仙；汇率按输入的十进制文字原样提交。取值范围以服务端为准（DESIGN 1.16 第 9 条），不合格时显示 `[admin.rates_invalid]`，整次保存不生效，页面保留已填的值。
+- **整页保存**：`( [common.save] )` 一次提交整页（含删除与新增）。成功显示 `[admin.rates_saved]`，页面改显示服务端返回的保存后数据（新的版本号）。服务端告知「数据已被改动」（另一个标签页或会话已保存过）时显示 `[admin.rates_changed]` 与 `( [admin.reload] )`，整次保存不生效；点了重新读取，未保存的修改丢弃。其他失败显示 `[common.error_retry]`，页面保留已填的值。保存期间按钮禁用，防重复提交。
 
 ## A07 后台库存重置结果
 
