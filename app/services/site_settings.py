@@ -1,4 +1,4 @@
-"""读取站点设置：短信验证开关与支付方式的当前值；后台保存支付方式。
+"""读取站点设置：短信验证开关与支付方式的当前值；后台保存这两项。
 
 依据 docs/DESIGN.md 1.11（提交 2d13250）「边界与原则」第 4 条：「下单、发送短信、提交验证码与
 确认注销时，服务端都按当时读取的开关值判定」；「数据模型」的 SiteSetting 一行：「每次判定都从
@@ -8,12 +8,15 @@
 的支付方式取『模拟』（默认）或『Stripe 测试』，与短信验证开关一样每次从数据库读取」；「服务端在
 访客发起支付时按当时的值判定」。
 
-读取函数只发 SELECT、不写库。只有支付方式可以修改（save_payment_method，SHOP-TASK-122，接口见
-app/api/admin_site_settings.py）：锁定站点设置行后在同一事务里改值并写审计
-admin_payment_method_changed（「数据模型」SiteSetting 一行「后台修改写入 AuditEvent」）；凭据
-不可用时不能改为 Stripe 测试（第 2 条「凭据未配置时不能切到 Stripe 测试」，docs/UX.md 0.11 A09
-「保存时服务端再次检查」）。短信验证开关按 Kelvin 2026-10-07 与 2026-10-15 的决定暂不提供写入。
-本模块不写日志。
+读取函数只发 SELECT、不写库。后台保存（save_site_settings，SHOP-TASK-122 与 168，接口见
+app/api/admin_site_settings.py）一次提交支付方式与短信验证开关两项：锁定站点设置行后在同一事务里
+改有变化的项，每项各写一条审计（admin_payment_method_changed、admin_sms_verification_changed；
+「数据模型」SiteSetting 一行「后台修改写入 AuditEvent」）。凭据不可用时不能改为 Stripe 测试
+（第 2 条「凭据未配置时不能切到 Stripe 测试」，docs/UX.md 0.11 A09「保存时服务端再次检查」）；
+短信服务配置不齐全时不能保存「开启」（docs/DESIGN.md 1.15「边界与原则」短信验证开关一条：
+「缺一或不合格即拒绝开启，本次保存不生效，同一次保存里的其他设置（如支付方式）也不生效（当前已
+开启也一样）；保存『关闭』不检查」）。短信服务是否可用由接口在当次请求里算出后传入（HANDOFF
+0.65：判定写在接口文件里，这里引用公开站点设置接口会循环导入）。本模块不写日志。
 """
 
 from __future__ import annotations
@@ -35,11 +38,16 @@ from app.services.admin_auth import record_audit
 
 # 审计操作名与对象类别（对象 ID 为站点设置行的 ID）。
 ADMIN_PAYMENT_METHOD_CHANGED = "admin_payment_method_changed"
+ADMIN_SMS_VERIFICATION_CHANGED = "admin_sms_verification_changed"
 AUDIT_TARGET_SITE_SETTING = "site_setting"
 
+# 短信验证开关审计的旧值与新值（HANDOFF 0.65）。
+SMS_VERIFICATION_ON = "on"
+SMS_VERIFICATION_OFF = "off"
 
-class PaymentMethodRejected(Exception):
-    """保存支付方式被拒；code 为 stripe_not_configured。"""
+
+class SiteSettingsRejected(Exception):
+    """保存站点设置被拒；code 为 stripe_not_configured 或 sms_not_configured。"""
 
     def __init__(self, code: str) -> None:
         super().__init__(code)
@@ -86,8 +94,12 @@ def _known_method(method: str | None) -> str:
     return PAYMENT_METHOD_SIMULATED
 
 
+def _sms_audit_value(enabled: bool) -> str:
+    return SMS_VERIFICATION_ON if enabled else SMS_VERIFICATION_OFF
+
+
 # ---------------------------------------------------------------------------
-# 保存支付方式
+# 保存支付方式与短信验证开关
 # ---------------------------------------------------------------------------
 
 
@@ -124,52 +136,84 @@ def _lock_site_setting(db: Session, now: datetime) -> SiteSetting:
     return db.scalars(lock_site_setting_statement()).one()
 
 
-def save_payment_method(
+def save_site_settings(
     db: Session,
     admin_account_id: int,
     method: str,
+    sms_enabled: bool | None,
     stripe_available: bool,
+    sms_available: bool,
     now: datetime,
-) -> tuple[str, bool]:
-    """保存支付方式，返回保存后的支付方式与是否实际改动（与当前值相同为假）。
+) -> tuple[str, bool, bool]:
+    """保存支付方式与短信验证开关，返回保存后的支付方式、保存后的短信验证开关与是否实际改动
+    （两项都与当前值相同为假）。
 
     method 须为 simulated 或 stripe_test（由接口校验，其他值是编程错误，抛 ValueError）；
-    stripe_available 为 app/services/stripe_gateway.py 的 stripe_configured 在当次请求里的结果；
+    sms_enabled 为 None 表示请求里省略了该字段：不检查短信配置、不改开关（HANDOFF 0.65）；
+    stripe_available 为 app/services/stripe_gateway.py 的 stripe_configured、sms_available 为
+    app/api/admin_site_settings.py 的 sms_service_configured，都在当次请求里算出；
     admin_account_id 须在调用前取出（这里先回滚，调用方会话里的 ORM 对象随之过期）。按以下顺序：
-    1. method 为 stripe_test 而 stripe_available 为假：抛 stripe_not_configured，不查库、不写入
-       （当前已是 stripe_test 也一样）。切回 simulated 不看配置。
+    1. method 为 stripe_test 而 stripe_available 为假：抛 stripe_not_configured；sms_enabled 为
+       True 而 sms_available 为假：抛 sms_not_configured。两项检查都不查库、不写入任何一项（当前
+       已是该值也一样），先查支付方式再查短信（HANDOFF 0.65）。切回 simulated 与保存「关闭」不看
+       配置。
     2. 结束此前的事务（此前只有读取，回滚即可），以 SELECT … FOR UPDATE 锁定站点设置行，使锁定
        成为新事务的第一条语句；行不存在时在保存点里按默认值插入，撞上主键即回滚该保存点，然后
        再锁定。
-    3. 当前值按 get_payment_method 的规则解读（不认识的值视为 simulated）；与 method 相同时回滚
-       （释放锁），不写入、不写审计。
-    4. 否则改值与更新时间，写一条 admin_payment_method_changed 审计（对象为该行，旧值与新值为
-       simulated 或 stripe_test），一起提交。短信验证开关不动。
+    3. 两项各自与锁住那一行的当前值比较：支付方式按 get_payment_method 的规则解读（不认识的值
+       视为 simulated），短信验证开关按 is_sms_verification_enabled 的规则解读（sms_enabled 为
+       None 时不比较）。都相同时回滚（释放锁），不写入、不写审计。
+    4. 否则只改有变化的项与更新时间，每项变化各写一条审计（对象为该行；支付方式为
+       admin_payment_method_changed，旧值与新值为 simulated 或 stripe_test；短信为
+       admin_sms_verification_changed，旧值与新值为 on 或 off），一起提交。
     """
     if method not in PAYMENT_METHODS:
         raise ValueError("payment method must be simulated or stripe_test")
     if method == PAYMENT_METHOD_STRIPE_TEST and not stripe_available:
-        raise PaymentMethodRejected("stripe_not_configured")
+        raise SiteSettingsRejected("stripe_not_configured")
+    if sms_enabled is True and not sms_available:
+        raise SiteSettingsRejected("sms_not_configured")
 
     db.rollback()
     setting = _lock_site_setting(db, now)
-    current = _known_method(setting.payment_method)
-    if current == method:
+    current_method = _known_method(setting.payment_method)
+    # 当前值取自锁住的那一行，不另发 SELECT；回滚与提交之后该对象过期，读取都在此之前。
+    current_sms = bool(setting.sms_verification_enabled)
+    new_sms = current_sms if sms_enabled is None else sms_enabled
+    method_changed = current_method != method
+    sms_changed = current_sms != new_sms
+    if not method_changed and not sms_changed:
         db.rollback()
-        return current, False
+        return current_method, current_sms, False
 
-    setting.payment_method = method
+    if method_changed:
+        setting.payment_method = method
+    if sms_changed:
+        setting.sms_verification_enabled = new_sms
     setting.updated_at = now
     db.flush()
-    record_audit(
-        db,
-        ADMIN_PAYMENT_METHOD_CHANGED,
-        admin_account_id,
-        now,
-        target_type=AUDIT_TARGET_SITE_SETTING,
-        target_id=setting.id,
-        old_value=current,
-        new_value=method,
-    )
+    setting_id = setting.id
+    if method_changed:
+        record_audit(
+            db,
+            ADMIN_PAYMENT_METHOD_CHANGED,
+            admin_account_id,
+            now,
+            target_type=AUDIT_TARGET_SITE_SETTING,
+            target_id=setting_id,
+            old_value=current_method,
+            new_value=method,
+        )
+    if sms_changed:
+        record_audit(
+            db,
+            ADMIN_SMS_VERIFICATION_CHANGED,
+            admin_account_id,
+            now,
+            target_type=AUDIT_TARGET_SITE_SETTING,
+            target_id=setting_id,
+            old_value=_sms_audit_value(current_sms),
+            new_value=_sms_audit_value(new_sms),
+        )
     db.commit()
-    return method, True
+    return method, new_sms, True

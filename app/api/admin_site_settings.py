@@ -1,26 +1,35 @@
-"""后台站点设置 A09 的支付方式接口：GET /api/admin/site-settings、PUT /api/admin/site-settings。
+"""后台站点设置 A09 的支付方式与短信验证开关接口：GET /api/admin/site-settings、
+PUT /api/admin/site-settings。
 
-依据 docs/DESIGN.md 1.12（提交 acf576e）「Stripe 测试环境支付」第 1 条（只接受测试密钥）、第 2 条
-（支付方式取模拟或 Stripe 测试，修改写审计；凭据未配置时不能切到 Stripe 测试）、「数据模型」的
-SiteSetting 一行（后台修改写入 AuditEvent）与「权限与资料保护」；docs/UX.md 0.11 的 A09（凭据
-未配置或密钥不是测试密钥时 Stripe 选项禁用，保存时服务端再次检查）；Kelvin 2026-10-07 与
-2026-10-15 的决定（A09 先只放支付方式开关，不提供短信验证开关的写入）；docs/HANDOFF.md 0.54 的
-落实写法（凭据是否可用以 stripe_configured 的五项检查为准，比第 2 条所写的两项更严；凭据不可用
-时保存「Stripe 测试」一律被拒，当前已是该值也一样）。保存规则见 app/services/site_settings.py。
+支付方式依据 docs/DESIGN.md 1.12（提交 acf576e）「Stripe 测试环境支付」第 1 条（只接受测试密钥）、
+第 2 条（支付方式取模拟或 Stripe 测试，修改写审计；凭据未配置时不能切到 Stripe 测试）、「数据模型」
+的 SiteSetting 一行（后台修改写入 AuditEvent）与「权限与资料保护」；docs/UX.md 0.11 的 A09（凭据
+未配置或密钥不是测试密钥时 Stripe 选项禁用，保存时服务端再次检查）；docs/HANDOFF.md 0.54 的落实
+写法（凭据是否可用以 stripe_configured 的五项检查为准，比第 2 条所写的两项更严；凭据不可用时保存
+「Stripe 测试」一律被拒，当前已是该值也一样）。
+短信验证开关（SHOP-TASK-168）依据 docs/DESIGN.md 1.15（提交 1c668e6）「边界与原则」短信验证开关
+一条（保存「开启」时检查五类短信服务配置，缺一或不合格即拒绝，同一次保存里的其他设置也不生效，
+当前已开启也一样；保存「关闭」不检查；检查只看配置，不联网）；docs/UX.md 0.14 的 A09（页面读取时
+返回开关当前值与短信服务是否可用；保存一次提交两项，任一项被拒两项都不写入）；docs/HANDOFF.md
+0.65 的落实写法（短信字段可省略，省略时不检查、不改开关；先查支付方式再查短信；判定写在本文件）。
+保存规则见 app/services/site_settings.py。
 
 两个接口都经 SHOP-TASK-036 的 require_admin：没有有效后台会话时 401 admin_session_required。
 
 读取（GET）：require_admin（401）→ 返回当前支付方式（get_payment_method）、凭据是否可用
-（stripe_available，即当次请求的 stripe_configured）与由 cookie 算出的 CSRF 令牌。不写审计；不返回
-短信验证开关。
+（stripe_available，即当次请求的 stripe_configured）、由 cookie 算出的 CSRF 令牌、短信验证开关
+（is_sms_verification_enabled）与短信服务是否可用（sms_available，即当次请求的
+sms_service_configured）。不写审计。
 保存（PUT），每一步不通过即停止：
 1. 请求体按实际读到的字节逐块判断，超过 8 KB 即 413，先于一切校验；不是 JSON 415；
 2. require_admin（401）；
 3. X-CSRF-Token（403 csrf_failed）；
-4. 请求体只有 payment_method（simulated 或 stripe_test，按原样比较、区分大小写），多出字段（含
-   短信验证开关）或其他值 422；
-5. 值为 stripe_test 而凭据不可用：422 {"detail": "stripe_not_configured"}，不写入。之后才保存，
-   成功或与当前值相同都是 200 与保存后的 payment_method。
+4. 请求体有必填的 payment_method（simulated 或 stripe_test，按原样比较、区分大小写）与可省略的
+   sms_verification_enabled（只接受 JSON 布尔值），多出字段或其他值 422；
+5. 支付方式为 stripe_test 而凭据不可用：422 {"detail": "stripe_not_configured"}；
+6. sms_verification_enabled 为 true 而短信服务不可用：422 {"detail": "sms_not_configured"}。
+   两种拒绝都不写入任何一项。之后才保存，成功或与当前值相同都是 200 与保存后的 payment_method
+   和 sms_verification_enabled。
 
 两个接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control: no-store，由
 SHOP-TASK-027 的路由类统一加上；路径存在但方法不匹配的 405 由框架在路由之外回答，不在此列。
@@ -40,13 +49,18 @@ from sqlalchemy.orm import Session
 from app.api.admin_auth import AdminDep, require_admin_csrf
 from app.api.order_lookup import _NoStoreRoute
 from app.api.pay import _body_errors, _json_body, _utcnow
+from app.api.site_settings import turnstile_site_key
+from app.core.config import Settings
 from app.db.session import get_session
 from app.services.admin_auth import csrf_token_for_cookie
+from app.services.captcha import TurnstileVerifier
 from app.services.site_settings import (
-    PaymentMethodRejected,
+    SiteSettingsRejected,
     get_payment_method,
-    save_payment_method,
+    is_sms_verification_enabled,
+    save_site_settings,
 )
+from app.services.sms_provider import TwilioVerifyClient
 from app.services.stripe_gateway import stripe_configured
 
 router = APIRouter(prefix="/api/admin/site-settings", tags=["admin"], route_class=_NoStoreRoute)
@@ -54,13 +68,55 @@ router = APIRouter(prefix="/api/admin/site-settings", tags=["admin"], route_clas
 # 与 app/models/site.py 的 PAYMENT_METHODS 相同（测试核对两者一致）。
 PaymentMethodName = Literal["simulated", "stripe_test"]
 
+# 短信服务的两个目的地（马来西亚、新加坡）单次费用上限，与每日预算和发送限流阈值：都须为正整数。
+SMS_COST_LIMIT_SETTINGS = ("sms_max_cost_micro_usd_my", "sms_max_cost_micro_usd_sg")
+SMS_SEND_LIMIT_SETTINGS = (
+    "sms_daily_count_limit",
+    "sms_daily_cost_limit_micro_usd",
+    "sms_phone_limit_per_minute",
+    "sms_phone_limit_per_hour",
+    "sms_phone_limit_per_day",
+    "sms_source_limit_per_hour",
+)
 
-class PaymentMethodIn(BaseModel):
-    """只有支付方式；短信验证开关不提供写入。"""
+
+def _positive_int(value: object) -> bool:
+    # 布尔值是 int 的子类，不算整数。
+    return isinstance(value, int) and not isinstance(value, bool) and value > 0
+
+
+def sms_service_configured(settings: Settings) -> bool:
+    """短信服务的配置是否齐全（DESIGN 1.15「边界与原则」短信验证开关一条）。
+
+    只读传入的配置，不联网、不写日志；五类全部合格才为真：
+    1. 短信服务商：TwilioVerifyClient 已配置（四项非空，接口地址为 https://）；
+    2. 人机挑战：TurnstileVerifier 已配置（密钥非空，核验地址为 https://），且公开 key 按公开站点
+       设置接口的规则合格（turnstile_site_key 不为 None，即该接口会下发它）；
+    3. 限流所用的 Redis：连接串非空（同 app/services/rate_limit.py 判断未配置的写法）；
+    4. 两个目的地的单次费用上限都为正整数；
+    5. 每日条数与费用上限、每个号码每分钟、每小时、每天与每个来源每小时的限流阈值都为正整数。
+    配置齐全不证明短信能送达；开启后服务不可用时按停发处理。
+    """
+    return (
+        TwilioVerifyClient.from_settings(settings).configured
+        and TurnstileVerifier.from_settings(settings).configured
+        and turnstile_site_key(settings.turnstile_site_key) is not None
+        and bool(settings.redis_url)
+        and all(
+            _positive_int(getattr(settings, name))
+            for name in SMS_COST_LIMIT_SETTINGS + SMS_SEND_LIMIT_SETTINGS
+        )
+    )
+
+
+class SiteSettingsIn(BaseModel):
+    """支付方式必填；短信验证开关可省略（省略时不检查、不改开关，HANDOFF 0.65）。"""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
     payment_method: PaymentMethodName
+    # 是否提交了该字段看 model_fields_set；默认值只为省略时占位，显式的 null 仍是 422。
+    sms_verification_enabled: bool = False
 
 
 # 不叫 SiteSettingsOut：公开接口 app/api/site_settings.py 已用这个名字。
@@ -68,11 +124,18 @@ class PaymentMethodOut(BaseModel):
     payment_method: str
 
 
+class AdminSiteSettingsSavedOut(PaymentMethodOut):
+    sms_verification_enabled: bool
+
+
 class AdminSiteSettingsOut(PaymentMethodOut):
     # 为假时页面禁用「Stripe 测试」选项，保存它会被拒。
     stripe_available: bool
     # 由 cookie 重新算出的 CSRF 令牌，供页面提交保存。
     csrf_token: str
+    sms_verification_enabled: bool
+    # 为假时页面禁用「开启」选项，保存开启会被拒。
+    sms_available: bool
 
 
 async def _save_body(request: Request) -> bytes:
@@ -89,9 +152,13 @@ def _stripe_available(request: Request) -> bool:
     return stripe_configured(request.app.state.settings)
 
 
+def _sms_available(request: Request) -> bool:
+    return sms_service_configured(request.app.state.settings)
+
+
 @router.get("", response_model=AdminSiteSettingsOut)
 def read(admin: AdminDep, session: SessionDep, request: Request) -> AdminSiteSettingsOut:
-    """当前支付方式、凭据是否可用与 CSRF 令牌；只读，不写审计。"""
+    """当前支付方式与短信验证开关、两者是否可用与 CSRF 令牌；只读，不写审计。"""
     csrf_token = csrf_token_for_cookie(admin.cookie_value)
     if csrf_token is None:
         # require_admin 通过时 cookie 格式必然合法；这里只为类型收窄。
@@ -100,34 +167,42 @@ def read(admin: AdminDep, session: SessionDep, request: Request) -> AdminSiteSet
         payment_method=get_payment_method(session),
         stripe_available=_stripe_available(request),
         csrf_token=csrf_token,
+        sms_verification_enabled=is_sms_verification_enabled(session),
+        sms_available=_sms_available(request),
     )
 
 
-@router.put("", response_model=PaymentMethodOut)
+@router.put("", response_model=AdminSiteSettingsSavedOut)
 def save(
     raw: SaveBodyDep,
     admin: AdminDep,
     session: SessionDep,
     request: Request,
-) -> PaymentMethodOut:
-    """CSRF → 请求体 → 凭据检查 → 保存。与当前值相同时不写入、不写审计。"""
+) -> AdminSiteSettingsSavedOut:
+    """CSRF → 请求体 → 凭据检查 → 短信配置检查 → 保存。两项都与当前值相同时不写入、不写审计。"""
     require_admin_csrf(request, admin)
     try:
-        body = PaymentMethodIn.model_validate_json(raw)
+        body = SiteSettingsIn.model_validate_json(raw)
     except ValidationError as exc:
         raise RequestValidationError(_body_errors(exc)) from None
+    sms_enabled: bool | None = None
+    if "sms_verification_enabled" in body.model_fields_set:
+        sms_enabled = body.sms_verification_enabled
 
     # 保存先回滚此前的事务，会话里的 ORM 对象随之过期：管理员 ID 在此之前取出。
     account_id = admin.account.id
     try:
-        method, _ = save_payment_method(
+        method, sms_after, _ = save_site_settings(
             session,
             account_id,
             body.payment_method,
+            sms_enabled,
             _stripe_available(request),
+            # 保存「关闭」或省略时不看短信配置。
+            sms_enabled is not True or _sms_available(request),
             _utcnow(),
         )
-    except PaymentMethodRejected as exc:
+    except SiteSettingsRejected as exc:
         session.rollback()
         raise HTTPException(status_code=422, detail=exc.code) from None
-    return PaymentMethodOut(payment_method=method)
+    return AdminSiteSettingsSavedOut(payment_method=method, sms_verification_enabled=sms_after)
