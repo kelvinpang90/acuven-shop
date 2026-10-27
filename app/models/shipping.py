@@ -12,6 +12,14 @@
 MySQL 默认排序规则不区分大小写，数据库不保证代码是大写字母：
 大小写与字母是否合法由写入方（数据迁移、之后的后台维护）与查询函数校验。
 代码是否是真实存在的国家不在这里校验。
+
+行 ID 不复用（DESIGN 1.16 第 9 条「删除的行的 ID 不再分配给新行
+（不依赖数据库的默认行为，测试库与生产库都须成立）」，HANDOFF 0.67）：
+两张表都在建表时显式声明自增。MySQL 由迁移 0004 建表时的 AUTO_INCREMENT
+保证，8.0 起自增计数持久化，删掉最大的 ID、重启后都不复用；SQLite 由表参数里的
+sqlite_autoincrement 保证，不加时主键沿用 rowid 的默认行为，删掉最大的 ID
+后会把它再分配给新行。这一项只改 SQLite 的建表语句，列、约束与 MySQL 的
+建表语句不变，迁移不改。
 """
 
 from __future__ import annotations
@@ -30,6 +38,10 @@ ZONE_OTHER = "other"
 
 # 兜底行固定的区域代码。
 OTHER_ZONE_CODE = "OTHER"
+
+# 两张表的表选项：MySQL 的引擎与字符集，加上 SQLite 的显式自增
+# （行 ID 不复用，见模块说明）。
+_TABLE_OPTIONS = {**MYSQL_TABLE_OPTIONS, "sqlite_autoincrement": True}
 
 
 class ShippingRate(Base):
@@ -51,7 +63,7 @@ class ShippingRate(Base):
         ),
         CheckConstraint("fee_sen >= 0", name="fee_sen_non_negative"),
         CheckConstraint("version >= 1", name="version_positive"),
-        MYSQL_TABLE_OPTIONS,
+        _TABLE_OPTIONS,
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -85,7 +97,7 @@ class DemoFxRate(Base):
         ),
         CheckConstraint("rate > 0", name="rate_positive"),
         CheckConstraint("version >= 1", name="version_positive"),
-        MYSQL_TABLE_OPTIONS,
+        _TABLE_OPTIONS,
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
