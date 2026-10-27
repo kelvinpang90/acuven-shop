@@ -1425,6 +1425,111 @@ export const COPY = {
     zh: "继续支付",
     ms: "Teruskan pembayaran",
   },
+  "account.points_type_earned": {
+    en: "Earned",
+    zh: "获得",
+    ms: "Diperoleh",
+  },
+  "account.points_type_redeemed": {
+    en: "Used at checkout",
+    zh: "结账抵扣",
+    ms: "Digunakan semasa daftar keluar",
+  },
+  "account.points_type_expired": {
+    en: "Expired",
+    zh: "到期失效",
+    ms: "Tamat tempoh",
+  },
+  "account.points_type_returned": {
+    en: "Returned after refund",
+    zh: "退款返还",
+    ms: "Dikembalikan selepas bayaran balik",
+  },
+  "account.points_type_reversed": {
+    en: "Taken back after refund",
+    zh: "退款追回",
+    ms: "Ditarik balik selepas bayaran balik",
+  },
+  "account.points": {
+    en: "My points",
+    zh: "我的积分",
+    ms: "Mata saya",
+  },
+  "account.points_balance": {
+    en: "Balance: {points} points",
+    zh: "余额：{points} 积分",
+    ms: "Baki: {points} mata",
+  },
+  "account.points_pending": {
+    en: "Owed from refunds: {points} points (settled from future points)",
+    zh: "退款后尚欠积分：{points} 积分（以后获得的积分会先用于补足）",
+    ms: "Tertunggak daripada bayaran balik: {points} mata (dijelaskan daripada mata akan datang)",
+  },
+  "account.points_expiry": {
+    en: "{points} points expire on {date}",
+    zh: "{points} 积分将于 {date} 到期",
+    ms: "{points} mata tamat tempoh pada {date}",
+  },
+  "account.points_history": {
+    en: "Points history",
+    zh: "积分明细",
+    ms: "Sejarah mata",
+  },
+  "account.coupons": {
+    en: "My coupons",
+    zh: "我的优惠券",
+    ms: "Kupon saya",
+  },
+  "account.coupons_available": {
+    en: "Available coupons",
+    zh: "可用优惠券",
+    ms: "Kupon tersedia",
+  },
+  "account.coupon_value_fixed": {
+    en: "RM {amount} off",
+    zh: "减 RM {amount}",
+    ms: "Potongan RM {amount}",
+  },
+  "account.coupon_value_percent": {
+    en: "{percent}% off",
+    zh: "减 {percent}%",
+    ms: "Potongan {percent}%",
+  },
+  "account.coupon_min_spend": {
+    en: "Minimum item spend: RM {amount}",
+    zh: "最低商品消费：RM {amount}",
+    ms: "Perbelanjaan item minimum: RM {amount}",
+  },
+  "account.coupon_valid_until": {
+    en: "Valid until {date}",
+    zh: "有效期至 {date}",
+    ms: "Sah sehingga {date}",
+  },
+  "account.coupon_use_hint": {
+    en: "Enter the code at checkout. Coupons reduce the item amount only.",
+    zh: "结账时输入代码即可使用；优惠券只抵商品金额。",
+    ms: "Masukkan kod semasa daftar keluar. Kupon hanya mengurangkan jumlah item.",
+  },
+  "account.coupons_available_empty": {
+    en: "No coupons are available right now.",
+    zh: "目前没有可用的优惠券。",
+    ms: "Tiada kupon tersedia buat masa ini.",
+  },
+  "account.coupons_used": {
+    en: "Coupons you've used",
+    zh: "使用记录",
+    ms: "Kupon yang telah anda gunakan",
+  },
+  "account.coupon_used_on": {
+    en: "Used on order {orderNo}",
+    zh: "用于订单 {orderNo}",
+    ms: "Digunakan pada pesanan {orderNo}",
+  },
+  "account.coupons_used_empty": {
+    en: "You haven't used any coupons yet.",
+    zh: "您还没有使用过优惠券。",
+    ms: "Anda belum menggunakan sebarang kupon.",
+  },
   "account.demo_hint": {
     en: "Points and coupons are demo only and have no cash value.",
     zh: "积分与优惠券均为演示，没有现金价值。",
