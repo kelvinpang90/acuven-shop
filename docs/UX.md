@@ -2060,7 +2060,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 |           | [admin.shipping_other]  [admin.shipping_fee] [M1 ____]    |
 |           |-----------------------------------------------------------|
 |           | [admin.fx_title]                                          |
-|           |  <国家> → <币种>  [admin.fx_rate] [M2 ____]  [admin.fx_version] ( [admin.remove] ) |
+|           |  <国家> → <币种>（<小数位>）  [admin.fx_rate] [M2 ____]  [admin.fx_version] ( [admin.remove] ) |
 |           |  新增的行：[admin.shipping_country] <国家> [admin.fx_currency] [___] [admin.fx_decimals] [___] [admin.fx_rate_new] [M2 ____] ( [admin.remove] ) |
 |           |  ( [admin.add_fx] )                                       |
 |           | [admin.rules_apply_new]      ( [common.save] )            |
@@ -2088,6 +2088,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 |   [admin.fx_currency] [___]    |
 |   [admin.fx_decimals] [___]    |
 |   [admin.fx_rate_new] [M2 ____] |
+|   ( [admin.remove] )           |
 |   ( [admin.add_fx] )           |
 | [admin.rules_apply_new]        |
 | ( [common.save] )              |
@@ -2103,8 +2104,8 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 
 保存与状态（0.15，DESIGN 1.16 候批稿「计价、优惠、积分与库存」第 9 条，Kelvin 2026-10-27 决定）：
 
-- **增删**：马来西亚 16 个州属与 `[admin.shipping_other]` 只能改运费，没有 `[admin.remove]`。国家运费与演示汇率每行有 `[admin.remove]`，点了该行即从页面上去掉，保存后才生效，不另弹确认框；保存前可再用新增按钮加回。`[admin.add_country]` 与 `[admin.add_fx]` 各加一行空白行，`<国家>` 从结账页的收货国家列表里选（不含马来西亚，也不含该区块已有的国家）。新增的汇率行要填 `[admin.fx_currency]`（三位字母）、`[admin.fx_decimals]`（0–3）与汇率；已有的汇率行只能改汇率，币种与小数位只显示不可改。
-- **取值**：运费按 RM 输入、至多两位小数，提交时换成整仙；汇率按输入的十进制文字原样提交。取值范围以服务端为准（DESIGN 1.16 第 9 条），不合格时显示 `[admin.rates_invalid]`，整次保存不生效，页面保留已填的值。
+- **增删**：马来西亚 16 个州属与 `[admin.shipping_other]` 只能改运费，没有 `[admin.remove]`。国家运费与演示汇率每行有 `[admin.remove]`，点了该行即从页面上去掉，保存后才生效，不另弹确认框；保存前可再用新增按钮加回。`[admin.add_country]` 与 `[admin.add_fx]` 各加一行空白行，`<国家>` 从结账页的收货国家列表里选（不含马来西亚，也不含该区块已有的国家）。新增的汇率行要填 `[admin.fx_currency]`（三位字母，提交前转成大写）、`[admin.fx_decimals]`（0–3）与汇率；已有的汇率行只能改汇率，币种与小数位只显示不可改。
+- **取值**：运费按 RM 输入、至多两位小数，提交时按文字换成整仙（不经浮点数相乘）；汇率按输入的十进制文字原样提交。输入本身不是这两种格式时，页面不提交，直接显示 `[admin.rates_invalid]`。取值范围以服务端为准（DESIGN 1.16 第 9 条），服务端回答「取值不合格」时同样显示 `[admin.rates_invalid]`，整次保存不生效，页面保留已填的值；服务端先查取值、再查数据是否已被改动，两者都有时先显示取值不合格。
 - **整页保存**：`( [common.save] )` 一次提交整页（含删除与新增）。成功显示 `[admin.rates_saved]`，页面改显示服务端返回的保存后数据（新的版本号）。服务端告知「数据已被改动」（另一个标签页或会话已保存过）时显示 `[admin.rates_changed]` 与 `( [admin.reload] )`，整次保存不生效；点了重新读取，未保存的修改丢弃。其他失败显示 `[common.error_retry]`，页面保留已填的值。保存期间按钮禁用，防重复提交。
 
 ## A07 后台库存重置结果

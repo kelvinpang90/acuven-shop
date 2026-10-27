@@ -591,7 +591,7 @@
 | `admin.fx_currency` | Currency code | 币种代码 | Kod mata wang | A06 新增的汇率行（0.16） |
 | `admin.fx_decimals` | Decimal places | 小数位 | Tempat perpuluhan | A06 新增的汇率行（0.16） |
 | `admin.fx_rate_new` | Demo rate (1 MYR =) | 演示汇率（1 MYR =） | Kadar demo (1 MYR =) | A06 新增的汇率行（0.16） |
-| `admin.rates_saved` | Saved. New orders use these fees and rates. | 已保存，新订单按这些运费与汇率计算。 | Disimpan. Pesanan baharu menggunakan kos dan kadar ini. | A06 保存成功（0.16） |
+| `admin.rates_saved` | Saved. New orders use the new shipping fees; reference currencies show the new rates. | 已保存。新订单按新运费计算，参考外币按新汇率显示。 | Disimpan. Pesanan baharu menggunakan kos penghantaran baharu; mata wang rujukan memaparkan kadar baharu. | A06 保存成功（0.16） |
 | `admin.rates_invalid` | Check the values: fees RM0.00–RM9,999.99; rates above 0 and below 1,000,000, with up to 6 decimal places; currency code 3 letters (not MYR); decimal places 0–3; each country only once. | 请检查：运费为 RM0.00 到 RM9,999.99；汇率大于 0、小于 1,000,000，至多 6 位小数；币种代码为 3 个字母（不是 MYR）；小数位为 0 到 3；每个国家只能有一行。 | Semak nilai: kos RM0.00–RM9,999.99; kadar melebihi 0 dan di bawah 1,000,000, dengan paling banyak 6 tempat perpuluhan; kod mata wang 3 huruf (bukan MYR); tempat perpuluhan 0–3; setiap negara sekali sahaja. | A06 保存被拒：取值不合格（0.16） |
 | `admin.rates_changed` | Fees or rates were changed elsewhere. Reload to see the latest values. Your unsaved changes will be lost. | 运费或汇率已在别处修改。请重新读取最新的值，未保存的修改会丢失。 | Kos atau kadar telah diubah di tempat lain. Muat semula untuk melihat nilai terkini. Perubahan yang belum disimpan akan hilang. | A06 保存被拒：数据已被改动（0.16） |
 | `admin.reload` | Reload | 重新读取 | Muat semula | A06 数据已被改动时（0.16） |
