@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 
+import { sendDeleteCode, verifyDeleteCode } from "../api/memberAccount";
+import type { DeleteSendReply, DeleteVerifyReply } from "../api/memberAccount";
 import { sendSmsCode, smsLogin, verifyPasswordReset } from "../api/memberAuth";
 import type { MemberPhone, ResetVerifyReply, SmsLoginReply, SmsSendReply } from "../api/memberAuth";
 import type { CopyKey, Language } from "../i18n/copy";
@@ -20,8 +22,18 @@ import type { ChallengeLoader, ChallengeWidget } from "./turnstile";
 // （任何国家），由页面给出，组件不显示号码输入、国家码选择与 auth.sms_scope；通过时与注册 / 短信登录相同（kind 为 member、带 created）。
 // 离开第 2 步的去向（号码格式不成立、不在白名单、开关途中被关闭、短信无法送达或停发后改为游客）经 onLeave 交给页面；
 // 验证码错误不降级（不出现游客选项）。没有人机挑战公开 key 时只显示 common.service_unavailable，不给游客选项（HANDOFF 0.63 第（4）项）。
+// 注销确认（delete_account，SHOP-TASK-167，docs/UX.md 0.13 V1 与 P13，DESIGN 1.14「权限与资料保护」第 3 条，HANDOFF 0.63）：号码固定为本账号，
+// auth.phone 之下以文字显示会话里的遮掩号码，没有号码输入与国家码选择；显示 auth.sms_scope 与人机挑战，不显示 auth.claim_notice 与任何游客文字或按钮。
+// 发送与核验经 api/memberAccount.ts 的 sendDeleteCode 与 verifyDeleteCode（带调用方给出的 CSRF 令牌，号码由服务端取本账号的）；
+// 短信未发出（not_whitelisted、undeliverable、suspended）都为 auth.sms_not_sent_no_change。verified、disabled、signed_out 与 csrf 经 onDeleteStep 交给页面。
 
 export type SmsPurpose = "register" | "login" | "reset_password" | "checkout";
+
+// 注销确认用途（发送与核验走注销接口，不经 memberAuth.ts）。
+export type DeleteSmsPurpose = "delete_account";
+
+// View 能显示的全部用途。
+export type SmsViewPurpose = SmsPurpose | DeleteSmsPurpose;
 
 export type SmsRegion = "MY" | "SG";
 
@@ -171,10 +183,10 @@ export function startVerifying(state: SmsState): SmsState {
   return { ...state, verifying: true, phoneInvalid: false, codeWrong: false, notice: null };
 }
 
-const REGISTER_PURPOSES: ReadonlySet<SmsPurpose> = new Set<SmsPurpose>(["register", "login"]);
+const REGISTER_PURPOSES: ReadonlySet<SmsViewPurpose> = new Set<SmsViewPurpose>(["register", "login"]);
 
 // 显示 auth.claim_notice 的用途（UX V1「仅结账验证、注册、短信登录显示」）。
-const CLAIM_PURPOSES: ReadonlySet<SmsPurpose> = new Set<SmsPurpose>(["register", "login", "checkout"]);
+const CLAIM_PURPOSES: ReadonlySet<SmsViewPurpose> = new Set<SmsViewPurpose>(["register", "login", "checkout"]);
 
 // 结账用途里同一行显示 checkout.continue_guest 的提示（服务端判定短信无法送达或停发）；验证码错误不在其中。
 export const CHECKOUT_GUEST_NOTICE: CopyKey = "checkout.sms_unavailable";
@@ -188,8 +200,8 @@ function notWhitelisted(purpose: SmsPurpose): CopyKey | null {
   return REGISTER_PURPOSES.has(purpose) ? "auth.not_supported_country" : "auth.sms_not_sent_no_change";
 }
 
-// 短信无法送达或停发（UX V1）：注册 / 短信登录为 auth.sms_failed，重设密码为 auth.sms_not_sent_no_change，结账为 checkout.sms_unavailable。
-function notSent(purpose: SmsPurpose): CopyKey {
+// 短信无法送达或停发（UX V1）：注册 / 短信登录为 auth.sms_failed，重设密码与注销确认为 auth.sms_not_sent_no_change，结账为 checkout.sms_unavailable。
+function notSent(purpose: SmsViewPurpose): CopyKey {
   if (purpose === "checkout") {
     return CHECKOUT_GUEST_NOTICE;
   }
@@ -358,6 +370,113 @@ export async function submitCheckoutCode(phone: MemberPhone, code: string, signa
   }
 }
 
+// 注销确认用途交给页面的结果：verified 为验证通过（服务端已为当前会话签发批准，页面出现 account.delete_confirm）；disabled 为开关在流程途中被关闭
+// （页面改用开关关闭时的确认方式）；signed_out 为会话已不在；csrf 为令牌失效（页面重读会话换用新令牌）。
+export type DeleteSmsStep = "verified" | "disabled" | "signed_out" | "csrf";
+
+// 注销确认用途发出验证码的号码：号码由服务端取本账号的，不提交（phone 为空）；masked 为会话里的遮掩号码（auth.code_sent 的 {phoneMasked}）。
+export function deleteSent(phoneMasked: string): SentPhone {
+  return { phone: { input: "", region: "" }, masked: phoneMasked };
+}
+
+// 注销确认用途按发送的结果决定（每种结果都收起进行中、作废已用的令牌）：sent 记下号码并显示验证码输入；disabled 整个组件换成暂停提示；
+// not_whitelisted、undeliverable 与 suspended 都为 auth.sms_not_sent_no_change（UX V1，没有游客文字与按钮）；captcha_failed 为 auth.challenge_failed，
+// rate_limited 为 common.rate_limited，network 为 common.network_check，failed 为 common.error_retry；signed_out 与 csrf 不加提示，由页面处理。
+export function deleteSendStep(reply: DeleteSendReply, sent: SentPhone): SmsChange {
+  return (current) => {
+    const settled: SmsState = { ...current, sending: false, token: null };
+    switch (reply) {
+      case "sent":
+        return { ...settled, sent, code: "" };
+      case "disabled":
+        return { ...settled, paused: true };
+      case "not_whitelisted":
+      case "undeliverable":
+      case "suspended":
+        return { ...settled, notice: "auth.sms_not_sent_no_change" };
+      case "captcha_failed":
+        return { ...settled, notice: "auth.challenge_failed" };
+      case "rate_limited":
+        return { ...settled, notice: "common.rate_limited" };
+      case "network":
+        return { ...settled, notice: "common.network_check" };
+      case "failed":
+        return { ...settled, notice: "common.error_retry" };
+      case "signed_out":
+      case "csrf":
+        return settled;
+    }
+  };
+}
+
+// 发送的结果里交给页面的（disabled、signed_out 与 csrf）；其余为 null。
+export function deleteSendHandOver(reply: DeleteSendReply): DeleteSmsStep | null {
+  return reply === "disabled" || reply === "signed_out" || reply === "csrf" ? reply : null;
+}
+
+// 注销确认用途核验的结果：change 为对状态的改动，step 为交给页面的结果（没有为 null）。
+export interface DeleteVerifyStep {
+  change: SmsChange;
+  step: DeleteSmsStep | null;
+}
+
+// 按核验的结果决定：verified 进入已验证状态；wrong（含过期）在验证码下显示 auth.code_wrong；disabled 整个组件换成暂停提示；
+// unavailable 为 common.service_unavailable，network 为 common.network_check，failed 为 common.error_retry，都留在验证码输入；signed_out 与 csrf 不加提示。
+export function deleteVerifyStep(reply: DeleteVerifyReply): DeleteVerifyStep {
+  switch (reply) {
+    case "verified":
+      return { change: settledVerify({ verified: true }), step: "verified" };
+    case "wrong":
+      return { change: settledVerify({ codeWrong: true }), step: null };
+    case "disabled":
+      return { change: settledVerify({ paused: true }), step: "disabled" };
+    case "unavailable":
+      return { change: settledVerify({ notice: "common.service_unavailable" }), step: null };
+    case "signed_out":
+    case "csrf":
+      return { change: settledVerify({}), step: reply };
+    case "network":
+      return { change: settledVerify({ notice: "common.network_check" }), step: null };
+    case "failed":
+      return { change: settledVerify({ notice: "common.error_retry" }), step: null };
+  }
+}
+
+// 注销确认用途对结果的处理：按当前状态改动、重置挑战与交给页面的结果。
+export interface DeleteSmsMoves {
+  update: (change: SmsChange) => void;
+  resetChallenge: () => void;
+  step: (step: DeleteSmsStep) => void;
+}
+
+// 注销确认用途发送（与重发）验证码：以完成挑战取得的令牌与调用方给出的 CSRF 令牌经 sendDeleteCode 发送（不带号码）；
+// 更新状态之后重置挑战，再把要页面处理的结果交出。signal 中止之后不再更新。
+export async function sendDeleteAccountCode(phoneMasked: string, csrfToken: string, token: string, signal: AbortSignal, moves: DeleteSmsMoves): Promise<void> {
+  const reply = await sendDeleteCode(token, csrfToken, signal);
+  if (signal.aborted) {
+    return;
+  }
+  moves.update(deleteSendStep(reply, deleteSent(phoneMasked)));
+  moves.resetChallenge();
+  const step = deleteSendHandOver(reply);
+  if (step !== null) {
+    moves.step(step);
+  }
+}
+
+// 注销确认用途提交验证码：经 verifyDeleteCode 提交（请求体只有验证码，带 CSRF 令牌）；更新状态之后把要页面处理的结果交出。signal 中止之后不再更新。
+export async function submitDeleteAccountCode(code: string, csrfToken: string, signal: AbortSignal, moves: DeleteSmsMoves): Promise<void> {
+  const reply = await verifyDeleteCode(code, csrfToken, signal);
+  if (signal.aborted) {
+    return;
+  }
+  const { change, step } = deleteVerifyStep(reply);
+  moves.update(change);
+  if (step !== null) {
+    moves.step(step);
+  }
+}
+
 // 挑战的处理：token 为取得令牌，lost 为加载失败、出错或过期，widget 为已渲染（或已移除，null）的挑战。
 export interface ChallengeMoves {
   token: (token: string) => void;
@@ -467,11 +586,13 @@ export interface SmsHandlers {
 }
 
 export interface SmsVerifyViewProps extends SmsHandlers {
-  purpose: SmsPurpose;
+  purpose: SmsViewPurpose;
   smsEnabled: boolean;
   siteKey: string | null;
-  // auth.continue_guest 的去向；只有注册 / 短信登录用到，重设密码与结账为 null。
+  // auth.continue_guest 的去向；只有注册 / 短信登录用到，重设密码、结账与注销确认为 null。
   guestTo: RoutePath | null;
+  // 注销确认用途 auth.phone 之下显示的本账号遮掩号码（会话里的）；其余用途不用。
+  phoneMasked?: string | undefined;
   state: SmsState;
   // 托管挑战的容器（View 只放一个空的 div，挑战由组件经 turnstile.ts 渲染进去）。
   challengeRef: (element: HTMLDivElement | null) => void;
@@ -480,7 +601,7 @@ export interface SmsVerifyViewProps extends SmsHandlers {
 }
 
 // 整个组件替换为一条提示（不显示号码、挑战与发送按钮）：开关关闭或流程中被关闭时为 auth.sms_paused；公开 key 为 null 时注册 / 短信登录为
-// auth.sms_failed、重设密码为 auth.sms_not_sent_no_change、结账为 common.service_unavailable（HANDOFF 0.63 第（4）项）。注册 / 短信登录另有 auth.continue_guest。
+// auth.sms_failed、重设密码与注销确认为 auth.sms_not_sent_no_change、结账为 common.service_unavailable（HANDOFF 0.63 第（4）项）。注册 / 短信登录另有 auth.continue_guest。
 function replacement(props: Pick<SmsVerifyViewProps, "purpose" | "smsEnabled" | "siteKey" | "state">): CopyKey | null {
   if (!props.smsEnabled || props.state.paused) {
     return "auth.sms_paused";
@@ -494,7 +615,7 @@ function replacement(props: Pick<SmsVerifyViewProps, "purpose" | "smsEnabled" | 
 // 替换提示里以 info（role="status"）显示的两条；其余为 danger。
 const INFO_REPLACEMENTS: ReadonlySet<CopyKey> = new Set<CopyKey>(["auth.sms_paused", "auth.sms_failed"]);
 
-export function SmsVerifyView({ purpose, smsEnabled, siteKey, guestTo, state, challengeRef, onRegion, onPhone, onCode, onSend, onVerify, onContinueGuest }: SmsVerifyViewProps) {
+export function SmsVerifyView({ purpose, smsEnabled, siteKey, guestTo, phoneMasked, state, challengeRef, onRegion, onPhone, onCode, onSend, onVerify, onContinueGuest }: SmsVerifyViewProps) {
   const t = useCopy();
   const labelId = useId();
   const phoneId = useId();
@@ -504,6 +625,8 @@ export function SmsVerifyView({ purpose, smsEnabled, siteKey, guestTo, state, ch
   const guest = REGISTER_PURPOSES.has(purpose) ? guestTo : null;
   // 结账用途：号码由页面给出，不显示号码输入、国家码选择与 auth.sms_scope（P05 第 2 步线框与视觉稿 P05-desktop-2、P05-phone-2）。
   const checkout = purpose === "checkout";
+  // 注销确认用途：号码固定为本账号，以文字显示，没有输入与国家码（视觉稿 P13-desktop-settings、P13-phone-settings 的 V1 注销确认）。
+  const deletion = purpose === "delete_account";
   const replaced = replacement({ purpose, smsEnabled, siteKey, state });
   if (replaced !== null) {
     return (
@@ -516,9 +639,15 @@ export function SmsVerifyView({ purpose, smsEnabled, siteKey, guestTo, state, ch
   const { sent, verified } = state;
   // 服务端的 captcha_failed 与挑战本身的失败是同一条提示，只显示一次。
   const notice = state.notice === "auth.challenge_failed" && state.challengeLost ? null : state.notice;
-  // 结账用途的发送按钮为次要按钮（视觉稿 P05-desktop-2、P05-phone-2），其余用途为主按钮（V1-start）。
-  const sendClass = checkout ? "acs-btn acs-btn--secondary site-sms__send" : "acs-btn acs-btn--primary site-sms__send";
-  const phoneField = (
+  // 结账与注销确认用途的发送按钮为次要按钮（视觉稿 P05-desktop-2、P05-phone-2、P13-desktop-settings），其余用途为主按钮（V1-start）。
+  const sendClass = checkout || deletion ? "acs-btn acs-btn--secondary site-sms__send" : "acs-btn acs-btn--primary site-sms__send";
+  const fixedPhone = (
+    <div className="acs-field">
+      <span className="acs-field__label">{t("auth.phone")}</span>
+      <span className="acs-num">{phoneMasked}</span>
+    </div>
+  );
+  const phoneField = deletion ? fixedPhone : (
     <div className={state.phoneInvalid ? "acs-field acs-field--invalid" : "acs-field"}>
       <label className="acs-field__label" id={labelId} htmlFor={phoneId}>
         {t("auth.phone")}
@@ -653,13 +782,25 @@ export function SmsVerifyView({ purpose, smsEnabled, siteKey, guestTo, state, ch
   );
 }
 
-interface CommonProps {
+interface BaseProps {
   smsEnabled: boolean;
   // 人机挑战公开 key（站点设置 turnstile_site_key）；null 时整个组件替换。
   siteKey: string | null;
-  onVerified: (verified: SmsVerified) => void;
   // 挑战的加载与渲染；默认 Cloudflare Turnstile。
   challenge?: ChallengeLoader;
+}
+
+interface CommonProps extends BaseProps {
+  onVerified: (verified: SmsVerified) => void;
+}
+
+// 注销确认用途的属性：phoneMasked 为会话里的遮掩号码（只显示，不提交）；csrfToken 为会话给的 CSRF 令牌（发送与核验都带）；
+// onDeleteStep 收到要页面处理的结果（不给时不处理）。
+export interface DeleteSmsProps extends BaseProps {
+  purpose: DeleteSmsPurpose;
+  phoneMasked: string;
+  csrfToken: string;
+  onDeleteStep?: ((step: DeleteSmsStep) => void) | undefined;
 }
 
 // 结账用途的属性：phone 为第 1 步的号码；onLeave 收到离开第 2 步的去向（不给时不处理，也不显示 checkout.continue_guest）。
@@ -669,8 +810,8 @@ export interface CheckoutSmsProps {
   onLeave?: ((leave: CheckoutLeave) => void) | undefined;
 }
 
-// 注册 / 短信登录须给出 auth.continue_guest 的去向（站内前台路径），重设密码不传；结账给出号码与离开第 2 步的回调。
-export type SmsVerifyProps = CommonProps & ({ purpose: "register" | "login"; guestTo: RoutePath } | { purpose: "reset_password" } | CheckoutSmsProps);
+// 注册 / 短信登录须给出 auth.continue_guest 的去向（站内前台路径），重设密码不传；结账给出号码与离开第 2 步的回调；注销确认见 DeleteSmsProps。
+export type SmsVerifyProps = (CommonProps & ({ purpose: "register" | "login"; guestTo: RoutePath } | { purpose: "reset_password" } | CheckoutSmsProps)) | DeleteSmsProps;
 
 function smsMoves(setState: Dispatch<SetStateAction<SmsState>>, widget: RefObject<ChallengeWidget | null>, onVerified: (verified: SmsVerified) => void): SmsMoves {
   return {
@@ -693,8 +834,26 @@ function checkoutMoves(moves: SmsMoves, onLeave: ((leave: CheckoutLeave) => void
   };
 }
 
+function deleteMoves(setState: Dispatch<SetStateAction<SmsState>>, widget: RefObject<ChallengeWidget | null>, onDeleteStep: ((step: DeleteSmsStep) => void) | undefined): DeleteSmsMoves {
+  return {
+    update: (change) => {
+      setState(change);
+    },
+    resetChallenge: () => {
+      widget.current?.reset();
+    },
+    step: (step) => {
+      onDeleteStep?.(step);
+    },
+  };
+}
+
+// 注销确认用途不调用 onVerified（结果经 onDeleteStep 交出）。
+const NOT_VERIFIED: (verified: SmsVerified) => void = () => undefined;
+
 export default function SmsVerify(props: SmsVerifyProps) {
-  const { purpose, smsEnabled, siteKey, onVerified } = props;
+  const { purpose, smsEnabled, siteKey } = props;
+  const onVerified = props.purpose === "delete_account" ? NOT_VERIFIED : props.onVerified;
   const loader = props.challenge ?? TURNSTILE;
   const guestTo = props.purpose === "register" || props.purpose === "login" ? props.guestTo : null;
   const checkout = props.purpose === "checkout" ? props : null;
@@ -745,6 +904,7 @@ export default function SmsVerify(props: SmsVerifyProps) {
       smsEnabled={smsEnabled}
       siteKey={siteKey}
       guestTo={guestTo}
+      phoneMasked={props.purpose === "delete_account" ? props.phoneMasked : undefined}
       state={state}
       challengeRef={setBox}
       onRegion={(region) => {
@@ -764,10 +924,12 @@ export default function SmsVerify(props: SmsVerifyProps) {
         }
         setState(startSending);
         const moves = smsMoves(setState, widget, onVerified);
-        if (checkout !== null) {
-          void sendCheckoutCode(checkout.phone, token, controller.signal, checkoutMoves(moves, onLeave));
+        if (props.purpose === "delete_account") {
+          void sendDeleteAccountCode(props.phoneMasked, props.csrfToken, token, controller.signal, deleteMoves(setState, widget, props.onDeleteStep));
+        } else if (props.purpose === "checkout") {
+          void sendCheckoutCode(props.phone, token, controller.signal, checkoutMoves(moves, onLeave));
         } else {
-          void sendCode(purpose, phoneOf(state), token, controller.signal, moves);
+          void sendCode(props.purpose, phoneOf(state), token, controller.signal, moves);
         }
       }}
       onVerify={() => {
@@ -777,10 +939,12 @@ export default function SmsVerify(props: SmsVerifyProps) {
         }
         setState(startVerifying);
         const moves = smsMoves(setState, widget, onVerified);
-        if (checkout !== null) {
+        if (props.purpose === "delete_account") {
+          void submitDeleteAccountCode(state.code.trim(), props.csrfToken, controller.signal, deleteMoves(setState, widget, props.onDeleteStep));
+        } else if (props.purpose === "checkout") {
           void submitCheckoutCode(state.sent.phone, state.code.trim(), controller.signal, checkoutMoves(moves, onLeave));
         } else {
-          void submitCode(purpose, state.sent.phone, state.code.trim(), controller.signal, moves);
+          void submitCode(props.purpose, state.sent.phone, state.code.trim(), controller.signal, moves);
         }
       }}
       onContinueGuest={

@@ -1570,6 +1570,56 @@ export const COPY = {
     zh: "更改密码",
     ms: "Tukar kata laluan",
   },
+  "account.delete": {
+    en: "Delete account",
+    zh: "注销账号",
+    ms: "Padam akaun",
+  },
+  "account.delete_warning": {
+    en: "Deleting your account removes your mobile number and password, logs you out everywhere, and forfeits your points and unused coupons. Your orders, including their shipping details, stay in our records but are no longer linked to you, and registering again with the same number will not restore them. This cannot be undone.",
+    zh: "注销将删除您的手机号和密码并退出所有登录，积分余额与未用优惠券作废。订单（含收货资料）仍保留在记录中，但不再与您关联，用同一号码重新注册也不会恢复。此操作不可撤销。",
+    ms: "Memadam akaun akan membuang nombor telefon bimbit dan kata laluan anda, log keluar di semua peranti, dan melucutkan mata serta kupon yang belum digunakan. Pesanan anda, termasuk butiran penghantaran, kekal dalam rekod tetapi tidak lagi dikaitkan dengan anda, dan mendaftar semula dengan nombor yang sama tidak akan memulihkannya. Tindakan ini tidak boleh dibatalkan.",
+  },
+  "account.delete_verify": {
+    en: "To confirm, verify your mobile number by SMS first.",
+    zh: "请先通过短信验证手机号以确认注销。",
+    ms: "Untuk mengesahkan, sahkan nombor telefon bimbit anda melalui SMS dahulu.",
+  },
+  "account.delete_confirm": {
+    en: "Delete my account",
+    zh: "确认注销",
+    ms: "Padam akaun saya",
+  },
+  "account.deleted": {
+    en: "Your account has been deleted.",
+    zh: "您的账号已注销。",
+    ms: "Akaun anda telah dipadam.",
+  },
+  "account.delete_verify_password": {
+    en: "SMS is currently switched off. To confirm, enter your password.",
+    zh: "短信目前已关闭。请输入密码以确认注销。",
+    ms: "SMS kini dimatikan. Untuk mengesahkan, masukkan kata laluan anda.",
+  },
+  "account.delete_password_wrong": {
+    en: "That password is incorrect. Your account has not been deleted.",
+    zh: "密码不正确，账号未注销。",
+    ms: "Kata laluan itu salah. Akaun anda belum dipadam.",
+  },
+  "account.delete_verify_session": {
+    en: "SMS is currently switched off and you haven't set a password, so you can confirm deletion while logged in.",
+    zh: "短信目前已关闭，且您尚未设置密码，可在当前登录状态下确认注销。",
+    ms: "SMS kini dimatikan dan anda belum menetapkan kata laluan, jadi anda boleh mengesahkan pemadaman semasa log masuk.",
+  },
+  "account.delete_session_confirm": {
+    en: "Delete your account now? This cannot be undone.",
+    zh: "确定现在注销账号？此操作不可撤销。",
+    ms: "Padam akaun anda sekarang? Tindakan ini tidak boleh dibatalkan.",
+  },
+  "account.delete_keep": {
+    en: "Keep my account",
+    zh: "保留账号",
+    ms: "Kekalkan akaun saya",
+  },
   "account.demo_hint": {
     en: "Points and coupons are demo only and have no cash value.",
     zh: "积分与优惠券均为演示，没有现金价值。",

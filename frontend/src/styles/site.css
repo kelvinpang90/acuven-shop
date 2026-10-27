@@ -567,6 +567,13 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-account__field { max-width: 420px; }
 .site-account__paused { max-width: 720px; }
 .site-account__submit, .site-account__change { justify-self: start; }
+/* 注销部分（SHOP-TASK-167，P13-desktop-settings 与 P13-desktop-settings-sms-off）：设置段末尾，最宽 720px、上方多 24px（外边距与内边距各 24px），
+   各项上下排列（间距 14px）；号码、验证码与当前密码栏最宽 420px；account.delete_confirm 靠左、不拉满。
+   未设密码时的确认框（account.delete_session_confirm）盖在页面上居中（同 P06 的取消确认框） */
+.site-account__delete { display: grid; gap: 14px; align-content: start; max-width: 720px; margin-top: 24px; padding-top: 24px; }
+.site-account__delete .acs-field { max-width: 420px; }
+.site-account__confirm { justify-self: start; }
+.site-account__overlay { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; }
 
 @media (max-width: 767px) {
   .site { --gutter: 16px; }
@@ -1006,4 +1013,10 @@ a.site-admin-refunds__clear { text-decoration: none; }
   /* 设置段（P13-phone-settings）：段首为遮掩后的手机号，新密码栏与提示拉满一栏；密码之后为整宽的退出按钮（上方多 8px） */
   .site-account__field, .site-account__paused { max-width: none; }
   .site-account__signout.site-phone-only { display: flex; margin-top: 8px; }
+
+  /* 注销部分（P13-phone-settings；手机版的开关关闭设置与确认框没有视觉稿，照 P13-desktop-settings-sms-off）：拉满一栏、上方多 16px；
+     各栏拉满，发送验证码与 account.delete_confirm 为整宽按钮 */
+  .site-account__delete { max-width: none; margin-top: 16px; }
+  .site-account__delete .acs-field { max-width: none; }
+  .site-account__delete .site-sms__send, .site-account__confirm { justify-self: stretch; }
 }

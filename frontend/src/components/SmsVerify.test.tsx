@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { MEMBER_DELETE_SEND_URL, MEMBER_DELETE_VERIFY_URL } from "../api/memberAccount";
 import { PASSWORD_RESET_VERIFY_URL, SMS_LOGIN_URL, SMS_SEND_URL } from "../api/memberAuth";
+import { CSRF_HEADER } from "../api/pay";
 import { COPY, LANGUAGES, translate } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
@@ -14,6 +16,7 @@ import SmsVerify, {
   challengeLost,
   challengeToken,
   checkoutSent,
+  deleteSent,
   INITIAL_SMS,
   maskedCheckoutPhone,
   maskedPhone,
@@ -21,23 +24,28 @@ import SmsVerify, {
   mountChallenge,
   sendCheckoutCode,
   sendCode,
+  sendDeleteAccountCode,
   SmsVerifyView,
   startSending,
   startVerifying,
   submitCheckoutCode,
   submitCode,
+  submitDeleteAccountCode,
 } from "./SmsVerify";
 import type {
   ChallengeMoves,
   CheckoutLeave,
   CheckoutSmsMoves,
   CheckoutSmsPhone,
+  DeleteSmsMoves,
+  DeleteSmsStep,
   SmsMoves,
   SmsPhone,
   SmsPurpose,
   SmsState,
   SmsVerified,
   SmsVerifyViewProps,
+  SmsViewPurpose,
 } from "./SmsVerify";
 import { TURNSTILE_SCRIPT_URL, turnstileLanguage } from "./turnstile";
 import type { ChallengeHandlers, ChallengeLoader, ChallengeWidget } from "./turnstile";
@@ -75,8 +83,9 @@ function wrap(element: ReactNode, language: Language) {
   );
 }
 
-function guestFor(purpose: SmsPurpose): RoutePath | null {
-  return purpose === "reset_password" ? null : GUEST_TO;
+// SHOP-TASK-167：View 的用途多了注销确认（SmsViewPurpose），参数类型随之放宽、注销确认也没有游客去向；原有四种用途的去向不变。
+function guestFor(purpose: SmsViewPurpose): RoutePath | null {
+  return purpose === "reset_password" || purpose === "delete_account" ? null : GUEST_TO;
 }
 
 function render(overrides: Partial<SmsVerifyViewProps> = {}, language: Language = "en"): string {
@@ -834,6 +843,235 @@ describe("checkout purpose", () => {
       renderCheckout({ state: { ...CHECKOUT_SENT, verified: true } }, language),
       renderCheckout({ siteKey: null }, language),
       ...notices.map((notice) => renderCheckout({ state: { ...CHECKOUT_SENT, notice } }, language)),
+    ];
+    for (const html of pages) {
+      expect(html).not.toMatch(/\s(title|placeholder)=/i);
+      for (const value of visibleTexts(html)) {
+        expect(plain.has(value) || templates.some((pattern) => pattern.test(value)), value).toBe(true);
+      }
+    }
+  });
+});
+
+describe("delete account purpose (SHOP-TASK-167)", () => {
+  // 会话里的遮掩号码（服务端遮掩，前端取不到完整号码）。
+  const ACCOUNT_MASKED = "+60 12•••• 678";
+  const DELETE_SENDING: SmsState = startSending({ ...INITIAL_SMS, token: CAPTCHA });
+  const DELETE_SENT: SmsState = { ...INITIAL_SMS, sent: deleteSent(ACCOUNT_MASKED), code: CODE };
+  const DELETE_VERIFYING: SmsState = startVerifying(DELETE_SENT);
+
+  function renderDelete(overrides: Partial<SmsVerifyViewProps> = {}, language: Language = "en"): string {
+    return render({ purpose: "delete_account", guestTo: null, phoneMasked: ACCOUNT_MASKED, ...overrides }, language);
+  }
+
+  // 注销确认用途对结果的处理的替身：按顺序记下事件，并把改动套在 state 上；交给页面的结果另记下。
+  function fakeDeleteMoves(start: SmsState) {
+    const events: string[] = [];
+    const steps: DeleteSmsStep[] = [];
+    let state = start;
+    const target: DeleteSmsMoves = {
+      update: (change) => {
+        state = change(state);
+        events.push("update");
+      },
+      resetChallenge: () => {
+        events.push("reset");
+      },
+      step: (step) => {
+        steps.push(step);
+        events.push(`step ${step}`);
+      },
+    };
+    return { target, events, steps, state: () => state };
+  }
+
+  function headerOf(init: RequestInit | undefined, name: string): string | undefined {
+    return (init?.headers as Record<string, string> | undefined)?.[name];
+  }
+
+  // UX P13 线框「<V1：用途「注销确认」，号码固定为本账号>」、HANDOFF 0.63（Kelvin 2026-10-24）「注销用途的 V1 号码为本账号只读、无国家码选择，
+  // 显示 auth.sms_scope 与人机挑战、不显示 auth.claim_notice」与 UX V1「重设密码与注销确认两种用途……不提供游客选项」：auth.phone 之下以文字显示
+  // 遮掩号码（acs-num），没有输入与国家码；发送按钮为视觉稿 P13-desktop-settings 的次要按钮，完成挑战前禁用。
+  it("shows the account's own number as text with the scope and the check, without claim notice or guest option", () => {
+    const html = renderDelete();
+    expect(textNodes(html)).toEqual([t("auth.phone"), ACCOUNT_MASKED, t("auth.sms_scope"), t("auth.challenge"), t("auth.send_code")]);
+    expect(html).toContain(`<span class="acs-num">${ACCOUNT_MASKED}</span>`);
+    expect(tags(html, "input")).toEqual([]);
+    expect(tags(html, "select")).toEqual([]);
+    expect(textNodes(html)).not.toContain(t("auth.claim_notice"));
+    expect(textNodes(html)).not.toContain(t("auth.continue_guest"));
+    expect(hrefs(html)).toEqual([]);
+    const send = button(html, t("auth.send_code"));
+    expect(send).toContain(`class="acs-btn acs-btn--secondary site-sms__send"`);
+    expect(disabled(send)).toBe(true);
+  });
+
+  // 同一条，经组件本身：注销确认用途的 SmsVerify（号码与 CSRF 令牌由页面给出）渲染出与 View 相同的初始内容，令牌不出现在页面上。
+  it("renders the same through the component", () => {
+    const html = renderToStaticMarkup(wrap(<SmsVerify purpose="delete_account" smsEnabled siteKey={SITE_KEY} phoneMasked={ACCOUNT_MASKED} csrfToken={CSRF} />, "en"));
+    expect(textNodes(html)).toEqual([t("auth.phone"), ACCOUNT_MASKED, t("auth.sms_scope"), t("auth.challenge"), t("auth.send_code")]);
+    expect(html).not.toContain(CSRF);
+  });
+
+  // 验收「发送以完成挑战取得的令牌与调用方给出的 CSRF 令牌经 SHOP-TASK-164 的注销发送，auth.code_sent 的 {phoneMasked} 为会话里的遮掩号码」：
+  // 请求体只有 captcha_token（不带号码），请求头带 CSRF 令牌；发出后重置挑战，auth.code_sent 显示会话里的遮掩号码，不交给页面。
+  it("sends through the deletion endpoint with the check and the CSRF token", async () => {
+    const request = stubFetch(() => json(200, {}));
+    const moves = fakeDeleteMoves(DELETE_SENDING);
+    await sendDeleteAccountCode(ACCOUNT_MASKED, CSRF, CAPTCHA, new AbortController().signal, moves.target);
+    expect(requests(request)).toEqual([{ url: MEMBER_DELETE_SEND_URL, method: "POST", body: { captcha_token: CAPTCHA } }]);
+    expect(headerOf(request.mock.calls[0]?.[1], CSRF_HEADER)).toBe(CSRF);
+    expect(moves.events).toEqual(["update", "reset"]);
+    expect(moves.steps).toEqual([]);
+    expect(moves.state()).toMatchObject({ sending: false, token: null, sent: { masked: ACCOUNT_MASKED }, notice: null });
+    const html = renderDelete({ state: moves.state() });
+    expect(textNodes(html)).toContain(t("auth.code_sent", { phoneMasked: ACCOUNT_MASKED }));
+    expect(textNodes(html)).toContain(t("auth.code"));
+  });
+
+  // UX V1「号码不在白名单……重设密码 / 注销确认 → [auth.sms_not_sent_no_change]（无游客文字与按钮）」「短信无法送达或停发……重设密码 / 注销确认 →
+  // [auth.sms_not_sent_no_change]」与 UX P13「注销确认时短信发送失败或号码不在白名单，只显示 [auth.sms_not_sent_no_change]」：三种未发出都是这一条，
+  // 没有 auth.continue_guest、auth.not_supported_country 与 auth.sms_failed，也没有链接。
+  it.each<[string, Reply]>([
+    ["not_whitelisted", () => json(422, { detail: "not_whitelisted" })],
+    ["undeliverable", () => json(422, { detail: "sms_undeliverable" })],
+    ["suspended", () => json(503, { detail: "sms_suspended" })],
+  ])("shows only auth.sms_not_sent_no_change after %s", async (_name, reply) => {
+    stubFetch(reply);
+    const moves = fakeDeleteMoves(DELETE_SENDING);
+    await sendDeleteAccountCode(ACCOUNT_MASKED, CSRF, CAPTCHA, new AbortController().signal, moves.target);
+    expect(moves.steps).toEqual([]);
+    expect(moves.state()).toMatchObject({ sending: false, token: null, sent: null, notice: "auth.sms_not_sent_no_change" });
+    const texts = textNodes(renderDelete({ state: moves.state() }));
+    expect(texts).toContain(t("auth.sms_not_sent_no_change"));
+    for (const key of ["auth.continue_guest", "auth.not_supported_country", "auth.sms_failed", "auth.claim_notice"] as const) {
+      expect(texts).not.toContain(t(key));
+    }
+    expect(hrefs(renderDelete({ state: moves.state() }))).toEqual([]);
+  });
+
+  // 验收「其余提示照组件现有写法」：captcha_failed、rate_limited、network 与其他失败的提示同其他用途，不交给页面。
+  it.each<[string, Reply, CopyKey]>([
+    ["captcha_failed", () => json(403, { detail: "captcha_failed" }), "auth.challenge_failed"],
+    ["rate_limited", () => json(429, { detail: "rate_limited" }), "common.rate_limited"],
+    ["network", () => "network", "common.network_check"],
+    ["failed", () => json(500, {}), "common.error_retry"],
+  ])("shows the usual notice when sending gets %s", async (_name, reply, key) => {
+    stubFetch(reply);
+    const moves = fakeDeleteMoves(DELETE_SENDING);
+    await sendDeleteAccountCode(ACCOUNT_MASKED, CSRF, CAPTCHA, new AbortController().signal, moves.target);
+    expect(moves.steps).toEqual([]);
+    expect(moves.state().notice).toBe(key);
+    expect(textNodes(renderDelete({ state: moves.state() }))).toContain(t(key));
+  });
+
+  // 验收「disabled、signed_out 与 csrf 经回调交给页面」（组件不跳转）：发送的这三种结果在更新状态与重置挑战之后交出；disabled 时组件换成暂停提示。
+  it.each<[string, Reply, DeleteSmsStep]>([
+    ["disabled", () => json(403, { detail: "sms_disabled" }), "disabled"],
+    ["signed_out", () => json(401, { detail: "member_session_required" }), "signed_out"],
+    ["csrf", () => json(403, { detail: "csrf_failed" }), "csrf"],
+  ])("hands %s to the page when sending", async (_name, reply, step) => {
+    stubFetch(reply);
+    const moves = fakeDeleteMoves(DELETE_SENDING);
+    await sendDeleteAccountCode(ACCOUNT_MASKED, CSRF, CAPTCHA, new AbortController().signal, moves.target);
+    expect(moves.events).toEqual(["update", "reset", `step ${step}`]);
+    expect(moves.state()).toMatchObject({ sending: false, token: null, sent: null, notice: null, paused: step === "disabled" });
+  });
+
+  // 验收「核验经 SHOP-TASK-164 的注销核验，verified 时经回调告知页面」：请求体只有验证码，请求头带 CSRF 令牌；通过后进入已验证状态并交出 verified。
+  it("verifies through the deletion endpoint and reports verified", async () => {
+    const request = stubFetch(() => new Response(null, { status: 204 }));
+    const moves = fakeDeleteMoves(DELETE_VERIFYING);
+    await submitDeleteAccountCode(CODE, CSRF, new AbortController().signal, moves.target);
+    expect(requests(request)).toEqual([{ url: MEMBER_DELETE_VERIFY_URL, method: "POST", body: { code: CODE } }]);
+    expect(headerOf(request.mock.calls[0]?.[1], CSRF_HEADER)).toBe(CSRF);
+    expect(moves.events).toEqual(["update", "step verified"]);
+    expect(moves.state()).toMatchObject({ verifying: false, verified: true });
+  });
+
+  // 验收「wrong 显示 auth.code_wrong」与 HANDOFF 0.63 记下的 2026-10-23 写法（b）「code_wrong 与 code_expired 都显示 auth.code_wrong」：在验证码下显示，不交给页面，没有游客选项。
+  it.each(["code_wrong", "code_expired"])("shows auth.code_wrong after %s", async (code) => {
+    stubFetch(() => json(422, { detail: code }));
+    const moves = fakeDeleteMoves(DELETE_VERIFYING);
+    await submitDeleteAccountCode(CODE, CSRF, new AbortController().signal, moves.target);
+    expect(moves.steps).toEqual([]);
+    expect(moves.state()).toMatchObject({ verifying: false, codeWrong: true, verified: false });
+    const html = renderDelete({ state: moves.state() });
+    expect(textNodes(html)).toContain(t("auth.code_wrong"));
+    expect(textNodes(html)).not.toContain(t("auth.continue_guest"));
+  });
+
+  // 验收「disabled、signed_out 与 csrf 经回调交给页面」：核验的这三种结果在更新状态之后交出，没有通过。
+  it.each<[string, Reply, DeleteSmsStep]>([
+    ["disabled", () => json(403, { detail: "sms_disabled" }), "disabled"],
+    ["signed_out", () => json(401, { detail: "member_session_required" }), "signed_out"],
+    ["csrf", () => json(403, { detail: "csrf_failed" }), "csrf"],
+  ])("hands %s to the page when verifying", async (_name, reply, step) => {
+    stubFetch(reply);
+    const moves = fakeDeleteMoves(DELETE_VERIFYING);
+    await submitDeleteAccountCode(CODE, CSRF, new AbortController().signal, moves.target);
+    expect(moves.events).toEqual(["update", `step ${step}`]);
+    expect(moves.state()).toMatchObject({ verifying: false, verified: false, paused: step === "disabled" });
+  });
+
+  // 验收「其余提示照组件现有写法」：核验的 503、网络中断与其他失败留在验证码输入，显示对应提示，可再提交。
+  it.each<[string, Reply, CopyKey]>([
+    ["unavailable", () => json(503, { detail: "verify_unavailable" }), "common.service_unavailable"],
+    ["network", () => "network", "common.network_check"],
+    ["failed", () => json(500, {}), "common.error_retry"],
+  ])("stays on the code entry after verifying gets %s", async (_name, reply, key) => {
+    stubFetch(reply);
+    const moves = fakeDeleteMoves(DELETE_VERIFYING);
+    await submitDeleteAccountCode(CODE, CSRF, new AbortController().signal, moves.target);
+    expect(moves.steps).toEqual([]);
+    const html = renderDelete({ state: moves.state() });
+    expect(textNodes(html)).toContain(t(key));
+    expect(disabled(button(html, t("auth.verify_submit")))).toBe(false);
+  });
+
+  // 同一条「没有人机挑战公开 key 时」照组件现有写法（重设密码同样）整个替换为 auth.sms_not_sent_no_change，没有游客选项。
+  it("replaces the component with auth.sms_not_sent_no_change without a challenge key", () => {
+    const html = renderDelete({ siteKey: null });
+    expect(textNodes(html)).toEqual([t("auth.sms_not_sent_no_change")]);
+    expect(tags(html, "button")).toEqual([]);
+    expect(hrefs(html)).toEqual([]);
+  });
+
+  // 验收「离开页面或组件卸载时中止请求，之后不再更新」：发送与核验都不再更新，也不交给页面。
+  it("does nothing once the component is gone", async () => {
+    stubFetch(() => new Response(null, { status: 204 }));
+    const moves = fakeDeleteMoves(DELETE_SENDING);
+    const controller = new AbortController();
+    const sending = sendDeleteAccountCode(ACCOUNT_MASKED, CSRF, CAPTCHA, controller.signal, moves.target);
+    const verifying = submitDeleteAccountCode(CODE, CSRF, controller.signal, moves.target);
+    controller.abort();
+    await Promise.all([sending, verifying]);
+    expect(moves.events).toEqual([]);
+  });
+
+  // 验收「页面内容与文案以 docs/UX.md 0.13 的 P13 与 V1、docs/UX-COPY.md 0.14 为准……不自行编写文案」：注销确认用途各状态的文字，
+  // 除会话里的遮掩号码外，都是当前语言的字典文案（带变量的按模板匹配）。
+  it.each(LANGUAGES)("shows only dictionary text besides the account's number in %s", (language) => {
+    const plain = new Set<string>([ACCOUNT_MASKED]);
+    const templates: RegExp[] = [];
+    for (const entry of Object.values(COPY)) {
+      const text = entry[language];
+      if (/\{\w+\}/.test(text)) {
+        templates.push(new RegExp(`^${text.split(/\{\w+\}/).map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".+")}$`));
+      } else {
+        plain.add(text);
+      }
+    }
+    const notices: CopyKey[] = ["auth.sms_not_sent_no_change", "auth.challenge_failed", "common.rate_limited", "common.service_unavailable", "common.network_check", "common.error_retry"];
+    const pages = [
+      renderDelete({}, language),
+      renderDelete({ state: challengeLost(INITIAL_SMS) }, language),
+      renderDelete({ state: DELETE_SENT }, language),
+      renderDelete({ state: { ...DELETE_SENT, codeWrong: true } }, language),
+      renderDelete({ state: { ...DELETE_SENT, verified: true } }, language),
+      renderDelete({ state: { ...DELETE_SENT, paused: true } }, language),
+      renderDelete({ siteKey: null }, language),
+      ...notices.map((notice) => renderDelete({ state: { ...INITIAL_SMS, notice } }, language)),
     ];
     for (const html of pages) {
       expect(html).not.toMatch(/\s(title|placeholder)=/i);
