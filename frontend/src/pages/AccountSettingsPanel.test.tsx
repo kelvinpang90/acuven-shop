@@ -237,10 +237,17 @@ describe("password content", () => {
       text("account.password_set_submit", language),
       text("common.nav_logout", language),
     ]);
-    const input = /<input class="acs-input" id="([^"]+)" type="password" autoComplete="new-password" value="" aria-describedby="([^"]+)"\/>/i.exec(html);
-    expect(input).not.toBeNull();
-    expect(html).toContain(`<label class="acs-field__label" for="${input?.[1] ?? ""}">${copy("auth.new_password", language)}</label>`);
-    expect(html).toContain(`<span class="acs-field__hint" id="${input?.[2] ?? ""}">${copy("auth.password_rule", language)}</span>`);
+    // 服务端渲染的属性顺序不在意图之内：先取出整个密码输入标签，再逐项断言属性。
+    const input = /<input[^>]*type="password"[^>]*\/>/.exec(html)?.[0] ?? "";
+    expect(input).toContain(`class="acs-input"`);
+    expect(input).toMatch(/autocomplete="new-password"/i);
+    expect(input).toContain(`value=""`);
+    const id = /\sid="([^"]+)"/.exec(input)?.[1];
+    const describedBy = /\saria-describedby="([^"]+)"/.exec(input)?.[1];
+    expect(id).toBeDefined();
+    expect(describedBy).toBeDefined();
+    expect(html).toContain(`<label class="acs-field__label" for="${id ?? ""}">${copy("auth.new_password", language)}</label>`);
+    expect(html).toContain(`<span class="acs-field__hint" id="${describedBy ?? ""}">${copy("auth.password_rule", language)}</span>`);
     expect(html).toContain(`<button class="acs-btn acs-btn--primary site-account__submit" type="submit" aria-busy="false">${copy("account.password_set_submit", language)}</button>`);
     expect(html).not.toContain(copy("account.password_exists", language));
     expect(html).not.toContain(copy("account.sms_paused_set_password", language));
@@ -289,6 +296,7 @@ describe("password content", () => {
     expect(settle.mock.calls).toEqual([[enabled]]);
   });
 
+  // 验收第 6 条「离开页面时中止请求，之后不再更新」：读取开关时页面已离开，就不再把开关交给页面。
   it("hands over nothing after leaving the page", async () => {
     stubFetch({ [SITE_SETTINGS_URL]: [json(200, { sms_verification_enabled: false })] });
     const gone = new AbortController();
@@ -315,10 +323,14 @@ describe("password content", () => {
     expect(html).toContain(`<a class="site-account__change" href="/forgot-password">${copy("account.password_change", language)}</a>`);
     expect(html).not.toContain(`type="password"`);
     const without = render({ hasPassword: true, changeTo: null }, language);
-    expect(without).not.toContain(copy("account.password_change", language));
+    // 中文的 account.password_exists 本身含 account.password_change 的文字，所以只断言没有链接元素。
+    expect(without).not.toContain(`>${copy("account.password_change", language)}</a>`);
+    expect(without).not.toContain("site-account__change");
     expect(without).not.toContain("href=");
   });
 
+  // 验收第 3 条「指向 /forgot-password 的 account.password_change（照 CheckoutPage.tsx 的 loginPath 写法以 isRoutePath 判断）」：
+  // 去向取自路由表，不在路由表里时为 null。
   it("derives the change destination from the route table", () => {
     expect(passwordChangePath()).toBe(isRoutePath("/forgot-password") ? "/forgot-password" : null);
   });
@@ -475,6 +487,8 @@ describe("setting a first password", () => {
     expect(failed.current()).toEqual({ ...TYPED, notice: "common.error_retry" });
   });
 
+  // 验收第 4 条首次设置的各结果（done 显示 account.password_set_done 并重读、already_set 重读、signed_out 去 /login、csrf 重读换令牌、
+  // too_short 以 auth.password_rule 提示）：每种回答归到对应的下一步。
   it("maps every reply", () => {
     expect(passwordStep("done")).toBe("done");
     expect(passwordStep("already_set")).toBe("reread");
