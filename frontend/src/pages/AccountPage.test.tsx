@@ -3,7 +3,7 @@ import type { ReactElement, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MEMBER_COUPONS_URL, MEMBER_POINTS_URL } from "../api/memberAccount";
+import { MEMBER_COUPONS_URL, MEMBER_PASSWORD_URL, MEMBER_POINTS_URL } from "../api/memberAccount";
 import type { MemberCoupons, MemberPoints } from "../api/memberAccount";
 import { clearMemberOrder, handOffMemberOrder, MEMBER_ORDERS_URL, memberOrderInView } from "../api/memberOrders";
 import type { MemberOrderSummary, MemberOrdersRead } from "../api/memberOrders";
@@ -30,11 +30,13 @@ import {
   orderPath,
   ordersStep,
   sessionStep,
+  setPassword,
   startLogout,
   statusTag,
   viewOrder,
 } from "./AccountPage";
 import type { AccountMoves, AccountScreen, AccountViewProps, OrdersState } from "./AccountPage";
+import { SETTINGS_START } from "./AccountSettingsPanel";
 import { formatDate } from "./TrackOrderPage";
 
 afterEach(() => {
@@ -94,14 +96,18 @@ function languageStorage(language: Language) {
 const EMPTY_POINTS: MemberPoints = { balance: 0, pending: 0, next_expiry: null, history: [] };
 const EMPTY_COUPONS: MemberCoupons = { available: [], used: [] };
 
+// SHOP-TASK-166 加入设置段后，已登录的状态另带 hasPassword（默认 false，与 memberReply 的 has_password 一致）与设置段（取初始值）；
+// 设置段的内容由 AccountSettingsPanel.test.tsx 守住。
 function memberScreen(overrides: Partial<Extract<AccountScreen, { status: "member" }>> = {}): AccountScreen {
   return {
     status: "member",
     phoneMasked: MASKED,
+    hasPassword: false,
     csrfToken: TOKEN,
     orders: { status: "ready", orders: ORDERS },
     points: { status: "ready", points: EMPTY_POINTS },
     coupons: { status: "ready", coupons: EMPTY_COUPONS },
+    settings: SETTINGS_START,
     loggingOut: false,
     logoutError: null,
     ...overrides,
@@ -114,8 +120,22 @@ function withOrders(orders: OrdersState): AccountScreen {
 
 const noop = () => undefined;
 
+// SHOP-TASK-166：View 多了 account.password_change 的去向与设置密码的两个处理（随 props 扩展补上）。
+const CHANGE_TO = "/forgot-password" as RoutePath;
+
 function props(overrides: Partial<AccountViewProps> = {}): AccountViewProps {
-  return { screen: memberScreen(), section: "orders", orderTo: ORDER_TO, onSection: noop, onView: noop, onLogout: noop, ...overrides };
+  return {
+    screen: memberScreen(),
+    section: "orders",
+    orderTo: ORDER_TO,
+    changeTo: CHANGE_TO,
+    onSection: noop,
+    onView: noop,
+    onPassword: noop,
+    onPasswordSubmit: noop,
+    onLogout: noop,
+    ...overrides,
+  };
 }
 
 function wrap(children: ReactNode, language: Language): ReactElement {
@@ -243,6 +263,9 @@ const ordersReply = (orders: MemberOrderSummary[] = ORDERS) => json(200, { total
 const pointsReply = () => json(200, EMPTY_POINTS);
 const couponsReply = () => json(200, EMPTY_COUPONS);
 const signedOutReply = () => json(401, { detail: "member_session_required" });
+// SHOP-TASK-166：会话为 member 后另读站点设置的短信验证开关（fetchSiteSettings，地址未导出）。
+const SITE_SETTINGS_URL = "/api/site-settings";
+const siteReply = (enabled = true) => json(200, { sms_verification_enabled: enabled, whatsapp_contact_url: null, turnstile_site_key: null });
 
 // 页面的处理替身：按顺序记下 show、update 与 replace，并按它们推演页面状态。
 function fakeMoves(initial: AccountScreen = LOADING) {
@@ -272,19 +295,21 @@ describe("opening the page", () => {
   // 验收第 2 条「打开时经 SHOP-TASK-151 的读取对象重读一次会话（不直接用之前读到的状态：登录后来到本页时共享状态可能还是旧的）」：
   // 共享状态先读成未登录（登录之前的那次），打开页面时仍重读会话，读到已登录后显示标题行，再读我的订单。
   // SHOP-TASK-165：已登录后与我的订单一起读取积分与优惠券，只为这两个读取补了替身、请求清单与两次 update，会话与我的订单的期望不变。
+  // SHOP-TASK-166：只为多出的站点设置读取补了替身、请求清单与一次 update。
   it("rereads the session instead of using the earlier shared state", async () => {
     const calls = stubFetch({
       [MEMBER_SESSION_URL]: [guestReply(), memberReply()],
       [MEMBER_ORDERS_URL]: [ordersReply()],
       [MEMBER_POINTS_URL]: [pointsReply()],
       [MEMBER_COUPONS_URL]: [couponsReply()],
+      [SITE_SETTINGS_URL]: [siteReply()],
     });
     const reader = createMemberSessionReader();
     expect((await reader.load()).kind).toBe("guest");
     const { moves, events, current } = fakeMoves();
     await openAccount(reader, new AbortController().signal, moves);
-    expect(calls.map((call) => call.url)).toEqual([MEMBER_SESSION_URL, MEMBER_SESSION_URL, MEMBER_ORDERS_URL, MEMBER_POINTS_URL, MEMBER_COUPONS_URL]);
-    expect(events).toEqual(["show member", "update", "update", "update"]);
+    expect(calls.map((call) => call.url)).toEqual([MEMBER_SESSION_URL, MEMBER_SESSION_URL, MEMBER_ORDERS_URL, MEMBER_POINTS_URL, MEMBER_COUPONS_URL, SITE_SETTINGS_URL]);
+    expect(events).toEqual(["show member", "update", "update", "update", "update"]);
     expect(current()).toEqual(memberScreen());
     expect(reader.current().kind).toBe("member");
   });
@@ -328,30 +353,33 @@ describe("opening the page", () => {
   });
 
   // 同一条「这一判断只在打开页面时的那次读取后做，之后共享会话状态的变化不触发去 /login」：打开完成后共享读取再读到未登录，页面不跳转、不更新。
-  // SHOP-TASK-165：只为积分与优惠券两个读取补了替身与两次 update。
+  // SHOP-TASK-165：只为积分与优惠券两个读取补了替身与两次 update。SHOP-TASK-166：只为站点设置读取补了替身与一次 update。
   it("ignores later changes of the shared session", async () => {
     stubFetch({
       [MEMBER_SESSION_URL]: [memberReply(), guestReply()],
       [MEMBER_ORDERS_URL]: [ordersReply()],
       [MEMBER_POINTS_URL]: [pointsReply()],
       [MEMBER_COUPONS_URL]: [couponsReply()],
+      [SITE_SETTINGS_URL]: [siteReply()],
     });
     const reader = createMemberSessionReader();
     const { moves, events } = fakeMoves();
     await openAccount(reader, new AbortController().signal, moves);
     expect((await reader.reload()).kind).toBe("guest");
-    expect(events).toEqual(["show member", "update", "update", "update"]);
+    expect(events).toEqual(["show member", "update", "update", "update", "update"]);
   });
 
   // 验收第 6 条「离开页面时中止请求，之后不再更新；会员会话的重读是共享读取，不中止，离开页面后不再据其结果更新或跳转」：
   // 读取会话不带页面的 signal（共享状态照常更新为已登录），重读期间已离开时不显示、不读我的订单；我的订单的请求带页面的 signal。
   // SHOP-TASK-165：只为积分与优惠券两个读取补了替身，并期望这两个请求同样带页面的 signal。
+  // SHOP-TASK-166：只为站点设置读取补了替身，并期望它在请求清单末尾、同样带页面的 signal。
   it("stops after leaving the page while the shared reread still settles", async () => {
     const calls = stubFetch({
       [MEMBER_SESSION_URL]: [memberReply(), memberReply()],
       [MEMBER_ORDERS_URL]: [ordersReply()],
       [MEMBER_POINTS_URL]: [pointsReply()],
       [MEMBER_COUPONS_URL]: [couponsReply()],
+      [SITE_SETTINGS_URL]: [siteReply()],
     });
     const reader = createMemberSessionReader();
     const gone = new AbortController();
@@ -367,9 +395,10 @@ describe("opening the page", () => {
     await openAccount(reader, page.signal, staying.moves);
     expect(calls[2]?.url).toBe(MEMBER_ORDERS_URL);
     expect(calls[2]?.init.signal).toBe(page.signal);
-    expect(calls.slice(3).map((call) => call.url)).toEqual([MEMBER_POINTS_URL, MEMBER_COUPONS_URL]);
+    expect(calls.slice(3).map((call) => call.url)).toEqual([MEMBER_POINTS_URL, MEMBER_COUPONS_URL, SITE_SETTINGS_URL]);
     expect(calls[3]?.init.signal).toBe(page.signal);
     expect(calls[4]?.init.signal).toBe(page.signal);
+    expect(calls[5]?.init.signal).toBe(page.signal);
   });
 });
 
@@ -392,12 +421,13 @@ describe("points and coupons sections (SHOP-TASK-165)", () => {
 
   // 同一条「signed_out 时照我的订单重读会话并用 replace 进入 /login」与 HANDOFF 0.61 第（5）条：积分或优惠券回 401 时先重读会话、再 replace；
   // 我的订单照常更新。三段同时读取，几段都回 401 时只重读一次会话、只跳转一次。
+  // SHOP-TASK-166：只为多出的站点设置读取补了替身，update 次数各加一（开关的那次）。
   it.each<[string, Record<string, Reply[]>, number]>([
-    ["points", { [MEMBER_POINTS_URL]: [signedOutReply()], [MEMBER_COUPONS_URL]: [couponsReply()] }, 2],
-    ["coupons", { [MEMBER_POINTS_URL]: [pointsReply()], [MEMBER_COUPONS_URL]: [signedOutReply()] }, 2],
-    ["both", { [MEMBER_POINTS_URL]: [signedOutReply()], [MEMBER_COUPONS_URL]: [signedOutReply()] }, 1],
+    ["points", { [MEMBER_POINTS_URL]: [signedOutReply()], [MEMBER_COUPONS_URL]: [couponsReply()] }, 3],
+    ["coupons", { [MEMBER_POINTS_URL]: [pointsReply()], [MEMBER_COUPONS_URL]: [signedOutReply()] }, 3],
+    ["both", { [MEMBER_POINTS_URL]: [signedOutReply()], [MEMBER_COUPONS_URL]: [signedOutReply()] }, 2],
   ])("rereads the session once and goes to /login when %s says signed out", async (_name, routes, updates) => {
-    const calls = stubFetch({ [MEMBER_SESSION_URL]: [memberReply(), guestReply()], [MEMBER_ORDERS_URL]: [ordersReply()], ...routes });
+    const calls = stubFetch({ [MEMBER_SESSION_URL]: [memberReply(), guestReply()], [MEMBER_ORDERS_URL]: [ordersReply()], [SITE_SETTINGS_URL]: [siteReply()], ...routes });
     const reader = createMemberSessionReader();
     const { moves, events } = fakeMoves();
     await openAccount(reader, new AbortController().signal, moves);
@@ -439,17 +469,140 @@ describe("points and coupons sections (SHOP-TASK-165)", () => {
   });
 });
 
+// 已设密码的会员会话（设置密码之后重读到的那次）。
+const memberWithPassword = (token = TOKEN) => json(200, { phone_masked: MASKED, has_password: true, expires_at: "2026-11-24T00:00:00Z", csrf_token: token });
+
+function bodyOf(init: RequestInit): unknown {
+  const body: unknown = JSON.parse(typeof init.body === "string" ? init.body : "null");
+  return body;
+}
+
+describe("settings section (SHOP-TASK-166)", () => {
+  // 验收第 2 条「会话为 member 后经 frontend/src/api/siteSettings.ts 的 fetchSiteSettings 读取短信验证开关，失败时按开启处理」与
+  // HANDOFF 0.63 第（7）条「设置段读取站点设置失败时按开关开启处理」：开关关闭时设置段换上关闭；读取失败（500 或网络中断）时保持开启。
+  it.each<[string, Reply, boolean]>([
+    ["switched on", siteReply(true), true],
+    ["switched off", siteReply(false), false],
+    ["failing", new Response(null, { status: 500 }), true],
+    ["unreachable", "network", true],
+  ])("reads the SMS switch after the session when it is %s", async (_name, reply, enabled) => {
+    stubFetch({
+      [MEMBER_SESSION_URL]: [memberReply()],
+      [MEMBER_ORDERS_URL]: [ordersReply()],
+      [MEMBER_POINTS_URL]: [pointsReply()],
+      [MEMBER_COUPONS_URL]: [couponsReply()],
+      [SITE_SETTINGS_URL]: [reply],
+    });
+    const { moves, current } = fakeMoves();
+    await openAccount(createMemberSessionReader(), new AbortController().signal, moves);
+    expect(current()).toEqual(memberScreen({ settings: { ...SETTINGS_START, smsEnabled: enabled } }));
+  });
+
+  // 验收第 2 条「AccountScreen 的 member 另带 hasPassword（取自打开时…的会话）」：打开时读到已设密码，设置段显示已设密码的内容。
+  it("takes hasPassword from the session read on opening", async () => {
+    stubFetch({
+      [MEMBER_SESSION_URL]: [memberWithPassword()],
+      [MEMBER_ORDERS_URL]: [ordersReply()],
+      [MEMBER_POINTS_URL]: [pointsReply()],
+      [MEMBER_COUPONS_URL]: [couponsReply()],
+      [SITE_SETTINGS_URL]: [siteReply()],
+    });
+    const { moves, current } = fakeMoves();
+    await openAccount(createMemberSessionReader(), new AbortController().signal, moves);
+    expect(current()).toEqual(memberScreen({ hasPassword: true }));
+    expect(render({ screen: current(), section: "settings" })).toContain(copy("account.password_exists"));
+  });
+
+  // 验收第 4 条「以会话里的 CSRF 令牌经 SHOP-TASK-164 提交…done 时显示 account.password_set_done、清空输入并经读取对象重读会话
+  // （hasPassword 变为真后显示已设密码的内容，account.password_set_done 留在其上方）」与 HANDOFF 0.63 第（7）条「设密码成功先显示
+  // account.password_set_done 再重读会话」：请求头带会话令牌、请求体只有密码；先换上已设置，再按重读结果换上 hasPassword 与新令牌。
+  it("sets the password with the session token and rereads the session", async () => {
+    const calls = stubFetch({ [MEMBER_PASSWORD_URL]: [new Response(null, { status: 204 })], [MEMBER_SESSION_URL]: [memberWithPassword(NEW_TOKEN)] });
+    const reader = createMemberSessionReader();
+    const { moves, events, current } = fakeMoves(memberScreen({ settings: { ...SETTINGS_START, password: "s3cret-pass" } }));
+    await setPassword(reader, "s3cret-pass", TOKEN, new AbortController().signal, moves);
+    expect(calls.map((call) => call.url)).toEqual([MEMBER_PASSWORD_URL, MEMBER_SESSION_URL]);
+    expect(headerOf(calls[0]?.init ?? {}, CSRF_HEADER)).toBe(TOKEN);
+    expect(bodyOf(calls[0]?.init ?? {})).toEqual({ password: "s3cret-pass" });
+    expect(calls[0]?.url).not.toContain("s3cret-pass");
+    expect(events).toEqual(["update", "update", "update"]);
+    expect(current()).toEqual(memberScreen({ hasPassword: true, csrfToken: NEW_TOKEN, settings: { ...SETTINGS_START, done: true } }));
+    const html = render({ screen: current(), section: "settings" });
+    expect(html.indexOf(copy("account.password_set_done"))).toBeLessThan(html.indexOf(copy("account.password_exists")));
+    expect(html).not.toContain(copy("account.password_set_submit"));
+    expect(reader.current()).toEqual({ kind: "member", phoneMasked: MASKED, hasPassword: true, csrfToken: NEW_TOKEN });
+  });
+
+  // 同一条「done 与 already_set 后的重读得到 guest 时用 replace 进入 /login」：设置成功后重读到未登录时离开本页。
+  it("goes to /login when the reread after setting finds no session", async () => {
+    stubFetch({ [MEMBER_PASSWORD_URL]: [new Response(null, { status: 204 })], [MEMBER_SESSION_URL]: [guestReply()] });
+    const { moves, events } = fakeMoves(memberScreen());
+    await setPassword(createMemberSessionReader(), "s3cret-pass", TOKEN, new AbortController().signal, moves);
+    expect(events).toEqual(["update", "update", "replace /login"]);
+  });
+
+  // 同一条「csrf 时重读会话——member 时换用新令牌并显示 common.error_retry」：之后的提交带新令牌。
+  it("takes the new token after a csrf failure", async () => {
+    stubFetch({ [MEMBER_PASSWORD_URL]: [json(403, { detail: "csrf_failed" })], [MEMBER_SESSION_URL]: [memberReply(NEW_TOKEN)] });
+    const { moves, current } = fakeMoves(memberScreen({ settings: { ...SETTINGS_START, password: "s3cret-pass" } }));
+    await setPassword(createMemberSessionReader(), "s3cret-pass", TOKEN, new AbortController().signal, moves);
+    expect(current()).toEqual(memberScreen({ csrfToken: NEW_TOKEN, settings: { ...SETTINGS_START, password: "s3cret-pass", notice: "common.error_retry" } }));
+  });
+
+  // 同一条「提交前长度不足 8 个字符时不发请求、以 auth.password_rule 作错误提示」与 HANDOFF 0.63「提交前按 auth.password_rule 检查长度不少于 8」。
+  it("sends nothing for a password shorter than 8 characters", async () => {
+    const calls = stubFetch({});
+    const { moves, current } = fakeMoves(memberScreen({ settings: { ...SETTINGS_START, password: "short" } }));
+    await setPassword(createMemberSessionReader(), "short", TOKEN, new AbortController().signal, moves);
+    expect(calls).toHaveLength(0);
+    expect(current()).toEqual(memberScreen({ settings: { ...SETTINGS_START, password: "short", tooShort: true } }));
+  });
+
+  // 验收第 6 条「离开页面时中止请求，之后不再更新；会员会话的重读是共享读取，不中止」：提交带页面的 signal，回答到达前已离开时不再更新或重读。
+  it("does nothing after leaving the page", async () => {
+    const calls = stubFetch({ [MEMBER_PASSWORD_URL]: [new Response(null, { status: 204 })], [MEMBER_SESSION_URL]: [memberWithPassword()] });
+    const gone = new AbortController();
+    gone.abort();
+    const { moves, events } = fakeMoves(memberScreen());
+    await setPassword(createMemberSessionReader(), "s3cret-pass", TOKEN, gone.signal, moves);
+    expect(calls.map((call) => call.url)).toEqual([MEMBER_PASSWORD_URL]);
+    expect(calls[0]?.init.signal).toBe(gone.signal);
+    expect(events).toEqual(["update"]);
+  });
+});
+
 describe("title row", () => {
   // 验收第 2 条「member 时显示标题行——h1 为 common.nav_account，其后遮掩后的手机号（acs-num）与 common.nav_logout 按钮，桌面与手机都显示」
-  // 与 UX P13 桌面线框「[common.nav_account] <手机号部分遮盖 [P1]> ([common.nav_logout])」：三者依次在同一行里，不按宽度分两份。
+  // 与 UX P13 桌面线框「[common.nav_account] <手机号部分遮盖 [P1]> ([common.nav_logout])」：三者依次在同一行里。
+  // SHOP-TASK-166 验收第 5 条「标题行的遮掩号码与 common.nav_logout 只在桌面显示」：号码与按钮加桌面限定（site-desktop-only）；
+  // 设置段另有一份手机用的号码，遮掩号码在页面上由一次改为两次。
   it.each(LANGUAGES)("shows the title, the masked number and the log-out button in %s", (language) => {
     const html = render({}, language);
     expect(html).toContain(
-      `<div class="site-account__head"><h1 class="acs-display-l">${copy("common.nav_account", language)}</h1><span class="acs-num acs-muted">${MASKED}</span>` +
-        `<button class="acs-btn acs-btn--secondary acs-btn--sm site-account__logout" type="button" aria-busy="false">${copy("common.nav_logout", language)}</button></div>`,
+      `<div class="site-account__head"><h1 class="acs-display-l">${copy("common.nav_account", language)}</h1><span class="acs-num acs-muted site-desktop-only">${MASKED}</span>` +
+        `<button class="acs-btn acs-btn--secondary acs-btn--sm site-desktop-only site-account__logout" type="button" aria-busy="false">${copy("common.nav_logout", language)}</button></div>`,
     );
-    expect(html.split(MASKED)).toHaveLength(2);
+    expect(html.split(MASKED)).toHaveLength(3);
     expect(html.match(/<h1/g)).toHaveLength(1);
+  });
+
+  // SHOP-TASK-166 验收第 5 条「设置段在手机顶部另显示遮掩号码（acs-num）与 common.nav_logout 按钮（照 P13-phone-settings），桌面设置段不显示」
+  // 与 UX P13 手机线框「--- 设置 --- | [P1] <手机号部分遮盖> | … | ([common.nav_logout])」：设置段里的号码与按钮都是手机限定，号码在段首（密码标题之前），
+  // 按钮在密码之后；标题行里的两项都是桌面限定。
+  it.each(LANGUAGES)("moves the masked number and log-out into the settings section on phones in %s", (language) => {
+    const html = render({ section: "settings" }, language);
+    const head = part(html, /<div class="site-account__head">[\s\S]*?<\/div>/);
+    expect(head).not.toContain("site-phone-only");
+    const settings = part(html, /<section[^>]* id="account-settings"[\s\S]*?<\/section>/);
+    const number = settings.indexOf(`<span class="acs-num acs-muted site-phone-only">${MASKED}</span>`);
+    const title = settings.indexOf(`<h3 class="acs-display-s">${copy("account.password_title", language)}</h3>`);
+    const button = settings.indexOf(
+      `<button class="acs-btn acs-btn--secondary acs-btn--block site-phone-only site-account__signout" type="button" aria-busy="false">${copy("common.nav_logout", language)}</button>`,
+    );
+    expect(number).toBeGreaterThanOrEqual(0);
+    expect(title).toBeGreaterThan(number);
+    expect(button).toBeGreaterThan(settings.indexOf(`>${copy("account.password_set_submit", language)}</button>`));
+    expect(settings.split(MASKED)).toHaveLength(2);
   });
 });
 
@@ -457,38 +610,44 @@ describe("navigation and sections", () => {
   // 验收第 3 条「段表…按表渲染…桌面为左侧导航，每项是跳到本页该段的页内锚点，当前段标 aria-current」与 SHOP-TASK-165 验收第 2 条
   // 「ACCOUNT_SECTIONS 依次为我的订单、我的积分（account.points）与我的优惠券（account.coupons），导航与标签照现有写法按表渲染」：
   // 导航依次为三项，各指向本页段内容的锚点，只有当前段标 aria-current（随段表扩展，由「只有一项」改为三项）。
-  it.each(LANGUAGES)("lists my orders, my points and my coupons in the desktop navigation in %s", (language) => {
+  // SHOP-TASK-166 验收第 2 条「ACCOUNT_SECTIONS 末尾加入设置（account.settings）」与 UX P13 桌面线框左栏第四项 [account.settings]：随段表扩展改为四项。
+  it.each(LANGUAGES)("lists my orders, my points, my coupons and settings in the desktop navigation in %s", (language) => {
     expect(ACCOUNT_SECTIONS).toEqual([
       { section: "orders", label: "account.orders" },
       { section: "points", label: "account.points" },
       { section: "coupons", label: "account.coupons" },
+      { section: "settings", label: "account.settings" },
     ]);
     const nav = part(render({ section: "points" }, language), /<nav class="site-desktop-only site-account__nav">[\s\S]*?<\/nav>/);
     expect(nav).toBe(
       `<nav class="site-desktop-only site-account__nav"><a href="#account-orders">${copy("account.orders", language)}</a>` +
-        `<a href="#account-points" aria-current="true">${copy("account.points", language)}</a><a href="#account-coupons">${copy("account.coupons", language)}</a></nav>`,
+        `<a href="#account-points" aria-current="true">${copy("account.points", language)}</a><a href="#account-coupons">${copy("account.coupons", language)}</a>` +
+        `<a href="#account-settings">${copy("account.settings", language)}</a></nav>`,
     );
   });
 
   // 同一条「手机为分段标签（acs-tabs，role 为 tablist 的容器与 role 为 tab 的按钮，选中项 aria-selected，写法照 LoginPage.tsx 的页签），段内容为 tabpanel」：
   // 三个标签依次排列、只有当前段选中，各控制对应的段内容（id 为锚点），段内容以标签为名称；不是当前段的内容在手机隐藏（随段表扩展，由一个标签改为三个）。
+  // SHOP-TASK-166 与 UX P13 手机线框「[account.orders][account.points][account.coupons][account.settings]」：随段表扩展改为四个标签与四个 tabpanel。
   it.each(LANGUAGES)("shows a tab for each section on phones in %s", (language) => {
     const html = render({}, language);
     const tabs = part(html, /<div class="acs-tabs site-phone-only site-account__tabs" role="tablist">[\s\S]*?<\/div>/);
     const tab = (section: string, label: CopyKey, selected: boolean) =>
       `<button class="acs-tab" id="account-${section}-tab" role="tab" type="button" aria-selected="${String(selected)}" aria-controls="account-${section}">${copy(label, language)}</button>`;
     expect(tabs).toBe(
-      `<div class="acs-tabs site-phone-only site-account__tabs" role="tablist">${tab("orders", "account.orders", true)}${tab("points", "account.points", false)}${tab("coupons", "account.coupons", false)}</div>`,
+      `<div class="acs-tabs site-phone-only site-account__tabs" role="tablist">${tab("orders", "account.orders", true)}${tab("points", "account.points", false)}${tab("coupons", "account.coupons", false)}` +
+        `${tab("settings", "account.settings", false)}</div>`,
     );
-    expect(html.match(/role="tabpanel"/g)).toHaveLength(3);
+    expect(html.match(/role="tabpanel"/g)).toHaveLength(4);
     expect(html).toContain(`<section class="site-account__section" id="account-orders" role="tabpanel" aria-labelledby="account-orders-tab" aria-busy="false">`);
     expect(html).toContain(`<section class="site-account__section site-account__section--off" id="account-points" role="tabpanel" aria-labelledby="account-points-tab" aria-busy="false">`);
     expect(html).toContain(`<section class="site-account__section site-account__section--off" id="account-coupons" role="tabpanel" aria-labelledby="account-coupons-tab" aria-busy="false">`);
+    expect(html).toContain(`<section class="site-account__section site-account__section--off" id="account-settings" role="tabpanel" aria-labelledby="account-settings-tab" aria-busy="false">`);
     const panels = [...html.matchAll(/<section[^>]* id="([^"]*)"/g)].map((m) => m[1]);
-    expect(panels).toEqual(["account-orders", "account-points", "account-coupons"]);
+    expect(panels).toEqual(["account-orders", "account-points", "account-coupons", "account-settings"]);
   });
 
-  // 同一条：点导航项或标签都交给页面切换当前段（每一项都交出自己的段）。
+  // 同一条：点导航项或标签都交给页面切换当前段（每一项都交出自己的段；SHOP-TASK-166 随段表扩展加上设置）。
   it("hands navigation and tab clicks to the page", () => {
     const onSection = vi.fn();
     const elements = tree({ onSection });
@@ -497,7 +656,7 @@ describe("navigation and sections", () => {
     for (const element of [...anchors, ...tabs]) {
       (element.props.onClick as () => void)();
     }
-    expect(onSection.mock.calls).toEqual([["orders"], ["points"], ["coupons"], ["orders"], ["points"], ["coupons"]]);
+    expect(onSection.mock.calls).toEqual([["orders"], ["points"], ["coupons"], ["settings"], ["orders"], ["points"], ["coupons"], ["settings"]]);
   });
 
   // SHOP-TASK-165 验收第 2 条「读取中该段标 aria-busy」：积分或优惠券读取中时只有该段标 aria-busy，只有段标题。
@@ -507,7 +666,8 @@ describe("navigation and sections", () => {
   ])("marks only the %s section busy while it loads", (section, title) => {
     const html = render({ screen: section === "points" ? memberScreen({ points: { status: "loading" } }) : memberScreen({ coupons: { status: "loading" } }) });
     const busy = [...html.matchAll(/<section[^>]* id="account-(\w+)"[^>]* aria-busy="(true|false)">/g)].map((m) => [m[1], m[2]]);
-    expect(busy).toEqual(["orders", "points", "coupons"].map((name) => [name, name === section ? "true" : "false"]));
+    // SHOP-TASK-166：段表多了设置段（不读取，不标 aria-busy）。
+    expect(busy).toEqual(["orders", "points", "coupons", "settings"].map((name) => [name, name === section ? "true" : "false"]));
     const panel = part(html, new RegExp(`<section[^>]* id="account-${section}"[\\s\\S]*?</section>`));
     expect(textNodes(panel)).toEqual([COPY[title].en]);
   });
@@ -758,17 +918,27 @@ describe("logging out", () => {
   });
 
   // 同一条「进行中按钮禁用」：退出进行中按钮禁用并标 aria-busy，不能再次退出；平时可点并交给页面处理。
+  // SHOP-TASK-166 验收第 5 条「两个退出按钮共用现有的退出处理与禁用条件」：标题行的按钮加了桌面限定，设置段另有手机用的按钮，
+  // 改为按两个类名分别查找；两个按钮的禁用条件与交给页面的处理相同（期望的禁用条件与退出去向不变）。
   it("disables the button while logging out", () => {
     const onLogout = vi.fn();
-    const idle = tree({ onLogout }).find((element) => element.type === "button" && element.props.className === "acs-btn acs-btn--secondary acs-btn--sm site-account__logout");
-    expect(idle?.props.disabled).toBe(false);
-    (idle?.props.onClick as () => void)();
-    expect(onLogout).toHaveBeenCalledTimes(1);
+    const classNames = ["acs-btn acs-btn--secondary acs-btn--sm site-desktop-only site-account__logout", "acs-btn acs-btn--secondary acs-btn--block site-phone-only site-account__signout"];
+    const elements = tree({ onLogout });
+    for (const className of classNames) {
+      const idle = elements.find((element) => element.type === "button" && element.props.className === className);
+      expect(idle?.props.disabled, className).toBe(false);
+      expect(idle?.props.onClick, className).toBe(onLogout);
+      (idle?.props.onClick as () => void)();
+    }
+    expect(onLogout).toHaveBeenCalledTimes(2);
     const busy = startLogout(memberScreen({ logoutError: "common.error_retry" }));
     expect(busy).toEqual(memberScreen({ loggingOut: true }));
     expect(canLogout(busy)).toBe(false);
     expect(canLogout(memberScreen())).toBe(true);
-    expect(render({ screen: busy })).toContain(`<button class="acs-btn acs-btn--secondary acs-btn--sm site-account__logout" type="button" disabled="" aria-busy="true">`);
+    const html = render({ screen: busy });
+    for (const className of classNames) {
+      expect(html).toContain(`<button class="${className}" type="button" disabled="" aria-busy="true">`);
+    }
   });
 
   // 验收第 6 条「离开页面时中止请求，之后不再更新」：退出的回答到达前已离开时不更新、不跳转。
@@ -860,15 +1030,26 @@ describe("dictionary", () => {
 
   // UX「阅读说明」不写死文字：本页用到的键在字典里，三语都有（逐字核对由 copy.test.ts 读 UX-COPY 守住）。
   it("has every key this page uses", () => {
-    const keys: CopyKey[] = ["common.nav_account", "common.nav_logout", "account.orders", "account.orders_hint", "account.orders_empty", "account.order_view", "account.demo_hint"];
+    // SHOP-TASK-166：加上段表的 account.settings（设置段自己的键由 AccountSettingsPanel.test.tsx 列出）。
+    const keys: CopyKey[] = [
+      "common.nav_account",
+      "common.nav_logout",
+      "account.orders",
+      "account.orders_hint",
+      "account.orders_empty",
+      "account.order_view",
+      "account.demo_hint",
+      "account.settings",
+    ];
     for (const key of keys) {
       for (const language of LANGUAGES) {
         expect(COPY[key][language], key).not.toBe("");
       }
     }
     // SHOP-TASK-165：sessionStep 的结果多了积分与优惠券两段，三段都从读取中开始（随状态扩展修改）。
+    // SHOP-TASK-166：另带会话的 hasPassword（这里为 true）与设置段的初始值（随状态扩展修改）。
     expect(sessionStep({ kind: "member", phoneMasked: MASKED, hasPassword: true, csrfToken: TOKEN } satisfies MemberSessionState)).toEqual(
-      memberScreen({ orders: { status: "loading" }, points: { status: "loading" }, coupons: { status: "loading" } }),
+      memberScreen({ hasPassword: true, orders: { status: "loading" }, points: { status: "loading" }, coupons: { status: "loading" }, settings: SETTINGS_START }),
     );
   });
 });
