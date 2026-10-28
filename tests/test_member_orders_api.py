@@ -265,7 +265,8 @@ def _add[T](session: Session, row: T) -> T:
 @pytest.fixture
 def catalog(engine: Engine) -> None:
     """A 商品 A-SKU 1000 仙、库存 5；B 商品 B-SKU 500 仙、库存 3、每单限购 2。
-    运费：MY-10 州属行 800、SG 国家行 2000、兜底行 3000；SG 有演示汇率。
+    运费：西马 MY-W 行 800（MY-10 按它计价）、SG 国家行 2000、兜底行 3000；SG 有演示汇率。
+    没有东马 MY-E 的行（DESIGN 1.17 第 10 条），寄东马州属（如 MY-12）取不到运费。
     """
 
     def action(session: Session) -> None:
@@ -294,7 +295,7 @@ def catalog(engine: Engine) -> None:
             _add(session, variant)
         session.add_all(
             [
-                ShippingRate(zone_type="my_state", zone_code="MY-10", fee_sen=SHIPPING, version=1),
+                ShippingRate(zone_type="my_region", zone_code="MY-W", fee_sen=SHIPPING, version=1),
                 ShippingRate(zone_type="country", zone_code="SG", fee_sen=SG_SHIPPING, version=3),
                 ShippingRate(
                     zone_type="other", zone_code="OTHER", fee_sen=OTHER_SHIPPING, version=2
@@ -815,12 +816,13 @@ def test_quote_without_destination_has_no_total(
 
 
 def test_quote_invalid_destination_and_missing_rate(client: TestClient, token: str) -> None:
-    """验收：“运费缺失与无效目的地同计价接口（503 与 422）”。"""
+    """验收：“运费缺失与无效目的地同计价接口（503 与 422）”。运费缺失为寄东马 MY-12
+    而没有 MY-E 的行（DESIGN 1.17 第 10 条「按该档的行计价」）。"""
     headers = cookie_header(token)
     response = client.post(QUOTE_URL, json=quote_body(state_code="MY-99"), headers=headers)
     assert response.status_code == 422
     assert_no_store(response)
-    response = client.post(QUOTE_URL, json=quote_body(state_code="MY-05"), headers=headers)
+    response = client.post(QUOTE_URL, json=quote_body(state_code="MY-12"), headers=headers)
     assert response.status_code == 503
     assert response.json() == {"detail": "shipping is unavailable"}
     assert_no_store(response)
@@ -965,9 +967,10 @@ def test_unplaceable_order_is_409(client: TestClient, engine: Engine, token: str
 
 
 def test_order_missing_rate_is_503(client: TestClient, engine: Engine, token: str) -> None:
-    """验收：下单“运费缺失 503”，同计价接口；不建订单。"""
+    """验收：下单“运费缺失 503”，同计价接口；不建订单。运费缺失为寄东马 MY-12 而没有
+    MY-E 的行（DESIGN 1.17 第 10 条「按该档的行计价」）。"""
     before = state(engine)
-    body = order_body(state_code="MY-05", coupon_code=OMIT, points=OMIT)
+    body = order_body(state_code="MY-12", coupon_code=OMIT, points=OMIT)
 
     response = client.post(ORDER_URL, json=body, headers=order_headers(token))
 

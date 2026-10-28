@@ -6,6 +6,8 @@
 「其他货币只按管理员配置的固定演示汇率显示参考数，不参与结算」
 「该国无演示汇率时只显示 MYR，不猜测或临时请求实时汇率」。
 以及 SHOP-TASK-007 验收标准里的具体规则。每条测试的文档字符串引用它守住的那一句。
+马来西亚两档依据 docs/DESIGN.md 1.17（提交 80e3775）「计价、优惠、积分与库存」第 10 条
+（下称「第 10 条」）与 docs/HANDOFF.md 0.69（SHOP-TASK-172）。
 用 SQLite 内存库按模型建表。SQLite 的 LIKE 与 MySQL 默认排序规则都不区分大小写，
 大小写由查询函数与写入方校验，这里不对数据库断言大小写。
 """
@@ -23,6 +25,8 @@ from sqlalchemy.orm import Session
 from app.db.base import Base
 from app.models import DemoFxRate, ShippingRate
 from app.services.shipping import (
+    EAST_MALAYSIA_STATE_CODES,
+    MY_STATE_CODES,
     FxReference,
     InvalidDestination,
     ShippingQuote,
@@ -38,6 +42,10 @@ from app.services.shipping import (
 pytestmark = pytest.mark.filterwarnings(
     "ignore:Dialect sqlite\\+pysqlite does \\*not\\* support Decimal:sqlalchemy.exc.SAWarning"
 )
+
+# 第 10 条逐字抄下的划分，不从被测模块取：东马为沙巴、砂拉越与纳闽。
+EAST_STATES = {"MY-12", "MY-13", "MY-15"}
+ALL_STATES = [f"MY-{n:02d}" for n in range(1, 17)]
 
 
 @pytest.fixture
@@ -77,9 +85,9 @@ def _fx(session: Session, country_code: str = "SG", **fields: object) -> DemoFxR
 
 @pytest.fixture
 def rates(session: Session) -> Session:
-    """一小组费率：两个州属、SG、兜底；SG 与 JP 有汇率。"""
-    _zone(session, "my_state", "MY-01", fee_sen=800)
-    _zone(session, "my_state", "MY-12", fee_sen=1500, version=3)
+    """一小组费率：马来西亚两档、SG、兜底；SG 与 JP 有汇率。"""
+    _zone(session, "my_region", "MY-W", fee_sen=800)
+    _zone(session, "my_region", "MY-E", fee_sen=1500, version=3)
     _zone(session, "country", "SG", fee_sen=2000, version=2)
     _zone(session, "other", "OTHER", fee_sen=8000)
     _fx(session, "SG", version=4)
@@ -91,14 +99,16 @@ def rates(session: Session) -> Session:
 
 
 def test_valid_zone_rows_of_each_type_are_accepted(session: Session) -> None:
-    """「区域类型（马来西亚州属、国家、其他国家兜底三种）」：三种合法的行都写得进去，
+    """「区域类型（马来西亚、国家、其他国家兜底三种）」；第 10 条「改运费表的区域代码检查
+    约束为：my_region 且代码为 MY-W 或 MY-E」：两档、国家与兜底的行都写得进去，
     运费为零不算负数。也是下面各条拒绝测试的对照。
     """
-    _zone(session, "my_state", "MY-16", fee_sen=0)
+    _zone(session, "my_region", "MY-W", fee_sen=0)
+    _zone(session, "my_region", "MY-E")
     _zone(session, "country", "SG")
     _zone(session, "other", "OTHER")
 
-    assert len(session.scalars(select(ShippingRate)).all()) == 3
+    assert len(session.scalars(select(ShippingRate)).all()) == 4
 
 
 def test_negative_fee_is_rejected(session: Session) -> None:
@@ -120,30 +130,42 @@ def test_zone_version_zero_is_rejected(session: Session) -> None:
 @pytest.mark.parametrize(
     ("zone_type", "zone_code"),
     [
-        ("my_state", "SG"),  # 州属行不以 MY- 开头
-        ("my_state", "MY-1"),  # 州属行不是 5 位
-        ("my_state", "XX-01"),  # 5 位但不以 MY- 开头
-        ("my_state", "OTHER"),
+        ("my_region", "MY-01"),  # 档的行不收州属代码
+        ("my_region", "MY-X"),  # 两档之外的代码
+        ("my_region", "SG"),
+        ("my_region", "OTHER"),
         ("country", "MY"),  # 国家行不能是马来西亚
-        ("country", "MY-01"),  # 州属代码不能当国家行
+        ("country", "MY-W"),  # 档的代码不能当国家行
         ("country", "SGP"),  # 国家行不是 2 位
         ("country", "OTHER"),
         ("country", ""),
         ("other", "SG"),  # 兜底行只能是 OTHER
-        ("other", "MY-01"),
+        ("other", "MY-E"),
         ("region", "SG"),  # 三种之外的类型
     ],
 )
 def test_zone_type_and_code_mismatch_is_rejected(
     session: Session, zone_type: str, zone_code: str
 ) -> None:
-    """「类型与代码的搭配（州属行以 MY- 开头且长 5 位、国家行长 2 位且不是 MY、
-    兜底行等于 OTHER）……由显式命名的检查约束保证」，国家行为 MY 也在这里被拒。
+    """第 10 条「改运费表的区域代码检查约束为：my_region 且代码为 MY-W 或 MY-E」；
+    「类型与代码的搭配（国家行长 2 位且不是 MY、兜底行等于 OTHER）……由显式命名的
+    检查约束保证」，国家行为 MY 也在这里被拒。
     """
     with pytest.raises(
         IntegrityError, match="CHECK constraint failed: ck_shipping_rates_zone_code_matches_type"
     ):
         _zone(session, zone_type, zone_code)
+
+
+@pytest.mark.parametrize("zone_code", ["MY-01", "MY-12", "MY-W"])
+def test_state_rows_are_rejected_by_the_model(session: Session, zone_code: str) -> None:
+    """第 10 条「运费表里这两行的区域类别为『马来西亚档』（my_region），取代原来 16 个
+    州属各一行（my_state）」：模型的检查约束不再收 my_state 的行。
+    """
+    with pytest.raises(
+        IntegrityError, match="CHECK constraint failed: ck_shipping_rates_zone_code_matches_type"
+    ):
+        _zone(session, "my_state", zone_code)
 
 
 def test_duplicate_zone_code_is_rejected(session: Session) -> None:
@@ -229,23 +251,54 @@ def test_duplicate_fx_country_is_rejected(session: Session) -> None:
 # ---- 运费查询 ----
 
 
-def test_malaysia_uses_state_row(rates: Session) -> None:
-    """「马来西亚必须给 16 个州属代码之一」：按州属行返回运费、区域代码与版本号。"""
-    assert quote_shipping(rates, "MY", "MY-12") == ShippingQuote(1500, "MY-12", 3)
-    assert quote_shipping(rates, "MY", "MY-01") == ShippingQuote(800, "MY-01", 1)
+@pytest.mark.parametrize("state_code", ALL_STATES)
+def test_each_state_is_quoted_by_its_tier(rates: Session, state_code: str) -> None:
+    """第 10 条「东马（MY-E）含沙巴（MY-12）、砂拉越（MY-13）与纳闽联邦直辖区（MY-15）；
+    西马（MY-W）含其余 11 个州与吉隆坡（MY-14）、布城（MY-16）」「服务端按上面的划分把
+    州属换算成档，按该档的行计价」「计价接口返回的……区域代码是档的代码及该行版本号」：
+    16 个州属各自取所属档的运费、档的代码与该档行的版本号。
+    """
+    if state_code in EAST_STATES:
+        expected = ShippingQuote(1500, "MY-E", 3)
+    else:
+        expected = ShippingQuote(800, "MY-W", 1)
+
+    assert quote_shipping(rates, "MY", state_code) == expected
 
 
-@pytest.mark.parametrize("state_code", [None, "MY-17", "MY-00", "my-01", "SG", ""])
+def test_east_malaysia_is_exactly_three_states() -> None:
+    """第 10 条「东马（MY-E）含沙巴（MY-12）、砂拉越（MY-13）与纳闽联邦直辖区（MY-15）」：
+    东马恰为这三个州属，都在 16 个州属代码里；州属代码集合本身不变，仍为 MY-01 到 MY-16。
+    """
+    assert EAST_MALAYSIA_STATE_CODES == EAST_STATES
+    assert MY_STATE_CODES == set(ALL_STATES)
+    assert len(MY_STATE_CODES - EAST_MALAYSIA_STATE_CODES) == 13
+
+
+@pytest.mark.parametrize("state_code", [None, "MY-17", "MY-00", "my-01", "SG", "", "MY-W", "MY-E"])
 def test_malaysia_without_known_state_is_rejected(rates: Session, state_code: str | None) -> None:
-    """「马来西亚……缺少或未知即拒绝」：不退回兜底运费，也不转换大小写。"""
+    """「马来西亚……缺少或未知即拒绝」；第 10 条「收货国家为马来西亚时仍须选州属
+    （……列表与校验不变）」：不退回兜底运费，也不转换大小写；档的代码不能当州属。
+    """
     with pytest.raises(InvalidDestination):
         quote_shipping(rates, "MY", state_code)
 
 
-def test_malaysia_state_without_row_is_an_error(rates: Session) -> None:
-    """「不返回零运费」：州属代码合法但表里没有该行时明确报错，不用兜底行代替。"""
+@pytest.mark.parametrize(
+    ("present", "state_code"),
+    [("MY-W", "MY-12"), ("MY-W", "MY-15"), ("MY-E", "MY-01"), ("MY-E", "MY-14")],
+)
+def test_malaysia_tier_without_row_is_an_error(
+    session: Session, present: str, state_code: str
+) -> None:
+    """「不返回零运费」；第 10 条「按该档的行计价」：两档的行缺一时，所选州属所属的档
+    没有行即抛 ShippingRateMissing，不用另一档或兜底行代替。
+    """
+    _zone(session, "my_region", present)
+    _zone(session, "other", "OTHER")
+
     with pytest.raises(ShippingRateMissing):
-        quote_shipping(rates, "MY", "MY-05")
+        quote_shipping(session, "MY", state_code)
 
 
 @pytest.mark.parametrize("state_code", ["MY-01", ""])

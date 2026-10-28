@@ -5,6 +5,10 @@
 「访客国家货币」按收货国家决定，该国无演示汇率时只显示 MYR，不猜测或临时请求实时汇率。
 两个查询都返回所用费率行的版本号，供结账写入订单快照。
 
+马来西亚依据 docs/DESIGN.md 1.17（提交 80e3775）「计价、优惠、积分与库存」第 10 条：
+结账仍须选州属，这里按州属换算成西马（MY-W）或东马（MY-E）一档，按该档的行计价；
+返回的区域代码与版本号是档的行的，订单快照随之记档的代码。
+
 只发 SELECT，不写库、不缓存费率。国家代码须是两位大写字母，不自动转换大小写：
 MySQL 比较不区分大小写，大小写只能在这里与写入方把关。
 """
@@ -19,11 +23,20 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import DemoFxRate, ShippingRate
-from app.models.shipping import OTHER_ZONE_CODE, ZONE_COUNTRY, ZONE_MY_STATE, ZONE_OTHER
+from app.models.shipping import (
+    MY_EAST_ZONE_CODE,
+    MY_WEST_ZONE_CODE,
+    OTHER_ZONE_CODE,
+    ZONE_COUNTRY,
+    ZONE_MY_REGION,
+    ZONE_OTHER,
+)
 
 MALAYSIA = "MY"
 # ISO 3166-2:MY 的 13 个州与 3 个联邦直辖区。
 MY_STATE_CODES = frozenset(f"MY-{n:02d}" for n in range(1, 17))
+# 东马：沙巴、砂拉越与纳闽联邦直辖区（DESIGN 1.17 第 10 条）；其余州属为西马。
+EAST_MALAYSIA_STATE_CODES = frozenset({"MY-12", "MY-13", "MY-15"})
 # 汇率列是 DECIMAL(18, 6)。
 MAX_RATE_DECIMAL_PLACES = 6
 MAX_CURRENCY_DECIMALS = 3
@@ -117,17 +130,22 @@ def _zone(session: Session, zone_type: str, zone_code: str) -> ShippingRate | No
 def quote_shipping(session: Session, country_code: str, state_code: str | None) -> ShippingQuote:
     """按收货国家与马来西亚州属查示例运费。
 
-    马来西亚必须给 MY-01 到 MY-16 之一，缺少或未知即拒绝；其他国家给了州属代码即拒绝，
-    有国家行用国家行，否则用兜底行。应有的行不存在时抛 ShippingRateMissing。
+    马来西亚必须给 MY-01 到 MY-16 之一，缺少或未知即拒绝；东马州属用 MY-E 的行，
+    其余用 MY-W 的行。其他国家给了州属代码即拒绝，有国家行用国家行，否则用兜底行。
+    应有的行不存在时抛 ShippingRateMissing。
     """
     _require_country_code(country_code)
 
     if country_code == MALAYSIA:
         if state_code not in MY_STATE_CODES:
             raise InvalidDestination(f"Malaysia needs a state code MY-01..MY-16: {state_code!r}")
-        row = _zone(session, ZONE_MY_STATE, state_code)
+        if state_code in EAST_MALAYSIA_STATE_CODES:
+            tier = MY_EAST_ZONE_CODE
+        else:
+            tier = MY_WEST_ZONE_CODE
+        row = _zone(session, ZONE_MY_REGION, tier)
         if row is None:
-            raise ShippingRateMissing(f"no shipping rate for state {state_code}")
+            raise ShippingRateMissing(f"no shipping rate for Malaysia tier {tier}")
     else:
         if state_code is not None:
             raise InvalidDestination(f"state code is only for Malaysia: {state_code!r}")

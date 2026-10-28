@@ -3,8 +3,10 @@
 依据 docs/DESIGN.md 1.16（提交 e9a1c93）「计价、优惠、积分与库存」第 9 条
 （下称「第 9 条」）与 docs/HANDOFF.md 0.67 记录的落实写法。
 接口由 SHOP-TASK-171 接上，本模块只提供规则函数，不写日志。
+马来西亚一组依据 DESIGN 1.17（提交 80e3775）第 10 条与 HANDOFF 0.69：即西马（MY-W）、
+东马（MY-E）两档的行，名为 malaysia，按西马、东马的顺序排列（不按代码排序）。
 
-范围：16 个州属与兜底各一行，只改运费、不增删；国家运费与演示汇率可改、
+范围：马来西亚两档与兜底各一行，只改运费、不增删；国家运费与演示汇率可改、
 可新增、可删除。新增的国家须在 app/services/regions.py 的 phone_regions()
 里且不是 MY；新增汇率另给币种代码（三位大写字母、不是 MYR）与小数位（0–3），
 之后只改汇率。运费为 0 到 999,999 的整仙；汇率以十进制字符串提交、
@@ -34,7 +36,13 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from app.models import DemoFxRate, ShippingRate
-from app.models.shipping import ZONE_COUNTRY, ZONE_MY_STATE, ZONE_OTHER
+from app.models.shipping import (
+    MY_EAST_ZONE_CODE,
+    MY_WEST_ZONE_CODE,
+    ZONE_COUNTRY,
+    ZONE_MY_REGION,
+    ZONE_OTHER,
+)
 from app.services.admin_auth import record_audit
 from app.services.regions import phone_regions
 from app.services.shipping import MALAYSIA, MAX_CURRENCY_DECIMALS
@@ -53,6 +61,8 @@ AUDIT_TARGET_DEMO_FX_RATE = "demo_fx_rate"
 MAX_FEE_SEN = 999_999
 HOME_CURRENCY = "MYR"
 NEW_ROW_VERSION = 1
+# DESIGN 1.17 第 10 条「两行按西马、东马的顺序排列」。
+_MALAYSIA_ORDER = {MY_WEST_ZONE_CODE: 0, MY_EAST_ZONE_CODE: 1}
 
 # 照 app/services/shipping.py：只认 ASCII 大写字母，不转换大小写。
 _COUNTRY_CODE = re.compile(r"[A-Z]{2}")
@@ -99,12 +109,12 @@ class FxRateRow:
 
 @dataclass(frozen=True)
 class AdminRates:
-    """整页数据：州属按 MY-01 到 MY-16、国家运费与汇率按国家代码排列。
+    """整页数据：马来西亚两档按西马、东马，国家运费与汇率按国家代码排列。
 
     other 为兜底行；迁移 0005 已写入它，只有库里缺这一行时为 None。
     """
 
-    states: tuple[ShippingRateRow, ...]
+    malaysia: tuple[ShippingRateRow, ...]
     other: ShippingRateRow | None
     countries: tuple[ShippingRateRow, ...]
     fx_rates: tuple[FxRateRow, ...]
@@ -141,6 +151,9 @@ def load_admin_rates(db: Session) -> AdminRates:
             if zone.zone_type == zone_type
         )
 
+    malaysia = sorted(
+        rows_of(ZONE_MY_REGION), key=lambda row: _MALAYSIA_ORDER.get(row.zone_code, 2)
+    )
     others = rows_of(ZONE_OTHER)
     rates = db.execute(
         select(
@@ -153,7 +166,7 @@ def load_admin_rates(db: Session) -> AdminRates:
         )
     ).all()
     return AdminRates(
-        states=rows_of(ZONE_MY_STATE),
+        malaysia=tuple(malaysia),
         other=others[0] if others else None,
         countries=rows_of(ZONE_COUNTRY),
         fx_rates=tuple(
@@ -177,7 +190,7 @@ def load_admin_rates(db: Session) -> AdminRates:
 
 @dataclass(frozen=True)
 class KeepFee:
-    """保留一行运费（州属、兜底或国家）并给出新运费；id 与 version 为读取时的值。"""
+    """保留一行运费（马来西亚档、兜底或国家）并给出新运费；id 与 version 为读取时的值。"""
 
     id: int
     version: int
@@ -275,19 +288,19 @@ def _check_new_currency(currency_code: object, currency_decimals: object) -> Non
 
 
 def _check_request(
-    states: Sequence[KeepFee],
+    malaysia: Sequence[KeepFee],
     other: Sequence[KeepFee],
     countries: Sequence[CountryItem],
     fx_rates: Sequence[FxItem],
 ) -> None:
-    groups = (states, other, countries, fx_rates)
+    groups = (malaysia, other, countries, fx_rates)
     if not all(isinstance(group, list | tuple) for group in groups):
         raise RatesInvalid("each group must be a list")
 
-    # 第 9 条「州属与兜底的行只有保留」。
-    for item in (*states, *other):
+    # 第 9 条「马来西亚与兜底的行只有保留」。
+    for item in (*malaysia, *other):
         if not isinstance(item, KeepFee):
-            raise RatesInvalid("state and fallback rows can only be kept")
+            raise RatesInvalid("Malaysia and fallback rows can only be kept")
         _check_ref(item)
         _check_fee(item.fee_sen)
     for item in countries:
@@ -395,7 +408,7 @@ def _fx_value(row: DemoFxRate) -> str:
 def save_admin_rates(
     db: Session,
     admin_account_id: int,
-    states: Sequence[KeepFee],
+    malaysia: Sequence[KeepFee],
     other: Sequence[KeepFee],
     countries: Sequence[CountryItem],
     fx_rates: Sequence[FxItem],
@@ -403,7 +416,7 @@ def save_admin_rates(
 ) -> AdminRates:
     """保存整页的运费与演示汇率，返回保存后的整页数据（同 load_admin_rates）。
 
-    四组依次为州属、兜底、国家运费与汇率，列出读取时的全部现有行；
+    四组依次为马来西亚两档、兜底、国家运费与汇率，列出读取时的全部现有行；
     now 为不带时区的 UTC 时间，交给 record_audit；admin_account_id 须在调用前
     取出（这里先回滚，调用方会话里的 ORM 对象随之过期）。按以下顺序：
     1. 检查请求本身，不发任何 SQL：运费为 0 到 999,999 的整数（布尔值不算）；
@@ -422,7 +435,7 @@ def save_admin_rates(
        删除的行没有新值。
     4. 整页都未变时回滚、不写审计；否则一并提交。
     """
-    _check_request(states, other, countries, fx_rates)
+    _check_request(malaysia, other, countries, fx_rates)
 
     db.rollback()
     try:
@@ -433,7 +446,7 @@ def save_admin_rates(
             return {zone.id: zone for zone in zones if zone.zone_type == zone_type}
 
         country_zones = zones_of(ZONE_COUNTRY)
-        _check_group(zones_of(ZONE_MY_STATE), states)
+        _check_group(zones_of(ZONE_MY_REGION), malaysia)
         _check_group(zones_of(ZONE_OTHER), other)
         _check_group(country_zones, countries)
         _check_group({rate.id: rate for rate in rates}, fx_rates)
@@ -464,7 +477,9 @@ def save_admin_rates(
 
         # 三组运费的行 ID 互不重叠（核对已保证各组恰是该组现有的行）。
         zone_items = {
-            item.id: item for item in (*states, *other, *countries) if not isinstance(item, _ADDED)
+            item.id: item
+            for item in (*malaysia, *other, *countries)
+            if not isinstance(item, _ADDED)
         }
         for zone in zones:
             item = zone_items[zone.id]

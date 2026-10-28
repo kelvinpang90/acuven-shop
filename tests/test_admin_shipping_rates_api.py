@@ -7,9 +7,11 @@ PUT /api/admin/shipping-rates（app/api/admin_shipping_rates.py，SHOP-TASK-171�
 与 docs/HANDOFF.md 0.67 的落实写法（下称「HANDOFF 0.67」）。
 每条测试（参数化的测试是每个用例）的文档字符串写明它守住的原句；
 没有直接原句的，写明是 SHOP-TASK-171 验收里的约定（下称「验收」）。
+马来西亚一组依据 DESIGN 1.17（提交 80e3775）同节第 10 条（下称「第 10 条」）与
+docs/HANDOFF.md 0.69（下称「HANDOFF 0.69」）：字段由 states 改名为 malaysia，西马在前。
 
 夹具照 tests/test_admin_site_settings.py：SQLite 内存库按模型建表（StaticPool），
-管理员与后台会话直接写库并提交；运费与汇率写入与迁移 0005 相同的演示数据
+管理员与后台会话直接写库并提交；运费与汇率写入与迁移 0005、0023 之后相同的演示数据
 （同 tests/test_admin_shipping_rates.py）。接口的会话依赖换成每个请求一个绑定
 同一内存库的会话，关闭时回滚未提交的改动；检查结果一律在另一个数据库会话里
 只查列值读出，读得到即说明接口已提交。期望的 CSRF 令牌在这里另算。
@@ -66,8 +68,9 @@ FX_ADDED = "admin_fx_rate_added"
 SHIPPING = "shipping_rate"
 FX = "demo_fx_rate"
 
-# 与迁移 0005 相同的演示数据，按迁移的写入顺序。
-STATE_FEES = {f"MY-{n:02d}": 1500 if n in (12, 13, 15) else 800 for n in range(1, 17)}
+# 与迁移 0005、0023 之后相同的演示数据。马来西亚两档东马先写入：读取仍西马在前
+# （第 10 条「两行按西马、东马的顺序排列」）。
+MALAYSIA_FEES = {"MY-E": 1500, "MY-W": 800}
 COUNTRY_FEES = {
     "SG": 2000,
     "BN": 2500,
@@ -90,7 +93,7 @@ FX_RATES = (
     ("HK", "HKD", 2, Decimal("1.800000")),
 )
 
-PAGE_FIELDS = ["states", "other", "countries", "fx"]
+PAGE_FIELDS = ["malaysia", "other", "countries", "fx"]
 ZONE_FIELDS = ["id", "version", "zone_code", "fee_sen"]
 FX_FIELDS = ["id", "version", "country_code", "currency_code", "currency_decimals", "rate"]
 
@@ -110,8 +113,8 @@ def engine() -> Iterator[Engine]:
     )
     Base.metadata.create_all(engine)
     with Session(engine) as seed:
-        for code, fee in STATE_FEES.items():
-            seed.add(ShippingRate(zone_type="my_state", zone_code=code, fee_sen=fee, version=1))
+        for code, fee in MALAYSIA_FEES.items():
+            seed.add(ShippingRate(zone_type="my_region", zone_code=code, fee_sen=fee, version=1))
         for code, fee in COUNTRY_FEES.items():
             seed.add(ShippingRate(zone_type="country", zone_code=code, fee_sen=fee, version=1))
         seed.add(ShippingRate(zone_type="other", zone_code="OTHER", fee_sen=OTHER_FEE, version=1))
@@ -298,7 +301,7 @@ def _body(page: dict[str, Any]) -> dict[str, Any]:
         return {"id": row["id"], "version": row["version"], "fee_sen": row["fee_sen"]}
 
     return {
-        "states": [keep_fee(row) for row in page["states"]],
+        "malaysia": [keep_fee(row) for row in page["malaysia"]],
         "other": keep_fee(page["other"]),
         "countries": [keep_fee(row) for row in page["countries"]],
         "fx": [
@@ -383,7 +386,7 @@ def _add_country_twice(_page: dict[str, Any], body: dict[str, Any]) -> None:
 
 
 def _list_a_row_twice(_page: dict[str, Any], body: dict[str, Any]) -> None:
-    body["states"][1] = dict(body["states"][0])
+    body["malaysia"][1] = dict(body["malaysia"][0])
 
 
 def _leave_out_sg(page: dict[str, Any], body: dict[str, Any]) -> None:
@@ -512,9 +515,9 @@ def test_invalid_body_without_a_session_is_401(client: TestClient) -> None:
 
 MALFORMED = [
     # 整数字段 strict：布尔值、字符串与浮点数一律不收。
-    pytest.param(_set("states", "MY-01", "fee_sen", True), id="fee-bool"),
-    pytest.param(_set("states", "MY-01", "fee_sen", SECRET), id="fee-string"),
-    pytest.param(_set("states", "MY-01", "fee_sen", "800"), id="fee-numeric-string"),
+    pytest.param(_set("malaysia", "MY-W", "fee_sen", True), id="fee-bool"),
+    pytest.param(_set("malaysia", "MY-W", "fee_sen", SECRET), id="fee-string"),
+    pytest.param(_set("malaysia", "MY-E", "fee_sen", "800"), id="fee-numeric-string"),
     pytest.param(_set("countries", "SG", "fee_sen", 2000.0), id="fee-float"),
     pytest.param(_set("countries", "SG", "id", SECRET), id="id-string"),
     pytest.param(_set_other("version", True), id="version-bool"),
@@ -527,9 +530,9 @@ MALFORMED = [
     ),
     pytest.param(_set_row("fx", "SG", lambda row: _ref(row, delete="true")), id="delete-string"),
     pytest.param(_set("countries", "SG", "delete", True), id="keep-and-delete"),
-    # 州属与兜底的行只接受 id、version、fee_sen。
+    # 马来西亚与兜底的行只接受 id、version、fee_sen。
     pytest.param(
-        _set_row("states", "MY-01", lambda row: _ref(row, delete=True)), id="state-delete"
+        _set_row("malaysia", "MY-W", lambda row: _ref(row, delete=True)), id="malaysia-delete"
     ),
     pytest.param(_set_other("delete", True), id="other-delete"),
     # 已有行带币种或国家代码、新增行带行 ID 或缺字段。
@@ -560,15 +563,15 @@ MALFORMED = [
         id="new-fx-rate-number",
     ),
     # 多出字段或缺字段。
-    pytest.param(_set("states", "MY-01", "note", SECRET), id="extra-row-field"),
+    pytest.param(_set("malaysia", "MY-W", "note", SECRET), id="extra-row-field"),
     pytest.param(_set_top("note", SECRET), id="extra-top-level"),
-    pytest.param(_drop_top("states"), id="missing-states"),
+    pytest.param(_drop_top("malaysia"), id="missing-malaysia"),
     pytest.param(_drop_top("other"), id="missing-other"),
     pytest.param(_drop_top("countries"), id="missing-countries"),
     pytest.param(_drop_top("fx"), id="missing-fx"),
     pytest.param(lambda page, body: {**body, "other": [body["other"]]}, id="other-as-list"),
     pytest.param(_set_top("other", None), id="other-null"),
-    pytest.param(_set_top("states", SECRET), id="states-not-a-list"),
+    pytest.param(_set_top("malaysia", SECRET), id="malaysia-not-a-list"),
     pytest.param(lambda page, body: [], id="not-an-object"),
     pytest.param(lambda page, body: SECRET, id="bare-string"),
 ]
@@ -580,9 +583,40 @@ def test_malformed_body_is_422_without_echo(
 ) -> None:
     """验收「整数字段 strict（布尔值、字符串与浮点数一律不收），rate、country_code
     与 currency_code 只接受 JSON 字符串；多出字段或缺字段 422，错误沿用 _body_errors
-    不回显」；第 9 条「州属与兜底的行只有保留」「已有汇率行只给新汇率，不给币种与
+    不回显」；第 9 条「马来西亚与兜底的行只有保留」「已有汇率行只给新汇率，不给币种与
     小数位」「新增的行不带行 ID 与版本号」：布尔值或字符串运费、数字汇率、delete
     为 false、已有行带币种、多出字段等都 422，不回显所给的值，数据与审计不变。"""
+    page = _page(client, token)
+    before = _snapshot(engine)
+
+    response = _put(client, token, _mutated(page, mutate))
+
+    _assert_plain_errors(response)
+    assert _snapshot(engine) == before
+
+
+def _states_instead_of_malaysia(_page: dict[str, Any], body: dict[str, Any]) -> dict[str, Any]:
+    return {"states": body["malaysia"], **{k: v for k, v in body.items() if k != "malaysia"}}
+
+
+def _states_with_secret(_page: dict[str, Any], body: dict[str, Any]) -> None:
+    body["states"] = [{"id": 1, "version": 1, "fee_sen": SECRET}]
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        pytest.param(_states_instead_of_malaysia, id="states-instead-of-malaysia"),
+        pytest.param(_set_top("states", []), id="states-alongside-malaysia"),
+        pytest.param(_states_with_secret, id="states-with-secret"),
+    ],
+)
+def test_old_states_field_is_422_without_echo(
+    client: TestClient, engine: Engine, token: str, mutate: Mutation
+) -> None:
+    """第 10 条「读取与保存接口里这一组的字段由 states 改名为 malaysia」；HANDOFF 0.69
+    「请求体仍带 states 时照多出字段回 422」：只给旧字段名、或在 malaysia 之外另带 states，
+    都 422，错误沿用 _body_errors 不回显所给的值，数据与审计不变。"""
     page = _page(client, token)
     before = _snapshot(engine)
 
@@ -601,27 +635,28 @@ def test_get_returns_the_page_and_csrf_token(
     client: TestClient, engine: Engine, token: str
 ) -> None:
     """第 9 条「读取时每行带行 ID 与版本号」「读取接口与审计都用规范形式」；A06「页面
-    改显示服务端返回的保存后数据（新的版本号）」；验收 GET 的字段依次为 states、
+    改显示服务端返回的保存后数据（新的版本号）」；第 10 条「这一组的字段由 states 改名为
+    malaysia，两行按西马、东马的顺序排列」；验收 GET 的字段依次为 malaysia、
     other、countries、fx 与 csrf_token，运费行为 id、version、zone_code、fee_sen，
     汇率行为 id、version、country_code、currency_code、currency_decimals、rate；
-    州属按 MY-01 到 MY-16、国家按代码排列；只读，不写审计。"""
+    马来西亚恰为两行、西马在前，国家按代码排列；只读，不写审计。"""
     before = _snapshot(engine)
 
     body = _page(client, token)
 
     assert list(body) == [*PAGE_FIELDS, "csrf_token"]
     assert body["csrf_token"] == _csrf_for(token)
-    assert all(list(row) == ZONE_FIELDS for row in [*body["states"], *body["countries"]])
+    assert all(list(row) == ZONE_FIELDS for row in [*body["malaysia"], *body["countries"]])
     assert list(body["other"]) == ZONE_FIELDS
     assert all(list(row) == FX_FIELDS for row in body["fx"])
 
-    states = [(row["zone_code"], row["fee_sen"], row["version"]) for row in body["states"]]
+    malaysia = [(row["zone_code"], row["fee_sen"], row["version"]) for row in body["malaysia"]]
     countries = [(row["zone_code"], row["fee_sen"]) for row in body["countries"]]
     fx = [
         (row["country_code"], row["currency_code"], row["currency_decimals"], row["rate"])
         for row in body["fx"]
     ]
-    assert states == [(code, fee, 1) for code, fee in sorted(STATE_FEES.items())]
+    assert malaysia == [("MY-W", 800, 1), ("MY-E", 1500, 1)]
     assert (body["other"]["zone_code"], body["other"]["fee_sen"]) == ("OTHER", OTHER_FEE)
     assert countries == sorted(COUNTRY_FEES.items())
     assert fx == [
@@ -643,7 +678,7 @@ def test_get_returns_the_page_and_csrf_token(
 
 
 INVALID_VALUES = [
-    pytest.param(_set("states", "MY-01", "fee_sen", -1), id="fee-negative"),
+    pytest.param(_set("malaysia", "MY-W", "fee_sen", -1), id="fee-negative"),
     pytest.param(_set("countries", "SG", "fee_sen", 1_000_000), id="fee-too-large"),
     pytest.param(_set("fx", "JP", "rate", "1e5"), id="rate-exponent"),
     pytest.param(_set("fx", "JP", "rate", "0"), id="rate-zero"),
@@ -690,7 +725,7 @@ def test_invalid_values_are_rates_invalid(
 
 
 STALE = [
-    pytest.param(_set("states", "MY-01", "version", 2), id="state-version-ahead"),
+    pytest.param(_set("malaysia", "MY-W", "version", 2), id="malaysia-version-ahead"),
     pytest.param(_set_other("version", 0), id="other-version-behind"),
     pytest.param(_leave_out_sg, id="country-row-left-out"),
     pytest.param(
@@ -729,7 +764,7 @@ def test_save_after_a_concurrent_change_is_rates_changed(
     _read(engine, _bump_version(DemoFxRate, DemoFxRate.country_code, "JP"))
     before = _snapshot(engine)
 
-    response = _put(client, token, _mutated(page, _set("states", "MY-01", "fee_sen", 900)))
+    response = _put(client, token, _mutated(page, _set("malaysia", "MY-W", "fee_sen", 900)))
 
     _assert_error(response, 409, RATES_CHANGED)
     assert _snapshot(engine) == before
@@ -745,7 +780,7 @@ def test_invalid_and_stale_together_is_rates_invalid(
     _read(engine, _bump_version(ShippingRate, ShippingRate.zone_code, "SG"))
     before = _snapshot(engine)
 
-    response = _put(client, token, _mutated(page, _set("states", "MY-01", "fee_sen", -1)))
+    response = _put(client, token, _mutated(page, _set("malaysia", "MY-W", "fee_sen", -1)))
 
     _assert_error(response, 422, RATES_INVALID)
     assert _snapshot(engine) == before
@@ -763,14 +798,15 @@ def test_save_returns_the_saved_page_and_writes_audits(
     增、删一行写一条审计」；A06「成功……页面改显示服务端返回的保存后数据（新的
     版本号）」；HANDOFF 0.67「旧值与新值写成『代码 金额或汇率 v版本号』」；验收
     「成功回 200 与保存后的整页数据（字段同 GET，不含 csrf_token）」「审计的操作者
-    正确」：一次保存改州属、兜底、国家运费与汇率，删一行国家运费与一行汇率，
-    新增一行国家运费与一行汇率；响应等于随后 GET 的整页（去掉 csrf_token），
-    审计的操作者都是当前管理员。"""
+    正确」；第 10 条「第 9 条的『马来西亚』一组即这两行，只能改运费」「西马、东马的顺序」：
+    一次保存改西马、兜底、国家运费与汇率，删一行国家运费与一行汇率，
+    新增一行国家运费与一行汇率；响应等于随后 GET 的整页（去掉 csrf_token），马来西亚一组
+    仍西马在前，审计取值写成「MY-W 800 v1」这样的代码、金额与版本号，操作者都是当前管理员。"""
     page = _page(client, token)
     gb = _row(page, "countries", "GB")
     hk = _row(page, "fx", "HK")
     body = _body(page)
-    body["states"][_index(page, "states", "MY-01")]["fee_sen"] = 900
+    body["malaysia"][_index(page, "malaysia", "MY-W")]["fee_sen"] = 900
     body["other"]["fee_sen"] = 8500
     body["countries"][_index(page, "countries", "SG")]["fee_sen"] = 2100
     body["countries"][_index(page, "countries", "GB")] = _ref(gb, delete=True)
@@ -785,9 +821,10 @@ def test_save_returns_the_saved_page_and_writes_audits(
 
     assert list(saved) == PAGE_FIELDS
     assert saved == _saved_page(_page(client, token))
-    my01 = _row(saved, "states", "MY-01")
-    assert (my01["fee_sen"], my01["version"]) == (900, 2)
-    assert _row(saved, "states", "MY-02")["version"] == 1
+    assert [row["zone_code"] for row in saved["malaysia"]] == ["MY-W", "MY-E"]
+    west = _row(saved, "malaysia", "MY-W")
+    assert (west["fee_sen"], west["version"]) == (900, 2)
+    assert _row(saved, "malaysia", "MY-E")["version"] == 1
     assert (saved["other"]["fee_sen"], saved["other"]["version"]) == (8500, 2)
     countries = [row["zone_code"] for row in saved["countries"]]
     fx_countries = [row["country_code"] for row in saved["fx"]]
@@ -807,7 +844,7 @@ def test_save_returns_the_saved_page_and_writes_audits(
     audits = _audits(engine)
     assert len(audits) == 8
     assert set(audits) == {
-        (account_id, SHIPPING_CHANGED, SHIPPING, "MY-01 800 v1", "MY-01 900 v2"),
+        (account_id, SHIPPING_CHANGED, SHIPPING, "MY-W 800 v1", "MY-W 900 v2"),
         (account_id, SHIPPING_CHANGED, SHIPPING, "SG 2000 v1", "SG 2100 v2"),
         (account_id, SHIPPING_REMOVED, SHIPPING, "GB 6000 v1", None),
         (account_id, SHIPPING_CHANGED, SHIPPING, "OTHER 8000 v1", "OTHER 8500 v2"),
@@ -890,7 +927,7 @@ def test_all_responses_are_no_store_and_nothing_is_logged(
     responses = [
         _get(client, token),
         _get(client, None),
-        _put(client, token, _mutated(page, _set("states", "MY-01", "fee_sen", 900))),
+        _put(client, token, _mutated(page, _set("malaysia", "MY-W", "fee_sen", 900))),
         _put(client, None, _body(page)),
         _put(client, token, _body(page), csrf=None),
         _put_raw(client, token, oversized, "application/json"),

@@ -11,7 +11,10 @@ PUT /api/admin/shipping-rates。
 
 两个接口都经 SHOP-TASK-036 的 require_admin：没有有效后台会话时 401 admin_session_required。
 
-读取（GET）：require_admin（401）→ 返回 load_admin_rates 的整页数据（states、other、countries、
+马来西亚一组依据 DESIGN 1.17（提交 80e3775）第 10 条与 HANDOFF 0.69：字段由 states 改名为
+malaysia，即西马（MY-W）、东马（MY-E）两行，西马在前；请求体仍带 states 时照多出字段回 422。
+
+读取（GET）：require_admin（401）→ 返回 load_admin_rates 的整页数据（malaysia、other、countries、
 fx）与由 cookie 算出的 CSRF 令牌。不写审计。
 保存（PUT），每一步不通过即停止：
 1. 请求体按实际读到的字节逐块判断，超过 64 KB 即 413，先于一切校验；不是 JSON 415；
@@ -76,7 +79,7 @@ class _RowIn(BaseModel):
 
 
 class KeepFeeIn(_RowIn):
-    """保留一行运费（州属、兜底或国家）并给出新运费。"""
+    """保留一行运费（马来西亚档、兜底或国家）并给出新运费。"""
 
     id: int
     version: int
@@ -116,7 +119,7 @@ class AdminRatesIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    states: list[KeepFeeIn]
+    malaysia: list[KeepFeeIn]
     other: KeepFeeIn
     countries: list[KeepFeeIn | RemoveRowIn | AddCountryFeeIn]
     fx: list[KeepFxRateIn | RemoveRowIn | AddFxRateIn]
@@ -145,7 +148,8 @@ class FxRateOut(BaseModel):
 
 
 class AdminRatesOut(BaseModel):
-    states: list[ShippingRateOut]
+    # 西马、东马两行，西马在前。
+    malaysia: list[ShippingRateOut]
     # 迁移 0005 已写入兜底行；只有库里缺这一行时为 None。
     other: ShippingRateOut | None
     countries: list[ShippingRateOut]
@@ -176,7 +180,7 @@ def _fx_out(row: FxRateRow) -> FxRateOut:
 
 def _page_fields(rates: AdminRates) -> dict[str, object]:
     return {
-        "states": [_zone_out(row) for row in rates.states],
+        "malaysia": [_zone_out(row) for row in rates.malaysia],
         "other": None if rates.other is None else _zone_out(rates.other),
         "countries": [_zone_out(row) for row in rates.countries],
         "fx": [_fx_out(row) for row in rates.fx_rates],
@@ -260,7 +264,7 @@ def save(
         saved = save_admin_rates(
             session,
             account_id,
-            [_keep_fee(item) for item in body.states],
+            [_keep_fee(item) for item in body.malaysia],
             [_keep_fee(body.other)],
             [_country_item(item) for item in body.countries],
             [_fx_item(item) for item in body.fx],
