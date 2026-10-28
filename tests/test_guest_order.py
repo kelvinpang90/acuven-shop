@@ -235,7 +235,8 @@ def _catalog(db: Session) -> _Catalog:
     每单限购取默认值 10。TEE-RED-M 2590 仙、库存 5；TEE-BLUE-M
     2190 仙、库存 5（规格 ID 比红色大）。
     Mug：无规格，三语名称齐全，每单限购 2；MUG 1500 仙、库存 3。
-    运费：MY-10 州属行、SG 国家行、兜底行；MY-05 没有运费行。
+    运费：西马 MY-W 行（MY-10 按它计价）、SG 国家行、兜底行；没有东马 MY-E 的行，
+    寄东马州属（如 MY-12）取不到运费（DESIGN 1.17 第 10 条）。
     """
     category = _add(db, Category(slug="goods", name_en="Goods", is_active=True))
     tee = Product(
@@ -269,7 +270,7 @@ def _catalog(db: Session) -> _Catalog:
     mug_id = _variant(db, mug, "MUG", 1500, 3)
 
     zones = [
-        ("my_state", "MY-10", SHIPPING, 1),
+        ("my_region", "MY-W", SHIPPING, 1),
         ("country", "SG", 2000, 3),
         ("other", "OTHER", 8000, 4),
     ]
@@ -505,7 +506,7 @@ def test_new_order_row_values(db: Session, client: TestClient) -> None:
     assert order.points_redeemed == 0
     assert order.points_earned == 0
     assert order.shipping_fee_sen == SHIPPING
-    assert order.shipping_zone_code == "MY-10"
+    assert order.shipping_zone_code == "MY-W"
     assert order.shipping_rate_version == 1
     assert order.total_sen == order.subtotal_sen + order.shipping_fee_sen
     assert order.idempotency_key == key
@@ -809,10 +810,11 @@ def test_second_reservation_failing_rolls_back_the_first(
 def test_missing_shipping_rate_is_503(db: Session, client: TestClient) -> None:
     """「数据模型」ShippingRate 一行，下单存运费快照。SHOP-TASK-020 验收：
     运费行缺失时与计价接口一样 503，不以零运费代替，不建订单、不动库存。
+    DESIGN 1.17 第 10 条「按该档的行计价」：寄东马 MY-12 而没有 MY-E 的行。
     """
     catalog = _catalog(db)
 
-    response = _post(client, _payload(state_code="MY-05"), _key())
+    response = _post(client, _payload(state_code="MY-12"), _key())
 
     assert response.status_code == 503, response.text
     assert response.json() == {"detail": "shipping is unavailable"}

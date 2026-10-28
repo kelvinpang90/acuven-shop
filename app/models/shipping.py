@@ -1,9 +1,13 @@
 """运费区与演示汇率。
 
-依据 docs/DESIGN.md 1.8（提交 2b68ad0）「数据模型」的 ShippingRate / DemoFxRate 一行：
-「国家运费、马来西亚州属运费、“其他国家”兜底运费；参考币种固定汇率及版本。
+依据 docs/DESIGN.md 1.17（提交 80e3775）「数据模型」的 ShippingRate / DemoFxRate 一行：
+「国家运费、马来西亚西马与东马两档运费、“其他国家”兜底运费；参考币种固定汇率及版本。
 下单存计算规则版本与金额快照」，以及「边界与原则」：金额以 MYR 的仙为整数单位，
 其他货币只按固定演示汇率显示参考数，不参与结算。
+
+马来西亚只分两档（「计价、优惠、积分与库存」第 10 条）：区域类别 my_region，
+区域代码只允许 MY-W（西马）与 MY-E（东马），取代原来 16 个州属各一行（my_state）。
+州属到档的换算由 app/services/shipping.py 做；表结构由迁移 0023 改。
 
 运费是 MYR 整数仙。汇率不是金额，是全项目唯一用定点小数存的数。
 每行的版本号从 1 开始，之后的后台维护每改一行费率把该行版本号加一。
@@ -32,9 +36,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import MYSQL_TABLE_OPTIONS, Base
 
 # 运费区类型。
-ZONE_MY_STATE = "my_state"
+ZONE_MY_REGION = "my_region"
 ZONE_COUNTRY = "country"
 ZONE_OTHER = "other"
+
+# 马来西亚两档固定的区域代码：西马与东马。
+MY_WEST_ZONE_CODE = "MY-W"
+MY_EAST_ZONE_CODE = "MY-E"
 
 # 兜底行固定的区域代码。
 OTHER_ZONE_CODE = "OTHER"
@@ -47,16 +55,15 @@ _TABLE_OPTIONS = {**MYSQL_TABLE_OPTIONS, "sqlite_autoincrement": True}
 class ShippingRate(Base):
     """一个运费区的示例运费。
 
-    州属行的区域代码是 ISO 3166-2 马来西亚代码 MY-01 到 MY-16；国家行是 ISO 3166-1
-    两位代码格式且不是 MY；兜底行是 OTHER。数据库只保证前缀与长度，
-    具体是哪 16 个州属代码由写入方与查询函数校验。
+    马来西亚档的行（DESIGN 1.17 第 10 条）区域代码只能是 MY-W 或 MY-E，由检查约束保证；
+    国家行是 ISO 3166-1 两位代码格式且不是 MY；兜底行是 OTHER。
     """
 
     __tablename__ = "shipping_rates"
     __table_args__ = (
         UniqueConstraint("zone_code"),
         CheckConstraint(
-            "(zone_type = 'my_state' AND LENGTH(zone_code) = 5 AND zone_code LIKE 'MY-%')"
+            "(zone_type = 'my_region' AND zone_code IN ('MY-W', 'MY-E'))"
             " OR (zone_type = 'country' AND LENGTH(zone_code) = 2 AND zone_code <> 'MY')"
             " OR (zone_type = 'other' AND zone_code = 'OTHER')",
             name="zone_code_matches_type",

@@ -195,7 +195,8 @@ def _unconfigured(app: FastAPI) -> None:
 
 
 def _catalog(db: Session) -> None:
-    """一件已发布、无规格的商品 MUG（1500 仙，库存 100）与 MY-10 的运费行，写完即提交。"""
+    """一件已发布、无规格的商品 MUG（1500 仙，库存 100）与西马 MY-W 的运费行（寄 MY-10），
+    写完即提交。"""
     category = Category(slug="goods", name_en="Goods", is_active=True)
     db.add(category)
     db.flush()
@@ -218,7 +219,7 @@ def _catalog(db: Session) -> None:
             is_active=True,
         )
     )
-    db.add(ShippingRate(zone_type="my_state", zone_code="MY-10", fee_sen=800, version=1))
+    db.add(ShippingRate(zone_type="my_region", zone_code="MY-W", fee_sen=800, version=1))
     db.commit()
 
 

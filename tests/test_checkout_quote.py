@@ -164,16 +164,18 @@ def _tee(db: Session) -> _Tee:
     return _Tee(category, product, color, size, red, red_m, blue_m)
 
 
-def _rates(db: Session, *, fallback: bool = True) -> None:
-    """两个州属、SG 与 BN 两个国家行、兜底行；SG 与 JP 有汇率，BN 没有，
-    JP 没有国家行。版本号各不相同，才看得出响应里的版本号来自哪一行。
+def _rates(db: Session, *, fallback: bool = True, east: bool = True) -> None:
+    """马来西亚两档（MY-10 等西马州属按 MY-W、MY-13 按 MY-E）、SG 与 BN 两个国家行、
+    兜底行；SG 与 JP 有汇率，BN 没有，JP 没有国家行。版本号各不相同，才看得出响应里的
+    版本号来自哪一行。east=False 时不建东马 MY-E 的行（DESIGN 1.17 第 10 条）。
     """
     zones = [
-        ("my_state", "MY-10", 800, 1),
-        ("my_state", "MY-13", 1500, 2),
+        ("my_region", "MY-W", 800, 1),
         ("country", "SG", 2000, 3),
         ("country", "BN", 2500, 1),
     ]
+    if east:
+        zones.append(("my_region", "MY-E", 1500, 2))
     if fallback:
         zones.append(("other", "OTHER", 8000, 4))
     for zone_type, zone_code, fee_sen, version in zones:
@@ -407,7 +409,7 @@ def test_missing_translation_falls_back_to_english_and_is_flagged(
     [
         (
             {"country_code": "MY", "state_code": "MY-13"},
-            {"fee_sen": 1500, "zone_code": "MY-13", "version": 2},
+            {"fee_sen": 1500, "zone_code": "MY-E", "version": 2},
             5180 + 1500,
             None,
         ),
@@ -678,10 +680,10 @@ def test_oversized_body_is_413_even_without_a_database() -> None:
 
 
 @pytest.mark.parametrize(
-    ("destination", "fallback"),
+    ("destination", "fallback", "east"),
     [
-        ({"country_code": "FR"}, False),
-        ({"country_code": "MY", "state_code": "MY-05"}, True),
+        ({"country_code": "FR"}, False, True),
+        ({"country_code": "MY", "state_code": "MY-12"}, True, False),
     ],
     ids=["fallback-row-missing", "malaysia-state-row-missing"],
 )
@@ -690,18 +692,20 @@ def test_missing_shipping_row_is_503_without_details(
     client: TestClient,
     destination: dict[str, str],
     fallback: bool,
+    east: bool,
 ) -> None:
-    """「合法目的地因运费行缺失（马来西亚州属行或兜底行）取不到运费时一律返回 503，
-    响应不含内部细节，不返回零运费」：州属行缺失时即使有兜底行也不退回兜底。
+    """「合法目的地因运费行缺失（马来西亚档的行或兜底行）取不到运费时一律返回 503，
+    响应不含内部细节，不返回零运费」；DESIGN 1.17 第 10 条「按该档的行计价」：
+    寄东马 MY-12 而没有 MY-E 的行时，即使有西马与兜底行也不退回它们。
     """
     _tee(db)
-    _rates(db, fallback=fallback)
+    _rates(db, fallback=fallback, east=east)
 
     response = client.post(URL, json=_body(("TEE-RED-M", 1), **destination))
 
     assert response.status_code == 503
     assert response.json() == {"detail": "shipping is unavailable"}
-    for detail in ["OTHER", "MY-05", "FR", "fee"]:
+    for detail in ["OTHER", "MY-12", "MY-E", "FR", "fee"]:
         assert detail not in response.text
 
 

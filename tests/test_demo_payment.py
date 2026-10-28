@@ -217,7 +217,7 @@ def _variant(
 
 
 def _catalog(db: Session) -> _Catalog:
-    """两件已发布商品与 MY-10 运费，写完即提交。
+    """两件已发布商品与西马 MY-W 运费（MY-10 按它计价），写完即提交。
 
     Tee：规格名颜色，英文与中文齐全，马来文全缺；TEE-RED-M 2590 仙、库存 5，
     TEE-BLUE-M 2190 仙、库存 5（规格 ID 比红色大）。
@@ -268,7 +268,7 @@ def _catalog(db: Session) -> _Catalog:
     _add(db, mug)
     mug_id = _variant(db, mug, "MUG", 1500, 3)
 
-    rate = ShippingRate(zone_type="my_state", zone_code="MY-10", fee_sen=SHIPPING, version=1)
+    rate = ShippingRate(zone_type="my_region", zone_code="MY-W", fee_sen=SHIPPING, version=1)
     _add(db, rate)
     db.commit()
     return _Catalog(red_m=red_m, blue_m=blue_m, mug=mug_id)

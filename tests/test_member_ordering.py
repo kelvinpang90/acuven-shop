@@ -170,7 +170,7 @@ def _variant(db: Session, product: Product, sku: str, price_sen: int, stock: int
 @pytest.fixture
 def catalog(db: Session) -> _Catalog:
     """A 商品 A-SKU 1000 仙、库存 5、每单限购 10；B 商品 B-SKU 500 仙、库存 3、每单限购 2。
-    运费：MY-10 州属行 800、SG 国家行 2000；SG 有演示汇率。写完即提交。
+    运费：西马 MY-W 行 800（MY-10 按它计价）、SG 国家行 2000；SG 有演示汇率。写完即提交。
     """
     category = _add(db, Category(slug="goods", name_en="Goods", is_active=True))
     product_a = Product(
@@ -188,7 +188,7 @@ def catalog(db: Session) -> _Catalog:
     _add(db, product_b)
     a = _variant(db, product_a, "A-SKU", 1000, 5)
     b = _variant(db, product_b, "B-SKU", 500, 3)
-    _add(db, ShippingRate(zone_type="my_state", zone_code="MY-10", fee_sen=SHIPPING, version=1))
+    _add(db, ShippingRate(zone_type="my_region", zone_code="MY-W", fee_sen=SHIPPING, version=1))
     _add(db, ShippingRate(zone_type="country", zone_code="SG", fee_sen=SG_SHIPPING, version=3))
     fx = DemoFxRate(
         country_code="SG", currency_code="SGD", currency_decimals=2, rate=SG_RATE, version=5
@@ -379,7 +379,7 @@ def test_example_order_writes_snapshots(db: Session, catalog: _Catalog, member: 
     assert order.subtotal_sen == SUBTOTAL
     assert (order.coupon_discount_sen, order.points_redeemed) == (250, 300)
     assert (order.shipping_fee_sen, order.total_sen, order.points_earned) == (SHIPPING, 2750, 19)
-    assert (order.shipping_zone_code, order.shipping_rate_version) == ("MY-10", 1)
+    assert (order.shipping_zone_code, order.shipping_rate_version) == ("MY-W", 1)
     assert (order.created_at, order.payment_expires_at) == (NOW, NOW + timedelta(minutes=15))
     assert order.paid_at is None
     assert _units(db, order.id) == [

@@ -4,8 +4,10 @@
 （下称「第 9 条」）与 docs/HANDOFF.md 0.67 记录的落实写法（下称「HANDOFF 0.67」）。
 每条测试（参数化的测试是每个用例）的文档字符串写明它守住的原句；
 没有直接原句的写明是 SHOP-TASK-170 验收里的约定（下称「验收」）。
+马来西亚一组依据 DESIGN 1.17（提交 80e3775）同节第 10 条（下称「第 10 条」）与
+docs/HANDOFF.md 0.69（下称「HANDOFF 0.69」）：西马 MY-W、东马 MY-E 两行，组名 malaysia。
 
-用 SQLite 内存库按模型建表（StaticPool），写入与迁移 0005 相同的演示数据并提交。
+用 SQLite 内存库按模型建表（StaticPool），写入与迁移 0005、0023 之后相同的演示数据并提交。
 结果一律以只查列值的 SELECT 读出，不看会话里的 ORM 对象。
 SQLite 不生成 FOR UPDATE：锁定查询另用 MySQL 方言编译检查。
 """
@@ -52,8 +54,9 @@ pytestmark = pytest.mark.filterwarnings(
 
 NOW = datetime(2026, 10, 27, 3, 0)
 
-# 与迁移 0005 相同的演示数据，按迁移的写入顺序。
-STATE_FEES = {f"MY-{n:02d}": 1500 if n in (12, 13, 15) else 800 for n in range(1, 17)}
+# 与迁移 0005、0023 之后相同的演示数据。马来西亚两档东马先写入：读取仍西马在前，
+# 说明这一组既不按代码也不按行 ID 排序（第 10 条「两行按西马、东马的顺序排列」）。
+MALAYSIA_FEES = {"MY-E": 1500, "MY-W": 800}
 COUNTRY_FEES = {
     "SG": 2000,
     "BN": 2500,
@@ -95,8 +98,8 @@ def engine() -> Iterator[Engine]:
     engine = create_engine("sqlite://", poolclass=StaticPool)
     Base.metadata.create_all(engine)
     with Session(engine) as seed:
-        for code, fee in STATE_FEES.items():
-            seed.add(_seed_zone("my_state", code, fee))
+        for code, fee in MALAYSIA_FEES.items():
+            seed.add(_seed_zone("my_region", code, fee))
         for code, fee in COUNTRY_FEES.items():
             seed.add(_seed_zone("country", code, fee))
         seed.add(_seed_zone("other", "OTHER", OTHER_FEE))
@@ -138,7 +141,7 @@ def _request(page: AdminRates) -> dict[str, list]:
     """把读到的整页原样列成保存请求（每行保留、值不变）。"""
     assert page.other is not None
     return {
-        "states": [KeepFee(row.id, row.version, row.fee_sen) for row in page.states],
+        "malaysia": [KeepFee(row.id, row.version, row.fee_sen) for row in page.malaysia],
         "other": [KeepFee(page.other.id, page.other.version, page.other.fee_sen)],
         "countries": [KeepFee(row.id, row.version, row.fee_sen) for row in page.countries],
         "fx_rates": [KeepFxRate(row.id, row.version, row.rate) for row in page.fx_rates],
@@ -151,7 +154,7 @@ def _replace(group: list, row_id: int, item: object) -> None:
 
 
 def _zone(page: AdminRates, code: str) -> ShippingRateRow:
-    rows = [*page.states, *page.countries, *([page.other] if page.other else [])]
+    rows = [*page.malaysia, *page.countries, *([page.other] if page.other else [])]
     return next(row for row in rows if row.zone_code == code)
 
 
@@ -216,7 +219,9 @@ Mutation = Callable[[AdminRates, dict], None]
 def _set_fee(code: str, fee: object) -> Mutation:
     def mutate(page: AdminRates, request: dict) -> None:
         row = _zone(page, code)
-        group = "states" if code.startswith("MY-") else "other" if code == "OTHER" else "countries"
+        group = (
+            "malaysia" if code.startswith("MY-") else "other" if code == "OTHER" else "countries"
+        )
         _replace(request[group], row.id, KeepFee(row.id, row.version, fee))
 
     return mutate
@@ -264,18 +269,19 @@ def _remove_first(group: str) -> Mutation:
 
 
 def test_load_orders_rows_and_carries_ids_and_versions(db: Session) -> None:
-    """第 9 条「读取时每行带行 ID 与版本号」；验收「16 个州属按 MY-01 到 MY-16 排列、
-    兜底一行、国家运费按国家代码排列、汇率按国家代码排列」「运费为整仙」。"""
+    """第 9 条「读取时每行带行 ID 与版本号」；第 10 条「第 9 条的『马来西亚』一组即这两行」
+    「两行按西马、东马的顺序排列」；验收「兜底一行、国家运费按国家代码排列、汇率按国家代码
+    排列」「运费为整仙」：malaysia 一组恰为两行，西马在前（东马先写入、代码也排在前）。"""
     page = load_admin_rates(db)
 
-    assert [row.zone_code for row in page.states] == [f"MY-{n:02d}" for n in range(1, 17)]
-    assert {row.zone_code: row.fee_sen for row in page.states} == STATE_FEES
+    assert [row.zone_code for row in page.malaysia] == ["MY-W", "MY-E"]
+    assert {row.zone_code: row.fee_sen for row in page.malaysia} == MALAYSIA_FEES
     assert page.other is not None
     assert (page.other.zone_code, page.other.fee_sen) == ("OTHER", OTHER_FEE)
     assert [row.zone_code for row in page.countries] == sorted(COUNTRY_FEES)
     assert {row.zone_code: row.fee_sen for row in page.countries} == COUNTRY_FEES
     assert [row.country_code for row in page.fx_rates] == sorted(c for c, *_ in FX_RATES)
-    zones = [*page.states, page.other, *page.countries]
+    zones = [*page.malaysia, page.other, *page.countries]
     assert all(type(row.fee_sen) is int and row.version == 1 for row in zones)
     assert all(row.version == 1 for row in page.fx_rates)
     ids = [row.id for row in zones] + [row.id for row in page.fx_rates]
@@ -339,9 +345,9 @@ def test_load_only_selects_and_writes_no_audit(db: Session, engine: Engine) -> N
 
 INVALID = [
     # 第 9 条「运费以整仙提交，0 到 999,999 仙」。
-    pytest.param(_set_fee("MY-01", -1), id="state-fee-negative"),
-    pytest.param(_set_fee("MY-01", 1_000_000), id="state-fee-too-large"),
-    pytest.param(_set_fee("MY-01", True), id="state-fee-bool"),
+    pytest.param(_set_fee("MY-W", -1), id="malaysia-fee-negative"),
+    pytest.param(_set_fee("MY-E", 1_000_000), id="malaysia-fee-too-large"),
+    pytest.param(_set_fee("MY-W", True), id="malaysia-fee-bool"),
     pytest.param(_set_fee("OTHER", -1), id="other-fee-negative"),
     pytest.param(_set_fee("SG", 1_000_000), id="country-fee-too-large"),
     pytest.param(_set_fee("SG", False), id="country-fee-bool"),
@@ -391,7 +397,7 @@ INVALID = [
     pytest.param(_add_fx("NZ", "NZD", -1, "0.38"), id="decimals-negative"),
     pytest.param(_add_fx("NZ", "NZD", True, "0.38"), id="decimals-bool"),
     # 第 9 条「同一组的新增行之间国家不重复」；验收「同一组里行 ID 不重复」。
-    pytest.param(_repeat_first("states"), id="state-id-repeated"),
+    pytest.param(_repeat_first("malaysia"), id="malaysia-id-repeated"),
     pytest.param(_repeat_first("countries"), id="country-id-repeated"),
     pytest.param(_repeat_first("fx_rates"), id="fx-id-repeated"),
     pytest.param(
@@ -402,10 +408,10 @@ INVALID = [
         _append("fx_rates", AddFxRate("NZ", "NZD", 2, "0.38"), AddFxRate("NZ", "NZD", 2, "1")),
         id="added-fx-country-repeated",
     ),
-    # 第 9 条「州属与兜底的行只有保留」：结构不合格。
-    pytest.param(_remove_first("states"), id="state-removed"),
+    # 第 9 条「马来西亚与兜底的行只有保留」；第 10 条「只能改运费，不能增删」：结构不合格。
+    pytest.param(_remove_first("malaysia"), id="malaysia-removed"),
     pytest.param(_remove_first("other"), id="other-removed"),
-    pytest.param(_append("states", AddCountryFee("NZ", 5500)), id="state-added"),
+    pytest.param(_append("malaysia", AddCountryFee("NZ", 5500)), id="malaysia-added"),
     pytest.param(_append("fx_rates", AddCountryFee("NZ", 5500)), id="fee-item-in-fx-group"),
 ]
 
@@ -436,7 +442,7 @@ def test_range_limits_are_accepted(db: Session, admin_id: int) -> None:
     1–6 位数字」「小数位（0–3 的整数）」：取值范围的两端都能保存，是上面反例的对照。"""
     page = load_admin_rates(db)
     request = _request(page)
-    _set_fee("MY-01", 0)(page, request)
+    _set_fee("MY-W", 0)(page, request)
     _set_fee("SG", 999_999)(page, request)
     _set_rate("JP", "999999.999999")(page, request)
     _set_rate("SG", "0.000001")(page, request)
@@ -444,7 +450,7 @@ def test_range_limits_are_accepted(db: Session, admin_id: int) -> None:
 
     saved = _save(db, admin_id, request)
 
-    assert _zone(saved, "MY-01").fee_sen == 0
+    assert _zone(saved, "MY-W").fee_sen == 0
     assert _zone(saved, "SG").fee_sen == 999_999
     assert _fx(saved, "JP").rate == "999999.999999"
     assert _fx(saved, "SG").rate == "0.000001"
@@ -475,20 +481,20 @@ def _drop(group: str, code: str) -> Mutation:
     return mutate
 
 
-def _state_in_country_group(page: AdminRates, request: dict) -> None:
-    row = _zone(page, "MY-01")
-    request["states"] = [item for item in request["states"] if item.id != row.id]
+def _tier_in_country_group(page: AdminRates, request: dict) -> None:
+    row = _zone(page, "MY-W")
+    request["malaysia"] = [item for item in request["malaysia"] if item.id != row.id]
     request["countries"].append(KeepFee(row.id, row.version, row.fee_sen))
 
 
 CHANGED = [
     # 第 9 条「版本号与当前相同」。
-    pytest.param(_bump_version("states", "MY-12"), id="state-version-differs"),
+    pytest.param(_bump_version("malaysia", "MY-E"), id="malaysia-version-differs"),
     pytest.param(_bump_version("other", "OTHER"), id="other-version-differs"),
     pytest.param(_bump_version("countries", "BN"), id="country-version-differs"),
     pytest.param(_bump_version("fx_rates", "HK"), id="fx-version-differs"),
     # 第 9 条「现有的行一个不漏」。
-    pytest.param(_drop("states", "MY-16"), id="state-row-missing"),
+    pytest.param(_drop("malaysia", "MY-W"), id="malaysia-row-missing"),
     pytest.param(_drop("other", "OTHER"), id="other-row-missing"),
     pytest.param(_drop("countries", "BN"), id="country-row-missing"),
     pytest.param(_drop("fx_rates", "HK"), id="fx-row-missing"),
@@ -496,7 +502,7 @@ CHANGED = [
     pytest.param(_append("countries", KeepFee(999, 1, 100)), id="country-row-not-existing"),
     pytest.param(_append("countries", RemoveRow(999, 1)), id="removed-row-not-existing"),
     pytest.param(_append("fx_rates", KeepFxRate(999, 1, "1")), id="fx-row-not-existing"),
-    pytest.param(_state_in_country_group, id="state-id-in-country-group"),
+    pytest.param(_tier_in_country_group, id="malaysia-id-in-country-group"),
     # 第 9 条「新增的国家在该组不得已有行」。
     pytest.param(_add_country("SG", 2500), id="added-country-exists"),
     pytest.param(_add_fx("SG", "SGD", 2, "0.32"), id="added-fx-country-exists"),
@@ -622,26 +628,50 @@ def test_changed_rows_get_new_version_and_one_audit_each(db: Session, admin_id: 
     只有改了值的三行版本为 2，各写一条审计。"""
     page = load_admin_rates(db)
     request = _request(page)
-    _set_fee("MY-12", 1600)(page, request)
+    _set_fee("MY-E", 1600)(page, request)
     _set_fee("SG", 2500)(page, request)
     _set_rate("JP", "35.5")(page, request)
 
     saved = _save(db, admin_id, request)
 
     versions = {row[1]: row[3] for row in _zones(db)}
-    assert versions.pop("MY-12") == 2
+    assert versions.pop("MY-E") == 2
     assert versions.pop("SG") == 2
     assert set(versions.values()) == {1}
     fx_versions = {row[1]: row[5] for row in _rates(db)}
     assert fx_versions.pop("JP") == 2
     assert set(fx_versions.values()) == {1}
     assert _fx(saved, "JP").rate == "35.5"
-    sabah, singapore, japan = _zone(page, "MY-12"), _zone(page, "SG"), _fx(page, "JP")
-    # 运费表的行按 id 处理，种子数据里州属在国家之前。
+    east, singapore, japan = _zone(page, "MY-E"), _zone(page, "SG"), _fx(page, "JP")
+    # 运费表的行按 id 处理，种子数据里马来西亚两档在国家之前。
     assert _audits(db) == [
-        (SHIPPING_CHANGED, SHIPPING, sabah.id, "MY-12 1500 v1", "MY-12 1600 v2"),
+        (SHIPPING_CHANGED, SHIPPING, east.id, "MY-E 1500 v1", "MY-E 1600 v2"),
         (SHIPPING_CHANGED, SHIPPING, singapore.id, "SG 2000 v1", "SG 2500 v2"),
         (FX_CHANGED, FX, japan.id, "JP JPY 0 34 v1", "JP JPY 0 35.5 v2"),
+    ]
+
+
+def test_both_malaysia_tiers_are_saved_and_audited(db: Session, admin_id: int) -> None:
+    """第 10 条「第 9 条的『马来西亚』一组即这两行，只能改运费」；第 9 条「改了值的行版本号
+    加一」「记该行的代码、旧值与新值……及版本号」；HANDOFF 0.69「马来西亚一组的字段……改名为
+    malaysia、西马在前」：同一次保存改两档运费，保存后的一组仍西马在前，审计取值写成
+    「MY-W 800 v1」这样的代码、金额与版本号。"""
+    page = load_admin_rates(db)
+    request = _request(page)
+    _set_fee("MY-W", 900)(page, request)
+    _set_fee("MY-E", 1700)(page, request)
+    west, east = _zone(page, "MY-W"), _zone(page, "MY-E")
+
+    saved = _save(db, admin_id, request)
+
+    assert saved.malaysia == (
+        ShippingRateRow(west.id, "MY-W", 900, 2),
+        ShippingRateRow(east.id, "MY-E", 1700, 2),
+    )
+    # 东马先写入，行 ID 较小，先处理。
+    assert _audits(db) == [
+        (SHIPPING_CHANGED, SHIPPING, east.id, "MY-E 1500 v1", "MY-E 1700 v2"),
+        (SHIPPING_CHANGED, SHIPPING, west.id, "MY-W 800 v1", "MY-W 900 v2"),
     ]
 
 
@@ -854,12 +884,14 @@ def test_removed_fx_rate_shows_only_myr(db: Session, admin_id: int) -> None:
 
 
 def test_changed_fee_is_used_by_the_next_quote(db: Session, admin_id: int) -> None:
-    """第 9 条「保存提交后，之后的每次计价与下单都按新值」：改了 MY-13 的运费，
-    计价取新值与新版本号。"""
+    """第 9 条「保存提交后，之后的每次计价与下单都按新值」；第 10 条「服务端……把州属换算成档，
+    按该档的行计价」：改了东马 MY-E 的运费，寄 MY-13 的计价取新值、档的代码与新版本号，
+    西马不变。"""
     page = load_admin_rates(db)
     request = _request(page)
-    _set_fee("MY-13", 1700)(page, request)
+    _set_fee("MY-E", 1700)(page, request)
 
     _save(db, admin_id, request)
 
-    assert quote_shipping(db, "MY", "MY-13") == ShippingQuote(1700, "MY-13", 2)
+    assert quote_shipping(db, "MY", "MY-13") == ShippingQuote(1700, "MY-E", 2)
+    assert quote_shipping(db, "MY", "MY-10") == ShippingQuote(800, "MY-W", 1)
