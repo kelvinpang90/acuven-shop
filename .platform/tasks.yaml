@@ -4809,3 +4809,45 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+  - id: SHOP-TASK-172
+    title: 马来西亚运费改为西马、东马两档（模型、迁移、计价与后台维护）
+    purpose: >-
+      按 docs/DESIGN.md 1.17「数据模型」ShippingRate 一行、「计价、优惠、积分与库存」第 9 条与第 10 条，把运费表里马来西亚的 16 个州属行（区域类别 my_state）换成西马 MY-W 与东马 MY-E 两行（区域类别 my_region；东马为 MY-12、MY-13、MY-15，其余 13 个为西马），
+      在同一步里改模型与新迁移 0023、结账计价（按所选州属换算成档）、后台维护的服务层与接口（马来西亚一组的字段由 states 改名为 malaysia，西马在前），以及所有按州属建运费行的测试。
+      设计第 10 条要求写入两档行的那一步同时改计价与后台维护，否则马来西亚无法计价、后台保存会因表里有不认识的行而失败；模型的区域代码检查约束一改，按州属建行的测试在同一提交里全部失效，所以不能再拆，允许路径 16 个（其中 10 个是测试文件，多为改夹具的运费行与期望的区域代码）。
+      运营者落实写法（HANDOFF 0.69）：迁移照项目惯例只在 MySQL 上执行、不要求能在 SQLite 上执行（照 alembic/versions/20260930_0007_members.py 用 op.drop_constraint 与 op.create_check_constraint 改检查约束），换算规则写成迁移模块里的纯函数，由测试经 importlib 载入后直接调用；不改前端，不改结账的州属列表与校验，不改订单表与已有订单，不改设计。
+      设计闸门：DESIGN 1.17（提交 80e3775）与 HANDOFF 0.69，马来西亚运费两档（碰运费金额与数据结构）。A06 页面待视觉稿按两档重画、经 Kelvin 审阅后另行登记。
+    status: ready
+    depends_on:
+      - SHOP-TASK-171
+    acceptance_criteria:
+      - 模型——app/models/shipping.py 去掉 ZONE_MY_STATE，新增 ZONE_MY_REGION（值 my_region）与两档的区域代码常量（MY-W、MY-E）；ShippingRate 的检查约束 zone_code_matches_type 改为（zone_type 为 my_region 且 zone_code 为 MY-W 或 MY-E）或国家行或兜底行（后两者照旧）；列、其余约束、唯一约束与 sqlite_autoincrement 不变；模块与类的说明随之改为两档并引用 DESIGN 1.17 第 10 条
+      - 迁移——新增 alembic/versions/20261028_0023_my_shipping_tiers.py（revision 为 0023，down_revision 为 0022；不 import app，照 0004 的写法自带常量）。模块里两个纯函数——tier_fees 接收州属代码到运费仙数的映射，返回 MY-W 与 MY-E 各自的运费（每档取该档州属运费的最大值；出现 MY-01 到 MY-16 以外的代码、或某一档一个州属都没有时抛 RuntimeError）；state_fees 接收两档的运费，返回 16 个州属各自的运费（缺任一档时抛 RuntimeError）。upgrade 先读出全部 my_state 行并调用 tier_fees 完成判断，再删去原检查约束、删除州属行、写入两档行（版本号 1）、建新检查约束；downgrade 先读出两档行并调用 state_fees 完成判断，再删去新约束、删除两档行、写入 16 个州属行（版本号 1）、恢复原约束；约束名用 op.f 照 0004；不写审计、不改订单；模块说明写明执行顺序的原因（改约束在 MySQL 上不随事务回滚，判断不通过时库须保持原样）与只在 MySQL 上执行
+      - 计价——app/services/shipping.py 的 quote_shipping 对马来西亚照旧要求 MY_STATE_CODES 之一（缺少或未知仍抛 InvalidDestination，MY_STATE_CODES 与 app/services/regions.py 不变），按新增的东马州属集合（MY-12、MY-13、MY-15）换算成 MY-E，其余为 MY-W，取 my_region 的该行；该行不存在时抛 ShippingRateMissing（不以零运费代替）；返回的 ShippingQuote 的 zone_code 与 version 为该档行的；国家行、兜底行与 reference_amount 不变；下单写入订单快照的 shipping_zone_code 因此为 MY-W 或 MY-E，app/services/ordering.py 与 member_ordering.py 不改
+      - 后台维护——app/services/admin_shipping_rates.py 的 AdminRates 与 save_admin_rates 里马来西亚一组由 states 改名为 malaysia，取 my_region 的行，按 MY-W、MY-E 的顺序排列（不按代码排序）；第 9 条的两步核对、锁行顺序、行 ID 与版本号、审计（取值写成「MY-W 800 v1」这样的代码、金额与版本号）与其余三组不变。app/api/admin_shipping_rates.py 的读取响应与保存请求体里这一组的字段同样改名为 malaysia（字段顺序为 malaysia、other、countries、fx，读取另带 csrf_token），请求体仍带 states 时照多出字段回 422、沿用 _body_errors 不回显；其余检查顺序与回答不变
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_shipping.py 验证 16 个州属各自换算到的档与版本号、东马恰为三个州属、两档行缺一时抛 ShippingRateMissing、州属代码缺少或未知仍拒绝、my_state 行被模型的检查约束拒绝；tests/test_demo_shipping_seed.py 改为在空的 SQLite 连接上先执行迁移 0004 再执行 0005（新模型的约束不收州属行，原有的 0005 断言照旧），删去对种子州属行直接计价的两条断言，改为对迁移 0023 的纯函数验证——种子运费换算为 MY-W 800、MY-E 1500，同档不一致取最大，某档无州属或出现未知代码时 RuntimeError，state_fees 重建 16 个州属的运费且缺一档时 RuntimeError；tests/test_admin_shipping_rates.py 与 tests/test_admin_shipping_rates_api.py 的夹具改为两档行，验证 malaysia 一组为两行且西马在前、改两档运费的保存与审计取值、请求体带 states 时 422；每条新增或改写的测试写明守住的是 DESIGN 1.17 第 9 条、第 10 条或 HANDOFF 0.69 的哪一句
+      - 现有测试只在必要时修改——tests/test_checkout_quote.py、tests/test_guest_order.py、tests/test_demo_payment.py、tests/test_member_ordering.py、tests/test_member_orders_api.py、tests/test_public_rate_limits.py 里按州属建的运费行改为对应的档的行（MY-10 等西马州属对应 MY-W，MY-13 对应 MY-E，费用与版本号照原值），对 zone_code 与订单 shipping_zone_code 的期望随之改为档的代码；其余断言不变；直接写入订单行的夹具里的 shipping_zone_code 与收货地址的州属代码不改（已有订单的快照不改写）
+      - docs/task-records/SHOP-TASK-172.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；模型、迁移 0023 的两个纯函数与执行顺序、计价换算、后台一组改名、改动的现有测试与原因、偏离、验证到什么程度——迁移的表结构与读写只在部署时于 MySQL 上执行，CI 只验证纯函数，写明这一点；并写明 A06 页面待视觉稿重画后另行登记）
+      - 改动只落在 allowed_change_paths；不改前端、app/services/regions.py、app/api/orders.py、app/api/checkout.py、订单模型与已有迁移；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.17 提交 80e3775 与 HANDOFF 0.69），不合并、不直推
+    allowed_change_paths:
+      - app/models/shipping.py
+      - alembic/versions/20261028_0023_my_shipping_tiers.py
+      - app/services/shipping.py
+      - app/services/admin_shipping_rates.py
+      - app/api/admin_shipping_rates.py
+      - tests/test_shipping.py
+      - tests/test_demo_shipping_seed.py
+      - tests/test_admin_shipping_rates.py
+      - tests/test_admin_shipping_rates_api.py
+      - tests/test_checkout_quote.py
+      - tests/test_guest_order.py
+      - tests/test_demo_payment.py
+      - tests/test_member_ordering.py
+      - tests/test_member_orders_api.py
+      - tests/test_public_rate_limits.py
+      - docs/task-records/SHOP-TASK-172.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
