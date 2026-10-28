@@ -4817,7 +4817,7 @@ tasks:
       设计第 10 条要求写入两档行的那一步同时改计价与后台维护，否则马来西亚无法计价、后台保存会因表里有不认识的行而失败；模型的区域代码检查约束一改，按州属建行的测试在同一提交里全部失效，所以不能再拆，允许路径 16 个（其中 10 个是测试文件，多为改夹具的运费行与期望的区域代码）。
       运营者落实写法（HANDOFF 0.69）：迁移照项目惯例只在 MySQL 上执行、不要求能在 SQLite 上执行（CI 的 backend 在 MySQL 8 上做迁移往返）（照 alembic/versions/20260930_0007_members.py 用 op.drop_constraint 与 op.create_check_constraint 改检查约束），换算规则写成迁移模块里的纯函数，由测试经 importlib 载入后直接调用；不改前端，不改结账的州属列表与校验，不改订单表与已有订单，不改设计。
       设计闸门：DESIGN 1.17（提交 80e3775）与 HANDOFF 0.69，马来西亚运费两档（碰运费金额与数据结构）。A06 页面待视觉稿按两档重画、经 Kelvin 审阅后另行登记。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-171
     acceptance_criteria:
