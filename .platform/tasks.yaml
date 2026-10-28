@@ -4788,7 +4788,7 @@ tasks:
       运营者落实写法（HANDOFF 0.67）：写法照 app/api/admin_site_settings.py（require_admin、require_admin_csrf、_NoStoreRoute、_body_errors）；请求体上限 64 KB，在本文件里照 app/api/pay.py 的 _json_body 逐块读取（它的上限固定为 8 KB，整页的国家与汇率行可能超过）；
       取值不合格回 422 {"detail":"rates_invalid"}，数据已被改动回 409 {"detail":"rates_changed"}。不做前端，不改服务层的规则、模型与迁移，不改设计。
       设计闸门：DESIGN 1.16（提交 e9a1c93）与 HANDOFF 0.67，运费与演示汇率的后台维护。拆分：接口层（4 个允许路径），页面待视觉稿补齐后另行登记。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-170
     acceptance_criteria:
