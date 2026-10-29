@@ -95,6 +95,7 @@ const MALFORMED_RATES: [string, Record<string, unknown>][] = [
   ["other id zero", { other: { ...OTHER, id: 0 } }],
   // DESIGN 1.17 第 9 条「新增运费或汇率的国家须在结账页的收货国家列表里（即 `phonenumbers` 支持的两位地区代码），且不是马来西亚」：
   // 国家行的代码为 MY、小写、三位或 OTHER 都不合格，运费与版本号同上。
+  ["countries missing", { countries: undefined }],
   ["countries not an array", { countries: SG }],
   ["countries code MY", { countries: [{ ...SG, zone_code: "MY" }] }],
   ["countries code lower case", { countries: [{ ...SG, zone_code: "sg" }] }],
@@ -105,6 +106,7 @@ const MALFORMED_RATES: [string, Record<string, unknown>][] = [
   ["countries version missing", { countries: [{ ...SG, version: undefined }] }],
   // DESIGN 1.17 第 9 条「币种代码（三位大写字母……）与小数位（0–3 的整数）」与「汇率……以十进制字符串提交」：国家为 MY、币种为两位或小写、
   // 小数位为 4、负数、小数或字符串、汇率为空串或数字都不合格。
+  ["fx missing", { fx: undefined }],
   ["fx not an array", { fx: SGD }],
   ["fx id zero", { fx: [{ ...SGD, id: 0 }] }],
   ["fx version as string", { fx: [{ ...SGD, version: "1" }] }],
