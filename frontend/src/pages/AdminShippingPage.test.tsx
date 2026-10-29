@@ -484,7 +484,7 @@ describe("display", () => {
   it.each(LANGUAGES)("shows only dictionary text in every state in %s", (language) => {
     const name = countryNames(language);
     const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language]));
-    const rowNames = [COPY["admin.shipping_my_west"][language], COPY["admin.shipping_my_east"][language], COPY["admin.shipping_other"][language]];
+    const rowNames: string[] = [COPY["admin.shipping_my_west"][language], COPY["admin.shipping_my_east"][language], COPY["admin.shipping_other"][language]];
     for (const base of [RATES, SAVED]) {
       for (const row of base.countries) {
         allowed.add(name(row.zone_code));
