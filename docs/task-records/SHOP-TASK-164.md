@@ -23,3 +23,18 @@
 - 留给后续任务：页面（P13 我的积分、我的优惠券与设置段的首次设置密码与注销，以及注销后清除暂存）留给 SHOP-TASK-165 至 167。本任务不做页面，不改路由与页头。
 - 改动只在 `frontend/src/api/memberAccount.ts`、`frontend/src/api/memberAccount.test.ts` 与本文件；`memberAuth.ts`、`memberOrders.ts` 与 `pay.ts` 未改（只引用 `pay.ts` 导出的 `CSRF_HEADER`）。未改后端、`docs/TODO.md`、`.platform/`、CI、部署配置、`package.json` 与 `package-lock.json`，未装依赖。
 - 验证到什么程度：人工逐条对照验收标准、三个后端文件的文档字符串与处理函数、UX 0.13 P13 与 DESIGN 1.14 自查。上面列的测试只是写入的测试。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查；检查命令结果由 Worker 另行记录。未对真实后端接口验证。
+
+## 登记时的验收标准（原文）
+
+2026-10-29 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 新文件 frontend/src/api/memberAccount.ts，写法沿用 frontend/src/api/memberAuth.ts 与 frontend/src/api/memberOrders.ts（同源 cookie，cache 为 no-store，Accept 为 application/json，有请求体时 Content-Type 为 application/json；CSRF_HEADER 取自 frontend/src/api/pay.ts）；都不带查询参数；六个接口的 401（member_session_required）都归 signed_out，四个写接口的 403 csrf_failed 都归 csrf；密码、验证码、人机挑战令牌与 CSRF 令牌只在请求体与请求头里，不进地址、日志或浏览器存储
+      - 积分与优惠券——两个读取都接收 AbortSignal；积分归为 ok（200，取 balance、pending、next_expiry（points 与马来西亚日期 date，或 null）与 history（最多 100 条，每条 type 为 earned、redeemed、expired、returned、reversed 之一，points 带正负号，order_number 与 created_at））、signed_out、failed 与 network；优惠券归为 ok（200，取 available（code、type 为 fixed 或 percent、amount_sen、percent、min_spend_sen 与 valid_until）与 used（code、order_number 与 discount_sen））、signed_out、failed 与 network；照 memberOrders.ts 以类型断言读取，不是 JSON 归 failed
+      - 首次设置密码——请求体只有 password，请求头带调用方给出的 CSRF 令牌，接收 AbortSignal；结果归为 done（204）、too_short（422 password_too_short）、already_set（409 password_already_set）、signed_out、csrf、unavailable（503）、failed（其他，含结构不合格的 422）与 network
+      - 注销三步——发送的请求体只有 captcha_token（不带号码，服务端取本账号的号码），结果照 memberAuth.ts 的 sendSmsCode 归类（sent 为 200，disabled、captcha_failed、not_whitelisted、undeliverable、rate_limited、suspended，failed 与 network；没有 phone_invalid），另有 signed_out 与 csrf；核验的请求体只有 code，结果归为 verified（204，服务端签发 10 分钟一次性批准）、wrong（422 code_wrong 或 code_expired，二者同样处理）、disabled（403 sms_disabled）、unavailable（503）、signed_out、csrf、failed 与 network；确认注销的请求体只在调用方给出密码时为 password，否则为空对象，结果归为 deleted（204，服务端清除会话 cookie）、not_verified（403 delete_not_verified）、password_wrong（403 password_wrong）、password_required（422 password_required）、rate_limited（429）、unavailable（503）、signed_out、csrf、failed 与 network；三步都带调用方给出的 CSRF 令牌并接收 AbortSignal
+      - 用 vitest（不加测试依赖，fetch 以替身代替）在 frontend/src/api/memberAccount.test.ts 验证意图——六个请求的地址、方法、请求头与请求体（只有约定字段；写操作带 X-CSRF-Token，读取不带；都不带查询参数；确认注销没有密码时请求体为空对象）；各状态码与错误码的归类（含 401、403 各码、409、422 各码、429、503）与网络中断；整个过程不写 localStorage、sessionStorage 与 cookie；每条测试写明它守住的是哪个接口记录、UX 或 DESIGN 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-164.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；六个请求、归类、偏离、验证到什么程度，只写实际存在的测试，并写明页面留给 SHOP-TASK-165 至 167）
+      - 改动只落在 allowed_change_paths（不改 memberAuth.ts、memberOrders.ts 与 pay.ts，只引用它们导出的内容；不做页面，不改路由与页头）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.14 提交 00f8f34 与 HANDOFF 0.63），不合并、不直推
+```

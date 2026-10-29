@@ -35,3 +35,18 @@
 - 页面（P06 与 P07 会员模式的读取、写入与清除暂存、获得积分的显示、P09 继续支付、退出与注销时清除暂存等）不在本任务，留给 SHOP-TASK-159、161 至 163 与 167。
 - 改动只在 `frontend/src/api/pay.ts`、`frontend/src/api/pay.test.ts`、`frontend/src/api/memberPay.ts`、`frontend/src/api/memberPay.test.ts`、`frontend/src/pages/PayPage.test.tsx`、`frontend/src/pages/PayResultPage.test.tsx` 与本文件；未改 `PayPage.tsx`、`PayResultPage.tsx`、`memberOrders.ts`、`memberSession.ts`、路由与页头、后端、`docs/TODO.md`、`.platform/`、CI、部署配置、`package.json` 与 `package-lock.json`，未装依赖。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.14 与 `app/api/member_pay.py`、`app/services/payment.py` 的请求模型与错误码自查。上面列的测试只是写入的测试。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查；检查命令结果由 Worker 另行记录。未对真实后端接口验证。
+
+## 登记时的验收标准（原文）
+
+2026-10-29 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - frontend/src/api/pay.ts 的 PayOrder 另有三个必填字段 coupon_discount_sen、points_redeemed 与 points_earned（非负整数，订单快照；游客订单都为 0，取值照后端 app/services/payment.py 的 PayOrder），照本文件现有写法以类型断言读取、字段旁注释写明取值；pay.ts 其余类型、函数与行为不变，只可把现有内部函数（如 postWrite、settle、replyObject）改为导出供新模块复用，不改其签名与行为；frontend/src/api/pay.test.ts、frontend/src/pages/PayPage.test.tsx 与 frontend/src/pages/PayResultPage.test.tsx 里构造 PayOrder 样例的函数只补三个字段（都为 0）使类型检查通过，现有断言一字不改
+      - 新文件 frontend/src/api/memberPay.ts，写法沿用 pay.ts（同源 cookie，cache 为 no-store，Accept 与 Content-Type 为 application/json；409 的 detail 照 pay.ts 读取）；读取的请求体只有 order_number、带 lang 查询参数（写法同 payOrdersUrl）、不带 CSRF 令牌与幂等键、接收 AbortSignal，结果归为 ok（200，订单为 PayOrder，没有 CSRF 令牌）、signed_out（401）、not_found（404 order_not_found）、failed（其他，含 5xx）与 network；支付的请求体只有 order_number、method 与 result，带幂等键（沿用 pay.ts 的 attemptFor）与 CSRF 令牌，取消的请求体只有 order_number、带 CSRF 令牌，两者的回答照 pay.ts 的 WriteReply 归类，其中 expired 换成 signed_out，另有 not_found；Stripe 发起（带 lang）与确认的请求体、成功响应与结果映射照 pay.ts 的 startStripe 与 confirmStripe，401 归 signed_out，另有 not_found；订单号只在请求体里，CSRF 令牌只在请求头里
+      - 写操作之后的去向——照 pay.ts 的 runPayment 与 runCancel 各写一个会员版：重新读取改用本模块的会员读取（网络中断后的确认照 confirmOrder 写法重读到 ok、signed_out 或 not_found 为止，间隔可注入）；结果里 expired 换成 signed_out，另有 not_found；403 csrf 时会员读取不给新令牌，归一个单独的结果（带重新读取到的订单，没有则为空），由页面重读会员会话取得新令牌后提示重试（同 frontend/src/api/memberOrders.ts 的会员版提交去向）；其余去向（result、method_changed、unavailable、error、retry 与网络中断后沿用同一幂等键的条件）与游客版相同；页面已离开（中止）时返回 null
+      - 当前订单暂存（DESIGN 1.14 第 7 条，UX P06「会员的当前订单」）——导出三个函数写入、读取与清除会员当前这一笔订单号：写入同时记在模块变量与本标签页 sessionStorage 的一个固定键里（键名为常量、不含订单号，只存订单号这一个值）；读取先取模块变量，没有再取 sessionStorage，读取不清除；清除同时清两处；sessionStorage 不存在或读写抛错时以 try/catch 当作没有暂存，写入与清除静默跳过；不写 localStorage、cookie、地址与历史状态；游客的函数与流程不读也不写它（运营者落实写法，HANDOFF 0.63）
+      - 用 vitest（不加测试依赖，fetch、等待与 sessionStorage 以替身代替）在 frontend/src/api/memberPay.test.ts 验证意图——五个请求的地址、方法、请求头与请求体（只有约定字段；读取与发起带 lang，其余不带查询参数；只有写操作带 X-CSRF-Token，只有支付带 Idempotency-Key）；各状态码与错误码的归类（含 401、404、409 各码、503 stripe_unavailable 与网络中断）；两个会员版写操作去向的各分支（含 csrf、signed_out、not_found、网络中断后的确认与重试条件、中止返回 null）；暂存的写入、先内存后 sessionStorage 的读取、覆盖、清除与 sessionStorage 抛错时的退化，且整个过程不写 localStorage 与 cookie；每条测试写明它守住的是哪个接口记录、UX 或 DESIGN 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-158.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；新字段、五个请求、归类、写操作去向、暂存规则、偏离（含不加 lines、新文件而不并入 pay.ts 的理由）、验证到什么程度，只写实际存在的测试，并写明页面留给 SHOP-TASK-159、161 至 163 与 167）
+      - 改动只落在 allowed_change_paths（不改 PayPage.tsx、PayResultPage.tsx、memberOrders.ts 与 memberSession.ts；不做页面，不改路由与页头）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.14 提交 00f8f34 与 HANDOFF 0.63），不合并、不直推
+```

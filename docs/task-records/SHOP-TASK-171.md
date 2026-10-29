@@ -25,3 +25,18 @@
   - 请求体 422 的 `loc` 在三选一的行上会带 pydantic 的模型名（如 `KeepFeeIn`、`RemoveRowIn`），只是位置，不含提交的值。
 - 留给之后的任务：A06 页面（国家运费与汇率的删除、新增汇率、保存后的三种状态）待视觉稿补齐、经 Kelvin 审阅后另行登记（HANDOFF 0.67 第（5）点）。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.16 第 9 条、UX 0.15 A06「保存与状态」与 HANDOFF 0.67 原句自查。新增 `tests/test_admin_shipping_rates_api.py`（夹具照 `tests/test_admin_site_settings.py`，运费与汇率写入与迁移 0005 相同的演示数据），覆盖：GET 的字段与顺序、行字段顺序、规范汇率、CSRF 令牌、不写审计；GET 与 PUT 在没有 cookie、格式不对、未知与已撤销会话时 401；PUT 的 413（超过 64 KB，有无会话、是否 JSON 都先回 413，不回显）、恰好 64 KB 的合法整页照常保存、415、结构不合格时没有会话先回 401、CSRF 缺少/为空/不一致时 403；请求体 422（布尔值、字符串与浮点数运费，字符串行 ID，布尔版本号，数字汇率，delete 为 false 或字符串，保留与删除同时给，州属与兜底带 delete，已有汇率行带币种或小数位，已有运费行带国家代码，新增行带行 ID、缺小数位、小数位为字符串、汇率为数字，多出字段，缺任一组，other 为数组或 null，整体不是对象）且不回显、数据不变；取值不合格（运费 -1 与 1,000,000，汇率 "1e5"、"0"、" 34"、"34."，新增国家 my、MY、nz，币种 MYR，小数位 4，同一组新增同一国家两次，同一组列同一行 ID 两次）回 422 `rates_invalid`；过期的版本号、漏列现有行、未知行 ID、新增已有的国家、读取后另一处改过的行回 409 `rates_changed`；两者都有时回 422 `rates_invalid`；被拒时数据与审计都不变；成功的整页保存（改州属、兜底、国家运费与汇率，删一行国家运费与一行汇率，新增一行国家运费与一行汇率）回 200 与随后 GET 相同的整页、版本号与审计（操作者为当前管理员、旧值新值）正确；同一次保存里删掉 SG 的运费与汇率再各新增一行成功，新行 ID 与旧的不同、版本号为 1、写四条审计，之后拿旧页面保存回 409；原样保存（汇率写成 0.310000）不写入；新增的响应（含错误）带 no-store、应用不记日志；该路径下只有 GET 与 PUT。每条测试的文档字符串写明它守住的 DESIGN 1.16 第 9 条、UX 0.15 A06、HANDOFF 0.67 原句或验收条目。测试交由 PR 的必需 CI 检查 backend 执行（Worker 沙箱不跑后端测试）。SQLite 不支持行锁，锁定在 MySQL 上的效果由 SHOP-TASK-170 的测试与代码审阅负责，本任务不另测。检查命令结果由 Worker 另行记录。
+
+## 登记时的验收标准（原文）
+
+2026-10-29 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - GET /api/admin/shipping-rates——require_admin（没有有效后台会话时 401 admin_session_required）后返回 load_admin_rates 的整页数据与由 cookie 算出的 CSRF 令牌（照 admin_site_settings 的 csrf_token_for_cookie）；字段依次为 states、other、countries、fx 与 csrf_token——states、countries 为数组，other 为一个对象，各行为 id、version、zone_code、fee_sen；fx 为数组，各行为 id、version、country_code、currency_code、currency_decimals、rate（规范形式的字符串）；不写审计
+      - PUT /api/admin/shipping-rates 的请求体——states、other、countries、fx 四项都必填；州属与兜底的行只接受 id、version、fee_sen；国家运费的已有行接受 id、version 与 fee_sen，或 id、version 与值为 true 的 delete；新增行只接受 country_code 与 fee_sen；汇率的已有行接受 id、version 与 rate，或 id、version 与值为 true 的 delete；新增行只接受 country_code、currency_code、currency_decimals 与 rate；整数字段 strict（布尔值、字符串与浮点数一律不收），rate、country_code 与 currency_code 只接受 JSON 字符串；多出字段或缺字段 422，错误沿用 _body_errors 不回显；请求模型只校验结构与 JSON 类型，不加取值范围、格式与长度约束——运费越界、汇率格式不对、国家或币种不合格、重复等一律交给服务层，由 RatesInvalid 回 rates_invalid
+      - 检查顺序——413（64 KB，按实际读到的字节逐块判断，先于一切校验）→ 415（不是 JSON）→ 401 → 403 csrf_failed → 422 请求体 → 服务层 RatesInvalid 回 422 {"detail":"rates_invalid"} → RatesChanged 回 409 {"detail":"rates_changed"}；被拒时不写入、不写审计；成功回 200 与保存后的整页数据（字段同 GET，不含 csrf_token）
+      - 这些接口的处理函数与依赖产生的响应（含错误）都带 Cache-Control 为 no-store（照 _NoStoreRoute），路径存在而方法不匹配时由框架返回的 405 不在此列；接口不写日志；app/main.py 照现有后台路由的写法注册
+      - 测试验证意图——新增 tests/test_admin_shipping_rates_api.py（照 tests/test_admin_site_settings.py 的夹具），验证——GET 的字段与顺序、401；PUT 的 413、415、401、403、请求体 422（布尔值或字符串运费、数字汇率、delete 为 false、已有行带币种、多出字段）且不回显请求内容；取值不合格（至少运费 -1、汇率为字符串 "1e5"、国家 my 各一例）回 422 {"detail":"rates_invalid"}、过期的版本号回 409 rates_changed，两者都不改数据、不写审计，两者都有时回 422；成功的保存回 200 与保存后的数据、审计的操作者正确；删后再增同一国家在一次保存里成功；新增的响应（含错误）带 no-store；该路径下只有 GET 与 PUT；每条测试写明守住的是 DESIGN 1.16 第 9 条、UX 0.15 A06 或 HANDOFF 0.67 的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑后端测试）
+      - docs/task-records/SHOP-TASK-171.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；两个接口、请求体格式、检查顺序与回答、偏离、验证到什么程度，并写明 A06 页面待视觉稿补齐后另行登记）
+      - 改动只落在 allowed_change_paths；app/services/admin_shipping_rates.py、模型与迁移不变，现有接口与测试不变；不改 .platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.16（提交 e9a1c93）与 HANDOFF 0.67），不合并、不直推
+```
