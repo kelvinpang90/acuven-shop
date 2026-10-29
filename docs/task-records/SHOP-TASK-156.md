@@ -24,3 +24,18 @@
   - 前端预填（结账第 3 步取号、401 时按会话失效处理、其他错误时留空）不在本任务，留给 SHOP-TASK-157、159。
 - 改动只在 `app/api/member_auth.py`、`tests/test_member_phone_api.py` 与本文件；未改 `app/main.py`、模型、迁移、服务层、`.platform/`、`docs/TODO.md`、CI、部署配置与前端，未装依赖。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.14 第 8 条与 `app/services/member_auth.py` 的 `check_member_session`（只读、不延长会话）自查。上面列的测试只是写入的测试，由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑 pytest；检查命令结果由 Worker 另行记录。只在 SQLite 内存库上写了测试，未在真实 MySQL 上验证。
+
+## 登记时的验收标准（原文）
+
+2026-10-29 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 新增 GET /api/member/phone（app/api/member_auth.py 的同一路由器，沿用 _NoStoreRoute；这些接口的处理函数与依赖产生的响应（含错误）都带 no-store，路径存在而方法不匹配时由框架返回的 405 不含请求内容与个人资料，不在此列）；不读请求体，不定义查询参数，不要求 X-CSRF-Token 与 Idempotency-Key；只经 require_member 授权，会话不通过一律 401 member_session_required（与其他会员接口相同，不区分会话不存在、已撤销、已到期或会员已注销），响应体不含号码；不读短信验证开关；不另设限流与审计记录；只读，不写库、不延长会话
+      - 200 的响应体只有 phone 一个字段，为会员账号上的 E.164 号码原文（以加号开头），不带遮掩号码、has_password、expires_at、csrf_token、收货资料或其他字段（响应模型禁止多出字段）；会员没有号码时照 current_session 的类型收窄写法回 401 member_session_required；本接口没有请求体与参数，不产生 422（不需要 _body_errors 与 _language）；本模块仍不写日志，号码不进日志与错误回显
+      - 模块开头的说明补上第四个接口（依据 DESIGN 1.14 第 8 条；只读、401、no-store、不受开关影响、不设限流与审计）；现有三个接口与 require_member、require_member_csrf、mask_phone 的行为不变，GET /api/member/session 仍只给遮掩号码
+      - 测试验证意图——新文件 tests/test_member_phone_api.py 用 TestClient 与 SQLite 内存库（夹具与会员会话照 tests/test_member_auth_api.py），验证：已登录会员 200 且响应体的键只有 phone、值为该会员的 E.164 号码；两个会员各自只取到自己的号码；没有 cookie、会话已撤销、已到期、会员已注销都 401 member_session_required 且响应体不含号码；不带 X-CSRF-Token 照常 200；短信验证开关开启与关闭（含没有设置行）结果相同；读取前后会员与会话表各列不变；所有响应（含 401）带 no-store；接口不写日志记录；GET /api/member/session 的 phone_masked 仍为遮掩形式、不含完整号码；每条测试写明它守住的是设计第 8 条的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
+      - 现有测试一字不改并照常通过（含 tests/test_member_auth_api.py）
+      - docs/task-records/SHOP-TASK-156.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；接口、授权与错误、响应字段、偏离、验证到什么程度，只写实际存在的测试，未在真实 MySQL 上验证的如实写明，并写明前端预填留给 SHOP-TASK-157、159）
+      - 改动只落在 allowed_change_paths；不改 app/main.py（会员路由器已注册）、模型、迁移、服务层、.platform/、docs/TODO.md、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.14 提交 00f8f34 与 HANDOFF 0.63），不合并、不直推
+```

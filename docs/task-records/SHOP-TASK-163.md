@@ -26,3 +26,19 @@
 - 留给后续任务：注销（P13 设置段）时清除暂存留给 SHOP-TASK-167。
 - 改动只在 `frontend/src/pages/TrackOrderPage.tsx`、`frontend/src/pages/TrackOrderPage.test.tsx`、`frontend/src/pages/AccountPage.tsx`、`frontend/src/pages/AccountPage.test.tsx`、`frontend/src/i18n/copy.ts`、`frontend/src/styles/site.css` 与本文件；`router.tsx` 与 `App.tsx` 不需要改，未改。未改 `frontend/src/api/`、`RefundPage.tsx`、`PayPage.tsx`、`PayResultPage.tsx`、后端、`docs/TODO.md`、`.platform/`、CI、部署配置、`package.json` 与 `package-lock.json`，未装依赖。
 - 验证到什么程度：人工逐条对照验收标准、UX 0.13 P09 与 P06「会员的当前订单」、DESIGN 1.14 第 7 条与 HANDOFF 0.63 自查。上面列的测试只是写入的测试。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查；检查命令结果由 Worker 另行记录。未做浏览器验收，未对真实后端接口验证。
+
+## 登记时的验收标准（原文）
+
+2026-10-29 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.13 的 P09、docs/UX-COPY.md 0.14 与 docs/HANDOFF.md 0.63 为准，样式以 docs/design/pages/ 的 P09-pending（account.order_pay 为主按钮样式的链接）为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.14 逐字加入 account.order_pay，写法与相邻条目相同（每种语言一行）
+      - 继续支付——会员模式下状态为待支付（awaiting_demo_payment）的订单显示指向 /pay 的 account.order_pay（主按钮样式的链接，放在订单状态区里查单模式显示 order.lookup_no_pay 的位置，桌面与手机相同；account.orders 返回链接的位置不变；视觉稿 P09-pending 只有一张 640 像素的片段，与此不同处记入任务记录）；点击时先经 SHOP-TASK-158 写入该单订单号（覆盖之前暂存的值），再以站内导航前往 /pay；订单号不进地址、查询参数与历史状态；其他状态不显示；查单模式不变（待支付仍为 order.lookup_no_pay，没有 account.order_pay）
+      - 退出清除暂存——AccountPage.tsx 的退出在 ok 与 signed_out 时，除现有的 clearMemberOrder 外另经 SHOP-TASK-158 清除当前订单暂存，其余去向（重读会话、replace 前往首页、csrf、failed、network）不变
+      - 代码结构——沿用两个页面现有的写法（导出的纯函数与异步函数、只依赖 props 的 View；写入暂存与导航经回调传入，便于测试）；不改 RefundPage.tsx 引用的 TrackOrderPage.tsx 导出的类型与签名；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch、sessionStorage 与路由以替身代替）验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——frontend/src/pages/TrackOrderPage.test.tsx 会员模式的待支付订单有指向 /pay 的 account.order_pay、其他状态没有，点击时先写入暂存再前往 /pay，查单模式仍只有 order.lookup_no_pay；frontend/src/pages/AccountPage.test.tsx 退出 ok 与 signed_out 时清除暂存、csrf 与 failed 时不清除；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - 现有测试只在必要时修改并写明原因——TrackOrderPage.test.tsx「shows neither order.lookup_no_pay nor account.order_pay for an unpaid order」一条改为会员模式待支付订单显示 account.order_pay 且仍没有 order.lookup_no_pay（SHOP-TASK-154 的暂缓至此取消），其余断言不变；AccountPage.test.tsx 现有断言不变
+      - docs/task-records/SHOP-TASK-163.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；继续支付、退出清除暂存、偏离、验证到什么程度，只写实际存在的测试，写明未做浏览器验收，并写明注销时的清除留给 SHOP-TASK-167）
+      - 改动只落在 allowed_change_paths（不改 frontend/src/api/、RefundPage.tsx、PayPage.tsx 与 PayResultPage.tsx；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.14 提交 00f8f34 与 HANDOFF 0.63），不合并、不直推
+```
