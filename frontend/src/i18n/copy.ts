@@ -1895,6 +1895,16 @@ export const COPY = {
     zh: "示例运费（RM）",
     ms: "Kos penghantaran contoh (RM)",
   },
+  "admin.shipping_country": {
+    en: "Country",
+    zh: "国家/地区",
+    ms: "Negara",
+  },
+  "admin.add_country": {
+    en: "Add country",
+    zh: "新增国家",
+    ms: "Tambah negara",
+  },
   "admin.fx_title": {
     en: "Demo exchange rates",
     zh: "演示汇率",
@@ -1909,6 +1919,26 @@ export const COPY = {
     en: "Version {n}",
     zh: "版本 {n}",
     ms: "Versi {n}",
+  },
+  "admin.remove": {
+    en: "Remove",
+    zh: "删除",
+    ms: "Padam",
+  },
+  "admin.add_fx": {
+    en: "Add exchange rate",
+    zh: "新增汇率",
+    ms: "Tambah kadar pertukaran",
+  },
+  "admin.fx_currency": {
+    en: "Currency code",
+    zh: "币种代码",
+    ms: "Kod mata wang",
+  },
+  "admin.fx_decimals": {
+    en: "Decimal places",
+    zh: "小数位",
+    ms: "Tempat perpuluhan",
   },
   "admin.fx_rate_new": {
     en: "Demo rate (1 MYR =)",
