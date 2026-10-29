@@ -4847,7 +4847,7 @@ tasks:
       新增汇率行的币种为三个字母（提交前转大写）、小数位为 0 到 3 的一位数字，格式不对时照 SHOP-TASK-175 不提交、显示 admin.rates_invalid；删除按钮的无障碍标签为 admin.remove 的文字、英文逗号加空格、行名（现有的国家行为国家名称，现有的汇率行同样为国家名称，两种新增行都为该行当前选中的国家名称）；新增国家行的运费输入框的无障碍标签照 SHOP-TASK-175 的运费输入框，行名为该行当前选中的国家名称；新增汇率行的国家下拉（admin.shipping_country）与三个输入框用可见标签，不另加无障碍标签；画板上 Remove, Indonesia, IDR 这类拼法不照搬。
       设计闸门：DESIGN 1.17（提交 80e3775）第 9 条与 HANDOFF 0.72，运费与汇率行的增删（核对与审计在服务端）。
       拆分：A06 页面的第二层（7 个允许路径，router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-175
     acceptance_criteria:
