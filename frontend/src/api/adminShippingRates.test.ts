@@ -177,7 +177,7 @@ describe("reading the shipping rates", () => {
     await expect(readAdminShippingRates()).resolves.toEqual({ kind: "ok", rates, csrf_token: "t" });
   });
 
-  // SHOP-TASK-174 验收第 2 条「字段缺少或类型不对都算不合格，整个响应体不合格即归为 failed」（各例守住的设计原句见 MALFORMED_RATES 的注释）。
+  // 各例守住的 HANDOFF 0.72、SHOP-TASK-171、172 记录与 DESIGN 1.17 第 9 条原句见 MALFORMED_RATES 各组的注释：任一项不合格，整个响应体归为 failed。
   it.each(MALFORMED_RATES)("treats a malformed page as a failure: %s", async (_name, change) => {
     stubFetch(json(200, { ...PAGE, ...change }));
     await expect(readAdminShippingRates()).resolves.toEqual({ kind: "failed" });
@@ -196,7 +196,8 @@ describe("reading the shipping rates", () => {
     await expect(readAdminShippingRates()).resolves.toEqual({ kind: "failed" });
   });
 
-  // 同一条「响应体不合格算失败」：200 但响应体不是 JSON 也算 failed。
+  // SHOP-TASK-171 记录「返回 `load_admin_rates` 的整页数据与由 cookie 算出的 CSRF 令牌」「`other` 为一个对象」：200 的响应体须为这样一个
+  // JSON 对象，不是 JSON 时读不出整页与令牌，算 failed。
   it("treats a body that is not JSON as a failure", async () => {
     stubFetch(new Response("<html>", { status: 200 }));
     await expect(readAdminShippingRates()).resolves.toEqual({ kind: "failed" });
@@ -216,7 +217,8 @@ describe("reading the shipping rates", () => {
     await expect(readAdminShippingRates()).resolves.toEqual({ kind });
   });
 
-  // SHOP-TASK-174 验收第 1 条「调用方可传入 AbortSignal，中止时按现有模块的做法归为 network」：中止后 fetch 抛错，归为 network。
+  // SHOP-TASK-171、172 记录、DESIGN 1.17 第 9 条与 HANDOFF 0.72 都没有关于中止的原句（记录的偏离一节已列明）；守住的是本任务验收第 1 条
+  // 「调用方可传入 AbortSignal，中止时按现有模块的做法归为 network」：中止后 fetch 抛错，归为 network。
   it("treats an aborted request as a network failure", async () => {
     const controller = new AbortController();
     const fetchMock = stubFetch(json(200, PAGE));
@@ -308,13 +310,15 @@ describe("saving the shipping rates", () => {
     await expect(saveAdminShippingRates(SAVE, "csrf-abc")).resolves.toEqual({ kind: "ok", rates: RATES });
   });
 
-  // SHOP-TASK-174 验收第 2 条「保存 200 的响应体按同一条件读取，只是不取 csrf_token」：没有 csrf_token 照样合格（上一条），其余不合格的例子与读取相同。
+  // SHOP-TASK-171 记录「成功回 200 与 `save_admin_rates` 返回的保存后整页数据，字段同 GET、不含 `csrf_token`」：没有 csrf_token 照样合格（上一条），
+  // 字段同 GET，所以不合格的例子与读取相同（各例守住的设计原句见 MALFORMED_RATES 的注释）。
   it.each(MALFORMED_RATES)("treats a malformed saved page as a failure: %s", async (_name, change) => {
     stubFetch(json(200, { ...RATES, ...change }));
     await expect(saveAdminShippingRates(SAVE, "csrf-abc")).resolves.toEqual({ kind: "failed" });
   });
 
-  // 同一条「响应体不合格算失败」：整体不是对象、为 null 或不是 JSON 都算 failed。
+  // SHOP-TASK-171 记录「成功回 200 与 `save_admin_rates` 返回的保存后整页数据，字段同 GET」：200 的响应体须为带这些字段的 JSON 对象，
+  // 整体不是对象、为 null 或不是 JSON 时读不出保存后的整页，算 failed。
   it.each<[string, Response]>([
     ["not an object", json(200, [RATES])],
     ["null body", json(200, null)],
@@ -354,7 +358,8 @@ describe("saving the shipping rates", () => {
     await expect(saveAdminShippingRates(SAVE, "csrf-abc")).resolves.toEqual({ kind });
   });
 
-  // SHOP-TASK-174 验收第 1 条「调用方可传入 AbortSignal，中止时按现有模块的做法归为 network」：中止后 fetch 抛错，归为 network。
+  // SHOP-TASK-171、172 记录、DESIGN 1.17 第 9 条与 HANDOFF 0.72 都没有关于中止的原句（记录的偏离一节已列明）；守住的是本任务验收第 1 条
+  // 「调用方可传入 AbortSignal，中止时按现有模块的做法归为 network」：中止后 fetch 抛错，归为 network。
   it("treats an aborted request as a network failure", async () => {
     const controller = new AbortController();
     const fetchMock = stubFetch(json(200, RATES));
