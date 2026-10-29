@@ -4811,7 +4811,7 @@ tasks:
       格式不对时页面不提交、显示 admin.rates_invalid，取值范围以服务端为准；读取与保存的 401、403 与网络中断照 A09 页面现有写法（401 回到 A01、保存 403 重新读取、网络中断 common.network_check）；改任何输入后收起保存按钮下方的全部提示（admin.rates_saved、admin.rates_invalid、admin.rates_changed 连同 admin.reload、common.error_retry 与 common.network_check），比 A09 多收起失败提示，表单上方 403 后的提示照 A09 不随改值收起；无障碍标签的拼法见验收标准。
       设计闸门：DESIGN 1.17（提交 80e3775）第 9、10 条与 HANDOFF 0.72，运费与汇率的显示与提交（取值核对、并发核对与审计在服务端）。
       拆分：A06 页面的第一层（7 个允许路径，router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）；增删行另成 SHOP-TASK-176。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-173
       - SHOP-TASK-174
