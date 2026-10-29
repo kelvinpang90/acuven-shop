@@ -4744,7 +4744,7 @@ tasks:
       设计闸门：不适用（只加路由、导航与标题，不碰金额与个人资料）。
       拆分：A06 页面的框架层，照 A05 的 SHOP-TASK-100。15 个允许路径，超过拆分规则的 12 个：导航多一项后，7 个现有测试文件里按顺序列出导航项或路由表的断言必然失效
       （运营者在登记时对 main 的导出做骨架实测，列出 22 条失败，全部在这 7 个文件里），只许改这些断言，与加导航的改动拆不开。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 页面内容与文案以 docs/UX.md 0.16 的「管理后台总体」与 A06、docs/UX-COPY.md 0.17 与 docs/HANDOFF.md 0.72 为准，样式以 docs/design/pages/ 的 A06-desktop 与 A06-phone 的页头与导航部分为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色
