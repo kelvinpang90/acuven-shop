@@ -7,6 +7,8 @@
 
 > 2026-10-24 补充会员相关的 10 张画板（落实 `docs/UX.md` 0.13 与 `docs/UX-COPY.md` 0.14）：P13 会员中心的积分、优惠券、设置（短信开启）的桌面与手机稿，以及短信关闭时的设置与注销（桌面）；P10 退款申请会员模式的桌面与手机稿；P06、P07 会员找不到订单时的整页提示。画板直接按本目录的静态页面格式绘制（不经 Claude Design 画布），参考图以站内字体用无头浏览器按画板尺寸截取。画板里灰色的「标注（不向用户显示）」只供审阅，前端不照搬。原有画板未改。Kelvin 已于 2026-10-24 认可，记录见 `docs/HANDOFF.md`。
 
+> 2026-10-29 重画 A06 运费区与演示汇率（落实 `docs/UX.md` 0.15、0.16 与 `docs/UX-COPY.md` 0.16、0.17）：马来西亚由 16 个州属改为西马、东马两行；国家运费与汇率每行加删除按钮，加新增的国家行与汇率行，汇率版本号改为逐行显示；另加保存后的五种状态画板 `A06-desktop-states`。画板直接按本目录的静态页面格式绘制（不经 Claude Design 画布），参考图以站内字体用无头浏览器按画板尺寸截取。画板里灰色的「标注（不向用户显示）」只供审阅，前端不照搬。Kelvin 已于 2026-10-29 认可，记录见 `docs/HANDOFF.md`。
+
 页面的内容、流程、去向与文案以 [UX.md](../UX.md) 与 [UX-COPY.md](../UX-COPY.md) 为准；本目录只规定样式。二者冲突时以 UX 文档为准，并把冲突报给运营者。
 
 ## 目录
@@ -160,8 +162,9 @@
 | A05 优惠券 · 桌面 | [A05-desktop.html](pages/A05-desktop.html) | [A05-desktop.png](reference/A05-desktop.png) | 1440 × 900 |
 | A05 优惠券列表 · 手机 | [A05-phone-list.html](pages/A05-phone-list.html) | [A05-phone-list.png](reference/A05-phone-list.png) | 390 × 900 |
 | A05 新建优惠券 · 手机 | [A05-phone-new.html](pages/A05-phone-new.html) | [A05-phone-new.png](reference/A05-phone-new.png) | 390 × 1000 |
-| A06 运费区与演示汇率 · 桌面 | [A06-desktop.html](pages/A06-desktop.html) | [A06-desktop.png](reference/A06-desktop.png) | 1440 × 1180 |
-| A06 运费区与演示汇率 · 手机 | [A06-phone.html](pages/A06-phone.html) | [A06-phone.png](reference/A06-phone.png) | 390 × 1560 |
+| A06 运费区与演示汇率 · 桌面 | [A06-desktop.html](pages/A06-desktop.html) | [A06-desktop.png](reference/A06-desktop.png) | 1440 × 1250 |
+| A06 运费区与演示汇率 · 保存后的状态 | [A06-desktop-states.html](pages/A06-desktop-states.html) | [A06-desktop-states.png](reference/A06-desktop-states.png) | 520 × 892 |
+| A06 运费区与演示汇率 · 手机 | [A06-phone.html](pages/A06-phone.html) | [A06-phone.png](reference/A06-phone.png) | 390 × 1944 |
 | A07 库存重置结果 · 桌面（含失败展开） | [A07-desktop.html](pages/A07-desktop.html) | [A07-desktop.png](reference/A07-desktop.png) | 1440 × 760 |
 | A07 库存重置结果 · 手机 | [A07-phone.html](pages/A07-phone.html) | [A07-phone.png](reference/A07-phone.png) | 390 × 1000 |
 | A08 店铺装修 · 桌面 | [A08-desktop.html](pages/A08-desktop.html) | [A08-desktop.png](reference/A08-desktop.png) | 1440 × 1250 |
