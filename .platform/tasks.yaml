@@ -4783,7 +4783,7 @@ tasks:
       设计闸门：不适用（运费与汇率的取值规则、核对与审计在 SHOP-TASK-170 到 172 的服务端，依据 DESIGN 1.17 第 9、10 条；请求模块只传递与校验字段）。
       运营者落实写法（HANDOFF 0.72）：兜底行为 null 时读取算失败（迁移 0005 已写入兜底行，保存必须带它，缺了页面无法保存）；马来西亚行的区域代码只收 MY-W 与 MY-E。
       拆分：A06 页面的请求层（3 个允许路径），照 A05 的 SHOP-TASK-101。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 新文件 frontend/src/api/adminShippingRates.ts 调用 GET 与 PUT /api/admin/shipping-rates，都不带查询参数（同源 cookie，cache 为 no-store，Accept 为 application/json；PUT 的 Content-Type 为 application/json，X-CSRF-Token 为调用方给出的 csrf_token，请求头名取 frontend/src/api/pay.ts 的 CSRF_HEADER）；写法沿用 frontend/src/api/adminSiteSettings.ts（readBody、isRecord 这类内部函数在本文件另写）；调用方可传入 AbortSignal，中止时按现有模块的做法归为 network
