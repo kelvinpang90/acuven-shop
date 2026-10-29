@@ -491,7 +491,9 @@ a.site-admin-refunds__clear { text-decoration: none; }
    每行汇率为「国家 → 币种 (小数位)」与其下的汇率和版本标签、96px 的输入框（间距 10px）。admin.rules_apply_new 内边距 10px 12px；
    保存按钮靠左，提示在其下（间距 10px），admin.rates_saved 内边距 10px 12px，admin.rates_changed 的文字与 admin.reload 上下排列（间距 10px、靠左）。
    区块标题的字号与字重、次要文字与提示的字号、admin.rules_apply_new 与 admin.rates_saved 的底色和圆角 site.css 写不了，记在任务记录的偏离里。
-   删除按钮与新增行由 SHOP-TASK-176 接上 */
+   删除与新增（SHOP-TASK-176）：按国家与汇率的每行在输入框右边加 84px 的 admin.remove（文字居中，行内的名称与输入框照原样排列）；
+   新增的国家行占满两列，为最宽 240px 的国家下拉、110px 的运费输入框与 admin.remove；新增的汇率行为两列的四个带标签的字段（间距 10px，上方 12px），
+   admin.remove 另起一行靠右；admin.add_country 与 admin.add_fx 靠左。新增汇率行上方的虚线（颜色）与字段文字的字号 site.css 写不了，记在任务记录的偏离里 */
 .site-admin-shipping { display: grid; grid-template-columns: minmax(0, 1fr) 460px; grid-template-rows: auto 1fr; gap: 16px 24px; align-items: start; }
 .site-admin-shipping__body, .site-admin-shipping__form { display: contents; }
 .site-admin-shipping__title, .site-admin-shipping__body > .acs-admin__alert, .site-admin-shipping__fees { grid-column: 1; }
@@ -514,6 +516,15 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-shipping__save > .acs-admin__btn { justify-self: start; }
 .site-admin-shipping__save > [role="status"] { padding: 10px 12px; }
 .site-admin-shipping__changed { display: grid; gap: 10px; justify-items: start; }
+.site-admin-shipping__line { display: grid; grid-template-columns: minmax(0, 1fr) 110px 84px; gap: 10px; align-items: center; min-width: 0; }
+.site-admin-shipping__line > .site-admin-shipping__fee, .site-admin-shipping__line > .site-admin-shipping__fx-row { display: contents; }
+.site-admin-shipping__fx-line { grid-template-columns: minmax(0, 1fr) 96px 84px; }
+.site-admin-shipping__new-country { grid-template-columns: minmax(0, 240px) 110px 84px; grid-column: 1 / -1; }
+.site-admin-shipping__new-fx { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding-top: 12px; }
+.site-admin-shipping__new-fx > .site-admin-shipping__remove { grid-column: 1 / -1; justify-self: end; }
+.site-admin-shipping__remove { justify-content: center; }
+.site-admin-shipping__add { justify-self: start; }
+.site-admin-shipping .acs-admin__select { box-sizing: border-box; min-width: 0; max-width: 100%; }
 
 /* 短信验证组件 V1（SHOP-TASK-145，V1-start、V1-code-wrong、V1-errors、V1-register-unavailable、V1-no-change 与 V1-verified，
    画板均为 480px 宽、没有另画手机稿，所以没有 767px 及以下的差异）：各块上下排列（间距 16px）；国家码下拉 96px、号码占余下；
@@ -998,7 +1009,9 @@ a.site-admin-refunds__clear { text-decoration: none; }
      summary 为可点的折叠标题（至少 32px 高）。视觉稿的 summary 为 flex，会去掉展开标记；UX 手机线框为「▸ [admin.shipping_my_state]」，
      这里保留原生标记，以上下内边距 6px 代替居中。内容与 summary 间距 8px、各行间距 8px（演示汇率 10px）；马来西亚两档不限宽，
      按国家为一列、输入框 96px；每行汇率上方 10px，版本标签在汇率之下另起一行（上方 8px）。保存按钮占满宽度、至少 44px 高，文字居中，
-     admin.reload 至少 44px 高。标题的字号与各行汇率之间的分隔线（颜色）site.css 写不了，记在任务记录的偏离里 */
+     admin.reload 至少 44px 高。标题的字号与各行汇率之间的分隔线（颜色）site.css 写不了，记在任务记录的偏离里。
+     删除与新增（SHOP-TASK-176）：国家行（含新增的）为名称或下拉、96px 的输入框与 84px 的 admin.remove；汇率行的 admin.remove 在输入框下方靠右，
+     名称一栏跨两行（版本标签在左下）；删除、新增按钮至少 44px 高 */
   .site-admin-shipping { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; gap: 14px; }
   .site-admin-shipping__body, .site-admin-shipping__form { display: grid; gap: 14px; }
   .site-admin-shipping__fees, .site-admin-shipping__side { gap: 14px; }
@@ -1010,8 +1023,11 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-shipping__fx .site-admin-shipping__content { gap: 10px; padding-top: 8px; }
   .site-admin-shipping__malaysia .site-admin-shipping__rows { max-width: none; }
   .site-admin-shipping__countries .site-admin-shipping__rows { grid-template-columns: minmax(0, 1fr); }
-  .site-admin-shipping__countries .site-admin-shipping__fee { grid-template-columns: minmax(0, 1fr) 96px; }
-  .site-admin-shipping__fx-row { padding-top: 10px; }
+  .site-admin-shipping__countries .site-admin-shipping__line { grid-template-columns: minmax(0, 1fr) 96px 84px; }
+  .site-admin-shipping__fx-line { grid-template-columns: minmax(0, 1fr) 96px; padding-top: 10px; }
+  .site-admin-shipping__fx-line .site-admin-shipping__fx-name { grid-row: span 2; }
+  .site-admin-shipping__fx-line > .site-admin-shipping__remove { grid-column: 2; justify-self: end; }
+  .site-admin-shipping__remove, .site-admin-shipping__add { min-height: 44px; }
   .site-admin-shipping__fx-name .acs-tag { display: flex; width: fit-content; margin-top: 8px; }
   .site-admin-shipping__save > .acs-admin__btn { justify-self: stretch; justify-content: center; min-height: 44px; }
   .site-admin-shipping__changed .acs-admin__btn { min-height: 44px; }
