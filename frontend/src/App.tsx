@@ -12,6 +12,7 @@ import AdminLoginPage from "./pages/AdminLoginPage";
 import AdminCouponsPage from "./pages/AdminCouponsPage";
 import AdminOrdersPage from "./pages/AdminOrdersPage";
 import AdminRefundsPage from "./pages/AdminRefundsPage";
+import AdminShippingPage from "./pages/AdminShippingPage";
 import AdminSiteSettingsPage from "./pages/AdminSiteSettingsPage";
 import AdminStockResetsPage from "./pages/AdminStockResetsPage";
 import AdminStoreDesignPage from "./pages/AdminStoreDesignPage";
@@ -64,6 +65,7 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   // 退款详情与列表是同一页（桌面列表在左、详情在右，手机只显示详情）。
   "/admin/refunds/:id": AdminRefundsPage,
   "/admin/coupons": AdminCouponsPage,
+  "/admin/shipping": AdminShippingPage,
   "/admin/stock-resets": AdminStockResetsPage,
   "/admin/store-design": AdminStoreDesignPage,
   "/admin/settings": AdminSiteSettingsPage,

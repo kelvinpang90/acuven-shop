@@ -837,6 +837,8 @@ describe("navigation", () => {
   // 店铺装修（/admin/store-design）四项；当前项与手机顶栏名称不变。
   // SHOP-TASK-137 改动：按 SHOP-TASK-137 验收第 3 条把「依次为这五项」改为依次为订单、退款、优惠券、库存重置、店铺装修与
   // 站点设置（/admin/settings）六项；当前项与手机顶栏名称不变。
+  // SHOP-TASK-173 改动：按 SHOP-TASK-173 验收第 4 条在优惠券之后加入运费与演示汇率（/admin/shipping），改为依次为这七项；
+  // 当前项与手机顶栏名称不变。
   it.each(LANGUAGES)("marks the refunds item as current in %s", (language) => {
     for (const path of [REFUNDS_PATH, "/admin/refunds/order/42"]) {
       const html = renderApp(path, language);
@@ -846,6 +848,7 @@ describe("navigation", () => {
             [ORDERS_PATH, undefined],
             [REFUNDS_PATH, "page"],
             ["/admin/coupons", undefined],
+            ["/admin/shipping", undefined],
             ["/admin/stock-resets", undefined],
           ["/admin/store-design", undefined],
           ["/admin/settings", undefined],
@@ -854,6 +857,7 @@ describe("navigation", () => {
             COPY["admin.nav_orders"][language],
             COPY["admin.nav_refunds"][language],
             COPY["admin.nav_coupons"][language],
+            COPY["admin.nav_shipping"][language],
             COPY["admin.nav_stock_resets"][language],
           COPY["admin.nav_store_design"][language],
           COPY["admin.nav_settings"][language],
