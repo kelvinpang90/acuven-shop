@@ -1865,6 +1865,76 @@ export const COPY = {
     zh: "示例运费",
     ms: "Kos penghantaran contoh",
   },
+  "admin.shipping_my_state": {
+    en: "Malaysia",
+    zh: "马来西亚",
+    ms: "Malaysia",
+  },
+  "admin.shipping_my_west": {
+    en: "West Malaysia",
+    zh: "西马",
+    ms: "Malaysia Barat",
+  },
+  "admin.shipping_my_east": {
+    en: "East Malaysia (Sabah, Sarawak, Labuan)",
+    zh: "东马（沙巴、砂拉越、纳闽）",
+    ms: "Malaysia Timur (Sabah, Sarawak, Labuan)",
+  },
+  "admin.shipping_by_country": {
+    en: "By country",
+    zh: "按国家",
+    ms: "Mengikut negara",
+  },
+  "admin.shipping_other": {
+    en: "All other countries",
+    zh: "其他国家",
+    ms: "Semua negara lain",
+  },
+  "admin.shipping_fee": {
+    en: "Sample shipping fee (RM)",
+    zh: "示例运费（RM）",
+    ms: "Kos penghantaran contoh (RM)",
+  },
+  "admin.fx_title": {
+    en: "Demo exchange rates",
+    zh: "演示汇率",
+    ms: "Kadar pertukaran demo",
+  },
+  "admin.fx_rate": {
+    en: "Demo rate: 1 MYR = {rate} {currency}",
+    zh: "演示汇率：1 MYR = {rate} {currency}",
+    ms: "Kadar demo: 1 MYR = {rate} {currency}",
+  },
+  "admin.fx_version": {
+    en: "Version {n}",
+    zh: "版本 {n}",
+    ms: "Versi {n}",
+  },
+  "admin.fx_rate_new": {
+    en: "Demo rate (1 MYR =)",
+    zh: "演示汇率（1 MYR =）",
+    ms: "Kadar demo (1 MYR =)",
+  },
+  "admin.rates_saved": {
+    en: "Saved. New orders use the new shipping fees; reference currencies show the new rates.",
+    zh: "已保存。新订单按新运费计算，参考外币按新汇率显示。",
+    ms: "Disimpan. Pesanan baharu menggunakan kos penghantaran baharu; mata wang rujukan memaparkan kadar baharu.",
+  },
+  "admin.rates_invalid": {
+    en: "Check the values: fees RM0.00–RM9,999.99; rates above 0 and below 1,000,000, with up to 6 decimal places; currency code 3 letters (not MYR); decimal places 0–3; each country only once.",
+    zh: "请检查：运费为 RM0.00 到 RM9,999.99；汇率大于 0、小于 1,000,000，至多 6 位小数；币种代码为 3 个字母（不是 MYR）；小数位为 0 到 3；每个国家只能有一行。",
+    ms: "Semak nilai: kos RM0.00–RM9,999.99; kadar melebihi 0 dan di bawah 1,000,000, dengan paling banyak 6 tempat perpuluhan; kod mata wang 3 huruf (bukan MYR); tempat perpuluhan 0–3; setiap negara sekali sahaja.",
+  },
+  "admin.rates_changed": {
+    en: "Fees or rates were changed elsewhere. Reload to see the latest values. Your unsaved changes will be lost.",
+    zh: "运费或汇率已在别处修改。请重新读取最新的值，未保存的修改会丢失。",
+    ms: "Kos atau kadar telah diubah di tempat lain. Muat semula untuk melihat nilai terkini. Perubahan yang belum disimpan akan hilang.",
+  },
+  "admin.reload": {
+    en: "Reload",
+    zh: "重新读取",
+    ms: "Muat semula",
+  },
   "admin.nav_stock_resets": {
     en: "Stock resets",
     zh: "库存重置",

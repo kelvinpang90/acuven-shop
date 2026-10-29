@@ -484,6 +484,37 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-settings__cost { display: flex; gap: 8px; padding: 8px 10px; }
 .site-admin-settings__cost svg { flex-shrink: 0; margin-top: 2px; }
 
+/* 后台运费区与演示汇率 A06（SHOP-TASK-175，A06-desktop 与 A06-desktop-states）：页面分两列，左栏为标题与三块运费，右栏为 460px 的演示汇率、
+   admin.rules_apply_new 与保存（列间距 24px，各块上下间距 16px，顶端对齐）；表单区与表单不另成一层（display: contents），右栏从标题那一行起，
+   左栏的第二行占去右栏多出的高度。各块为面板（内边距 20px），summary 在桌面为区块标题（不显示展开标记、不可点收起），其下内容间距 10px
+   （演示汇率 12px）。马来西亚两档最宽 420px、行间距 8px；按国家为两列（列间距 32px、行间距 8px）；每行运费为名称与 110px 的输入框（间距 10px）；
+   每行汇率为「国家 → 币种 (小数位)」与其下的汇率和版本标签、96px 的输入框（间距 10px）。admin.rules_apply_new 内边距 10px 12px；
+   保存按钮靠左，提示在其下（间距 10px），admin.rates_saved 内边距 10px 12px，admin.rates_changed 的文字与 admin.reload 上下排列（间距 10px、靠左）。
+   区块标题的字号与字重、次要文字与提示的字号、admin.rules_apply_new 与 admin.rates_saved 的底色和圆角 site.css 写不了，记在任务记录的偏离里。
+   删除按钮与新增行由 SHOP-TASK-176 接上 */
+.site-admin-shipping { display: grid; grid-template-columns: minmax(0, 1fr) 460px; grid-template-rows: auto 1fr; gap: 16px 24px; align-items: start; }
+.site-admin-shipping__body, .site-admin-shipping__form { display: contents; }
+.site-admin-shipping__title, .site-admin-shipping__body > .acs-admin__alert, .site-admin-shipping__fees { grid-column: 1; }
+.site-admin-shipping__side { grid-column: 2; grid-row: 1 / 3; }
+.site-admin-shipping__fees, .site-admin-shipping__side { display: grid; gap: 16px; min-width: 0; }
+.site-admin-shipping__group, .site-admin-shipping__other { min-width: 0; padding: 20px; }
+.site-admin-shipping__summary { display: block; pointer-events: none; }
+.site-admin-shipping__summary::-webkit-details-marker { display: none; }
+.site-admin-shipping__content { display: grid; gap: 10px; padding-top: 10px; }
+.site-admin-shipping__fx .site-admin-shipping__content { gap: 12px; padding-top: 12px; }
+.site-admin-shipping__rows { display: grid; row-gap: 8px; }
+.site-admin-shipping__malaysia .site-admin-shipping__rows { max-width: 420px; }
+.site-admin-shipping__countries .site-admin-shipping__rows { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 32px; }
+.site-admin-shipping__fee { display: grid; grid-template-columns: minmax(0, 1fr) 110px; gap: 10px; align-items: center; }
+.site-admin-shipping__fx-row { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 10px; align-items: center; }
+.site-admin-shipping__fee > span, .site-admin-shipping__fx-name { min-width: 0; overflow-wrap: anywhere; }
+.site-admin-shipping .acs-admin__input { box-sizing: border-box; min-width: 0; max-width: 100%; }
+.site-admin-shipping__rules { padding: 10px 12px; }
+.site-admin-shipping__save { display: grid; gap: 10px; }
+.site-admin-shipping__save > .acs-admin__btn { justify-self: start; }
+.site-admin-shipping__save > [role="status"] { padding: 10px 12px; }
+.site-admin-shipping__changed { display: grid; gap: 10px; justify-items: start; }
+
 /* 短信验证组件 V1（SHOP-TASK-145，V1-start、V1-code-wrong、V1-errors、V1-register-unavailable、V1-no-change 与 V1-verified，
    画板均为 480px 宽、没有另画手机稿，所以没有 767px 及以下的差异）：各块上下排列（间距 16px）；国家码下拉 96px、号码占余下；
    托管挑战的容器至少 64px 高；发送、重发与 auth.continue_guest 靠左；验证码输入与验证按钮同一行（间距 10px）；字段错误的图标不收缩、
@@ -962,6 +993,28 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-settings__body, .site-admin-settings__form { gap: 14px; }
   .site-admin-settings__save { display: grid; gap: 10px; }
   .site-admin-settings__save .acs-admin__btn { justify-content: center; min-height: 44px; }
+
+  /* 后台运费区与演示汇率 A06（A06-phone）：一列，标题与各块上下排列（间距 14px），表单区与表单恢复为一层；各块内边距 12px 14px；
+     summary 为可点的折叠标题（至少 32px 高）。视觉稿的 summary 为 flex，会去掉展开标记；UX 手机线框为「▸ [admin.shipping_my_state]」，
+     这里保留原生标记，以上下内边距 6px 代替居中。内容与 summary 间距 8px、各行间距 8px（演示汇率 10px）；马来西亚两档不限宽，
+     按国家为一列、输入框 96px；每行汇率上方 10px，版本标签在汇率之下另起一行（上方 8px）。保存按钮占满宽度、至少 44px 高，文字居中，
+     admin.reload 至少 44px 高。标题的字号与各行汇率之间的分隔线（颜色）site.css 写不了，记在任务记录的偏离里 */
+  .site-admin-shipping { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; gap: 14px; }
+  .site-admin-shipping__body, .site-admin-shipping__form { display: grid; gap: 14px; }
+  .site-admin-shipping__fees, .site-admin-shipping__side { gap: 14px; }
+  .site-admin-shipping__side { grid-column: 1; grid-row: auto; }
+  .site-admin-shipping__group, .site-admin-shipping__other { padding: 12px 14px; }
+  .site-admin-shipping__summary { display: list-item; min-height: 32px; padding: 6px 0; pointer-events: auto; cursor: pointer; }
+  .site-admin-shipping__summary::-webkit-details-marker { display: revert; }
+  .site-admin-shipping__content { gap: 8px; padding-top: 8px; }
+  .site-admin-shipping__fx .site-admin-shipping__content { gap: 10px; padding-top: 8px; }
+  .site-admin-shipping__malaysia .site-admin-shipping__rows { max-width: none; }
+  .site-admin-shipping__countries .site-admin-shipping__rows { grid-template-columns: minmax(0, 1fr); }
+  .site-admin-shipping__countries .site-admin-shipping__fee { grid-template-columns: minmax(0, 1fr) 96px; }
+  .site-admin-shipping__fx-row { padding-top: 10px; }
+  .site-admin-shipping__fx-name .acs-tag { display: flex; width: fit-content; margin-top: 8px; }
+  .site-admin-shipping__save > .acs-admin__btn { justify-self: stretch; justify-content: center; min-height: 44px; }
+  .site-admin-shipping__changed .acs-admin__btn { min-height: 44px; }
 
   /* 会员登录 P12（P12-phone）：不画卡片（display: contents），标题、★ 提示、页签与页签内容在内容区（上 28px、左右 16px、下 40px）里
      上下排列，间距 16px，页签内容与密码表单同样 16px；auth.forgot 与 common.nav_register 居中 */
