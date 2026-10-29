@@ -264,6 +264,8 @@ describe("navigation", () => {
   // 店铺装修（/admin/store-design）四项；当前项仍为库存重置，手机顶栏名称不变（下一条）。
   // SHOP-TASK-137 改动：按 SHOP-TASK-137 验收第 3 条把「依次为这五项」改为依次为订单、退款、优惠券、库存重置、店铺装修与
   // 站点设置（/admin/settings）六项；当前项仍为库存重置，手机顶栏名称不变（下一条）。
+  // SHOP-TASK-173 改动：按 SHOP-TASK-173 验收第 4 条在优惠券之后加入运费与演示汇率（/admin/shipping），改为依次为这七项
+  // （按项数截取的文字随之取前七个）；当前项仍为库存重置，手机顶栏名称不变（下一条）。
   it.each(LANGUAGES)("marks the stock resets item as current, after orders and refunds, in %s", (language) => {
     const html = renderApp(STOCK_RESETS_PATH, language);
     for (const nav of [element(html, "nav", "site-admin__nav"), element(html, "nav", "site-admin__menu-nav")]) {
@@ -272,15 +274,17 @@ describe("navigation", () => {
           [ORDERS_PATH, undefined],
           [REFUNDS_PATH, undefined],
           ["/admin/coupons", undefined],
+          ["/admin/shipping", undefined],
           [STOCK_RESETS_PATH, "page"],
         ["/admin/store-design", undefined],
         ["/admin/settings", undefined],
       ]);
-        const labels = textNodes(nav).slice(0, 6);
+        const labels = textNodes(nav).slice(0, 7);
       expect(labels).toEqual([
           COPY["admin.nav_orders"][language],
           COPY["admin.nav_refunds"][language],
           COPY["admin.nav_coupons"][language],
+          COPY["admin.nav_shipping"][language],
           COPY["admin.nav_stock_resets"][language],
         COPY["admin.nav_store_design"][language],
         COPY["admin.nav_settings"][language],

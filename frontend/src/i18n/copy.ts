@@ -1855,6 +1855,16 @@ export const COPY = {
     zh: "请检查代码（4 到 20 位字母或数字）、面额、最低消费、次数上限与日期。",
     ms: "Semak kod (4–20 huruf atau digit), nilai, perbelanjaan minimum, had penggunaan dan tarikh.",
   },
+  "admin.nav_shipping": {
+    en: "Shipping & demo rates",
+    zh: "运费与演示汇率",
+    ms: "Penghantaran & kadar demo",
+  },
+  "admin.shipping_title": {
+    en: "Sample shipping fees",
+    zh: "示例运费",
+    ms: "Kos penghantaran contoh",
+  },
   "admin.nav_stock_resets": {
     en: "Stock resets",
     zh: "库存重置",

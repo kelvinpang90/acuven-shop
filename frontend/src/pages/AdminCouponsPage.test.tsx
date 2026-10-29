@@ -16,7 +16,7 @@ import type { DisableMoves, ListState, Moves } from "./AdminCouponsPage";
 const COUPONS_PATH = "/admin/coupons";
 const PATH = COUPONS_PATH;
 const LOGIN = "/admin/login";
-const NAV_PATHS = ["/admin/orders", "/admin/refunds", COUPONS_PATH, "/admin/stock-resets", "/admin/store-design", "/admin/settings"];
+const NAV_PATHS = ["/admin/orders", "/admin/refunds", COUPONS_PATH, "/admin/shipping", "/admin/stock-resets", "/admin/store-design", "/admin/settings"];
 const FIXED: AdminCoupon = { id: 1, code: "WELCOME", type: "fixed", amount_off_sen: 1000, percent_off: null, min_subtotal_sen: 0, starts_on: "2026-01-01", ends_on: "2026-12-31", total_use_limit: 100, per_member_use_limit: null, used_count: 12, active: true };
 const PERCENT: AdminCoupon = { id: 2, code: "SAVE20", type: "percent", amount_off_sen: null, percent_off: 20, min_subtotal_sen: 0, starts_on: "2026-10-05", ends_on: "2026-10-05", total_use_limit: null, per_member_use_limit: null, used_count: 0, active: false };
 
@@ -53,6 +53,8 @@ describe("AdminCouponsPage", () => {
   // UX「管理后台总体」及 SHOP-TASK-100 验收：优惠券当前项位于退款之后，五项顺序在桌面与手机菜单相同。
   // SHOP-TASK-137 改动：按 SHOP-TASK-137 验收第 3 条把「依次为这五项」改为依次为这六项（站点设置 /admin/settings 在店铺装修之后）；
   // 当前项与手机顶栏名称不变。
+  // SHOP-TASK-173 改动：按 SHOP-TASK-173 验收第 4 条在优惠券之后加入运费与演示汇率（/admin/shipping），改为依次为这七项；
+  // 当前项与手机顶栏名称不变。
   it.each(LANGUAGES)("marks coupons current in both navigation menus in UX order in %s", (language) => {
     const html = renderToStaticMarkup(
       <LanguageProvider storage={storage(language)}>
@@ -65,7 +67,7 @@ describe("AdminCouponsPage", () => {
     for (const nav of menus) {
       const items = tags(nav, "a").filter((tag) => !attributes(tag).has("lang"));
       expect(items.map((tag) => attributes(tag).get("href"))).toEqual(NAV_PATHS);
-      expect(items.map((tag) => attributes(tag).get("aria-current"))).toEqual([undefined, undefined, "page", undefined, undefined, undefined]);
+      expect(items.map((tag) => attributes(tag).get("aria-current"))).toEqual([undefined, undefined, "page", undefined, undefined, undefined, undefined]);
     }
     expect(html).toContain(`<span class="site-admin__bar-title">${COPY["admin.nav_coupons"][language]}</span>`);
   });

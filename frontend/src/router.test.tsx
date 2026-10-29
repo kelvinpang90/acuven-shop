@@ -99,6 +99,8 @@ describe("route table", () => {
   // 会员模式的退款申请 /account/order/refund 仍不在表里（SHOP-TASK-155 加入）。
   // SHOP-TASK-155 验收第 2 条「路由 /account/order/refund 加进 frontend/src/router.tsx 的路由表」：退款申请的会员模式进表，在订单详情会员模式之后；
   // 原来断言它不在表里的一行改用另一个不存在的路径 /account/order/refunds（验收第 7 条），并断言 /account/order/refund 在表里。
+  // SHOP-TASK-173 验收第 2、4 条「路由表在 /admin/coupons 之后加一项」「router.test.tsx 的路由表断言加 /admin/shipping」：
+  // 运费与演示汇率进表，在优惠券之后、库存重置结果之前。
   it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page, the member login, the password reset, the register page, the member centre, the member order detail and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
@@ -125,6 +127,7 @@ describe("route table", () => {
       "/admin/refunds/order/:orderId",
       "/admin/refunds/:id",
       "/admin/coupons",
+      "/admin/shipping",
       "/admin/stock-resets",
       "/admin/store-design",
       "/admin/settings",
