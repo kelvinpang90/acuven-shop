@@ -4960,7 +4960,7 @@ tasks:
       运营者落实写法（HANDOFF 0.76）：写法照 app/api/admin_site_settings.py 与 app/api/admin_coupons.py（require_admin、CSRF、请求体 8 KB 上限、strict 模型、不回显的 422、no-store 路由类）；取值不合格回 422 category_invalid，分类已被改动回 409 category_changed，路径里的分类 ID 照 app/api/admin_orders.py 的订单 ID 写法校验，不存在的分类按已被改动回 409。
       不做前端，不改服务层与模型，不改设计。
       设计闸门：DESIGN 1.18（提交 5ba9796） 第 14 条与 HANDOFF 0.76。拆分：接口层（4 个允许路径），页面 A10 另行登记。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-180
     acceptance_criteria:
