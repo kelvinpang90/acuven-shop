@@ -9,6 +9,8 @@
 
 > 2026-10-29 重画 A06 运费区与演示汇率（落实 `docs/UX.md` 0.15、0.16 与 `docs/UX-COPY.md` 0.16、0.17）：马来西亚由 16 个州属改为西马、东马两行；国家运费与汇率每行加删除按钮，加新增的国家行与汇率行，汇率版本号改为逐行显示；另加保存后的五种状态画板 `A06-desktop-states`。画板直接按本目录的静态页面格式绘制（不经 Claude Design 画布），参考图以站内字体用无头浏览器按画板尺寸截取。画板里灰色的「标注（不向用户显示）」只供审阅，前端不照搬。Kelvin 已于 2026-10-29 认可，记录见 `docs/HANDOFF.md`。
 
+> 2026-10-30 补充 DESIGN 1.18 的画板（落实 `docs/UX.md` 0.17 与 `docs/UX-COPY.md` 0.18，审阅稿）：重画 A04 桌面与手机稿（未上架状态、图片缩略图与封面、前后移动与移除、规格值与 SKU 的新增与启用、上架条件、每单限购 1–1000），新增 A04 新建商品、保存状态、图片与当日库存调整状态，A10 后台分类的桌面、手机与状态稿，A09 每日恢复库存一段，P03 / P04 整单上限状态；A07 两张加开关关闭说明。后台导航新增「Categories」，排在「Products」之后：新画与本次改动的画板已带上，其余后台画板未重画，以本条为准。画法同 2026-10-29 的 A06。
+
 页面的内容、流程、去向与文案以 [UX.md](../UX.md) 与 [UX-COPY.md](../UX-COPY.md) 为准；本目录只规定样式。二者冲突时以 UX 文档为准，并把冲突报给运营者。
 
 ## 目录
@@ -91,6 +93,7 @@
 | V1 验证通过（三种文案） | [V1-verified.html](pages/V1-verified.html) | [V1-verified.png](reference/V1-verified.png) | 480 × 290 |
 | P02 无结果 | [P02-empty.html](pages/P02-empty.html) | [P02-empty.png](reference/P02-empty.png) | 640 × 230 |
 | P04 购物车为空 / 商品有变化 | [P04-states.html](pages/P04-states.html) | [P04-states.png](reference/P04-states.png) | 640 × 270 |
+| P03 整单件数已满 / P04、P05 超出整单件数或金额上限（2026-10-30） | [P03-P04-caps.html](pages/P03-P04-caps.html) | [P03-P04-caps.png](reference/P03-P04-caps.png) | 640 × 540 |
 | P05 报错与提交中 | [P05-states.html](pages/P05-states.html) | [P05-states.png](reference/P05-states.png) | 640 × 450 |
 | P06 模拟支付（游客）· 桌面 | [P06-desktop.html](pages/P06-desktop.html) | [P06-desktop.png](reference/P06-desktop.png) | 1440 × 1540 |
 | P06 模拟支付（游客）· 手机 | [P06-phone.html](pages/P06-phone.html) | [P06-phone.png](reference/P06-phone.png) | 390 × 1670 |
@@ -157,19 +160,26 @@
 | A03 已批准 · Stripe 退款处理中 · 桌面 | [A03-stripe-approved.html](pages/A03-stripe-approved.html) | [A03-stripe-approved.png](reference/A03-stripe-approved.png) | 1440 × 960 |
 | A03 已批准 · 最新一次失败可重试 · 手机 | [A03-stripe-phone-failed.html](pages/A03-stripe-phone-failed.html) | [A03-stripe-phone-failed.png](reference/A03-stripe-phone-failed.png) | 390 × 1160 |
 | A03 其他状态（类型未知 / 现金为 0 / 重试被拒） | [A03-stripe-states.html](pages/A03-stripe-states.html) | [A03-stripe-states.png](reference/A03-stripe-states.png) | 640 × 520 |
-| A04 商品、规格与库存 · 桌面 | [A04-desktop.html](pages/A04-desktop.html) | [A04-desktop.png](reference/A04-desktop.png) | 1440 × 1080 |
-| A04 编辑商品 · 手机 | [A04-phone-edit.html](pages/A04-phone-edit.html) | [A04-phone-edit.png](reference/A04-phone-edit.png) | 390 × 1700 |
+| A04 商品、规格与库存 · 桌面（2026-10-30 重画） | [A04-desktop.html](pages/A04-desktop.html) | [A04-desktop.png](reference/A04-desktop.png) | 1440 × 1850 |
+| A04 编辑商品 · 手机（含当日库存调整展开，2026-10-30 重画） | [A04-phone-edit.html](pages/A04-phone-edit.html) | [A04-phone-edit.png](reference/A04-phone-edit.png) | 390 × 3370 |
+| A04 新建商品 · 桌面（含无规格的情形，2026-10-30） | [A04-desktop-new.html](pages/A04-desktop-new.html) | [A04-desktop-new.png](reference/A04-desktop-new.png) | 1440 × 1790 |
+| A04 保存状态与当前分类不可用（2026-10-30） | [A04-states.html](pages/A04-states.html) | [A04-states.png](reference/A04-states.png) | 520 × 1350 |
+| A04 当日库存调整与图片状态、移除确认框（2026-10-30） | [A04-images-stock.html](pages/A04-images-stock.html) | [A04-images-stock.png](reference/A04-images-stock.png) | 520 × 2050 |
 | A05 优惠券 · 桌面 | [A05-desktop.html](pages/A05-desktop.html) | [A05-desktop.png](reference/A05-desktop.png) | 1440 × 900 |
 | A05 优惠券列表 · 手机 | [A05-phone-list.html](pages/A05-phone-list.html) | [A05-phone-list.png](reference/A05-phone-list.png) | 390 × 900 |
 | A05 新建优惠券 · 手机 | [A05-phone-new.html](pages/A05-phone-new.html) | [A05-phone-new.png](reference/A05-phone-new.png) | 390 × 1000 |
 | A06 运费区与演示汇率 · 桌面 | [A06-desktop.html](pages/A06-desktop.html) | [A06-desktop.png](reference/A06-desktop.png) | 1440 × 1250 |
 | A06 运费区与演示汇率 · 保存后的状态 | [A06-desktop-states.html](pages/A06-desktop-states.html) | [A06-desktop-states.png](reference/A06-desktop-states.png) | 520 × 892 |
 | A06 运费区与演示汇率 · 手机 | [A06-phone.html](pages/A06-phone.html) | [A06-phone.png](reference/A06-phone.png) | 390 × 1944 |
-| A07 库存重置结果 · 桌面（含失败展开） | [A07-desktop.html](pages/A07-desktop.html) | [A07-desktop.png](reference/A07-desktop.png) | 1440 × 760 |
-| A07 库存重置结果 · 手机 | [A07-phone.html](pages/A07-phone.html) | [A07-phone.png](reference/A07-phone.png) | 390 × 1000 |
+| A07 库存重置结果 · 桌面（含失败展开） | [A07-desktop.html](pages/A07-desktop.html) | [A07-desktop.png](reference/A07-desktop.png) | 1440 × 820 |
+| A07 库存重置结果 · 手机 | [A07-phone.html](pages/A07-phone.html) | [A07-phone.png](reference/A07-phone.png) | 390 × 1060 |
 | A08 店铺装修 · 桌面 | [A08-desktop.html](pages/A08-desktop.html) | [A08-desktop.png](reference/A08-desktop.png) | 1440 × 1250 |
 | A08 店铺装修 · 手机 | [A08-phone.html](pages/A08-phone.html) | [A08-phone.png](reference/A08-phone.png) | 390 × 1640 |
 | A09 站点设置 · 桌面（含已保存提示） | [A09-desktop.html](pages/A09-desktop.html) | [A09-desktop.png](reference/A09-desktop.png) | 1440 × 640 |
 | A09 站点设置 · 手机 | [A09-phone.html](pages/A09-phone.html) | [A09-phone.png](reference/A09-phone.png) | 390 × 844 |
 | A09 支付方式 · 桌面（Stripe 测试，已保存） | [A09-stripe-desktop.html](pages/A09-stripe-desktop.html) | [A09-stripe-desktop.png](reference/A09-stripe-desktop.png) | 1440 × 900 |
 | A09 支付方式 · 凭据未配置 · 手机 | [A09-stripe-phone.html](pages/A09-stripe-phone.html) | [A09-stripe-phone.png](reference/A09-stripe-phone.png) | 390 × 1180 |
+| A09 每日恢复库存（关闭）· 桌面（2026-10-30） | [A09-stock-reset.html](pages/A09-stock-reset.html) | [A09-stock-reset.png](reference/A09-stock-reset.png) | 1440 × 1030 |
+| A10 分类 · 桌面（2026-10-30） | [A10-desktop.html](pages/A10-desktop.html) | [A10-desktop.png](reference/A10-desktop.png) | 1440 × 760 |
+| A10 分类列表与编辑 · 手机（2026-10-30） | [A10-phone.html](pages/A10-phone.html) | [A10-phone.png](reference/A10-phone.png) | 390 × 1400 |
+| A10 保存状态、已满与停用确认框（2026-10-30） | [A10-states.html](pages/A10-states.html) | [A10-states.png](reference/A10-states.png) | 520 × 1410 |
