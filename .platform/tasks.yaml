@@ -4947,7 +4947,7 @@ tasks:
       运营者落实写法（HANDOFF 0.76）：slug 与代码的基本写法、截短与去重写成独立模块 app/services/admin_codes.py，后台商品的任务（之后登记）沿用；新建与保存都先锁住现有全部分类行（至多 30 行，按 id 排序）再核对，保存在其中核对该分类的版本号（登记时的预审指出：只锁该分类行时，两个会话同时把两个分类改成同一英文名称都能通过）；英文名称在应用层去掉首尾空白并转小写比较；审计操作名 admin_category_created 与 admin_category_changed。
       不做接口与前端，不改模型与迁移（版本号列已由 SHOP-TASK-177 加好），不改 app/services/catalog.py，不改设计。
       设计闸门：DESIGN 1.18（提交 5ba9796） 第 14 条与 HANDOFF 0.76，后台维护分类。拆分：业务规则层（4 个允许路径），接口由 SHOP-TASK-181 接上，页面 A10 另行登记。
-    status: ready
+    status: done
     acceptance_criteria:
       - 代码生成——新增 app/services/admin_codes.py，code_base(english_name, fallback) 只保留 ASCII 字母与数字并转小写，其余连续字符（含空白、标点与非 ASCII 字符）换成一个连字符，去掉首尾连字符，结果为空时返回 fallback；unique_code(base, limit, taken) 依次试后缀（无、-2、-3……），每次先把 base 截到 limit 减后缀长度、去掉截短后末尾的连字符、再接后缀，返回第一个不在 taken 里的结果（taken 为已有代码的集合，调用方负责把同一次保存里先生成的加进去）；两个函数都不碰数据库
       - 读取——新增 app/services/admin_categories.py，load_admin_categories(db) 返回全部分类（含停用的）按 id 从小到大，每项为 id、slug、三语名称（空为 None）、is_active、version 与 visible_products（该分类下满足 app/services/catalog.py 的 published() 的商品件数，与前台同一规则）；只发 SELECT，不写库、不写审计
