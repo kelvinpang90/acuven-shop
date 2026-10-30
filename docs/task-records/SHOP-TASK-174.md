@@ -18,3 +18,18 @@
   - 汇率 `rate` 只校验为非空字符串，不在请求模块里检查十进制格式（交给服务端与 SHOP-TASK-175 的页面输入校验，HANDOFF 0.72 第（4）点）。
 - 留给之后：A06 页面的读取显示、改值与整页保存交给 SHOP-TASK-175，删除与新增行交给 SHOP-TASK-176。
 - 验证到什么程度：人工逐条对照验收标准、`app/api/admin_shipping_rates.py`、SHOP-TASK-171 与 172 记录、DESIGN 1.17 第 9 条与 HANDOFF 0.72 第（3）点自查。`frontend/src/api/adminShippingRates.test.ts`（vitest，fetch 以参数带类型的 `vi.fn` 替身代替）覆盖：两个请求的地址、方法、同源 cookie、no-store、Accept、Content-Type、CSRF 头与 signal；请求体恰为四项、各种行只有规定字段、删除行的 `delete` 为 true、调用方对象上多出的属性（含 `states`、`csrf_token`）不进请求体、空的组照样发出；读取与保存 200 时多出的字段不带进结果；读取时运费 0 与 999999 和小数位 0 与 3 合格（保存的响应体不另测这几个边界）；读取与保存共用的不合格例（各组缺少或不是数组，`other` 为 null、缺少、数组、代码不是 `OTHER`，马来西亚行代码为州属代码、小写、`OTHER` 或重复，行 ID 与版本号为 0、小数或字符串，运费 1000000、小数、负数或字符串，国家代码为 `MY`、小写、三位或 `OTHER`，币种两位、小写或四位，小数位 4、负数、小数或字符串，汇率为空串或数字）与读取的 `csrf_token` 缺少、为空、数字或 null，整体不是对象或不是 JSON；读取与保存各状态码的归类（422 与 409 的 detail 对调、大小写不同、错误列表、不是 JSON 时归 failed，413、415 与其他状态归 failed）、网络中断与中止。除两条中止测试（见偏离一节）外，每条测试的注释写明它守住的 SHOP-TASK-171、172 记录、DESIGN 1.17 第 9 条或 HANDOFF 0.72 的原句；响应体不是 JSON 的测试引用 SHOP-TASK-171 记录里 GET 与 PUT 200 回答整页数据的原句。前端检查交由 PR 的必需 CI 检查 frontend 执行（lint、类型检查、测试、构建与镜像构建；Worker 沙箱不跑前端检查）。本任务不做浏览器验收。检查命令结果由 Worker 另行记录。
+
+## 登记时的验收标准（原文）
+
+2026-10-30 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 新文件 frontend/src/api/adminShippingRates.ts 调用 GET 与 PUT /api/admin/shipping-rates，都不带查询参数（同源 cookie，cache 为 no-store，Accept 为 application/json；PUT 的 Content-Type 为 application/json，X-CSRF-Token 为调用方给出的 csrf_token，请求头名取 frontend/src/api/pay.ts 的 CSRF_HEADER）；写法沿用 frontend/src/api/adminSiteSettings.ts（readBody、isRecord 这类内部函数在本文件另写）；调用方可传入 AbortSignal，中止时按现有模块的做法归为 network
+      - 读取 200 的响应体只取 app/api/admin_shipping_rates.py 的 AdminRatesPageOut 列出的字段，多出的字段不带进结果；合格条件——malaysia 为数组，每行 id 与 version 为正整数、zone_code 为 MY-W 或 MY-E 且同一代码不出现两次、fee_sen 为 0 到 999999 的整数；other 为一行（zone_code 为 OTHER，其余同上），为 null 时算不合格；countries 为数组，每行 zone_code 为两位大写字母且不是 MY，其余同上；fx 为数组，每行 id 与 version 为正整数、country_code 为两位大写字母且不是 MY、currency_code 为三位大写字母、currency_decimals 为 0 到 3 的整数、rate 为非空字符串；csrf_token 为非空字符串；字段缺少或类型不对都算不合格，整个响应体不合格即归为 failed；保存 200 的响应体按同一条件读取，只是不取 csrf_token
+      - 保存函数接收整页的保存内容、csrf_token 与可选的 AbortSignal；保存内容有 malaysia（保留的运费行数组）、other（一行保留的运费行）、countries 与 fx 四项，各行用联合类型区分种类——保留的运费行只有 id、version、fee_sen，删除的行只有 id、version 与值为 true 的 delete，新增的国家运费行只有 country_code 与 fee_sen，保留的汇率行只有 id、version、rate，新增的汇率行只有 country_code、currency_code、currency_decimals 与 rate（与 app/api/admin_shipping_rates.py 的 AdminRatesIn 一致）；JSON 请求体只有这四项，每行按种类只序列化这些字段，调用方对象上多出的属性不带进请求体
+      - 结果归类——读取为 ok（带整页数据与 csrf_token）、none（401）、failed（其他状态，含 200 但响应体不合格）与 network；保存为 ok（带保存后的整页数据）、none（401）、csrf（403）、invalid（422 且 detail 为 rates_invalid）、changed（409 且 detail 为 rates_changed）、failed（其他状态，含其他 422、其他 409、413、415 与 200 但响应体不合格）与 network
+      - 用 vitest（不加测试依赖，fetch 以替身代替）在新文件 frontend/src/api/adminShippingRates.test.ts 验证意图——两个请求的地址、方法、请求头与请求体（四项、各种行只有规定字段、多出的属性不进请求体、删除行的 delete 为 true）；读取与保存响应体的合格判定（逐项各有反例，含 other 为 null、马来西亚行代码不是两档或重复、国家代码为 MY、币种为两位、小数位为 4、fee_sen 为 1000000 或小数、多出的字段不带进结果）；各状态码的归类（422 与 409 的 detail 不对时归 failed）与网络中断、中止；每条测试写明它守住的是 SHOP-TASK-171、172 记录、DESIGN 1.17 第 9 条或 HANDOFF 0.72 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-174.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；请求、字段与合格条件、归类、偏离、验证到什么程度；只写实际存在的测试，写明页面留给 SHOP-TASK-175、176）
+      - 改动只落在 allowed_change_paths（不改页面、路由与导航）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
+```

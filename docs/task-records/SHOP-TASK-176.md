@@ -31,3 +31,19 @@
     8. 「rereads after a CSRF refusal and shows error_retry above the form」：请求由 PUT、GET 改为 PUT、GET、GET（多了收货国家列表），期望的状态多了 `regions`（fetch 替身的调用次数与地址、页面状态变化）。
   - 其余 SHOP-TASK-173、175 的测试未改。
 - 验证到什么程度：人工逐条对照 UX A06「增删」、UX-COPY 0.17 的六条文案、HANDOFF 0.72 第（4）到（8）点与两张画板；上面列出的是本次新增或修改的测试代码，前端的 lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI `frontend` 执行（Worker 沙箱不跑前端检查）。未做浏览器验收（包括桌面与手机上删除按钮、新增行的实际排版与下拉的表现）。
+
+## 登记时的验收标准（原文）
+
+2026-10-30 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.16 的 A06、docs/UX-COPY.md 0.17 与 docs/HANDOFF.md 0.72 为准，样式以 docs/design/pages/ 的 A06-desktop 与 A06-phone 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.17 逐字加入 admin.remove、admin.add_country、admin.add_fx、admin.shipping_country、admin.fx_currency 与 admin.fx_decimals 中字典还没有的键，写法与相邻条目相同
+      - 删除——按国家与演示汇率两块的每行（含新增的行）有次要按钮 admin.remove，马来西亚两档与其他国家没有；点了即从页面去掉该行，不弹确认框，保存后才生效；被删的现有行在保存内容里为删除的行（读取时的 id、version 与 delete），新增后又删掉的行不进保存内容
+      - 新增国家运费——按国家一块的末尾有次要按钮 admin.add_country，点了在该块末尾加一行：国家下拉（无障碍标签为 admin.shipping_country，选项照 HANDOFF 0.72）、空白的运费输入框与 admin.remove；同一块的新增行之间国家互不重复（每行自己选中的国家仍在自己的选项里）；保存内容里为新增的国家运费行（country_code 与按 SHOP-TASK-175 换成整仙的 fee_sen）
+      - 新增汇率——演示汇率一块的末尾有次要按钮 admin.add_fx，点了加一行：带可见标签 admin.shipping_country 的国家下拉（选项规则同上，按汇率一块判断）、admin.fx_currency（至多三个字符）、admin.fx_decimals 与 admin.fx_rate_new 三个带可见标签的输入框，以及 admin.remove；格式照 HANDOFF 0.72，合格时保存内容里为新增的汇率行（国家、转大写的币种、小数位的整数与原样的汇率）；已有的汇率行仍只能改汇率
+      - 保存与重新读取——保存内容按页面顺序列出现有的行（被删的以删除的行列在原位置），新增的行排在该组末尾；增删任何一行或改新增行的国家选择即照 SHOP-TASK-175 收起保存按钮下方的全部提示；ok 后页面照 SHOP-TASK-175 改为返回的整页数据（新增的行成为现有的行，删除的行消失）；admin.reload 重新读取时丢弃增删；收货国家列表在每次整页读取时（打开页面、admin.reload 与保存 403 后的重新读取）一起重新取得，读取失败只禁用两个新增按钮，不影响其余部分，下一次整页读取成功即恢复
+      - 代码结构沿用 frontend/src/pages/AdminSiteSettingsPage.tsx 现有写法（导出把结果变成页面状态的纯函数、接收 AbortSignal 与回调的异步函数，以及只依赖 props 的 View）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；增删与选国家另导出改动页面状态的纯函数
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AdminShippingPage.test.tsx 验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——删除按钮只在国家与汇率行出现及其无障碍标签；删除现有行与新增行在保存内容里的差别；两种新增行的字段与可见标签；下拉选项不含 MY、不含该块已有国家、含已删除的国家、按名称排序、默认第一个；没有可选国家或收货国家列表读取失败时新增按钮禁用；币种转大写、小数位与汇率格式不对时不提交并显示 admin.rates_invalid；保存内容的顺序；ok 与重新读取后的页面；页面文字全部来自字典（国家名称、币种代码、小数位、版本号、汇率与运费的值、输入框的值、无障碍标签中拼接用的英文逗号加空格以及 → 与括号除外）；每条测试写明它守住的是 UX、设计或 HANDOFF 0.72 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）。SHOP-TASK-175 写的断言只在因本任务的删除与新增按钮、收货国家列表的读取（fetch 替身的调用次数与地址），或页面状态与 View 的 props 变化而失效时改写，并在任务记录里逐条写明
+      - docs/task-records/SHOP-TASK-176.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；删除、两种新增、国家选项、保存内容与重新读取、偏离、验证到什么程度；只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.17 提交 80e3775 与 HANDOFF 0.72），不合并、不直推；不新增路由，router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改
+```
