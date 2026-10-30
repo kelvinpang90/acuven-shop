@@ -2471,6 +2471,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 说明：
 
 - **列表**：全部分类按 ID 从小到大（即前台分类列表的顺序），名称列显示英文名称（缺英文名称时显示 —）；`[admin.category_visible]` 为该分类下前台可见（满足发布规则）的商品件数；`[admin.categories_count]` 显示已有个数与上限 30，已满时 `[common.create]` 禁用并显示 `[admin.categories_full]`。有未保存的修改（编辑区的值与最近一次读取或保存的不同）时，点另一项的 `[common.edit]`、`[common.create]`、后台导航、手机顶栏的返回或 `[admin.logout]`，先弹确认框 `[admin.unsaved_confirm]`：`[admin.unsaved_leave]` 丢弃修改并继续，`[admin.unsaved_stay]` 留在本页、保留已填的值（Kelvin 2026-10-30 决定）；没有未保存的修改时直接切换。浏览器的后退与前进在本站内切页（不重新加载页面）时同样弹这个确认框，选 `[admin.unsaved_stay]` 时把地址栏恢复为本页；刷新与关闭标签页由浏览器自己的离开提示拦一次（文字由浏览器决定）。点「已被改动」提示里的 `[admin.reload]` 是明确放弃修改，不再确认。
+- **内容语言**：与 A04 相同；`[admin.category_translation_missing]` 只在内容语言为中文或马来文、且该语言的名称为空时显示，英文名称缺失由保存时的 `[admin.category_invalid]` 说明。
 - **新建**：英文名称必填（slug 按英文名称生成，之后改名称也不变）；启用默认勾选。新建成功后进入该分类的编辑区、显示 `[admin.category_created]` 与生成的 slug。
 - **启用与停用**：勾选启用须有英文名称，页面先检查，不满足即不提交、显示 `[admin.category_invalid]`。取消勾选后保存时，该分类的 `[admin.category_visible]` 大于 0 即先弹 `[admin.category_disable_confirm]`（`{count}` 为该件数），确认后才提交；为 0 时直接提交。停用后前台不再显示该分类与其下的商品（商品自己的上架状态不变，重新启用后照常显示），访客购物车里这些商品的行标为不可购买，首页精选里这些商品也不再显示。
 - **不能删除**：分类不能删除，不再用的停用（`[admin.category_slug_hint]` 一并说明 slug 不变）。
