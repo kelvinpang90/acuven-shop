@@ -5010,7 +5010,7 @@ tasks:
       运营者落实写法（HANDOFF 0.77）：请求结构写死在契约里，保存与接口照用；第一步（只看请求）的检查写成新建与保存共用的函数；代码沿用 SHOP-TASK-180 的 app/services/admin_codes.py，沿用的代码同样去重；读取单件商品时一并返回它的图片（只读）；审计操作名 admin_product_created、admin_product_option_created、admin_product_option_value_created、admin_product_variant_created。
       不做接口与前端，不改模型与迁移（版本号列已由 SHOP-TASK-177 加好），不改 app/services/catalog.py，不改设计。
       设计闸门：DESIGN 1.18（提交 5ba9796） 第 11 条与 HANDOFF 0.77，商品与价格。拆分：读取与新建（3 个允许路径），已有行的保存由 SHOP-TASK-184、保存时的新增由 185、接口由 186 接上，页面 A04 另行登记。
-    status: ready
+    status: done
     acceptance_criteria:
       - 请求结构（写在 app/services/admin_products.py，新建与保存共用，SHOP-TASK-184 至 186 照用、不改）——ProductInput(category_id, name_en, name_zh, name_ms, description_en, description_zh, description_ms, is_active, max_per_order, options, variants)；OptionInput(id, name_en, name_zh, name_ms, values)，id 为 None 表示新建（只在新建商品时出现）；ValueInput(id, temp_id, name_en, name_zh, name_ms)，已有的值只带 id、新增的值只带 temp_id；VariantInput(id, temp_id, option_values, price_sen, daily_initial_stock, is_active)，已有的 SKU 只带 id 且 option_values 为 None，新增的 SKU 只带 temp_id 且 option_values 按规格名顺序列出 ValueRef；ValueRef(id, temp_id) 两者恰有一个，以行 ID 引用已有规格值、以 temp_id 引用同一请求里新增的规格值；temp_id 为 1–32 个 ASCII 字母、数字、连字符或下划线，规格值之间、SKU 之间各自不重复；五个类型都是不可变的数据类，列表字段为 list 或 tuple
       - 读取——load_admin_products(db) 返回全部商品（含未上架的），按 created_at 从新到旧、同时间按 id 从大到小，不分页，每项为 id、slug、三语名称、is_active、category_id 与所属分类的三语名称；load_admin_product(db, product_id) 不存在时返回 None，否则返回商品的 id、slug、version、category_id、三语名称与描述、is_active、max_per_order，规格名按 sort_order（同序按 id）列出 id、code、三语名称与同样排序的规格值（id、code、三语名称），SKU 按 id 列出 id、sku、price_sen、daily_initial_stock、available_stock、is_active 与按规格名顺序排列的规格值 ID，图片按 sort_order 列出 id 与 storage_ref；两者只发 SELECT，不写库；之后的任务不改这两个函数的签名与返回结构
