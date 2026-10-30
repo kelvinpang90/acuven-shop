@@ -7,7 +7,7 @@
 
 依据已批准的 `docs/DESIGN.md` 1.18 与 `docs/REQUIREMENTS.md` 1.15（Kelvin 2026-10-30 批准，记录见 `docs/HANDOFF.md` 0.73）：
 
-- **A04 后台商品**（DESIGN 1.18 第 11、12、13 条）：列表含未上架的商品（`[admin.unpublished]`）；新建商品（规格名只在新建时给出，0–3 个）；新增规格值与 SKU、SKU 启用、商品与 SKU 不能删除；分类只能选启用且有英文名称的，当前分类已停用时可保留但不能上架；上架条件常显；保存后三种结果与 A06 写法相同；有未保存的修改时切换商品、新建或离开本页先弹确认框（Kelvin 2026-10-30 决定）。图片缩略图、封面、前后移动、移除确认与上传结果，图片各自立即生效；当日库存调整在该行下展开、立即提交，「库存已变动」时显示当前值。每单限购提示改为 1–1000。
+- **A04 后台商品**（DESIGN 1.18 第 11、12、13 条）：列表含未上架的商品（`[admin.unpublished]`）；新建商品（规格名只在新建时给出，0–3 个）；新增规格值与 SKU、SKU 启用、商品与 SKU 不能删除；分类只能选启用且有英文名称的，当前分类已停用时可保留但不能上架；上架条件常显；保存后四种结果与 A06 写法相同；有未保存的修改时切换商品、新建或离开本页先弹确认框（Kelvin 2026-10-30 决定）。图片缩略图、封面、前后移动、移除确认与上传结果，图片各自立即生效；当日库存调整在该行下展开、立即提交，「库存已变动」时显示当前值。每单限购提示改为 1–1000。
 - **A10 后台分类**（新增，DESIGN 1.18 第 14 条，页面位置由 UX 定）：独立一页 `/admin/categories`，导航项 `[admin.nav_categories]` 排在 `[admin.nav_products]` 之后（未选：放进 A04 的一个区块）；新建、三语名称、启用与停用（停用前按前台可见商品件数确认）、不能删除、至多 30 个；有未保存的修改时切换同样先确认。
 - **A09 每日恢复库存开关**（DESIGN 1.18 第 6 条）：新增 `[admin.stock_reset_toggle]`，默认开启，与短信验证、支付方式一起整页保存；任一项被拒则三项都不写入。
 - **A07**：新增 `[admin.stock_reset_off_note]`，说明开关关闭期间没有新的重置记录（页面不读取开关状态，常显）。
@@ -451,9 +451,9 @@ V1 金额与个人资料元素：
 
 每单限购（0.6）：`[detail.max_per_order]` 显示该商品的限购件数。同一商品所有规格在本浏览器购物车中的件数合计计入限购；数量 (+) 的上限是限购件数减去购物车中该商品已有的件数，所选规格已在购物车中时加入即合并件数。该商品已达限购时加入按钮禁用并显示 `[detail.limit_reached]`；购物车已有 20 行且所选规格不在其中时加入按钮禁用并显示 `[detail.cart_full]`。两处都只是提示，下单时由服务端再次校验（DESIGN 1.10「计价、优惠、积分与库存」第 8 条）。
 
-整单件数上限（0.17，DESIGN 1.18「计价、优惠、积分与库存」第 8 条）：一张购物车所有行的件数合计不超过 2,000，每行不超过 1000。数量（(+) 与直接输入）的上限取「限购件数减去购物车中该商品已有的件数」与「2,000 减去购物车全部行的件数」中较小的（每行 1000 件的剩余不会小于前者，因为限购件数至多 1000）；后者为 0 时加入按钮禁用并显示 `[detail.cart_units_full]`（`{count}` 为 2,000），与 `[detail.limit_reached]` 同时满足时只显示 `[detail.limit_reached]`。整单金额上限要等计价接口判断，本页不提示。
+整单件数上限（0.17，DESIGN 1.18「计价、优惠、积分与库存」第 8 条）：一张购物车所有行的件数合计不超过 2,000，每行不超过 1000。数量（(+) 与直接输入）的上限取「限购件数减去购物车中该商品已有的件数」与「2,000 减去购物车全部行的件数」中较小的（每行 1000 件的剩余不会小于前者，因为限购件数至多 1000）；后者为 0 时加入按钮禁用并显示 `[detail.cart_units_full]`（`{count}` 为 2,000），与另两种禁用原因同时满足时只显示一条，依次为 `[detail.limit_reached]`、`[detail.cart_units_full]`、`[detail.cart_full]`；手机上与 `[detail.limit_reached]` 的位置相同。整单金额上限要等计价接口判断，本页不提示。
 
-数量可直接输入（0.17，Kelvin 2026-10-30 决定）：(-) 与 (+) 之间是数字输入框（读屏标签 `[detail.quantity]`），只收整数，回车或离开输入框时生效；为空、为 0 或不是整数时恢复为原来的件数；超过上限时改为上限，并在旁边显示 `[common.qty_capped]`（`{count}` 为上限）。本页的上限即上一段所说的件数。
+数量可直接输入（0.17，Kelvin 2026-10-30 决定）：(-) 与 (+) 之间是数字输入框（读屏标签 `[detail.quantity]`），只收整数，回车或离开输入框时生效；为空、小于 1 或不是整数时恢复为原来的件数；超过上限时改为上限，并在数量下方显示 `[common.qty_capped]`（`{count}` 为上限）。本页的上限即上一段所说的件数。
 
 金额与个人资料元素：
 
@@ -512,7 +512,7 @@ V1 金额与个人资料元素：
 
 说明（0.6）：同一商品各行的件数合计达到每单限购时，这些行的数量 (+) 禁用。计价接口把某商品的各行标为超出限购时，在这些行下显示 `[cart.over_limit]`（`{count}` 为接口返回的限购件数），并与其他变化一样显示 `[cart.item_changed]`；访客减少件数或移除后重新计价。
 
-整单上限（0.17，DESIGN 1.18「计价、优惠、积分与库存」第 8 条）：购物车全部行的件数合计达到 2,000 时，各行的数量 (+) 禁用。数量可直接输入（0.17，Kelvin 2026-10-30 决定）：(-) 与 (+) 之间是数字输入框（读屏标签 `[detail.quantity]`），只收整数，回车或离开输入框时生效；为空、为 0 或不是整数时恢复为原来的件数；超过上限时改为上限，并在旁边显示 `[common.qty_capped]`（`{count}` 为上限）。每行的上限为该行现有件数加上「限购件数减去该商品各行合计」与「2,000 减去全部行合计」中较小的；生效后与 (+)(-) 一样重新计价。计价接口返回超出整单件数上限的标记时显示 `[cart.units_over_limit]`（`{count}` 为接口返回的上限件数），返回超出整单金额上限的标记时显示 `[cart.amount_over_limit]`（`{amount}` 为接口返回的上限金额，按整数仙格式化）；两者与各行的标注互不影响，同时存在时都显示，样式与 `[cart.item_changed]` 相同，位置在它之下。本页没有运费，金额上限按商品小计判断。`[cart.checkout]` 照旧显示（与有非正常行时相同），P05 再次提示并禁止下单。
+整单上限（0.17，DESIGN 1.18「计价、优惠、积分与库存」第 8 条）：购物车全部行的件数合计达到 2,000 时，各行的数量 (+) 禁用。数量可直接输入（0.17，Kelvin 2026-10-30 决定）：(-) 与 (+) 之间是数字输入框（读屏标签 `[detail.quantity]`），只收整数，回车或离开输入框时生效；为空、小于 1 或不是整数时恢复为原来的件数；超过上限时改为上限，并在数量下方显示 `[common.qty_capped]`（`{count}` 为上限）。输入值不大于该行现有件数时照收（减少件数不受上限约束）；大于时，上限为「该行现有件数 + max(0, min(限购件数减去该商品各行合计, 2,000 减去全部行合计))」（后台调低限购后购物车可能已超出，这时上限就是现有件数）；生效后与 (+)(-) 一样重新计价。计价接口返回超出整单件数上限的标记时显示 `[cart.units_over_limit]`（`{count}` 为接口返回的上限件数），返回超出整单金额上限的标记时显示 `[cart.amount_over_limit]`（`{amount}` 为接口返回的上限金额，按整数仙格式化）；两者与各行的标注互不影响，同时存在时都显示，样式与 `[cart.item_changed]` 相同，位置在它之下。本页没有运费，金额上限按商品小计判断。`[cart.checkout]` 照旧显示（与有非正常行时相同），P05 再次提示并禁止下单。
 
 金额与个人资料元素：
 
@@ -1939,7 +1939,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 
 - **目的**：查看全部商品（含未上架的），新建商品，维护商品三语文案、分类、图片、规格值、SKU、价格、每日初始库存、SKU 启用、每单限购、当日库存调整与上架状态（0.17 起按 DESIGN 1.18「计价、优惠、积分与库存」第 11、12、13 条）。
 - **入口**：后台导航；A10。
-- **去向**：A07（查看重置结果）；A10（维护分类）。
+- **去向**：A07（查看重置结果）；A10（维护分类，经后台导航，本页不另设入口）。
 - **演示提示**：★ `[admin.demo_banner]`；`[admin.initial_stock_note]`；`[admin.rules_apply_new]`。
 
 桌面：
@@ -1964,7 +1964,8 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 |           |  [admin.images_immediate]                                  |
 |           |  新建未保存：( [admin.upload] ) 禁用，旁边 [admin.image_save_first] |
 |           |  [admin.product_options]                                   |
-|           |   <规格名> [____]  [admin.option_values] [<值>__] [<值>__] ( [admin.add_value] ) |
+|           |   [admin.option_name] [____]  [admin.option_values] [<值>__] [<值>__] ( [admin.add_value] ) |
+|           |   （规格值输入框与新 SKU 的规格值下拉框，读屏标签 [admin.option_value]） |
 |           |   [admin.options_fixed_note]                               |
 |           |  [admin.sku] [admin.variant] [admin.price] [admin.initial_stock] [admin.sku_enabled] [admin.available_today] |
 |           |  <sku> <规格值> [M1 ____] [M2 ___] ☑ <n> ([admin.adjust_today]) |
@@ -1981,9 +1982,9 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 |  [admin.adjust_note]                                                       |
 |  结果：[admin.adjust_saved] / [admin.stock_changed] / [admin.adjust_invalid] / [common.error_retry] |
 图片（0.17）：上传中 [admin.image_uploading]；被拒 [admin.image_type_unsupported] / [admin.image_too_large] / [admin.images_full] / [admin.image_invalid]；排序被拒 [admin.images_changed] ( [admin.reload] )；其他失败 [common.error_retry]
-移除图片确认框（0.17）：[admin.image_remove_confirm]  ( [admin.image_remove] ) ( [common.cancel] )
-有未保存的修改时切换（0.17）：[admin.unsaved_confirm]  ( [admin.unsaved_leave] ) ( [admin.unsaved_stay] )
-新建商品（0.17）：规格区为 ( [admin.add_option] )，每个规格名一行 [____] [admin.option_values] [<值>__] ( [admin.add_value] ) (✗)；没有规格名时为 [admin.no_options]，SKU 表固定一行
+移除图片确认框（0.17）：[admin.image_remove_confirm]  ( [common.cancel] ) ( [admin.image_remove] )
+有未保存的修改时切换（0.17）：[admin.unsaved_confirm]  ( [admin.unsaved_stay] ) ( [admin.unsaved_leave] )
+新建商品（0.17）：规格区为 ( [admin.add_option] )，每个规格名一行 [admin.option_name] [____] [admin.option_values] [<值>__] ( [admin.add_value] ) (✗)；没有规格名时为 [admin.no_options]，SKU 表固定一行
 ```
 
 手机：
@@ -2013,7 +2014,8 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 | [admin.product_image_rules]    |
 | [admin.images_immediate]       |
 | [admin.product_options]        |
-|  <规格名> [____]               |
+|  [admin.option_name] [____]    |
+|  [admin.option_values]         |
 |  [<值>__] [<值>__]             |
 |  ( [admin.add_value] )         |
 | [admin.options_fixed_note]     |
@@ -2027,10 +2029,17 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 |  [admin.sku_enabled] ☑         |
 |  [admin.available_today] <n>   |
 |  ([admin.adjust_today])        |
-|  （展开）[admin.adjust_new] [M4 __] |
+|  （展开）[admin.adjust_title]   |
+|   [admin.adjust_shown]         |
+|   [admin.adjust_new] [M4 __]   |
 |   ([admin.adjust_save]) ([common.cancel]) |
-| 新 SKU 卡片：[admin.sku_code_on_save] |
-|  [▾ <值>] [▾ <值>] … (✗)        |
+|   [admin.adjust_note]          |
+|   结果见桌面                    |
+| 新 SKU 卡片：[admin.sku_code_on_save] (✗) |
+|  [▾ <值>] [▾ <值>] …            |
+|  [admin.price] [M1 ____]       |
+|  [admin.initial_stock][M2 __]  |
+|  [admin.sku_enabled] ☑         |
 | ( [admin.add_sku] )            |
 | [admin.no_delete_note]         |
 | [admin.initial_stock_note]     |
@@ -2039,16 +2048,16 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 
 说明（0.17，DESIGN 1.18 第 11 条）：
 
-- **列表**：全部商品（含未上架的），按新建时间从新到旧，不分页；状态显示 `[admin.active]` 或 `[admin.unpublished]`。有未保存的修改（编辑区的值与最近一次读取或保存的不同；图片与当日库存调整立即生效，不算在内）时，点另一项的 `[common.edit]`、`[common.create]`、后台导航、手机顶栏的返回或 `[admin.logout]`，先弹确认框 `[admin.unsaved_confirm]`：`[admin.unsaved_leave]` 丢弃修改并继续，`[admin.unsaved_stay]` 留在本页、保留已填的值（Kelvin 2026-10-30 决定）；没有未保存的修改时直接切换。刷新、关闭标签页或浏览器后退由浏览器自己的离开提示拦一次（文字由浏览器决定）。点「已被改动」提示里的 `[admin.reload]` 是明确放弃修改，不再确认。
+- **列表**：全部商品（含未上架的），按新建时间从新到旧，不分页；状态显示 `[admin.active]` 或 `[admin.unpublished]`。有未保存的修改（编辑区的值与最近一次读取或保存的不同；图片与当日库存调整立即生效，不算在内）时，点另一项的 `[common.edit]`、`[common.create]`、后台导航、手机顶栏的返回或 `[admin.logout]`，先弹确认框 `[admin.unsaved_confirm]`：`[admin.unsaved_leave]` 丢弃修改并继续，`[admin.unsaved_stay]` 留在本页、保留已填的值（Kelvin 2026-10-30 决定）；没有未保存的修改时直接切换。浏览器的后退与前进在本站内切页（不重新加载页面）时同样弹这个确认框，选 `[admin.unsaved_stay]` 时把地址栏恢复为本页；刷新与关闭标签页由浏览器自己的离开提示拦一次（文字由浏览器决定）。点「已被改动」提示里的 `[admin.reload]` 是明确放弃修改，不再确认。
 - **一次保存**：文案、分类、上架状态、每单限购、规格名与规格值的名称、各 SKU 的价格、每日初始库存与启用状态，以及新增的规格值与 SKU，都由 `[common.save]` 一次提交；图片与当日库存调整各自立即生效，不随保存提交（见下）。保存中按钮禁用，防重复提交。
 - **内容语言**：`[admin.content_language]` 切换的是本商品全部名称与描述输入框（含规格名与规格值的名称）显示与编辑的语言，切换不丢失已填的其他语言；`[admin.translation_missing]` 按当前语言是否缺译显示。
 - **分类**：下拉框只列启用且有英文名称的分类（与前台分类列表相同），名称按后台界面语言显示（缺译回退英文）。商品当前所属的分类已停用或缺英文名称时，下拉框仍显示它、可以保留，其下显示 `[admin.category_current_unavailable]`；这时勾选 `[admin.active]` 保存会被拒。新建商品必须选分类。
 - **上架**：`[admin.publish_requirements]` 常显。勾选 `[admin.active]` 时页面先按请求里能看到的部分检查（英文名称与描述、全部规格名与规格值的英文名称、至少一个启用的 SKU），不满足即不提交、显示 `[admin.product_invalid]`；分类是否启用由服务端判断。下架不检查。
-- **规格**：规格名只在新建商品时给出（0–3 个，`[admin.add_option]` 达 3 个后禁用），之后不能增减，`[admin.options_fixed_note]` 常显；每个规格名 1–20 个值，`[admin.add_value]` 达 20 个后禁用。已有的规格名与规格值只能改名称，不能删；本次新增、还没保存的规格值与 SKU 可用 (✗) 去掉。新建商品与新增规格值时英文名称必填（代码按英文名称生成）。
+- **规格**：规格名只在新建商品时给出（0–3 个，`[admin.add_option]` 达 3 个后禁用），之后不能增减，`[admin.options_fixed_note]` 常显；每个规格名 1–20 个值，`[admin.add_value]` 达 20 个后禁用。已有的规格名与规格值只能改名称，不能删；本次新增、还没保存的规格值与 SKU 可用 (✗) 去掉；新建商品时规格名也可去掉。被本次新增的 SKU 选用的规格值（或其值被选用的规格名）的 (✗) 禁用，先去掉或改选那些 SKU。新建商品与新增规格值时英文名称必填（代码按英文名称生成）。
 - **SKU**：已有 SKU 的规格值组合不能改，只显示；不再卖的取消 `[admin.sku_enabled]`。`[admin.add_sku]` 新增一行，每个规格名下各选一个值（可选同一次新增的值），代码由服务端在保存时生成，保存前显示 `[admin.sku_code_on_save]`；一件商品至多 50 个 SKU，达到后按钮禁用。没有规格名的商品固定一个 SKU，不显示 `[admin.add_sku]`。新增 SKU 保存后，当日可用库存等于它的每日初始库存。
 - **不能删除**：商品、规格名、规格值与已保存的 SKU 都不能删除，`[admin.no_delete_note]` 常显；不再卖的商品下架。
-- **保存结果**：成功时页面改显示服务端返回的保存后数据（版本号随之更新），显示 `[admin.product_saved]`；新建成功后进入该商品的编辑区、显示 `[admin.product_created]`，这时才能上传图片。输入不是金额或整数格式、超出范围时页面不提交、直接显示 `[admin.product_invalid]`；服务端回答「取值不合格」时同样显示。两者都整次保存不生效，页面保留已填的值。服务端回答「商品已被改动」时显示 `[admin.product_changed]` 与 `[admin.reload]`，点它重新读取，未保存的修改丢弃，不自动合并。其他失败显示 `[common.error_retry]`，保留已填的值。
-- **图片**（DESIGN 1.18 第 13 条）：缩略图按顺序排列，第一张标 `[admin.image_cover]`（商品列表、分类图与购物车用它）；`[admin.image_count]` 显示已有张数与上限 8。每张图的 (‹)(›) 前后移动一位（读屏标签 `[admin.image_move_earlier]`、`[admin.image_move_later]`；第一张没有 (‹)、最后一张没有 (›)），(✗) 移除（读屏标签 `[admin.image_remove]`），移除前弹确认框 `[admin.image_remove_confirm]`（移除后无法恢复，系统不保留原图）。`[admin.upload]` 一次选一个文件，选好即上传，上传中按钮禁用并显示 `[admin.image_uploading]`；已有 8 张或新建商品尚未保存时按钮禁用，后者旁边显示 `[admin.image_save_first]`。上传、排序与移除各自立即生效，不需要 `[common.save]`，也不改商品的版本号（`[admin.images_immediate]`）；成功后图片区改显示服务端返回的图片列表。被拒时按服务端的回答显示 `[admin.image_type_unsupported]`、`[admin.image_too_large]`、`[admin.images_full]` 或 `[admin.image_invalid]`，排序被拒（图片已在别处增删）显示 `[admin.images_changed]` 与 `[admin.reload]`（只重新读取图片区）。页面只做格式与大小的初步检查（不是 JPEG、PNG、WebP 或超过 5 MB 即不上传、直接显示对应提示），像素尺寸由服务端判断。
+- **保存结果**：成功时页面改显示服务端返回的保存后数据（版本号随之更新），显示 `[admin.product_saved]`；新建成功后进入该商品的编辑区、显示 `[admin.product_created]`，这时才能上传图片。价格按 RM 输入、至多两位小数，提交时按文字换成整仙（不经浮点数相乘，与 A06 运费相同）；库存与限购只收整数。输入不是这些格式、超出范围时页面不提交、直接显示 `[admin.product_invalid]`；服务端回答「取值不合格」时同样显示。两者都整次保存不生效，页面保留已填的值。服务端回答「商品已被改动」时显示 `[admin.product_changed]` 与 `[admin.reload]`，点它重新读取，未保存的修改丢弃，不自动合并。其他失败显示 `[common.error_retry]`，保留已填的值。
+- **图片**（DESIGN 1.18 第 13 条）：缩略图按顺序排列，第一张标 `[admin.image_cover]`（商品列表、分类图与购物车用它）；`[admin.image_count]` 显示已有张数与上限 8。每张图的 (‹)(›) 前后移动一位（读屏标签 `[admin.image_move_earlier]`、`[admin.image_move_later]`；第一张的 (‹)、最后一张的 (›) 照常显示但禁用），(✗) 移除（读屏标签 `[admin.image_remove]`），移除前弹确认框 `[admin.image_remove_confirm]`（移除后无法恢复，系统不保留原图）。`[admin.upload]` 一次选一个文件，选好即上传，上传中按钮禁用并显示 `[admin.image_uploading]`；已有 8 张或新建商品尚未保存时按钮禁用，后者旁边显示 `[admin.image_save_first]`。上传、排序与移除各自立即生效，不需要 `[common.save]`，也不改商品的版本号（`[admin.images_immediate]`）；成功后图片区改显示服务端返回的图片列表。被拒时按服务端的回答显示 `[admin.image_type_unsupported]`、`[admin.image_too_large]`、`[admin.images_full]` 或 `[admin.image_invalid]`，排序被拒（图片已在别处增删）显示 `[admin.images_changed]` 与 `[admin.reload]`（重新读取该商品，只替换图片区，编辑区未保存的修改保留）。页面只做格式与大小的初步检查（不是 JPEG、PNG、WebP 或超过 5 MB 即不上传、直接显示对应提示），像素尺寸由服务端判断。
 - **当日库存调整**（DESIGN 1.18 第 12 条）：点某行 `[admin.adjust_today]` 在该行下展开，显示该 SKU 的代码、页面当前显示的当日可用库存 `[admin.adjust_shown]` 与新值输入框 M4；`[admin.adjust_save]` 立即提交（请求带页面显示的那个值），不需要 `[common.save]`，也不影响编辑区里未保存的修改。成功后该行的 `[admin.available_today]` 改为新值、显示 `[admin.adjust_saved]`；服务端回答「库存已变动」时显示 `[admin.stock_changed]`（`{count}` 为服务端返回的当前值），该行改显示当前值、输入框保留，管理员核对后可再次提交；输入不是 0–9,999 的整数时不提交、显示 `[admin.adjust_invalid]`。`[admin.adjust_note]` 常显。新增、还没保存的 SKU 没有这个按钮。
 - **上限提示**：每单限购 1–1000（`[admin.max_per_order_hint]`）；价格 RM0.00–RM500,000.00；每日初始库存与当日库存调整 0–9,999；整单另受每单 2,000 件与 RM999,999.99 的上限（P04、P05），本页不另提示。
 
@@ -2056,7 +2065,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 
 | 标记 | 元素 | 依据 DESIGN 1.18 小节 |
 | --- | --- | --- |
-| M1 | 规格 MYR 价格（RM0.00–RM500,000.00，以整仙提交；只影响新订单） | 「数据模型」（`Product` / `Variant`）「计价、优惠、积分与库存」（第 7、11 条） |
+| M1 | 规格 MYR 价格（RM0.00–RM500,000.00，按 RM 输入、至多两位小数，按文字换成整仙提交、不经浮点；只影响新订单） | 「数据模型」（`Product` / `Variant`）「计价、优惠、积分与库存」（第 7、11 条） |
 | M3 | 每单限购件数（1–1000 的整数，默认 10，同一商品各规格合计；只影响之后的计价与下单） | 「数据模型」（`Product` / `Variant`）「计价、优惠、积分与库存」（第 7、8 条） |
 | M2 | 每日初始库存（0–9,999；从下一次每日重置起生效；新增 SKU 保存后当日可用库存即为它） | 「计价、优惠、积分与库存」（第 6、11 条） |
 | M4 | 当日库存调整（0–9,999；带调整前页面显示的值，不等即「库存已变动」；下一次每日重置时被覆盖） | 「计价、优惠、积分与库存」（第 12 条） |
@@ -2391,7 +2400,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 说明：
 
 - 默认 `[admin.sms_off]`。开启前运营者须已开通并核实短信服务；开启后结账、注册、短信登录、重设密码与注销确认按 0.6 的短信流程进行，关闭后前台按 V1「短信验证开关关闭时」显示。
-- **短信服务未配置**（0.14，DESIGN 1.15「边界与原则」，Kelvin 2026-10-27 决定）：服务端告知短信服务的配置不齐全时，`[admin.sms_on]` 禁用、其下显示 `[admin.sms_not_configured]`；当前已开启而配置后来失效时，两项照常显示当前值，仍可切回关闭。保存时服务端再次检查，被拒则显示 `[admin.sms_not_configured]`、本次保存不生效（支付方式也不改）。禁用与提示的写法与 `[admin.stripe_not_configured]` 相同；开启时页面不另加确认框，`[admin.sms_toggle_cost]` 照常显示（Kelvin 2026-10-27 决定）。页面读取时服务端返回短信开关的当前值与短信服务是否可用（按同一检查在当次请求里算出）；保存一次提交两项，任一项被拒则两项都不写入，被拒的项各自显示提示。短信已开启而配置失效时，须先切回关闭才能保存支付方式的修改；Stripe 测试已选而凭据失效时同理。
+- **短信服务未配置**（0.14，DESIGN 1.15「边界与原则」，Kelvin 2026-10-27 决定）：服务端告知短信服务的配置不齐全时，`[admin.sms_on]` 禁用、其下显示 `[admin.sms_not_configured]`；当前已开启而配置后来失效时，两项照常显示当前值，仍可切回关闭。保存时服务端再次检查，被拒则显示 `[admin.sms_not_configured]`、本次保存不生效（支付方式也不改）。禁用与提示的写法与 `[admin.stripe_not_configured]` 相同；开启时页面不另加确认框，`[admin.sms_toggle_cost]` 照常显示（Kelvin 2026-10-27 决定）。页面读取时服务端返回短信开关的当前值与短信服务是否可用（按同一检查在当次请求里算出）；保存一次提交全部三项（0.17 起含每日恢复库存），任一项被拒则三项都不写入，被拒的项各自显示提示。短信已开启而配置失效时，须先切回关闭才能保存另两项的修改；Stripe 测试已选而凭据失效时同理。
 - 保存写入后台审计记录（操作者、时间、新旧值）。
 - **每日恢复库存**（0.17，DESIGN 1.18 第 6 条，Kelvin 2026-10-30 决定）：默认 `[admin.stock_reset_on]`。页面读取时服务端返回开关的当前值，与另两项一起整页保存；任一项被拒（短信服务未配置、Stripe 未配置）则三项都不写入，被拒的项各自显示提示。关闭后定时任务不再重置当日库存，库存只随下单、取消与当日库存调整变化，卖完即为零；重新开启后，定时任务的下一次运行（约一分钟内）即按「初始库存减去仍有效的预留」重置当天，覆盖当天此前的调整（`[admin.stock_reset_toggle_hint]`）。页面不另加确认框。
 - **支付方式**（0.11）：默认 `[admin.payment_simulated]`。服务端告知 Stripe 测试凭据（测试密钥与 webhook 签名密钥）未配置或密钥不是测试密钥时，`[admin.payment_stripe]` 禁用、其下显示 `[admin.stripe_not_configured]`；当前已是「Stripe 测试」而凭据后来失效时，两项照常显示当前值，仍可切回模拟。保存时服务端再次检查，被拒则显示 `[admin.stripe_not_configured]`、本次保存不生效。切换只影响之后发起的支付，已经发起的 Stripe 会话的确认、作废与退款不受影响（DESIGN 1.12「Stripe 测试环境支付」第 2 条）；页面不另加确认框。
@@ -2432,8 +2441,8 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 |           |  ( [common.save] )                                        |
 +-----------+-----------------------------------------------------------+
 已满 30 个：( [common.create] ) 禁用，旁边 [admin.categories_full]
-停用确认框（取消勾选 [admin.category_enabled] 后保存、且该分类有前台可见商品时）：[admin.category_disable_confirm]  ( [admin.category_disable] ) ( [common.cancel] )
-有未保存的修改时切换：[admin.unsaved_confirm]  ( [admin.unsaved_leave] ) ( [admin.unsaved_stay] )
+停用确认框（取消勾选 [admin.category_enabled] 后保存、且该分类有前台可见商品时）：[admin.category_disable_confirm]  ( [common.cancel] ) ( [admin.category_disable] )
+有未保存的修改时切换：[admin.unsaved_confirm]  ( [admin.unsaved_stay] ) ( [admin.unsaved_leave] )
 保存结果：[admin.category_saved]（新建后为 [admin.category_created]）/ [admin.category_invalid] / [admin.category_changed] ( [admin.reload] ) / [common.error_retry]
 ```
 
@@ -2461,7 +2470,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 
 说明：
 
-- **列表**：全部分类按 ID 从小到大（即前台分类列表的顺序），名称列显示英文名称（缺英文名称时显示 —）；`[admin.category_visible]` 为该分类下前台可见（满足发布规则）的商品件数；`[admin.categories_count]` 显示已有个数与上限 30，已满时 `[common.create]` 禁用并显示 `[admin.categories_full]`。有未保存的修改（编辑区的值与最近一次读取或保存的不同；图片与当日库存调整立即生效，不算在内）时，点另一项的 `[common.edit]`、`[common.create]`、后台导航、手机顶栏的返回或 `[admin.logout]`，先弹确认框 `[admin.unsaved_confirm]`：`[admin.unsaved_leave]` 丢弃修改并继续，`[admin.unsaved_stay]` 留在本页、保留已填的值（Kelvin 2026-10-30 决定）；没有未保存的修改时直接切换。刷新、关闭标签页或浏览器后退由浏览器自己的离开提示拦一次（文字由浏览器决定）。点「已被改动」提示里的 `[admin.reload]` 是明确放弃修改，不再确认。
+- **列表**：全部分类按 ID 从小到大（即前台分类列表的顺序），名称列显示英文名称（缺英文名称时显示 —）；`[admin.category_visible]` 为该分类下前台可见（满足发布规则）的商品件数；`[admin.categories_count]` 显示已有个数与上限 30，已满时 `[common.create]` 禁用并显示 `[admin.categories_full]`。有未保存的修改（编辑区的值与最近一次读取或保存的不同）时，点另一项的 `[common.edit]`、`[common.create]`、后台导航、手机顶栏的返回或 `[admin.logout]`，先弹确认框 `[admin.unsaved_confirm]`：`[admin.unsaved_leave]` 丢弃修改并继续，`[admin.unsaved_stay]` 留在本页、保留已填的值（Kelvin 2026-10-30 决定）；没有未保存的修改时直接切换。浏览器的后退与前进在本站内切页（不重新加载页面）时同样弹这个确认框，选 `[admin.unsaved_stay]` 时把地址栏恢复为本页；刷新与关闭标签页由浏览器自己的离开提示拦一次（文字由浏览器决定）。点「已被改动」提示里的 `[admin.reload]` 是明确放弃修改，不再确认。
 - **新建**：英文名称必填（slug 按英文名称生成，之后改名称也不变）；启用默认勾选。新建成功后进入该分类的编辑区、显示 `[admin.category_created]` 与生成的 slug。
 - **启用与停用**：勾选启用须有英文名称，页面先检查，不满足即不提交、显示 `[admin.category_invalid]`。取消勾选后保存时，该分类的 `[admin.category_visible]` 大于 0 即先弹 `[admin.category_disable_confirm]`（`{count}` 为该件数），确认后才提交；为 0 时直接提交。停用后前台不再显示该分类与其下的商品（商品自己的上架状态不变，重新启用后照常显示），访客购物车里这些商品的行标为不可购买，首页精选里这些商品也不再显示。
 - **不能删除**：分类不能删除，不再用的停用（`[admin.category_slug_hint]` 一并说明 slug 不变）。

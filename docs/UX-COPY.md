@@ -6,7 +6,7 @@
 ## 0.18 修订要点
 
 - 依据已批准的 `docs/DESIGN.md` 1.18 与 `docs/REQUIREMENTS.md` 1.15（记录见 `docs/HANDOFF.md` 0.73），页面结构见 [UX.md](UX.md) 0.17。
-- 新增 A04 的 40 个键（商品列表状态、新建、上架条件、图片、规格值与 SKU、保存结果、当日库存调整）、A10 后台分类的 19 个键、A07 的 `admin.stock_reset_off_note`、A09 每日恢复库存的 4 个键，以及整单上限的 `detail.cart_units_full`（P03）、`cart.units_over_limit` 与 `cart.amount_over_limit`（P04、P05）；另有 A04 与 A10 共用的未保存提示 `admin.unsaved_confirm`、`admin.unsaved_leave`、`admin.unsaved_stay`，与 P03、P04 数量直接输入超过上限时的 `common.qty_capped`（Kelvin 2026-10-30 决定）。
+- 新增 A04 的 40 个键（商品列表状态、新建、上架条件、图片、规格值与 SKU、保存结果、当日库存调整）、A10 后台分类的 19 个键、A07 的 `admin.stock_reset_off_note`、A09 每日恢复库存的 4 个键，以及整单上限的 `detail.cart_units_full`（P03）、`cart.units_over_limit` 与 `cart.amount_over_limit`（P04、P05）；另有 A04 与 A10 共用的未保存提示 `admin.unsaved_confirm`、`admin.unsaved_leave`、`admin.unsaved_stay`，A04 规格名与规格值的 `admin.option_name`、`admin.option_value`，与 P03、P04 数量直接输入超过上限时的 `common.qty_capped`（Kelvin 2026-10-30 决定）。
 - 改动 3 个已有键，前端都还没有用到：`admin.image_rules` 去掉变量、只写格式与大小（A08 店铺标志沿用它；像素与张数另由 `admin.product_image_rules` 给出）；`admin.max_per_order_hint` 的 1–99 改为 1–1000；`admin.initial_stock_note` 的中文由「次日重置」改为「下一次每日重置」（开关关闭期间不是次日）。
 - 其余已有键未改动、未删除。马来文随其他文案在上线后母语审校。
 
@@ -521,6 +521,7 @@
 | `admin.nav_orders` | Orders | 订单 | Pesanan | — |
 | `admin.nav_refunds` | Refunds | 退款审核 | Bayaran balik | — |
 | `admin.nav_products` | Products | 商品 | Produk | — |
+| `admin.nav_categories` | Categories | 分类 | Kategori | A10 导航与页标题，排在 `admin.nav_products` 之后（0.18） |
 | `admin.nav_coupons` | Coupons | 优惠券 | Kupon | — |
 | `admin.nav_shipping` | Shipping & demo rates | 运费与演示汇率 | Penghantaran & kadar demo | — |
 | `admin.nav_stock_resets` | Stock resets | 库存重置 | Tetapan semula stok | — |
@@ -582,7 +583,7 @@
 | `admin.publish_requirements` | To publish: English name and description, English names for every option and value, at least one enabled SKU, and an enabled category with an English name. | 上架须有：英文名称与描述、全部规格名与规格值的英文名称、至少一个启用的 SKU，以及启用且有英文名称的分类。 | Untuk diterbitkan: nama dan penerangan bahasa Inggeris, nama bahasa Inggeris bagi setiap pilihan dan nilai, sekurang-kurangnya satu SKU aktif, dan kategori aktif yang mempunyai nama bahasa Inggeris. | A04 常显（0.18） |
 | `admin.product_image_rules` | 200–4,000 pixels on each side. Up to 8 images; the first is the cover. Location and other photo data are removed, and the original file isn't kept. | 宽与高 200 到 4,000 像素。最多 8 张，第一张为封面。拍摄地点等照片资料会被去掉，不保留原文件。 | Setiap sisi 200–4,000 piksel. Sehingga 8 imej; yang pertama ialah kulit. Lokasi dan data foto lain dibuang, dan fail asal tidak disimpan. | A04，接在 `admin.image_rules` 之后（0.18） |
 | `admin.image_count` | {count} of {max} images | 已有 {count} 张，最多 {max} 张 | {count} daripada {max} imej | A04；{max} 为 8（0.18） |
-| `admin.image_cover` | Cover | 封面 | Kulit | A04 第一张图的标签（0.18） |
+| `admin.image_cover` | Cover | 封面 | Imej utama | A04 第一张图的标签（0.18） |
 | `admin.image_move_earlier` | Move earlier | 前移 | Alih ke depan | A04 读屏标签，`(‹)`（0.18） |
 | `admin.image_move_later` | Move later | 后移 | Alih ke belakang | A04 读屏标签，`(›)`（0.18） |
 | `admin.image_remove` | Remove image | 移除图片 | Buang imej | A04 读屏标签 `(✗)` 与确认框按钮（0.18） |
@@ -596,6 +597,8 @@
 | `admin.image_invalid` | This image can't be used. It must be a single still image, 200–4,000 pixels on each side. | 这张图片不能使用：须为单张静态图，宽与高都在 200 到 4,000 像素之间。 | Imej ini tidak boleh digunakan. Ia mesti satu imej pegun, 200–4,000 piksel pada setiap sisi. | A04 上传被拒：图片不合格（0.18） |
 | `admin.images_changed` | Images were changed elsewhere. Reload to see the latest images. | 图片已在别处修改，请重新读取最新的图片。 | Imej telah diubah di tempat lain. Muat semula untuk melihat imej terkini. | A04 排序被拒：图片已被改动（0.18） |
 | `admin.option_values` | Values | 规格值 | Nilai | A04（0.18） |
+| `admin.option_name` | Option name | 规格名 | Nama pilihan | A04 规格名输入框（0.18） |
+| `admin.option_value` | Option value | 规格值 | Nilai pilihan | A04 读屏标签：规格值输入框与新 SKU 的规格值下拉框（0.18） |
 | `admin.add_value` | Add value | 新增规格值 | Tambah nilai | A04；每个规格名至多 20 个值（0.18） |
 | `admin.add_option` | Add option | 新增规格名 | Tambah pilihan | A04 新建商品时；至多 3 个（0.18） |
 | `admin.no_options` | No options: this product has a single SKU. | 无规格：此商品只有一个 SKU。 | Tiada pilihan: produk ini mempunyai satu SKU sahaja. | A04（0.18） |
@@ -614,9 +617,8 @@
 | `admin.adjust_save` | Set today's stock | 改为此值 | Tetapkan stok hari ini | A04；立即提交（0.18） |
 | `admin.adjust_note` | Takes effect now and lasts until the next daily reset. The daily initial stock and existing orders are not changed. | 立即生效，保留到下一次每日重置；不改每日初始库存，也不改已有订单。 | Berkuat kuasa sekarang hingga tetapan semula harian berikutnya. Stok awal harian dan pesanan sedia ada tidak diubah. | A04（0.18） |
 | `admin.adjust_saved` | Today's stock updated. | 当日库存已更新。 | Stok hari ini dikemas kini. | A04 调整成功（0.18） |
-| `admin.stock_changed` | Today's stock changed in the meantime (an order was placed or cancelled). It is now {count}. Check it and set it again if needed. | 当日库存在此期间已变动（有订单下单或取消），现在为 {count}。请核对后视需要再次调整。 | Stok hari ini telah berubah sementara itu (pesanan dibuat atau dibatalkan). Kini {count}. Semak dan tetapkan semula jika perlu. | A04 库存已变动；{count} 为服务端返回的当前值（0.18） |
+| `admin.stock_changed` | Today's stock changed in the meantime (for example, an order was placed or cancelled). It is now {count}. Check it and set it again if needed. | 当日库存在此期间已变动（例如有订单下单或取消），现在为 {count}。请核对后视需要再次调整。 | Stok hari ini telah berubah sementara itu (contohnya, pesanan dibuat atau dibatalkan). Kini {count}. Semak dan tetapkan semula jika perlu. | A04 库存已变动；{count} 为服务端返回的当前值（0.18） |
 | `admin.adjust_invalid` | Enter a whole number from 0 to 9,999. | 请输入 0 到 9,999 的整数。 | Masukkan nombor bulat dari 0 hingga 9,999. | A04 调整的取值不合格（0.18） |
-| `admin.nav_categories` | Categories | 分类 | Kategori | A10 导航与页标题，排在 `admin.nav_products` 之后（0.18） |
 | `admin.categories_count` | {count} of {max} categories | 已有 {count} 个分类，最多 {max} 个 | {count} daripada {max} kategori | A10；{max} 为 30（0.18） |
 | `admin.categories_full` | The store already has the maximum of 30 categories. Categories can't be deleted; rename and re-enable a disabled one instead. | 已达 30 个分类的上限。分类不能删除，可把已停用的分类改名后重新启用。 | Kedai sudah mempunyai maksimum 30 kategori. Kategori tidak boleh dipadam; namakan semula dan aktifkan semula kategori yang dinyahaktifkan. | A10 已满时（0.18） |
 | `admin.category_name` | Category name | 分类名称 | Nama kategori | A10 列头与输入框（0.18） |
@@ -629,11 +631,11 @@
 | `admin.category_edit` | Edit category | 编辑分类 | Sunting kategori | A10（0.18） |
 | `admin.category_new` | New category | 新建分类 | Kategori baharu | A10（0.18） |
 | `admin.category_translation_missing` | {language} name is missing and will fall back to English. An English name is required to enable the category. | 缺少{language}名称，将回退英文；缺少英文名称则不能启用。 | Nama {language} tiada dan akan kembali kepada bahasa Inggeris. Nama bahasa Inggeris diperlukan untuk mengaktifkan kategori. | A10（0.18） |
-| `admin.category_disable_confirm` | {count} products in this category are shown in the store. After disabling, the category and these products disappear from the store (including featured products on the home page), and carts can't check out with them. Disable it? | 此分类下有 {count} 件商品正在前台显示。停用后，该分类与这些商品都不再在前台显示（含首页精选），购物车里的这些商品不能下单。确定停用？ | {count} produk dalam kategori ini dipaparkan di kedai. Selepas dinyahaktifkan, kategori dan produk ini hilang dari kedai (termasuk produk pilihan di halaman utama), dan troli tidak boleh membuat pesanan untuknya. Nyahaktifkan? | A10 确认框；{count} 为 `admin.category_visible` 的件数（0.18） |
+| `admin.category_disable_confirm` | Products from this category shown in the store: {count}. After disabling, the category and these products disappear from the store (including featured products on the home page), and carts can't check out with them. Disable it? | 此分类下正在前台显示的商品：{count} 件。停用后，该分类与这些商品都不再在前台显示（含首页精选），购物车里的这些商品不能下单。确定停用？ | Produk daripada kategori ini yang dipaparkan di kedai: {count}. Selepas dinyahaktifkan, kategori dan produk ini hilang dari kedai (termasuk produk pilihan di halaman utama), dan troli tidak boleh membuat pesanan untuknya. Nyahaktifkan? | A10 确认框；{count} 为 `admin.category_visible` 的件数（0.18） |
 | `admin.category_disable` | Disable | 停用 | Nyahaktifkan | A10 确认框按钮（0.18） |
 | `admin.category_saved` | Saved. The storefront now uses these categories. | 已保存，前台已改用这些分类。 | Disimpan. Kedai kini menggunakan kategori ini. | A10 保存成功（0.18） |
 | `admin.category_created` | Category created. | 分类已新建。 | Kategori dicipta. | A10 新建成功（0.18） |
-| `admin.category_invalid` | Check the values: names up to 200 characters; a new or enabled category needs an English name that differs from the other categories; up to 30 categories. | 请检查：名称不超过 200 个字符；新建或启用的分类须有英文名称，且不与其他分类重复；分类至多 30 个。 | Semak nilai: nama sehingga 200 aksara; kategori baharu atau aktif memerlukan nama bahasa Inggeris yang berbeza daripada kategori lain; sehingga 30 kategori. | A10 取值不合格（0.18） |
+| `admin.category_invalid` | Check the values: names up to 200 characters; English names must differ from those of other categories; a new or enabled category needs an English name; up to 30 categories. | 请检查：名称不超过 200 个字符；英文名称不能与其他分类重复；新建或启用的分类须有英文名称；分类至多 30 个。 | Semak nilai: nama sehingga 200 aksara; nama bahasa Inggeris mesti berbeza daripada kategori lain; kategori baharu atau aktif memerlukan nama bahasa Inggeris; sehingga 30 kategori. | A10 取值不合格（0.18） |
 | `admin.category_changed` | This category was changed elsewhere. Reload to see the latest version. Your unsaved changes will be lost. | 此分类已在别处修改，请重新读取最新版本，未保存的修改会丢失。 | Kategori ini telah diubah di tempat lain. Muat semula untuk melihat versi terkini. Perubahan yang belum disimpan akan hilang. | A10 分类已被改动，旁边 `admin.reload`（0.18） |
 | `admin.unsaved_confirm` | You have unsaved changes. Leave without saving them? | 有未保存的修改，确定不保存就离开？ | Anda mempunyai perubahan yang belum disimpan. Tinggalkan tanpa menyimpannya? | A04、A10 确认框（0.18） |
 | `admin.unsaved_leave` | Leave without saving | 不保存，离开 | Tinggalkan tanpa simpan | A04、A10 确认框按钮（0.18） |
