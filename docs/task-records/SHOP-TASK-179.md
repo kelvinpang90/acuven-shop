@@ -25,3 +25,19 @@
   - `SiteSettingsIn.daily_stock_reset_enabled` 的占位默认值写真（与服务端默认一致）。它只在省略时占位，接口按 `model_fields_set` 判断是否提交，省略时不会把这个默认值传给保存。
   - 接口层与服务层的测试比验收多了几条对照：设置行不存在时 GET 为开启、数字 0 被拒、表为空时保存插入的行写开启、三项同时改动的审计顺序。
 - 验证范围：上面列出的是本次新增或修改的测试代码；后端的 lint、格式检查与测试由 PR 的必需 CI 检查 `backend` 执行（Worker 沙箱不跑后端测试）。SQLite 不复现 MySQL 的 `FOR UPDATE` 等锁，所以保存时锁行的并发行为不在这里覆盖，沿用现有锁定协议。
+
+## 登记时的验收标准（原文）
+
+2026-10-30 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 读取——app/services/site_settings.py 新增 is_daily_stock_reset_enabled(db) -> bool，写法照 is_sms_verification_enabled（每次调用只发一条只查该列的 SELECT，不缓存，不加载 ORM 对象）；表里没有站点设置那一行时返回真；_lock_site_setting 按默认值插入那一行时 daily_stock_reset_enabled 写真；模块说明补上本开关的依据
+      - 定时任务与补跑命令——app/jobs.py 的 reset_stock_job 的 run 先调用 is_daily_stock_reset_enabled，再判断当天是否已完成；读到关闭时回滚、记一条 info 日志，原文为 stock reset <营业日期> skipped (switch off)（营业日期为 ISO 格式，如 2026-10-30）、返回 0，不调用 reset_completed 与 reset_daily_stock，所以不新建也不重试重置记录、不改任何 SKU 的当日可用库存，当天此前已有的失败记录保持原样；跳过算成功（运行器照常记成功与心跳）；reset-stock 子命令同样跳过并以 EXIT_OK 退出；每次运行都重新读取，不缓存，以这次读到的值为准；读到开启时行为与现在完全相同
+      - 保存——save_site_settings 增加关键字参数 stock_reset_enabled（布尔值或 None，None 表示请求里省略，不比较、不改），返回值改为 (支付方式, 短信开关, 每日恢复库存开关, 是否实际改动) 四项；两项配置检查（stripe_not_configured、sms_not_configured）照旧在锁行之前，任一被拒则三项都不写入；锁住的那一行上本开关与新值不同时改写并写一条审计，操作名 admin_daily_stock_reset_changed，对象为站点设置行，旧值与新值为 on 或 off（照 admin_sms_verification_changed 的写法）；同一次保存有多项改动时审计依次为支付方式、短信、每日恢复库存；三项都未变时回滚、不写审计；关闭本身不检查任何配置
+      - 接口——app/api/admin_site_settings.py 的 SiteSettingsIn 增加可省略的 daily_stock_reset_enabled（只接受 JSON 布尔值，显式的 null 与其他类型照现有写法 422，是否提交看 model_fields_set）；GET 响应在 sms_available 之后增加 daily_stock_reset_enabled（is_daily_stock_reset_enabled 的当前值），PUT 响应在 sms_verification_enabled 之后增加保存后的 daily_stock_reset_enabled（取自 save_site_settings 的返回值，保存时不另发 SELECT，现有测试断言保存时对 site_settings 只有一条锁定查询）；其余步骤、错误码、请求体上限与 no-store 不变；模块说明补上本字段
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_stock_reset_switch.py，引擎、会话工厂与运行器的写法照 tests/test_stock_reset.py，每条测试的文档字符串写明它守住的 DESIGN 1.18 第 6 条原句——关闭时运行器一轮不调用重置、不新建重置记录、SKU 的当日可用库存不变且记为成功；关闭时当天已有的 failed 记录结果与尝试次数不变，重新开启后下一轮把它重试为 succeeded；同一营业日期关闭期间做过的调整（测试里直接改库写 available_stock 模拟当日库存调整，SHOP-TASK-182 尚未交付）在重新开启后的下一轮被「初始库存减去仍有效的预留」覆盖；当天已 succeeded 之后关闭再开启不再重置；同一个 Runner 两轮之间改开关即生效（不缓存）；reset-stock 子命令关闭时以 EXIT_OK 退出且没有新记录；表里没有站点设置那一行时照常重置；保存开与关各写一条审计、省略字段不改不写审计、与当前值相同不写审计、Stripe 或短信被拒时开关不变
+      - 现有测试——tests/test_admin_site_settings.py 只在断言 GET 或 PUT 响应完整字段（字典相等或字段顺序）的地方加上 daily_stock_reset_enabled，并新增接口层的测试：GET 返回当前值、PUT 提交 false 后再 GET 为 false、省略不改、null 与字符串 422、与支付方式被拒同一次提交时不写入；tests/test_site_settings.py 新增读取函数的测试（无行为真、列为假时为假、只发一条 SELECT）；其余现有测试不改
+      - docs/task-records/SHOP-TASK-179.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明判定位置、日志内容、保存的返回值变化，以及偏离与取舍）
+      - 改动只落在 allowed_change_paths；不改 app/services/stock_reset.py、模型与迁移、前端、.platform/、CI 与部署配置，不装依赖，不改设计
+```
