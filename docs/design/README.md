@@ -93,7 +93,7 @@
 | V1 验证通过（三种文案） | [V1-verified.html](pages/V1-verified.html) | [V1-verified.png](reference/V1-verified.png) | 480 × 290 |
 | P02 无结果 | [P02-empty.html](pages/P02-empty.html) | [P02-empty.png](reference/P02-empty.png) | 640 × 230 |
 | P04 购物车为空 / 商品有变化 | [P04-states.html](pages/P04-states.html) | [P04-states.png](reference/P04-states.png) | 640 × 270 |
-| P03 整单件数已满 / P04、P05 超出整单件数或金额上限（2026-10-30） | [P03-P04-caps.html](pages/P03-P04-caps.html) | [P03-P04-caps.png](reference/P03-P04-caps.png) | 640 × 540 |
+| P03、P04 数量直接输入 / P03 整单件数已满 / P04、P05 超出整单件数或金额上限（2026-10-30） | [P03-P04-caps.html](pages/P03-P04-caps.html) | [P03-P04-caps.png](reference/P03-P04-caps.png) | 640 × 740 |
 | P05 报错与提交中 | [P05-states.html](pages/P05-states.html) | [P05-states.png](reference/P05-states.png) | 640 × 450 |
 | P06 模拟支付（游客）· 桌面 | [P06-desktop.html](pages/P06-desktop.html) | [P06-desktop.png](reference/P06-desktop.png) | 1440 × 1540 |
 | P06 模拟支付（游客）· 手机 | [P06-phone.html](pages/P06-phone.html) | [P06-phone.png](reference/P06-phone.png) | 390 × 1670 |
@@ -163,7 +163,7 @@
 | A04 商品、规格与库存 · 桌面（2026-10-30 重画） | [A04-desktop.html](pages/A04-desktop.html) | [A04-desktop.png](reference/A04-desktop.png) | 1440 × 1850 |
 | A04 编辑商品 · 手机（含当日库存调整展开，2026-10-30 重画） | [A04-phone-edit.html](pages/A04-phone-edit.html) | [A04-phone-edit.png](reference/A04-phone-edit.png) | 390 × 3370 |
 | A04 新建商品 · 桌面（含无规格的情形，2026-10-30） | [A04-desktop-new.html](pages/A04-desktop-new.html) | [A04-desktop-new.png](reference/A04-desktop-new.png) | 1440 × 1790 |
-| A04 保存状态与当前分类不可用（2026-10-30） | [A04-states.html](pages/A04-states.html) | [A04-states.png](reference/A04-states.png) | 520 × 1350 |
+| A04 保存状态、当前分类不可用与未保存确认框（2026-10-30） | [A04-states.html](pages/A04-states.html) | [A04-states.png](reference/A04-states.png) | 520 × 1570 |
 | A04 当日库存调整与图片状态、移除确认框（2026-10-30） | [A04-images-stock.html](pages/A04-images-stock.html) | [A04-images-stock.png](reference/A04-images-stock.png) | 520 × 2050 |
 | A05 优惠券 · 桌面 | [A05-desktop.html](pages/A05-desktop.html) | [A05-desktop.png](reference/A05-desktop.png) | 1440 × 900 |
 | A05 优惠券列表 · 手机 | [A05-phone-list.html](pages/A05-phone-list.html) | [A05-phone-list.png](reference/A05-phone-list.png) | 390 × 900 |
@@ -182,4 +182,4 @@
 | A09 每日恢复库存（关闭）· 桌面（2026-10-30） | [A09-stock-reset.html](pages/A09-stock-reset.html) | [A09-stock-reset.png](reference/A09-stock-reset.png) | 1440 × 1030 |
 | A10 分类 · 桌面（2026-10-30） | [A10-desktop.html](pages/A10-desktop.html) | [A10-desktop.png](reference/A10-desktop.png) | 1440 × 760 |
 | A10 分类列表与编辑 · 手机（2026-10-30） | [A10-phone.html](pages/A10-phone.html) | [A10-phone.png](reference/A10-phone.png) | 390 × 1400 |
-| A10 保存状态、已满与停用确认框（2026-10-30） | [A10-states.html](pages/A10-states.html) | [A10-states.png](reference/A10-states.png) | 520 × 1410 |
+| A10 保存状态、已满、停用与未保存确认框（2026-10-30） | [A10-states.html](pages/A10-states.html) | [A10-states.png](reference/A10-states.png) | 520 × 1630 |

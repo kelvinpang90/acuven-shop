@@ -6,7 +6,7 @@
 ## 0.18 修订要点
 
 - 依据已批准的 `docs/DESIGN.md` 1.18 与 `docs/REQUIREMENTS.md` 1.15（记录见 `docs/HANDOFF.md` 0.73），页面结构见 [UX.md](UX.md) 0.17。
-- 新增 A04 的 40 个键（商品列表状态、新建、上架条件、图片、规格值与 SKU、保存结果、当日库存调整）、A10 后台分类的 19 个键、A07 的 `admin.stock_reset_off_note`、A09 每日恢复库存的 4 个键，以及整单上限的 `detail.cart_units_full`（P03）、`cart.units_over_limit` 与 `cart.amount_over_limit`（P04、P05）。
+- 新增 A04 的 40 个键（商品列表状态、新建、上架条件、图片、规格值与 SKU、保存结果、当日库存调整）、A10 后台分类的 19 个键、A07 的 `admin.stock_reset_off_note`、A09 每日恢复库存的 4 个键，以及整单上限的 `detail.cart_units_full`（P03）、`cart.units_over_limit` 与 `cart.amount_over_limit`（P04、P05）；另有 A04 与 A10 共用的未保存提示 `admin.unsaved_confirm`、`admin.unsaved_leave`、`admin.unsaved_stay`，与 P03、P04 数量直接输入超过上限时的 `common.qty_capped`（Kelvin 2026-10-30 决定）。
 - 改动 3 个已有键，前端都还没有用到：`admin.image_rules` 去掉变量、只写格式与大小（A08 店铺标志沿用它；像素与张数另由 `admin.product_image_rules` 给出）；`admin.max_per_order_hint` 的 1–99 改为 1–1000；`admin.initial_stock_note` 的中文由「次日重置」改为「下一次每日重置」（开关关闭期间不是次日）。
 - 其余已有键未改动、未删除。马来文随其他文案在上线后母语审校。
 
@@ -150,6 +150,7 @@
 | `common.edit` | Edit | 编辑 | Sunting | 后台 |
 | `common.a11y_qty_decrease` | Decrease quantity | 减少数量 | Kurangkan kuantiti | 读屏标签，`(-)` |
 | `common.a11y_qty_increase` | Increase quantity | 增加数量 | Tambah kuantiti | 读屏标签，`(+)` |
+| `common.qty_capped` | Set to {count}, the most you can have in this order. | 已改为 {count} 件，这是本单最多可买的件数。 | Ditetapkan kepada {count}, jumlah maksimum untuk pesanan ini. | P03、P04 直接输入的件数超过上限时；{count} 为上限（0.18） |
 | `common.a11y_page_prev` | Previous page | 上一页 | Halaman sebelumnya | 读屏标签，`(‹)` |
 | `common.a11y_page_next` | Next page | 下一页 | Halaman seterusnya | 读屏标签，`(›)` |
 
@@ -634,6 +635,9 @@
 | `admin.category_created` | Category created. | 分类已新建。 | Kategori dicipta. | A10 新建成功（0.18） |
 | `admin.category_invalid` | Check the values: names up to 200 characters; a new or enabled category needs an English name that differs from the other categories; up to 30 categories. | 请检查：名称不超过 200 个字符；新建或启用的分类须有英文名称，且不与其他分类重复；分类至多 30 个。 | Semak nilai: nama sehingga 200 aksara; kategori baharu atau aktif memerlukan nama bahasa Inggeris yang berbeza daripada kategori lain; sehingga 30 kategori. | A10 取值不合格（0.18） |
 | `admin.category_changed` | This category was changed elsewhere. Reload to see the latest version. Your unsaved changes will be lost. | 此分类已在别处修改，请重新读取最新版本，未保存的修改会丢失。 | Kategori ini telah diubah di tempat lain. Muat semula untuk melihat versi terkini. Perubahan yang belum disimpan akan hilang. | A10 分类已被改动，旁边 `admin.reload`（0.18） |
+| `admin.unsaved_confirm` | You have unsaved changes. Leave without saving them? | 有未保存的修改，确定不保存就离开？ | Anda mempunyai perubahan yang belum disimpan. Tinggalkan tanpa menyimpannya? | A04、A10 确认框（0.18） |
+| `admin.unsaved_leave` | Leave without saving | 不保存，离开 | Tinggalkan tanpa simpan | A04、A10 确认框按钮（0.18） |
+| `admin.unsaved_stay` | Keep editing | 继续编辑 | Teruskan menyunting | A04、A10 确认框按钮（0.18） |
 | `admin.coupon_listed_note` | All active coupons within their valid dates are listed under "My coupons", the same for every member, regardless of total or per-member usage limits. | 所有启用中且在有效期内的优惠券都会列在会员中心「我的优惠券」中，对全部会员相同，不因总次数或每会员次数上限而不列出。 | Semua kupon aktif dalam tempoh sah disenaraikan di bawah "Kupon saya", sama bagi setiap ahli, tanpa mengira had jumlah penggunaan atau had setiap ahli. | Q19 已决；不改数据模型 |
 | `admin.coupon_code` | Coupon code | 优惠券代码 | Kod kupon | — |
 | `admin.coupon_type` | Type | 类型 | Jenis | — |

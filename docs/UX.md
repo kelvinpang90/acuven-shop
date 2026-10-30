@@ -7,11 +7,11 @@
 
 依据已批准的 `docs/DESIGN.md` 1.18 与 `docs/REQUIREMENTS.md` 1.15（Kelvin 2026-10-30 批准，记录见 `docs/HANDOFF.md` 0.73）：
 
-- **A04 后台商品**（DESIGN 1.18 第 11、12、13 条）：列表含未上架的商品（`[admin.unpublished]`）；新建商品（规格名只在新建时给出，0–3 个）；新增规格值与 SKU、SKU 启用、商品与 SKU 不能删除；分类只能选启用且有英文名称的，当前分类已停用时可保留但不能上架；上架条件常显；保存后三种结果与 A06 写法相同。图片缩略图、封面、前后移动、移除确认与上传结果，图片各自立即生效；当日库存调整在该行下展开、立即提交，「库存已变动」时显示当前值。每单限购提示改为 1–1000。
-- **A10 后台分类**（新增，DESIGN 1.18 第 14 条，页面位置由 UX 定）：独立一页 `/admin/categories`，导航项 `[admin.nav_categories]` 排在 `[admin.nav_products]` 之后（未选：放进 A04 的一个区块）；新建、三语名称、启用与停用（停用前按前台可见商品件数确认）、不能删除、至多 30 个。
+- **A04 后台商品**（DESIGN 1.18 第 11、12、13 条）：列表含未上架的商品（`[admin.unpublished]`）；新建商品（规格名只在新建时给出，0–3 个）；新增规格值与 SKU、SKU 启用、商品与 SKU 不能删除；分类只能选启用且有英文名称的，当前分类已停用时可保留但不能上架；上架条件常显；保存后三种结果与 A06 写法相同；有未保存的修改时切换商品、新建或离开本页先弹确认框（Kelvin 2026-10-30 决定）。图片缩略图、封面、前后移动、移除确认与上传结果，图片各自立即生效；当日库存调整在该行下展开、立即提交，「库存已变动」时显示当前值。每单限购提示改为 1–1000。
+- **A10 后台分类**（新增，DESIGN 1.18 第 14 条，页面位置由 UX 定）：独立一页 `/admin/categories`，导航项 `[admin.nav_categories]` 排在 `[admin.nav_products]` 之后（未选：放进 A04 的一个区块）；新建、三语名称、启用与停用（停用前按前台可见商品件数确认）、不能删除、至多 30 个；有未保存的修改时切换同样先确认。
 - **A09 每日恢复库存开关**（DESIGN 1.18 第 6 条）：新增 `[admin.stock_reset_toggle]`，默认开启，与短信验证、支付方式一起整页保存；任一项被拒则三项都不写入。
 - **A07**：新增 `[admin.stock_reset_off_note]`，说明开关关闭期间没有新的重置记录（页面不读取开关状态，常显）。
-- **P03、P04、P05 整单上限**（DESIGN 1.18 第 8 条）：P03 可加入的件数取每单限购剩余与整单 2,000 件剩余中较小的（每行 1000 件不会先于每单限购达到），整单已满时加入按钮禁用并显示 `[detail.cart_units_full]`；P04 数量 (+) 同样受整单 2,000 件约束；计价接口返回超出整单件数或金额上限时，P04 与 P05 显示 `[cart.units_over_limit]`、`[cart.amount_over_limit]`，P05 下单按钮禁用（沿用不可下单的现有写法）。
+- **P03、P04、P05 整单上限**（DESIGN 1.18 第 8 条）：P03 可加入的件数取每单限购剩余与整单 2,000 件剩余中较小的（每行 1000 件不会先于每单限购达到），整单已满时加入按钮禁用并显示 `[detail.cart_units_full]`；P04 数量 (+) 同样受整单 2,000 件约束；计价接口返回超出整单件数或金额上限时，P04 与 P05 显示 `[cart.units_over_limit]`、`[cart.amount_over_limit]`，P05 下单按钮禁用（沿用不可下单的现有写法）。P03、P04 的数量改为可直接输入（Kelvin 2026-10-30 决定，未选：仍只用 (+)(-)），超过上限时改为上限并显示 `[common.qty_capped]`。
 - 新增与改动的文案键见 UX-COPY 0.18「0.18 修订要点」。A04 重画桌面与手机稿并加状态稿，A10、A09、P04 与 P03 补画，经 Kelvin 审阅后再登记页面任务。其余各页、V1 与全局框架不变；待决问题未新增。
 
 ## 0.16 修订要点
@@ -451,7 +451,9 @@ V1 金额与个人资料元素：
 
 每单限购（0.6）：`[detail.max_per_order]` 显示该商品的限购件数。同一商品所有规格在本浏览器购物车中的件数合计计入限购；数量 (+) 的上限是限购件数减去购物车中该商品已有的件数，所选规格已在购物车中时加入即合并件数。该商品已达限购时加入按钮禁用并显示 `[detail.limit_reached]`；购物车已有 20 行且所选规格不在其中时加入按钮禁用并显示 `[detail.cart_full]`。两处都只是提示，下单时由服务端再次校验（DESIGN 1.10「计价、优惠、积分与库存」第 8 条）。
 
-整单件数上限（0.17，DESIGN 1.18「计价、优惠、积分与库存」第 8 条）：一张购物车所有行的件数合计不超过 2,000，每行不超过 1000。数量 (+) 的上限取「限购件数减去购物车中该商品已有的件数」与「2,000 减去购物车全部行的件数」中较小的（每行 1000 件的剩余不会小于前者，因为限购件数至多 1000）；后者为 0 时加入按钮禁用并显示 `[detail.cart_units_full]`（`{count}` 为 2,000），与 `[detail.limit_reached]` 同时满足时只显示 `[detail.limit_reached]`。整单金额上限要等计价接口判断，本页不提示。
+整单件数上限（0.17，DESIGN 1.18「计价、优惠、积分与库存」第 8 条）：一张购物车所有行的件数合计不超过 2,000，每行不超过 1000。数量（(+) 与直接输入）的上限取「限购件数减去购物车中该商品已有的件数」与「2,000 减去购物车全部行的件数」中较小的（每行 1000 件的剩余不会小于前者，因为限购件数至多 1000）；后者为 0 时加入按钮禁用并显示 `[detail.cart_units_full]`（`{count}` 为 2,000），与 `[detail.limit_reached]` 同时满足时只显示 `[detail.limit_reached]`。整单金额上限要等计价接口判断，本页不提示。
+
+数量可直接输入（0.17，Kelvin 2026-10-30 决定）：(-) 与 (+) 之间是数字输入框（读屏标签 `[detail.quantity]`），只收整数，回车或离开输入框时生效；为空、为 0 或不是整数时恢复为原来的件数；超过上限时改为上限，并在旁边显示 `[common.qty_capped]`（`{count}` 为上限）。本页的上限即上一段所说的件数。
 
 金额与个人资料元素：
 
@@ -510,7 +512,7 @@ V1 金额与个人资料元素：
 
 说明（0.6）：同一商品各行的件数合计达到每单限购时，这些行的数量 (+) 禁用。计价接口把某商品的各行标为超出限购时，在这些行下显示 `[cart.over_limit]`（`{count}` 为接口返回的限购件数），并与其他变化一样显示 `[cart.item_changed]`；访客减少件数或移除后重新计价。
 
-整单上限（0.17，DESIGN 1.18「计价、优惠、积分与库存」第 8 条）：购物车全部行的件数合计达到 2,000 时，各行的数量 (+) 禁用。计价接口返回超出整单件数上限的标记时显示 `[cart.units_over_limit]`（`{count}` 为接口返回的上限件数），返回超出整单金额上限的标记时显示 `[cart.amount_over_limit]`（`{amount}` 为接口返回的上限金额，按整数仙格式化）；两者与各行的标注互不影响，同时存在时都显示，样式与 `[cart.item_changed]` 相同，位置在它之下。本页没有运费，金额上限按商品小计判断。`[cart.checkout]` 照旧显示（与有非正常行时相同），P05 再次提示并禁止下单。
+整单上限（0.17，DESIGN 1.18「计价、优惠、积分与库存」第 8 条）：购物车全部行的件数合计达到 2,000 时，各行的数量 (+) 禁用。数量可直接输入（0.17，Kelvin 2026-10-30 决定）：(-) 与 (+) 之间是数字输入框（读屏标签 `[detail.quantity]`），只收整数，回车或离开输入框时生效；为空、为 0 或不是整数时恢复为原来的件数；超过上限时改为上限，并在旁边显示 `[common.qty_capped]`（`{count}` 为上限）。每行的上限为该行现有件数加上「限购件数减去该商品各行合计」与「2,000 减去全部行合计」中较小的；生效后与 (+)(-) 一样重新计价。计价接口返回超出整单件数上限的标记时显示 `[cart.units_over_limit]`（`{count}` 为接口返回的上限件数），返回超出整单金额上限的标记时显示 `[cart.amount_over_limit]`（`{amount}` 为接口返回的上限金额，按整数仙格式化）；两者与各行的标注互不影响，同时存在时都显示，样式与 `[cart.item_changed]` 相同，位置在它之下。本页没有运费，金额上限按商品小计判断。`[cart.checkout]` 照旧显示（与有非正常行时相同），P05 再次提示并禁止下单。
 
 金额与个人资料元素：
 
@@ -1980,6 +1982,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 |  结果：[admin.adjust_saved] / [admin.stock_changed] / [admin.adjust_invalid] / [common.error_retry] |
 图片（0.17）：上传中 [admin.image_uploading]；被拒 [admin.image_type_unsupported] / [admin.image_too_large] / [admin.images_full] / [admin.image_invalid]；排序被拒 [admin.images_changed] ( [admin.reload] )；其他失败 [common.error_retry]
 移除图片确认框（0.17）：[admin.image_remove_confirm]  ( [admin.image_remove] ) ( [common.cancel] )
+有未保存的修改时切换（0.17）：[admin.unsaved_confirm]  ( [admin.unsaved_leave] ) ( [admin.unsaved_stay] )
 新建商品（0.17）：规格区为 ( [admin.add_option] )，每个规格名一行 [____] [admin.option_values] [<值>__] ( [admin.add_value] ) (✗)；没有规格名时为 [admin.no_options]，SKU 表固定一行
 ```
 
@@ -2036,7 +2039,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 
 说明（0.17，DESIGN 1.18 第 11 条）：
 
-- **列表**：全部商品（含未上架的），按新建时间从新到旧，不分页；状态显示 `[admin.active]` 或 `[admin.unpublished]`。点 `[common.edit]` 或 `[common.create]` 时，编辑区里未保存的修改直接丢弃，不另确认（未选：切换前弹确认框）。
+- **列表**：全部商品（含未上架的），按新建时间从新到旧，不分页；状态显示 `[admin.active]` 或 `[admin.unpublished]`。有未保存的修改（编辑区的值与最近一次读取或保存的不同；图片与当日库存调整立即生效，不算在内）时，点另一项的 `[common.edit]`、`[common.create]`、后台导航、手机顶栏的返回或 `[admin.logout]`，先弹确认框 `[admin.unsaved_confirm]`：`[admin.unsaved_leave]` 丢弃修改并继续，`[admin.unsaved_stay]` 留在本页、保留已填的值（Kelvin 2026-10-30 决定）；没有未保存的修改时直接切换。刷新、关闭标签页或浏览器后退由浏览器自己的离开提示拦一次（文字由浏览器决定）。点「已被改动」提示里的 `[admin.reload]` 是明确放弃修改，不再确认。
 - **一次保存**：文案、分类、上架状态、每单限购、规格名与规格值的名称、各 SKU 的价格、每日初始库存与启用状态，以及新增的规格值与 SKU，都由 `[common.save]` 一次提交；图片与当日库存调整各自立即生效，不随保存提交（见下）。保存中按钮禁用，防重复提交。
 - **内容语言**：`[admin.content_language]` 切换的是本商品全部名称与描述输入框（含规格名与规格值的名称）显示与编辑的语言，切换不丢失已填的其他语言；`[admin.translation_missing]` 按当前语言是否缺译显示。
 - **分类**：下拉框只列启用且有英文名称的分类（与前台分类列表相同），名称按后台界面语言显示（缺译回退英文）。商品当前所属的分类已停用或缺英文名称时，下拉框仍显示它、可以保留，其下显示 `[admin.category_current_unavailable]`；这时勾选 `[admin.active]` 保存会被拒。新建商品必须选分类。
@@ -2430,6 +2433,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 +-----------+-----------------------------------------------------------+
 已满 30 个：( [common.create] ) 禁用，旁边 [admin.categories_full]
 停用确认框（取消勾选 [admin.category_enabled] 后保存、且该分类有前台可见商品时）：[admin.category_disable_confirm]  ( [admin.category_disable] ) ( [common.cancel] )
+有未保存的修改时切换：[admin.unsaved_confirm]  ( [admin.unsaved_leave] ) ( [admin.unsaved_stay] )
 保存结果：[admin.category_saved]（新建后为 [admin.category_created]）/ [admin.category_invalid] / [admin.category_changed] ( [admin.reload] ) / [common.error_retry]
 ```
 
@@ -2457,7 +2461,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 
 说明：
 
-- **列表**：全部分类按 ID 从小到大（即前台分类列表的顺序），名称列显示英文名称（缺英文名称时显示 —）；`[admin.category_visible]` 为该分类下前台可见（满足发布规则）的商品件数；`[admin.categories_count]` 显示已有个数与上限 30，已满时 `[common.create]` 禁用并显示 `[admin.categories_full]`。点 `[common.edit]` 或 `[common.create]` 时，编辑区里未保存的修改直接丢弃，不另确认。
+- **列表**：全部分类按 ID 从小到大（即前台分类列表的顺序），名称列显示英文名称（缺英文名称时显示 —）；`[admin.category_visible]` 为该分类下前台可见（满足发布规则）的商品件数；`[admin.categories_count]` 显示已有个数与上限 30，已满时 `[common.create]` 禁用并显示 `[admin.categories_full]`。有未保存的修改（编辑区的值与最近一次读取或保存的不同；图片与当日库存调整立即生效，不算在内）时，点另一项的 `[common.edit]`、`[common.create]`、后台导航、手机顶栏的返回或 `[admin.logout]`，先弹确认框 `[admin.unsaved_confirm]`：`[admin.unsaved_leave]` 丢弃修改并继续，`[admin.unsaved_stay]` 留在本页、保留已填的值（Kelvin 2026-10-30 决定）；没有未保存的修改时直接切换。刷新、关闭标签页或浏览器后退由浏览器自己的离开提示拦一次（文字由浏览器决定）。点「已被改动」提示里的 `[admin.reload]` 是明确放弃修改，不再确认。
 - **新建**：英文名称必填（slug 按英文名称生成，之后改名称也不变）；启用默认勾选。新建成功后进入该分类的编辑区、显示 `[admin.category_created]` 与生成的 slug。
 - **启用与停用**：勾选启用须有英文名称，页面先检查，不满足即不提交、显示 `[admin.category_invalid]`。取消勾选后保存时，该分类的 `[admin.category_visible]` 大于 0 即先弹 `[admin.category_disable_confirm]`（`{count}` 为该件数），确认后才提交；为 0 时直接提交。停用后前台不再显示该分类与其下的商品（商品自己的上架状态不变，重新启用后照常显示），访客购物车里这些商品的行标为不可购买，首页精选里这些商品也不再显示。
 - **不能删除**：分类不能删除，不再用的停用（`[admin.category_slug_hint]` 一并说明 slug 不变）。
