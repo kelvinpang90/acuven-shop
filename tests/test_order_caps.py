@@ -266,7 +266,8 @@ def _guest_payload(lines: list[CartItem]) -> dict[str, object]:
 
 
 def _key() -> str:
-    return f"caps-key-{next(_KEY_SEQUENCE)}"
+    # 幂等键须为 16 到 64 个字母、数字、连字符或下划线。
+    return f"caps-order-key-{next(_KEY_SEQUENCE):08d}"
 
 
 # ---------------------------------------------------------------------------
