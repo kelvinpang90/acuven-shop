@@ -15,3 +15,19 @@
   - 金额超出时 `total_sen` 照给（只把 `fx_reference` 置空），验收标准只要求参考外币为 null；设计说超限时不返回的是参考外币金额。
 - 前端的每行 1000、整单 2,000 件剩余与金额上限的提示和禁用（DESIGN 1.18 第 8 条「前台可加入或增加的件数……具体文案与位置由 UX 定」）不在本任务，待 UX 与视觉稿补齐后另行登记；`frontend/src/cart.ts` 仍按每行 1–99 清洗与限制。
 - 验证到什么程度：上面列出的是本次新增或修改的测试代码；后端的 lint、格式检查与测试由 PR 的必需 CI 检查 `backend` 执行（Worker 沙箱不跑后端测试）。pytest 用 SQLite；会员下单的行锁只在 MySQL 上成立，这里只验证超出上限时在扣库存之前拒绝。
+
+## 登记时的验收标准（原文）
+
+2026-10-30 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 常量——app/services/checkout.py 的 MAX_LINE_QUANTITY 改为 1000，新增 MAX_ORDER_UNITS = 2000 与 MAX_ORDER_AMOUNT_SEN = 99_999_999，说明引用 DESIGN 1.18 第 8 条；计价、游客下单、会员下单与退款申请的请求体都经 MAX_LINE_QUANTITY 校验每行件数，1000 件照常、1001 件 422（退款申请仍不得超过该行的购买件数，现有的服务层判定不变）
+      - 件数上限——CheckoutQuote 在 can_place_order 之后依次新增 unit_limit、units_over_limit、amount_limit_sen 与 amount_over_limit 四个字段（MemberCheckoutQuote 与 MemberQuoteOut 也接在 can_place_order 之后、同样顺序）；unit_limit 恒为 2000，units_over_limit（请求里所有行的件数合计大于 2000 时为真，含不可购买的行）；超出时 can_place_order 为假，各行的状态与标注照现有规则不变
+      - 金额上限——amount_limit_sen 恒为 99999999，amount_over_limit（给了收货国家时按 subtotal_sen 加运费、没给时按 subtotal_sen，大于上限时为真）；超出时 can_place_order 为假、fx_reference 为 null；subtotal_sen 改为各计价行（正常、超出限购与库存不足）行小计之和，不调用 price_order，值与原来相同
+      - 会员计价——app/services/member_ordering.py 的 MemberCheckoutQuote 带上这四个字段（取自 quote_cart）；units_over_limit 或 amount_over_limit 为真时照有不正常行的写法返回——coupon_applicable 为空，coupon_discount_sen、points_cap、points_redeemed 与 points_earned 为 0，points_accepted 为假，available_points 照常为可用余额；app/api/member_orders.py 的 MemberQuoteOut 加这四个字段；会员下单照旧以 quote_cart 的 can_place_order 判定
+      - 下单——游客下单（app/services/ordering.py）与会员下单不改代码，超出任一整单上限时因 can_place_order 为假回 409 order_not_placeable，不写订单、不动库存；app/api/checkout.py、app/api/orders.py、app/api/refunds.py、app/api/member_orders.py 与 app/services/checkout.py 说明里的「1–99」「1 到 99 件」改为 1–1000，checkout.py、orders.py 与 refunds.py 除说明外不改
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_order_caps.py，验证件数合计 2000 不超、2001 超出（含不可购买的行一起计数）、金额恰为 99999999 不超、多 1 仙即超出、没有运费报价时只按小计判断、超出金额时 fx_reference 为 null、两种超出时 can_place_order 都为假、游客下单经接口回 409 order_not_placeable 且没有写入订单、会员下单在服务层调用 place_member_order 抛 OrderNotPlaceable 且没有写入订单（不经会员接口，免去会话与限流的替身；涉及时间的照现有测试固定传入 now，不依赖真实时钟）、会员计价超出时照上一条返回；现有测试只把「100 件被拒」改为「1001 件被拒」——tests/test_purchase_limit.py 的 test_line_quantity_99_is_accepted_and_100_is_rejected（改名为 1000 与 1001，99 件被接受的对照改为 1000 件）、tests/test_checkout_quote.py 的 quantity-100、tests/test_guest_order.py 的 quantity-100、tests/test_refunds.py 与 tests/test_refund_points_estimate_api.py 的 quantity-over-99（参数 id 可随之改名；退款两处不加 1000 件的对照，服务层另按购买件数拒绝）；1000 件被接受的对照只放在上面改名的那条与 tests/test_checkout_quote.py 的 test_limits_are_inclusive（件数 99 改为 1000）；这几个文件文档字符串里的「1 到 99」「1–99」随之改为 1–1000；列出计价响应完整字段的两处加上四个新字段——tests/test_checkout_quote.py 的 test_ok_line_has_exactly_the_public_fields 的期望字典（unit_limit 2000、units_over_limit 为假、amount_limit_sen 99999999、amount_over_limit 为假）与 tests/test_member_orders_api.py 的 GUEST_QUOTE_FIELDS；其余断言不变；每条新增或改写的测试写明守住的是 DESIGN 1.18 第 8 条的哪一句
+      - docs/task-records/SHOP-TASK-178.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；常量、两个整单上限的判定口径、会员计价、下单的拒绝、改动的现有测试与原因、偏离、验证到什么程度；写明前端的上限与提示另行登记）
+      - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/pricing.py、app/services/ordering.py、前端；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 与 HANDOFF 0.74），不合并、不直推
+```
