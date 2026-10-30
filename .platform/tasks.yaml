@@ -5012,20 +5012,20 @@ tasks:
   - id: SHOP-TASK-183
     title: 后台商品的读取与新建规则（含代码生成）
     purpose: >-
-      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 11 条（后台维护商品：查看全部商品、新建商品的范围、结构与上限、代码生成与沿用、取值、上架条件、新建时的核对、审计与生效），新增服务层 app/services/admin_products.py 的读取与新建部分，供 SHOP-TASK-185 的后台接口调用；保存已有商品由 SHOP-TASK-184 接上。
-      运营者落实写法（HANDOFF 0.77）：第一步（只看请求）的检查写成新建与保存共用的函数；代码沿用 SHOP-TASK-180 的 app/services/admin_codes.py；读取单件商品时一并返回它的图片（只读，图片的上传、排列与移除另行登记）；审计操作名 admin_product_created、admin_product_option_created、admin_product_option_value_created、admin_product_variant_created。
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 11 条（后台维护商品：查看全部商品、新建商品的范围、结构与上限、代码生成与沿用、取值、上架条件、新建时的核对、审计与生效），新增服务层 app/services/admin_products.py 的请求结构、共用检查、读取与新建，供之后的保存任务与接口任务调用。
+      运营者落实写法（HANDOFF 0.77）：请求结构写死在契约里，保存与接口照用；第一步（只看请求）的检查写成新建与保存共用的函数；代码沿用 SHOP-TASK-180 的 app/services/admin_codes.py，沿用的代码同样去重；读取单件商品时一并返回它的图片（只读）；审计操作名 admin_product_created、admin_product_option_created、admin_product_option_value_created、admin_product_variant_created。
       不做接口与前端，不改模型与迁移（版本号列已由 SHOP-TASK-177 加好），不改 app/services/catalog.py，不改设计。
-      设计闸门：DESIGN 1.18（提交 5ba9796） 第 11 条与 HANDOFF 0.77，商品与价格。拆分：业务规则层的读取与新建（3 个允许路径），保存由 SHOP-TASK-184、接口由 SHOP-TASK-185 接上，页面 A04 另行登记。
+      设计闸门：DESIGN 1.18（提交 5ba9796） 第 11 条与 HANDOFF 0.77，商品与价格。拆分：读取与新建（3 个允许路径），已有行的保存由 SHOP-TASK-184、保存时的新增由 185、接口由 186 接上，页面 A04 另行登记。
     status: ready
     acceptance_criteria:
-      - 读取列表——load_admin_products(db) 返回全部商品（含未上架的），按 created_at 从新到旧、同时间按 id 从大到小，不分页；每项为 id、slug、三语名称、is_active、category_id 与所属分类的三语名称；只发 SELECT，不写库
-      - 读取单件——load_admin_product(db, product_id) 不存在时返回 None，否则返回商品的 id、slug、version、category_id、三语名称与描述、is_active、max_per_order；规格名按 sort_order（同序按 id）列出 id、code 与三语名称，各自的规格值同样排序列出 id、code 与三语名称；SKU 按 id 列出 id、sku、price_sen、daily_initial_stock、available_stock、is_active 与按规格名顺序排列的规格值 ID；图片按 sort_order 列出 id 与 storage_ref；只发 SELECT，不写库
-      - 第一步（不碰数据库，新建与保存共用）——取值——名称每种语言去掉首尾空白后 0–200 个字符、描述 0–5,000 个字符、规格名与规格值的名称 0–100 个字符，空串存为 None；价格为 0 到 50,000,000 的整数仙，每日初始库存为 0 到 9,999 的整数，每单限购为 1 到 1000 的整数（布尔值都不算整数）；结构为 0–3 个规格名、每个规格名 1–20 个值、1–50 个 SKU，每个 SKU 在每个规格名下恰有一个值，没有规格名时恰有一个 SKU，任两个 SKU 的规格值组合不同；同一商品里规格名的英文名称、同一规格名下规格值的英文名称去掉首尾空白并转小写后不重复（为空的不参与比较）；新建商品时商品、每个规格名与每个规格值的英文名称必填，分类 ID 为整数；保存为上架时请求里看得到的上架条件须满足（英文名称与英文描述、全部规格名与规格值的英文名称齐全、至少一个启用的 SKU）；任一不通过抛 ProductInvalid（只带英文说明、不回显提交的值）、不发任何 SQL
-      - 新建——create_product(db, admin_account_id, 请求, now)，请求为商品字段、规格名（各带规格值，规格值带请求内的临时编号）与 SKU（以临时编号引用规格值）的结构，写法由实现定并在任务记录写明；第一步通过后先回滚此前的事务。第三步在新事务里以共享锁读所选分类（SELECT … FOR SHARE，即 with_for_update(read=True)），分类须存在、启用且有英文名称，否则回滚、抛 ProductInvalid；随后插入商品（版本号 1）、规格名、规格值与 SKU（新 SKU 的 available_stock 等于其每日初始库存），按请求顺序给 sort_order
-      - 代码——商品 slug 为 unique_code(code_base(英文名称, product), 100, 全站已有 slug)；规格名代码的基本部分先沿用全站英文名称相同（去掉首尾空白并转小写后在应用层比较，取回行后比对，不依赖数据库排序规则）的规格名中 id 最小者的代码，没有才取 code_base(英文名称, option)，再经 unique_code(基本部分, 50, 该商品已有与已生成的规格名代码)；规格值代码的基本部分先沿用全站同一规格名代码之下英文名称相同的规格值中 id 最小者的代码，没有才取 code_base(英文名称, value)，再经 unique_code(基本部分, 50, 该规格名下已有与已生成的规格值代码)——沿用的代码同样去重（登记时的预审指出：同一商品先有英文名称 Color、后有 Colour 时两者都会得到 color）；SKU 代码为 slug 依规格名的顺序以连字符接上各规格值的代码，没有规格名时为 slug 接 -std，再经 unique_code(…, 64, 全站已有 SKU 与同一次保存里先生成的)；同一次保存按请求顺序生成；flush 时撞上唯一约束即回滚、抛 ProductChanged
+      - 请求结构（写在 app/services/admin_products.py，新建与保存共用，SHOP-TASK-184 至 186 照用、不改）——ProductInput(category_id, name_en, name_zh, name_ms, description_en, description_zh, description_ms, is_active, max_per_order, options, variants)；OptionInput(id, name_en, name_zh, name_ms, values)，id 为 None 表示新建（只在新建商品时出现）；ValueInput(id, temp_id, name_en, name_zh, name_ms)，已有的值只带 id、新增的值只带 temp_id；VariantInput(id, temp_id, option_values, price_sen, daily_initial_stock, is_active)，已有的 SKU 只带 id 且 option_values 为 None，新增的 SKU 只带 temp_id 且 option_values 按规格名顺序列出 ValueRef；ValueRef(id, temp_id) 两者恰有一个，以行 ID 引用已有规格值、以 temp_id 引用同一请求里新增的规格值；temp_id 为 1–32 个 ASCII 字母、数字、连字符或下划线，规格值之间、SKU 之间各自不重复；四个类型都是不可变的数据类，列表字段为 list 或 tuple
+      - 读取——load_admin_products(db) 返回全部商品（含未上架的），按 created_at 从新到旧、同时间按 id 从大到小，不分页，每项为 id、slug、三语名称、is_active、category_id 与所属分类的三语名称；load_admin_product(db, product_id) 不存在时返回 None，否则返回商品的 id、slug、version、category_id、三语名称与描述、is_active、max_per_order，规格名按 sort_order（同序按 id）列出 id、code、三语名称与同样排序的规格值（id、code、三语名称），SKU 按 id 列出 id、sku、price_sen、daily_initial_stock、available_stock、is_active 与按规格名顺序排列的规格值 ID，图片按 sort_order 列出 id 与 storage_ref；两者只发 SELECT，不写库；之后的任务不改这两个函数的签名与返回结构
+      - 第一步（不碰数据库，新建与保存共用）——名称每种语言去掉首尾空白后 0–200 个字符、描述 0–5,000 个字符、规格名与规格值的名称 0–100 个字符，空串存为 None；分类 ID、价格、库存与限购为整数（布尔值不算）——价格 0 到 50,000,000 仙、每日初始库存 0 到 9,999、每单限购 1 到 1000；结构为 0–3 个规格名、每个规格名 1–20 个值、1–50 个 SKU，每个 SKU 在每个规格名下恰有一个值，没有规格名时恰有一个 SKU，新增 SKU 之间组合不重复；同一商品里规格名的英文名称、同一规格名下规格值的英文名称去掉首尾空白并转小写后不重复（为空的不参与比较）；temp_id 的格式、唯一与引用有效；新建商品时商品、每个规格名与每个规格值的英文名称必填，且请求里不得有任何 id；保存为上架时请求里看得到的上架条件须满足（英文名称与英文描述、全部规格名与规格值的英文名称齐全、至少一个启用的 SKU）；任一不通过抛 ProductInvalid（只带英文说明、不回显提交的值）、不发任何 SQL
+      - 新建——create_product(db, admin_account_id, product, now)（now 为不带时区的 UTC 时间）；第一步通过后先回滚此前的事务，在新事务里以共享锁读所选分类（SELECT … FOR SHARE，即 with_for_update(read=True)），分类须存在、启用且有英文名称，否则回滚、抛 ProductInvalid；随后插入商品（version 1、created_at 取 now）、规格名、规格值与 SKU（新 SKU 的 available_stock 等于其每日初始库存），规格名、规格值各按请求顺序从 0 起给 sort_order
+      - 代码——商品 slug 为 unique_code(code_base(英文名称, product), 100, 全站已有 slug)；规格名代码的基本部分先沿用全站英文名称相同（去掉首尾空白并转小写后在应用层比较，取回行后比对，不依赖数据库排序规则）的规格名中 id 最小者的代码，没有才取 code_base(英文名称, option)，再经 unique_code(基本部分, 50, 该商品已有与已生成的规格名代码)；规格值代码的基本部分先沿用全站同一规格名代码之下英文名称相同的规格值中 id 最小者的代码，没有才取 code_base(英文名称, value)，再经 unique_code(基本部分, 50, 该规格名下已有与已生成的规格值代码)；SKU 代码为 slug 依规格名的顺序以连字符接上各规格值的代码，没有规格名时为 slug 接 -std，再经 unique_code(…, 64, 全站已有 SKU 与同一次保存里先生成的)；按请求顺序生成；flush 时撞上唯一约束即回滚、抛 ProductChanged；代码生成写成保存任务能复用的函数
       - 审计——新建商品写一条 admin_product_created（对象类别 product、新值为 slug），随它新建的每个规格名、规格值与 SKU 各写一条（admin_product_option_created、admin_product_option_value_created、admin_product_variant_created，对象类别 product_option、product_option_value、product_variant，新值为代码），对象 ID 为各自的行 ID，旧值为空；之后一并提交，返回 load_admin_product 的结果；写入途中出现任何异常都先回滚再抛出
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_products.py（SQLite 内存库按模型建表，数据照迁移 0003（alembic/versions/20260930_0003_demo_catalog.py）的示例商品写法造），每条测试的文档字符串写明它守住的 DESIGN 1.18 第 11 条原句——列表的排序与含未上架的商品、单件读取的各项与排序、不存在为 None、读取只发 SELECT；第一步每类不合格（各上限的两端、布尔值当整数、组合重复、英文名称大小写不同也算重复、缺英文名称、上架条件、没有规格名却有两个 SKU）都不发 SQL；分类停用或缺英文名称被拒；示例数据的 Colour 沿用 color、1 m 沿用 1m、没有规格名的 SKU 为 slug-std、slug 与 SKU 去重加后缀；新 SKU 的当日可用库存等于每日初始库存；审计条数与写法；新建的已上架商品出现在 app/services/catalog.py 的前台商品列表，未上架的不出现
-      - docs/task-records/SHOP-TASK-183.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明请求结构、函数签名与偏离取舍）；改动只落在 allowed_change_paths，不改模型与迁移、app/services/catalog.py、app/services/admin_codes.py、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_products.py（SQLite 内存库按模型建表，数据照迁移 0003（alembic/versions/20260930_0003_demo_catalog.py）的示例商品写法造），只经 create_product 与两个 load 函数调用，不直接测共用检查的内部写法，每条测试的文档字符串写明它守住的 DESIGN 1.18 第 11 条原句——列表排序与含未上架的商品、单件读取的各项与排序、不存在为 None、读取只发 SELECT；第一步每类不合格（各上限两端、布尔值当整数、组合重复、英文名称大小写不同也算重复、缺英文名称、上架条件、没有规格名却有两个 SKU、temp_id 重复或引用无效、新建请求带 id）都不发 SQL；分类停用或缺英文名称被拒；Colour 沿用 color、1 m 沿用 1m、同一商品先 Color 后 Colour 得 color 与 color-2、没有规格名的 SKU 为 slug-std、slug 与 SKU 去重加后缀；新 SKU 的当日可用库存等于每日初始库存；审计条数与写法；新建的已上架商品出现在 app/services/catalog.py 的前台商品列表，未上架的不出现
+      - docs/task-records/SHOP-TASK-183.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明函数签名与偏离取舍）；改动只落在 allowed_change_paths，不改模型与迁移、app/services/catalog.py、app/services/admin_codes.py、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
     allowed_change_paths:
       - app/services/admin_products.py
       - tests/test_admin_products.py
@@ -5036,24 +5036,24 @@ tasks:
     creates_branch: true
     creates_pull_request: true
   - id: SHOP-TASK-184
-    title: 已有商品的保存规则（三步核对、新增规格值与 SKU、审计）
+    title: 已有商品的保存规则（三步核对、改已有行、版本与审计）
     purpose: >-
-      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 11 条（保存一件已有商品的全部可改内容：不能删除、规格名不能增减、已有 SKU 的组合不能改；核对的三步；有改动才加版本；逐项审计；生效），在 SHOP-TASK-183 的 app/services/admin_products.py 上新增 save_product。
-      运营者落实写法（HANDOFF 0.77）：加锁顺序为商品行、该商品的 SKU 行（按 id 从小到大，与下单扣减、每日重置一致）、分类行的共享锁；第二步核对版本号与行 ID，不通过回 ProductChanged；第三步查库的取值不通过回 ProductInvalid；审计操作名 admin_product_changed、admin_product_option_changed、admin_product_option_value_changed、admin_product_variant_changed 与新增时的 *_created，旧值与新值写成「字段 值」。
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 11 条（保存一件已有商品的全部可改内容：不能删除、规格名不能增减、已有 SKU 的组合不能改；核对的三步；有改动才加版本；逐项审计；生效），在 SHOP-TASK-183 的 app/services/admin_products.py 上新增 save_product，本任务只处理已有行的修改，保存时新增规格值与 SKU 由 SHOP-TASK-185 接上。
+      运营者落实写法（HANDOFF 0.77）：加锁顺序为商品行、该商品的 SKU 行（按 id 从小到大，与下单扣减、每日重置一致）、分类行的共享锁；第二步核对版本号与行 ID，不通过回 ProductChanged；第三步查库的取值不通过回 ProductInvalid；审计操作名 admin_product_changed、admin_product_option_changed、admin_product_option_value_changed、admin_product_variant_changed，旧值与新值写成「字段 值」。
       不做接口与前端，不改模型与迁移，不改设计。
-      设计闸门：DESIGN 1.18（提交 5ba9796） 第 11 条与 HANDOFF 0.77，商品与价格。拆分：保存规则（3 个允许路径），接口由 SHOP-TASK-185 接上。
+      设计闸门：DESIGN 1.18（提交 5ba9796） 第 11 条与 HANDOFF 0.77，商品与价格。拆分：已有行的保存（3 个允许路径；登记时的审查估计连同新增会超过约 1500 行，故把新增拆给 SHOP-TASK-185）。
     status: ready
     depends_on:
       - SHOP-TASK-183
     acceptance_criteria:
-      - 请求——save_product(db, admin_account_id, product_id, 请求, now)，请求带读取时的 version，以行 ID 列出该商品现有的全部规格名、规格值与 SKU（各带可改的取值——名称、SKU 的价格、每日初始库存与启用状态；已有 SKU 不带组合），新增的规格值带临时编号与名称并归属某个已有规格名，新增的 SKU 带临时编号、取值与按规格名引用的规格值（已有的以行 ID、本次新增的以临时编号）；另带商品的分类 ID、三语名称与描述、is_active、max_per_order；写法由实现定并在任务记录写明
-      - 第一步——调用 SHOP-TASK-183 的共用检查（结构按「现有加新增」整体计算上限与组合，新增的规格值须有英文名称，临时编号的引用有效、新增 SKU 之间组合不重复），另查 version 与各行 ID 为整数、请求里同一类行 ID 不重复、新增 SKU 以行 ID 引用的规格值须是请求里列出的、属于该 SKU 所选规格名的已有规格值；不通过抛 ProductInvalid、不发任何 SQL（这些只看请求就能判断，归第一步；请求列出的行 ID 与库里不符归第二步）
-      - 第二步——先回滚此前的事务，在新事务里依次以 SELECT … FOR UPDATE 锁商品行、再按 id 从小到大锁该商品的 SKU 行（锁定查询以函数给出并带 populate_existing）；商品不存在、version 与当前不同、请求里的规格名、规格值与 SKU 的行 ID 不恰好是该商品现有的全部行、新增 SKU 引用的已有规格值不属于它所选的规格名，任一即回滚、抛 ProductChanged
-      - 第三步（同一事务）——分类与当前不同时，以共享锁（with_for_update(read=True)）读新分类，须存在、启用且有英文名称；保存为上架时以共享锁读所属分类，须启用且有英文名称（分类不变且不上架时不检查，停用的当前分类可以保留）；新增 SKU 的组合与已有 SKU（含停用的）不重复；任一不通过即回滚、抛 ProductInvalid。新增规格值与 SKU 的代码照 SHOP-TASK-183 生成（规格值排在该规格名已有的值之后，SKU 代码按规格名顺序取各值代码），撞上唯一约束即回滚、抛 ProductChanged；新 SKU 的 available_stock 等于其每日初始库存
-      - 写入与审计——逐项与当前值比较，有改动的写新值；有任何改动（含新增）时商品 version 加一，没有改动时回滚、不加版本、不写审计；每改一项写一条审计（对象为商品、规格名、规格值或 SKU，以行 ID 记录），旧值与新值写成「字段 值」——字段为 category_id、is_active、max_per_order、name_en、name_zh、name_ms、description_en、description_zh、description_ms、price_sen、daily_initial_stock（上架与启用状态写 true 或 false，文案取前 100 个字符，为空时只写字段名），SKU 的两侧都在前面加 SKU 代码（如 crew-neck-tee-black-m price_sen 2500）；新增的规格值与 SKU 各写一条 *_created（新值为代码）；已有 SKU 改每日初始库存不改 available_stock；返回 load_admin_product 的结果；写入途中出现任何异常都先回滚再抛出
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_product_save.py（写法照 tests/test_admin_products.py），每条测试的文档字符串写明它守住的 DESIGN 1.18 第 11 条原句——改名不改 slug 与代码；改价格只影响之后的计价（app/services/checkout.py 的 quote_cart 取新价）；version 不符、漏列或多列行 ID、新 SKU 引用别的规格名的值都是 ProductChanged 且不写库；改到停用或缺英文名称的分类被拒、分类不变时停用的当前分类可以保留但保存为上架被拒；新增 SKU 与停用的已有 SKU 组合相同被拒；新增规格值沿用全站代码；没有改动不加版本不写审计、有改动加一；审计的字段与写法；改每日初始库存不改当日可用库存；下架后前台不再出现、停用 SKU 后计价把该行标为不可购买；锁定查询按 MySQL 方言编译带 FOR UPDATE、分类读取带 FOR SHARE（或 LOCK IN SHARE MODE）
-      - docs/task-records/SHOP-TASK-184.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明请求结构与偏离取舍）
-      - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/catalog.py、app/services/checkout.py、app/services/admin_codes.py、tests/test_admin_products.py 以外的现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计；tests/test_admin_products.py 不改
+      - 入口——save_product(db, admin_account_id, product_id, version, product, now)，product 为 SHOP-TASK-183 的 ProductInput；不改 183 的请求结构、共用检查、create_product 与两个 load 函数的签名与返回结构。本任务里请求带任何新增的规格值或 SKU（带 temp_id 的项）即抛 ProductInvalid，由 SHOP-TASK-185 放开；本任务的测试不断言这一拒绝（185 会改掉它）
+      - 第一步——调用共用检查，另查 version 为整数、规格名都带 id、同一类行 ID 不重复；不通过抛 ProductInvalid、不发任何 SQL（只看请求就能判断的归第一步，请求列出的行 ID 与库里不符归第二步）
+      - 第二步——先回滚此前的事务，在新事务里依次以 SELECT … FOR UPDATE 锁商品行、再按 id 从小到大锁该商品的 SKU 行（锁定查询以函数给出并带 populate_existing）；商品不存在、version 与当前不同、请求里的规格名、规格值与 SKU 的行 ID 不恰好是该商品现有的全部行、规格值挂在别的规格名下，任一即回滚、抛 ProductChanged
+      - 第三步（同一事务）——分类与当前不同时，以共享锁（with_for_update(read=True)）读新分类，须存在、启用且有英文名称；保存为上架时以共享锁读所属分类，须启用且有英文名称（分类不变且不上架时不检查，停用的当前分类可以保留）；不通过即回滚、抛 ProductInvalid
+      - 写入与审计——逐项与当前值比较，有改动的写新值；有任何改动时商品 version 加一，没有改动时回滚、不加版本、不写审计；每改一项写一条审计（对象为商品、规格名、规格值或 SKU，以行 ID 记录），旧值与新值写成「字段 值」——字段为 category_id、is_active、max_per_order、name_en、name_zh、name_ms、description_en、description_zh、description_ms、price_sen、daily_initial_stock（上架与启用状态写 true 或 false，文案取前 100 个字符，为空时只写字段名），SKU 的两侧都在前面加 SKU 代码（如 crew-neck-tee-black-m price_sen 2500）；改每日初始库存不改 available_stock；slug 与各代码不变；返回 load_admin_product 的结果；写入途中出现任何异常都先回滚再抛出
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_product_save.py（写法照 tests/test_admin_products.py，经 create_product 造数据），每条测试的文档字符串写明它守住的 DESIGN 1.18 第 11 条原句——改名不改 slug 与代码；改价格只影响之后的计价（app/services/checkout.py 的 quote_cart 取新价）；version 不符、漏列或多列行 ID、规格值挂错规格名、商品不存在都是 ProductChanged 且不写库；改到停用或缺英文名称的分类被拒、分类不变时停用的当前分类可以保留但保存为上架被拒；没有改动不加版本不写审计、有改动加一；审计的字段与写法；改每日初始库存不改当日可用库存；下架后前台不再出现、停用 SKU 后计价把该行标为不可购买；锁定查询按 MySQL 方言编译带 FOR UPDATE、分类读取带 FOR SHARE（或 LOCK IN SHARE MODE）
+      - docs/task-records/SHOP-TASK-184.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明偏离取舍）
+      - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/catalog.py、app/services/checkout.py、app/services/admin_codes.py、现有测试（含 tests/test_admin_products.py）、前端、.platform/、CI 与部署配置，不装依赖，不改设计
     allowed_change_paths:
       - app/services/admin_products.py
       - tests/test_admin_product_save.py
@@ -5064,28 +5064,55 @@ tasks:
     creates_branch: true
     creates_pull_request: true
   - id: SHOP-TASK-185
-    title: 后台商品的列表、读取、新建与保存接口
+    title: 保存商品时新增规格值与 SKU
     purpose: >-
-      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 11 条与 docs/UX.md 0.17 的 A04（列表、单件编辑、新建、保存后的取值不合格与商品已被改动），把 SHOP-TASK-183、184 的服务层接成后台接口 GET /api/admin/products、GET /api/admin/products/{product_id}、POST /api/admin/products 与 PUT /api/admin/products/{product_id}。
-      运营者落实写法（HANDOFF 0.77）：写法照 app/api/admin_coupons.py（require_admin、CsrfDep 先于路径 ID、strict 模型、不回显的 422、no-store 路由类）；请求体按实际读到的字节逐块判断，上限 128 KB（照 app/api/admin_shipping_rates.py 的逐块读取写法，三语描述各 5,000 字与 50 个 SKU 放得下）；取值不合格回 422 product_invalid，商品已被改动回 409 product_changed，读取不存在的商品回 404 product_not_found；金额一律以整数仙收发。
-      不做前端，不改服务层与模型，不改设计。
-      设计闸门：DESIGN 1.18（提交 5ba9796） 第 11 条与 HANDOFF 0.77。拆分：接口层（4 个允许路径），页面 A04 另行登记。
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 11 条（可新增规格值与 SKU；新增的规格值与 SKU 各带一个请求内的临时编号，新增 SKU 以行 ID 引用已有规格值、以临时编号引用同一次保存里新增的规格值；新增的排在已有的之后；第三步查新增 SKU 的组合与已有 SKU（含停用的）不重复；新增 SKU 的当日可用库存等于每日初始库存），放开 SHOP-TASK-184 的 save_product 对新增项的拒绝。
+      运营者落实写法（HANDOFF 0.77）：代码生成复用 SHOP-TASK-183 的函数；新增 SKU 以行 ID 引用的规格值须是请求里列出的、属于该 SKU 所选规格名的已有规格值，否则归第一步「取值不合格」；新增的规格值与 SKU 各写一条 *_created 审计。
+      不做接口与前端，不改模型与迁移，不改设计。
+      设计闸门：DESIGN 1.18（提交 5ba9796） 第 11 条与 HANDOFF 0.77。拆分：保存时的新增（3 个允许路径）。
     status: ready
     depends_on:
       - SHOP-TASK-184
     acceptance_criteria:
-      - 读取——GET /api/admin/products 经 require_admin（401 admin_session_required），返回 products（load_admin_products 的全部项）与由 cookie 算出的 csrf_token；GET /api/admin/products/{product_id} 路径 ID 照 app/api/admin_orders.py 的 _order_id 校验（不合法 422 不回显），返回 load_admin_product 的结果，不存在 404 {"detail":"product_not_found"}；都不写审计
-      - 新建——POST /api/admin/products，步骤依次为请求体逐块读取超过 128 KB 即 413、不是 JSON 415、require_admin（401）、X-CSRF-Token（403 csrf_failed）、请求体模型（字段与 SHOP-TASK-183 的请求结构一一对应，strict，多出字段或类型不对 422，照 app/api/pay.py 的 _body_errors 不回显）、create_product；ProductInvalid 回 422 {"detail":"product_invalid"}，ProductChanged 回 409 {"detail":"product_changed"}；成功回 201 与新商品（同单件读取）
-      - 保存——PUT /api/admin/products/{product_id}，步骤依次为 413、415、401、403（照 app/api/admin_coupons.py 先声明 CsrfDep 依赖、再声明路径 ID 依赖）、路径 ID 422、请求体模型（与 SHOP-TASK-184 的请求结构一一对应）、save_product；两种异常的回答同新建；成功或未变都回 200 与保存后的商品
-      - 通用——四个接口的处理函数与依赖产生的全部响应（含错误）都带 no-store，由 SHOP-TASK-027 的路由类统一加上；路径存在但方法不匹配时由框架返回的 405 不含请求内容与个人资料，不在此列；不写日志；app/main.py 注册新路由
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_products_api.py，写法照 tests/test_admin_shipping_rates_api.py（测试会话依赖替换、后台登录与 CSRF 的取得方式），每条测试的文档字符串写明它守住的 DESIGN 1.18 第 11 条、UX 0.17 A04 或本契约的约定——四个接口没有会话 401、写操作 CSRF 不符 403；413 先于登录检查；415；多出字段、缺字段、null、布尔值当整数、浮点数价格等 422 且不回显；路径 ID 不合法 422；读取不存在 404；新建 201 且返回的代码正确；取值不合格 422 product_invalid；版本号不符 409 product_changed；成功与未变都 200；列表与单件的字段；所有响应带 no-store
+      - 入口——仍是 SHOP-TASK-184 的 save_product，签名与返回不变；去掉「请求带新增项即 ProductInvalid」，其余已有行的行为不变；不改 183 的请求结构、共用检查、create_product 与两个 load 函数
+      - 第一步——共用检查按「现有加新增」整体计算上限（每个规格名至多 20 个值、至多 50 个 SKU）与英文名称不重复；新增的规格值英文名称必填；新增 SKU 的 option_values 个数等于规格名个数，以行 ID 引用的须是请求里该规格名下列出的已有规格值，以 temp_id 引用的须是同一规格名下新增的规格值；不通过抛 ProductInvalid、不发任何 SQL
+      - 第三步——在 184 的第二步之后、同一事务里，新增 SKU 的组合与该商品已有 SKU（含停用的）的组合不重复，否则回滚、抛 ProductInvalid；新增的规格值排在该规格名已有值之后（sort_order 为已有最大值加一起），新增的 SKU 依次插入；代码复用 SHOP-TASK-183 的生成函数（规格值代码在该规格名下去重，SKU 代码按规格名顺序取各值代码、全站去重），撞上唯一约束即回滚、抛 ProductChanged；新 SKU 的 available_stock 等于其每日初始库存
+      - 版本与审计——有任何新增即算有改动，商品 version 加一（与已有行的改动合并只加一次）；新增的规格值与 SKU 各写一条 admin_product_option_value_created、admin_product_variant_created（新值为代码，对象 ID 为新行 ID）；写入途中出现任何异常都先回滚再抛出
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_product_additions.py（写法照 tests/test_admin_product_save.py），每条测试的文档字符串写明它守住的 DESIGN 1.18 第 11 条原句——新增规格值并以 temp_id 被新增 SKU 引用；新增 SKU 引用已有规格值；与停用的已有 SKU 组合相同被拒；引用别的规格名下的值或请求里没列出的值被拒；新增规格值沿用全站代码；超过 20 个值或 50 个 SKU 被拒；新 SKU 的当日可用库存与代码；只加一次版本；审计；新增的 SKU 可被 app/services/checkout.py 的 quote_cart 计价
       - docs/task-records/SHOP-TASK-185.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）
+      - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/catalog.py、app/services/checkout.py、app/services/admin_codes.py、现有测试（含 tests/test_admin_products.py 与 tests/test_admin_product_save.py）、前端、.platform/、CI 与部署配置，不装依赖，不改设计
+    allowed_change_paths:
+      - app/services/admin_products.py
+      - tests/test_admin_product_additions.py
+      - docs/task-records/SHOP-TASK-185.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-186
+    title: 后台商品的列表、读取、新建与保存接口
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 11 条与 docs/UX.md 0.17 的 A04（列表、单件编辑、新建、保存后的取值不合格与商品已被改动），把 SHOP-TASK-183 至 185 的服务层接成后台接口 GET /api/admin/products、GET /api/admin/products/{product_id}、POST /api/admin/products 与 PUT /api/admin/products/{product_id}。
+      运营者落实写法（HANDOFF 0.77）：写法照 app/api/admin_coupons.py（require_admin、CsrfDep 先于路径 ID、strict 模型、不回显的 422、no-store 路由类）；请求体按实际读到的字节逐块判断，上限 256 KB（照 app/api/admin_shipping_rates.py 的逐块读取写法）；请求体的 JSON 字段名与 SHOP-TASK-183 的请求结构同名一一对应；取值不合格回 422 product_invalid，商品已被改动回 409 product_changed，读取不存在的商品回 404 product_not_found；金额一律以整数仙收发。
+      不做前端，不改服务层与模型，不改设计。
+      设计闸门：DESIGN 1.18（提交 5ba9796） 第 11 条与 HANDOFF 0.77。拆分：接口层（4 个允许路径），页面 A04 另行登记。
+    status: ready
+    depends_on:
+      - SHOP-TASK-185
+    acceptance_criteria:
+      - 读取——GET /api/admin/products 经 require_admin（401 admin_session_required），返回 products（load_admin_products 的全部项）与由 cookie 算出的 csrf_token；GET /api/admin/products/{product_id} 路径 ID 照 app/api/admin_orders.py 的 _order_id 校验（不合法 422 不回显），返回 load_admin_product 的结果，不存在 404 {"detail":"product_not_found"}；都不写审计
+      - 新建——POST /api/admin/products，步骤依次为请求体逐块读取超过 256 KB 即 413、不是 JSON 415、require_admin（401）、X-CSRF-Token（403 csrf_failed）、请求体模型（与 ProductInput 同名一一对应，options、values、variants 为数组，option_values 的每项为只带 id 或只带 temp_id 的对象，strict，多出字段、缺字段或类型不对 422，照 app/api/pay.py 的 _body_errors 不回显）、create_product；ProductInvalid 回 422 {"detail":"product_invalid"}，ProductChanged 回 409 {"detail":"product_changed"}；成功回 201 与新商品（同单件读取）
+      - 保存——PUT /api/admin/products/{product_id}，步骤依次为 413、415、401、403（照 app/api/admin_coupons.py 先声明 CsrfDep 依赖、再声明路径 ID 依赖）、路径 ID 422、请求体模型（新建的字段加必填的整数 version）、save_product；两种异常的回答同新建；成功或未变都回 200 与保存后的商品
+      - 通用——四个接口的处理函数与依赖产生的全部响应（含错误）都带 no-store，由 SHOP-TASK-027 的路由类统一加上；路径存在但方法不匹配时由框架返回的 405 不含请求内容与个人资料，不在此列；不写日志；app/main.py 注册新路由
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_products_api.py，写法照 tests/test_admin_shipping_rates_api.py（测试会话依赖替换、后台登录与 CSRF 的取得方式），每条测试的文档字符串写明它守住的 DESIGN 1.18 第 11 条、UX 0.17 A04 或本契约的约定——四个接口没有会话 401、写操作 CSRF 不符 403；413 先于登录检查；415；多出字段、缺字段、null、布尔值当整数、浮点数价格、ValueRef 同时带 id 与 temp_id 等 422 且不回显；路径 ID 不合法 422；GET 不存在 404、PUT 不存在 409 product_changed；新建 201 且返回的代码正确；取值不合格 422 product_invalid；版本号不符 409；成功与未变都 200；保存时新增规格值与 SKU；列表与单件的字段；所有响应带 no-store
+      - docs/task-records/SHOP-TASK-186.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）
       - 改动只落在 allowed_change_paths；不改服务层、模型与迁移、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
     allowed_change_paths:
       - app/api/admin_products.py
       - app/main.py
       - tests/test_admin_products_api.py
-      - docs/task-records/SHOP-TASK-185.md
+      - docs/task-records/SHOP-TASK-186.md
     allowed_commands:
       - lint.check
       - format.check
