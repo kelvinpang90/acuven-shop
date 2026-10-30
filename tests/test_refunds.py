@@ -1191,10 +1191,11 @@ KEY_LOC = ["header", "Idempotency-Key"]
             ["body", "lines", 0, "quantity"],
             id="zero-quantity",
         ),
+        # DESIGN 1.18 第 8 条「退款申请每行的件数上限随每行件数改为 1000」。
         pytest.param(
-            {"lines": [{"line_index": 0, "quantity": 100}]},
+            {"lines": [{"line_index": 0, "quantity": 1001}]},
             ["body", "lines", 0, "quantity"],
-            id="quantity-over-99",
+            id="quantity-over-1000",
         ),
         pytest.param(
             {"lines": [{"line_index": 0, "quantity": "2"}]},
@@ -1214,7 +1215,7 @@ def test_invalid_request_is_422_without_echo(
     db: Session, client: TestClient, change: dict[str, Any], loc: list[Any]
 ) -> None:
     """凭据不写入「错误回显」。SHOP-TASK-029 验收：请求体只有订单号与申请行列表（1 到 20 项，
-    行序不重复，件数为 1 到 99 的整数），多出字段 422；须带 Idempotency-Key（规则同
+    行序不重复，件数为 1 到 1000 的整数），多出字段 422；须带 Idempotency-Key（规则同
     SHOP-TASK-020）；422 每条错误只含位置、类型与固定消息，不回显请求内容，带 no-store；
     不写任何行。
     """

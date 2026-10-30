@@ -12,7 +12,7 @@
 处理顺序，每一步不通过即停止，且之前不读写订单数据：
 1. 请求体按实际读到的字节逐块判断，超过 8 KB 即 413，先于一切校验；不是 JSON 415；
    幂等键（规则同 SHOP-TASK-020）与请求体一并校验：请求体只有订单号与申请行列表（1 到 20 项，
-   每项为订单行序与 1 到 99 件，行序不重复），多出字段 422。
+   每项为订单行序与 1 到 1000 件，行序不重复），多出字段 422。
 2. 按请求里的订单号查到订单 ID，以当前 cookie 与 lookup 范围调用 check_order_access（401）。
 3. X-CSRF-Token 请求头经 check_csrf_token 校验，不通过 403 {"detail": "csrf_failed"}。
 4. 之后才查幂等键与订单（app/services/refunds.py 的 submit_refund）。

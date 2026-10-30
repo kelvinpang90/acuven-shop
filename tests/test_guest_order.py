@@ -1070,10 +1070,11 @@ JAPAN = {"country_code": "JP", "state_code": None}
         pytest.param({"body": {"phone_region": "ZZ"}}, ["body", "phone"], id="phone-bad-region"),
         pytest.param({"drop": "phone"}, ["body", "phone"], id="phone-missing"),
         pytest.param({"body": {"lines": TWO_MUGS}}, ["body", "lines"], id="duplicate-sku"),
+        # DESIGN 1.18 第 8 条「每行件数为 1–1000 的整数」。
         pytest.param(
-            {"body": {"lines": [{"sku": "MUG", "quantity": 100}]}},
+            {"body": {"lines": [{"sku": "MUG", "quantity": 1001}]}},
             ["body", "lines", 0, "quantity"],
-            id="quantity-100",
+            id="quantity-1001",
         ),
     ],
 )

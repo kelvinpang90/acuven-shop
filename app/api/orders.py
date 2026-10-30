@@ -96,7 +96,7 @@ class GuestOrderIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    # 与计价接口相同：1 到 20 行，每行 1 到 99 件，SKU 不重复。
+    # 与计价接口相同：1 到 20 行，每行 1 到 1000 件，SKU 不重复。
     lines: list[QuoteLineIn] = Field(min_length=1, max_length=MAX_CART_LINES)
     # 结账第 1 步的手机号原文，与页面国家码选择对应的地区代码
     # （如 MY）；以加号开头时以输入为准。
