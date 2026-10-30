@@ -4857,7 +4857,7 @@ tasks:
       downgrade 先读出每单限购大于 99 的商品数与已有文件名的图片行数，任一不为零即抛 RuntimeError、库保持原样（改约束在 MySQL 上不随事务回滚），再先删约束、后删列、恢复 1–99 的约束。
       设计闸门：DESIGN 1.18（提交 5ba9796）与 HANDOFF 0.74，商品、分类、图片与站点设置的数据结构。
       拆分：数据库层（7 个允许路径）；计价与下单上限另成 SHOP-TASK-178，后台维护的服务层与接口、每日恢复库存开关的定时任务与站点设置接口另行登记。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 商品与分类——app/models/catalog.py 的 Category 与 Product 各加 version（非空整数，服务端默认 1，检查约束名为 version_positive、文本为 version >= 1），说明引用 DESIGN 1.18 第 11、14 条；Product 的检查约束 max_per_order_range 的文本改为 max_per_order >= 1 AND max_per_order <= 1000（约束名不变），列的服务端默认 10 不变，max_per_order 列注释里的「1–99」改为 1–1000；其余列、约束与唯一约束不变
