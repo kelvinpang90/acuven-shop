@@ -78,3 +78,29 @@ def test_every_setting_is_passed_to_api() -> None:
         if field != "git_sha" and f"SHOP_{field.upper()}" not in environment
     ]
     assert missing == []
+
+
+R2_EXPECTED = {
+    "R2_ENDPOINT_URL": "${R2_ENDPOINT_URL:-}",
+    "R2_BUCKET": "${R2_BUCKET:-}",
+    "R2_ACCESS_KEY_ID": "${R2_ACCESS_KEY_ID:-}",
+    "R2_SECRET_ACCESS_KEY": "${R2_SECRET_ACCESS_KEY:-}",
+}
+
+
+def test_compose_passes_r2_variables_only_to_api() -> None:
+    """DESIGN 1.19 第 13 条「连接端点、存储桶名、访问密钥 ID 与访问密钥都由私有配置注入」
+    「缺任一项或为空字符串即视为存储不可用」：四项照设计原名传给 shop_api，未设置时为空串、
+    照常部署；定时任务不碰图片，不传给 shop_jobs。"""
+    environment = _environment("shop_api")
+    for name, value in R2_EXPECTED.items():
+        assert environment.get(name) == value, name
+    jobs = _environment("shop_jobs")
+    assert not any(name.startswith("R2_") for name in jobs)
+
+
+def test_api_memory_limit_is_512m() -> None:
+    """DESIGN 1.19「上线依赖与设计闸门」：本站 API 容器的内存上限提到 512m（Pillow 处理图片，另含
+    boto3 的常驻内存）。"""
+    compose = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
+    assert compose["services"]["shop_api"]["mem_limit"] == "512m"

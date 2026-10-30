@@ -22,7 +22,8 @@ services:
     image: ${SHOP_API_IMAGE:?set by deploy/deploy.sh to the commit-tagged image}
     restart: unless-stopped
     logging: *logging
-    mem_limit: 256m
+    # 512m：商品图片在进程内用 Pillow 解码与编码，另加 boto3 的常驻内存（DESIGN 1.19 第 13 条与「上线依赖」，部署后按实测复核）。
+    mem_limit: 512m
     environment:
       SHOP_DATABASE_URL: ${SHOP_DATABASE_URL:?set SHOP_DATABASE_URL in .env (see .env.example)}
       # 可以不设：未设置时为空串，照常部署，依赖限流的接口回答暂不可用。
@@ -55,6 +56,12 @@ services:
       SHOP_SMS_PHONE_LIMIT_PER_HOUR: ${SHOP_SMS_PHONE_LIMIT_PER_HOUR:-5}
       SHOP_SMS_PHONE_LIMIT_PER_DAY: ${SHOP_SMS_PHONE_LIMIT_PER_DAY:-10}
       SHOP_SMS_SOURCE_LIMIT_PER_HOUR: ${SHOP_SMS_SOURCE_LIMIT_PER_HOUR:-10}
+      # 商品图片的 Cloudflare R2 私有存储桶（DESIGN 1.19 第 13 条，变量名照设计原文、不带 SHOP_ 前缀）：
+      # 可以不设，未设置时为空串，视为存储不可用，图片的上传与提供回答 503，其余照常部署。只传给 shop_api。
+      R2_ENDPOINT_URL: ${R2_ENDPOINT_URL:-}
+      R2_BUCKET: ${R2_BUCKET:-}
+      R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
+      R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
     networks: [proxy_net, data_net]
     healthcheck:
       test:

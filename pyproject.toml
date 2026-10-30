@@ -21,6 +21,11 @@ dependencies = [
     "phonenumbers>=9.0",
     # 共享 Redis 的官方客户端：短时限流计数（DESIGN 1.11「失败、并发与重试」第 4 条）。
     "redis>=5.0",
+    # 商品图片的校验、转正、去元数据与转 WebP（DESIGN 1.19「计价、优惠、积分与库存」第 13 条）。
+    "Pillow>=11.0",
+    # 经 S3 兼容接口读写 Cloudflare R2 私有存储桶里的展示图（DESIGN 1.19 第 13 条）；
+    # 新版默认附带的上传校验和由调用方设为 when_required，见第 13 条。
+    "boto3>=1.35",
 ]
 
 [project.optional-dependencies]
