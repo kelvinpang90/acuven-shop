@@ -11,3 +11,18 @@
   - 请求模型不限制名称长度：长度、首尾空白与英文名称必填都交给服务层，不合格时是 `category_invalid` 而不是请求体 422，与 A10 的「取值不合格」一致。
   - 新建与保存时服务层未捕获的数据库错误不另转成 503（同 `admin_site_settings.py`，验收未列出）。
 - 验证范围：上面列出的是本次新增的测试代码；后端的 lint、格式检查与测试由 PR 的必需 CI 检查 `backend` 执行（Worker 沙箱不跑后端测试）。
+
+## 登记时的验收标准（原文）
+
+2026-10-30 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 读取——GET /api/admin/categories 经 require_admin（没有有效后台会话 401 admin_session_required），返回 categories（load_admin_categories 的全部项，字段依次为 id、slug、name_en、name_zh、name_ms、is_active、version、visible_products，名称为空时为 null）与由 cookie 算出的 csrf_token；不写审计
+      - 新建——POST /api/admin/categories，步骤依次为请求体按实际读到的字节逐块判断超过 8 KB 即 413、不是 JSON 415（先于一切校验，照 app/api/admin_site_settings.py 的 _save_body）、require_admin（401）、X-CSRF-Token（403 csrf_failed）、请求体模型（name_en、name_zh、name_ms 为字符串，is_active 为布尔值，四项必填，多出字段或类型不对 422，照 app/api/pay.py 的 _body_errors 不回显）、create_category；CategoryInvalid 回 422 {"detail":"category_invalid"}，CategoryChanged 回 409 {"detail":"category_changed"}；成功回 201 与新分类（字段同读取的一项）
+      - 保存——PUT /api/admin/categories/{category_id}，步骤依次为请求体 8 KB 上限 413、不是 JSON 415、require_admin（401）、X-CSRF-Token（403 csrf_failed，照 app/api/admin_coupons.py 先声明 CsrfDep 依赖、再声明路径 ID 依赖，使 403 先于路径的 422）、路径 ID 照 app/api/admin_orders.py 的 _order_id 校验（不合法 422，只给固定消息、不回显）、请求体模型（同新建，另有必填的整数 version）；调用 save_category，两种异常的回答同新建；成功或未变都回 200 与保存后的分类
+      - 通用——三个接口的处理函数与依赖产生的全部响应（含错误）都带 no-store，由 SHOP-TASK-027 的路由类统一加上；路径存在但方法不匹配时由框架返回的 405 不含请求内容与个人资料，不在此列；不写日志；app/main.py 注册新路由
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_categories_api.py，写法照 tests/test_admin_shipping_rates_api.py（测试会话依赖替换、后台登录与 CSRF 的取得方式），每条测试的文档字符串写明它守住的 DESIGN 1.18 第 14 条、UX 0.17 A10 或本契约的约定——三个接口没有会话 401、写操作 CSRF 不符 403；413 先于登录检查；415；多出字段、缺字段、null、布尔值当整数等 422 且不回显提交的值；路径 ID 为 0、负数、非数字、超长 422；新建成功 201 且审计一条、第 31 个 422 category_invalid、英文名称重复 422；保存版本号不符与分类不存在 409 category_changed；启用但没有英文名称 422、停用且英文名称为空时 200；成功与未变都 200；读取的字段顺序与 visible_products；所有响应带 no-store
+      - docs/task-records/SHOP-TASK-181.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）
+      - 改动只落在 allowed_change_paths；不改服务层、模型与迁移、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
+```
