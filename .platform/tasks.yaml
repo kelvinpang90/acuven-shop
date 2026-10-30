@@ -4860,13 +4860,7 @@ tasks:
     status: done
     depends_on: []
     acceptance_criteria:
-      - 商品与分类——app/models/catalog.py 的 Category 与 Product 各加 version（非空整数，服务端默认 1，检查约束名为 version_positive、文本为 version >= 1），说明引用 DESIGN 1.18 第 11、14 条；Product 的检查约束 max_per_order_range 的文本改为 max_per_order >= 1 AND max_per_order <= 1000（约束名不变），列的服务端默认 10 不变，max_per_order 列注释里的「1–99」改为 1–1000；其余列、约束与唯一约束不变
-      - 商品图片——app/models/catalog.py 的 ProductImage 加五个可空列——file_name（String(32)，唯一约束）、source_format（String(4)）、width、height、byte_size（整数）；检查约束 metadata_all_or_none（五列全为空或全不为空；全为空的是示例数据的占位图引用；文本为 (file_name IS NULL AND source_format IS NULL AND width IS NULL AND height IS NULL AND byte_size IS NULL) OR (file_name IS NOT NULL AND source_format IS NOT NULL AND width IS NOT NULL AND height IS NOT NULL AND byte_size IS NOT NULL)）、source_format_valid（文本为 source_format IS NULL OR source_format IN ('jpeg', 'png', 'webp')）、display_size_range（文本为 width IS NULL OR (width >= 1 AND width <= 1600 AND height >= 1 AND height <= 1600 AND byte_size >= 1)）；storage_ref、sort_order 与（product_id, sort_order）的唯一约束不变，类的说明引用 DESIGN 1.18 第 13 条
-      - 站点设置——app/models/site.py 的 SiteSetting 加 daily_stock_reset_enabled（非空布尔，服务端默认为真，与 sms_verification_enabled 的写法相同），说明引用 DESIGN 1.18「计价、优惠、积分与库存」第 6 条；其余列与约束不变
-      - 迁移——新增 alembic/versions/20261030_0024_admin_catalog_schema.py（revision 为 0024，down_revision 为 0023）；upgrade 加上述各列、约束与唯一约束，并把 max_per_order_range 改为 1–1000；downgrade 依次——读出 max_per_order 大于 99 的商品数与 file_name 不为空的图片行数，任一大于 0 即抛 RuntimeError（此时还没有改动；删掉文件名会让后台上传的图片永远找不到文件，登记时的预审指出）；删去新增的检查约束与 file_name 的唯一约束（MySQL 8.0 不许删除被检查约束引用的列，须先删约束）；删去新增的列；删去 1–1000 的 max_per_order_range 并建回 1–99 的约束（照 0023 先删后建）；新旧约束文本写成模块常量，与模型逐字一致；模块说明写明执行顺序的原因与只在 MySQL 上执行
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_purchase_limit.py 只改两条约束测试：0、1001 与 -1 被检查约束拒绝，1 与 1000 能写入并读回，文档字符串改为引用 DESIGN 1.18，函数名里的 1_to_99、1_and_99 随之改为 1_to_1000、1_and_1000，模块文档字符串里引用 DESIGN 1.10「1–99」的那句改为引用 DESIGN 1.18 的 1–1000；tests/test_site_settings.py 只在 test_table_has_only_the_switch 的列集合里加 daily_stock_reset_enabled，并照该处已有的注释写法补一句 DESIGN 1.18 加列的说明（登记时的预审指出）；新增 tests/test_admin_catalog_schema.py，验证新建的商品与分类版本号为 1、版本号 0 被拒绝，五列全空与全有值的图片行都能写入、只填部分列、格式不在三种之内（用 gif 这类值，不用大小写变体——MySQL 默认排序规则比较时不分大小写）、宽或高为 0 或 1601、字节数为 0、文件名重复都被拒绝，新建站点设置行时每日恢复库存开关为真，并经 importlib 载入迁移 0024 核对 revision、down_revision 与约束常量和模型逐字一致；每条测试写明守住的是 DESIGN 1.18 的哪一句
-      - docs/task-records/SHOP-TASK-177.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；各列与约束、迁移的执行顺序、偏离、验证到什么程度——pytest 不在 SQLite 上执行 0024，CI 的必需检查 backend 在 MySQL 8 上做 upgrade、downgrade 再 upgrade 的往返与 alembic check，写明这一点）
-      - 改动只落在 allowed_change_paths；不改服务层、接口、计价与下单、定时任务、前端与已有迁移；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 与 HANDOFF 0.74），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-177.md
     allowed_change_paths:
       - app/models/catalog.py
       - app/models/site.py
@@ -4895,14 +4889,7 @@ tasks:
     depends_on:
       - SHOP-TASK-177
     acceptance_criteria:
-      - 常量——app/services/checkout.py 的 MAX_LINE_QUANTITY 改为 1000，新增 MAX_ORDER_UNITS = 2000 与 MAX_ORDER_AMOUNT_SEN = 99_999_999，说明引用 DESIGN 1.18 第 8 条；计价、游客下单、会员下单与退款申请的请求体都经 MAX_LINE_QUANTITY 校验每行件数，1000 件照常、1001 件 422（退款申请仍不得超过该行的购买件数，现有的服务层判定不变）
-      - 件数上限——CheckoutQuote 在 can_place_order 之后依次新增 unit_limit、units_over_limit、amount_limit_sen 与 amount_over_limit 四个字段（MemberCheckoutQuote 与 MemberQuoteOut 也接在 can_place_order 之后、同样顺序）；unit_limit 恒为 2000，units_over_limit（请求里所有行的件数合计大于 2000 时为真，含不可购买的行）；超出时 can_place_order 为假，各行的状态与标注照现有规则不变
-      - 金额上限——amount_limit_sen 恒为 99999999，amount_over_limit（给了收货国家时按 subtotal_sen 加运费、没给时按 subtotal_sen，大于上限时为真）；超出时 can_place_order 为假、fx_reference 为 null；subtotal_sen 改为各计价行（正常、超出限购与库存不足）行小计之和，不调用 price_order，值与原来相同
-      - 会员计价——app/services/member_ordering.py 的 MemberCheckoutQuote 带上这四个字段（取自 quote_cart）；units_over_limit 或 amount_over_limit 为真时照有不正常行的写法返回——coupon_applicable 为空，coupon_discount_sen、points_cap、points_redeemed 与 points_earned 为 0，points_accepted 为假，available_points 照常为可用余额；app/api/member_orders.py 的 MemberQuoteOut 加这四个字段；会员下单照旧以 quote_cart 的 can_place_order 判定
-      - 下单——游客下单（app/services/ordering.py）与会员下单不改代码，超出任一整单上限时因 can_place_order 为假回 409 order_not_placeable，不写订单、不动库存；app/api/checkout.py、app/api/orders.py、app/api/refunds.py、app/api/member_orders.py 与 app/services/checkout.py 说明里的「1–99」「1 到 99 件」改为 1–1000，checkout.py、orders.py 与 refunds.py 除说明外不改
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_order_caps.py，验证件数合计 2000 不超、2001 超出（含不可购买的行一起计数）、金额恰为 99999999 不超、多 1 仙即超出、没有运费报价时只按小计判断、超出金额时 fx_reference 为 null、两种超出时 can_place_order 都为假、游客下单经接口回 409 order_not_placeable 且没有写入订单、会员下单在服务层调用 place_member_order 抛 OrderNotPlaceable 且没有写入订单（不经会员接口，免去会话与限流的替身；涉及时间的照现有测试固定传入 now，不依赖真实时钟）、会员计价超出时照上一条返回；现有测试只把「100 件被拒」改为「1001 件被拒」——tests/test_purchase_limit.py 的 test_line_quantity_99_is_accepted_and_100_is_rejected（改名为 1000 与 1001，99 件被接受的对照改为 1000 件）、tests/test_checkout_quote.py 的 quantity-100、tests/test_guest_order.py 的 quantity-100、tests/test_refunds.py 与 tests/test_refund_points_estimate_api.py 的 quantity-over-99（参数 id 可随之改名；退款两处不加 1000 件的对照，服务层另按购买件数拒绝）；1000 件被接受的对照只放在上面改名的那条与 tests/test_checkout_quote.py 的 test_limits_are_inclusive（件数 99 改为 1000）；这几个文件文档字符串里的「1 到 99」「1–99」随之改为 1–1000；列出计价响应完整字段的两处加上四个新字段——tests/test_checkout_quote.py 的 test_ok_line_has_exactly_the_public_fields 的期望字典（unit_limit 2000、units_over_limit 为假、amount_limit_sen 99999999、amount_over_limit 为假）与 tests/test_member_orders_api.py 的 GUEST_QUOTE_FIELDS；其余断言不变；每条新增或改写的测试写明守住的是 DESIGN 1.18 第 8 条的哪一句
-      - docs/task-records/SHOP-TASK-178.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；常量、两个整单上限的判定口径、会员计价、下单的拒绝、改动的现有测试与原因、偏离、验证到什么程度；写明前端的上限与提示另行登记）
-      - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/pricing.py、app/services/ordering.py、前端；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 与 HANDOFF 0.74），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-178.md
     allowed_change_paths:
       - app/services/checkout.py
       - app/services/member_ordering.py
@@ -4918,6 +4905,119 @@ tasks:
       - tests/test_refund_points_estimate_api.py
       - tests/test_member_orders_api.py
       - docs/task-records/SHOP-TASK-178.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-179
+    title: 每日恢复库存开关（定时任务、补跑命令与站点设置接口）
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 6 条的每日恢复库存开关与「数据模型」SiteSetting 一行，让每日库存重置的定时任务与运营者补跑命令先读开关、关闭时跳过，并在后台站点设置的读取与保存接口加入这个开关；数据库列已由 SHOP-TASK-177 加好（site_settings.daily_stock_reset_enabled，服务端默认真）。
+      运营者落实写法（HANDOFF 0.76）：开关的读取函数照 is_sms_verification_enabled 写在 app/services/site_settings.py，表里没有那一行时视为开启；判定写在 app/jobs.py 的 reset_stock_job 里，reset-stock 子命令本来就经它执行，所以一处改动同时约束定时任务与补跑命令；保存请求里的 daily_stock_reset_enabled 可省略（省略即不改，现有 A09 页面照常能保存），任一项被拒时三项都不写入；审计操作名 admin_daily_stock_reset_changed，旧值与新值为 on 或 off。
+      不做前端（A09 页面的开关另行登记），不改模型与迁移，不改 app/services/stock_reset.py，不改设计。
+      设计闸门：DESIGN 1.18（提交 5ba9796） 第 6 条与 HANDOFF 0.76，库存与站点设置。拆分：开关只有一处判定与一个字段，读取、任务与接口放在同一任务里（7 个允许路径）。
+    status: ready
+    acceptance_criteria:
+      - 读取——app/services/site_settings.py 新增 is_daily_stock_reset_enabled(db) -> bool，写法照 is_sms_verification_enabled（每次调用只发一条只查该列的 SELECT，不缓存，不加载 ORM 对象）；表里没有站点设置那一行时返回真；_lock_site_setting 按默认值插入那一行时 daily_stock_reset_enabled 写真；模块说明补上本开关的依据
+      - 定时任务与补跑命令——app/jobs.py 的 reset_stock_job 的 run 先调用 is_daily_stock_reset_enabled，再判断当天是否已完成；读到关闭时回滚、记一条 info 日志，原文为 stock reset <营业日期> skipped (switch off)（营业日期为 ISO 格式，如 2026-10-30）、返回 0，不调用 reset_completed 与 reset_daily_stock，所以不新建也不重试重置记录、不改任何 SKU 的当日可用库存，当天此前已有的失败记录保持原样；跳过算成功（运行器照常记成功与心跳）；reset-stock 子命令同样跳过并以 EXIT_OK 退出；每次运行都重新读取，不缓存，以这次读到的值为准；读到开启时行为与现在完全相同
+      - 保存——save_site_settings 增加关键字参数 stock_reset_enabled（布尔值或 None，None 表示请求里省略，不比较、不改），返回值改为 (支付方式, 短信开关, 每日恢复库存开关, 是否实际改动) 四项；两项配置检查（stripe_not_configured、sms_not_configured）照旧在锁行之前，任一被拒则三项都不写入；锁住的那一行上本开关与新值不同时改写并写一条审计，操作名 admin_daily_stock_reset_changed，对象为站点设置行，旧值与新值为 on 或 off（照 admin_sms_verification_changed 的写法）；同一次保存有多项改动时审计依次为支付方式、短信、每日恢复库存；三项都未变时回滚、不写审计；关闭本身不检查任何配置
+      - 接口——app/api/admin_site_settings.py 的 SiteSettingsIn 增加可省略的 daily_stock_reset_enabled（只接受 JSON 布尔值，显式的 null 与其他类型照现有写法 422，是否提交看 model_fields_set）；GET 响应在 sms_available 之后增加 daily_stock_reset_enabled（is_daily_stock_reset_enabled 的当前值），PUT 响应在 sms_verification_enabled 之后增加保存后的 daily_stock_reset_enabled（取自 save_site_settings 的返回值，保存时不另发 SELECT，现有测试断言保存时对 site_settings 只有一条锁定查询）；其余步骤、错误码、请求体上限与 no-store 不变；模块说明补上本字段
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_stock_reset_switch.py，引擎、会话工厂与运行器的写法照 tests/test_stock_reset.py，每条测试的文档字符串写明它守住的 DESIGN 1.18 第 6 条原句——关闭时运行器一轮不调用重置、不新建重置记录、SKU 的当日可用库存不变且记为成功；关闭时当天已有的 failed 记录结果与尝试次数不变，重新开启后下一轮把它重试为 succeeded；同一营业日期关闭期间做过的调整（测试里直接改库写 available_stock 模拟当日库存调整，SHOP-TASK-182 尚未交付）在重新开启后的下一轮被「初始库存减去仍有效的预留」覆盖；当天已 succeeded 之后关闭再开启不再重置；同一个 Runner 两轮之间改开关即生效（不缓存）；reset-stock 子命令关闭时以 EXIT_OK 退出且没有新记录；表里没有站点设置那一行时照常重置；保存开与关各写一条审计、省略字段不改不写审计、与当前值相同不写审计、Stripe 或短信被拒时开关不变
+      - 现有测试——tests/test_admin_site_settings.py 只在断言 GET 或 PUT 响应完整字段（字典相等或字段顺序）的地方加上 daily_stock_reset_enabled，并新增接口层的测试：GET 返回当前值、PUT 提交 false 后再 GET 为 false、省略不改、null 与字符串 422、与支付方式被拒同一次提交时不写入；tests/test_site_settings.py 新增读取函数的测试（无行为真、列为假时为假、只发一条 SELECT）；其余现有测试不改
+      - docs/task-records/SHOP-TASK-179.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明判定位置、日志内容、保存的返回值变化，以及偏离与取舍）
+      - 改动只落在 allowed_change_paths；不改 app/services/stock_reset.py、模型与迁移、前端、.platform/、CI 与部署配置，不装依赖，不改设计
+    allowed_change_paths:
+      - app/services/site_settings.py
+      - app/jobs.py
+      - app/api/admin_site_settings.py
+      - tests/test_stock_reset_switch.py
+      - tests/test_admin_site_settings.py
+      - tests/test_site_settings.py
+      - docs/task-records/SHOP-TASK-179.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-180
+    title: 后台分类的读取、新建与保存规则（含 slug 生成）
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 14 条（后台维护分类：查看全部分类与各自前台可见的商品件数、新建、逐个保存三语名称与启用状态、至多 30 个、不删除、slug 新建时按英文名称生成且之后不变、版本号核对、审计）与第 11 条「代码」一段的基本写法、截短与去重，新增服务层，供 SHOP-TASK-181 的后台接口调用。
+      运营者落实写法（HANDOFF 0.76）：slug 与代码的基本写法、截短与去重写成独立模块 app/services/admin_codes.py，后台商品的任务（之后登记）沿用；新建与保存都先锁住现有全部分类行（至多 30 行，按 id 排序）再核对，保存在其中核对该分类的版本号（登记时的预审指出：只锁该分类行时，两个会话同时把两个分类改成同一英文名称都能通过）；英文名称在应用层去掉首尾空白并转小写比较；审计操作名 admin_category_created 与 admin_category_changed。
+      不做接口与前端，不改模型与迁移（版本号列已由 SHOP-TASK-177 加好），不改 app/services/catalog.py，不改设计。
+      设计闸门：DESIGN 1.18（提交 5ba9796） 第 14 条与 HANDOFF 0.76，后台维护分类。拆分：业务规则层（4 个允许路径），接口由 SHOP-TASK-181 接上，页面 A10 另行登记。
+    status: ready
+    acceptance_criteria:
+      - 代码生成——新增 app/services/admin_codes.py，code_base(english_name, fallback) 只保留 ASCII 字母与数字并转小写，其余连续字符（含空白、标点与非 ASCII 字符）换成一个连字符，去掉首尾连字符，结果为空时返回 fallback；unique_code(base, limit, taken) 依次试后缀（无、-2、-3……），每次先把 base 截到 limit 减后缀长度、去掉截短后末尾的连字符、再接后缀，返回第一个不在 taken 里的结果（taken 为已有代码的集合，调用方负责把同一次保存里先生成的加进去）；两个函数都不碰数据库
+      - 读取——新增 app/services/admin_categories.py，load_admin_categories(db) 返回全部分类（含停用的）按 id 从小到大，每项为 id、slug、三语名称（空为 None）、is_active、version 与 visible_products（该分类下满足 app/services/catalog.py 的 published() 的商品件数，与前台同一规则）；只发 SELECT，不写库、不写审计
+      - 新建——create_category(db, admin_account_id, name_en, name_zh, name_ms, is_active, now)（now 为不带时区的 UTC 时间，交给 record_audit；admin_account_id 须在调用前取出）。第一步不碰数据库：三个名称须为 str，去掉首尾空白后不超过 200 个字符，空串存为 None；英文名称必填；is_active 须为 bool；不通过抛 CategoryInvalid、不发任何 SQL。第一步通过后先回滚此前的事务，第二步在新事务里以 SELECT … FOR UPDATE 锁住现有全部分类行（按 id 排序，锁定查询以函数给出并带 populate_existing，照 lock_site_setting_statement）后计数，已有 30 个即 CategoryInvalid；英文名称与任一现有分类相同（去掉首尾空白并转小写后在应用层比较，为空的不参与）即 CategoryInvalid；slug 为 unique_code(code_base(英文名称, category), 100, 现有全部 slug)；插入版本号 1，flush 时撞上唯一约束即回滚、抛 CategoryChanged；写一条审计 admin_category_created（对象类别 category、对象 ID 为新行 ID、新值为 slug）后提交，返回该分类（同读取的一项）
+      - 保存——save_category(db, admin_account_id, category_id, version, name_en, name_zh, name_ms, is_active, now)。第一步检查三个名称（须为 str，去掉首尾空白后不超过 200 个字符，空串存为 None）与 is_active 须为 bool；英文名称只在 is_active 为真时必填（停用时可为空，DESIGN 1.18 第 14 条只在新建与启用时要求英文名称）；version 须为整数（布尔值不算）；不通过抛 CategoryInvalid、不发任何 SQL。第二步回滚后执行新建所用的同一条锁定查询，锁住现有全部分类行（按 id 排序，带 populate_existing），该分类不在其中或版本号与当前不同即回滚、抛 CategoryChanged；英文名称与其他任一分类相同（口径同上）即回滚、抛 CategoryInvalid。逐项与当前值比较——有改动的写新值、版本号加一、每改一项写一条审计 admin_category_changed（对象类别 category、对象 ID 为分类 ID），旧值与新值写成「字段 值」（字段为 name_en、name_zh、name_ms、is_active；文案取前 100 个字符，为空时只写字段名；启用状态写 true 或 false），按这个字段顺序写；都未变时回滚、不加版本、不写审计。slug 不变。返回保存后的分类（同读取的一项）
+      - 异常——CategoryInvalid 与 CategoryChanged 只带英文说明，不回显提交的值；写入途中出现任何异常都先回滚再抛出
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_categories.py（SQLite 内存库按模型建表），每条测试的文档字符串写明它守住的 DESIGN 1.18 第 14 条或第 11 条原句——code_base 的例子（Kitchen & Dining 为 kitchen-dining，首尾空白与标点去掉，非 ASCII 字母当作分隔，全是符号时为 fallback）与 unique_code 的截短去重（100 个字符的基本部分接 -2 时截到 98 并去掉末尾连字符、已有 kitchen 与 kitchen-2 时为 kitchen-3）；读取的顺序、停用分类、visible_products 与前台发布规则一致（停用分类、下架商品、缺英文描述的商品不计）；新建与保存的每类不合格都不写库；第 31 个被拒；英文名称大小写与首尾空白不同也算重复；版本号不符与分类不存在为 CategoryChanged；改名不改 slug；每改一项一条审计、未变不写；停用后 app/services/catalog.py 的前台分类列表不再有它、其下商品不再出现在前台商品列表，重新启用后恢复；锁定查询按 MySQL 方言编译带 FOR UPDATE 并按 id 排序，新建与保存回滚之后的第一条语句都是它
+      - docs/task-records/SHOP-TASK-180.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明函数签名、审计写法与偏离取舍）
+      - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/catalog.py、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
+    allowed_change_paths:
+      - app/services/admin_codes.py
+      - app/services/admin_categories.py
+      - tests/test_admin_categories.py
+      - docs/task-records/SHOP-TASK-180.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-181
+    title: 后台分类的读取、新建与保存接口
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 14 条与 docs/UX.md 0.17 的 A10（列表与各分类的前台可见商品件数、新建、逐个保存、取值不合格与分类已被改动两种结果），把 SHOP-TASK-180 的服务层接成后台接口 GET /api/admin/categories、POST /api/admin/categories 与 PUT /api/admin/categories/{category_id}。
+      运营者落实写法（HANDOFF 0.76）：写法照 app/api/admin_site_settings.py 与 app/api/admin_coupons.py（require_admin、CSRF、请求体 8 KB 上限、strict 模型、不回显的 422、no-store 路由类）；取值不合格回 422 category_invalid，分类已被改动回 409 category_changed，路径里的分类 ID 照 app/api/admin_orders.py 的订单 ID 写法校验，不存在的分类按已被改动回 409。
+      不做前端，不改服务层与模型，不改设计。
+      设计闸门：DESIGN 1.18（提交 5ba9796） 第 14 条与 HANDOFF 0.76。拆分：接口层（4 个允许路径），页面 A10 另行登记。
+    status: ready
+    depends_on:
+      - SHOP-TASK-180
+    acceptance_criteria:
+      - 读取——GET /api/admin/categories 经 require_admin（没有有效后台会话 401 admin_session_required），返回 categories（load_admin_categories 的全部项，字段依次为 id、slug、name_en、name_zh、name_ms、is_active、version、visible_products，名称为空时为 null）与由 cookie 算出的 csrf_token；不写审计
+      - 新建——POST /api/admin/categories，步骤依次为请求体按实际读到的字节逐块判断超过 8 KB 即 413、不是 JSON 415（先于一切校验，照 app/api/admin_site_settings.py 的 _save_body）、require_admin（401）、X-CSRF-Token（403 csrf_failed）、请求体模型（name_en、name_zh、name_ms 为字符串，is_active 为布尔值，四项必填，多出字段或类型不对 422，照 app/api/pay.py 的 _body_errors 不回显）、create_category；CategoryInvalid 回 422 {"detail":"category_invalid"}，CategoryChanged 回 409 {"detail":"category_changed"}；成功回 201 与新分类（字段同读取的一项）
+      - 保存——PUT /api/admin/categories/{category_id}，步骤依次为请求体 8 KB 上限 413、不是 JSON 415、require_admin（401）、X-CSRF-Token（403 csrf_failed，照 app/api/admin_coupons.py 先声明 CsrfDep 依赖、再声明路径 ID 依赖，使 403 先于路径的 422）、路径 ID 照 app/api/admin_orders.py 的 _order_id 校验（不合法 422，只给固定消息、不回显）、请求体模型（同新建，另有必填的整数 version）；调用 save_category，两种异常的回答同新建；成功或未变都回 200 与保存后的分类
+      - 通用——三个接口的处理函数与依赖产生的全部响应（含错误）都带 no-store，由 SHOP-TASK-027 的路由类统一加上；路径存在但方法不匹配时由框架返回的 405 不含请求内容与个人资料，不在此列；不写日志；app/main.py 注册新路由
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_categories_api.py，写法照 tests/test_admin_shipping_rates_api.py（测试会话依赖替换、后台登录与 CSRF 的取得方式），每条测试的文档字符串写明它守住的 DESIGN 1.18 第 14 条、UX 0.17 A10 或本契约的约定——三个接口没有会话 401、写操作 CSRF 不符 403；413 先于登录检查；415；多出字段、缺字段、null、布尔值当整数等 422 且不回显提交的值；路径 ID 为 0、负数、非数字、超长 422；新建成功 201 且审计一条、第 31 个 422 category_invalid、英文名称重复 422；保存版本号不符与分类不存在 409 category_changed；启用但没有英文名称 422、停用且英文名称为空时 200；成功与未变都 200；读取的字段顺序与 visible_products；所有响应带 no-store
+      - docs/task-records/SHOP-TASK-181.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）
+      - 改动只落在 allowed_change_paths；不改服务层、模型与迁移、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
+    allowed_change_paths:
+      - app/api/admin_categories.py
+      - app/main.py
+      - tests/test_admin_categories_api.py
+      - docs/task-records/SHOP-TASK-181.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-182
+    title: 当日库存调整（服务层与接口）
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 12 条（管理员把某个 SKU（含停用的）的当日可用库存直接改为 0–9,999 的整数，不改每日初始库存；请求带调整前页面显示的值，以一条带条件的更新写入，不等即回答「库存已变动」并返回当前值；先比调整前的值，相等后新值与当前相同时照常成功、不写入不记审计；不改预留、订单与商品版本号；每次写入一条审计）与 docs/UX.md 0.17 A04「当日库存调整」，新增服务层与后台接口 POST /api/admin/variants/{variant_id}/available-stock。
+      运营者落实写法（HANDOFF 0.76）：规则只有一条带条件的更新，服务层与接口放在同一任务；库存已变动回 409 {"detail":"stock_changed", "available_stock":当前值}，取值不合格回 422 stock_invalid，SKU 不存在回 404 variant_not_found；审计操作名 admin_variant_stock_adjusted，对象为该 SKU，旧值与新值写成「SKU 代码 available_stock 值」。
+      不做前端，不改模型与迁移，不改设计。
+      设计闸门：DESIGN 1.18（提交 5ba9796） 第 12 条与 HANDOFF 0.76，库存。拆分：一条规则的服务层与接口（6 个允许路径），A04 页面另行登记。
+    status: ready
+    depends_on:
+      - SHOP-TASK-181
+    acceptance_criteria:
+      - 服务层——新增 app/services/admin_stock_adjust.py，adjust_available_stock(db, admin_account_id, variant_id, expected, new_value, now) 参数写法照 save_site_settings；先不碰数据库检查 expected 与 new_value 都是 0 到 9,999 的整数（布尔值不算），不通过抛 StockInvalid；然后回滚此前的事务
+      - 写入——expected 与 new_value 不同时执行一条 UPDATE product_variants SET available_stock = new_value WHERE id = variant_id AND available_stock = expected；命中一行则写一条审计（admin_variant_stock_adjusted，对象类别 product_variant，对象 ID 为 SKU 的 ID，旧值「SKU 代码 available_stock expected」、新值「SKU 代码 available_stock new_value」，SKU 代码取自同一事务里读出的该行）后提交；未命中则回滚，读出该 SKU 当前的当日可用库存——SKU 不存在抛 VariantNotFound，存在则抛 StockChanged（带当前值）；expected 与 new_value 相同时只读出当前值——等于 expected 即成功、不写入不记审计，不等抛 StockChanged，不存在抛 VariantNotFound；停用的 SKU 照样可调；不改 daily_initial_stock、订单、预留与商品的 version；返回 (SKU 代码, 调整后的当日可用库存)
+      - 接口——新增 app/api/admin_stock_adjust.py 的 POST /api/admin/variants/{variant_id}/available-stock，步骤依次为请求体 8 KB 上限 413、不是 JSON 415、require_admin（401）、X-CSRF-Token（403 csrf_failed，照 app/api/admin_coupons.py 先声明 CsrfDep 依赖、再声明路径 ID 依赖）、路径 ID 照 app/api/admin_orders.py 的 _order_id 校验（不合法 422 不回显）、请求体模型（expected 与 available_stock 两个必填整数，strict，多出字段 422，照 app/api/pay.py 的 _body_errors 不回显）、服务层；StockInvalid 回 422 {"detail":"stock_invalid"}，VariantNotFound 回 404 {"detail":"variant_not_found"}，StockChanged 回 409 {"detail":"stock_changed", "available_stock":当前值}；成功回 200 {"variant_id", "sku", "available_stock"}；处理函数与依赖产生的全部响应（含错误）都带 no-store（SHOP-TASK-027 的路由类），框架返回的 405 不在此列；不写日志；app/main.py 注册新路由
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_stock_adjust.py（SQLite 内存库按模型建表，接口部分照 tests/test_admin_shipping_rates_api.py 的写法），每条测试的文档字符串写明它守住的 DESIGN 1.18 第 12 条原句——调整成功改当日可用库存、不改每日初始库存与商品版本号、写一条审计且旧值新值格式正确；expected 不等于当前值时不写入、409 带当前值（模拟其间有订单扣减）；新值与当前相同时 200、不写审计；停用 SKU 可调；-1、10000、布尔值、字符串 422 stock_invalid 或请求体 422；SKU 不存在 404；没有会话 401、CSRF 不符 403、413 先于登录检查、415；响应带 no-store；调整之后每日重置照初始库存减去仍有效的预留重算（调用 app/services/stock_reset.py 的 reset_daily_stock 验证）；UPDATE 语句按 MySQL 方言编译带 available_stock 的等值条件
+      - docs/task-records/SHOP-TASK-182.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）
+      - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/stock_reset.py、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
+    allowed_change_paths:
+      - app/services/admin_stock_adjust.py
+      - app/api/admin_stock_adjust.py
+      - app/main.py
+      - tests/test_admin_stock_adjust.py
+      - docs/task-records/SHOP-TASK-182.md
     allowed_commands:
       - lint.check
       - format.check
