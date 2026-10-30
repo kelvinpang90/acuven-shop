@@ -1,7 +1,8 @@
-"""后台维护商品：请求结构、第一步的共用检查、读取全部商品与单件商品、新建商品与代码生成。
+"""后台维护商品：请求结构、第一步的共用检查、读取全部商品与单件商品、新建商品与代码生成、
+保存已有商品。
 
 依据 docs/DESIGN.md 1.18（提交 5ba9796）「计价、优惠、积分与库存」第 11 条（下称「第 11 条」）
-与 docs/HANDOFF.md 0.77 的落实写法。已有商品的保存由 SHOP-TASK-184、保存时的新增由 185 接上，
+与 docs/HANDOFF.md 0.77 的落实写法。已有行的保存为 SHOP-TASK-184，保存时的新增由 185 接上，
 接口由 186 接上；本模块只提供规则函数，不写日志。
 
 请求结构（ProductInput 等五个类型）新建与保存共用，接口的 JSON 字段与之同名。已有的行带行 ID，
@@ -9,6 +10,9 @@
 第一步 check_product_request 只看请求、不碰数据库，不通过抛 ProductInvalid。
 新建在第一步通过后回滚此前的事务，在新事务里以共享锁读所选分类（与第 14 条保存分类时锁分类行
 互相等待），再生成代码、插入各行、每个新行写一条审计后提交。代码生成的四个函数保存任务照用。
+保存已有商品在第一步通过后回滚此前的事务，在新事务里依次锁商品行、该商品的 SKU 行（按 id，
+与下单扣减、每日重置一致）后核对版本号与行 ID（第二步），再以共享锁读分类（第三步），逐项
+写入有改动的值、每项一条审计，有改动时版本号加一后提交。
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -39,6 +43,10 @@ ADMIN_PRODUCT_CREATED = "admin_product_created"
 ADMIN_PRODUCT_OPTION_CREATED = "admin_product_option_created"
 ADMIN_PRODUCT_OPTION_VALUE_CREATED = "admin_product_option_value_created"
 ADMIN_PRODUCT_VARIANT_CREATED = "admin_product_variant_created"
+ADMIN_PRODUCT_CHANGED = "admin_product_changed"
+ADMIN_PRODUCT_OPTION_CHANGED = "admin_product_option_changed"
+ADMIN_PRODUCT_OPTION_VALUE_CHANGED = "admin_product_option_value_changed"
+ADMIN_PRODUCT_VARIANT_CHANGED = "admin_product_variant_changed"
 AUDIT_TARGET_PRODUCT = "product"
 AUDIT_TARGET_OPTION = "product_option"
 AUDIT_TARGET_OPTION_VALUE = "product_option_value"
@@ -68,6 +76,8 @@ NO_OPTION_SKU_SUFFIX = "std"
 NEW_PRODUCT_VERSION = 1
 # 分类 ID 超出 INT 的范围即不存在；先拦下，免得驱动在比较之前就报溢出。
 MAX_ROW_ID = 2**31 - 1
+# 第 11 条「文案的字段带语言，如 name_zh，值取前 100 个字符」。
+AUDIT_TEXT_LENGTH = 100
 
 _TEMP_ID = re.compile(r"[A-Za-z0-9_-]{1,32}")
 
@@ -78,7 +88,8 @@ class ProductInvalid(Exception):
 
 
 class ProductChanged(Exception):
-    """商品已被改动：新建时生成的代码撞上唯一约束（只在两个后台会话同时保存时发生）。"""
+    """商品已被改动：新建时生成的代码撞上唯一约束（只在两个后台会话同时保存时发生）；保存时
+    商品不存在、版本号与当前不同，或请求列出的行 ID 不恰好是该商品现有的全部行。"""
 
 
 # ---------------------------------------------------------------------------
@@ -921,6 +932,272 @@ def create_product(
                 new_value=new_value,
             )
         saved = load_admin_product(db, product_id)
+        assert saved is not None
+    except BaseException:
+        db.rollback()
+        raise
+
+    db.commit()
+    return saved
+
+
+# ---------------------------------------------------------------------------
+# 保存已有商品
+# ---------------------------------------------------------------------------
+
+# 逐项比较与写审计的顺序；字段名照模型列名（HANDOFF 0.77）。
+PRODUCT_FIELDS = (
+    "category_id",
+    "is_active",
+    "max_per_order",
+    "name_en",
+    "name_zh",
+    "name_ms",
+    "description_en",
+    "description_zh",
+    "description_ms",
+)
+NAME_FIELDS = ("name_en", "name_zh", "name_ms")
+VARIANT_FIELDS = ("price_sen", "daily_initial_stock", "is_active")
+
+type _FieldValue = str | int | bool | None
+
+
+def lock_product_statement(product_id: int) -> Select[tuple[Product]]:
+    """锁定商品行的查询（SELECT … FOR UPDATE）；保存第二步的第一条语句。"""
+    return (
+        select(Product)
+        .where(Product.id == product_id)
+        .with_for_update()
+        # 会话里可能留着并发提交之前读到的旧值。
+        .execution_options(populate_existing=True)
+    )
+
+
+def lock_variants_statement(product_id: int) -> Select[tuple[ProductVariant]]:
+    """锁定该商品全部 SKU 行的查询（SELECT … FOR UPDATE，按 id 从小到大，与下单扣减、每日重置
+    的加锁顺序一致）；在锁商品行之后执行。"""
+    return (
+        select(ProductVariant)
+        .where(ProductVariant.product_id == product_id)
+        .order_by(ProductVariant.id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
+def _check_save_request(product: ProductInput, version: object) -> CheckedProduct:
+    """保存的第一步：共用检查之外，version 为整数、规格名都带 id；不发任何 SQL。"""
+    checked = check_product_request(product, creating=False)
+    # bool 是 int 的子类，但 True 不是一个版本号。
+    if type(version) is not int:
+        raise ProductInvalid("version must be an integer")
+    if any(option.id is None for option in checked.options):
+        raise ProductInvalid("options cannot be added to an existing product")
+    # 保存时新增规格值与 SKU 由 SHOP-TASK-185 放开。
+    new_value = any(value.id is None for option in checked.options for value in option.values)
+    new_variant = any(variant.id is None for variant in checked.variants)
+    if new_value or new_variant:
+        raise ProductInvalid("this save cannot add option values or variants")
+    return checked
+
+
+def _lock_and_match(
+    db: Session, product_id: int, version: int, checked: CheckedProduct
+) -> tuple[Product, list[ProductOption], list[ProductOptionValue], list[ProductVariant]]:
+    """保存的第二步：锁商品行、再锁该商品的 SKU 行，核对版本号与行 ID，不通过抛
+    ProductChanged。返回商品行、规格名（按 sort_order 再按 id）、规格值（同）与 SKU（按 id）。"""
+    product_row = None
+    # 超出 INT 范围的 ID 不会存在；不拿去比较，免得驱动报溢出。
+    if type(product_id) is int and 1 <= product_id <= MAX_ROW_ID:
+        product_row = db.scalars(lock_product_statement(product_id)).one_or_none()
+    if product_row is None:
+        raise ProductChanged("the product does not exist")
+    variant_rows = list(db.scalars(lock_variants_statement(product_id)))
+    if product_row.version != version:
+        raise ProductChanged("the product was changed since it was read")
+
+    # 规格名与规格值只经后台保存改动，商品行已锁，不另加锁。
+    option_stmt = (
+        select(ProductOption)
+        .where(ProductOption.product_id == product_id)
+        .order_by(ProductOption.sort_order, ProductOption.id)
+        .execution_options(populate_existing=True)
+    )
+    option_rows = list(db.scalars(option_stmt))
+    value_stmt = (
+        select(ProductOptionValue)
+        .where(ProductOptionValue.product_id == product_id)
+        .order_by(ProductOptionValue.sort_order, ProductOptionValue.id)
+        .execution_options(populate_existing=True)
+    )
+    value_rows = list(db.scalars(value_stmt))
+
+    # 第一步已查过同一类行 ID 不重复，集合与映射相等即恰好是现有的全部行。
+    listed_values = {value.id: option.id for option in checked.options for value in option.values}
+    current_values = {row.id: row.option_id for row in value_rows}
+    if (
+        {option.id for option in checked.options} != {row.id for row in option_rows}
+        or listed_values != current_values
+        or {variant.id for variant in checked.variants} != {row.id for row in variant_rows}
+    ):
+        raise ProductChanged("the product was changed since it was read")
+    return product_row, option_rows, value_rows, variant_rows
+
+
+def _check_category(db: Session, product_row: Product, checked: CheckedProduct) -> None:
+    """保存的第三步：分类改了时以共享锁读新分类；分类不变而保存为上架时以共享锁读所属分类。
+    分类不变且不上架时不检查（停用的当前分类可以保留）。"""
+    if checked.category_id != product_row.category_id:
+        check_category_for_product(db, checked.category_id)
+    elif checked.is_active:
+        check_category_for_product(db, product_row.category_id)
+
+
+def _audit_value(field: str, value: _FieldValue) -> str:
+    """审计的「字段 值」：上架与启用状态为 true 或 false，文案取前 100 个字符，
+    为空时只写字段名。"""
+    if isinstance(value, bool):
+        return f"{field} {'true' if value else 'false'}"
+    if isinstance(value, int):
+        return f"{field} {value}"
+    if not value:
+        return field
+    return f"{field} {value[:AUDIT_TEXT_LENGTH]}"
+
+
+def _update(
+    row: object, wanted: object, fields: Sequence[str]
+) -> list[tuple[str, _FieldValue, _FieldValue]]:
+    """逐项与当前值比较，有改动的写新值；返回 (字段, 旧值, 新值)。
+    空串与 NULL 都按空比较。"""
+    changes: list[tuple[str, _FieldValue, _FieldValue]] = []
+    for field in fields:
+        old_value = getattr(row, field)
+        if field == "is_active":
+            old_value = bool(old_value)
+        elif isinstance(old_value, str):
+            old_value = old_value or None
+        new_value = getattr(wanted, field)
+        if old_value != new_value:
+            changes.append((field, old_value, new_value))
+            setattr(row, field, new_value)
+    return changes
+
+
+def _audit_rows(
+    action: str,
+    target_type: str,
+    target_id: int,
+    changes: list[tuple[str, _FieldValue, _FieldValue]],
+    prefix: str = "",
+) -> list[tuple[str, str, int, str, str]]:
+    """每项改动一条审计：(操作名, 对象类别, 对象 ID, 旧值, 新值)。
+    SKU 的 prefix 为 SKU 代码加一个空格。"""
+    return [
+        (
+            action,
+            target_type,
+            target_id,
+            prefix + _audit_value(field, old_value),
+            prefix + _audit_value(field, new_value),
+        )
+        for field, old_value, new_value in changes
+    ]
+
+
+def save_product(
+    db: Session,
+    admin_account_id: int,
+    product_id: int,
+    version: int,
+    product: ProductInput,
+    now: datetime,
+) -> AdminProduct:
+    """保存一件已有商品的全部可改内容，返回保存后的它（同 load_admin_product 的结果）。
+
+    now 与 admin_account_id 同 create_product。本任务只改已有行：请求带任何新增的规格值或
+    SKU（带 temp_id 的项）即抛 ProductInvalid（由 SHOP-TASK-185 放开）。按以下顺序：
+    1. check_product_request(product, creating=False)，另查 version 为整数、规格名都带 id；
+       不通过抛 ProductInvalid、不发任何 SQL。
+    2. 结束此前的事务（回滚），在新事务里以 lock_product_statement 锁商品行、再以
+       lock_variants_statement 按 id 锁该商品的 SKU 行。商品不存在、version 与当前不同、请求里
+       规格名、规格值与 SKU 的行 ID 不恰好是该商品现有的全部行、规格值挂在别的规格名下，抛
+       ProductChanged。
+    3. 分类与当前不同时以共享锁读新分类，须存在、启用且有英文名称；分类不变而保存为上架时以
+       共享锁读所属分类，须启用且有英文名称；不通过抛 ProductInvalid。
+    4. 按商品（PRODUCT_FIELDS）、规格名、规格值（按规格名再按各自的顺序，NAME_FIELDS）、SKU
+       （按 id，VARIANT_FIELDS）逐项与当前值比较，有改动的写新值，每项一条 *_changed 审计（旧值
+       与新值为「字段 值」，SKU 的两侧前面加 SKU 代码），版本号加一后提交；都未变时回滚、不加
+       版本、不写审计。改每日初始库存不改当日可用库存；slug 与各代码不变。
+    任何异常都先回滚再抛出。
+    """
+    checked = _check_save_request(product, version)
+
+    db.rollback()
+    try:
+        product_row, option_rows, value_rows, variant_rows = _lock_and_match(
+            db, product_id, version, checked
+        )
+        _check_category(db, product_row, checked)
+
+        options_by_id = {option.id: option for option in checked.options}
+        values_by_id = {value.id: value for option in checked.options for value in option.values}
+        variants_by_id = {variant.id: variant for variant in checked.variants}
+        position = {row.id: index for index, row in enumerate(option_rows)}
+        value_rows.sort(key=lambda row: (position[row.option_id], row.sort_order, row.id))
+
+        audits = _audit_rows(
+            ADMIN_PRODUCT_CHANGED,
+            AUDIT_TARGET_PRODUCT,
+            product_row.id,
+            _update(product_row, checked, PRODUCT_FIELDS),
+        )
+        for option_row in option_rows:
+            audits += _audit_rows(
+                ADMIN_PRODUCT_OPTION_CHANGED,
+                AUDIT_TARGET_OPTION,
+                option_row.id,
+                _update(option_row, options_by_id[option_row.id], NAME_FIELDS),
+            )
+        for value_row in value_rows:
+            audits += _audit_rows(
+                ADMIN_PRODUCT_OPTION_VALUE_CHANGED,
+                AUDIT_TARGET_OPTION_VALUE,
+                value_row.id,
+                _update(value_row, values_by_id[value_row.id], NAME_FIELDS),
+            )
+        for variant_row in variant_rows:
+            # 只改价格、每日初始库存与启用状态；当日可用库存从下一次每日重置起按新的初始库存。
+            audits += _audit_rows(
+                ADMIN_PRODUCT_VARIANT_CHANGED,
+                AUDIT_TARGET_VARIANT,
+                variant_row.id,
+                _update(variant_row, variants_by_id[variant_row.id], VARIANT_FIELDS),
+                prefix=f"{variant_row.sku} ",
+            )
+
+        saved_id = product_row.id
+        if not audits:
+            unchanged = load_admin_product(db, saved_id)
+            assert unchanged is not None
+            db.rollback()
+            return unchanged
+
+        product_row.version += 1
+        db.flush()
+        for action, target_type, target_id, old_text, new_text in audits:
+            record_audit(
+                db,
+                action,
+                admin_account_id,
+                now,
+                target_type=target_type,
+                target_id=target_id,
+                old_value=old_text,
+                new_value=new_text,
+            )
+        saved = load_admin_product(db, saved_id)
         assert saved is not None
     except BaseException:
         db.rollback()
