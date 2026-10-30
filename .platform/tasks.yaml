@@ -4846,3 +4846,78 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+  - id: SHOP-TASK-177
+    title: 商品、分类、图片与站点设置的数据库结构（DESIGN 1.18）
+    purpose: >-
+      按 docs/DESIGN.md 1.18「数据模型」Product / Variant 与 SiteSetting 两行，以及「计价、优惠、积分与库存」第 6、8、11、13、14 条的数据部分，改模型并新增迁移 0024：
+      商品与分类各加版本号；每单限购的检查约束由 1–99 改为 1–1000；商品图片加文件名、上传时的格式与展示图的宽、高、字节数五列；站点设置加每日恢复库存开关（默认开启）。
+      只改结构，不写读写这些列的业务代码与接口，不改计价与下单（另成 SHOP-TASK-178），不改前端，不改设计。
+      运营者落实写法（HANDOFF 0.74）：迁移照 alembic/versions/20261028_0023_my_shipping_tiers.py 的写法（不 import app、自带常量，约束名用 op.f，改检查约束先 drop 再 create），
+      只在 MySQL 上执行、不要求能在 SQLite 上执行（CI 的 backend 在 MySQL 8 上做迁移往返与 alembic check）；新增的非空列都带服务端默认值，已有的行由默认值填好，不另写数据；
+      downgrade 先读出每单限购大于 99 的商品数，有则抛 RuntimeError、库保持原样（改约束在 MySQL 上不随事务回滚），再删列、恢复 1–99 的约束。
+      设计闸门：DESIGN 1.18（提交 5ba9796）与 HANDOFF 0.74，商品、分类、图片与站点设置的数据结构。
+      拆分：数据库层（6 个允许路径）；计价与下单上限另成 SHOP-TASK-178，后台维护的服务层与接口、每日恢复库存开关的定时任务与站点设置接口另行登记。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 商品与分类——app/models/catalog.py 的 Category 与 Product 各加 version（非空整数，服务端默认 1，检查约束名为 version_positive、文本为 version >= 1），说明引用 DESIGN 1.18 第 11、14 条；Product 的检查约束 max_per_order_range 的文本改为 max_per_order >= 1 AND max_per_order <= 1000（约束名不变），列的服务端默认 10 与注释里的「1–99」随之改为 1–1000；其余列、约束与唯一约束不变
+      - 商品图片——app/models/catalog.py 的 ProductImage 加五个可空列——file_name（String(32)，唯一约束）、source_format（String(4)）、width、height、byte_size（整数）；检查约束 metadata_all_or_none（五列全为空或全不为空；全为空的是示例数据的占位图引用）、source_format_valid（为空或为 jpeg、png、webp 之一）、display_size_range（为空或宽与高都在 1 到 1600 之间、字节数至少为 1）；storage_ref、sort_order 与（product_id, sort_order）的唯一约束不变，类的说明引用 DESIGN 1.18 第 13 条
+      - 站点设置——app/models/site.py 的 SiteSetting 加 daily_stock_reset_enabled（非空布尔，服务端默认为真，与 sms_verification_enabled 的写法相同），说明引用 DESIGN 1.18「计价、优惠、积分与库存」第 6 条；其余列与约束不变
+      - 迁移——新增 alembic/versions/20261030_0024_admin_catalog_schema.py（revision 为 0024，down_revision 为 0023）；upgrade 加上述各列、约束与唯一约束，并把 max_per_order_range 改为 1–1000；downgrade 先读出 max_per_order 大于 99 的商品数，大于 0 即抛 RuntimeError（此时还没有改动），否则删去新增的列、约束与唯一约束，并恢复 1–99 的约束；新旧约束文本写成模块常量，与模型逐字一致；模块说明写明执行顺序的原因与只在 MySQL 上执行
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_purchase_limit.py 只改两条约束测试：0、1001 与 -1 被检查约束拒绝，1 与 1000 能写入并读回，文档字符串改为引用 DESIGN 1.18；新增 tests/test_admin_catalog_schema.py，验证新建的商品与分类版本号为 1、版本号 0 被拒绝，五列全空与全有值的图片行都能写入、只填部分列、格式不在三种之内、宽或高为 0 或 1601、字节数为 0、文件名重复都被拒绝，新建站点设置行时每日恢复库存开关为真，并经 importlib 载入迁移 0024 核对 revision、down_revision 与约束常量和模型逐字一致；每条测试写明守住的是 DESIGN 1.18 的哪一句
+      - docs/task-records/SHOP-TASK-177.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；各列与约束、迁移的执行顺序、偏离、验证到什么程度——pytest 不在 SQLite 上执行 0024，CI 的必需检查 backend 在 MySQL 8 上做 upgrade、downgrade 再 upgrade 的往返与 alembic check，写明这一点）
+      - 改动只落在 allowed_change_paths；不改服务层、接口、计价与下单、定时任务、前端与已有迁移；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 与 HANDOFF 0.74），不合并、不直推
+    allowed_change_paths:
+      - app/models/catalog.py
+      - app/models/site.py
+      - alembic/versions/20261030_0024_admin_catalog_schema.py
+      - tests/test_purchase_limit.py
+      - tests/test_admin_catalog_schema.py
+      - docs/task-records/SHOP-TASK-177.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-178
+    title: 每行 1000 件、整单 2,000 件与整单金额上限（计价与下单）
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 8 条，把计价、游客下单、会员下单与退款申请的每行件数上限由 99 改为 1000，并新增两个整单上限：
+      一张购物车或订单所有行（含不可购买的行）的件数合计不超过 2,000，商品小计加运费（没有运费报价时只看商品小计，优惠券与积分抵扣之前）不超过 99,999,999 仙。
+      计价接口不因这两个上限拒绝整个请求，而返回标记与上限、不可下单；下单时服务端按同一计价重新判定，超出即拒绝整单。不改前端，不改设计。
+      运营者落实写法（HANDOFF 0.74）：常量与判定写在 app/services/checkout.py 的 quote_cart 里，游客与会员下单本来就按 quote_cart 的 can_place_order 判定，超出时照现有写法回 409 order_not_placeable，不新增错误码；
+      quote_cart 的商品小计改为各计价行的行小计之和（与 price_order 的小计相等，不逐件展开，件数超出时也不展开）；超出金额上限时不返回参考外币（fx_reference 为 null）；
+      会员计价在任一整单上限超出时照有不正常行的写法不判定券与积分；app/api/checkout.py、orders.py 与 refunds.py 只改说明里的「1–99」「1 到 99 件」。
+      设计闸门：DESIGN 1.18（提交 5ba9796）第 8 条与 HANDOFF 0.74，计价与下单的件数和金额上限。
+      拆分：计价与下单一层（13 个允许路径，超过 12 个——其中 6 个是现有测试文件，只把「100 件被拒」的期望改为 1001 件；3 个接口文件只改说明，常量在服务层一处改动即全部生效，拆开则这些说明与测试会在两个任务之间互相失效）。前端的件数上限与提示待 UX 与视觉稿补齐后另行登记。
+    status: ready
+    depends_on:
+      - SHOP-TASK-177
+    acceptance_criteria:
+      - 常量——app/services/checkout.py 的 MAX_LINE_QUANTITY 改为 1000，新增 MAX_ORDER_UNITS = 2000 与 MAX_ORDER_AMOUNT_SEN = 99_999_999，说明引用 DESIGN 1.18 第 8 条；计价、游客下单、会员下单与退款申请的请求体都经 MAX_LINE_QUANTITY 校验每行件数，1000 件照常、1001 件 422（退款申请仍不得超过该行的购买件数，现有的服务层判定不变）
+      - 件数上限——CheckoutQuote 新增 unit_limit（恒为 2000）与 units_over_limit（请求里所有行的件数合计大于 2000 时为真，含不可购买的行）；超出时 can_place_order 为假，各行的状态与标注照现有规则不变
+      - 金额上限——CheckoutQuote 新增 amount_limit_sen（恒为 99999999）与 amount_over_limit（给了收货国家时按 subtotal_sen 加运费、没给时按 subtotal_sen，大于上限时为真）；超出时 can_place_order 为假、fx_reference 为 null；subtotal_sen 改为各计价行（正常、超出限购与库存不足）行小计之和，不调用 price_order，值与原来相同
+      - 会员计价——app/services/member_ordering.py 的 MemberCheckoutQuote 带上这四个字段（取自 quote_cart）；units_over_limit 或 amount_over_limit 为真时照有不正常行的写法返回（不判定券与积分，coupon_applicable 为空、积分各项为 0）；app/api/member_orders.py 的 MemberQuoteOut 加这四个字段；会员下单照旧以 quote_cart 的 can_place_order 判定
+      - 下单——游客下单（app/services/ordering.py）与会员下单不改代码，超出任一整单上限时因 can_place_order 为假回 409 order_not_placeable，不写订单、不动库存；app/api/checkout.py、app/api/orders.py、app/api/refunds.py 与 app/services/checkout.py 说明里的「1–99」「1 到 99 件」改为 1–1000，除说明外不改这几个接口文件
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_order_caps.py，验证件数合计 2000 不超、2001 超出（含不可购买的行一起计数）、金额恰为 99999999 不超、多 1 仙即超出、没有运费报价时只按小计判断、超出金额时 fx_reference 为 null、两种超出时 can_place_order 都为假、游客与会员下单都回 409 order_not_placeable 且没有写入订单、会员计价超出时不判定券与积分；现有测试只把「100 件被拒」改为「1001 件被拒」并增加 1000 件被接受的对照——tests/test_purchase_limit.py 的 test_line_quantity_99_is_accepted_and_100_is_rejected（改名为 1000 与 1001）、tests/test_checkout_quote.py 的 quantity-100、tests/test_guest_order.py 的 quantity-100、tests/test_refunds.py 与 tests/test_refund_points_estimate_api.py 的 quantity-over-99，其余断言不变；每条新增或改写的测试写明守住的是 DESIGN 1.18 第 8 条的哪一句
+      - docs/task-records/SHOP-TASK-178.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；常量、两个整单上限的判定口径、会员计价、下单的拒绝、改动的现有测试与原因、偏离、验证到什么程度；写明前端的上限与提示另行登记）
+      - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/pricing.py、app/services/ordering.py、前端；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 与 HANDOFF 0.74），不合并、不直推
+    allowed_change_paths:
+      - app/services/checkout.py
+      - app/services/member_ordering.py
+      - app/api/member_orders.py
+      - app/api/checkout.py
+      - app/api/orders.py
+      - app/api/refunds.py
+      - tests/test_order_caps.py
+      - tests/test_purchase_limit.py
+      - tests/test_checkout_quote.py
+      - tests/test_guest_order.py
+      - tests/test_refunds.py
+      - tests/test_refund_points_estimate_api.py
+      - docs/task-records/SHOP-TASK-178.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
