@@ -1,7 +1,8 @@
 """每单限购：商品的限购件数列、计价接口按商品合计标出超出限购、商品详情返回限购件数。
 
-依据 docs/DESIGN.md 1.10（提交 e3b3505）「数据模型」的 Product / Variant 一行：
-「商品级的每单限购件数（Product 上非空的整数，1–99，默认 10，不按规格分别设置）」；
+依据 docs/DESIGN.md 1.18（提交 5ba9796）「数据模型」的 Product / Variant 一行：
+「商品级的每单限购件数（Product 上非空的整数，1–1000（1.18 起；此前为 1–99），默认 10，
+不按规格分别设置）」；
 「计价、优惠、积分与库存」第 8 条（下称第 8 条），以及 SHOP-TASK-016 验收标准里的具体规则。
 每条测试的文档字符串引用它守住的那一句。
 用 SQLite 内存库（打开外键检查）按模型建表，接口的会话依赖换成测试自己的会话。
@@ -131,21 +132,21 @@ def test_limit_defaults_to_10(db: Session) -> None:
     assert stored == 10
 
 
-@pytest.mark.parametrize("limit", [0, 100, -1])
-def test_limit_outside_1_to_99_is_rejected_by_the_check_constraint(
+@pytest.mark.parametrize("limit", [0, 1001, -1])
+def test_limit_outside_1_to_1000_is_rejected_by_the_check_constraint(
     db: Session,
     limit: int,
 ) -> None:
-    """Product / Variant 一行「每单限购件数（…1–99…）」：0、100 与负数由显式命名的
-    检查约束拦住，不靠应用层校验。
+    """DESIGN 1.18 Product / Variant 一行「每单限购件数（…1–1000（1.18 起；此前为 1–99）…）」：
+    0、1001 与负数由显式命名的检查约束拦住，不靠应用层校验。
     """
     with pytest.raises(IntegrityError, match=LIMIT_CONSTRAINT):
         _product(db, "edge", max_per_order=limit)
 
 
-@pytest.mark.parametrize("limit", [1, 99])
-def test_limit_1_and_99_are_accepted(db: Session, limit: int) -> None:
-    """Product / Variant 一行「1–99」的对照：两端的 1 与 99 都能写入并读回。"""
+@pytest.mark.parametrize("limit", [1, 1000])
+def test_limit_1_and_1000_are_accepted(db: Session, limit: int) -> None:
+    """DESIGN 1.18 Product / Variant 一行「1–1000」的对照：两端的 1 与 1000 都能写入并读回。"""
     product = _product(db, "edge", max_per_order=limit)
 
     stored = db.scalar(select(Product.max_per_order).where(Product.id == product.id))

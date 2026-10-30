@@ -8,8 +8,13 @@ SiteSetting 一行：「站点级运营开关：短信验证开关（布尔，�
 「`SiteSetting` 的支付方式取『模拟』（默认）或『Stripe 测试』，与短信验证
 开关一样每次从数据库读取、修改写审计」。
 
+每日恢复库存开关依据 docs/DESIGN.md 1.18（提交 5ba9796）同一行（「每日恢复
+库存开关（1.18，布尔，默认开启）」）与「计价、优惠、积分与库存」第 6 条。
+
 表只有一行，主键固定为 1，由检查约束保证；迁移 0010 写入这一行（开关
-关闭），迁移 0020 加支付方式列，已有的那一行取服务端默认值 simulated。
+关闭），迁移 0020 加支付方式列，已有的那一行取服务端默认值 simulated；
+迁移 0024 加每日恢复库存开关列，已有的那一行取服务端默认值（开启）。
+读取这个开关的定时任务与修改它的接口是之后的任务。
 短信验证开关的读取见 app/services/site_settings.py，支付方式的读取由
 SHOP-TASK-112 加到同一文件。时间是不带时区的 UTC。修改设置的接口与审计
 记录（AuditEvent）由之后的管理后台业务接口任务实现，这里不加其他设置项。
@@ -19,7 +24,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Integer, String, false
+from sqlalchemy import Boolean, CheckConstraint, DateTime, Integer, String, false, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import MYSQL_TABLE_OPTIONS, Base
@@ -65,4 +70,6 @@ class SiteSetting(Base):
         String(PAYMENT_METHOD_MAX_LENGTH),
         server_default=PAYMENT_METHOD_SIMULATED,
     )
+    # 每日恢复库存开关；服务端默认开启。
+    daily_stock_reset_enabled: Mapped[bool] = mapped_column(Boolean, server_default=true())
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)

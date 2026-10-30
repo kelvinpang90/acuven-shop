@@ -120,11 +120,14 @@ def test_table_has_only_the_switch() -> None:
     """「首版只有短信验证开关」：表里除主键与更新时间外只有这一个设置项。"""
     # 原为三列。DESIGN 1.12（提交 acf576e）SiteSetting 一行加了「支付方式（模拟 /
     # Stripe 测试，默认模拟）」，SHOP-TASK-110 随加列改为四列；其约束见
-    # tests/test_stripe_models.py。
+    # tests/test_stripe_models.py。DESIGN 1.18（提交 5ba9796）SiteSetting 一行加了「每日
+    # 恢复库存开关（1.18，布尔，默认开启）」，SHOP-TASK-177 随加列改为五列；其默认值见
+    # tests/test_admin_catalog_schema.py。
     assert set(SiteSetting.__table__.columns.keys()) == {
         "id",
         "sms_verification_enabled",
         "payment_method",
+        "daily_stock_reset_enabled",
         "updated_at",
     }
 

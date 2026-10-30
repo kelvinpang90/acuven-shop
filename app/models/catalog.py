@@ -4,7 +4,10 @@
 金额一律是 MYR 整数仙，不用浮点或 Decimal。
 三语文案（en / zh / ms）都可为空；是否发布由查询按「缺少当前语言回退英文，
 再缺失则不发布」判断，不在表里另存。库存预留与每日重置是之后的任务。
-商品级的每单限购件数依据 docs/DESIGN.md 1.10（提交 e3b3505）同一行（SHOP-TASK-016）。
+商品级的每单限购件数依据 docs/DESIGN.md 1.10（提交 e3b3505）同一行（SHOP-TASK-016），
+上限由 99 改为 1000 依据 docs/DESIGN.md 1.18（提交 5ba9796）同一行（SHOP-TASK-177）。
+商品与分类的版本号、图片的元数据依据 DESIGN 1.18 同一行与「计价、优惠、积分与库存」
+第 11、13、14 条；读写这些列的后台服务层与接口是之后的任务。
 """
 
 from __future__ import annotations
@@ -33,8 +36,14 @@ def _utcnow() -> datetime:
 
 
 class Category(Base):
+    """版本号依据 DESIGN 1.18 第 14 条：新建为 1，后台保存有改动时加一。"""
+
     __tablename__ = "categories"
-    __table_args__ = (UniqueConstraint("slug"), MYSQL_TABLE_OPTIONS)
+    __table_args__ = (
+        UniqueConstraint("slug"),
+        CheckConstraint("version >= 1", name="version_positive"),
+        MYSQL_TABLE_OPTIONS,
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     slug: Mapped[str] = mapped_column(String(100))
@@ -42,13 +51,20 @@ class Category(Base):
     name_zh: Mapped[str | None] = mapped_column(String(200))
     name_ms: Mapped[str | None] = mapped_column(String(200))
     is_active: Mapped[bool] = mapped_column(Boolean)
+    version: Mapped[int] = mapped_column(Integer, server_default="1")
 
 
 class Product(Base):
+    """版本号依据 DESIGN 1.18 第 11 条：新建为 1，后台保存有改动时加一。"""
+
     __tablename__ = "products"
     __table_args__ = (
         UniqueConstraint("slug"),
-        CheckConstraint("max_per_order >= 1 AND max_per_order <= 99", name="max_per_order_range"),
+        CheckConstraint(
+            "max_per_order >= 1 AND max_per_order <= 1000",
+            name="max_per_order_range",
+        ),
+        CheckConstraint("version >= 1", name="version_positive"),
         MYSQL_TABLE_OPTIONS,
     )
 
@@ -66,17 +82,43 @@ class Product(Base):
     description_zh: Mapped[str | None] = mapped_column(Text)
     description_ms: Mapped[str | None] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean)
-    # 每单限购件数（1–99）：同一商品所有 SKU 在一张订单中的件数合计上限，不按规格设置。
+    # 每单限购件数（1–1000）：同一商品所有 SKU 在一张订单中的件数合计上限，不按规格设置。
     max_per_order: Mapped[int] = mapped_column(Integer, server_default="10")
     # UTC，供按最新排序。
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    version: Mapped[int] = mapped_column(Integer, server_default="1")
 
 
 class ProductImage(Base):
-    """只存存储引用与排列序号，不存图片内容。"""
+    """只存存储引用、排列序号与元数据，不存图片内容。
+
+    元数据依据 DESIGN 1.18 第 13 条：后台上传的图片记服务端生成的文件名（唯一）、
+    上传时的格式与展示图的宽、高与字节数，五列全有值；示例数据的占位图引用五列全为空。
+    文件名的十六进制格式由服务层保证。
+    """
 
     __tablename__ = "product_images"
-    __table_args__ = (UniqueConstraint("product_id", "sort_order"), MYSQL_TABLE_OPTIONS)
+    __table_args__ = (
+        UniqueConstraint("product_id", "sort_order"),
+        UniqueConstraint("file_name"),
+        CheckConstraint(
+            "(file_name IS NULL AND source_format IS NULL AND width IS NULL"
+            " AND height IS NULL AND byte_size IS NULL)"
+            " OR (file_name IS NOT NULL AND source_format IS NOT NULL AND width IS NOT NULL"
+            " AND height IS NOT NULL AND byte_size IS NOT NULL)",
+            name="metadata_all_or_none",
+        ),
+        CheckConstraint(
+            "source_format IS NULL OR source_format IN ('jpeg', 'png', 'webp')",
+            name="source_format_valid",
+        ),
+        CheckConstraint(
+            "width IS NULL OR (width >= 1 AND width <= 1600"
+            " AND height >= 1 AND height <= 1600 AND byte_size >= 1)",
+            name="display_size_range",
+        ),
+        MYSQL_TABLE_OPTIONS,
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     product_id: Mapped[int] = mapped_column(
@@ -85,6 +127,14 @@ class ProductImage(Base):
     )
     storage_ref: Mapped[str] = mapped_column(String(500))
     sort_order: Mapped[int] = mapped_column(Integer)
+    # 32 位小写十六进制，展示图存为卷里的 <文件名>.webp。
+    file_name: Mapped[str | None] = mapped_column(String(32))
+    # 上传时按内容判断的格式（MPO 记为 jpeg）。
+    source_format: Mapped[str | None] = mapped_column(String(4))
+    # 展示图（WebP）的像素宽、高与字节数。
+    width: Mapped[int | None] = mapped_column(Integer)
+    height: Mapped[int | None] = mapped_column(Integer)
+    byte_size: Mapped[int | None] = mapped_column(Integer)
 
 
 class ProductOption(Base):
