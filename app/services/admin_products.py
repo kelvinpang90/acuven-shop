@@ -11,8 +11,9 @@
 新建在第一步通过后回滚此前的事务，在新事务里以共享锁读所选分类（与第 14 条保存分类时锁分类行
 互相等待），再生成代码、插入各行、每个新行写一条审计后提交。代码生成的四个函数保存任务照用。
 保存已有商品在第一步通过后回滚此前的事务，在新事务里依次锁商品行、该商品的 SKU 行（按 id，
-与下单扣减、每日重置一致）后核对版本号与行 ID（第二步），再以共享锁读分类（第三步），逐项
-写入有改动的值、每项一条审计，有改动时版本号加一后提交。
+与下单扣减、每日重置一致）后核对版本号与行 ID（第二步），再以共享锁读分类、查新增 SKU 的
+组合与已有 SKU 不重复（第三步），逐项写入有改动的值、每项一条审计，插入新增的规格值与 SKU、
+各一条审计，有改动或新增时版本号加一后提交。
 """
 
 from __future__ import annotations
@@ -88,7 +89,8 @@ class ProductInvalid(Exception):
 
 
 class ProductChanged(Exception):
-    """商品已被改动：新建时生成的代码撞上唯一约束（只在两个后台会话同时保存时发生）；保存时
+    """商品已被改动：新建或保存时新增的行生成的代码撞上唯一约束（只在两个后台会话同时保存时
+    发生）；保存时
     商品不存在、版本号与当前不同，或请求列出的行 ID 不恰好是该商品现有的全部行。"""
 
 
@@ -961,6 +963,10 @@ NAME_FIELDS = ("name_en", "name_zh", "name_ms")
 VARIANT_FIELDS = ("price_sen", "daily_initial_stock", "is_active")
 
 type _FieldValue = str | int | bool | None
+# (操作名, 对象类别, 对象 ID, 旧值, 新值)；新增行的审计没有旧值。
+type _Audit = tuple[str, str, int, str | None, str]
+# 新增的 SKU 与它在各规格名下所选的值（规格名 ID → ValueRef）。
+type _Choice = tuple[CheckedVariant, dict[int | None, ValueRef]]
 
 
 def lock_product_statement(product_id: int) -> Select[tuple[Product]]:
@@ -987,18 +993,14 @@ def lock_variants_statement(product_id: int) -> Select[tuple[ProductVariant]]:
 
 
 def _check_save_request(product: ProductInput, version: object) -> CheckedProduct:
-    """保存的第一步：共用检查之外，version 为整数、规格名都带 id；不发任何 SQL。"""
+    """保存的第一步：共用检查之外，version 为整数、规格名都带 id；不发任何 SQL。
+    上限、英文名称不重复与新增 SKU 的引用由共用检查按请求里的全部项（现有加新增）判断。"""
     checked = check_product_request(product, creating=False)
     # bool 是 int 的子类，但 True 不是一个版本号。
     if type(version) is not int:
         raise ProductInvalid("version must be an integer")
     if any(option.id is None for option in checked.options):
         raise ProductInvalid("options cannot be added to an existing product")
-    # 保存时新增规格值与 SKU 由 SHOP-TASK-185 放开。
-    new_value = any(value.id is None for option in checked.options for value in option.values)
-    new_variant = any(variant.id is None for variant in checked.variants)
-    if new_value or new_variant:
-        raise ProductInvalid("this save cannot add option values or variants")
     return checked
 
 
@@ -1033,13 +1035,19 @@ def _lock_and_match(
     )
     value_rows = list(db.scalars(value_stmt))
 
-    # 第一步已查过同一类行 ID 不重复，集合与映射相等即恰好是现有的全部行。
-    listed_values = {value.id: option.id for option in checked.options for value in option.values}
+    # 第一步已查过同一类行 ID 不重复，集合与映射相等即恰好是现有的全部行；新增的项不带行 ID。
+    listed_values = {
+        value.id: option.id
+        for option in checked.options
+        for value in option.values
+        if value.id is not None
+    }
     current_values = {row.id: row.option_id for row in value_rows}
+    listed_variants = {variant.id for variant in checked.variants if variant.id is not None}
     if (
         {option.id for option in checked.options} != {row.id for row in option_rows}
         or listed_values != current_values
-        or {variant.id for variant in checked.variants} != {row.id for row in variant_rows}
+        or listed_variants != {row.id for row in variant_rows}
     ):
         raise ProductChanged("the product was changed since it was read")
     return product_row, option_rows, value_rows, variant_rows
@@ -1052,6 +1060,134 @@ def _check_category(db: Session, product_row: Product, checked: CheckedProduct) 
         check_category_for_product(db, checked.category_id)
     elif checked.is_active:
         check_category_for_product(db, product_row.category_id)
+
+
+def _new_choices(checked: CheckedProduct) -> list[_Choice]:
+    """请求里新增的 SKU（按请求顺序）与它们在各规格名下所选的值；第一步已查过每个规格名下
+    恰有一个值。"""
+    choices: list[_Choice] = []
+    for variant in checked.variants:
+        if variant.id is None:
+            refs = zip(checked.options, variant.option_values or (), strict=True)
+            choices.append((variant, {option.id: ref for option, ref in refs}))
+    return choices
+
+
+def _check_new_combinations(db: Session, product_id: int, choices: Sequence[_Choice]) -> None:
+    """保存的第三步之二：新增 SKU 的组合与该商品已有 SKU（含停用的）的组合不重复，否则抛
+    ProductInvalid。引用了新增规格值的组合不会与已有的相同；没有新增 SKU 时不查库。"""
+    if not choices:
+        return
+    # SKU 行已锁；关联行只随新增 SKU 写入，后者经后台保存、在商品行上排队。
+    columns = (VariantOptionValue.variant_id, VariantOptionValue.option_value_id)
+    stmt = select(*columns).where(VariantOptionValue.product_id == product_id)
+    existing: dict[int, set[int]] = {}
+    for variant_id, value_id in db.execute(stmt):
+        existing.setdefault(variant_id, set()).add(value_id)
+    taken = {frozenset(value_ids) for value_ids in existing.values()}
+    for _, refs in choices:
+        value_ids = [ref.id for ref in refs.values()]
+        if None not in value_ids and frozenset(value_ids) in taken:
+            raise ProductInvalid("a new variant has the same option values as an existing one")
+
+
+def _insert_additions(
+    db: Session,
+    product_row: Product,
+    option_rows: Sequence[ProductOption],
+    value_rows: Sequence[ProductOptionValue],
+    checked: CheckedProduct,
+    choices: Sequence[_Choice],
+) -> list[_Audit]:
+    """插入保存请求里新增的规格值与 SKU，返回它们的 *_created 审计（新值为代码）。
+
+    规格值按规格名的顺序、同一规格名下按请求顺序，sort_order 从该规格名已有的最大值加一起；
+    代码经 generate_value_codes 在该规格名下去重。SKU 按请求顺序插入，代码经 generate_skus
+    按规格名的顺序取各值的代码、全站去重；当日可用库存等于每日初始库存。代码都先生成、再
+    插入；flush 撞上唯一约束抛 ProductChanged。没有新增时不发 SQL。"""
+    options_by_id = {option.id: option for option in checked.options}
+    code_by_id = {row.id: row.code for row in value_rows}
+    code_by_temp_id: dict[str | None, str] = {}
+    planned: list[tuple[ProductOption, CheckedValue, str, int]] = []
+    for option_row in option_rows:
+        added = [value for value in options_by_id[option_row.id].values if value.id is None]
+        if not added:
+            continue
+        current = [row for row in value_rows if row.option_id == option_row.id]
+        codes = generate_value_codes(
+            db, option_row.code, [value.name_en for value in added], [row.code for row in current]
+        )
+        start = max((row.sort_order for row in current), default=-1) + 1
+        for offset, (value, code) in enumerate(zip(added, codes, strict=True)):
+            planned.append((option_row, value, code, start + offset))
+            code_by_temp_id[value.temp_id] = code
+
+    skus: list[str] = []
+    if choices:
+        combinations = [
+            [
+                code_by_id[ref.id] if ref.id is not None else code_by_temp_id[ref.temp_id]
+                for ref in (refs[option_row.id] for option_row in option_rows)
+            ]
+            for _, refs in choices
+        ]
+        skus = generate_skus(db, product_row.slug, combinations)
+
+    product_id = product_row.id
+    new_value_rows: list[ProductOptionValue] = []
+    value_by_id = {row.id: row for row in value_rows}
+    value_by_temp_id: dict[str | None, ProductOptionValue] = {}
+    for option_row, value, code, sort_order in planned:
+        value_row = ProductOptionValue(
+            product_id=product_id,
+            option_id=option_row.id,
+            code=code,
+            sort_order=sort_order,
+            name_en=value.name_en,
+            name_zh=value.name_zh,
+            name_ms=value.name_ms,
+        )
+        db.add(value_row)
+        new_value_rows.append(value_row)
+        value_by_temp_id[value.temp_id] = value_row
+    if new_value_rows:
+        _flush(db)
+
+    new_variant_rows: list[ProductVariant] = []
+    for (variant, refs), sku in zip(choices, skus, strict=True):
+        variant_row = ProductVariant(
+            product_id=product_id,
+            sku=sku,
+            price_sen=variant.price_sen,
+            daily_initial_stock=variant.daily_initial_stock,
+            # 新增 SKU 还没有预留：当日可用库存等于每日初始库存。
+            available_stock=variant.daily_initial_stock,
+            is_active=variant.is_active,
+        )
+        db.add(variant_row)
+        _flush(db)
+        new_variant_rows.append(variant_row)
+        for ref in refs.values():
+            value_row = value_by_temp_id[ref.temp_id] if ref.id is None else value_by_id[ref.id]
+            db.add(
+                VariantOptionValue(
+                    variant_id=variant_row.id,
+                    option_value_id=value_row.id,
+                    product_id=product_id,
+                    option_id=value_row.option_id,
+                )
+            )
+        _flush(db)
+
+    audits: list[_Audit] = [
+        (ADMIN_PRODUCT_OPTION_VALUE_CREATED, AUDIT_TARGET_OPTION_VALUE, row.id, None, row.code)
+        for row in new_value_rows
+    ]
+    audits += [
+        (ADMIN_PRODUCT_VARIANT_CREATED, AUDIT_TARGET_VARIANT, row.id, None, row.sku)
+        for row in new_variant_rows
+    ]
+    return audits
 
 
 def _audit_value(field: str, value: _FieldValue) -> str:
@@ -1091,7 +1227,7 @@ def _audit_rows(
     target_id: int,
     changes: list[tuple[str, _FieldValue, _FieldValue]],
     prefix: str = "",
-) -> list[tuple[str, str, int, str, str]]:
+) -> list[_Audit]:
     """每项改动一条审计：(操作名, 对象类别, 对象 ID, 旧值, 新值)。
     SKU 的 prefix 为 SKU 代码加一个空格。"""
     return [
@@ -1116,20 +1252,25 @@ def save_product(
 ) -> AdminProduct:
     """保存一件已有商品的全部可改内容，返回保存后的它（同 load_admin_product 的结果）。
 
-    now 与 admin_account_id 同 create_product。本任务只改已有行：请求带任何新增的规格值或
-    SKU（带 temp_id 的项）即抛 ProductInvalid（由 SHOP-TASK-185 放开）。按以下顺序：
+    now 与 admin_account_id 同 create_product。新增的规格值与 SKU 带 temp_id，新增 SKU 以行 ID
+    引用请求里该规格名下列出的已有规格值、以 temp_id 引用同一规格名下新增的规格值。按以下顺序：
     1. check_product_request(product, creating=False)，另查 version 为整数、规格名都带 id；
-       不通过抛 ProductInvalid、不发任何 SQL。
+       上限与英文名称不重复按现有加新增计算；不通过抛 ProductInvalid、不发任何 SQL。
     2. 结束此前的事务（回滚），在新事务里以 lock_product_statement 锁商品行、再以
        lock_variants_statement 按 id 锁该商品的 SKU 行。商品不存在、version 与当前不同、请求里
        规格名、规格值与 SKU 的行 ID 不恰好是该商品现有的全部行、规格值挂在别的规格名下，抛
        ProductChanged。
     3. 分类与当前不同时以共享锁读新分类，须存在、启用且有英文名称；分类不变而保存为上架时以
-       共享锁读所属分类，须启用且有英文名称；不通过抛 ProductInvalid。
+       共享锁读所属分类，须启用且有英文名称；新增 SKU 的组合与该商品已有 SKU（含停用的）的
+       组合不重复；不通过抛 ProductInvalid。
     4. 按商品（PRODUCT_FIELDS）、规格名、规格值（按规格名再按各自的顺序，NAME_FIELDS）、SKU
        （按 id，VARIANT_FIELDS）逐项与当前值比较，有改动的写新值，每项一条 *_changed 审计（旧值
-       与新值为「字段 值」，SKU 的两侧前面加 SKU 代码），版本号加一后提交；都未变时回滚、不加
-       版本、不写审计。改每日初始库存不改当日可用库存；slug 与各代码不变。
+       与新值为「字段 值」，SKU 的两侧前面加 SKU 代码）。改每日初始库存不改当日可用库存；slug
+       与各代码不变。
+    5. 插入新增的规格值（排在该规格名已有值之后）与 SKU（当日可用库存等于每日初始库存），
+       代码由 generate_value_codes 与 generate_skus 生成，撞上唯一约束抛 ProductChanged；
+       之后各写一条 *_created 审计（新值为代码）。
+    有改动或新增时版本号加一（一次保存只加一）后提交；都没有时回滚、不加版本、不写审计。
     任何异常都先回滚再抛出。
     """
     checked = _check_save_request(product, version)
@@ -1140,6 +1281,8 @@ def save_product(
             db, product_id, version, checked
         )
         _check_category(db, product_row, checked)
+        choices = _new_choices(checked)
+        _check_new_combinations(db, product_row.id, choices)
 
         options_by_id = {option.id: option for option in checked.options}
         values_by_id = {value.id: value for option in checked.options for value in option.values}
@@ -1176,6 +1319,7 @@ def save_product(
                 _update(variant_row, variants_by_id[variant_row.id], VARIANT_FIELDS),
                 prefix=f"{variant_row.sku} ",
             )
+        audits += _insert_additions(db, product_row, option_rows, value_rows, checked, choices)
 
         saved_id = product_row.id
         if not audits:
