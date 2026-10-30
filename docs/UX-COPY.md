@@ -1,7 +1,14 @@
 # Acuven Shop 三语文案与演示提示（审阅稿）
 
-> **审阅稿。0.7 已于 2026-10-05 经 Kelvin 认可（记录见 `docs/HANDOFF.md`）；0.8 只新增后台登录页过渡状态的文案键 `admin.logged_in`，其余各键与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只新增 `admin.reviewed_by`，其余各键与 0.8 相同，Kelvin 已于 2026-10-06 认可；0.10 只新增 `admin.email` 并停用 `admin.username`，Kelvin 已于 2026-10-07 批准（记录见 `docs/HANDOFF.md`）；0.11 只新增 A05 新建优惠券被拒时的 `admin.coupon_code_taken` 与 `admin.coupon_invalid`，Kelvin 已于 2026-10-12 认可（记录见 `docs/HANDOFF.md`）。0.12 只新增 Stripe 测试环境支付所需的文案键，其余各键与 0.11 相同，Kelvin 已于 2026-10-15 审阅通过（记录见 `docs/HANDOFF.md`）。0.13 只新增 `admin.stripe_refund_not_sent`，其余各键与 0.12 相同，Kelvin 已于 2026-10-23 审阅通过（记录见 `docs/HANDOFF.md`）。0.14 只新增 `pay.member_reopen`，其余各键与 0.13 相同，Kelvin 已于 2026-10-24 审阅通过（记录见 `docs/HANDOFF.md`）。0.15 只新增 `admin.sms_not_configured`，其余各键与 0.14 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.16 只新增 A06 增删与保存结果所需的文案键，其余各键与 0.15 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.17 只新增 `admin.shipping_my_west` 与 `admin.shipping_my_east` 并把 `admin.shipping_my_state` 改为区块标题，其余各键与 0.16 相同，Kelvin 已于 2026-10-28 审阅通过（记录见 `docs/HANDOFF.md`）。**
-> 版本 0.17（2026-10-28），运营者修订（Claude Code），在 0.16（提交 `e9a1c93`）上按 Kelvin 2026-10-28 的决定新增 A06 的 `admin.shipping_my_west` 与 `admin.shipping_my_east`，并把 `admin.shipping_my_state` 改为区块标题「Malaysia」，页面结构见 [UX.md](UX.md) 0.16。以下为 0.16 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.16（2026-10-27），运营者修订（Claude Code），在 0.15（提交 `1c668e6`）上按 Kelvin 2026-10-27 的决定新增 A06 的 `admin.remove`、`admin.add_fx`、`admin.fx_currency`、`admin.fx_decimals`、`admin.fx_rate_new`、`admin.rates_saved`、`admin.rates_invalid`、`admin.rates_changed` 与 `admin.reload`，页面结构见 [UX.md](UX.md) 0.15；版本 0.15（2026-10-27），运营者修订（Claude Code），在 0.14（提交 `450c2fa`）上按 Kelvin 2026-10-27 的决定新增 `admin.sms_not_configured`，页面结构见 [UX.md](UX.md) 0.14；版本 0.14（2026-10-23），运营者修订（Claude Code），在 0.13（提交 `5e69c3e`）上按 Kelvin 2026-10-23 的决定新增 `pay.member_reopen`，页面结构见 [UX.md](UX.md) 0.13；版本 0.13（2026-10-23），运营者修订（Claude Code），在 0.12（提交 `e922fcf`）上按 Kelvin 2026-10-23 的决定新增 `admin.stripe_refund_not_sent`，页面结构见 [UX.md](UX.md) 0.12；版本 0.12（2026-10-15），运营者修订（Claude Code），在 0.11（提交 `d943045`）上按已批准的 `docs/DESIGN.md` 1.12「Stripe 测试环境支付」与 `docs/REQUIREMENTS.md` 1.13（Kelvin 2026-10-15 批准，记录见 `docs/HANDOFF.md` 0.50）新增 Stripe 测试环境支付的文案键，页面结构见 [UX.md](UX.md) 0.11；版本 0.11（2026-10-12），运营者修订（Claude Code），在 0.10（提交 `eb2bdc4`）上新增 `admin.coupon_code_taken` 与 `admin.coupon_invalid`；0.10（2026-10-07）在 0.9（提交 `1a65f6b`）上新增 `admin.email`；0.9（2026-10-06）在 0.8（提交 `f333b19`）上新增 `admin.reviewed_by`；0.8（2026-10-05）在 0.7（提交 `61f7b8a`）上新增 `admin.logged_in`；0.7 在 0.6（提交 `2d13250`）上新增 `admin.logout`；0.6（2026-10-01）在 0.5（提交 `e3b3505`）上增补短信验证开关所需的文案键，并修改 `privacy.fictional`、`privacy.sms` 两键。页面结构与线框见 [UX.md](UX.md)（0.10）；依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；「提示」列中依据 DESIGN 的小节除特别注明外仍指 1.9。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
+> **审阅稿。0.7 已于 2026-10-05 经 Kelvin 认可（记录见 `docs/HANDOFF.md`）；0.8 只新增后台登录页过渡状态的文案键 `admin.logged_in`，其余各键与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只新增 `admin.reviewed_by`，其余各键与 0.8 相同，Kelvin 已于 2026-10-06 认可；0.10 只新增 `admin.email` 并停用 `admin.username`，Kelvin 已于 2026-10-07 批准（记录见 `docs/HANDOFF.md`）；0.11 只新增 A05 新建优惠券被拒时的 `admin.coupon_code_taken` 与 `admin.coupon_invalid`，Kelvin 已于 2026-10-12 认可（记录见 `docs/HANDOFF.md`）。0.12 只新增 Stripe 测试环境支付所需的文案键，其余各键与 0.11 相同，Kelvin 已于 2026-10-15 审阅通过（记录见 `docs/HANDOFF.md`）。0.13 只新增 `admin.stripe_refund_not_sent`，其余各键与 0.12 相同，Kelvin 已于 2026-10-23 审阅通过（记录见 `docs/HANDOFF.md`）。0.14 只新增 `pay.member_reopen`，其余各键与 0.13 相同，Kelvin 已于 2026-10-24 审阅通过（记录见 `docs/HANDOFF.md`）。0.15 只新增 `admin.sms_not_configured`，其余各键与 0.14 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.16 只新增 A06 增删与保存结果所需的文案键，其余各键与 0.15 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.17 只新增 `admin.shipping_my_west` 与 `admin.shipping_my_east` 并把 `admin.shipping_my_state` 改为区块标题，其余各键与 0.16 相同，Kelvin 已于 2026-10-28 审阅通过（记录见 `docs/HANDOFF.md`）。0.18 按 DESIGN 1.18 新增 A04、A07、A09、A10、整单上限与数量直接输入的文案键，并改 `admin.image_rules`、`admin.max_per_order_hint` 与 `admin.initial_stock_note`，其余各键与 0.17 相同，Kelvin 已于 2026-10-30 审阅通过（记录见 `docs/HANDOFF.md`）。**
+> 版本 0.18（2026-10-30），运营者修订（Claude Code），在 0.17（提交 `80e3775`）上按已批准的 `docs/DESIGN.md` 1.18 新增 A04、A07、A09、A10 与整单上限的文案键，并改动 `admin.image_rules`、`admin.max_per_order_hint` 与 `admin.initial_stock_note`，页面结构见 [UX.md](UX.md) 0.17。以下为 0.17 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.17（2026-10-28），运营者修订（Claude Code），在 0.16（提交 `e9a1c93`）上按 Kelvin 2026-10-28 的决定新增 A06 的 `admin.shipping_my_west` 与 `admin.shipping_my_east`，并把 `admin.shipping_my_state` 改为区块标题「Malaysia」，页面结构见 [UX.md](UX.md) 0.16。以下为 0.16 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.16（2026-10-27），运营者修订（Claude Code），在 0.15（提交 `1c668e6`）上按 Kelvin 2026-10-27 的决定新增 A06 的 `admin.remove`、`admin.add_fx`、`admin.fx_currency`、`admin.fx_decimals`、`admin.fx_rate_new`、`admin.rates_saved`、`admin.rates_invalid`、`admin.rates_changed` 与 `admin.reload`，页面结构见 [UX.md](UX.md) 0.15；版本 0.15（2026-10-27），运营者修订（Claude Code），在 0.14（提交 `450c2fa`）上按 Kelvin 2026-10-27 的决定新增 `admin.sms_not_configured`，页面结构见 [UX.md](UX.md) 0.14；版本 0.14（2026-10-23），运营者修订（Claude Code），在 0.13（提交 `5e69c3e`）上按 Kelvin 2026-10-23 的决定新增 `pay.member_reopen`，页面结构见 [UX.md](UX.md) 0.13；版本 0.13（2026-10-23），运营者修订（Claude Code），在 0.12（提交 `e922fcf`）上按 Kelvin 2026-10-23 的决定新增 `admin.stripe_refund_not_sent`，页面结构见 [UX.md](UX.md) 0.12；版本 0.12（2026-10-15），运营者修订（Claude Code），在 0.11（提交 `d943045`）上按已批准的 `docs/DESIGN.md` 1.12「Stripe 测试环境支付」与 `docs/REQUIREMENTS.md` 1.13（Kelvin 2026-10-15 批准，记录见 `docs/HANDOFF.md` 0.50）新增 Stripe 测试环境支付的文案键，页面结构见 [UX.md](UX.md) 0.11；版本 0.11（2026-10-12），运营者修订（Claude Code），在 0.10（提交 `eb2bdc4`）上新增 `admin.coupon_code_taken` 与 `admin.coupon_invalid`；0.10（2026-10-07）在 0.9（提交 `1a65f6b`）上新增 `admin.email`；0.9（2026-10-06）在 0.8（提交 `f333b19`）上新增 `admin.reviewed_by`；0.8（2026-10-05）在 0.7（提交 `61f7b8a`）上新增 `admin.logged_in`；0.7 在 0.6（提交 `2d13250`）上新增 `admin.logout`；0.6（2026-10-01）在 0.5（提交 `e3b3505`）上增补短信验证开关所需的文案键，并修改 `privacy.fictional`、`privacy.sms` 两键。页面结构与线框见 [UX.md](UX.md)（0.10）；依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；「提示」列中依据 DESIGN 的小节除特别注明外仍指 1.9。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
+
+## 0.18 修订要点
+
+- 依据已批准的 `docs/DESIGN.md` 1.18 与 `docs/REQUIREMENTS.md` 1.15（记录见 `docs/HANDOFF.md` 0.73），页面结构见 [UX.md](UX.md) 0.17。
+- 新增 A04 的 40 个键（商品列表状态、新建、上架条件、图片、规格值与 SKU、保存结果、当日库存调整）、A10 后台分类的 19 个键、A07 的 `admin.stock_reset_off_note`、A09 每日恢复库存的 4 个键，以及整单上限的 `detail.cart_units_full`（P03）、`cart.units_over_limit` 与 `cart.amount_over_limit`（P04、P05）；另有 A04 与 A10 共用的未保存提示 `admin.unsaved_confirm`、`admin.unsaved_leave`、`admin.unsaved_stay`，A04 规格名与规格值的 `admin.option_name`、`admin.option_value`，与 P03、P04 数量直接输入超过上限时的 `common.qty_capped`（Kelvin 2026-10-30 决定）。
+- 改动 3 个已有键，前端都还没有用到：`admin.image_rules` 去掉变量、只写格式与大小（A08 店铺标志沿用它；像素与张数另由 `admin.product_image_rules` 给出）；`admin.max_per_order_hint` 的 1–99 改为 1–1000；`admin.initial_stock_note` 的中文由「次日重置」改为「下一次每日重置」（开关关闭期间不是次日）。
+- 其余已有键未改动、未删除。马来文随其他文案在上线后母语审校。
 
 ## 0.17 修订要点
 
@@ -143,6 +150,7 @@
 | `common.edit` | Edit | 编辑 | Sunting | 后台 |
 | `common.a11y_qty_decrease` | Decrease quantity | 减少数量 | Kurangkan kuantiti | 读屏标签，`(-)` |
 | `common.a11y_qty_increase` | Increase quantity | 增加数量 | Tambah kuantiti | 读屏标签，`(+)` |
+| `common.qty_capped` | Set to {count}, the most you can have in this order. | 已改为 {count} 件，这是本单最多可买的件数。 | Ditetapkan kepada {count}, jumlah maksimum untuk pesanan ini. | P03、P04 直接输入的件数超过上限时；{count} 为上限（0.18） |
 | `common.a11y_page_prev` | Previous page | 上一页 | Halaman sebelumnya | 读屏标签，`(‹)` |
 | `common.a11y_page_next` | Next page | 下一页 | Halaman seterusnya | 读屏标签，`(›)` |
 
@@ -192,6 +200,7 @@
 | `detail.max_per_order` | Limit {count} per order | 每单限购 {count} 件 | Had {count} unit bagi setiap pesanan | P03 数量旁；同一商品各规格合计（0.5） |
 | `detail.limit_reached` | You already have the maximum of {count} of this product in your cart. | 购物车中此商品已达每单限购 {count} 件。 | Troli anda sudah mempunyai jumlah maksimum {count} untuk produk ini. | P03 加入按钮禁用时（0.5） |
 | `detail.cart_full` | Your cart can hold up to {count} different items. Remove one to add another. | 购物车最多可放 {count} 种商品规格，请先移除一项再加入。 | Troli anda boleh memuatkan sehingga {count} item berbeza. Buang satu untuk menambah yang lain. | P03 加入按钮禁用时；{count} 为 20（0.5） |
+| `detail.cart_units_full` | Your cart can hold up to {count} items in total. | 购物车所有商品合计最多 {count} 件。 | Troli anda boleh memuatkan sehingga {count} unit secara keseluruhan. | P03 加入按钮禁用时；{count} 为 2,000（0.18） |
 | `detail.description` | Description | 商品描述 | Penerangan | — |
 | `detail.english_only` | English only | 仅英文 | Bahasa Inggeris sahaja | 商品文案回退英文时的标签（Q8 已决） |
 | `detail.a11y_image` | Image {n} of {count} | 第 {n} 张图，共 {count} 张 | Imej {n} daripada {count} | 读屏标签：P03 缩略图与手机主图（0.4） |
@@ -209,6 +218,8 @@
 | `cart.price_recheck` | Prices and stock are confirmed at checkout. | 价格与库存以结账时为准。 | Harga dan stok disahkan semasa daftar keluar. | — |
 | `cart.item_changed` | Some items changed in price or availability. Please review. | 部分商品的价格或库存已变化，请核对。 | Sesetengah item telah berubah harga atau ketersediaan. Sila semak. | — |
 | `cart.over_limit` | This product is limited to {count} per order. Please reduce the quantity. | 此商品每单限购 {count} 件，请减少数量。 | Produk ini dihadkan kepada {count} unit bagi setiap pesanan. Sila kurangkan kuantiti. | P04 超出限购的行下（0.5） |
+| `cart.units_over_limit` | Your cart has more than {count} items in total. Please reduce the quantities. | 购物车商品合计超过 {count} 件，请减少数量。 | Troli anda mempunyai lebih daripada {count} unit secara keseluruhan. Sila kurangkan kuantiti. | P04、P05；{count} 为接口返回的上限件数（0.18） |
+| `cart.amount_over_limit` | One order can't exceed RM {amount} (items plus shipping, before coupons and points). Please reduce the quantities. | 一张订单（商品加运费，优惠券与积分抵扣之前）不能超过 RM {amount}，请减少数量。 | Satu pesanan tidak boleh melebihi RM {amount} (item serta penghantaran, sebelum kupon dan mata). Sila kurangkan kuantiti. | P04、P05；{amount} 为接口返回的上限金额（0.18） |
 | `cart.checkout` | Check out | 去结账 | Daftar keluar | — |
 | `cart.continue` | Continue shopping | 继续购物 | Teruskan membeli-belah | — |
 | `cart.demo_hint` | Your cart is saved in this browser only. Nothing is charged. | 购物车只保存在本浏览器，不会扣款。 | Troli anda disimpan dalam pelayar ini sahaja. Tiada caj dikenakan. | ★ |
@@ -510,6 +521,7 @@
 | `admin.nav_orders` | Orders | 订单 | Pesanan | — |
 | `admin.nav_refunds` | Refunds | 退款审核 | Bayaran balik | — |
 | `admin.nav_products` | Products | 商品 | Produk | — |
+| `admin.nav_categories` | Categories | 分类 | Kategori | A10 导航与页标题，排在 `admin.nav_products` 之后（0.18） |
 | `admin.nav_coupons` | Coupons | 优惠券 | Kupon | — |
 | `admin.nav_shipping` | Shipping & demo rates | 运费与演示汇率 | Penghantaran & kadar demo | — |
 | `admin.nav_stock_resets` | Stock resets | 库存重置 | Tetapan semula stok | — |
@@ -552,19 +564,82 @@
 | `admin.product_images` | Images | 图片 | Imej | — |
 | `admin.upload` | Upload | 上传 | Muat naik | — |
 | `admin.variant` | Option values | 规格 | Nilai pilihan | 列头 |
-| `admin.image_rules` | Allowed types: {types}. Max size: {size} MB. | 允许格式：{types}；大小上限：{size} MB。 | Jenis dibenarkan: {types}. Saiz maksimum: {size} MB. | — |
+| `admin.image_rules` | JPEG, PNG or WebP, up to 5 MB. | JPEG、PNG 或 WebP，不超过 5 MB。 | JPEG, PNG atau WebP, sehingga 5 MB. | A04、A08（0.18 改：去掉变量） |
 | `admin.product_options` | Options (e.g. colour, size) | 规格（如颜色、尺寸） | Pilihan (cth. warna, saiz) | — |
 | `admin.sku` | SKU | SKU | SKU | — |
 | `admin.price` | Price (MYR) | 价格（MYR） | Harga (MYR) | — |
 | `admin.initial_stock` | Daily initial stock | 每日初始库存 | Stok awal harian | — |
 | `admin.max_per_order` | Limit per order | 每单限购 | Had setiap pesanan | A04（0.5） |
-| `admin.max_per_order_hint` | 1–99 items, counted across all options of this product. Changes apply to new orders only. | 1–99 件，按此商品所有规格合计。修改只影响新订单。 | 1–99 unit, dikira merentas semua pilihan produk ini. Perubahan hanya terpakai untuk pesanan baharu. | A04（0.5） |
+| `admin.max_per_order_hint` | 1–1000 items, counted across all options of this product. Changes apply to new orders only. | 1–1000 件，按此商品所有规格合计。修改只影响新订单。 | 1–1000 unit, dikira merentas semua pilihan produk ini. Perubahan hanya terpakai untuk pesanan baharu. | A04（0.5；0.18 改为 1–1000） |
 | `admin.available_today` | Available today | 今日可用 | Tersedia hari ini | — |
 | `admin.adjust_today` | Adjust today's stock | 调整当日库存 | Laraskan stok hari ini | — |
-| `admin.initial_stock_note` | Changes to initial stock take effect from the next daily reset. | 修改初始库存从次日重置起生效。 | Perubahan stok awal berkuat kuasa dari tetapan semula harian berikutnya. | — |
+| `admin.initial_stock_note` | Changes to initial stock take effect from the next daily reset. | 修改初始库存从下一次每日重置起生效。 | Perubahan stok awal berkuat kuasa dari tetapan semula harian berikutnya. | A04（0.18 改中文） |
 | `admin.active` | Published | 上架 | Diterbitkan | — |
 | `admin.translation_missing` | {language} text is missing and will fall back to English. English text is required to publish. | 缺少{language}文案，将回退英文；缺少英文则不能上架。 | Teks {language} tiada dan akan kembali kepada bahasa Inggeris. Teks bahasa Inggeris diperlukan untuk diterbitkan. | — |
 | `admin.rules_apply_new` | Changes apply to new orders only. Existing orders keep their original amounts. | 修改只影响新订单，已有订单保持原金额。 | Perubahan hanya terpakai untuk pesanan baharu. Pesanan sedia ada mengekalkan jumlah asal. | — |
+| `admin.unpublished` | Not published | 未上架 | Tidak diterbitkan | A04 列表状态（0.18） |
+| `admin.product_new` | New product | 新建商品 | Produk baharu | A04 新建时的编辑区标题（0.18） |
+| `admin.category_current_unavailable` | This product's current category is disabled or has no English name. You can keep it, but the product can't be published until you choose an enabled category. | 此商品当前所属的分类已停用或缺少英文名称。可以保留不改，但要改选一个启用的分类才能上架。 | Kategori semasa produk ini dinyahaktifkan atau tiada nama bahasa Inggeris. Anda boleh mengekalkannya, tetapi produk tidak boleh diterbitkan sehingga anda memilih kategori yang aktif. | A04（0.18） |
+| `admin.publish_requirements` | To publish: English name and description, English names for every option and value, at least one enabled SKU, and an enabled category with an English name. | 上架须有：英文名称与描述、全部规格名与规格值的英文名称、至少一个启用的 SKU，以及启用且有英文名称的分类。 | Untuk diterbitkan: nama dan penerangan bahasa Inggeris, nama bahasa Inggeris bagi setiap pilihan dan nilai, sekurang-kurangnya satu SKU aktif, dan kategori aktif yang mempunyai nama bahasa Inggeris. | A04 常显（0.18） |
+| `admin.product_image_rules` | 200–4,000 pixels on each side. Up to 8 images; the first is the cover. Location and other photo data are removed, and the original file isn't kept. | 宽与高 200 到 4,000 像素。最多 8 张，第一张为封面。拍摄地点等照片资料会被去掉，不保留原文件。 | Setiap sisi 200–4,000 piksel. Sehingga 8 imej; yang pertama ialah kulit. Lokasi dan data foto lain dibuang, dan fail asal tidak disimpan. | A04，接在 `admin.image_rules` 之后（0.18） |
+| `admin.image_count` | {count} of {max} images | 已有 {count} 张，最多 {max} 张 | {count} daripada {max} imej | A04；{max} 为 8（0.18） |
+| `admin.image_cover` | Cover | 封面 | Imej utama | A04 第一张图的标签（0.18） |
+| `admin.image_move_earlier` | Move earlier | 前移 | Alih ke depan | A04 读屏标签，`(‹)`（0.18） |
+| `admin.image_move_later` | Move later | 后移 | Alih ke belakang | A04 读屏标签，`(›)`（0.18） |
+| `admin.image_remove` | Remove image | 移除图片 | Buang imej | A04 读屏标签 `(✗)` 与确认框按钮（0.18） |
+| `admin.image_remove_confirm` | Remove this image? It can't be restored; upload it again if you need it. | 移除这张图片？移除后无法恢复，需要时请重新上传。 | Buang imej ini? Ia tidak boleh dipulihkan; muat naik semula jika perlu. | A04 确认框（0.18） |
+| `admin.images_immediate` | Image changes are saved straight away and don't need Save. | 图片的上传、排序与移除立即生效，不需要点保存。 | Perubahan imej disimpan serta-merta dan tidak memerlukan Simpan. | A04（0.18） |
+| `admin.image_save_first` | Save the new product first, then upload images. | 请先保存新商品，再上传图片。 | Simpan produk baharu dahulu, kemudian muat naik imej. | A04 新建未保存时（0.18） |
+| `admin.image_uploading` | Uploading… | 正在上传… | Sedang memuat naik… | A04（0.18） |
+| `admin.image_type_unsupported` | This file type isn't supported. Use JPEG, PNG or WebP. | 不支持此文件格式，请用 JPEG、PNG 或 WebP。 | Jenis fail ini tidak disokong. Gunakan JPEG, PNG atau WebP. | A04 上传被拒：格式不支持（0.18） |
+| `admin.image_too_large` | This file is larger than 5 MB. | 文件超过 5 MB。 | Fail ini melebihi 5 MB. | A04 上传被拒：文件太大（0.18） |
+| `admin.images_full` | This product already has 8 images. Remove one before uploading another. | 此商品已有 8 张图片，请先移除一张再上传。 | Produk ini sudah mempunyai 8 imej. Buang satu sebelum memuat naik yang lain. | A04 上传被拒：图片已满（0.18） |
+| `admin.image_invalid` | This image can't be used. It must be a single still image, 200–4,000 pixels on each side. | 这张图片不能使用：须为单张静态图，宽与高都在 200 到 4,000 像素之间。 | Imej ini tidak boleh digunakan. Ia mesti satu imej pegun, 200–4,000 piksel pada setiap sisi. | A04 上传被拒：图片不合格（0.18） |
+| `admin.images_changed` | Images were changed elsewhere. Reload to see the latest images. | 图片已在别处修改，请重新读取最新的图片。 | Imej telah diubah di tempat lain. Muat semula untuk melihat imej terkini. | A04 排序被拒：图片已被改动（0.18） |
+| `admin.option_values` | Values | 规格值 | Nilai | A04（0.18） |
+| `admin.option_name` | Option name | 规格名 | Nama pilihan | A04 规格名输入框（0.18） |
+| `admin.option_value` | Option value | 规格值 | Nilai pilihan | A04 读屏标签：规格值输入框与新 SKU 的规格值下拉框（0.18） |
+| `admin.add_value` | Add value | 新增规格值 | Tambah nilai | A04；每个规格名至多 20 个值（0.18） |
+| `admin.add_option` | Add option | 新增规格名 | Tambah pilihan | A04 新建商品时；至多 3 个（0.18） |
+| `admin.no_options` | No options: this product has a single SKU. | 无规格：此商品只有一个 SKU。 | Tiada pilihan: produk ini mempunyai satu SKU sahaja. | A04（0.18） |
+| `admin.options_fixed_note` | Options can't be added or removed after the product is created. To change them, create a new product and unpublish this one. | 规格名在新建商品后不能增减。要换规格，请新建商品并把此商品下架。 | Pilihan tidak boleh ditambah atau dibuang selepas produk dicipta. Untuk mengubahnya, cipta produk baharu dan nyahterbitkan produk ini. | A04（0.18） |
+| `admin.sku_enabled` | Enabled | 启用 | Aktif | A04 SKU 列头与勾选框（0.18） |
+| `admin.sku_code_on_save` | Code created on save | 保存时生成代码 | Kod dicipta semasa simpan | A04 新增、还没保存的 SKU（0.18） |
+| `admin.add_sku` | Add SKU | 新增 SKU | Tambah SKU | A04；至多 50 个 SKU（0.18） |
+| `admin.no_delete_note` | Products, options, values and SKUs can't be deleted because orders refer to them. Unpublish a product or disable a SKU instead. | 商品、规格名、规格值与 SKU 不能删除（订单会引用它们）。不再卖的商品请下架，SKU 请停用。 | Produk, pilihan, nilai dan SKU tidak boleh dipadam kerana pesanan merujuknya. Nyahterbitkan produk atau nyahaktifkan SKU sebagai ganti. | A04（0.18） |
+| `admin.product_saved` | Saved. New quotes and orders use these values. | 已保存，之后的计价与下单按新值执行。 | Disimpan. Sebut harga dan pesanan baharu menggunakan nilai ini. | A04 保存成功（0.18） |
+| `admin.product_created` | Product created. You can now upload images. | 商品已新建，现在可以上传图片。 | Produk dicipta. Anda kini boleh memuat naik imej. | A04 新建成功（0.18） |
+| `admin.product_invalid` | Check the values: names up to 200 characters, descriptions up to 5,000, option and value names up to 100; English names are required for a new product and for new options and values, with no duplicates; prices RM0.00–RM500,000.00; daily initial stock 0–9,999; limit per order 1–1000; each SKU a different combination; up to 3 options, 20 values per option and 50 SKUs. To publish, the requirements above must also be met. | 请检查：名称不超过 200 个字符，描述不超过 5,000 个字符，规格名与规格值的名称不超过 100 个字符；新建商品与新增的规格名、规格值须有英文名称且不重复；价格 RM0.00 到 RM500,000.00；每日初始库存 0 到 9,999；每单限购 1 到 1000；每个 SKU 的规格组合不同；至多 3 个规格名、每个规格名 20 个值、50 个 SKU。上架还须满足上面的条件。 | Semak nilai: nama sehingga 200 aksara, penerangan sehingga 5,000, nama pilihan dan nilai sehingga 100; nama bahasa Inggeris diperlukan untuk produk baharu serta pilihan dan nilai baharu, tanpa pendua; harga RM0.00–RM500,000.00; stok awal harian 0–9,999; had setiap pesanan 1–1000; setiap SKU gabungan yang berbeza; sehingga 3 pilihan, 20 nilai setiap pilihan dan 50 SKU. Untuk diterbitkan, syarat di atas juga mesti dipenuhi. | A04 取值不合格（0.18） |
+| `admin.product_changed` | This product was changed elsewhere. Reload to see the latest version. Your unsaved changes will be lost. | 此商品已在别处修改，请重新读取最新版本，未保存的修改会丢失。 | Produk ini telah diubah di tempat lain. Muat semula untuk melihat versi terkini. Perubahan yang belum disimpan akan hilang. | A04 商品已被改动，旁边 `admin.reload`（0.18） |
+| `admin.adjust_title` | Adjust today's stock for {sku} | 调整 {sku} 的当日库存 | Laraskan stok hari ini untuk {sku} | A04 展开的调整区（0.18） |
+| `admin.adjust_shown` | Shown now: {count} | 当前显示：{count} | Dipaparkan kini: {count} | A04；页面显示的当日可用库存，随请求提交（0.18） |
+| `admin.adjust_new` | New stock for today | 新的当日库存 | Stok baharu hari ini | A04（0.18） |
+| `admin.adjust_save` | Set today's stock | 改为此值 | Tetapkan stok hari ini | A04；立即提交（0.18） |
+| `admin.adjust_note` | Takes effect now and lasts until the next daily reset. The daily initial stock and existing orders are not changed. | 立即生效，保留到下一次每日重置；不改每日初始库存，也不改已有订单。 | Berkuat kuasa sekarang hingga tetapan semula harian berikutnya. Stok awal harian dan pesanan sedia ada tidak diubah. | A04（0.18） |
+| `admin.adjust_saved` | Today's stock updated. | 当日库存已更新。 | Stok hari ini dikemas kini. | A04 调整成功（0.18） |
+| `admin.stock_changed` | Today's stock changed in the meantime (for example, an order was placed or cancelled). It is now {count}. Check it and set it again if needed. | 当日库存在此期间已变动（例如有订单下单或取消），现在为 {count}。请核对后视需要再次调整。 | Stok hari ini telah berubah sementara itu (contohnya, pesanan dibuat atau dibatalkan). Kini {count}. Semak dan tetapkan semula jika perlu. | A04 库存已变动；{count} 为服务端返回的当前值（0.18） |
+| `admin.adjust_invalid` | Enter a whole number from 0 to 9,999. | 请输入 0 到 9,999 的整数。 | Masukkan nombor bulat dari 0 hingga 9,999. | A04 调整的取值不合格（0.18） |
+| `admin.categories_count` | {count} of {max} categories | 已有 {count} 个分类，最多 {max} 个 | {count} daripada {max} kategori | A10；{max} 为 30（0.18） |
+| `admin.categories_full` | The store already has the maximum of 30 categories. Categories can't be deleted; rename and re-enable a disabled one instead. | 已达 30 个分类的上限。分类不能删除，可把已停用的分类改名后重新启用。 | Kedai sudah mempunyai maksimum 30 kategori. Kategori tidak boleh dipadam; namakan semula dan aktifkan semula kategori yang dinyahaktifkan. | A10 已满时（0.18） |
+| `admin.category_name` | Category name | 分类名称 | Nama kategori | A10 列头与输入框（0.18） |
+| `admin.category_slug` | Link code | 链接代码 | Kod pautan | A10 列头；分类 slug（0.18） |
+| `admin.category_slug_hint` | Created from the English name and never changes, so filter links keep working. Categories can't be deleted; disable one you no longer use. | 按英文名称生成，之后不变，筛选链接因此一直有效。分类不能删除，不再用的请停用。 | Dicipta daripada nama bahasa Inggeris dan tidak berubah, jadi pautan penapis terus berfungsi. Kategori tidak boleh dipadam; nyahaktifkan yang tidak digunakan lagi. | A10（0.18） |
+| `admin.category_visible` | Products shown | 前台可见商品 | Produk dipaparkan | A10 列头；满足发布规则的商品件数（0.18） |
+| `admin.category_enabled` | Enabled | 启用 | Aktif | A10 列头与勾选框（0.18） |
+| `admin.category_on` | Enabled | 启用中 | Aktif | A10 状态（0.18） |
+| `admin.category_off` | Disabled | 已停用 | Dinyahaktifkan | A10 状态（0.18） |
+| `admin.category_edit` | Edit category | 编辑分类 | Sunting kategori | A10（0.18） |
+| `admin.category_new` | New category | 新建分类 | Kategori baharu | A10（0.18） |
+| `admin.category_translation_missing` | {language} name is missing and will fall back to English. An English name is required to enable the category. | 缺少{language}名称，将回退英文；缺少英文名称则不能启用。 | Nama {language} tiada dan akan kembali kepada bahasa Inggeris. Nama bahasa Inggeris diperlukan untuk mengaktifkan kategori. | A10（0.18） |
+| `admin.category_disable_confirm` | Products from this category shown in the store: {count}. After disabling, the category and these products disappear from the store (including featured products on the home page), and carts can't check out with them. Disable it? | 此分类下正在前台显示的商品：{count} 件。停用后，该分类与这些商品都不再在前台显示（含首页精选），购物车里的这些商品不能下单。确定停用？ | Produk daripada kategori ini yang dipaparkan di kedai: {count}. Selepas dinyahaktifkan, kategori dan produk ini hilang dari kedai (termasuk produk pilihan di halaman utama), dan troli tidak boleh membuat pesanan untuknya. Nyahaktifkan? | A10 确认框；{count} 为 `admin.category_visible` 的件数（0.18） |
+| `admin.category_disable` | Disable | 停用 | Nyahaktifkan | A10 确认框按钮（0.18） |
+| `admin.category_saved` | Saved. The storefront now uses these categories. | 已保存，前台已改用这些分类。 | Disimpan. Kedai kini menggunakan kategori ini. | A10 保存成功（0.18） |
+| `admin.category_created` | Category created. | 分类已新建。 | Kategori dicipta. | A10 新建成功（0.18） |
+| `admin.category_invalid` | Check the values: names up to 200 characters; English names must differ from those of other categories; a new or enabled category needs an English name; up to 30 categories. | 请检查：名称不超过 200 个字符；英文名称不能与其他分类重复；新建或启用的分类须有英文名称；分类至多 30 个。 | Semak nilai: nama sehingga 200 aksara; nama bahasa Inggeris mesti berbeza daripada kategori lain; kategori baharu atau aktif memerlukan nama bahasa Inggeris; sehingga 30 kategori. | A10 取值不合格（0.18） |
+| `admin.category_changed` | This category was changed elsewhere. Reload to see the latest version. Your unsaved changes will be lost. | 此分类已在别处修改，请重新读取最新版本，未保存的修改会丢失。 | Kategori ini telah diubah di tempat lain. Muat semula untuk melihat versi terkini. Perubahan yang belum disimpan akan hilang. | A10 分类已被改动，旁边 `admin.reload`（0.18） |
+| `admin.unsaved_confirm` | You have unsaved changes. Leave without saving them? | 有未保存的修改，确定不保存就离开？ | Anda mempunyai perubahan yang belum disimpan. Tinggalkan tanpa menyimpannya? | A04、A10 确认框（0.18） |
+| `admin.unsaved_leave` | Leave without saving | 不保存，离开 | Tinggalkan tanpa simpan | A04、A10 确认框按钮（0.18） |
+| `admin.unsaved_stay` | Keep editing | 继续编辑 | Teruskan menyunting | A04、A10 确认框按钮（0.18） |
 | `admin.coupon_listed_note` | All active coupons within their valid dates are listed under "My coupons", the same for every member, regardless of total or per-member usage limits. | 所有启用中且在有效期内的优惠券都会列在会员中心「我的优惠券」中，对全部会员相同，不因总次数或每会员次数上限而不列出。 | Semua kupon aktif dalam tempoh sah disenaraikan di bawah "Kupon saya", sama bagi setiap ahli, tanpa mengira had jumlah penggunaan atau had setiap ahli. | Q19 已决；不改数据模型 |
 | `admin.coupon_code` | Coupon code | 优惠券代码 | Kod kupon | — |
 | `admin.coupon_type` | Type | 类型 | Jenis | — |
@@ -610,6 +685,7 @@
 | `admin.stock_reset_ok` | Completed | 已完成 | Selesai | — |
 | `admin.stock_reset_failed` | Failed — the operator has been alerted | 失败——已告警运营者 | Gagal — pengendali telah dimaklumkan | — |
 | `admin.stock_reset_note` | Resets restore today's stock only. Past orders, refunds and points are not changed. | 重置只恢复当日库存，不改动历史订单、退款与积分。 | Tetapan semula hanya memulihkan stok hari ini. Pesanan, bayaran balik dan mata lalu tidak diubah. | — |
+| `admin.stock_reset_off_note` | While daily stock reset is turned off in Site settings, no resets run and no new results appear here. | 在站点设置中关闭每日恢复库存期间，不会重置，这里也没有新的记录。 | Semasa tetapan semula stok harian dimatikan dalam Tetapan laman, tiada tetapan semula dijalankan dan tiada keputusan baharu dipaparkan di sini. | A07 常显（0.18） |
 | `admin.nav_store_design` | Store design | 店铺装修 | Reka bentuk kedai | A08 导航与页标题（0.4） |
 | `admin.design_demo_note` | The demo banner and demo hints always show on the storefront and can't be turned off here. | 前台的演示横幅与演示提示始终显示，这里不能关闭。 | Sepanduk demo dan petunjuk demo sentiasa dipaparkan di kedai dan tidak boleh dimatikan di sini. | A08（0.4） |
 | `admin.theme` | Theme | 主题 | Tema | A08（0.4） |
@@ -654,6 +730,10 @@
 | `admin.sms_toggle_cost` | Turning this on sends real SMS messages, which cost money. Turn it on only after the SMS service has been set up and checked. | 开启后会发送真实短信并产生费用。请在短信服务开通并核实后再开启。 | Menghidupkan ini akan menghantar SMS sebenar yang dikenakan kos. Hidupkan hanya selepas perkhidmatan SMS disediakan dan disemak. | A09 演示提示（0.6） |
 | `admin.sms_not_configured` | SMS verification can't be turned on: the SMS service, its anti-bot check or its sending limits are not fully set up. | 无法开启短信验证：短信服务、人机验证或发送限额的配置不完整。 | Pengesahan SMS tidak boleh dihidupkan: perkhidmatan SMS, semakan anti-bot atau had penghantarannya belum disediakan sepenuhnya. | A09 选项禁用或保存被拒；DESIGN 1.15「边界与原则」（0.15） |
 | `admin.settings_saved` | Saved. New requests use this setting. | 已保存，之后的请求按此设置执行。 | Disimpan. Permintaan baharu menggunakan tetapan ini. | A09 保存成功（0.6） |
+| `admin.stock_reset_toggle` | Daily stock reset | 每日恢复库存 | Tetapan semula stok harian | A09（0.18） |
+| `admin.stock_reset_on` | On (default) | 开启（默认） | Hidup (lalai) | A09（0.18） |
+| `admin.stock_reset_off` | Off | 关闭 | Mati | A09（0.18） |
+| `admin.stock_reset_toggle_hint` | When on, each SKU's stock for today is reset every day (Malaysia time) to its daily initial stock minus active holds. When off, stock changes only with orders, cancellations and today's adjustments, and stays at zero once sold out. If today's reset hasn't run yet, turning it back on resets today's stock within about a minute, replacing adjustments made earlier today. | 开启时，每天（马来西亚时间）把各 SKU 的当日库存恢复为每日初始库存减去仍有效的预留。关闭时，库存只随下单、取消与当日库存调整变化，卖完即为零。当天还没恢复的，重新开启后约一分钟内即恢复当天库存，并覆盖当天此前的调整。 | Apabila hidup, stok hari ini bagi setiap SKU ditetapkan semula setiap hari (waktu Malaysia) kepada stok awal harian tolak tahanan aktif. Apabila mati, stok hanya berubah dengan pesanan, pembatalan dan pelarasan hari ini, dan kekal sifar apabila habis dijual. Jika tetapan semula hari ini belum dijalankan, menghidupkannya semula menetapkan semula stok hari ini dalam kira-kira seminit, menggantikan pelarasan yang dibuat awal hari ini. | A09（0.18） |
 | `admin.payment_method` | Payment method | 支付方式 | Kaedah pembayaran | A09（0.12） |
 | `admin.payment_simulated` | Simulated (default) | 模拟（默认） | Simulasi (lalai) | A09（0.12） |
 | `admin.payment_stripe` | Stripe test mode | Stripe 测试环境 | Mod ujian Stripe | A09（0.12） |
