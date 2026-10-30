@@ -294,7 +294,8 @@ def test_visible_products_matches_front_catalog(db: Session) -> None:
 
 
 def test_load_only_selects_and_writes_no_audit(db: Session, engine: Engine) -> None:
-    """验收「只发 SELECT，不写库、不写审计」。"""
+    """第 14 条「管理员在后台查看全部分类」「后台读取分类时返回每个分类下前台可见（满足现有
+    发布规则）的商品件数」：读取只是查看，只发 SELECT，不改库、不写审计。"""
     before = _snapshot(db)
     statements = _record_statements(engine)
 
@@ -421,7 +422,8 @@ def test_create_slug_conflict_is_changed(
 
 
 def test_create_rolls_back_on_audit_error(db: Session, admin_id: int) -> None:
-    """验收「写入途中出现任何异常都先回滚再抛出」：审计被拒（时间带时区）时不留下新分类。"""
+    """第 14 条「计数与插入在同一事务里」「新建写一条（新值为 slug）」：审计被拒（时间带时区）
+    时整个事务回滚，不留下新分类。"""
     before = _snapshot(db)
 
     with pytest.raises(ValueError):
