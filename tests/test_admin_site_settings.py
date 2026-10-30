@@ -35,7 +35,7 @@ from typing import Any, get_args
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from sqlalchemy import Engine, Select, create_engine, event, select, update
+from sqlalchemy import Engine, Select, create_engine, delete, event, select, update
 from sqlalchemy.dialects import mysql
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -55,6 +55,7 @@ from app.models.site import (
 from app.services.admin_auth import issue_admin_session, revoke_admin_session
 from app.services.site_settings import (
     get_payment_method,
+    is_daily_stock_reset_enabled,
     is_sms_verification_enabled,
     lock_site_setting_statement,
 )
@@ -81,14 +82,20 @@ SITE_URL = "https://shop.example.test"
 
 SIMULATED = {"payment_method": PAYMENT_METHOD_SIMULATED}
 STRIPE_TEST = {"payment_method": PAYMENT_METHOD_STRIPE_TEST}
-# 保存成功的响应体：保存后的支付方式与短信验证开关（种子数据里开关关闭）。
-SAVED_SIMULATED = {**SIMULATED, "sms_verification_enabled": False}
-SAVED_STRIPE_TEST = {**STRIPE_TEST, "sms_verification_enabled": False}
+# SHOP-TASK-179 在保存与读取的响应里加了每日恢复库存开关；种子数据取服务端默认值（开启）。
+STOCK_RESET_ON = {"daily_stock_reset_enabled": True}
+# 保存成功的响应体：保存后的支付方式与短信验证开关（种子数据里开关关闭），SHOP-TASK-179 起
+# 另有每日恢复库存开关。
+SAVED_SIMULATED = {**SIMULATED, "sms_verification_enabled": False, **STOCK_RESET_ON}
+SAVED_STRIPE_TEST = {**STRIPE_TEST, "sms_verification_enabled": False, **STOCK_RESET_ON}
 
 SMS_CHANGED = "admin_sms_verification_changed"
 SMS_NOT_CONFIGURED = {"detail": "sms_not_configured"}
+# 这两个既是请求体也是响应体；作响应体比较时补上 STOCK_RESET_ON（SHOP-TASK-179）。
 SMS_ON = {**SIMULATED, "sms_verification_enabled": True}
 SMS_OFF = {**SIMULATED, "sms_verification_enabled": False}
+
+STOCK_RESET_CHANGED = "admin_daily_stock_reset_changed"
 
 # 短信服务五类配置全部合格的一组（主机、凭据都是虚构的）。
 SMS_CONFIGURED: dict[str, Any] = {
@@ -589,6 +596,8 @@ def test_get_returns_method_availability_and_csrf_token(
         "csrf_token": _csrf_for(token),
         "sms_verification_enabled": False,
         "sms_available": False,
+        # SHOP-TASK-179 在 sms_available 之后加了每日恢复库存开关（种子数据为默认的开启）。
+        "daily_stock_reset_enabled": True,
     }
     assert list(body) == [
         "payment_method",
@@ -596,6 +605,7 @@ def test_get_returns_method_availability_and_csrf_token(
         "csrf_token",
         "sms_verification_enabled",
         "sms_available",
+        "daily_stock_reset_enabled",
     ]
     assert _snapshot(engine) == before
 
@@ -777,6 +787,7 @@ def test_saving_the_current_value_writes_nothing(
     assert _ok(_put(client, token, {"payment_method": method})) == {
         "payment_method": method,
         "sms_verification_enabled": False,
+        **STOCK_RESET_ON,
     }
     assert _snapshot(engine) == before
 
@@ -932,7 +943,7 @@ def test_turning_sms_off_ignores_the_config(
     _set_sms(db, True)
     client = _sms_client(engine, **overrides)
 
-    assert _ok(_put(client, token, SMS_OFF)) == SMS_OFF
+    assert _ok(_put(client, token, SMS_OFF)) == {**SMS_OFF, **STOCK_RESET_ON}
     assert _read(engine, is_sms_verification_enabled) is False
     assert _sms_audits(engine) == [(account_id, "site_setting", SITE_SETTING_ID, "on", "off")]
 
@@ -952,7 +963,7 @@ def test_sms_toggle_saves_and_writes_an_audit(
     再关闭写第二条审计。"""
     client = _sms_client(engine)
 
-    assert _ok(_put(client, token, SMS_ON)) == SMS_ON
+    assert _ok(_put(client, token, SMS_ON)) == {**SMS_ON, **STOCK_RESET_ON}
     assert _read(engine, is_sms_verification_enabled) is True
     assert _ok(_get(client, token))["sms_verification_enabled"] is True
     rows, _ = _snapshot(engine)
@@ -963,7 +974,7 @@ def test_sms_toggle_saves_and_writes_an_audit(
     assert _sms_audits(engine) == [(account_id, "site_setting", SITE_SETTING_ID, "off", "on")]
     assert _audits(engine) == []
 
-    assert _ok(_put(client, token, SMS_OFF)) == SMS_OFF
+    assert _ok(_put(client, token, SMS_OFF)) == {**SMS_OFF, **STOCK_RESET_ON}
     assert _read(engine, is_sms_verification_enabled) is False
     assert _sms_audits(engine)[1] == (account_id, "site_setting", SITE_SETTING_ID, "on", "off")
 
@@ -978,7 +989,7 @@ def test_saving_the_current_sms_value_writes_nothing(
     before = _snapshot(engine)
     body = {**SIMULATED, "sms_verification_enabled": enabled}
 
-    assert _ok(_put(_sms_client(engine), token, body)) == body
+    assert _ok(_put(_sms_client(engine), token, body)) == {**body, **STOCK_RESET_ON}
     assert _snapshot(engine) == before
 
 
@@ -1000,7 +1011,7 @@ def test_both_changes_write_two_audits_in_one_commit(
     finally:
         event.remove(engine, "commit", _count)
 
-    assert saved == {**STRIPE_TEST, "sms_verification_enabled": True}
+    assert saved == {**STRIPE_TEST, "sms_verification_enabled": True, **STOCK_RESET_ON}
     assert len(commits) == 1
     assert _audits(engine) == [
         (
@@ -1083,6 +1094,7 @@ def test_omitting_the_sms_field_ignores_the_sms_config(
     assert _ok(_put(client, token, STRIPE_TEST)) == {
         **STRIPE_TEST,
         "sms_verification_enabled": enabled,
+        **STOCK_RESET_ON,
     }
     assert _read(engine, is_sms_verification_enabled) is enabled
     assert _read(engine, get_payment_method) == PAYMENT_METHOD_STRIPE_TEST
@@ -1096,7 +1108,7 @@ def test_turning_sms_on_without_a_setting_row_inserts_it(
 ) -> None:
     """验收「行不存在时照它的写法插入」「短信按 is_sms_verification_enabled 的规则解读」：
     表为空时开启写出那一行（支付方式模拟）与一条 off → on 的审计，不写支付方式审计。"""
-    assert _ok(_put(_sms_client(engine), token, SMS_ON)) == SMS_ON
+    assert _ok(_put(_sms_client(engine), token, SMS_ON)) == {**SMS_ON, **STOCK_RESET_ON}
 
     rows, _ = _snapshot(engine)
     assert [(row[0], row[1], row[2]) for row in rows] == [
@@ -1157,6 +1169,117 @@ def test_sms_responses_are_no_store_and_nothing_is_logged(
     for response in responses:
         _assert_no_store(response)
     assert [record for record in caplog.records if record.name.startswith("app")] == []
+
+
+# ---------------------------------------------------------------------------
+# 每日恢复库存开关（SHOP-TASK-179）
+# 依据 DESIGN 1.18（提交 5ba9796）「计价、优惠、积分与库存」第 6 条（下称「1.18 第 6 条」）与
+# docs/HANDOFF.md 0.76；服务层的更多情形见 tests/test_stock_reset_switch.py。
+# ---------------------------------------------------------------------------
+
+
+def _set_stock_reset(db: Session, enabled: bool) -> None:
+    db.execute(update(SiteSetting).values(daily_stock_reset_enabled=enabled))
+    db.commit()
+
+
+def _stock_reset_audits(engine: Engine) -> list[tuple[Any, ...]]:
+    """每日恢复库存开关修改的审计记录，字段同 _audits。"""
+    return _audits(engine, STOCK_RESET_CHANGED)
+
+
+def test_get_returns_the_current_stock_reset_switch(
+    db: Session, client: TestClient, token: str, seeded: None
+) -> None:
+    """1.18 第 6 条「开关与短信验证开关、支付方式一起在『站点设置』整页保存」；UX 0.17「页面读取时
+    服务端返回开关的当前值」：GET 的 daily_stock_reset_enabled 为库里的当前值，改库后随即读到；
+    设置行不存在时为开启。"""
+    assert _ok(_get(client, token))["daily_stock_reset_enabled"] is True
+
+    _set_stock_reset(db, False)
+
+    assert _ok(_get(client, token))["daily_stock_reset_enabled"] is False
+
+    db.execute(delete(SiteSetting))
+    db.commit()
+
+    assert _ok(_get(client, token))["daily_stock_reset_enabled"] is True
+
+
+def test_saving_stock_reset_off_is_read_back_by_get(
+    client: TestClient, engine: Engine, account_id: int, token: str, seeded: None
+) -> None:
+    """1.18 第 6 条「照 SiteSetting 一行写审计，旧值与新值记 on 或 off」：PUT 提交 false 回 200 与
+    保存后的 false，之后 GET 读到 false；写一条 on → off 的审计，不写支付方式与短信审计。"""
+    saved = _ok(_put(client, token, {**SIMULATED, "daily_stock_reset_enabled": False}))
+
+    assert saved == {**SAVED_SIMULATED, "daily_stock_reset_enabled": False}
+    assert list(saved) == [
+        "payment_method",
+        "sms_verification_enabled",
+        "daily_stock_reset_enabled",
+    ]
+    assert _ok(_get(client, token))["daily_stock_reset_enabled"] is False
+    assert _read(engine, is_daily_stock_reset_enabled) is False
+    assert _stock_reset_audits(engine) == [
+        (account_id, "site_setting", SITE_SETTING_ID, "on", "off")
+    ]
+    assert _audits(engine) == []
+    assert _sms_audits(engine) == []
+
+
+def test_omitting_the_stock_reset_field_keeps_it(
+    db: Session, client: TestClient, engine: Engine, token: str, seeded: None
+) -> None:
+    """1.18 第 6 条「保存请求里本开关可以省略，省略即不改（不带它的现有 A09 页面照常能保存）」：开关
+    关闭时只提交支付方式，保存成功、开关仍关闭，响应带开关的当前值，不写本开关的审计。"""
+    _set_stock_reset(db, False)
+
+    saved = _ok(_put(client, token, STRIPE_TEST))
+
+    assert saved == {**SAVED_STRIPE_TEST, "daily_stock_reset_enabled": False}
+    assert _read(engine, is_daily_stock_reset_enabled) is False
+    assert _stock_reset_audits(engine) == []
+    assert len(_audits(engine)) == 1
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(None, id="null"),
+        pytest.param("false", id="string-false"),
+        pytest.param(SECRET, id="string-secret"),
+        pytest.param(0, id="zero"),
+    ],
+)
+def test_stock_reset_field_must_be_a_json_boolean(
+    client: TestClient, engine: Engine, token: str, seeded: None, value: Any
+) -> None:
+    """验收「daily_stock_reset_enabled 只接受 JSON 布尔值，显式的 null 与其他类型照现有写法 422」：
+    null、字符串与数字都 422，不回显所给的值，开关、数据与审计不变。"""
+    before = _snapshot(engine)
+
+    response = _put(client, token, {**SIMULATED, "daily_stock_reset_enabled": value})
+
+    _assert_plain_errors(response)
+    assert _snapshot(engine) == before
+    assert _read(engine, is_daily_stock_reset_enabled) is True
+
+
+def test_rejected_payment_method_keeps_the_stock_reset_switch(
+    engine: Engine, token: str, seeded: None
+) -> None:
+    """1.18 第 6 条「同一次保存的任何一项被拒（短信配置不齐、Stripe 未配置等）时，本开关的修改同样
+    不生效」：凭据不可用时同一次提交 stripe_test 与关闭回 422 stripe_not_configured，开关仍开启，
+    数据与审计不变。"""
+    client = _client(engine, make_settings(stripe_secret_key=""))
+    before = _snapshot(engine)
+
+    response = _put(client, token, {**STRIPE_TEST, "daily_stock_reset_enabled": False})
+
+    _assert_error(response, 422, NOT_CONFIGURED)
+    assert _snapshot(engine) == before
+    assert _read(engine, is_daily_stock_reset_enabled) is True
 
 
 # ---------------------------------------------------------------------------

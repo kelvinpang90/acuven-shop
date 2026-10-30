@@ -1,0 +1,27 @@
+# SHOP-TASK-179 每日恢复库存开关（定时任务、补跑命令与站点设置接口）
+
+- [x] 依据：`docs/DESIGN.md` 1.18（提交 `5ba9796`）「计价、优惠、积分与库存」第 6 条的每日恢复库存开关一段与「数据模型」的 `SiteSetting` 一行；`docs/HANDOFF.md` 0.76 的落实写法。设计闸门：DESIGN 1.18（提交 `5ba9796`）第 6 条与 HANDOFF 0.76，库存与站点设置。数据库列 `site_settings.daily_stock_reset_enabled` 已由 SHOP-TASK-177 加好；本任务不改模型与迁移、`app/services/stock_reset.py`、前端与设计。
+- [x] 读取（`app/services/site_settings.py`）：新增 `is_daily_stock_reset_enabled(db) -> bool`，写法照 `is_sms_verification_enabled`——每次调用只发一条只查该列的 SELECT，不缓存、不加载 ORM 对象；表里没有站点设置那一行时返回真。`_lock_site_setting` 按默认值插入那一行时显式写 `daily_stock_reset_enabled=True`。模块说明补上第 6 条与 HANDOFF 0.76 的依据。
+- [x] 判定位置（`app/jobs.py`）：只在 `reset_stock_job` 的 `run` 里，先于 `reset_completed`。读到关闭时回滚、记一条 info 日志、返回 0，不调用 `reset_completed` 与 `reset_daily_stock`；所以不新建也不重试重置记录、不改 SKU 的当日可用库存，当天已有的 failed 记录保持原样。跳过算成功，运行器照常记成功与心跳。`reset-stock` 子命令本来就经 `reset_stock_job` 执行，同样跳过并以 `EXIT_OK` 退出（随后照旧记 `job reset_daily_stock done: 0 changed`）。每次运行都重新读开关；读到开启时与原来完全相同。模块说明、`reset-stock` 用法与 `reset_stock` 的说明随之补上跳过的情形。
+  - 日志原文：`stock reset <营业日期> skipped (switch off)`，营业日期为 ISO 格式（如 `stock reset 2026-10-30 skipped (switch off)`），级别 info。
+- [x] 保存（`save_site_settings`）：新增关键字参数 `stock_reset_enabled: bool | None = None`（None 即请求里省略：不比较、不改）。返回值由三项 `(支付方式, 短信开关, 是否实际改动)` 改为四项 `(支付方式, 短信开关, 每日恢复库存开关, 是否实际改动)`；唯一的调用方 `app/api/admin_site_settings.py` 随之改。`stripe_not_configured`、`sms_not_configured` 两项检查照旧在锁行之前，任一被拒时三项都不写入。当前值取自锁住的那一行，不另发 SELECT；与新值不同时改写，并写一条 `admin_daily_stock_reset_changed` 审计（对象为站点设置行，旧值与新值为 `on` 或 `off`）。同一次保存有多项改动时，审计依次为支付方式、短信、每日恢复库存；三项都未变时回滚、不写审计。开启与关闭都不检查任何配置。
+- [x] 接口（`app/api/admin_site_settings.py`）：`SiteSettingsIn` 加可省略的 `daily_stock_reset_enabled`（strict 布尔；是否提交看 `model_fields_set`，显式的 null 与其他类型照现有写法 422）。GET 响应在 `sms_available` 之后加 `daily_stock_reset_enabled`（`is_daily_stock_reset_enabled` 的当前值）；PUT 响应在 `sms_verification_enabled` 之后加保存后的值（取自 `save_site_settings` 的返回值）。其余步骤、错误码、请求体上限与 no-store 不变；模块说明补上本字段。
+- [x] 测试：
+  - 新增 `tests/test_stock_reset_switch.py`，引擎、会话工厂与运行器的写法照 `tests/test_stock_reset.py`。每条测试的文档字符串写明它守住的第 6 条原句。覆盖以下情形：
+    - 关闭时运行器一轮不调用 `reset_completed` 与重置、没有新记录、库存不变、记为成功、心跳照写、只有一条 info 跳过日志；
+    - 关闭时当天的 failed 记录不变，重新开启后下一轮重试为 succeeded（尝试 2 次）；
+    - 关闭期间直接改库模拟的当日库存调整，在重新开启后的下一轮被「初始减去仍有效的预留」覆盖；
+    - 当天已 succeeded 之后关闭再开启不再重置；
+    - 同一个 Runner 两轮之间改开关即生效，每轮都先读开关、再判断是否已完成；
+    - 表里没有站点设置行时照常重置、不补写那一行；
+    - `reset-stock` 关闭时以 `EXIT_OK` 退出且没有新记录，开启后照常重置；
+    - 保存开与关各写一条审计（Stripe 与短信都不可用时也能保存）；省略字段不改、不写审计；与当前值相同不写审计、更新时间不变；Stripe 或短信被拒时开关不变；三项同时改动时的审计顺序；表为空时插入的行开关为开启。
+  - `tests/test_admin_site_settings.py`：只在断言 GET 或 PUT 响应完整字段的地方加上 `daily_stock_reset_enabled`。涉及 `SAVED_SIMULATED`、`SAVED_STRIPE_TEST` 两个常量，GET 的字典与字段顺序，以及以 `SMS_ON`、`SMS_OFF` 等比较响应体的各处。`SMS_ON`、`SMS_OFF` 同时用作请求体，所以常量本身不改，比较时补上 `STOCK_RESET_ON`。另新增接口层测试：GET 返回当前值（含设置行不存在时为开启）；PUT false 后 GET 为 false 且有 on → off 审计；省略不改；null、字符串与数字 422；与 stripe_not_configured 同一次提交时不写入。
+  - `tests/test_site_settings.py`：新增读取函数的测试——没有那一行时为真、服务端默认为真而列为假时为假、每次调用只发一条只查该列的 SELECT、会话里有旧对象时照样读库。模块说明补一句依据。
+- 偏离与取舍：
+  - 跳过时不另写 warning 或审计；按验收只记一条 info 日志。运行器的 `job reset_daily_stock done: …` 日志照旧只在生效条数非零时记，所以运行器里只有这一条；`reset-stock` 子命令照旧多记一条 `done: 0 changed`。
+  - 读开关时数据库出错（如表不存在）按任务失败处理，与原来 `reset_completed` 出错相同：只记 `job reset_daily_stock failed: <异常类名>`，不记 `stock reset … failed`（那一条仍只包在 `reset_daily_stock` 外面）。
+  - `_sms_audit_value` 改名为 `_switch_audit_value`，由短信与每日恢复库存两个开关共用；仍用 `SMS_VERIFICATION_ON` / `SMS_VERIFICATION_OFF` 两个常量，没有另加同值的常量。
+  - `SiteSettingsIn.daily_stock_reset_enabled` 的占位默认值写真（与服务端默认一致）。它只在省略时占位，接口按 `model_fields_set` 判断是否提交，省略时不会把这个默认值传给保存。
+  - 接口层与服务层的测试比验收多了几条对照：设置行不存在时 GET 为开启、数字 0 被拒、表为空时保存插入的行写开启、三项同时改动的审计顺序。
+- 验证范围：上面列出的是本次新增或修改的测试代码；后端的 lint、格式检查与测试由 PR 的必需 CI 检查 `backend` 执行（Worker 沙箱不跑后端测试）。SQLite 不复现 MySQL 的 `FOR UPDATE` 等锁，所以保存时锁行的并发行为不在这里覆盖，沿用现有锁定协议。

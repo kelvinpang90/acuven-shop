@@ -4,7 +4,8 @@
 与「上线依赖与设计闸门」（配置 WhatsApp 联系方式），
 以及 docs/UX.md 待决问题 Q10（配置缺失时隐藏）；支付方式的读取函数依据 docs/DESIGN.md 1.12
 （提交 acf576e）「Stripe 测试环境支付」第 2 条（SHOP-TASK-112）；人机挑战的公开 site key
-依据 docs/UX.md V1 的托管人机挑战组件（SHOP-TASK-143）。
+依据 docs/UX.md V1 的托管人机挑战组件（SHOP-TASK-143）；每日恢复库存开关的读取函数依据
+docs/DESIGN.md 1.18（提交 5ba9796）「计价、优惠、积分与库存」第 6 条（SHOP-TASK-179）。
 每条测试的文档字符串写明它守住的设计或 UX 原句；没有直接原句的写明是 SHOP-TASK-022、
 SHOP-TASK-073 或 SHOP-TASK-143 验收标准里的约定。
 
@@ -29,7 +30,11 @@ from app.db.session import get_session
 from app.main import create_app
 from app.models import SiteSetting
 from app.models.site import PAYMENT_METHOD_SIMULATED, PAYMENT_METHOD_STRIPE_TEST
-from app.services.site_settings import get_payment_method, is_sms_verification_enabled
+from app.services.site_settings import (
+    get_payment_method,
+    is_daily_stock_reset_enabled,
+    is_sms_verification_enabled,
+)
 
 URL = "/api/site-settings"
 NOW = datetime(2026, 10, 1, 2, 0)
@@ -267,6 +272,68 @@ def test_payment_method_read_ignores_a_stale_loaded_object(db: Session) -> None:
 
     assert row.payment_method == PAYMENT_METHOD_SIMULATED
     assert get_payment_method(db) == PAYMENT_METHOD_STRIPE_TEST
+
+
+# ---- 每日恢复库存开关的读取 ----
+# 依据 DESIGN 1.18（提交 5ba9796）「计价、优惠、积分与库存」第 6 条与「数据模型」SiteSetting 一行
+# （SHOP-TASK-179）。
+
+
+def test_daily_stock_reset_missing_row_reads_as_on(db: Session) -> None:
+    """第 6 条「表里还没有站点设置那一行时视为开启」：表里没有那一行时为真。"""
+    assert db.scalar(select(SiteSetting.id)) is None
+
+    assert is_daily_stock_reset_enabled(db) is True
+
+
+def test_daily_stock_reset_reads_the_stored_value(db: Session) -> None:
+    """「数据模型」SiteSetting「每日恢复库存开关（1.18，布尔，默认开启）」：行里不给开关值时取
+    服务端默认值，读到开启；列为假时读到关闭。"""
+    db.execute(insert(SiteSetting).values(id=1, updated_at=NOW))
+    assert is_daily_stock_reset_enabled(db) is True
+
+    db.execute(update(SiteSetting).values(daily_stock_reset_enabled=False))
+    db.flush()
+
+    assert is_daily_stock_reset_enabled(db) is False
+
+
+def test_daily_stock_reset_each_read_is_one_select(db: Session) -> None:
+    """第 6 条「定时任务每次运行时先从数据库读取开关的当前值（不缓存）」：两次读取之间改库，第二次
+    读到新值，每次调用只发一条 SELECT，且只查这一列。"""
+    _setting(db, enabled=False)
+    statements = _record_statements(db)
+
+    assert is_daily_stock_reset_enabled(db) is True
+    db.execute(update(SiteSetting).values(daily_stock_reset_enabled=False))
+    db.flush()
+    assert is_daily_stock_reset_enabled(db) is False
+    db.execute(delete(SiteSetting))
+    assert is_daily_stock_reset_enabled(db) is True
+
+    selects = [s for s in statements if s.lstrip().upper().startswith("SELECT")]
+    assert len(selects) == 3
+    for statement in selects:
+        assert "daily_stock_reset_enabled" in statement
+        assert "sms_verification_enabled" not in statement
+        assert "payment_method" not in statement
+
+
+def test_daily_stock_reset_read_ignores_a_stale_loaded_object(db: Session) -> None:
+    """「数据模型」SiteSetting「每次判定都从数据库读取当前值、不缓存」：会话里已加载的对象仍是
+    旧值时，读取函数照样给出库里的新值（不加载 ORM 对象）。"""
+    row = SiteSetting(
+        id=1,
+        sms_verification_enabled=False,
+        daily_stock_reset_enabled=True,
+        updated_at=NOW,
+    )
+    db.add(row)
+    db.flush()
+    db.connection().exec_driver_sql("UPDATE site_settings SET daily_stock_reset_enabled = 0")
+
+    assert row.daily_stock_reset_enabled is True
+    assert is_daily_stock_reset_enabled(db) is False
 
 
 # ---- 公开接口 ----

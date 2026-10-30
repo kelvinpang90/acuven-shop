@@ -1,4 +1,4 @@
-"""后台站点设置 A09 的支付方式与短信验证开关接口：GET /api/admin/site-settings、
+"""后台站点设置 A09 的支付方式、短信验证开关与每日恢复库存开关接口：GET /api/admin/site-settings、
 PUT /api/admin/site-settings。
 
 支付方式依据 docs/DESIGN.md 1.12（提交 acf576e）「Stripe 测试环境支付」第 1 条（只接受测试密钥）、
@@ -12,24 +12,30 @@ PUT /api/admin/site-settings。
 当前已开启也一样；保存「关闭」不检查；检查只看配置，不联网）；docs/UX.md 0.14 的 A09（页面读取时
 返回开关当前值与短信服务是否可用；保存一次提交两项，任一项被拒两项都不写入）；docs/HANDOFF.md
 0.65 的落实写法（短信字段可省略，省略时不检查、不改开关；先查支付方式再查短信；判定写在本文件）。
-保存规则见 app/services/site_settings.py。
+每日恢复库存开关（SHOP-TASK-179）依据 docs/DESIGN.md 1.18（提交 5ba9796）「计价、优惠、积分与库存」
+第 6 条（开关与短信验证开关、支付方式一起整页保存，审计旧值与新值记 on 或 off；保存请求里本开关
+可以省略，省略即不改；同一次保存的任何一项被拒时本开关的修改同样不生效）与 docs/HANDOFF.md 0.76
+的落实写法；开启与关闭都不检查任何配置。保存规则见 app/services/site_settings.py。
 
 两个接口都经 SHOP-TASK-036 的 require_admin：没有有效后台会话时 401 admin_session_required。
 
 读取（GET）：require_admin（401）→ 返回当前支付方式（get_payment_method）、凭据是否可用
 （stripe_available，即当次请求的 stripe_configured）、由 cookie 算出的 CSRF 令牌、短信验证开关
-（is_sms_verification_enabled）与短信服务是否可用（sms_available，即当次请求的
-sms_service_configured）。不写审计。
+（is_sms_verification_enabled）、短信服务是否可用（sms_available，即当次请求的
+sms_service_configured）与每日恢复库存开关（daily_stock_reset_enabled，即
+is_daily_stock_reset_enabled）。不写审计。
 保存（PUT），每一步不通过即停止：
 1. 请求体按实际读到的字节逐块判断，超过 8 KB 即 413，先于一切校验；不是 JSON 415；
 2. require_admin（401）；
 3. X-CSRF-Token（403 csrf_failed）；
 4. 请求体有必填的 payment_method（simulated 或 stripe_test，按原样比较、区分大小写）与可省略的
-   sms_verification_enabled（只接受 JSON 布尔值），多出字段或其他值 422；
+   sms_verification_enabled、daily_stock_reset_enabled（都只接受 JSON 布尔值），多出字段或其他
+   值 422；
 5. 支付方式为 stripe_test 而凭据不可用：422 {"detail": "stripe_not_configured"}；
 6. sms_verification_enabled 为 true 而短信服务不可用：422 {"detail": "sms_not_configured"}。
-   两种拒绝都不写入任何一项。之后才保存，成功或与当前值相同都是 200 与保存后的 payment_method
-   和 sms_verification_enabled。
+   两种拒绝都不写入三项中的任何一项。之后才保存，成功或与当前值相同都是 200 与保存后的
+   payment_method、sms_verification_enabled 和 daily_stock_reset_enabled（取自保存的返回值，
+   不另发 SELECT）。
 
 两个接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control: no-store，由
 SHOP-TASK-027 的路由类统一加上；路径存在但方法不匹配的 405 由框架在路由之外回答，不在此列。
@@ -57,6 +63,7 @@ from app.services.captcha import TurnstileVerifier
 from app.services.site_settings import (
     SiteSettingsRejected,
     get_payment_method,
+    is_daily_stock_reset_enabled,
     is_sms_verification_enabled,
     save_site_settings,
 )
@@ -110,13 +117,15 @@ def sms_service_configured(settings: Settings) -> bool:
 
 
 class SiteSettingsIn(BaseModel):
-    """支付方式必填；短信验证开关可省略（省略时不检查、不改开关，HANDOFF 0.65）。"""
+    """支付方式必填；短信验证开关可省略（省略时不检查、不改开关，HANDOFF 0.65）；每日恢复库存
+    开关可省略（省略即不改，HANDOFF 0.76）。"""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
     payment_method: PaymentMethodName
-    # 是否提交了该字段看 model_fields_set；默认值只为省略时占位，显式的 null 仍是 422。
+    # 是否提交了这两个字段看 model_fields_set；默认值只为省略时占位，显式的 null 仍是 422。
     sms_verification_enabled: bool = False
+    daily_stock_reset_enabled: bool = True
 
 
 # 不叫 SiteSettingsOut：公开接口 app/api/site_settings.py 已用这个名字。
@@ -126,6 +135,7 @@ class PaymentMethodOut(BaseModel):
 
 class AdminSiteSettingsSavedOut(PaymentMethodOut):
     sms_verification_enabled: bool
+    daily_stock_reset_enabled: bool
 
 
 class AdminSiteSettingsOut(PaymentMethodOut):
@@ -136,6 +146,7 @@ class AdminSiteSettingsOut(PaymentMethodOut):
     sms_verification_enabled: bool
     # 为假时页面禁用「开启」选项，保存开启会被拒。
     sms_available: bool
+    daily_stock_reset_enabled: bool
 
 
 async def _save_body(request: Request) -> bytes:
@@ -158,7 +169,7 @@ def _sms_available(request: Request) -> bool:
 
 @router.get("", response_model=AdminSiteSettingsOut)
 def read(admin: AdminDep, session: SessionDep, request: Request) -> AdminSiteSettingsOut:
-    """当前支付方式与短信验证开关、两者是否可用与 CSRF 令牌；只读，不写审计。"""
+    """当前支付方式与短信验证开关、两者是否可用、CSRF 令牌与每日恢复库存开关；只读，不写审计。"""
     csrf_token = csrf_token_for_cookie(admin.cookie_value)
     if csrf_token is None:
         # require_admin 通过时 cookie 格式必然合法；这里只为类型收窄。
@@ -169,6 +180,7 @@ def read(admin: AdminDep, session: SessionDep, request: Request) -> AdminSiteSet
         csrf_token=csrf_token,
         sms_verification_enabled=is_sms_verification_enabled(session),
         sms_available=_sms_available(request),
+        daily_stock_reset_enabled=is_daily_stock_reset_enabled(session),
     )
 
 
@@ -179,7 +191,7 @@ def save(
     session: SessionDep,
     request: Request,
 ) -> AdminSiteSettingsSavedOut:
-    """CSRF → 请求体 → 凭据检查 → 短信配置检查 → 保存。两项都与当前值相同时不写入、不写审计。"""
+    """CSRF → 请求体 → 凭据检查 → 短信配置检查 → 保存。三项都与当前值相同时不写入、不写审计。"""
     require_admin_csrf(request, admin)
     try:
         body = SiteSettingsIn.model_validate_json(raw)
@@ -188,11 +200,14 @@ def save(
     sms_enabled: bool | None = None
     if "sms_verification_enabled" in body.model_fields_set:
         sms_enabled = body.sms_verification_enabled
+    stock_reset_enabled: bool | None = None
+    if "daily_stock_reset_enabled" in body.model_fields_set:
+        stock_reset_enabled = body.daily_stock_reset_enabled
 
     # 保存先回滚此前的事务，会话里的 ORM 对象随之过期：管理员 ID 在此之前取出。
     account_id = admin.account.id
     try:
-        method, sms_after, _ = save_site_settings(
+        method, sms_after, stock_reset_after, _ = save_site_settings(
             session,
             account_id,
             body.payment_method,
@@ -201,8 +216,13 @@ def save(
             # 保存「关闭」或省略时不看短信配置。
             sms_enabled is not True or _sms_available(request),
             _utcnow(),
+            stock_reset_enabled=stock_reset_enabled,
         )
     except SiteSettingsRejected as exc:
         session.rollback()
         raise HTTPException(status_code=422, detail=exc.code) from None
-    return AdminSiteSettingsSavedOut(payment_method=method, sms_verification_enabled=sms_after)
+    return AdminSiteSettingsSavedOut(
+        payment_method=method,
+        sms_verification_enabled=sms_after,
+        daily_stock_reset_enabled=stock_reset_after,
+    )
