@@ -250,7 +250,8 @@ def test_ok_line_has_exactly_the_public_fields(db: Session, client: TestClient) 
     （规格名与规格值按排列序号）、首张图片引用、单价（整数仙）与行小计（单价乘件数）」；
     「响应不含每日初始库存、启用状态等后台字段」
     「不含优惠券、积分与会员字段，也不预留占位字段」——整体相等，多一个字段就失败。
-    不带 lang 即英文，不标回退。
+    不带 lang 即英文，不标回退。DESIGN 1.18 第 8 条「返回整单超出件数上限的标记与上限件数」
+    「返回整单超出金额上限的标记与上限金额」：四个整单上限字段接在 can_place_order 之后。
     """
     _tee(db)
 
@@ -263,6 +264,10 @@ def test_ok_line_has_exactly_the_public_fields(db: Session, client: TestClient) 
         "total_sen": None,
         "fx_reference": None,
         "can_place_order": False,
+        "unit_limit": 2000,
+        "units_over_limit": False,
+        "amount_limit_sen": 99999999,
+        "amount_over_limit": False,
     }
 
 
@@ -538,7 +543,7 @@ def _one(**fields: object) -> dict[str, object]:
         pytest.param({}, id="no-lines"),
         pytest.param([], id="not-an-object"),
         pytest.param(_line(quantity=0), id="quantity-0"),
-        pytest.param(_line(quantity=100), id="quantity-100"),
+        pytest.param(_line(quantity=1001), id="quantity-1001"),
         pytest.param(_line(quantity=1.5), id="quantity-1.5"),
         pytest.param(_line(quantity=2.0), id="quantity-2.0"),
         pytest.param(_line(quantity="2"), id="quantity-string"),
@@ -568,7 +573,8 @@ def _one(**fields: object) -> dict[str, object]:
     ],
 )
 def test_invalid_request_body_is_rejected(db: Session, client: TestClient, body: object) -> None:
-    """「购物车 1 到 20 行，每行件数是 1 到 99 的整数（DESIGN 1.10 第 8 条），
+    """「购物车 1 到 20 行，每行件数是 1 到 1000 的整数（DESIGN 1.18 第 8 条「每行件数为
+    1–1000 的整数」），
     SKU 是 1 到 64 个字符的字符串；
     同一 SKU 出现两次、行数或件数越界、给了州属却没给国家均 422」；
     「不接受任何价格、金额、运费、汇率或折扣字段，多出的字段一律 422」；
@@ -591,13 +597,13 @@ def test_malformed_json_is_rejected(db: Session, client: TestClient) -> None:
 
 
 def test_limits_are_inclusive(db: Session, client: TestClient) -> None:
-    """「1 到 20 行」「1 到 99 的整数」「1 到 64 个字符」的对照：
-    恰好 20 行、件数恰好 99、SKU 恰好 64 个字符都接受。
+    """「1 到 20 行」「1 到 1000 的整数」（DESIGN 1.18 第 8 条「每行件数为 1–1000 的整数」）
+    「1 到 64 个字符」的对照：恰好 20 行、件数恰好 1000、SKU 恰好 64 个字符都接受。
     """
     _tee(db)
 
     assert client.post(URL, json={"lines": _lines(20)}).status_code == 200
-    assert client.post(URL, json=_line(quantity=99)).status_code == 200
+    assert client.post(URL, json=_line(quantity=1000)).status_code == 200
     assert client.post(URL, json=_line(sku="S" * 64)).status_code == 200
 
 

@@ -13,8 +13,9 @@
 不建订单、不预留库存；会员订单的获得积分在下单时按计价结果写入整单与逐件快照，模拟支付成功时
 才按快照发放（发放、取消与超时的接线留给 SHOP-TASK-090）。
 
-- 计价（quote_member_cart）：只读，不写库、不锁行。先按 quote_cart 计价；有不正常的行时不判定
-  券与积分。所有行都正常时券代码非空则查券（只给是否可用，不给原因），不可用不计入；积分上限为
+- 计价（quote_member_cart）：只读，不写库、不锁行。先按 quote_cart 计价；有不正常的行或超出
+  任一整单上限（docs/DESIGN.md 1.18 第 8 条，SHOP-TASK-178）时不判定券与积分。
+  所有行都正常时券代码非空则查券（只给是否可用，不给原因），不可用不计入；积分上限为
   可用余额与券后商品额的较小值，抵扣积分超过上限时不计入并标明不接受。
 - 下单（place_member_order）的加锁顺序：结束此前的只读事务后，以 SELECT … FOR UPDATE 锁住
   该会员的行作为新事务的第一条语句（同 app/services/refund_review.py 的锁定协议：之后的读取
@@ -84,8 +85,8 @@ class PointsUnavailable(Exception):
 class MemberCheckoutQuote:
     """会员计价结果。
 
-    lines、subtotal_sen、shipping、fx_reference 与 can_place_order 沿用 quote_cart；
-    total_sen 在给了收货国家时为现金实付合计加运费，否则为空。
+    lines、subtotal_sen、shipping、fx_reference、can_place_order 与四个整单上限字段沿用
+    quote_cart；total_sen 在给了收货国家时为现金实付合计加运费，否则为空。
     """
 
     lines: list[UnavailableLine | PricedLine]
@@ -94,14 +95,18 @@ class MemberCheckoutQuote:
     total_sen: int | None
     fx_reference: FxReference | None
     can_place_order: bool
-    # 没给券代码或有不正常的行时为空；否则为券是否可用（不给原因）。
+    unit_limit: int
+    units_over_limit: bool
+    amount_limit_sen: int
+    amount_over_limit: bool
+    # 没给券代码、有不正常的行或超出整单上限时为空；否则为券是否可用（不给原因）。
     coupon_applicable: bool | None
     coupon_discount_sen: int
     # 计入的抵扣积分；不接受时为 0。
     points_redeemed: int
     points_earned: int
     available_points: int
-    # 可用余额与券后商品额的较小值；有不正常的行时为 0。
+    # 可用余额与券后商品额的较小值；有不正常的行或超出整单上限时为 0。
     points_cap: int
     points_accepted: bool
 
@@ -228,7 +233,8 @@ def quote_member_cart(
     quote = quote_cart(db, items, lang=lang, country_code=country_code, state_code=state_code)
     balance = available_points(db, member_id, now)
 
-    if not all(line.status == "ok" for line in quote.lines):
+    over_cap = quote.units_over_limit or quote.amount_over_limit
+    if over_cap or not all(line.status == "ok" for line in quote.lines):
         # 不判定券与积分；quote_cart 的合计即无券无积分的现金实付合计加运费。
         return MemberCheckoutQuote(
             lines=quote.lines,
@@ -237,6 +243,10 @@ def quote_member_cart(
             total_sen=quote.total_sen,
             fx_reference=quote.fx_reference,
             can_place_order=quote.can_place_order,
+            unit_limit=quote.unit_limit,
+            units_over_limit=quote.units_over_limit,
+            amount_limit_sen=quote.amount_limit_sen,
+            amount_over_limit=quote.amount_over_limit,
             coupon_applicable=None,
             coupon_discount_sen=0,
             points_redeemed=0,
@@ -276,6 +286,10 @@ def quote_member_cart(
         total_sen=total,
         fx_reference=fx,
         can_place_order=quote.can_place_order,
+        unit_limit=quote.unit_limit,
+        units_over_limit=quote.units_over_limit,
+        amount_limit_sen=quote.amount_limit_sen,
+        amount_over_limit=quote.amount_over_limit,
         coupon_applicable=coupon_applicable,
         coupon_discount_sen=pricing.coupon_discount,
         points_redeemed=pricing.points_redeemed,

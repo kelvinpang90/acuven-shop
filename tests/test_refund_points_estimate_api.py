@@ -566,10 +566,11 @@ def test_non_json_is_415_before_401(app: FastAPI, db: Session) -> None:
             ["body", "lines", 0, "quantity"],
             id="zero-quantity",
         ),
+        # DESIGN 1.18 第 8 条「退款申请每行的件数上限随每行件数改为 1000」。
         pytest.param(
-            {"lines": [{"line_index": 0, "quantity": 100}]},
+            {"lines": [{"line_index": 0, "quantity": 1001}]},
             ["body", "lines", 0, "quantity"],
-            id="quantity-over-99",
+            id="quantity-over-1000",
         ),
         pytest.param(
             {"lines": [{"line_index": index, "quantity": 1} for index in range(21)]},
@@ -583,7 +584,7 @@ def test_invalid_request_is_422_before_401_without_echo(
     app: FastAPI, db: Session, change: dict[str, Any], loc: list[Any]
 ) -> None:
     """DESIGN「权限与资料保护」凭据不写入错误回显。SHOP-TASK-093 验收：请求体与退款申请
-    相同（订单号与 1 到 20 项申请行，件数 1 到 99，行序不重复），多出字段 422；422 先于 401
+    相同（订单号与 1 到 20 项申请行，件数 1 到 1000，行序不重复），多出字段 422；422 先于 401
     （这里没有 cookie），不回显请求内容，带 no-store。
     """
     placed = _guest_order(db, _now() - timedelta(days=5))

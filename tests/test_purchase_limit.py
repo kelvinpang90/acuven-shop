@@ -307,17 +307,17 @@ def test_every_priced_line_carries_max_per_order(db: Session, client: TestClient
 # ---- 请求校验 ----
 
 
-def test_line_quantity_99_is_accepted_and_100_is_rejected(
+def test_line_quantity_1000_is_accepted_and_1001_is_rejected(
     db: Session,
     client: TestClient,
 ) -> None:
-    """第 8 条「每行件数为 1–99 的整数」「计价接口不因超出限购拒绝整个请求」：
-    99 件照常计价（超出默认限购 10，标为超出限购），100 件是 422。
+    """DESIGN 1.18 第 8 条「每行件数为 1–1000 的整数」「计价接口不因超出限购拒绝整个请求」：
+    1000 件照常计价（超出默认限购 10，标为超出限购），1001 件是 422。
     """
     _shop(db)
 
-    accepted = client.post(URL, json=_body(("TEE-RED", 99)))
-    rejected = client.post(URL, json=_body(("TEE-RED", 100)))
+    accepted = client.post(URL, json=_body(("TEE-RED", 1000)))
+    rejected = client.post(URL, json=_body(("TEE-RED", 1001)))
 
     assert accepted.status_code == 200
     assert _statuses(accepted.json()) == {"TEE-RED": "over_limit"}

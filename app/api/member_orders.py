@@ -121,7 +121,7 @@ class MemberOrderIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    # 与计价接口相同：1 到 20 行，每行 1 到 99 件，SKU 不重复
+    # 与计价接口相同：1 到 20 行，每行 1 到 1000 件，SKU 不重复
     # （重复 SKU 由 _destination_errors 报 422，见 _order_input，不进入下单函数）。
     lines: list[QuoteLineIn] = Field(min_length=1, max_length=MAX_CART_LINES)
     # 收货电话原文：前端预填会员手机号，会员可改为其他号码或虚构号码。
@@ -151,11 +151,16 @@ class MemberQuoteOut:
     total_sen: int | None
     fx_reference: FxReference | None
     can_place_order: bool
-    # 未给代码或有不正常的行时为空；否则为券是否可用（不给原因）。
+    # 整单件数与金额上限（DESIGN 1.18 第 8 条），同计价接口。
+    unit_limit: int
+    units_over_limit: bool
+    amount_limit_sen: int
+    amount_over_limit: bool
+    # 未给代码、有不正常的行或超出整单上限时为空；否则为券是否可用（不给原因）。
     coupon_applied: bool | None
     coupon_discount_sen: int
     points_available: int
-    # 可用余额与券后商品额的较小值；有不正常的行时为 0。
+    # 可用余额与券后商品额的较小值；有不正常的行或超出整单上限时为 0。
     points_max: int
     points_accepted: bool
     # 计入的抵扣积分；不接受时为 0。
@@ -319,6 +324,10 @@ def quote(
         total_sen=result.total_sen,
         fx_reference=result.fx_reference,
         can_place_order=result.can_place_order,
+        unit_limit=result.unit_limit,
+        units_over_limit=result.units_over_limit,
+        amount_limit_sen=result.amount_limit_sen,
+        amount_over_limit=result.amount_over_limit,
         coupon_applied=result.coupon_applicable,
         coupon_discount_sen=result.coupon_discount_sen,
         points_available=result.available_points,
