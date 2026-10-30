@@ -4982,7 +4982,7 @@ tasks:
       运营者落实写法（HANDOFF 0.76）：规则只有一条带条件的更新，服务层与接口放在同一任务；库存已变动回 409 {"detail":"stock_changed", "available_stock":当前值}，取值不合格回 422 stock_invalid，SKU 不存在回 404 variant_not_found；审计操作名 admin_variant_stock_adjusted，对象为该 SKU，旧值与新值写成「SKU 代码 available_stock 值」。
       不做前端，不改模型与迁移，不改设计。
       设计闸门：DESIGN 1.18（提交 5ba9796） 第 12 条与 HANDOFF 0.76，库存。拆分：一条规则的服务层与接口（6 个允许路径），A04 页面另行登记。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-181
     acceptance_criteria:
