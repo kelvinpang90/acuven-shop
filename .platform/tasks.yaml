@@ -4917,7 +4917,7 @@ tasks:
       运营者落实写法（HANDOFF 0.76）：开关的读取函数照 is_sms_verification_enabled 写在 app/services/site_settings.py，表里没有那一行时视为开启；判定写在 app/jobs.py 的 reset_stock_job 里，reset-stock 子命令本来就经它执行，所以一处改动同时约束定时任务与补跑命令；保存请求里的 daily_stock_reset_enabled 可省略（省略即不改，现有 A09 页面照常能保存），任一项被拒时三项都不写入；审计操作名 admin_daily_stock_reset_changed，旧值与新值为 on 或 off。
       不做前端（A09 页面的开关另行登记），不改模型与迁移，不改 app/services/stock_reset.py，不改设计。
       设计闸门：DESIGN 1.18（提交 5ba9796） 第 6 条与 HANDOFF 0.76，库存与站点设置。拆分：开关只有一处判定与一个字段，读取、任务与接口放在同一任务里（7 个允许路径）。
-    status: ready
+    status: done
     acceptance_criteria:
       - 读取——app/services/site_settings.py 新增 is_daily_stock_reset_enabled(db) -> bool，写法照 is_sms_verification_enabled（每次调用只发一条只查该列的 SELECT，不缓存，不加载 ORM 对象）；表里没有站点设置那一行时返回真；_lock_site_setting 按默认值插入那一行时 daily_stock_reset_enabled 写真；模块说明补上本开关的依据
       - 定时任务与补跑命令——app/jobs.py 的 reset_stock_job 的 run 先调用 is_daily_stock_reset_enabled，再判断当天是否已完成；读到关闭时回滚、记一条 info 日志，原文为 stock reset <营业日期> skipped (switch off)（营业日期为 ISO 格式，如 2026-10-30）、返回 0，不调用 reset_completed 与 reset_daily_stock，所以不新建也不重试重置记录、不改任何 SKU 的当日可用库存，当天此前已有的失败记录保持原样；跳过算成功（运行器照常记成功与心跳）；reset-stock 子命令同样跳过并以 EXIT_OK 退出；每次运行都重新读取，不缓存，以这次读到的值为准；读到开启时行为与现在完全相同
