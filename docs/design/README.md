@@ -162,7 +162,7 @@
 | A03 其他状态（类型未知 / 现金为 0 / 重试被拒） | [A03-stripe-states.html](pages/A03-stripe-states.html) | [A03-stripe-states.png](reference/A03-stripe-states.png) | 640 × 520 |
 | A04 商品、规格与库存 · 桌面（2026-10-30 重画） | [A04-desktop.html](pages/A04-desktop.html) | [A04-desktop.png](reference/A04-desktop.png) | 1440 × 1750 |
 | A04 编辑商品 · 手机（含当日库存调整展开，2026-10-30 重画） | [A04-phone-edit.html](pages/A04-phone-edit.html) | [A04-phone-edit.png](reference/A04-phone-edit.png) | 390 × 3370 |
-| A04 新建商品 · 桌面（含无规格的情形，2026-10-30） | [A04-desktop-new.html](pages/A04-desktop-new.html) | [A04-desktop-new.png](reference/A04-desktop-new.png) | 1440 × 1810 |
+| A04 新建商品 · 桌面（含无规格的情形，2026-10-30） | [A04-desktop-new.html](pages/A04-desktop-new.html) | [A04-desktop-new.png](reference/A04-desktop-new.png) | 1440 × 1780 |
 | A04 保存状态、当前分类不可用与未保存确认框（2026-10-30） | [A04-states.html](pages/A04-states.html) | [A04-states.png](reference/A04-states.png) | 520 × 1570 |
 | A04 当日库存调整与图片状态、移除确认框（2026-10-30） | [A04-images-stock.html](pages/A04-images-stock.html) | [A04-images-stock.png](reference/A04-images-stock.png) | 520 × 2050 |
 | A05 优惠券 · 桌面 | [A05-desktop.html](pages/A05-desktop.html) | [A05-desktop.png](reference/A05-desktop.png) | 1440 × 900 |
