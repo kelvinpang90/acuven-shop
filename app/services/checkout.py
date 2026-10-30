@@ -6,9 +6,14 @@
 其他货币只按固定演示汇率显示参考数，按收货国家决定、不按 IP。
 
 每单限购依据 docs/DESIGN.md 1.10（提交 e3b3505）「计价、优惠、积分与库存」第 8 条
-（SHOP-TASK-016）：每行件数 1–99；同一商品各行件数合计超过该商品的每单限购件数时，
+（SHOP-TASK-016）：同一商品各行件数合计超过该商品的每单限购件数时，
 这些行标为超出限购，不拒绝整个请求；标注优先级为不可购买、超出限购、库存不足。
 下单时的整单校验由游客下单（app/services/ordering.py，SHOP-TASK-020）用本模块重新计价后执行。
+
+整单上限依据 docs/DESIGN.md 1.18（提交 5ba9796）同一条与 docs/HANDOFF.md 0.74（SHOP-TASK-178）：
+每行件数 1–1000；所有行（含不可购买的行）的件数合计不超过 2,000；商品小计加运费（没有运费报价时
+只看商品小计，优惠券与积分抵扣之前）不超过 99,999,999 仙。超出时不拒绝整个请求，而返回标记与上限、
+不可下单，各行的标注不变；超出金额上限时不返回参考外币。游客与会员下单按 can_place_order 拒绝整单。
 
 只发 SELECT，不写库、不缓存价格与费率。
 SKU 不存在、停用或所属商品未发布的行只给 SKU、件数与状态。
@@ -40,11 +45,14 @@ from app.services.catalog import (
     localized,
     published,
 )
-from app.services.pricing import OrderLine, price_order
 from app.services.shipping import FxReference, ShippingQuote, quote_shipping, reference_amount
 
 MAX_CART_LINES = 20
-MAX_LINE_QUANTITY = 99
+# DESIGN 1.18 第 8 条：每行件数 1–1000；所有行的件数合计不超过 2,000；
+# 商品小计加运费（抵扣之前）不超过 99,999,999 仙（RM999,999.99）。
+MAX_LINE_QUANTITY = 1000
+MAX_ORDER_UNITS = 2000
+MAX_ORDER_AMOUNT_SEN = 99_999_999
 MAX_SKU_LENGTH = 64
 
 
@@ -102,10 +110,16 @@ class CheckoutQuote:
     # 以下三项只在给了收货国家时有值。
     shipping: ShippingQuote | None
     total_sen: int | None
-    # 合计的参考外币；该国无演示汇率（含马来西亚）时也为 None。
+    # 合计的参考外币；该国无演示汇率（含马来西亚）或超出金额上限时也为 None。
     fx_reference: FxReference | None
-    # 所有行均为正常且给了收货国家；下单时由之后的任务重新计算与校验。
+    # 所有行均为正常、给了收货国家且未超出两个整单上限；下单时重新计算与校验。
     can_place_order: bool
+    # 恒为 MAX_ORDER_UNITS；所有行（含不可购买的行）的件数合计大于它时为真。
+    unit_limit: int
+    units_over_limit: bool
+    # 恒为 MAX_ORDER_AMOUNT_SEN；商品小计加运费（没给收货国家时只看小计）大于它时为真。
+    amount_limit_sen: int
+    amount_over_limit: bool
 
 
 def purchasable(
@@ -212,7 +226,6 @@ def quote_cart(
             product_quantities[product_id] = product_quantities.get(product_id, 0) + item.quantity
 
     lines: list[UnavailableLine | PricedLine] = []
-    priced: list[OrderLine] = []
     for item in items:
         if item.sku not in found:
             lines.append(
@@ -244,11 +257,16 @@ def quote_cart(
                 line_subtotal_sen=variant.price_sen * item.quantity,
             )
         )
-        priced.append(OrderLine(unit_price=variant.price_sen, quantity=item.quantity))
 
-    subtotal = price_order(priced).subtotal
+    # 等于 price_order 的小计；不逐件展开，件数超出上限时也不展开。
+    subtotal = sum(line.line_subtotal_sen for line in lines if isinstance(line, PricedLine))
     total = None if shipping is None else subtotal + shipping.fee_sen
-    fx = None if total is None else reference_amount(session, country_code, total)
+    units_over = sum(item.quantity for item in items) > MAX_ORDER_UNITS
+    # 抵扣之前的金额；还没有运费报价时只看商品小计。
+    amount_over = (subtotal if total is None else total) > MAX_ORDER_AMOUNT_SEN
+    fx = None
+    if total is not None and not amount_over:
+        fx = reference_amount(session, country_code, total)
     all_ok = all(line.status == "ok" for line in lines)
     return CheckoutQuote(
         lines=lines,
@@ -256,5 +274,9 @@ def quote_cart(
         shipping=shipping,
         total_sen=total,
         fx_reference=fx,
-        can_place_order=all_ok and shipping is not None,
+        can_place_order=all_ok and shipping is not None and not units_over and not amount_over,
+        unit_limit=MAX_ORDER_UNITS,
+        units_over_limit=units_over,
+        amount_limit_sen=MAX_ORDER_AMOUNT_SEN,
+        amount_over_limit=amount_over,
     )

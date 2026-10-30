@@ -129,6 +129,12 @@ GUEST_QUOTE_FIELDS = {
     "total_sen",
     "fx_reference",
     "can_place_order",
+    # DESIGN 1.18 第 8 条「返回整单超出件数上限的标记与上限件数」
+    # 「返回整单超出金额上限的标记与上限金额」。
+    "unit_limit",
+    "units_over_limit",
+    "amount_limit_sen",
+    "amount_over_limit",
 }
 
 # 省略该字段。
