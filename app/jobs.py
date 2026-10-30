@@ -35,7 +35,8 @@ creating 记录由定时任务以同一幂等键重试、到期后对账；付�
                                         STRIPE_CHECKOUT_BATCH_LIMIT 条；不能解除
                                         已转人工的记录）
     python -m app.jobs reset-stock      执行一次当日库存重置后退出（运营者手动补跑用；只重置当前
-                                        马来西亚营业日期，不补过去的日期；已完成也以 0 退出）
+                                        马来西亚营业日期，不补过去的日期；已完成或每日恢复
+                                        库存开关关闭而跳过也以 0 退出）
     python -m app.jobs complete-shipped 执行一次发货满 7 天自动确认收货后退出（运营者手动补跑用）
     python -m app.jobs expire-points    执行一次积分到期后退出（运营者手动补跑用；每次最多
                                         POINTS_EXPIRE_BATCH_LIMIT 个批次）
@@ -67,7 +68,8 @@ creating 记录由定时任务以同一幂等键重试、到期后对账；付�
 再 Stripe 会话的定时处理（会话处理与付款方式类型补齐两种扫描每轮各最多
 STRIPE_CHECKOUT_BATCH_LIMIT 条，合计至多两倍；Stripe 未配置时没有待处理的记录
 才跳过，见 stripe_checkouts_job），再每日库存重置
-（当前马来西亚营业日期已有 succeeded 记录时跳过，否则执行；失败只记日志、下一轮重试），再发货
+（每日恢复库存开关关闭或当前马来西亚营业日期已有 succeeded 记录时跳过，否则执行；失败只记日志、
+下一轮重试；开关依据 DESIGN 1.18 第 6 条，见 reset_stock_job），再发货
 满 7 天自动确认收货（每轮最多完成 AUTO_COMPLETE_BATCH_LIMIT 张，与超时取消相同），再删除满
 30 天的短信验证记录（每轮最多 VERIFICATION_DELETE_BATCH_LIMIT 条，与超时取消相同），再处理
 积分到期（每轮最多 POINTS_EXPIRE_BATCH_LIMIT 个批次，与超时取消相同），最后做 Stripe 退款
@@ -125,6 +127,7 @@ from app.db.session import _session_factory
 from app.services.auto_complete import auto_complete_shipped_orders
 from app.services.payment import expire_overdue_orders
 from app.services.points import expire_points
+from app.services.site_settings import is_daily_stock_reset_enabled
 from app.services.sms_retention import delete_expired_verifications
 from app.services.stock_reset import business_date, reset_completed, reset_daily_stock
 from app.services.stripe_gateway import StripeGateway, StripeHttpGateway, stripe_configured
@@ -223,12 +226,22 @@ def stripe_checkouts_job(
 def reset_stock_job() -> Job:
     """每日库存重置：SHOP-TASK-032 的 reset_daily_stock，只重置当前马来西亚营业日期。
 
+    每次运行先读每日恢复库存开关（SHOP-TASK-179，DESIGN 1.18「计价、优惠、积分与库存」第 6 条：
+    「定时任务每次运行时先从数据库读取开关的当前值（不缓存），再判断当天是否已完成重置」）。读到
+    关闭时回滚、记一条 info 日志、返回 0（跳过算成功），不判断是否已完成、不调用重置：不新建也不
+    重试重置记录，不改任何 SKU 的当日可用库存，当天已有的失败记录保持原样。reset-stock 子命令也经
+    本任务执行，所以同样受开关约束。读到开启时照下文。
+
     该日期已有 succeeded 记录时不调用、返回 0（跳过算成功）。返回本次重置的 SKU 数；并发的
     另一个执行者先完成时也返回 0。日志只含营业日期、SKU 数、结果与异常类名。
     """
 
     def run(db: Session, now: datetime) -> int:
         day = business_date(now)
+        if not is_daily_stock_reset_enabled(db):
+            db.rollback()
+            logger.info("stock reset %s skipped (switch off)", day.isoformat())
+            return 0
         if reset_completed(db, now):
             db.rollback()
             return 0
@@ -511,7 +524,8 @@ def reset_stock(
     *,
     now: Callable[[], datetime] = utc_now,
 ) -> int:
-    """执行一次当前马来西亚营业日期的库存重置，返回退出码：完成（含此前已完成）为 0，失败非零。"""
+    """执行一次当前马来西亚营业日期的库存重置，返回退出码：完成（含此前已完成与开关关闭而跳过）
+    为 0，失败非零。"""
     if session_factory is None:
         logger.error("database is not configured")
         return EXIT_NOT_CONFIGURED
