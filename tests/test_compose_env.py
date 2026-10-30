@@ -1,4 +1,5 @@
-"""docker-compose.yml 把短信、人机挑战与联系链接的配置传进 shop_api（SHOP-TASK-143）。
+"""docker-compose.yml 把短信、人机挑战与联系链接的配置传进 shop_api（SHOP-TASK-143），以及商品图片的
+R2 配置与 API 内存上限（DESIGN 1.19）。
 
 写法照 tests/test_stripe_gateway.py 的 test_compose_passes_all_six_variables_to_api_and_jobs：
 读取 docker-compose.yml，逐字比较 environment 里的写法。每条测试的文档字符串写明它守住的是什么。
