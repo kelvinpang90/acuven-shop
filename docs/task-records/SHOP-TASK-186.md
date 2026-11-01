@@ -14,3 +14,18 @@
   - 规格名的 `id` 在模型里可省略：新建时不带、保存时带；保存时省略即「新增规格名」，由服务层回 `product_invalid`。
   - 服务层未捕获的数据库错误不另转成 503（同 `admin_categories.py`，验收未列出）。
 - 验证范围：上面列出的是本次新增的测试代码。SQLite 不复现 MySQL 的行锁与共享锁，锁与并发由 SHOP-TASK-183 至 185 的服务层测试覆盖。
+
+## 登记时的验收标准（原文）
+
+2026-11-01 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 读取——GET /api/admin/products 经 require_admin（401 admin_session_required），返回 products（load_admin_products 的全部项）与由 cookie 算出的 csrf_token；GET /api/admin/products/{product_id} 路径 ID 照 app/api/admin_orders.py 的 _order_id 校验（不合法 422 不回显），返回 load_admin_product 的结果，不存在 404 {"detail":"product_not_found"}；都不写审计
+      - 新建——POST /api/admin/products，步骤依次为请求体逐块读取超过 256 KB 即 413、不是 JSON 415、require_admin（401）、X-CSRF-Token（403 csrf_failed）、请求体模型（与 ProductInput 同名一一对应，options、values、variants 为数组；不适用的字段一律省略、不写 null——新建商品的规格名不带 id，已有的规格值为 id 加三语名称、新增的规格值为 temp_id 加三语名称，已有的 SKU 为 id、price_sen、daily_initial_stock、is_active（不带 option_values），新增的 SKU 为 temp_id、option_values 与这三项，option_values 的每项为带 id 或 temp_id 的对象；三语名称与描述为字符串（可为空串）；请求体模型只校验类型、必填与多出字段（strict，多出字段、缺字段、null 或类型不对 422；可省略的 id、temp_id、option_values 照 app/api/admin_site_settings.py 的写法，类型不允许 None、是否提交看 model_fields_set），id 与 temp_id 的搭配（两者都有或都没有、已有 SKU 带 option_values 等）交给服务层判定、回 422 product_invalid；照 app/api/pay.py 的 _body_errors 不回显）、create_product；ProductInvalid 回 422 {"detail":"product_invalid"}，ProductChanged 回 409 {"detail":"product_changed"}；成功回 201 与新商品（同单件读取）
+      - 保存——PUT /api/admin/products/{product_id}，步骤依次为 413、415、401、403（照 app/api/admin_coupons.py 先声明 CsrfDep 依赖、再声明路径 ID 依赖）、路径 ID 422、请求体模型（新建的字段加必填的整数 version）、save_product；两种异常的回答同新建；成功或未变都回 200 与保存后的商品
+      - 通用——四个接口的处理函数与依赖产生的全部响应（含错误）都带 no-store，由 SHOP-TASK-027 的路由类统一加上；路径存在但方法不匹配时由框架返回的 405 不含请求内容与个人资料，不在此列；不写日志；app/main.py 注册新路由
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_products_api.py，写法照 tests/test_admin_shipping_rates_api.py（测试会话依赖替换、后台登录与 CSRF 的取得方式），每条测试的文档字符串写明它守住的 DESIGN 1.18 第 11 条、UX 0.17 A04 或本契约的约定——四个接口没有会话 401、写操作 CSRF 不符 403；413 先于登录检查；415；多出字段、缺字段、null、布尔值当整数、浮点数价格等 422 且不回显，ValueRef 同时带 id 与 temp_id 为 422 product_invalid；路径 ID 不合法 422；GET 不存在 404、PUT 不存在 409 product_changed；新建 201 且返回的代码正确；取值不合格 422 product_invalid；版本号不符 409；成功与未变都 200；保存时新增规格值与 SKU；列表与单件的字段；所有响应带 no-store
+      - docs/task-records/SHOP-TASK-186.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）
+      - 改动只落在 allowed_change_paths；不改服务层、模型与迁移、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
+```

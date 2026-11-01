@@ -15,3 +15,18 @@
   - SKU 代码按库里规格名的顺序（sort_order 再按 id）取值的代码，不按请求里规格名的排列；两者在正常的保存请求里相同。
   - 审计顺序：已有行的改动在前，之后新增的规格值（按规格名的顺序再按请求顺序）、新增的 SKU（按请求顺序）。
 - 验证范围：上面列出的是本次新增的测试代码；后端的 lint、格式检查与测试由 PR 的必需 CI 检查 `backend` 执行（Worker 沙箱不跑后端测试）。SQLite 不复现 MySQL 的行锁、共享锁与两个会话同时保存时的唯一约束冲突，后者以替换生成函数模拟。
+
+## 登记时的验收标准（原文）
+
+2026-11-01 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 入口——仍是 SHOP-TASK-184 的 save_product，签名与返回不变；去掉「请求带新增项即 ProductInvalid」，其余已有行的行为不变；不改 183 的请求结构、create_product 与两个 load 函数；共用检查可以扩展以处理保存请求（已有 SKU 的 option_values 为 None、ValueRef 以行 ID 引用已有规格值、按请求里全部项计算上限与查重），但不改它对新建请求的判定，tests/test_admin_products.py 保持通过、不改
+      - 第一步——共用检查按「现有加新增」整体计算上限（每个规格名至多 20 个值、至多 50 个 SKU）与英文名称不重复；新增的规格值英文名称必填；新增 SKU 的 option_values 个数等于规格名个数，以行 ID 引用的须是请求里该规格名下列出的已有规格值，以 temp_id 引用的须是同一规格名下新增的规格值；不通过抛 ProductInvalid、不发任何 SQL
+      - 第三步——在 184 的第二步之后、同一事务里，新增 SKU 的组合与该商品已有 SKU（含停用的）的组合不重复，否则回滚、抛 ProductInvalid；新增的规格值排在该规格名已有值之后（sort_order 为已有最大值加一起），新增的 SKU 依次插入；代码复用 SHOP-TASK-183 的生成函数（规格值代码在该规格名下去重，SKU 代码按规格名顺序取各值代码、全站去重），撞上唯一约束即回滚、抛 ProductChanged；新 SKU 的 available_stock 等于其每日初始库存
+      - 版本与审计——有任何新增即算有改动，商品 version 加一（与已有行的改动合并只加一次）；新增的规格值与 SKU 各写一条 admin_product_option_value_created、admin_product_variant_created（新值为代码，对象 ID 为新行 ID）；写入途中出现任何异常都先回滚再抛出
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_product_additions.py（写法照 tests/test_admin_product_save.py），每条测试的文档字符串写明它守住的 DESIGN 1.18 第 11 条原句——新增规格值并以 temp_id 被新增 SKU 引用；新增 SKU 引用已有规格值；与停用的已有 SKU 组合相同被拒；引用别的规格名下的值或请求里没列出的值被拒；新增规格值沿用全站代码；超过 20 个值或 50 个 SKU 被拒；新 SKU 的当日可用库存与代码；只加一次版本；审计；新增的 SKU 可被 app/services/checkout.py 的 quote_cart 计价
+      - docs/task-records/SHOP-TASK-185.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）
+      - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/catalog.py、app/services/checkout.py、app/services/admin_codes.py、现有测试（含 tests/test_admin_products.py 与 tests/test_admin_product_save.py）、前端、.platform/、CI 与部署配置，不装依赖，不改设计
+```
