@@ -1422,11 +1422,11 @@ def test_all_responses_are_no_store_and_nothing_is_logged(
 def test_routes_are_the_four_endpoints(app: FastAPI) -> None:
     """验收「GET /api/admin/products、GET /api/admin/products/{product_id}、
     POST /api/admin/products 与 PUT /api/admin/products/{product_id}」「app/main.py 注册新
-    路由」：该路径下只有这四个。"""
+    路由」：该路径下只有这四个（SHOP-TASK-190 的图片接口在 /images 之下，不在此列）。"""
     routes = {
         (method.upper(), path)
         for path, operations in app.openapi()["paths"].items()
-        if path.startswith(URL)
+        if path.startswith(URL) and not path.endswith("/images") and "/images/" not in path
         for method in operations
     }
 
