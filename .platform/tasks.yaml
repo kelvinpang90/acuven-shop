@@ -5117,7 +5117,7 @@ tasks:
       运营者落实写法（HANDOFF 0.79）：同一进程同时只处理一张，用模块级的 threading.Lock 包住整个处理；PNG 文本块解压后的总量上限在模块导入时设为 1 MB（PngImagePlugin.MAX_TEXT_MEMORY，单块上限 MAX_TEXT_CHUNK 不改）；16 位灰度按除以 256 换算成 8 位；ICC 配置文件无法解析时按图片不合格处理；处理中抛出的任何异常都转成图片不合格。函数是同步函数，由调用方放进线程。
       不做存储、数据库与接口，不改设计。
       设计闸门：DESIGN 1.19（提交 6e8f655）第 13 条与 HANDOFF 0.79，商品图片（去掉拍摄地点等照片资料）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-187
     acceptance_criteria:
