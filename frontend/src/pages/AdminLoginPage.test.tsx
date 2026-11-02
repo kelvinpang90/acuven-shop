@@ -14,9 +14,11 @@ import {
   canLogIn,
   DARK_SCHEME_QUERY,
   EMPTY_LOGIN,
+  HEALTHZ_URL,
   INITIAL_STATE,
   LOGIN_ERROR,
   logIn,
+  readVersion,
   sessionState,
   settleLogIn,
   settleSession,
@@ -55,7 +57,7 @@ function renderApp(path: string, language: Language = "en"): string {
 const noop = () => undefined;
 
 function props(overrides: Partial<AdminLoginViewProps> = {}): AdminLoginViewProps {
-  return { mode: "light", state: FORM_STATE, fields: EMPTY_LOGIN, busy: false, onChange: noop, onLogIn: noop, ...overrides };
+  return { mode: "light", state: FORM_STATE, fields: EMPTY_LOGIN, busy: false, version: null, onChange: noop, onLogIn: noop, ...overrides };
 }
 
 // 路由替身：记录本页经 replace 还是 navigate 去了哪里，以及留在本页时显示的状态。
@@ -594,6 +596,45 @@ describe("browser storage and addresses", () => {
         }
       }
     }
+  });
+});
+
+describe("deployed version", () => {
+  const SHA = "0123abcdef4567890123abcdef4567890123abcd";
+
+  // Kelvin 2026-11-02「后台登录页底部显示当前线上版本」：读 /api/healthz（GET、不缓存），返回 commit 的前 7 位；
+  // 部署后据此一眼核对线上跑的是哪个提交。
+  it("reads the first seven characters of the deployed commit", async () => {
+    const calls = stubFetch(json(200, { status: "ok", commit: SHA }));
+    await expect(readVersion()).resolves.toBe("0123abc");
+    expect(calls.map((call) => `${String(call.init.method)} ${call.url}`)).toEqual([`GET ${HEALTHZ_URL}`]);
+    expect(HEALTHZ_URL).toBe("/api/healthz");
+    expect(calls[0]?.init.cache).toBe("no-store");
+  });
+
+  // 同一条「取不到就不显示」：网络中断、非 200、响应体不是 JSON 或缺 commit、commit 不是十六进制（本地镜像为 unknown）都没有版本，
+  // 不能把 unknown 或半截内容当成版本号显示出来。
+  it.each<[string, Response | (() => never)]>([
+    ["network", networkDown],
+    ["503", json(503, { status: "ok", commit: SHA })],
+    ["not json", new Response("oops", { status: 200 })],
+    ["no commit", json(200, { status: "ok" })],
+    ["unknown", json(200, { status: "ok", commit: "unknown" })],
+    ["too short", json(200, { status: "ok", commit: "abc12" })],
+  ])("has no version when it cannot be read (%s)", async (_name, reply) => {
+    stubFetch(reply);
+    await expect(readVersion()).resolves.toBeNull();
+  });
+
+  // 显示为字典文案 admin.version（「版本 xxxxxxx」），在主体之后、页面最底部；没有版本时整行不渲染。
+  it.each(LANGUAGES)("shows the version line at the bottom only when known in %s", (language) => {
+    const html = render({ version: "0123abc" }, language);
+    const line = element(html, "p", "site-admin-login__version");
+    expect(classes(tags(line, "p")[0] ?? "")).toContain("acs-admin__muted");
+    expect(line).toContain(`>${escapeHtml(COPY["admin.version"][language].replace("{commit}", "0123abc"))}</p>`);
+    expect(html.indexOf(line)).toBeGreaterThan(html.indexOf("</main>"));
+    expect(COPY["admin.version"].zh).toBe("版本 {commit}");
+    expect(render({}, language)).not.toContain("site-admin-login__version");
   });
 });
 

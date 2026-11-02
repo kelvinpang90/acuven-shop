@@ -1745,6 +1745,11 @@ export const COPY = {
     zh: "邮箱",
     ms: "E-mel",
   },
+  "admin.version": {
+    en: "Version {commit}",
+    zh: "版本 {commit}",
+    ms: "Versi {commit}",
+  },
   "admin.login_failed": {
     en: "Username or password is incorrect.",
     zh: "用户名或密码不正确。",

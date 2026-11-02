@@ -279,6 +279,7 @@ body { margin: 0; }
 .site-admin-login__body { display: grid; gap: 16px; }
 .site-admin-login__body p { margin: 0; }
 .site-admin-login__submit { justify-content: center; min-height: 40px; }
+.site-admin-login__version { margin: 0; padding: 16px; text-align: center; }
 
 /* 后台框架（A02 起各页）：横幅右侧为深色底上的退出按钮，其下左侧导航（底部为语言链接）+ 右侧内容，至少占满视口高度。
    深色底沿用 acs-admin__nav；其中的次要按钮与语言链接按视觉稿改用导航的文字与边线变量（只换成另一个设计变量）。
