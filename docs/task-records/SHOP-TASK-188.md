@@ -9,14 +9,13 @@
   - 不写磁盘；`Image.open`、解码、转换与编码中抛出的任何 `Exception` 都转成 `ImageRejected`。
 - [x] 各色彩模式的转换取舍：
   - 透明值修正（在任何模式转换之前）：rawmode 为 `RGB;16B` 时把 `transparency` 三个值各右移 8 位；为 `L;2`、`L;4` 时分别乘 85 与 17。
-  - 模式 `1`：先 `convert("L")`，之后按 L 处理。
+  - 模式 `1`：先 `convert("L")`（Pillow 一并换算 `transparency`，不另修正），之后按 L 处理。
   - 带透明通道的：RGBA、LA、PA 取自带的 A；P、RGB 带 `transparency` 时先转 RGBA，L 带 `transparency` 时先转 LA，再取 A。
   - 16 位灰度（`I;16`、`I;16B`、`I;16L`、`I;16N` 先转成 `I`，以及 `I`）：带 `transparency` 时用 `ImageMath.lambda_eval` 逐像素比较原 16 位值（等于该值为 0、其余为 255）；灰度用 `ImageMath` 的 I 模式整数除法除以 256 再转 L（65535 → 255）。`point` 在 I 模式只做线性映射，比较做不出来，所以两处都用 `ImageMath`。
   - 颜色部分：RGBA、P、PA 经 RGBA 转 RGB；LA 取 L 通道；RGB、CMYK、L 原样。上面没列到的模式（三种格式解码后不会出现）直接转 RGB。
   - ICC：取转正后 info 里的 `icc_profile`（`None` 即没有；有值就解析，空字节解析失败即不合格）。配置文件的色彩空间（`profile.xcolor_space`）须与颜色部分的模式对应（RGB ↔ `RGB`、CMYK ↔ `CMYK`、L ↔ `GRAY`），否则不合格；对应时 `ImageCms.profileToProfile(颜色部分, 配置文件, sRGB, outputMode="RGB")`。没有 ICC 的直接 `convert("RGB")`（CMYK 用 Pillow 默认换算）。
 - [x] 测试：新增 `tests/test_image_processing.py`，样本都用 Pillow 现场生成，16 位 RGB 与 2、4 位灰度 PNG 用 `struct` 与 `zlib` 拼出字节，I;16 样本用 `Image.frombytes` 生成；每条测试的文档字符串写明它守住的第 13 条原句。覆盖任务给出的全部期望值（EXIF 方向 6 加 GPS 的 3000×1000 JPEG → 533×1600 且结果 info 没有 exif、icc_profile、xmp；RGBA、调色板带透明、LA、I;16、不带 ICC 的 CMYK、带 sRGB ICC 的 PNG；两帧 MPO 记为 jpeg；4000×200 → 1600×80；4000×4000 → 1600×1600；结果为 WEBP 且不含 VP8L；RGB 带透明与 ICC、L、I;16、模式 1、16 位 RGB、2 位与 4 位灰度的透明测试；GIF、BMP、TIFF，两帧的动画 WebP 与 APNG，199×300 与 4001×300（另加 300×199、300×4001）被拒、200×200 被接受；两个 700 KiB zTXt 被拒、一个被接受；截断的 PNG 与空字节被拒；先持有 `_process_lock` 时另一线程 0.2 秒内不结束，释放后正常返回）。颜色各分量允许差 2，透明度须相等。
 - 偏离与取舍：
-  - 模式 `1` 转 L 之后，按原 `transparency` 把它重设为 0 或 255（原值非零为 255）。任务写「Pillow 一并换算 transparency，不另修正」；重设的结果与 Pillow 已换算时相同，Pillow 没换算（把 1 位的原值 1 原样留下）时也不会把白色像素漏成不透明，所以多写这一行，不改变运营者核对过的结果。
   - ICC 配置文件与颜色部分的模式不符时，先按 `xcolor_space` 显式判断为不合格，不只依赖 littlecms 建转换时报错。
   - 缩放尺寸按缩放时图像的实际宽高算（draft 缩小过的 JPEG 按缩小后的宽高等比算），与任务「之后仍按下面的缩放规则缩到长边 1,600」的写法一致；draft 的缩小比例是整数，算出的短边与按原图算的至多差 1 像素。
   - 测试另加：已能接受 WebP（记为 `webp`）；用替身包住 `JpegImageFile.draft`，核对 4000×4000 请求 1600×1600、缩小解码为 2000×2000，3000×1000 请求 1600×533、仍为 3000×1000，长边不超过 1,600 的 JPEG 不调用 draft；`MAX_TEXT_MEMORY` 为 1,048,576；拒绝时异常不带文本、不带 `__cause__`。调色板与 MPO 的测试只核对模式、透明度与格式，不核对有损编码后纯色的颜色值。

@@ -135,10 +135,8 @@ def _fix_transparency(image: Image.Image, rawmode: str | None) -> Image.Image:
     elif rawmode in _LOW_BIT_GRAY_FACTORS and isinstance(transparency, int):
         image.info["transparency"] = transparency * _LOW_BIT_GRAY_FACTORS[rawmode]
     if image.mode == "1":
+        # Pillow 转 L 时一并换算 transparency，不另修正。
         image = image.convert("L")
-        if transparency is not None:
-            # 模式 1 的像素转成 L 后为 0 或 255；按原值重设，不依赖 Pillow 是否已换算。
-            image.info["transparency"] = 255 if transparency else 0
     return image
 
 
