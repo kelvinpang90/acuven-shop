@@ -16,3 +16,19 @@
   - 图片 ID 的上限沿用商品 ID 的 `MAX_PRODUCT_ID`（INT 上限，与服务层的 `MAX_ROW_ID` 相同）。
   - 404 `product_not_found` 与 503 `image_store_unavailable` 不是 UX-COPY 的键，页面照其他失败显示（HANDOFF 0.79）。
 - 验证范围：上面列出的是本次新增与修改的测试代码，存储函数全部替换、不访问 R2；结果以 PR 的必需 CI 检查 backend 为准。
+
+## 登记时的验收标准（原文）
+
+2026-11-02 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 上传——POST /api/admin/products/{product_id}/images，检查依次为（前一项不通过即回答、不再往下）——require_admin（401 admin_session_required）；X-CSRF-Token（403 csrf_failed）；路径 ID（照 app/api/admin_products.py 的 _product_id，不合法 422）；load_product_images 为 None 即 404 product_not_found；image_store_configured 为 False 即 503 image_store_unavailable，不读请求体；Content-Type 去掉分号后的参数与首尾空白、转小写后不是 image/jpeg、image/png、image/webp 之一即 415；请求头声明的长度超过 5,242,880 即 413、不读请求体，未声明或声明不超过时逐块读取、读到超过即停止并 413；已有 8 张即 409 images_full；process_image 抛 ImageRejected 即 422 image_invalid；add_image 的 ImagesFull 409、ProductMissing 404、ImageStoreUnavailable 503。成功 201 与 images
+      - 上传的写法——检查用依赖按声明顺序完成（照 app/api/admin_products.py 先声明会话与 CSRF 依赖、再声明路径 ID），请求体由最后声明的异步依赖用 request.stream() 逐块读取，不用多部分表单；Content-Type 只用来做上面的检查，格式以 process_image 按内容判断的为准
+      - 调序——PUT /api/admin/products/{product_id}/images，请求体为 JSON 对象 image_ids（整数数组，strict，多出字段、缺字段、null 或类型不对 422，不回显请求内容，同 app/api/pay.py 的 _body_errors），请求体照 app/api/admin_products.py 的 _write_body 逐块读取、上限 8 KB（413）、不是 JSON 415，先于会话检查；之后 require_admin（401）、CSRF（403）、路径 ID（422）；reorder_images 的 ProductMissing 404、ImagesChanged 409。成功 200 与 images
+      - 移除——DELETE /api/admin/products/{product_id}/images/{image_id}，require_admin（401）、CSRF（403）、两个路径 ID（照 _product_id 的写法，不合法 422）；remove_image 的 ProductMissing 404、ImagesChanged 409；存储未配置时照常移除（服务层只记日志）。成功 200 与 images
+      - 三个接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control no-store（用 SHOP-TASK-027 的 _NoStoreRoute 路由类）；路径存在但方法不匹配时由框架返回的 405 不含请求内容与个人资料，不在此列；不写日志（服务层与存储模块自己的日志除外）；在 app/main.py 注册路由
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_product_images_api.py（夹具照 tests/test_admin_products_api.py——StaticPool、关闭 check_same_thread、开外键、https 的 base_url，以 issue_admin_session 登录；Settings 以 R2_ENDPOINT_URL 等四个原名构造为已配置，未配置的用例不传；固定时间时 monkeypatch 本接口模块与 app.api.admin_auth 的 _utcnow；用 monkeypatch 替换 app.services.image_store 的 put_image 与 delete_image；上传的样本用 Pillow 现场生成 300×300 的 PNG），每条测试的文档字符串写明它守住的 DESIGN 1.19 第 13 条或 UX A04 原句——上传成功 201、列表与审计；检查顺序（未登录 401 先于一切；商品不存在 404 先于存储未配置的 503；未配置 503 不调用 put_image；415；声明长度 5,242,881 的 413；已有 8 张时即使请求体不是图片也回 409 images_full；坏图 422 image_invalid）；调序与移除的成功、409 images_changed 与 404；所有响应带 no-store
+      - docs/task-records/SHOP-TASK-190.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明各接口的检查顺序与偏离取舍）
+      - 改动只落在 allowed_change_paths；tests/test_admin_products_api.py 的 test_routes_are_the_four_endpoints 断言该前缀下只有四个路由，只为此改它——路径筛选排除以 /images 结尾与 /images/ 之下的路径，四个期望路由不变，该文件其他测试不改；不改服务层（含 app/services/admin_product_images.py、image_store.py、image_processing.py）、模型与迁移、其他现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
+```

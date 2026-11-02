@@ -5092,13 +5092,7 @@ tasks:
     depends_on:
       - SHOP-TASK-186
     acceptance_criteria:
-      - 配置——app/core/config.py 的 Settings 新增 r2_endpoint_url、r2_bucket、r2_access_key_id、r2_secret_access_key 四个字段，默认空串，分别以 validation_alias 读取环境变量 R2_ENDPOINT_URL、R2_BUCKET、R2_ACCESS_KEY_ID、R2_SECRET_ACCESS_KEY（不带 SHOP_ 前缀，带前缀的同名变量不生效）；不改 model_config 与其他字段；测试以这四个原名作关键字参数构造 Settings。image_store_configured(settings) 在四项都不为空串时为 True，否则为 False，不另检查格式。tests/test_compose_env.py 的 test_every_setting_is_passed_to_api 要求每个字段的 SHOP_ 变量都传给 shop_api，只为此改它——跳过以原名读取的这四个 r2_ 字段（它们由同文件的 test_compose_passes_r2_variables_only_to_api 守住），其余断言与该文件的其他测试不改
-      - 函数——app/services/image_store.py 提供 put_image(settings, file_name, data) 把 data 写成键为 product-images/<file_name>.webp、ContentType 为 image/webp 的对象；get_image(settings, file_name) 返回该对象的字节；delete_image(settings, file_name) 删除该对象；三者都不检查 file_name 的格式（由调用方保证）。存储未配置时 put_image 与 get_image 抛 ImageStoreUnavailable，delete_image 记一条 info 日志（操作名 delete 与文件名）后返回，三者都不创建 client、不访问 R2
-      - client——用 boto3.client 创建 s3 client，endpoint_url、两项密钥取自 settings，region_name 为 auto；botocore Config 的 connect_timeout 为 5、read_timeout 为 10，retries 的 mode 为 standard、total_max_attempts 为 3（删除用的 client 为 1），request_checksum_calculation 为 when_required；两个 client 各存在一个模块级变量里，首次使用时在同一把 threading.Lock 内创建，之后共用（测试可把这两个变量重置为 None）；不开 botocore 的调试日志（不调用 boto3.set_stream_logger，不改 botocore 的日志级别）
-      - 失败——put_image 与 get_image 的 R2 调用抛出任何异常时记一条 error 日志并抛 ImageStoreUnavailable；get_image 遇到对象不存在（ClientError 的错误码为 NoSuchKey，或 HTTP 状态为 404）抛 ImageNotFound、不记日志；delete_image 的 R2 调用抛出任何异常时记一条 error 日志后返回、不再抛出。日志只含操作名（put、get、delete）、文件名与异常类名，不含异常文本、端点、账号 ID、存储桶名与密钥；两个异常类不带异常文本，以 raise … from None 抛出
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_image_store.py，用 botocore.stub.Stubber 挂在本模块创建的 client 上，不访问网络（端点用不可解析的示例值，不写真实主机名）；每条测试的文档字符串写明它守住的 DESIGN 1.19 第 13 条原句——四项配置以原名读取；缺任一项或为空串即未配置，未配置时三个函数都不创建 client；client 的地区、两项超时、尝试次数（写读 3、删除 1）与 request_checksum_calculation；连续两次调用得到同一个 client；写入的 Bucket、Key 与 ContentType；读取返回字节；NoSuchKey 与 404 为 ImageNotFound；其他错误为 ImageStoreUnavailable；删除出错不抛出；用 caplog 断言日志里有操作名、文件名与异常类名，没有 Stubber 给出的错误消息、端点与存储桶名
-      - docs/task-records/SHOP-TASK-187.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明函数签名、两个 client 的取舍与偏离）
-      - 改动只落在 allowed_change_paths；不改 .env.example 与 docker-compose.yml（四项配置已由运营者的部署 PR 加上）、模型与迁移、现有测试（tests/test_compose_env.py 除上面允许的一处）、前端、.platform/、CI 与部署配置，不装依赖（boto3 已在 pyproject.toml），不改设计
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-187.md
     allowed_change_paths:
       - app/core/config.py
       - app/services/image_store.py
@@ -5121,14 +5115,7 @@ tasks:
     depends_on:
       - SHOP-TASK-187
     acceptance_criteria:
-      - 入口——process_image(data) 返回 ProcessedImage（frozen dataclass，字段 data 为展示图的 WebP 字节、source_format 为 jpeg、png 或 webp、width 与 height 为展示图的像素宽高），不合格抛 ImageRejected（不带异常文本）；整个处理在模块级的 _process_lock（threading.Lock）内进行，同一进程同时只处理一张
-      - 判断（顺序照设计，前一项不通过即抛 ImageRejected，不往下）——Image.open 后 format 须为 JPEG、MPO、PNG 或 WEBP（GIF、BMP、TIFF 等一律拒绝），MPO 只取第一帧、记为 jpeg；MPO 以外 n_frames 大于 1 即拒绝（动画 WebP 与 APNG）；在解码像素之前，用 Image.open 给出的宽与高判断都在 200 到 4,000 之间（含两端）；模块导入时把 PngImagePlugin.MAX_TEXT_MEMORY 设为 1,048,576
-      - 处理——JPEG 与 MPO 的长边超过 1,600 时，解码前以 draft 按缩到 1,600 后的尺寸缩小解码（请求尺寸按 Image.open 给出的未转正宽高等比算出；draft 只选不小于请求尺寸的缩小比例，之后仍按下面的缩放规则缩到长边 1,600，例如 3000×1000 的样本 draft 后仍为 3000×1000）；解码后按 EXIF 方向转正（ImageOps.exif_transpose）；透明与颜色分开处理——先修正透明值（在下面任何模式转换之前）：Image.open 后、解码前记下 tile 的 rawmode，为 RGB;16B（16 位 RGB，Pillow 把像素取高 8 位而透明色仍是 16 位值）时把 info 里 transparency 的三个值各右移 8 位（与透明色高 8 位相同的像素都变透明），为 L;2 或 L;4（2 位与 4 位灰度，Pillow 把像素放大到 0 到 255 而透明值仍是原位深的值）时把 transparency 分别乘 85 与 17；1 位黑白（模式 1）先转成 L（Pillow 一并换算 transparency，不另修正），之后按 L 处理；再取透明通道：RGBA、LA、PA 取自带的；P、RGB、L（含上面修正过的）的 info 里有 transparency 时先分别转成 RGBA、RGBA、LA 再取；16 位灰度（I;16 一类与 I）带 transparency 时按原 16 位值算（等于该值的像素为 0、其余为 255，用 ImageMath 逐像素比较，point 在 I 模式只做线性映射），灰度再按除以 256 换算成 L；其余没有透明通道。颜色部分为 RGB（RGBA、P、PA 经 RGBA 取颜色）、L（LA 取灰度）或原样的 RGB、CMYK、L；带 ICC 配置文件的经 ImageCms.profileToProfile 把颜色部分按它直接转到 sRGB、输出 RGB（嵌入的 CMYK 或灰度配置文件只能作用于对应的原模式；配置文件无法解析或与颜色部分的模式不符即不合格），不带的直接转成 RGB（CMYK 用 Pillow 默认换算）；有透明通道时接回成 RGBA，否则为 RGB；长边超过 1,600 时以 LANCZOS 等比缩到 1,600（短边四舍五入、至少 1）；把像素复制到不带任何 info 的新图上再编码，展示图不含 EXIF、ICC 与 XMP；编码为有损 WebP、quality 85
-      - 不合格——Image.open、解码、转换或编码中抛出的任何异常（截断的数据、空字节、文本块超限、无法解析的 ICC 等）都转成 ImageRejected，不留任何文件（本模块不写磁盘）
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_image_processing.py，样本在测试里用 Pillow 现场生成，每条测试的文档字符串写明它守住的 DESIGN 1.19 第 13 条原句。以下期望值已由运营者用 Pillow 13 实跑核对——3000×1000 的 JPEG 带 EXIF 方向 6 与 GPS 信息，结果为 533×1600、source_format 为 jpeg、结果的 info 里没有 exif、icc_profile 与 xmp；300×300 的 RGBA PNG 像素 (0, 0, 255, 100)，结果为 RGBA 且该像素仍为 (0, 0, 255, 100)；带 transparency 的调色板 PNG 与 LA 图的结果为 RGBA；300×300、值全为 32768 的 I;16 PNG，结果转成 RGB 后像素为 (128, 128, 128)；不带 ICC 的 CMYK JPEG 结果为 RGB；带 sRGB ICC 的 PNG 结果的 info 没有 icc_profile；两帧的 MPO 被接受、记为 jpeg；4000×200 的 PNG 结果为 1600×80；4000×4000 的 JPEG 结果为 1600×1600；结果字节的格式为 WEBP 且不含 VP8L（有损）；透明与 ICC——300×300、左半为 (1, 2, 3)、右半为 (10, 20, 30) 的 RGB PNG 以 (1, 2, 3) 为 transparency 并带 sRGB ICC，结果为 RGBA，(20, 150) 的透明度为 0、(280, 150) 为 (10, 20, 30, 255)；左半 7、右半 50 的 L PNG 以 7 为 transparency，(20, 150) 为 (7, 7, 7, 0)、(280, 150) 为 (50, 50, 50, 255)；左半 1000、右半 32768 的 I;16 PNG（用 Image.frombytes 生成，paste 对 I;16 不可靠）以 1000 为 transparency，(20, 150) 为 (3, 3, 3, 0)、(280, 150) 为 (128, 128, 128, 255)；(60, 100) 的 LA 图结果为 RGBA、像素为 (60, 60, 60, 100)；左半 0、右半 1 的模式 1 PNG 以 0 为 transparency，(20, 150) 的透明度为 0、(280, 150) 为 (255, 255, 255, 255)；左半 (1000, 2000, 3000)、右半 (40000, 50000, 60000) 的 16 位 RGB PNG（Pillow 写不出 16 位 RGB，测试按 PNG 格式用 struct 与 zlib 拼出字节）以 (1000, 2000, 3000) 为 transparency，(20, 150) 的透明度为 0、(280, 150) 为 (156, 195, 234, 255)；左半 1、右半 3 的 2 位灰度 PNG 以 1 为 transparency，与左半 5、右半 15 的 4 位灰度 PNG 以 5 为 transparency（同样用 struct 与 zlib 拼出字节），(20, 150) 都为 (85, 85, 85, 0)、(280, 150) 都为 (255, 255, 255, 255)。颜色比较时各分量与期望差不超过 2（有损编码），透明度须相等
-      - 测试验证意图（续）——拒绝的样本都抛 ImageRejected——GIF、BMP、TIFF；两帧的动画 WebP 与 APNG；199×300 与 4001×300 的 PNG（200×200 被接受）；两个各 700 KiB 的 zTXt 文本块（总量超过 1 MB）的 PNG（只有一个 700 KiB 文本块的被接受）；截断的 PNG 字节与空字节。并发——测试先持有 _process_lock，在另一线程调用 process_image，0.2 秒内不结束，释放后正常返回
-      - docs/task-records/SHOP-TASK-188.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明各种色彩模式的转换取舍与偏离）
-      - 改动只落在 allowed_change_paths；不改模型与迁移、现有测试、前端、.platform/、CI 与部署配置，不装依赖（Pillow 已在 pyproject.toml），不改设计
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-188.md
     allowed_change_paths:
       - app/services/image_processing.py
       - tests/test_image_processing.py
@@ -5149,14 +5136,7 @@ tasks:
     depends_on:
       - SHOP-TASK-188
     acceptance_criteria:
-      - 读取——load_product_images(db, product_id) 返回该商品的图片列表（SHOP-TASK-183 的 AdminProductImage，按排列序号、再按 id 排序），商品不存在返回 None；不写库。三个改动函数成功时都返回提交后的这个列表。异常类 ProductMissing（商品不存在）、ImagesFull（已有 8 张）、ImagesChanged（图片已被改动）定义在本模块，存储不可用沿用 image_store.ImageStoreUnavailable
-      - 上传——add_image(db, settings, admin_account_id, product_id, image, now)，image 为 ProcessedImage。依次为——文件名用 secrets.token_hex(16)；先 db.rollback() 结束此前的读事务，在任何事务之外调用 image_store.put_image（失败即抛出 ImageStoreUnavailable，不插入行）；再锁商品行，商品不存在即回滚、删除刚写入的对象、抛 ProductMissing；数该商品的图片，已有 8 张即回滚、删除该对象、抛 ImagesFull；否则插入 ProductImage（storage_ref 为 /api/product-images/<文件名>.webp，sort_order 为现有最大值加一、没有图片时为 0，file_name、source_format、width、height 取自处理结果，byte_size 为展示图的字节数）与一条审计，提交；插入、审计或提交途中出现任何异常即回滚、删除该对象后重新抛出。删除对象都经 image_store.delete_image（只尝试 1 次，失败只记日志）
-      - 调序——reorder_images(db, admin_account_id, product_id, image_ids, now)。回滚、锁商品行，商品不存在抛 ProductMissing；image_ids 不是恰好该商品现有的全部图片 ID（缺、多、重复或属于别的商品）即回滚、抛 ImagesChanged；顺序未变即回滚、返回列表；否则先把这些行的 sort_order 依次改为 -1、-2…并 flush，再改为 0、1…并 flush（避开唯一约束的中间冲突），写一条审计后提交；不碰 R2
-      - 移除——remove_image(db, settings, admin_account_id, product_id, image_id, now)。回滚、锁商品行，商品不存在抛 ProductMissing；该 ID 的图片不存在或不属于该商品即回滚、抛 ImagesChanged；否则删除行、写一条审计、提交；提交之后，该行的 file_name 不为空时调用 image_store.delete_image（存储未配置时它只记日志），为空（示例数据的占位图）时不调用
-      - 三个改动函数都不改商品的 version；写入途中出现任何异常都先回滚再抛出；审计的 occurred_at 取传入的 now，admin_account_id 取传入值
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_product_images.py（写法照 tests/test_admin_products.py，经 create_product 造商品；ProcessedImage 直接构造，不经 Pillow；用 monkeypatch 替换 app.services.image_store 的 put_image 与 delete_image 并记录调用），每条测试的文档字符串写明它守住的 DESIGN 1.19 第 13 条原句——上传成功插入一行（字段与 storage_ref）、写一条审计、排列序号为最大值加一、商品 version 不变；写入失败不插入行；第 9 张时 ImagesFull 且删除了刚写入的对象、库里仍为 8 张；商品不存在时删除了该对象；提交失败时删除了该对象；调序成功后顺序与审计的旧值新值；列出的 ID 缺、多、重复或属于别的商品都是 ImagesChanged 且顺序不变；顺序未变不写审计；移除删除行、写审计、提交后才调用 delete_image（替换的 delete_image 里查库，该行已不存在）；占位图移除不调用 delete_image；移除后第一张为排列序号最小者；锁定查询按 MySQL 方言编译带 FOR UPDATE，三个改动函数回滚之后的第一条语句都是它
-      - docs/task-records/SHOP-TASK-189.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明函数签名、审计写法与偏离取舍）
-      - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/admin_products.py、app/services/image_store.py、app/services/image_processing.py、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-189.md
     allowed_change_paths:
       - app/services/admin_product_images.py
       - tests/test_admin_product_images.py
@@ -5177,14 +5157,7 @@ tasks:
     depends_on:
       - SHOP-TASK-189
     acceptance_criteria:
-      - 上传——POST /api/admin/products/{product_id}/images，检查依次为（前一项不通过即回答、不再往下）——require_admin（401 admin_session_required）；X-CSRF-Token（403 csrf_failed）；路径 ID（照 app/api/admin_products.py 的 _product_id，不合法 422）；load_product_images 为 None 即 404 product_not_found；image_store_configured 为 False 即 503 image_store_unavailable，不读请求体；Content-Type 去掉分号后的参数与首尾空白、转小写后不是 image/jpeg、image/png、image/webp 之一即 415；请求头声明的长度超过 5,242,880 即 413、不读请求体，未声明或声明不超过时逐块读取、读到超过即停止并 413；已有 8 张即 409 images_full；process_image 抛 ImageRejected 即 422 image_invalid；add_image 的 ImagesFull 409、ProductMissing 404、ImageStoreUnavailable 503。成功 201 与 images
-      - 上传的写法——检查用依赖按声明顺序完成（照 app/api/admin_products.py 先声明会话与 CSRF 依赖、再声明路径 ID），请求体由最后声明的异步依赖用 request.stream() 逐块读取，不用多部分表单；Content-Type 只用来做上面的检查，格式以 process_image 按内容判断的为准
-      - 调序——PUT /api/admin/products/{product_id}/images，请求体为 JSON 对象 image_ids（整数数组，strict，多出字段、缺字段、null 或类型不对 422，不回显请求内容，同 app/api/pay.py 的 _body_errors），请求体照 app/api/admin_products.py 的 _write_body 逐块读取、上限 8 KB（413）、不是 JSON 415，先于会话检查；之后 require_admin（401）、CSRF（403）、路径 ID（422）；reorder_images 的 ProductMissing 404、ImagesChanged 409。成功 200 与 images
-      - 移除——DELETE /api/admin/products/{product_id}/images/{image_id}，require_admin（401）、CSRF（403）、两个路径 ID（照 _product_id 的写法，不合法 422）；remove_image 的 ProductMissing 404、ImagesChanged 409；存储未配置时照常移除（服务层只记日志）。成功 200 与 images
-      - 三个接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control no-store（用 SHOP-TASK-027 的 _NoStoreRoute 路由类）；路径存在但方法不匹配时由框架返回的 405 不含请求内容与个人资料，不在此列；不写日志（服务层与存储模块自己的日志除外）；在 app/main.py 注册路由
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_product_images_api.py（夹具照 tests/test_admin_products_api.py——StaticPool、关闭 check_same_thread、开外键、https 的 base_url，以 issue_admin_session 登录；Settings 以 R2_ENDPOINT_URL 等四个原名构造为已配置，未配置的用例不传；固定时间时 monkeypatch 本接口模块与 app.api.admin_auth 的 _utcnow；用 monkeypatch 替换 app.services.image_store 的 put_image 与 delete_image；上传的样本用 Pillow 现场生成 300×300 的 PNG），每条测试的文档字符串写明它守住的 DESIGN 1.19 第 13 条或 UX A04 原句——上传成功 201、列表与审计；检查顺序（未登录 401 先于一切；商品不存在 404 先于存储未配置的 503；未配置 503 不调用 put_image；415；声明长度 5,242,881 的 413；已有 8 张时即使请求体不是图片也回 409 images_full；坏图 422 image_invalid）；调序与移除的成功、409 images_changed 与 404；所有响应带 no-store
-      - docs/task-records/SHOP-TASK-190.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明各接口的检查顺序与偏离取舍）
-      - 改动只落在 allowed_change_paths；tests/test_admin_products_api.py 的 test_routes_are_the_four_endpoints 断言该前缀下只有四个路由，只为此改它——路径筛选排除以 /images 结尾与 /images/ 之下的路径，四个期望路由不变，该文件其他测试不改；不改服务层（含 app/services/admin_product_images.py、image_store.py、image_processing.py）、模型与迁移、其他现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-190.md
     allowed_change_paths:
       - app/api/admin_product_images.py
       - app/main.py
@@ -5207,16 +5180,155 @@ tasks:
     depends_on:
       - SHOP-TASK-190
     acceptance_criteria:
-      - 判断依次为（前一项不通过即回答、不再往下）——路径最后一段 name 不恰好是 32 位小写十六进制加 .webp（含大写字母、长度不对、其他扩展名，都由处理函数回答，不落到框架的默认 404）即 404 image_not_found；image_store_configured 为 False 即 503 image_store_unavailable；以去掉 .webp 的 32 位作 file_name，查不到 ProductImage 的行即 404，不访问 R2；image_store.get_image 抛 ImageNotFound 即 404，抛 ImageStoreUnavailable 即 503；错误响应都带 Cache-Control no-store，不含 R2 的错误内容
-      - 成功——200，响应体为 get_image 返回的字节，Content-Type 为 image/webp，X-Content-Type-Options 为 nosniff，Content-Security-Policy 为 default-src 'none'; sandbox，Cache-Control 为 public, max-age=31536000, immutable；不查商品是否上架；不写日志（存储模块自己的日志除外）；在 app/main.py 注册路由
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_product_images_api.py（夹具照 tests/test_admin_products_api.py 的 SQLite 内存库与 TestClient，不登录；Settings 以 R2_ENDPOINT_URL 等四个原名构造为已配置；用 monkeypatch 替换 app.services.image_store 的 get_image 并记录调用），每条测试的文档字符串写明它守住的 DESIGN 1.19 第 13 条原句——经 SHOP-TASK-189 的 add_image 入库（替换 put_image）后，GET 该行的 storage_ref 得到 200、字节与四个响应头；大写、31 位、.png 的文件名 404 且不查库不调用 get_image；未配置 503；查不到行 404 且不调用 get_image；ImageNotFound 404、ImageStoreUnavailable 503；所有错误响应带 no-store
-      - docs/task-records/SHOP-TASK-191.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明偏离取舍）
-      - 改动只落在 allowed_change_paths；不改服务层、模型与迁移、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-191.md
     allowed_change_paths:
       - app/api/product_images.py
       - app/main.py
       - tests/test_product_images_api.py
       - docs/task-records/SHOP-TASK-191.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-192
+    title: 后台站点设置的每日恢复库存开关 A09 与库存重置页的常显说明 A07
+    purpose: >-
+      在 A09 站点设置页加入每日恢复库存开关：frontend/src/api/adminSiteSettings.ts 读写 SHOP-TASK-179 新增的 daily_stock_reset_enabled，frontend/src/pages/AdminSiteSettingsPage.tsx 按 docs/UX.md 0.17 的 A09 在支付方式之后加入 admin.stock_reset_toggle 一组
+      （开启与关闭两个单选与 admin.stock_reset_toggle_hint；与短信、支付方式一起整页保存，任一项被拒三项都不写入；不加确认框），依据 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 6 条；
+      并在 A07 库存重置结果页 admin.stock_reset_note 之下加入常显的 admin.stock_reset_off_note（页面不读取开关状态）。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.80）：开关一组没有「不可用」状态，两个单选始终可选；保存的请求体总是带三项（服务端允许省略开关，但页面总是提交当前选择）；视觉稿 A09-stock-reset 只画了这一组，支付方式部分照 A09-stripe 两张。
+      设计闸门：DESIGN 1.18（提交 5ba9796）第 6 条与 HANDOFF 0.76、0.80，库存开关的显示与提交（取值核对与审计在服务端）。
+      拆分：请求模块与页面放在同一个任务（照 SHOP-TASK-169：请求模块改了保存的参数与结果，页面的调用必须同时改）；A07 只加一行常显说明，同属开关的页面部分，一并做；11 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.17 的 A09 与 A07、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.80 为准，样式以 docs/design/pages/ 的 A09-stock-reset（开关一组）、A09-stripe-desktop 与 A09-stripe-phone（其余部分）、A07-desktop 与 A07-phone 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入 admin.stock_reset_toggle、admin.stock_reset_on、admin.stock_reset_off、admin.stock_reset_toggle_hint 与 admin.stock_reset_off_note，写法与相邻条目相同（每种语言一行）
+      - 请求模块——读取的响应体另要求 daily_stock_reset_enabled 为布尔值（缺少或类型不对算不合格）并带进结果；saveAdminSiteSettings 改为同时提交三项（JSON 请求体只有 payment_method、sms_verification_enabled 与 daily_stock_reset_enabled），200 的响应体另要求 daily_stock_reset_enabled 为布尔值并带进 ok 结果；其余归类（含 stripe_not_configured 与 sms_not_configured）、请求头、no-store 与中止处理不变
+      - 表单——支付方式一组之后、common.save 之前是 admin.stock_reset_toggle 一组（fieldset 与 legend 照现有两组）两个单选 admin.stock_reset_on 与 admin.stock_reset_off（UX 线框的顺序），其下 admin.stock_reset_toggle_hint；选中项为读取（或保存后）的当前值；两个单选始终可选；不加确认框
+      - 保存——点 common.save 以三组的当前选择与读取给的 csrf_token 调用保存；ok 以返回的三项更新三组的选中项并显示 admin.settings_saved；not_configured 与 sms_not_configured 照现有写法显示、三组选中项都不变；改选开关后与改选另两组一样收起保存的提示；其余结果（none、csrf、network、failed）与读取的处理照现有写法不变
+      - A07——frontend/src/pages/AdminStockResetsPage.tsx 在 admin.stock_reset_note 之下、每日结果之前加一段常显的 admin.stock_reset_off_note（标签与类名照 admin.stock_reset_note 那一段），桌面与手机都显示；不读取开关状态，不发新的请求，列表、翻页与明细不变
+      - 代码结构沿用 frontend/src/pages/AdminSiteSettingsPage.tsx 现有写法（导出把结果变成页面状态的纯函数、接收 AbortSignal 与回调的异步函数，以及只依赖 props 的 View；改选开关另导出与 chooseSms 对应的纯函数，开关的两个选项照 SMS_OPTIONS 导出）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——frontend/src/api/adminSiteSettings.test.ts 的新字段与合格判定、请求体只有三项；frontend/src/pages/AdminSiteSettingsPage.test.tsx 的开关一组在支付方式之后、选中项随当前值、两个单选都可选、保存带三组选择、ok 更新三组、被拒时三组都不变、改选开关收起提示；frontend/src/pages/AdminStockResetsPage.test.tsx 的 admin.stock_reset_off_note 在 admin.stock_reset_note 之下常显；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - 现有测试只在必要时修改并写明原因——请求体与保存调用参数的断言、按顺序比较表单文字或单选的断言、legend 与 fieldset 的个数、状态与读取结果的整体比较、夹具与替身的 200 回答随第三项补上；A07 按顺序比较标题与说明的断言补上新的一段；短信、支付方式两组与后台框架、导航的期望不变；docs/task-records/SHOP-TASK-192.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由，不改导航；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 第 6 条与 HANDOFF 0.80），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/adminSiteSettings.ts
+      - frontend/src/api/adminSiteSettings.test.ts
+      - frontend/src/pages/AdminSiteSettingsPage.tsx
+      - frontend/src/pages/AdminSiteSettingsPage.test.tsx
+      - frontend/src/pages/AdminStockResetsPage.tsx
+      - frontend/src/pages/AdminStockResetsPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-192.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-193
+    title: 购物车每行 1000 件与整单 2,000 件上限、商品详情 P03 的数量直接输入与整单已满
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 8 条（每行 1–1000 件、整单所有行合计不超过 2,000 件）与 docs/UX.md 0.17 的 P03「整单件数上限」「数量可直接输入」两段，
+      把浏览器购物车 frontend/src/cart.ts 的每行上限由 99 改为 1000、新增整单 2,000 件上限，并在 P03 加入整单已满的禁用与 detail.cart_units_full、数量的直接输入与 common.qty_capped。
+      P04 的数量输入与整单提示留给 SHOP-TASK-194，P05 留给 SHOP-TASK-195。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.80）：整单上限只在加入时约束（addToCart 合并或新增后全部行合计超过 2,000 即不加入），读取时的清洗不按整单合计丢行（服务端计价再判断）；P03 的可加入件数为「限购件数减去购物车中该商品已有件数」与「2,000 减去购物车全部行件数」中较小的、不小于 0；{count} 照现有 detail.cart_full 直接传数字。
+      设计闸门：DESIGN 1.18（提交 5ba9796）第 8 条与 HANDOFF 0.80，购物车件数上限的提示与禁用（下单时由服务端再次校验）。
+      拆分：购物车模块与 P03 一层（10 个允许路径，router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）；P04、P05 各自另成任务。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.17 的 P03、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.80 为准，样式以 docs/design/pages/ 的 P03-P04-caps（数量输入框、common.qty_capped 与整单已满）与 P03-desktop、P03-phone 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入 detail.cart_units_full 与 common.qty_capped，写法与相邻条目相同（每种语言一行）
+      - 购物车模块——MAX_LINE_QUANTITY 改为 1000（与计价接口的请求上限相同），sanitizeCart、addToCart 与 setLineQuantity 的每行判定随之为 1 到 1000；新增导出常量 MAX_CART_UNITS 为 2000；addToCart 在合并或新增后全部行的件数合计超过 MAX_CART_UNITS 时不加入、返回 null；sanitizeCart 与 setLineQuantity 不按整单合计判定；存储格式、20 行上限与其余函数不变；注释里写 99 的地方随之改写
+      - P03 可加入件数——frontend/src/pages/productOptions.ts 的 purchaseState 的 remaining 为「max_per_order 减去 productQuantity」与「MAX_CART_UNITS 减去 cartItemCount」中较小的、不小于 0；block 新增 cart_units_full，禁用原因同时满足时只给一个，依次为 limit_reached（限购剩余为 0）、cart_units_full（整单剩余为 0）、cart_full（20 行已满且所选规格不在其中）；P03 在 detail.limit_reached 的同一位置以同样的标签与类名显示 detail.cart_units_full（{count} 为 MAX_CART_UNITS），加入按钮禁用；addSelection 照现有写法在 block 不为 null 时不加入
+      - P03 数量直接输入——(-) 与 (+) 之间的 output 换成数字输入框（input，inputmode 为 numeric，aria-label 为 detail.quantity 的文字；类名照视觉稿 P03-P04-caps 的 acs-input），只收整数，回车或离开输入框时生效；输入中的文字只存在页面状态里；生效时先去掉首尾空白，余下的必须全是 ASCII 数字 0–9（不收正负号、小数点、指数写法与全角数字），按十进制读成整数；为空、不全是这些数字或小于 1 时恢复为原来的件数（这条解析写成 frontend/src/cart.ts 导出的纯函数 parseQuantityInput，返回整数或 null，SHOP-TASK-194 的 P04 复用）；大于 remaining 时改为 remaining（remaining 为 0 时恢复为原来的件数，按钮已禁用），并在数量下方（detail.max_per_order 之前）以 acs-field__hint 与 role status 显示 common.qty_capped（{count} 为 remaining）；不超过时照收；(+)(-)、改选规格、加入或再次输入后收起 common.qty_capped；(+) 的禁用条件照旧为显示的件数不小于 remaining
+      - 代码结构沿用 frontend/src/pages/ProductDetailPage.tsx 与 productOptions.ts 的现有写法（把输入文字变成件数与是否改成上限的判定写成导出的纯函数，View 只依赖 props）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与存储以替身代替）验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——frontend/src/cart.test.ts 的 1000 件每行上限、整单 2,000 件时 addToCart 拒绝、清洗不按整单丢行、parseQuantityInput 对空白、正负号、小数、指数写法与全角数字返回 null；frontend/src/pages/productOptions.test.ts 的 remaining 取两者较小、三种禁用原因的先后；frontend/src/pages/ProductDetailPage.test.tsx 的数量输入框与读屏标签、空值小数与小于 1 恢复原件数、超过时改为上限并显示 common.qty_capped、整单已满时按钮禁用并显示 detail.cart_units_full、与 detail.limit_reached 同时满足时只显示后者；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - 现有测试只在必要时修改并写明原因——cart.test.ts 里以 99 为每行上限的三条断言改为 1000；ProductDetailPage.test.tsx 里以 output 显示件数的断言改为输入框；其余期望不变
+      - docs/task-records/SHOP-TASK-193.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 P04 与 P05 页面；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 第 8 条与 HANDOFF 0.80），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/cart.ts
+      - frontend/src/cart.test.ts
+      - frontend/src/pages/productOptions.ts
+      - frontend/src/pages/productOptions.test.ts
+      - frontend/src/pages/ProductDetailPage.tsx
+      - frontend/src/pages/ProductDetailPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-193.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-194
+    title: 计价结果的整单上限字段与购物车 P04 的数量直接输入、整单上限
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 8 条与 docs/UX.md 0.17 的 P04「整单上限」一段：frontend/src/api/checkout.ts 的计价结果类型加入接口已返回的 unit_limit、units_over_limit、amount_limit_sen、amount_over_limit（SHOP-TASK-178），
+      P04 各行数量 (+) 在全部行合计达到 2,000 件时禁用，数量改为可直接输入（上限与 common.qty_capped 照 UX），计价返回超出整单件数或金额上限时在 cart.item_changed 的位置之下显示 cart.units_over_limit、cart.amount_over_limit。
+      P05 的提示留给 SHOP-TASK-195。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.80）：计价结果照现有写法不做运行时校验，只加类型字段；为新字段必须改的测试夹具（结账与会员结账的请求模块测试、P04 与 P05 的页面测试）只补这四项；{count} 直接传接口返回的 unit_limit，{amount} 为 frontend/src/format.ts 的 formatSen(amount_limit_sen)（与视觉稿 P03-P04-caps 一致，不分千位）。
+      设计闸门：DESIGN 1.18（提交 5ba9796）第 8 条与 HANDOFF 0.80，整单上限的提示与数量输入（上限判定与下单校验在服务端）。
+      拆分：计价类型与 P04 一层（12 个允许路径：类型加字段后 5 个现有测试文件的夹具类型检查必然不通过，只许补这四项，与加字段的改动拆不开；router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-193
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.17 的 P04、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.80 为准，样式以 docs/design/pages/ 的 P03-P04-caps（数量输入框、common.qty_capped 与两条上限提示）与 P04-desktop、P04-phone、P04-states 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入 cart.units_over_limit 与 cart.amount_over_limit，写法与相邻条目相同（每种语言一行）
+      - 计价类型——frontend/src/api/checkout.ts 的 CheckoutQuote 加入 unit_limit（数字）、units_over_limit（布尔）、amount_limit_sen（数字，整数仙）、amount_over_limit（布尔），注释写明含义（照服务端 app/services/checkout.py 的注释）；DestinationQuote 与会员的 MemberQuote 经继承带上；请求与其他类型不变；frontend/src/api/checkout.test.ts、frontend/src/api/memberCheckout.test.ts、frontend/src/pages/CartPage.test.tsx、frontend/src/pages/CheckoutPage.test.tsx 与 frontend/src/pages/CheckoutMember.test.tsx 里构造计价结果的夹具只补这四项（未超出时为 2000、false、99999999、false），其余断言不变
+      - P04 (+)——canIncrease 另要求购物车全部行件数合计（cartItemCount）小于 MAX_CART_UNITS；每行 1000 件的判定照旧经 MAX_LINE_QUANTITY；限购的判定不变
+      - P04 数量直接输入——每个可购买行的 (-) 与 (+) 之间的件数换成数字输入框（input，inputmode 为 numeric，aria-label 为 detail.quantity 的文字；类名照视觉稿 P03-P04-caps 的 acs-input），只收整数，回车或离开输入框时生效；输入文字经 SHOP-TASK-193 的 parseQuantityInput 解析（与 P03 同一规则），为 null 时恢复为原来的件数；不大于该行现有件数时照收；大于时上限为「该行现有件数 + max(0, min(接口返回的 max_per_order 减去该商品各行合计（productTotal）, MAX_CART_UNITS 减去 cartItemCount))」，超过上限且上限大于现有件数时改为上限并在该行数量下方以 acs-field__hint 与 role status 显示 common.qty_capped（{count} 为上限），上限等于现有件数时只恢复为原件数、不显示 common.qty_capped；生效后经 changeQuantity 写回并照现有写法重新计价；该行的 (+)(-)、移除或再次输入后收起该行的 common.qty_capped；不可购买的行照旧只显示件数
+      - P04 整单上限提示——计价结果的 units_over_limit 为真时显示 cart.units_over_limit（{count} 为 unit_limit），amount_over_limit 为真时显示 cart.amount_over_limit（{amount} 为 formatSen(amount_limit_sen)）；两条都照 cart.item_changed 的提示条写法（acs-alert acs-alert--danger、role alert、同一图形），位置在 cart.item_changed 之下（没有非正常行时就在它的位置），依次为件数、金额，可同时显示，与各行的 cart.over_limit 互不影响；cart.checkout 照旧显示
+      - 代码结构沿用 frontend/src/pages/CartPage.tsx 现有写法（把输入文字变成件数、算上限的判定写成导出的纯函数，View 只依赖 props）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；用 vitest 与 react-dom/server（不加测试依赖，fetch 与存储以替身代替）验证意图（以 renderToStaticMarkup 渲染、直接调用导出的函数，不模拟点击）——CartPage.test.tsx 的整单 2,000 件时 (+) 禁用、输入框与读屏标签、空值与小于 1 恢复、减少照收、超过时改为上限并显示 common.qty_capped、后台调低限购后上限等于现有件数时只恢复不提示、两条上限提示的文字与先后、未超出时不显示；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - 现有测试只在必要时修改并写明原因——以 output 显示件数的断言改为输入框，夹具补四项，其余期望不变；docs/task-records/SHOP-TASK-194.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 P05 页面的源码；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 第 8 条与 HANDOFF 0.80），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/checkout.ts
+      - frontend/src/api/checkout.test.ts
+      - frontend/src/api/memberCheckout.test.ts
+      - frontend/src/pages/CartPage.tsx
+      - frontend/src/pages/CartPage.test.tsx
+      - frontend/src/pages/CheckoutPage.test.tsx
+      - frontend/src/pages/CheckoutMember.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-194.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-195
+    title: 结账 P05 的整单上限提示
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 8 条与 docs/UX.md 0.17 的 P05「整单上限」一段，计价结果的 units_over_limit 或 amount_over_limit 为真时，在 cart.item_changed 的位置（各步内容之前）显示 cart.units_over_limit、cart.amount_over_limit 与回购物车的链接；
+      下单按钮照现有写法由接口的 can_place_order 禁用（超出时服务端给 false），游客与会员共用同一个视图。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.80）：UX 写「第 3 步」显示，而件数上限在第 1 步的计价里就能判断，提示照现有 cart.item_changed 的写法在任一步都显示（同一位置、同一回购物车链接），不只限第 3 步；有非正常行与超出上限同时出现时，三条提示依次为 cart.item_changed、cart.units_over_limit、cart.amount_over_limit，下面只有一个回购物车的链接。
+      设计闸门：DESIGN 1.18（提交 5ba9796）第 8 条与 HANDOFF 0.80，整单上限的提示（判定与下单校验在服务端）。
+      拆分：P05 一层（8 个允许路径，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-194
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.17 的 P05、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.80 为准，样式以 docs/design/pages/ 的 P03-P04-caps（两条上限提示）与 P05-states 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改）；cart.units_over_limit 与 cart.amount_over_limit 已由 SHOP-TASK-194 加入字典，本任务不另加文案
+      - 提示——frontend/src/pages/CheckoutPage.tsx 的 ChangedNotice 一块在有非正常行（或下单 409 后）、当前计价结果的 units_over_limit 为真、或 amount_over_limit 为真时显示：依次为 cart.item_changed（只在前一种情形）、cart.units_over_limit（{count} 为 unit_limit）、cart.amount_over_limit（{amount} 为 frontend/src/format.ts 的 formatSen(amount_limit_sen)），每条照现有 cart.item_changed 的提示条写法（acs-alert acs-alert--danger、role alert、同一图形），其下只有一个回购物车的链接（文字为 common.nav_cart，照现有写法）；任一步都显示；当前计价结果取自页面已有的 ready（游客与会员共用的计价），与 cart.item_changed 用同一个 ready：重新计价进行中（pending）时照现有写法沿用上一次的结果显示，没有任何结果（首次读取中）或读取失败时不显示上限提示
+      - 下单按钮——canPlaceOrder 照现有写法依赖 can_place_order，不另加判定；测试写明超出上限时接口给 can_place_order 为 false、按钮禁用
+      - 代码结构沿用 CheckoutPage.tsx 现有写法（显示条件写成导出的纯函数或沿用 View 的 props）；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；用 vitest 与 react-dom/server（不加测试依赖，fetch 与存储以替身代替）验证意图（以 renderToStaticMarkup 渲染、直接调用导出的函数，不模拟点击）——frontend/src/pages/CheckoutPage.test.tsx 的件数超出、金额超出与两者同时的提示与先后、与 cart.item_changed 同时出现时只有一个回购物车链接、未超出时不显示、第 1 步与第 3 步都显示、超出时下单按钮禁用；会员路径在 frontend/src/pages/CheckoutMember.test.tsx 加一条同一提示的断言；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - 现有测试只在必要时修改并写明原因；docs/task-records/SHOP-TASK-195.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；含「任一步都显示」的落实写法、偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 第 8 条与 HANDOFF 0.80），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/CheckoutPage.tsx
+      - frontend/src/pages/CheckoutPage.test.tsx
+      - frontend/src/pages/CheckoutMember.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-195.md
     allowed_commands:
       - lint.check
       - format.check

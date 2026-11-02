@@ -18,3 +18,18 @@
   - 读取时 `Body.read()` 也在 try 里，读到一半超时同样归为 `ImageStoreUnavailable`。
   - 日志里的异常类名取 `type(exc).__name__`：botocore 会把已建模的 S3 错误码（如 `AccessDenied`）抛成 `ClientError` 的同名子类，所以测试不写死 `ClientError`，而以 `client.exceptions.from_code(code).__name__` 推出预期类名。
 - 验证范围：上面列出的是本次新增的测试代码，全部用 Stubber 或替换 client 方法，不访问网络；真实 R2 的连通由运营者部署后核验。
+
+## 登记时的验收标准（原文）
+
+2026-11-02 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 配置——app/core/config.py 的 Settings 新增 r2_endpoint_url、r2_bucket、r2_access_key_id、r2_secret_access_key 四个字段，默认空串，分别以 validation_alias 读取环境变量 R2_ENDPOINT_URL、R2_BUCKET、R2_ACCESS_KEY_ID、R2_SECRET_ACCESS_KEY（不带 SHOP_ 前缀，带前缀的同名变量不生效）；不改 model_config 与其他字段；测试以这四个原名作关键字参数构造 Settings。image_store_configured(settings) 在四项都不为空串时为 True，否则为 False，不另检查格式。tests/test_compose_env.py 的 test_every_setting_is_passed_to_api 要求每个字段的 SHOP_ 变量都传给 shop_api，只为此改它——跳过以原名读取的这四个 r2_ 字段（它们由同文件的 test_compose_passes_r2_variables_only_to_api 守住），其余断言与该文件的其他测试不改
+      - 函数——app/services/image_store.py 提供 put_image(settings, file_name, data) 把 data 写成键为 product-images/<file_name>.webp、ContentType 为 image/webp 的对象；get_image(settings, file_name) 返回该对象的字节；delete_image(settings, file_name) 删除该对象；三者都不检查 file_name 的格式（由调用方保证）。存储未配置时 put_image 与 get_image 抛 ImageStoreUnavailable，delete_image 记一条 info 日志（操作名 delete 与文件名）后返回，三者都不创建 client、不访问 R2
+      - client——用 boto3.client 创建 s3 client，endpoint_url、两项密钥取自 settings，region_name 为 auto；botocore Config 的 connect_timeout 为 5、read_timeout 为 10，retries 的 mode 为 standard、total_max_attempts 为 3（删除用的 client 为 1），request_checksum_calculation 为 when_required；两个 client 各存在一个模块级变量里，首次使用时在同一把 threading.Lock 内创建，之后共用（测试可把这两个变量重置为 None）；不开 botocore 的调试日志（不调用 boto3.set_stream_logger，不改 botocore 的日志级别）
+      - 失败——put_image 与 get_image 的 R2 调用抛出任何异常时记一条 error 日志并抛 ImageStoreUnavailable；get_image 遇到对象不存在（ClientError 的错误码为 NoSuchKey，或 HTTP 状态为 404）抛 ImageNotFound、不记日志；delete_image 的 R2 调用抛出任何异常时记一条 error 日志后返回、不再抛出。日志只含操作名（put、get、delete）、文件名与异常类名，不含异常文本、端点、账号 ID、存储桶名与密钥；两个异常类不带异常文本，以 raise … from None 抛出
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_image_store.py，用 botocore.stub.Stubber 挂在本模块创建的 client 上，不访问网络（端点用不可解析的示例值，不写真实主机名）；每条测试的文档字符串写明它守住的 DESIGN 1.19 第 13 条原句——四项配置以原名读取；缺任一项或为空串即未配置，未配置时三个函数都不创建 client；client 的地区、两项超时、尝试次数（写读 3、删除 1）与 request_checksum_calculation；连续两次调用得到同一个 client；写入的 Bucket、Key 与 ContentType；读取返回字节；NoSuchKey 与 404 为 ImageNotFound；其他错误为 ImageStoreUnavailable；删除出错不抛出；用 caplog 断言日志里有操作名、文件名与异常类名，没有 Stubber 给出的错误消息、端点与存储桶名
+      - docs/task-records/SHOP-TASK-187.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明函数签名、两个 client 的取舍与偏离）
+      - 改动只落在 allowed_change_paths；不改 .env.example 与 docker-compose.yml（四项配置已由运营者的部署 PR 加上）、模型与迁移、现有测试（tests/test_compose_env.py 除上面允许的一处）、前端、.platform/、CI 与部署配置，不装依赖（boto3 已在 pyproject.toml），不改设计
+```

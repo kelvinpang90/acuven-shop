@@ -11,3 +11,16 @@
   - `ImageNotFound`、`ImageStoreUnavailable` 与 `image_store_configured` 也经 `image_store` 模块属性取用，与 `get_image` 一致。
   - `{name}` 只匹配一段路径；带斜杠的路径（如 `/api/product-images/a/b.webp`）不进处理函数，由框架回答默认 404，不在「路径最后一段」的范围内。
 - 验证范围：上面列出的是本次新增的测试代码，存储函数全部替换、不访问 R2；结果以 PR 的必需 CI 检查 backend 为准。
+
+## 登记时的验收标准（原文）
+
+2026-11-02 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 判断依次为（前一项不通过即回答、不再往下）——路径最后一段 name 不恰好是 32 位小写十六进制加 .webp（含大写字母、长度不对、其他扩展名，都由处理函数回答，不落到框架的默认 404）即 404 image_not_found；image_store_configured 为 False 即 503 image_store_unavailable；以去掉 .webp 的 32 位作 file_name，查不到 ProductImage 的行即 404，不访问 R2；image_store.get_image 抛 ImageNotFound 即 404，抛 ImageStoreUnavailable 即 503；错误响应都带 Cache-Control no-store，不含 R2 的错误内容
+      - 成功——200，响应体为 get_image 返回的字节，Content-Type 为 image/webp，X-Content-Type-Options 为 nosniff，Content-Security-Policy 为 default-src 'none'; sandbox，Cache-Control 为 public, max-age=31536000, immutable；不查商品是否上架；不写日志（存储模块自己的日志除外）；在 app/main.py 注册路由
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_product_images_api.py（夹具照 tests/test_admin_products_api.py 的 SQLite 内存库与 TestClient，不登录；Settings 以 R2_ENDPOINT_URL 等四个原名构造为已配置；用 monkeypatch 替换 app.services.image_store 的 get_image 并记录调用），每条测试的文档字符串写明它守住的 DESIGN 1.19 第 13 条原句——经 SHOP-TASK-189 的 add_image 入库（替换 put_image）后，GET 该行的 storage_ref 得到 200、字节与四个响应头；大写、31 位、.png 的文件名 404 且不查库不调用 get_image；未配置 503；查不到行 404 且不调用 get_image；ImageNotFound 404、ImageStoreUnavailable 503；所有错误响应带 no-store
+      - docs/task-records/SHOP-TASK-191.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明偏离取舍）
+      - 改动只落在 allowed_change_paths；不改服务层、模型与迁移、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
+```
