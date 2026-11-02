@@ -5203,7 +5203,7 @@ tasks:
       运营者落实写法（HANDOFF 0.79）：错误的 detail 为 image_not_found（404）与 image_store_unavailable（503），都带 Cache-Control no-store；成功的响应带长期缓存，所以不用 _NoStoreRoute 路由类，错误响应自行加 no-store；存储经 image_store 模块属性调用（测试替换模块属性）；处理函数为同步函数，R2 读取在线程池里执行。
       不做前端，不改服务层与模型，不改设计。
       设计闸门：DESIGN 1.19（提交 6e8f655）第 13 条与 HANDOFF 0.79。拆分：提供接口（4 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-190
     acceptance_criteria:
