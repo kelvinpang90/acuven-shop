@@ -3,7 +3,7 @@ SHOP-TASK-191；存储见 SHOP-TASK-187 的 app/services/image_store.py）。
 
 依据 docs/DESIGN.md 1.19（提交 6e8f655）「计价、优惠、积分与库存」第 13 条「提供」一段（下称
 「第 13 条」）与 docs/HANDOFF.md 0.79 的落实写法。每条测试（参数化的测试是每个用例）的文档字符串
-写明它守住的原句；没有直接原句的，写明是 SHOP-TASK-191 验收里的约定（下称「验收」）。
+写明它守住的第 13 条原句；另引 SHOP-TASK-191 验收里的约定（下称「验收」）作补充。
 
 夹具照 tests/test_admin_products_api.py：SQLite 内存库按模型建表（StaticPool、关闭
 check_same_thread），种子商品经 create_product 造（未上架）；不登录。Settings 以
@@ -385,8 +385,8 @@ def test_errors_are_no_store_and_nothing_is_logged(
 
 
 def test_route_is_registered(app: FastAPI) -> None:
-    """验收「路由写成 /api/product-images/{name}」「在 app/main.py 注册路由」：该前缀下
-    只有这一个 GET。"""
+    """第 13 条「展示图经 GET /api/product-images/<文件名>.webp 提供，不要求会话」；验收「路由
+    写成 /api/product-images/{name}」「在 app/main.py 注册路由」：该前缀下只有这一个 GET。"""
     routes = {
         (method.upper(), path)
         for path, operations in app.openapi()["paths"].items()
