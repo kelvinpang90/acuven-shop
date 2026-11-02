@@ -5088,7 +5088,7 @@ tasks:
       运营者落实写法（HANDOFF 0.79）：四项配置加到 app/core/config.py 的 Settings，以 validation_alias 读取不带 SHOP_ 前缀的原名；botocore 的尝试次数按 client 设定、不能逐次调用设定，所以写入与读取共用一个 client（至多 3 次尝试），删除共用另一个 client（只尝试 1 次），两者其余配置相同，都在首次使用时创建、之后不再新建；本模块的函数都是同步函数，由调用方放进线程。
       不做图片校验与处理、数据库与接口，不改设计。
       设计闸门：DESIGN 1.19（提交 6e8f655）第 13 条与 HANDOFF 0.79，商品图片的存放。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-186
     acceptance_criteria:
