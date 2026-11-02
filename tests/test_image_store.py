@@ -357,7 +357,7 @@ def test_get_other_client_errors_are_unavailable(
     assert len(records) == 1
     assert records[0].levelno == logging.ERROR
     assert records[0].exc_info is None
-    _assert_safe_log(caplog.text, "get", "ClientError")
+    _assert_safe_log(caplog.text, "get", client.exceptions.from_code(code).__name__)
 
 
 @pytest.mark.parametrize(
@@ -403,7 +403,7 @@ def test_put_errors_are_unavailable(
         with pytest.raises(ImageStoreUnavailable) as error:
             image_store.put_image(settings, FILE_NAME, DATA)
     _assert_bare(error.value)
-    _assert_safe_log(caplog.text, "put", "ClientError")
+    _assert_safe_log(caplog.text, "put", client.exceptions.from_code("AccessDenied").__name__)
     caplog.clear()
 
     def raise_timeout(**kwargs: Any) -> Any:
@@ -438,7 +438,7 @@ def test_delete_errors_are_logged_not_raised(
     records = [r for r in caplog.records if r.name == LOGGER]
     assert len(records) == 1
     assert records[0].levelno == logging.ERROR
-    _assert_safe_log(caplog.text, "delete", "ClientError")
+    _assert_safe_log(caplog.text, "delete", client.exceptions.from_code("InternalError").__name__)
     caplog.clear()
 
     def raise_connection(**kwargs: Any) -> Any:

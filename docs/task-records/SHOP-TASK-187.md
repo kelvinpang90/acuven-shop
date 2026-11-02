@@ -16,4 +16,5 @@
 - 偏离与取舍：
   - 取 client 也放在三个函数的 try 里：端点写错时 `boto3.client` 创建即抛出（异常文本带端点），这时同样按 R2 调用失败处理（写读抛 `ImageStoreUnavailable`、删除只记日志），不让原异常带着端点外泄。
   - 读取时 `Body.read()` 也在 try 里，读到一半超时同样归为 `ImageStoreUnavailable`。
+  - 日志里的异常类名取 `type(exc).__name__`：botocore 会把已建模的 S3 错误码（如 `AccessDenied`）抛成 `ClientError` 的同名子类，所以测试不写死 `ClientError`，而以 `client.exceptions.from_code(code).__name__` 推出预期类名。
 - 验证范围：上面列出的是本次新增的测试代码，全部用 Stubber 或替换 client 方法，不访问网络；真实 R2 的连通由运营者部署后核验。
