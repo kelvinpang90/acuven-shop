@@ -20,3 +20,19 @@
   - 图片行不另加锁：图片只经本模块改动，商品行已锁，改动在商品行上排队；读图片行时带 `populate_existing`，免得会话里留着旧值。
   - 移除时 `ImagesChanged` 之前不调用存储；`delete_image` 在提交之后、try 之外调用，它本身不抛出（未配置或失败都只记日志）。
 - 验证范围：上面列出的是本次新增的测试代码，全部替换存储函数、不访问 R2；结果以 PR 的必需 CI 检查 backend 为准。
+
+## 登记时的验收标准（原文）
+
+2026-11-02 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 读取——load_product_images(db, product_id) 返回该商品的图片列表（SHOP-TASK-183 的 AdminProductImage，按排列序号、再按 id 排序），商品不存在返回 None；不写库。三个改动函数成功时都返回提交后的这个列表。异常类 ProductMissing（商品不存在）、ImagesFull（已有 8 张）、ImagesChanged（图片已被改动）定义在本模块，存储不可用沿用 image_store.ImageStoreUnavailable
+      - 上传——add_image(db, settings, admin_account_id, product_id, image, now)，image 为 ProcessedImage。依次为——文件名用 secrets.token_hex(16)；先 db.rollback() 结束此前的读事务，在任何事务之外调用 image_store.put_image（失败即抛出 ImageStoreUnavailable，不插入行）；再锁商品行，商品不存在即回滚、删除刚写入的对象、抛 ProductMissing；数该商品的图片，已有 8 张即回滚、删除该对象、抛 ImagesFull；否则插入 ProductImage（storage_ref 为 /api/product-images/<文件名>.webp，sort_order 为现有最大值加一、没有图片时为 0，file_name、source_format、width、height 取自处理结果，byte_size 为展示图的字节数）与一条审计，提交；插入、审计或提交途中出现任何异常即回滚、删除该对象后重新抛出。删除对象都经 image_store.delete_image（只尝试 1 次，失败只记日志）
+      - 调序——reorder_images(db, admin_account_id, product_id, image_ids, now)。回滚、锁商品行，商品不存在抛 ProductMissing；image_ids 不是恰好该商品现有的全部图片 ID（缺、多、重复或属于别的商品）即回滚、抛 ImagesChanged；顺序未变即回滚、返回列表；否则先把这些行的 sort_order 依次改为 -1、-2…并 flush，再改为 0、1…并 flush（避开唯一约束的中间冲突），写一条审计后提交；不碰 R2
+      - 移除——remove_image(db, settings, admin_account_id, product_id, image_id, now)。回滚、锁商品行，商品不存在抛 ProductMissing；该 ID 的图片不存在或不属于该商品即回滚、抛 ImagesChanged；否则删除行、写一条审计、提交；提交之后，该行的 file_name 不为空时调用 image_store.delete_image（存储未配置时它只记日志），为空（示例数据的占位图）时不调用
+      - 三个改动函数都不改商品的 version；写入途中出现任何异常都先回滚再抛出；审计的 occurred_at 取传入的 now，admin_account_id 取传入值
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_product_images.py（写法照 tests/test_admin_products.py，经 create_product 造商品；ProcessedImage 直接构造，不经 Pillow；用 monkeypatch 替换 app.services.image_store 的 put_image 与 delete_image 并记录调用），每条测试的文档字符串写明它守住的 DESIGN 1.19 第 13 条原句——上传成功插入一行（字段与 storage_ref）、写一条审计、排列序号为最大值加一、商品 version 不变；写入失败不插入行；第 9 张时 ImagesFull 且删除了刚写入的对象、库里仍为 8 张；商品不存在时删除了该对象；提交失败时删除了该对象；调序成功后顺序与审计的旧值新值；列出的 ID 缺、多、重复或属于别的商品都是 ImagesChanged 且顺序不变；顺序未变不写审计；移除删除行、写审计、提交后才调用 delete_image（替换的 delete_image 里查库，该行已不存在）；占位图移除不调用 delete_image；移除后第一张为排列序号最小者；锁定查询按 MySQL 方言编译带 FOR UPDATE，三个改动函数回滚之后的第一条语句都是它
+      - docs/task-records/SHOP-TASK-189.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明函数签名、审计写法与偏离取舍）
+      - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/admin_products.py、app/services/image_store.py、app/services/image_processing.py、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
+```
