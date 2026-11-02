@@ -112,6 +112,29 @@ export function settleLogIn(outcome: AdminOutcome, moves: LoginMoves): void {
   }
 }
 
+// 页面底部的线上版本（Kelvin 2026-11-02）：GET /api/healthz（app/api/health.py）返回的 commit 取前 7 位。
+// 请求失败、非 200、响应体不合格或 commit 不是十六进制（本地运行时为 unknown）都返回 null，页面不显示这一行。
+export const HEALTHZ_URL = "/api/healthz";
+
+export async function readVersion(signal?: AbortSignal): Promise<string | null> {
+  try {
+    const response = await fetch(HEALTHZ_URL, {
+      method: "GET",
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+      signal: signal ?? null,
+    });
+    if (response.status !== 200) {
+      return null;
+    }
+    const body: unknown = await response.json();
+    const commit = typeof body === "object" && body !== null ? (body as Record<string, unknown>).commit : undefined;
+    return typeof commit === "string" && /^[0-9a-f]{7,40}$/i.test(commit) ? commit.slice(0, 7) : null;
+  } catch {
+    return null;
+  }
+}
+
 function ChevronIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -163,13 +186,14 @@ export interface AdminLoginViewProps {
   state: AdminState;
   fields: LoginFields;
   busy: boolean;
+  version: string | null;
   onChange: (fields: LoginFields) => void;
   onLogIn: () => void;
 }
 
 // 输入框不设 name：不用脚本时表单（method="post"）也提交不出用户名或密码，更不会进网址。
-// 错误提示在提交按钮之后（UX A01 线框）。
-export function AdminLoginView({ mode, state, fields, busy, onChange, onLogIn }: AdminLoginViewProps) {
+// 错误提示在提交按钮之后（UX A01 线框）。版本行在主体之后、页面最底部，没有版本时不渲染。
+export function AdminLoginView({ mode, state, fields, busy, version, onChange, onLogIn }: AdminLoginViewProps) {
   const t = useCopy();
   const { screen, error } = state;
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -222,6 +246,7 @@ export function AdminLoginView({ mode, state, fields, busy, onChange, onLogIn }:
           )}
         </div>
       </main>
+      {version !== null && <p className="acs-admin__muted site-admin-login__version">{t("admin.version", { commit: version })}</p>}
     </div>
   );
 }
@@ -232,6 +257,7 @@ export default function AdminLoginPage() {
   const [state, setState] = useState<AdminState>(INITIAL_STATE);
   const [fields, setFields] = useState<LoginFields>(EMPTY_LOGIN);
   const [busy, setBusy] = useState(false);
+  const [version, setVersion] = useState<string | null>(null);
   // 离开页面时中止进行中的会话请求，之后不再更新页面。
   const lifetime = useRef<AbortController | null>(null);
 
@@ -248,6 +274,18 @@ export default function AdminLoginPage() {
     };
   }, [replace, navigate]);
 
+  useEffect(() => {
+    const controller = new AbortController();
+    void readVersion(controller.signal).then((read) => {
+      if (!controller.signal.aborted) {
+        setVersion(read);
+      }
+    });
+    return () => {
+      controller.abort();
+    };
+  }, []);
+
   const show = (next: AdminState) => {
     setState(next);
     setBusy(false);
@@ -259,6 +297,7 @@ export default function AdminLoginPage() {
       state={state}
       fields={fields}
       busy={busy}
+      version={version}
       onChange={setFields}
       onLogIn={() => {
         if (state.screen.status !== "form" || !canLogIn(fields, busy)) {

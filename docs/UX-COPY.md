@@ -516,6 +516,7 @@
 | `admin.login_title` | Admin log in | 管理员登录 | Log masuk pentadbir | — |
 | `admin.username` | Username | 用户名 | Nama pengguna | 停用：0.10 起 A01 改用 `admin.email` |
 | `admin.email` | Email | 邮箱 | E-mel | A01 登录名输入框（0.10） |
+| `admin.version` | Version {commit} | 版本 {commit} | Versi {commit} | A01 页面底部；`{commit}` 为 `/api/healthz` 返回的 commit 前 7 位，取不到时整行不显示（Kelvin 2026-11-02） |
 | `admin.login_failed` | Username or password is incorrect. | 用户名或密码不正确。 | Nama pengguna atau kata laluan salah. | A01 |
 | `admin.locked` | Too many failed attempts. This sign-in is locked for a short time. | 失败次数过多，登录已短时锁定。 | Terlalu banyak cubaan gagal. Log masuk ini dikunci untuk seketika. | — |
 | `admin.nav_orders` | Orders | 订单 | Pesanan | — |
