@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -83,6 +84,14 @@ class Settings(BaseSettings):
     public_site_url: str = ""
     # Stripe 对 MYR 的最低收款额（仙）；应付低于它的订单仍走模拟支付。
     stripe_min_amount_sen: int = 200
+
+    # 商品图片的 R2 私有存储桶（DESIGN 1.19「计价、优惠、积分与库存」第 13 条）。变量名照设计用
+    # 原名、不带 SHOP_ 前缀（validation_alias 使 env_prefix 不作用于这四项）。空串 = 未配置；
+    # 缺任一项即视为存储不可用（app/services/image_store.py 的 image_store_configured）。
+    r2_endpoint_url: str = Field(default="", validation_alias="R2_ENDPOINT_URL")
+    r2_bucket: str = Field(default="", validation_alias="R2_BUCKET")
+    r2_access_key_id: str = Field(default="", validation_alias="R2_ACCESS_KEY_ID")
+    r2_secret_access_key: str = Field(default="", validation_alias="R2_SECRET_ACCESS_KEY")
 
 
 @lru_cache

@@ -71,12 +71,16 @@ def test_compose_does_not_pass_them_to_jobs() -> None:
 def test_every_setting_is_passed_to_api() -> None:
     """守住验收第 5 条「Settings 每个字段（git_sha 除外）对应的 SHOP_ 变量都出现在
     shop_api.environment 里」：以后在 app/core/config.py 新增配置却忘了传进容器时失败。
-    git_sha 在镜像构建时写入，不经 compose 传入。"""
+    git_sha 在镜像构建时写入，不经 compose 传入。四个 r2_ 字段以原名读取（不带 SHOP_ 前缀），
+    由 test_compose_passes_r2_variables_only_to_api 守住。"""
     environment = _environment("shop_api")
+    r2_fields = {"r2_endpoint_url", "r2_bucket", "r2_access_key_id", "r2_secret_access_key"}
     missing = [
         f"SHOP_{field.upper()}"
         for field in Settings.model_fields
-        if field != "git_sha" and f"SHOP_{field.upper()}" not in environment
+        if field != "git_sha"
+        and field not in r2_fields
+        and f"SHOP_{field.upper()}" not in environment
     ]
     assert missing == []
 
