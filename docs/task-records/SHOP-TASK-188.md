@@ -1,0 +1,22 @@
+# SHOP-TASK-188 商品图片的校验与处理（Pillow，按内容判断、转正、去元数据、缩放、转 WebP）
+
+- [x] 依据：`docs/DESIGN.md` 1.19（提交 `6e8f655`）「计价、优惠、积分与库存」第 13 条「上传」一段里按文件内容的判断与「处理」一段；`docs/HANDOFF.md` 0.79 的落实写法（同一进程同时只处理一张，用模块级的 `threading.Lock` 包住整个处理；PNG 文本块总量上限在模块导入时设为 1 MB；16 位灰度按除以 256 换算成 8 位；ICC 配置文件无法解析时按图片不合格处理；处理中抛出的任何异常都转成图片不合格；函数是同步函数，由调用方放进线程）。设计闸门：DESIGN 1.19（提交 `6e8f655`）第 13 条与 HANDOFF 0.79。本任务只做校验与处理，供 SHOP-TASK-189、190 的上传调用；不做存储、数据库与接口，不改设计。
+- [x] 新增 `app/services/image_processing.py`：
+  - `process_image(data: bytes) -> ProcessedImage`：`ProcessedImage` 为 frozen dataclass，字段 `data`（展示图的 WebP 字节）、`source_format`（`jpeg`、`png` 或 `webp`）、`width` 与 `height`（展示图的像素宽高）。不合格抛 `ImageRejected`（不带异常文本、`raise … from None`，本模块自己抛的也一并换成新的）。整个处理在模块级的 `_process_lock`（`threading.Lock`）内进行。
+  - 模块导入时 `PngImagePlugin.MAX_TEXT_MEMORY = 1_048_576`，`MAX_TEXT_CHUNK` 不改。
+  - 判断（顺序照设计，前一项不通过即拒绝）：`Image.open` 的 `format` 须为 JPEG、MPO、PNG 或 WEBP（MPO 记为 `jpeg`，只取第一帧）；MPO 以外 `n_frames` 大于 1 即拒绝；用 `Image.open` 给出的宽与高判断都在 200 到 4,000 之间（含两端），之后才解码。
+  - 处理：解码前记下 tile 的 rawmode；JPEG 与 MPO 长边超过 1,600 时以 `draft(None, 目标尺寸)` 缩小解码（目标尺寸按未转正的宽高等比缩到长边 1,600 算出）；`load()` 后 `ImageOps.exif_transpose`；修正透明值、分出透明通道与颜色部分、按 ICC 转到 sRGB 或直接转 RGB、有透明通道时 `Image.merge` 成 RGBA；长边超过 1,600 时以 LANCZOS 等比缩到 1,600（短边四舍五入、至少 1，按整数运算）；用 `Image.frombytes` 把像素复制到不带 info 的新图，`save(format="WEBP", quality=85, lossless=False)`。
+  - 不写磁盘；`Image.open`、解码、转换与编码中抛出的任何 `Exception` 都转成 `ImageRejected`。
+- [x] 各色彩模式的转换取舍：
+  - 透明值修正（在任何模式转换之前）：rawmode 为 `RGB;16B` 时把 `transparency` 三个值各右移 8 位；为 `L;2`、`L;4` 时分别乘 85 与 17。
+  - 模式 `1`：先 `convert("L")`（Pillow 一并换算 `transparency`，不另修正），之后按 L 处理。
+  - 带透明通道的：RGBA、LA、PA 取自带的 A；P、RGB 带 `transparency` 时先转 RGBA，L 带 `transparency` 时先转 LA，再取 A。
+  - 16 位灰度（`I;16`、`I;16B`、`I;16L`、`I;16N` 先转成 `I`，以及 `I`）：带 `transparency` 时用 `ImageMath.lambda_eval` 逐像素比较原 16 位值（等于该值为 0、其余为 255）；灰度用 `ImageMath` 的 I 模式整数除法除以 256 再转 L（65535 → 255）。`point` 在 I 模式只做线性映射，比较做不出来，所以两处都用 `ImageMath`。
+  - 颜色部分：RGBA、P、PA 经 RGBA 转 RGB；LA 取 L 通道；RGB、CMYK、L 原样。上面没列到的模式（三种格式解码后不会出现）直接转 RGB。
+  - ICC：取转正后 info 里的 `icc_profile`（`None` 即没有；有值就解析，空字节解析失败即不合格）。配置文件的色彩空间（`profile.xcolor_space`）须与颜色部分的模式对应（RGB ↔ `RGB`、CMYK ↔ `CMYK`、L ↔ `GRAY`），否则不合格；对应时 `ImageCms.profileToProfile(颜色部分, 配置文件, sRGB, outputMode="RGB")`。没有 ICC 的直接 `convert("RGB")`（CMYK 用 Pillow 默认换算）。
+- [x] 测试：新增 `tests/test_image_processing.py`，样本都用 Pillow 现场生成，16 位 RGB 与 2、4 位灰度 PNG 用 `struct` 与 `zlib` 拼出字节，I;16 样本用 `Image.frombytes` 生成；每条测试的文档字符串写明它守住的第 13 条原句。覆盖任务给出的全部期望值（EXIF 方向 6 加 GPS 的 3000×1000 JPEG → 533×1600 且结果 info 没有 exif、icc_profile、xmp；RGBA、调色板带透明、LA、I;16、不带 ICC 的 CMYK、带 sRGB ICC 的 PNG；两帧 MPO 记为 jpeg；4000×200 → 1600×80；4000×4000 → 1600×1600；结果为 WEBP 且不含 VP8L；RGB 带透明与 ICC、L、I;16、模式 1、16 位 RGB、2 位与 4 位灰度的透明测试；GIF、BMP、TIFF，两帧的动画 WebP 与 APNG，199×300 与 4001×300（另加 300×199、300×4001）被拒、200×200 被接受；两个 700 KiB zTXt 被拒、一个被接受；截断的 PNG 与空字节被拒；先持有 `_process_lock` 时另一线程 0.2 秒内不结束，释放后正常返回）。颜色各分量允许差 2，透明度须相等。
+- 偏离与取舍：
+  - ICC 配置文件与颜色部分的模式不符时，先按 `xcolor_space` 显式判断为不合格，不只依赖 littlecms 建转换时报错。
+  - 缩放尺寸按缩放时图像的实际宽高算（draft 缩小过的 JPEG 按缩小后的宽高等比算），与任务「之后仍按下面的缩放规则缩到长边 1,600」的写法一致；draft 的缩小比例是整数，算出的短边与按原图算的至多差 1 像素。
+  - 测试另加：已能接受 WebP（记为 `webp`）；用替身包住 `JpegImageFile.draft`，核对 4000×4000 请求 1600×1600、缩小解码为 2000×2000，3000×1000 请求 1600×533、仍为 3000×1000，长边不超过 1,600 的 JPEG 不调用 draft；`MAX_TEXT_MEMORY` 为 1,048,576；拒绝时异常不带文本、不带 `__cause__`。调色板与 MPO 的测试只核对模式、透明度与格式，不核对有损编码后纯色的颜色值。
+- 验证范围：上面列出的是本次新增的测试代码，全部在内存里生成样本、不写磁盘；结果由 PR 的必需 CI 检查 backend 执行。
