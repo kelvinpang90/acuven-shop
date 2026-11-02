@@ -1,0 +1,13 @@
+# SHOP-TASK-191 商品展示图的提供接口
+
+- [x] 依据：`docs/DESIGN.md` 1.19（提交 `6e8f655`）「计价、优惠、积分与库存」第 13 条「提供」一段；`docs/HANDOFF.md` 0.79 的落实写法（路由取整段文件名、含扩展名，格式由处理函数校验，其他扩展名也回答带 no-store 的 `image_not_found`；错误为 404 `image_not_found` 与 503 `image_store_unavailable`，带 no-store；成功的响应长期缓存，所以不用 no-store 路由类；存储经 `image_store` 模块属性调用；处理函数为同步函数）。设计闸门：DESIGN 1.19（提交 `6e8f655`）第 13 条与 HANDOFF 0.79。本任务只做提供接口，读取 SHOP-TASK-187 的存储、SHOP-TASK-189 入库的行；不做前端，不改服务层、模型与设计。
+- [x] 新增 `app/api/product_images.py`，在 `app/main.py` 注册 `GET /api/product-images/{name}`（不要求会话，前台与后台共用；不用 `_NoStoreRoute`），判断依次为，前一项不通过即回答、不再往下：`name` 不恰好是 32 位小写十六进制加 `.webp`（大写、长度不对、其他扩展名或不带扩展名）即 404 `image_not_found` → `image_store_configured` 为 False 即 503 `image_store_unavailable` → 以去掉 `.webp` 的 32 位作 `file_name`，查不到 `ProductImage` 的行即 404 `image_not_found`、不访问 R2 → `image_store.get_image`：`ImageNotFound` 404 `image_not_found`、`ImageStoreUnavailable` 503 `image_store_unavailable`。错误响应都带 `Cache-Control: no-store`（`HTTPException` 的 headers），只有 detail，不含 R2 的错误内容。
+- [x] 成功 200，响应体为 `get_image` 返回的字节，响应头 `Content-Type: image/webp`、`X-Content-Type-Options: nosniff`、`Content-Security-Policy: default-src 'none'; sandbox`、`Cache-Control: public, max-age=31536000, immutable`；不查商品是否上架。处理函数是同步函数，FastAPI 在线程池里执行，R2 读取不阻塞事件循环；不写日志（存储模块自己的日志除外）。
+- [x] 测试：新增 `tests/test_product_images_api.py`，夹具照 `tests/test_admin_products_api.py`（SQLite 内存库、StaticPool、关闭 check_same_thread，TestClient，不登录）；`Settings` 以 `R2_ENDPOINT_URL` 等四个原名构造为已配置，未配置的用例不传；`app.services.image_store` 的 `put_image`、`get_image` 与 `delete_image` 以 monkeypatch 替换并记录调用；接口发出的 SQL 以引擎的 `before_cursor_execute` 事件记录。每条测试的文档字符串都写明它守住的第 13 条原句，另可补引 HANDOFF 0.79 或验收约定。覆盖：经 `add_image` 入库（替换 `put_image`）后 GET 该行的 `storage_ref` 得到 200、写入的字节与四个响应头（商品未上架）；大写、31 位、`.png`、不带扩展名的文件名 404 `image_not_found` 且不查库、不调用 `get_image`；未配置 503 且不查库、不调用 `get_image`；未配置时格式不对仍是 404；查不到行 404 且不调用 `get_image`；`ImageNotFound` 404、`ImageStoreUnavailable` 503 且响应里没有异常文本；所有错误响应只带 no-store、成功的带长期缓存，应用不记日志；该前缀下只注册了这一个 GET。
+- 偏离与取舍：
+  - 文件名格式与存储是否已配置两项放在一个同步依赖 `_file_name` 里，先于会话依赖声明（照 SHOP-TASK-190 的 `_upload_target` 写法），所以这两项回答之前不查库。会话依赖本身在数据库未配置时回答 `get_session` 的 503 `database is not configured`（不带 no-store），那是现有的公共依赖、排在第 3 步之前，本任务不改它。
+  - 查到行之后、读取 R2 之前先 `rollback` 结束只读事务，R2 读取（至多 3 次尝试、每次读取超时 10 秒）期间不在数据库连接上挂着事务；会话仍在请求结束时关闭。
+  - 查行只看 `file_name` 列（唯一约束），不比较 `storage_ref`；示例数据的占位图没有文件名，不会经本接口提供。
+  - `ImageNotFound`、`ImageStoreUnavailable` 与 `image_store_configured` 也经 `image_store` 模块属性取用，与 `get_image` 一致。
+  - `{name}` 只匹配一段路径；带斜杠的路径（如 `/api/product-images/a/b.webp`）不进处理函数，由框架回答默认 404，不在「路径最后一段」的范围内。
+- 验证范围：上面列出的是本次新增的测试代码，存储函数全部替换、不访问 R2；结果以 PR 的必需 CI 检查 backend 为准。
