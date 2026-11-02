@@ -5145,7 +5145,7 @@ tasks:
       运营者落实写法（HANDOFF 0.79）：三个改动函数都先回滚此前的事务，再以 SHOP-TASK-184 的 lock_product_statement 锁商品行；存储经 image_store 模块属性调用（image_store.put_image 等，测试替换模块属性）；审计对象类别为 product、以商品 ID 记录，操作名 admin_product_image_added（新值为图片 ID）、admin_product_images_reordered（旧值与新值为英文逗号分隔、不带空格的图片 ID 序列）、admin_product_image_removed（旧值为图片 ID）；调序时顺序未变不写库、不写审计；移除或调序时请求的图片不属于该商品即「图片已被改动」；移除后其余图片的排列序号不重排（第一张仍按排列序号最小者）。
       不做接口与前端，不改模型与迁移，不改设计。
       设计闸门：DESIGN 1.19（提交 6e8f655）第 13 条与 HANDOFF 0.79，商品图片。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-188
     acceptance_criteria:
