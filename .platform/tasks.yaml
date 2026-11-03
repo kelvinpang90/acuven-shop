@@ -5433,7 +5433,7 @@ tasks:
       运营者落实写法（HANDOFF 0.82）：请求类型以「已有（带 id）」与「新增（带 temp_id）」两种形状区分规格值与 SKU，序列化时只写出该形状的字段；价格以整仙收发，模块不做换算。
       设计闸门：DESIGN 1.18（提交 5ba9796）第 11 条与 HANDOFF 0.82，商品价格以整仙收发（取值规则、上架条件、并发核对与审计在 SHOP-TASK-183 至 186 的服务端；请求模块只传递与校验字段，不换算金额，不碰个人资料）。
       拆分：A04 的商品请求层（3 个允许路径），照 SHOP-TASK-198。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 写法照 frontend/src/api/adminShippingRates.ts（同源 cookie、cache no-store、Accept 与 Content-Type、写操作带调用方传入的 CSRF 令牌于 pay.ts 的 CSRF_HEADER、接收 AbortSignal、只取接口记录列出的字段且多出的字段不带进结果、响应体不合格算失败、页面只按状态码与 detail 区分，不显示错误体）；路径段为 ID 的十进制
