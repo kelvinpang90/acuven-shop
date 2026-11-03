@@ -5311,7 +5311,7 @@ tasks:
       运营者落实写法（HANDOFF 0.80）：UX 写「第 3 步」显示，而件数上限在第 1 步的计价里就能判断，提示照现有 cart.item_changed 的写法在任一步都显示（同一位置、同一回购物车链接），不只限第 3 步；有非正常行与超出上限同时出现时，三条提示依次为 cart.item_changed、cart.units_over_limit、cart.amount_over_limit，下面只有一个回购物车的链接。
       设计闸门：DESIGN 1.18（提交 5ba9796）第 8 条与 HANDOFF 0.80，整单上限的提示（判定与下单校验在服务端）。
       拆分：P05 一层（8 个允许路径，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-194
     acceptance_criteria:
