@@ -5450,7 +5450,7 @@ tasks:
       为 A04 页面新建调用 SHOP-TASK-186 四个接口（列表 GET /api/admin/products、单件 GET /api/admin/products/{product_id}、新建 POST /api/admin/products 与保存 PUT /api/admin/products/{product_id}）的请求模块 frontend/src/api/adminProducts.ts 与测试，供 A04 页面的任务使用；
       不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
       运营者落实写法（HANDOFF 0.82）：请求类型以「已有（带 id）」与「新增（带 temp_id）」两种形状区分规格值与 SKU，序列化时只写出该形状的字段；价格以整仙收发，模块不做换算。
-      设计闸门：不适用（商品的取值规则、上架条件、并发核对与审计在 SHOP-TASK-183 至 186 的服务端，依据 DESIGN 1.18 第 11 条；请求模块只传递与校验字段，不换算金额，不碰个人资料）。
+      设计闸门：DESIGN 1.18（提交 5ba9796）第 11 条与 HANDOFF 0.82，商品价格以整仙收发（取值规则、上架条件、并发核对与审计在 SHOP-TASK-183 至 186 的服务端；请求模块只传递与校验字段，不换算金额，不碰个人资料）。
       拆分：A04 的商品请求层（3 个允许路径），照 SHOP-TASK-198。
     status: ready
     depends_on: []
@@ -5461,7 +5461,7 @@ tasks:
       - 新建——POST /api/admin/products，JSON 请求体只有 category_id、name_en、name_zh、name_ms、description_en、description_zh、description_ms（字符串原样提交，不去空白）、is_active、max_per_order、options 与 variants；options 每项只有三语名称与 values，每个值只有 temp_id 与三语名称；variants 每项只有 temp_id、option_values（每项只有 temp_id）、price_sen、daily_initial_stock 与 is_active；201 且响应体为一件合格的商品时为 ok 并带回它；422 且 detail 为 product_invalid 为 invalid，409 且 detail 为 product_changed 为 changed；401 为 none，403 为 csrf；其他 422、409 与其他状态（含 413）、响应体不合格为 failed；网络中断与中止为 network
       - 保存——PUT /api/admin/products/{product_id}，请求体为新建的各项另加 version（整数）；options 每项另有 id；规格值为已有（只有 id 与三语名称）或新增（只有 temp_id 与三语名称）两种；variants 为已有（只有 id、price_sen、daily_initial_stock 与 is_active，不带 option_values）或新增（只有 temp_id、option_values、price_sen、daily_initial_stock 与 is_active）两种，新增 SKU 的 option_values 每项为只有 id（已有的值）或只有 temp_id（同一次新增的值）；两种形状写成 TypeScript 联合类型，序列化时只写出该形状的字段、不出现值为 undefined 或 null 的键；200 且响应体为一件合格的商品时为 ok 并带回它；其余归类同新建
       - 测试验证意图（不加测试依赖，fetch 以替身代替）——frontend/src/api/adminProducts.test.ts：四个请求的方法、地址、请求头、no-store 与请求体只有规定的字段（含已有与新增两种形状各自的字段）；列表与单件的合格判定（缺字段、类型不对、负数、非整数、option_value_ids 个数不对或引用别的规格名的值、多出字段不带进结果、空 csrf_token）；新建与保存的各种状态与 detail 的归类；中止为 network；每条测试写明它守住的是接口记录（SHOP-TASK-186 的 app/api/admin_products.py）、DESIGN 1.18 第 11 条或 UX 0.17 A04 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - docs/task-records/SHOP-TASK-200.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；导出的类型与函数签名，供 A04 页面的任务使用；验证到什么程度，只写实际存在的测试）；改动只落在 allowed_change_paths；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
+      - docs/task-records/SHOP-TASK-200.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；导出的类型与函数签名，供 A04 页面的任务使用；验证到什么程度，只写实际存在的测试）；改动只落在 allowed_change_paths；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：DESIGN 1.18 第 11 条，同上），不合并、不直推
     allowed_change_paths:
       - frontend/src/api/adminProducts.ts
       - frontend/src/api/adminProducts.test.ts
@@ -5477,7 +5477,7 @@ tasks:
       为 A04 页面新建调用 SHOP-TASK-190 三个图片接口（上传 POST、调序 PUT /api/admin/products/{product_id}/images 与移除 DELETE /api/admin/products/{product_id}/images/{image_id}）的请求模块 frontend/src/api/adminProductImages.ts，
       以及调用 SHOP-TASK-182 当日库存调整接口（POST /api/admin/variants/{variant_id}/available-stock）的请求模块 frontend/src/api/adminStockAdjust.ts，各带测试；不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
       运营者落实写法（HANDOFF 0.82）：上传的请求体为文件本身（不用多部分表单），Content-Type 为调用方给的类型；413 一律归为文件过大，不看响应体（反向代理回答的 413 不是 JSON）。
-      设计闸门：不适用（图片的格式、大小、像素与元数据规则，库存的取值与并发核对都在服务端，依据 DESIGN 1.19 第 13 条与 DESIGN 1.18 第 12 条；请求模块只传递与校验字段，不碰金额与个人资料）。
+      设计闸门：DESIGN 1.18（提交 5ba9796）第 12 条与 HANDOFF 0.82，当日可用库存调整的请求（取值与并发核对、审计在 SHOP-TASK-182 的服务端）；图片部分不碰金额与个人资料，规则在服务端，依据 DESIGN 1.19（提交 6e8f655）第 13 条；请求模块只传递与校验字段。
       拆分：A04 的图片与库存调整请求层（5 个允许路径），两个模块各自独立，照 SHOP-TASK-198 的写法。
     status: ready
     depends_on: []
@@ -5488,7 +5488,7 @@ tasks:
       - 移除——DELETE /api/admin/products/{product_id}/images/{image_id}，不带请求体；200 且响应体合格为 ok 并带回 images；409 且 detail 为 images_changed 为 changed；401 为 none，403 为 csrf；其他为 failed；网络中断与中止为 network
       - 当日库存调整——frontend/src/api/adminStockAdjust.ts 的 POST /api/admin/variants/{variant_id}/available-stock，Content-Type 为 JSON，请求体只有 expected 与 available_stock（整数）；200 且响应体 variant_id 为正整数、sku 为非空字符串、available_stock 为不小于 0 的整数时为 ok 并带回 available_stock；409 且 detail 为 stock_changed、available_stock 为不小于 0 的整数时为 changed 并带回该当前值（缺这一项或不合格为 failed）；422 且 detail 为 stock_invalid 为 invalid；401 为 none，403 为 csrf；其他状态（含 404 variant_not_found）为 failed；网络中断与中止为 network
       - 测试验证意图（不加测试依赖，fetch 以替身代替）——frontend/src/api/adminProductImages.test.ts 与 frontend/src/api/adminStockAdjust.test.ts：每个请求的方法、地址、请求头、no-store 与请求体（上传为原样的 Blob 与给定的 Content-Type，不是 FormData；调序与调整只有规定的字段；移除没有请求体）；响应体的合格判定（缺字段、类型不对、负数、多出字段不带进结果）；各种状态与 detail 的归类（含 413 的响应体不是 JSON 时仍为 too_large、409 stock_changed 缺当前值为 failed）；中止为 network；每条测试写明它守住的是接口记录（app/api/admin_product_images.py、app/api/admin_stock_adjust.py）、DESIGN 或 UX 0.17 A04 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - docs/task-records/SHOP-TASK-201.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；导出的类型与函数签名，供 A04 页面的任务使用；验证到什么程度，只写实际存在的测试）；改动只落在 allowed_change_paths；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
+      - docs/task-records/SHOP-TASK-201.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；导出的类型与函数签名，供 A04 页面的任务使用；验证到什么程度，只写实际存在的测试）；改动只落在 allowed_change_paths；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：DESIGN 1.18 第 12 条，同上），不合并、不直推
     allowed_change_paths:
       - frontend/src/api/adminProductImages.ts
       - frontend/src/api/adminProductImages.test.ts
@@ -5542,7 +5542,7 @@ tasks:
       在 SHOP-TASK-202 打开的编辑区里，按 docs/UX.md 0.17 的 A04 显示并编辑一件已有商品的三语名称与描述、分类、上架状态、每单限购、规格名与规格值的三语名称、已有 SKU 的价格、每日初始库存与启用状态，并以 SHOP-TASK-197 的 hook 接入未保存确认，
       依据 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 11 条。本任务不提交保存（common.save 与保存结果在 SHOP-TASK-204），不做新增规格值与 SKU（205）、新建（206）、图片（207）与当日库存调整（208）。不装依赖，不改后端，不改设计。
       运营者落实写法（HANDOFF 0.82）：规格列（admin.variant）为该 SKU 各规格值最近一次读取或保存的名称，按后台界面语言、缺译回退英文，以「 / 」相连，没有规格名时为 —；
-      分类下拉框的选项为分类读取结果里启用且英文名称不为 null 的分类（按接口顺序，文字按后台界面语言、缺译回退英文），商品当前分类不在其中时另加它一项排在最前（文字取商品列表该项的 category_name_*，按同样的规则，都缺时为 —；为 null 或空串都算缺译），选中的不是可选分类时其下显示 admin.category_current_unavailable；
+      分类下拉框的选项为分类读取结果里启用且英文名称不为 null、去掉首尾空白后不为空的分类（按接口顺序，文字按后台界面语言、缺译回退英文），商品当前分类不在其中时另加它一项排在最前（文字取商品列表该项的 category_name_*，按同样的规则，都缺时为 —；为 null 或空串都算缺译），选中的不是可选分类时其下显示 admin.category_current_unavailable；
       读取为 null 的文案在输入框与比较基线里都当作空串；价格输入框的初值为整仙用整数运算写成的两位小数文字（照 frontend/src/pages/AdminShippingPage.tsx 的 feeText）；切换界面语言不重新读取、不丢失已填的值；
       有未保存的修改时点另一行的 common.edit，先经确认、选离开才照 202 收起并读取；点当前已打开的那一件商品的 common.edit 照 202 不做任何事，不经确认、不丢失修改。
       设计闸门：DESIGN 1.18（提交 5ba9796）第 11 条与 HANDOFF 0.82，价格以 RM 文字显示与编辑（本任务不提交；取值核对、并发核对与审计在服务端）。
@@ -5557,7 +5557,7 @@ tasks:
       - 其余输入——admin.product_category 下拉框与 admin.category_current_unavailable 照 purpose 的落实写法；admin.active 勾选框；每单限购输入框（admin.max_per_order）；SKU 区桌面为表格（admin.sku、admin.variant、admin.price、admin.initial_stock、admin.sku_enabled、admin.available_today 六列；价格与每日初始库存为输入框，启用为勾选框，当日可用库存只显示），手机为每个 SKU 一张卡片（同样六项），两套都渲染、由 site.css 按宽度显隐；输入框保留所填的原文，本任务不校验
       - 常显的说明——admin.publish_requirements、admin.product_options 一组下的 admin.options_fixed_note、admin.max_per_order_hint、admin.no_delete_note、admin.initial_stock_note 与 admin.rules_apply_new，位置照视觉稿 A04-desktop 与 A04-phone-edit；规格名与规格值只能改名称，不显示去掉的按钮；不显示 common.create、common.save、图片区与当日库存调整的按钮（由之后的任务加入）
       - 未保存确认——编辑区的三语名称与描述、分类、上架、每单限购、规格名与规格值的三语名称、各 SKU 的价格文字、每日初始库存文字与启用状态，任一项与最近一次读取的值（null 当作空串，价格为读取值写成的文字）不同即为有未保存的修改，以 SHOP-TASK-197 的 hook 接入：点另一行的 common.edit 与手机的 common.back 先经确认；后台导航、浏览器前进后退、退出与刷新由框架与路由拦截；把有未保存修改的判定写成导出的纯函数
-      - 代码结构与测试——沿用 SHOP-TASK-202 与 frontend/src/pages/AdminShippingPage.tsx 的写法（分类下拉的选项、规格列的文字、缺译提示、价格初值与输入的初值写成导出的纯函数，View 只依赖 props）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替；以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）在 frontend/src/pages/AdminProductsPage.test.tsx 验证意图：读取单件后的各输入框初值（含 null 当作空串、价格 0 为 0.00 与 5 为 0.05）、内容语言切换保留各语言的值、缺译提示只在中文或马来文且有缺时显示一条、分类下拉只列可选分类且当前分类不可选时排在最前并显示提示、规格列文字、桌面与手机两套 SKU、未保存判定（未改不算、改了才算、改回原值不算）；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - 代码结构与测试——沿用 SHOP-TASK-202 与 frontend/src/pages/AdminShippingPage.tsx 的写法（分类下拉的选项、规格列的文字、缺译提示、价格初值与输入的初值写成导出的纯函数，View 只依赖 props）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替；以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）在 frontend/src/pages/AdminProductsPage.test.tsx 验证意图：读取单件后的各输入框初值（含 null 当作空串、价格 0 为 0.00 与 5 为 0.05）、内容语言切换保留各语言的值、缺译提示只在中文或马来文且有缺时显示一条、分类下拉只列可选分类（停用的、英文名称为 null、空串或只有空白的都不列）且当前分类不可选时排在最前并显示提示、规格列文字、桌面与手机两套 SKU、未保存判定（未改不算、改了才算、改回原值不算）；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-203.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；导出的纯函数与输入状态的写法供 204 至 208 接入、偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：DESIGN 1.18 第 11 条，同上），不合并、不直推
     allowed_change_paths:
       - frontend/src/pages/AdminProductsPage.tsx
