@@ -9,8 +9,10 @@ import { LanguageProvider } from "./i18n/language";
 import type { LanguageStorage } from "./i18n/language";
 import AccountPage from "./pages/AccountPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
+import AdminCategoriesPage from "./pages/AdminCategoriesPage";
 import AdminCouponsPage from "./pages/AdminCouponsPage";
 import AdminOrdersPage from "./pages/AdminOrdersPage";
+import AdminProductsPage from "./pages/AdminProductsPage";
 import AdminRefundsPage from "./pages/AdminRefundsPage";
 import AdminShippingPage from "./pages/AdminShippingPage";
 import AdminSiteSettingsPage from "./pages/AdminSiteSettingsPage";
@@ -64,6 +66,8 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   "/admin/refunds/order/:orderId": AdminRefundsPage,
   // 退款详情与列表是同一页（桌面列表在左、详情在右，手机只显示详情）。
   "/admin/refunds/:id": AdminRefundsPage,
+  "/admin/products": AdminProductsPage,
+  "/admin/categories": AdminCategoriesPage,
   "/admin/coupons": AdminCouponsPage,
   "/admin/shipping": AdminShippingPage,
   "/admin/stock-resets": AdminStockResetsPage,

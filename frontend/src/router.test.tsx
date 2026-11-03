@@ -4,6 +4,8 @@ import { describe, expect, it } from "vitest";
 import App from "./App";
 import { COPY } from "./i18n/copy";
 import {
+  ADMIN_CATEGORIES_PATH,
+  ADMIN_PRODUCTS_PATH,
   ROUTE_PATHS,
   adminOrderPath,
   adminRefundPath,
@@ -101,6 +103,8 @@ describe("route table", () => {
   // 原来断言它不在表里的一行改用另一个不存在的路径 /account/order/refunds（验收第 7 条），并断言 /account/order/refund 在表里。
   // SHOP-TASK-173 验收第 2、4 条「路由表在 /admin/coupons 之后加一项」「router.test.tsx 的路由表断言加 /admin/shipping」：
   // 运费与演示汇率进表，在优惠券之后、库存重置结果之前。
+  // SHOP-TASK-196 验收「路由」一条「路由表在 /admin/refunds/:id 之后加入 /admin/products 与 /admin/categories」：路由表断言在退款详情之后、
+  // 优惠券之前依次加上两条路径，并断言它们在表里。
   it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page, the member login, the password reset, the register page, the member centre, the member order detail and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
@@ -126,12 +130,16 @@ describe("route table", () => {
       "/admin/refunds",
       "/admin/refunds/order/:orderId",
       "/admin/refunds/:id",
+      "/admin/products",
+      "/admin/categories",
       "/admin/coupons",
       "/admin/shipping",
       "/admin/stock-resets",
       "/admin/store-design",
       "/admin/settings",
     ]);
+    expect(isRoutePath("/admin/products")).toBe(true);
+    expect(isRoutePath("/admin/categories")).toBe(true);
     expect(isRoutePath("/admin/settings")).toBe(true);
     expect(isRoutePath("/admin/coupons")).toBe(true);
     expect(isRoutePath("/admin/store-design")).toBe(true);
@@ -251,6 +259,40 @@ describe("route table", () => {
     expect(html).toContain(`<main class="acs-admin__main" aria-busy="true"></main>`);
     expect(html).toMatch(new RegExp(`aria-current="page"[^>]*>${COPY["admin.nav_coupons"].en}</a>`));
     expect(html).not.toContain(COPY["common.demo_banner"].en);
+  });
+
+  // SHOP-TASK-196 验收「路由」一条「导出 ADMIN_PRODUCTS_PATH 与 ADMIN_CATEGORIES_PATH」「文件顶部说明后台页的注释补上这两条路径（不带段值）」：
+  // 两条路径不带段值，多出一段不匹配、按未知路径落到首页。
+  it("gives the admin products and categories pages no path parameters", () => {
+    expect(ADMIN_PRODUCTS_PATH).toBe("/admin/products");
+    expect(ADMIN_CATEGORIES_PATH).toBe("/admin/categories");
+    expect(matchRoute("/admin/products")).toEqual({ pattern: "/admin/products", params: {} });
+    expect(matchRoute("/admin/categories")).toEqual({ pattern: "/admin/categories", params: {} });
+    for (const path of ["/admin/products/", "/admin/products/7", "/admin/categories/", "/admin/categories/7"]) {
+      expect(isRoutePath(path), path).toBe(false);
+      expect(resolvePath(path)).toBe("/");
+    }
+  });
+
+  // SHOP-TASK-196 验收「路由」与「页面」两条「两页都以后台框架渲染」「前台页头、菜单与页脚没有指向它们的入口」与 UX A01「前台不放入口链接」：
+  // 两条路径都用后台框架渲染、当前项分别为商品与分类，不套前台框架；前台页面里没有指向两页的链接。
+  it("renders the admin products and categories pages in the admin frame with no storefront entry", () => {
+    for (const [path, key] of [
+      ["/admin/products", "admin.nav_products"],
+      ["/admin/categories", "admin.nav_categories"],
+    ] as const) {
+      const html = render(path);
+      expect(html).toContain(COPY["admin.demo_banner"].en);
+      expect(html).toContain(`<main class="acs-admin__main" aria-busy="true"></main>`);
+      expect(html).toMatch(new RegExp(`aria-current="page"[^>]*>${COPY[key].en}</a>`));
+      expect(html).not.toContain(COPY["common.demo_banner"].en);
+      expect(html).not.toMatch(/<(header|footer)\b/);
+    }
+    for (const path of ["/", "/products", "/cart", "/track", "/privacy", "/login", "/account"]) {
+      const html = render(path);
+      expect(html, path).not.toContain(`href="/admin/products"`);
+      expect(html, path).not.toContain(`href="/admin/categories"`);
+    }
   });
 
   // SHOP-TASK-030 验收第 2 条「订单号与 CSRF 令牌不进任何路径、查询参数」：退款申请页的路径不带任何段值，多出一段（如把订单号放进路径）不匹配、按未知路径落到首页。

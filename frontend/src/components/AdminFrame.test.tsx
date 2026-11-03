@@ -41,10 +41,13 @@ const HTML_LANG = { en: "en", zh: "zh-Hans", ms: "ms" } as const;
 
 // UX-COPY 第 10 节里全部导航项的键（admin.nav_orders、admin.nav_refunds、admin.nav_stock_resets 与 admin.nav_store_design
 // 之外的都是尚未上线页面的项）。
+// SHOP-TASK-196 改动：LIVE_NAV_KEYS 在退款之后加入商品与分类，UX-COPY 的导航项至此全部上线。
 const DOC_NAV_KEYS = [...uxCopy.matchAll(/^\| `(admin\.nav_[a-z_]+)` \|/gm)].map((m) => m[1] ?? "");
 const LIVE_NAV_KEYS = [
   "admin.nav_orders",
   "admin.nav_refunds",
+  "admin.nav_products",
+  "admin.nav_categories",
   "admin.nav_coupons",
   "admin.nav_shipping",
   "admin.nav_stock_resets",
@@ -56,6 +59,8 @@ const STORE_DESIGN_PATH = "/admin/store-design";
 const COUPONS_PATH = "/admin/coupons";
 const SHIPPING_PATH = "/admin/shipping";
 const SETTINGS_PATH = "/admin/settings";
+const PRODUCTS_PATH = "/admin/products";
+const CATEGORIES_PATH = "/admin/categories";
 // 尚未上线页面的导航项在 UX-COPY 里的三语文字。
 function otherNavLabels(language: Language): string[] {
   const column = { en: 2, zh: 3, ms: 4 }[language];
@@ -319,32 +324,52 @@ describe("first render", () => {
   // SHOP-TASK-173 改动：按 SHOP-TASK-173 验收第 4 条把「按 UX 顺序只含这六项」改为「按 UX 顺序只含订单、退款、优惠券、运费与演示汇率、
   // 库存重置、店铺装修与站点设置七项、其他 admin.nav_* 不出现」：第四项为 admin.nav_shipping（指向 /admin/shipping），在 UX「管理后台总体」
   // 与 UX-COPY 的导航项里排在优惠券之后、库存重置之前。
-  it.each(LANGUAGES)("lists only the orders, refunds, coupons, shipping, stock resets, store design and site settings items in UX order in the navigation in %s", (language) => {
-    expect(ADMIN_NAV).toEqual(["orders", "refunds", "coupons", "shipping", "stockResets", "storeDesign", "settings"]);
+  // SHOP-TASK-196 改动：按 SHOP-TASK-196 验收「导航」一条与 UX「管理后台总体」「导航项依次为 [admin.nav_orders]、[admin.nav_refunds]、
+  // [admin.nav_products]、[admin.nav_categories]（0.17）、[admin.nav_coupons]、…」，在退款之后依次加入商品（/admin/products）与
+  // 分类（/admin/categories），ADMIN_NAV、href 与 aria-current 的期望改为九项，加两项的文字断言与退款 < 商品 < 分类 < 优惠券的顺序断言。
+  // 九项即 UX-COPY 的全部导航项，原来「UX-COPY 的导航项多于已上线项」的断言必然失效，改为两者相同（尚未上线的导航项文字随之为空表）。
+  it.each(LANGUAGES)("lists only the orders, refunds, products, categories, coupons, shipping, stock resets, store design and site settings items in UX order in the navigation in %s", (language) => {
+    expect(ADMIN_NAV).toEqual(["orders", "refunds", "products", "categories", "coupons", "shipping", "stockResets", "storeDesign", "settings"]);
     expect(DOC_NAV_KEYS.filter((key) => LIVE_NAV_KEYS.includes(key))).toEqual(LIVE_NAV_KEYS);
-    expect(DOC_NAV_KEYS.length).toBeGreaterThan(LIVE_NAV_KEYS.length);
+    expect(DOC_NAV_KEYS).toEqual(LIVE_NAV_KEYS);
     for (const html of [renderApp(ORDERS_PATH, language), render({}, language), render({ menuOpen: true }, language)]) {
       const nav = element(html, "nav", "site-admin__nav");
       const items = tags(nav, "a").filter((tag) => !attributes(tag).has("lang"));
       expect(items.map((tag) => attributes(tag).get("href"))).toEqual([
         ORDERS_PATH,
         REFUNDS_PATH,
+        PRODUCTS_PATH,
+        CATEGORIES_PATH,
         COUPONS_PATH,
         SHIPPING_PATH,
         STOCK_RESETS_PATH,
         STORE_DESIGN_PATH,
         SETTINGS_PATH,
       ]);
-      expect(items.map((tag) => attributes(tag).get("aria-current"))).toEqual(["page", undefined, undefined, undefined, undefined, undefined, undefined]);
+      expect(items.map((tag) => attributes(tag).get("aria-current"))).toEqual([
+        "page",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+      ]);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_orders"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_refunds"][language])}</a>`);
+      expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_products"][language])}</a>`);
+      expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_categories"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_coupons"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_shipping"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_stock_resets"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_store_design"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_settings"][language])}</a>`);
       expect(nav.indexOf(COPY["admin.nav_orders"][language])).toBeLessThan(nav.indexOf(escapeHtml(COPY["admin.nav_refunds"][language])));
-      expect(nav.indexOf(escapeHtml(COPY["admin.nav_refunds"][language]))).toBeLessThan(nav.indexOf(escapeHtml(COPY["admin.nav_coupons"][language])));
+      expect(nav.indexOf(escapeHtml(COPY["admin.nav_refunds"][language]))).toBeLessThan(nav.indexOf(escapeHtml(COPY["admin.nav_products"][language])));
+      expect(nav.indexOf(escapeHtml(COPY["admin.nav_products"][language]))).toBeLessThan(nav.indexOf(escapeHtml(COPY["admin.nav_categories"][language])));
+      expect(nav.indexOf(escapeHtml(COPY["admin.nav_categories"][language]))).toBeLessThan(nav.indexOf(escapeHtml(COPY["admin.nav_coupons"][language])));
       expect(nav.indexOf(escapeHtml(COPY["admin.nav_coupons"][language]))).toBeLessThan(
         nav.indexOf(escapeHtml(COPY["admin.nav_shipping"][language])),
       );
@@ -417,6 +442,8 @@ describe("phone menu", () => {
   // 店铺装修与站点设置六项。
   // SHOP-TASK-173 改动：按 SHOP-TASK-173 验收第 4 条「☰ 菜单同样」改为按 UX 顺序只含订单（aria-current="page"）、退款、优惠券、
   // 运费与演示汇率、库存重置、店铺装修与站点设置七项。
+  // SHOP-TASK-196 改动：按 SHOP-TASK-196 验收「导航」一条「桌面导航与手机菜单都按这个顺序列出」，在退款之后依次加入商品与分类，
+  // 改为九项，并加两项的文字断言。
   it.each(LANGUAGES)("opens the menu with the navigation, the languages and the logout button in %s", (language) => {
     const html = render({ menuOpen: true }, language);
     const bar = element(html, "div", "site-admin__bar");
@@ -432,6 +459,8 @@ describe("phone menu", () => {
     expect(tags(nav, "a").map((tag) => [attributes(tag).get("href"), attributes(tag).get("aria-current")])).toEqual([
         [ORDERS_PATH, "page"],
         [REFUNDS_PATH, undefined],
+        [PRODUCTS_PATH, undefined],
+        [CATEGORIES_PATH, undefined],
         [COUPONS_PATH, undefined],
         [SHIPPING_PATH, undefined],
         [STOCK_RESETS_PATH, undefined],
@@ -440,6 +469,8 @@ describe("phone menu", () => {
     ]);
     expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_orders"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_refunds"][language])}</a>`);
+    expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_products"][language])}</a>`);
+    expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_categories"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_coupons"][language])}</a>`);
     expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_shipping"][language])}</a>`);
     expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_stock_resets"][language])}</a>`);

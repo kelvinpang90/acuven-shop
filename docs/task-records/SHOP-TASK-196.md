@@ -1,0 +1,21 @@
+# SHOP-TASK-196 后台商品与分类页的路由与导航 A04、A10
+
+- [x] 按 `docs/UX.md` 0.17 与「管理后台总体」、`docs/UX-COPY.md` 0.18 增加 `/admin/products`（A04）与 `/admin/categories`（A10）：`frontend/src/router.tsx` 的路由表在 `/admin/refunds/:id` 之后依次加这两条，导出 `ADMIN_PRODUCTS_PATH` 与 `ADMIN_CATEGORIES_PATH`，文件顶部说明后台页的注释补上两条路径（不带段值）；`frontend/src/App.tsx` 的页面表加两页（以 `/admin` 开头，不套前台框架）。前台页头、菜单与页脚没有加入口。本任务不装依赖、不改后端、不改设计。设计闸门：不适用（只加路由、导航与标题，不碰金额与个人资料）。
+- [x] 页面：新文件 `frontend/src/pages/AdminProductsPage.tsx` 与 `frontend/src/pages/AdminCategoriesPage.tsx`，都用 `AdminFrame` 渲染（`current` 分别为 `products` 与 `categories`），内容区只有 `<h1 class="acs-admin__h">`，文字分别为 `admin.nav_products` 与 `admin.nav_categories`；页面不发起自己的请求，不加其他文字。
+- [x] 导航变化：`frontend/src/components/AdminFrame.tsx` 的 `AdminNavItem`、`ADMIN_NAV` 与导航表在 `refunds` 之后依次加入 `products`（指向 `ADMIN_PRODUCTS_PATH`，文字 `admin.nav_products`）与 `categories`（指向 `ADMIN_CATEGORIES_PATH`，文字 `admin.nav_categories`）；桌面导航与 ☰ 菜单依次为订单、退款、商品、分类、优惠券、运费与演示汇率、库存重置、店铺装修、站点设置九项，手机顶栏名称为当前页的导航项名称。文件顶部「导航只列已上线的页面」一句改为列出这九项并注明即 UX「管理后台总体」的全部导航项；导航项类型上方注释去掉「其余页面上线时各自加上」。
+- [x] 字典：`frontend/src/i18n/copy.ts` 在 `admin.nav_refunds` 之后按 UX-COPY 0.18 逐字加入 `admin.nav_products`（Products / 商品 / Produk）与 `admin.nav_categories`（Categories / 分类 / Kategori），每种语言一行。
+- [x] 改动的现有测试（只改按顺序列出导航项或路由表的断言，原因都是导航多了商品与分类两项、路由表多了两条路径，旧的七项期望必然失效；各改动处的测试注释加了一行「SHOP-TASK-196 改动」说明，各页面自身的其他期望与手机顶栏名称断言未改）：
+  - `frontend/src/components/AdminFrame.test.tsx`：文件顶部 `LIVE_NAV_KEYS` 在退款之后加两项，另加常量 `PRODUCTS_PATH` 与 `CATEGORIES_PATH`。「lists only … in the navigation」一条（3 条）的 `ADMIN_NAV` 期望、桌面导航 href 与 aria-current 的期望改为九项，加两项的文字断言与退款 < 商品 < 分类 < 优惠券的顺序断言，测试标题加入 products 与 categories；九项即 UX-COPY 的全部导航项，原来的 `DOC_NAV_KEYS.length > LIVE_NAV_KEYS.length` 必然失效，改为 `DOC_NAV_KEYS` 与 `LIVE_NAV_KEYS` 相同（`otherNavLabels` 随之为空表，「其他导航项文字不出现」的循环不再有项）。「opens the menu …」一条（3 条）的手机菜单 href/aria-current 期望加入两项，并加两项的文字断言。
+  - `frontend/src/pages/AdminCouponsPage.test.tsx`：文件顶部 `NAV_PATHS` 在退款之后加两项；「marks coupons current …」的 aria-current 期望数组改为九项（当前项仍为优惠券）。
+  - `frontend/src/pages/AdminRefundsPage.test.tsx`：「marks the refunds item as current」的 href/aria-current 期望与导航文字期望在退款之后加两项（当前项仍为退款）。
+  - `frontend/src/pages/AdminShippingPage.test.tsx`：文件顶部 `NAV_PATHS` 与 `NAV_KEYS` 加两项；「marks shipping current, after coupons, …」的 aria-current 期望数组与 `slice(0, 7)` 改为九项（当前项仍为运费与演示汇率，测试标题的「after coupons」仍成立，未改）。
+  - `frontend/src/pages/AdminSiteSettingsPage.test.tsx`：同上，「marks site settings current, after store design, …」（标题仍成立，未改）。
+  - `frontend/src/pages/AdminStockResetsPage.test.tsx`：「marks the stock resets item as current …」的 href/aria-current 期望与导航文字期望加两项，`slice(0, 7)` 改为 `slice(0, 9)`；测试标题的「after orders and refunds」随新顺序改写为「after orders, refunds, products, categories, coupons and shipping」。
+  - `frontend/src/pages/AdminStoreDesignPage.test.tsx`：同上；测试标题的「after the other three」改写为「after the other seven before it」。
+  - `frontend/src/router.test.tsx`：路由表断言在 `/admin/refunds/:id` 之后加两条路径，并断言两条路径在表里。
+- [x] 新增测试（vitest 与 react-dom/server，fetch 以替身代替，路由用 `RouterProvider` 的 `initialPath`，不模拟点击）：
+  - `frontend/src/pages/AdminProductsPage.test.tsx` 与 `frontend/src/pages/AdminCategoriesPage.test.tsx`，写法照 `AdminShippingPage.test.tsx` 的框架部分：经路由打开渲染后台框架、不套前台框架；桌面导航与 ☰ 菜单的九项顺序（文字来自字典）与当前项的 `aria-current="page"`；手机顶栏名称；已登录时内容区只有 h1（只带 `acs-admin__h`）；渲染时不调用 fetch；页面文字全部来自字典。
+  - `frontend/src/router.test.tsx` 另加两条：两条路径不带段值（多一段不匹配、落到首页，两个导出常量的值）；两条路径以后台框架渲染且当前项正确，前台几页的标记里没有指向两页的链接。
+- 偏离：无。视觉稿 A10-desktop 与 A10-phone 的标题都是不带其他类的 `acs-admin__h`，`site.css` 里没有在手机上隐藏它的规则，桌面与手机都显示标题不需要新的布局，因此 `frontend/src/styles/site.css` 未改动。A04 的视觉稿是之后的列表与编辑内容，本任务只取标题。
+- 留给之后的任务：A10 的请求模块与页面内容由 SHOP-TASK-198、199 实现，A04 的请求模块与页面内容另行登记；有未保存的修改时离开本页的确认由 SHOP-TASK-197 实现。未做浏览器验收。
+- 验证到什么程度：人工逐条对照 UX「管理后台总体」的导航顺序、A04 与 A10 线框的手机顶栏与标题、UX-COPY 0.18 的两条文案与视觉稿 A10 的标题写法；上述测试为本次新增或修改的测试代码，前端检查由 PR 的必需 CI `frontend` 执行。

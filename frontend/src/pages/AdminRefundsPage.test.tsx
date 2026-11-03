@@ -839,6 +839,8 @@ describe("navigation", () => {
   // 站点设置（/admin/settings）六项；当前项与手机顶栏名称不变。
   // SHOP-TASK-173 改动：按 SHOP-TASK-173 验收第 4 条在优惠券之后加入运费与演示汇率（/admin/shipping），改为依次为这七项；
   // 当前项与手机顶栏名称不变。
+  // SHOP-TASK-196 改动：按 SHOP-TASK-196 验收「导航」一条在退款之后依次加入商品（/admin/products）与分类（/admin/categories），
+  // href/aria-current 与导航文字的期望改为九项；当前项与手机顶栏名称不变。
   it.each(LANGUAGES)("marks the refunds item as current in %s", (language) => {
     for (const path of [REFUNDS_PATH, "/admin/refunds/order/42"]) {
       const html = renderApp(path, language);
@@ -847,6 +849,8 @@ describe("navigation", () => {
         expect(items.map((tag) => [attributes(tag).get("href"), attributes(tag).get("aria-current")])).toEqual([
             [ORDERS_PATH, undefined],
             [REFUNDS_PATH, "page"],
+            ["/admin/products", undefined],
+            ["/admin/categories", undefined],
             ["/admin/coupons", undefined],
             ["/admin/shipping", undefined],
             ["/admin/stock-resets", undefined],
@@ -856,6 +860,8 @@ describe("navigation", () => {
         expect(all(nav, "a").filter((a) => !attributes(tags(a, "a")[0] ?? "").has("lang")).map((a) => textNodes(a).join(""))).toEqual([
             COPY["admin.nav_orders"][language],
             COPY["admin.nav_refunds"][language],
+            COPY["admin.nav_products"][language],
+            COPY["admin.nav_categories"][language],
             COPY["admin.nav_coupons"][language],
             COPY["admin.nav_shipping"][language],
             COPY["admin.nav_stock_resets"][language],

@@ -1790,6 +1790,16 @@ export const COPY = {
     zh: "退款审核",
     ms: "Bayaran balik",
   },
+  "admin.nav_products": {
+    en: "Products",
+    zh: "商品",
+    ms: "Produk",
+  },
+  "admin.nav_categories": {
+    en: "Categories",
+    zh: "分类",
+    ms: "Kategori",
+  },
   "admin.nav_coupons": {
     en: "Coupons",
     zh: "优惠券",
