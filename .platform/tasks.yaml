@@ -5274,7 +5274,7 @@ tasks:
       运营者落实写法（HANDOFF 0.80）：计价结果照现有写法不做运行时校验，只加类型字段；为新字段必须改的测试夹具（结账与会员结账的请求模块测试、P04 与 P05 的页面测试）只补这四项；{count} 直接传接口返回的 unit_limit，{amount} 为 frontend/src/format.ts 的 formatSen(amount_limit_sen)（与视觉稿 P03-P04-caps 一致，不分千位）。
       设计闸门：DESIGN 1.18（提交 5ba9796）第 8 条与 HANDOFF 0.80，整单上限的提示与数量输入（上限判定与下单校验在服务端）。
       拆分：计价类型与 P04 一层（12 个允许路径：类型加字段后 5 个现有测试文件的夹具类型检查必然不通过，只许补这四项，与加字段的改动拆不开；router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-193
     acceptance_criteria:
