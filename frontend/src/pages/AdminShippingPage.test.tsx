@@ -45,10 +45,22 @@ afterEach(() => {
 });
 
 const SHIPPING_PATH = "/admin/shipping";
-const NAV_PATHS = ["/admin/orders", "/admin/refunds", "/admin/coupons", SHIPPING_PATH, "/admin/stock-resets", "/admin/store-design", "/admin/settings"];
+const NAV_PATHS = [
+  "/admin/orders",
+  "/admin/refunds",
+  "/admin/products",
+  "/admin/categories",
+  "/admin/coupons",
+  SHIPPING_PATH,
+  "/admin/stock-resets",
+  "/admin/store-design",
+  "/admin/settings",
+];
 const NAV_KEYS = [
   "admin.nav_orders",
   "admin.nav_refunds",
+  "admin.nav_products",
+  "admin.nav_categories",
   "admin.nav_coupons",
   "admin.nav_shipping",
   "admin.nav_stock_resets",
@@ -170,13 +182,26 @@ describe("AdminShippingPage", () => {
   // [admin.nav_shipping]、[admin.nav_stock_resets]、[admin.nav_store_design]、[admin.nav_settings]」与 Kelvin 2026-10-06
   // （docs/HANDOFF.md 0.35）「后台导航只显示已上线页面的导航项」：经路由打开本页，桌面导航与 ☰ 菜单都依次为订单、退款、优惠券、
   // 运费与演示汇率、库存重置、店铺装修与站点设置七项，运费与演示汇率排在优惠券之后并标 aria-current="page"，没有其他导航项。
+  // SHOP-TASK-196 改动：按 SHOP-TASK-196 验收「导航」一条与 UX「管理后台总体」（0.17 起 [admin.nav_categories] 排在 [admin.nav_products] 之后），
+  // 在退款之后依次加入商品（/admin/products）与分类（/admin/categories）：文件顶部 NAV_PATHS 与 NAV_KEYS、aria-current 的期望数组
+  // 与按项数截取的 slice 改为九项；当前项与手机顶栏名称不变，运费与演示汇率仍排在优惠券之后。
   it.each(LANGUAGES)("marks shipping current, after coupons, in both navigation menus in %s", (language) => {
     for (const html of [renderApp(language), renderToStaticMarkup(wrap(<AdminShippingPage />, language))]) {
       for (const nav of [element(html, "nav", "site-admin__nav"), element(html, "nav", "site-admin__menu-nav")]) {
         const items = tags(nav, "a").filter((tag) => !attributes(tag).has("lang"));
         expect(items.map((tag) => attributes(tag).get("href"))).toEqual(NAV_PATHS);
-        expect(items.map((tag) => attributes(tag).get("aria-current"))).toEqual([undefined, undefined, undefined, "page", undefined, undefined, undefined]);
-        expect(textNodes(nav).slice(0, 7)).toEqual(NAV_KEYS.map((key) => COPY[key][language]));
+        expect(items.map((tag) => attributes(tag).get("aria-current"))).toEqual([
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          "page",
+          undefined,
+          undefined,
+          undefined,
+        ]);
+        expect(textNodes(nav).slice(0, 9)).toEqual(NAV_KEYS.map((key) => COPY[key][language]));
       }
     }
   });
