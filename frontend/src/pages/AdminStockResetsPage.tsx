@@ -10,7 +10,8 @@ import { ADMIN_LOGIN_PATH, useRouter } from "../router";
 import type { RoutePath } from "../router";
 
 // 后台库存重置结果 A07（docs/UX.md 0.10 A07，视觉稿 A07-desktop 与 A07-phone）：用后台框架渲染，当前导航项为库存重置。
-// 内容区为标题 admin.stock_reset_title（h1）与其下的 admin.stock_reset_note，再下为按营业日期从新到旧的每日重置结果：
+// 内容区为标题 admin.stock_reset_title（h1）与其下的 admin.stock_reset_note，再下为常显的 admin.stock_reset_off_note（SHOP-TASK-192，
+// UX 0.17 A07；页面不读取每日恢复库存开关），再下为按营业日期从新到旧的每日重置结果：
 // 桌面为表格（日期、结果、SKU 数），手机为卡片，两套都渲染，由 site.css 按宽度显隐。
 // 每天的明细用原生 details 与 summary（admin.col_sku_count）展开：桌面在该日表格行下方另起一行，手机在卡片里；
 // 首次展开时才请求该日明细，每个 SKU 一行显示 SKU 与 admin.stock_reset_breakdown；明细为空时展开后不显示行。
@@ -243,6 +244,7 @@ export function AdminStockResetsView({ state, details, onOpen, onPage }: AdminSt
     <div className="site-admin-stock-resets">
       <h1 className="acs-admin__h">{t("admin.stock_reset_title")}</h1>
       <p className="site-admin-stock-resets__note">{t("admin.stock_reset_note")}</p>
+      <p className="site-admin-stock-resets__note">{t("admin.stock_reset_off_note")}</p>
       <div className="site-admin-stock-resets__list" aria-busy={state.busy}>
         {state.error !== null && <AdminAlert error={state.error} />}
         {list !== null && (

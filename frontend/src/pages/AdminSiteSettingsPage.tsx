@@ -17,7 +17,9 @@ import { startDeferred } from "./AdminOrderDetail";
 // 显示为选中、仍可改选关闭并保存（DESIGN 1.15「边界与原则」短信验证开关一条，写法照 Stripe，HANDOFF 0.65）。再是支付方式（SHOP-TASK-139）：
 // admin.payment_method 一组两个单选（模拟与 Stripe 测试）与 admin.payment_method_hint；Stripe 测试凭据不可用时 Stripe 选项禁用、其下显示
 // admin.stripe_not_configured，当前已是 Stripe 测试时照常显示为选中、仍可改选模拟并保存（DESIGN 1.12「Stripe 测试环境支付」第 2 条）。
-// 最后为 common.save，一次提交两项；不加确认框。
+// 再是每日恢复库存（SHOP-TASK-192，UX 0.17 A09，视觉稿 A09-stock-reset）：admin.stock_reset_toggle 一组两个单选（开启与关闭）与
+// admin.stock_reset_toggle_hint；没有不可用状态，两个单选始终可选（DESIGN 1.18「计价、优惠、积分与库存」第 6 条，HANDOFF 0.80）。
+// 最后为 common.save，一次提交三项，任一项被拒三项都不写入；不加确认框。
 // 打开页面与切换界面语言时调用 GET /api/admin/site-settings，保存为 PUT（经 api/adminSiteSettings.ts；配置检查与审计在服务端）。
 // 401 换成登录页 A01；离开页面或切换语言时中止读取与进行中的保存，旧请求的结果不再更新页面。
 
@@ -25,6 +27,12 @@ import { startDeferred } from "./AdminOrderDetail";
 export const SMS_OPTIONS: readonly { enabled: boolean; value: string; label: CopyKey }[] = [
   { enabled: true, value: "on", label: "admin.sms_on" },
   { enabled: false, value: "off", label: "admin.sms_off" },
+];
+
+// 每日恢复库存的两个单选依次为开启与关闭（UX A09 线框的顺序）及其文字。
+export const STOCK_RESET_OPTIONS: readonly { enabled: boolean; value: string; label: CopyKey }[] = [
+  { enabled: true, value: "on", label: "admin.stock_reset_on" },
+  { enabled: false, value: "off", label: "admin.stock_reset_off" },
 ];
 
 // 两个单选依次为模拟与 Stripe 测试（UX A09 线框的顺序）及其文字。
@@ -40,7 +48,8 @@ export const SMS_NOTE_ID = "site-admin-settings-sms-note";
 export const STRIPE_NOTE_ID = "site-admin-settings-stripe-note";
 
 // 页面的状态：读取中（标 aria-busy，不显示表单）、读取失败（只有提示）、已取到。已取到时 base 为读取的设置（保存成功后换成返回的
-// 支付方式与短信开关，两种可用状态与 CSRF 令牌沿用读取的），choice 为所选的支付方式，smsChoice 为所选的短信开关，saving 为保存进行中，
+// 三项，两种可用状态与 CSRF 令牌沿用读取的），choice 为所选的支付方式，smsChoice 为所选的短信开关，stockResetChoice 为所选的
+// 每日恢复库存开关，saving 为保存进行中，
 // saved 为显示 admin.settings_saved，rejected 为保存被拒（凭据不可用）时在保存按钮下方显示 admin.stripe_not_configured，smsRejected 为
 // 保存被拒（短信服务不可用）时在同一位置显示 admin.sms_not_configured，alert 为表单上方的提示（403 后重新读取），
 // saveError 为保存按钮下方的其他失败提示。
@@ -52,6 +61,7 @@ export type SettingsState =
       base: AdminSiteSettings;
       choice: PaymentMethod;
       smsChoice: boolean;
+      stockResetChoice: boolean;
       saving: boolean;
       saved: boolean;
       rejected: boolean;
@@ -68,6 +78,7 @@ function ready(base: AdminSiteSettings, alert: CopyKey | null, saved = false): S
     base,
     choice: base.payment_method,
     smsChoice: base.sms_verification_enabled,
+    stockResetChoice: base.daily_stock_reset_enabled,
     saving: false,
     saved,
     rejected: false,
@@ -99,13 +110,23 @@ function failedSave(change: { rejected: true } | { smsRejected: true } | { saveE
   return (current) => (current.status === "ready" ? { ...current, saving: false, ...change } : current);
 }
 
-// 按保存结果决定：200 以返回的支付方式与短信开关更新两组的选中项并显示 admin.settings_saved；401 回到 A01；403 重新读取（reread）；
-// 凭据不可用（422 stripe_not_configured）在保存按钮下方显示 admin.stripe_not_configured、短信服务不可用（422 sms_not_configured）
-// 在同一位置显示 admin.sms_not_configured，都不改两组的选中项；网络中断 common.network_check，其他失败 common.error_retry，都保留表单。
+// 按保存结果决定：200 以返回的支付方式、短信开关与每日恢复库存开关更新三组的选中项并显示 admin.settings_saved；401 回到 A01；
+// 403 重新读取（reread）；凭据不可用（422 stripe_not_configured）在保存按钮下方显示 admin.stripe_not_configured、短信服务不可用
+// （422 sms_not_configured）在同一位置显示 admin.sms_not_configured，都不改三组的选中项；网络中断 common.network_check，
+// 其他失败 common.error_retry，都保留表单。
 export function saveStep(save: SiteSettingsSave, base: AdminSiteSettings): SettingsChange | "login" | "reread" {
   switch (save.kind) {
     case "ok": {
-      const saved = ready({ ...base, payment_method: save.payment_method, sms_verification_enabled: save.sms_verification_enabled }, null, true);
+      const saved = ready(
+        {
+          ...base,
+          payment_method: save.payment_method,
+          sms_verification_enabled: save.sms_verification_enabled,
+          daily_stock_reset_enabled: save.daily_stock_reset_enabled,
+        },
+        null,
+        true,
+      );
       return () => saved;
     }
     case "none":
@@ -131,6 +152,11 @@ export function chooseMethod(state: SettingsState, method: PaymentMethod): Setti
 // 改选短信开关：同 chooseMethod，更新短信的选中项并收起保存的提示。
 export function chooseSms(state: SettingsState, enabled: boolean): SettingsState {
   return state.status === "ready" ? { ...state, smsChoice: enabled, saved: false, rejected: false, smsRejected: false } : state;
+}
+
+// 改选每日恢复库存开关：同 chooseSms，更新开关的选中项并收起保存的提示。
+export function chooseStockReset(state: SettingsState, enabled: boolean): SettingsState {
+  return state.status === "ready" ? { ...state, stockResetChoice: enabled, saved: false, rejected: false, smsRejected: false } : state;
 }
 
 // 点保存：按钮禁用并标 aria-busy，先前的提示都收起。
@@ -161,16 +187,17 @@ export async function openSettings(signal: AbortSignal, moves: SettingsMoves, al
   }
 }
 
-// 保存两组所选的项（带读取给的 CSRF 令牌）；signal 中止之后其结果不再更新表单。403 时与首次读取一样显示读取中，
+// 保存三组所选的项（带读取给的 CSRF 令牌）；signal 中止之后其结果不再更新表单。403 时与首次读取一样显示读取中，
 // 取得后以结果重置表单并在表单上方显示 common.error_retry。
 export async function submitSettings(
   base: AdminSiteSettings,
   choice: PaymentMethod,
   smsChoice: boolean,
+  stockResetChoice: boolean,
   signal: AbortSignal,
   moves: SettingsMoves,
 ): Promise<void> {
-  const save = await saveAdminSiteSettings(choice, smsChoice, base.csrf_token, signal);
+  const save = await saveAdminSiteSettings(choice, smsChoice, stockResetChoice, base.csrf_token, signal);
   if (signal.aborted) {
     return;
   }
@@ -212,6 +239,7 @@ type ReadyState = Extract<SettingsState, { status: "ready" }>;
 interface FormHandlers {
   onChoose: (method: PaymentMethod) => void;
   onChooseSms: (enabled: boolean) => void;
+  onChooseStockReset: (enabled: boolean) => void;
   onSave: () => void;
 }
 
@@ -301,7 +329,32 @@ function PaymentGroup({ state, onChoose }: { state: ReadyState } & Pick<FormHand
   );
 }
 
-function SettingsFormView({ state, onChoose, onChooseSms, onSave }: { state: ReadyState } & FormHandlers) {
+// 每日恢复库存一组（A09-stock-reset）：两个单选始终可选，其下为 admin.stock_reset_toggle_hint。
+function StockResetGroup({ state, onChooseStockReset }: { state: ReadyState } & Pick<FormHandlers, "onChooseStockReset">) {
+  const t = useCopy();
+  return (
+    <fieldset className="acs-admin__panel site-admin-settings__group site-admin-settings__stock-reset">
+      <legend>{t("admin.stock_reset_toggle")}</legend>
+      {STOCK_RESET_OPTIONS.map(({ enabled, value, label }) => (
+        <label key={value} className="site-admin-settings__option">
+          <input
+            type="radio"
+            name="daily_stock_reset_enabled"
+            value={value}
+            checked={state.stockResetChoice === enabled}
+            onChange={() => {
+              onChooseStockReset(enabled);
+            }}
+          />
+          <span>{t(label)}</span>
+        </label>
+      ))}
+      <span className="acs-admin__muted">{t("admin.stock_reset_toggle_hint")}</span>
+    </fieldset>
+  );
+}
+
+function SettingsFormView({ state, onChoose, onChooseSms, onChooseStockReset, onSave }: { state: ReadyState } & FormHandlers) {
   const t = useCopy();
   return (
     <form
@@ -314,6 +367,7 @@ function SettingsFormView({ state, onChoose, onChooseSms, onSave }: { state: Rea
       {state.alert !== null && <AdminAlert error={state.alert} />}
       <SmsGroup state={state} onChooseSms={onChooseSms} />
       <PaymentGroup state={state} onChoose={onChoose} />
+      <StockResetGroup state={state} onChooseStockReset={onChooseStockReset} />
       <div className="site-admin-settings__save">
         <button className="acs-admin__btn" type="submit" disabled={state.saving} aria-busy={state.saving}>
           {t("common.save")}
@@ -376,13 +430,16 @@ export function AdminSiteSettingsContent() {
       onChooseSms={(enabled) => {
         setEntry((current) => (current.language === language ? { language, state: chooseSms(current.state, enabled) } : current));
       }}
+      onChooseStockReset={(enabled) => {
+        setEntry((current) => (current.language === language ? { language, state: chooseStockReset(current.state, enabled) } : current));
+      }}
       onSave={() => {
         const controller = lifetime.current;
         if (state.status !== "ready" || state.saving || controller === null) {
           return;
         }
         setEntry({ language, state: startSaving(state) });
-        void submitSettings(state.base, state.choice, state.smsChoice, controller.signal, pageMoves(language, setEntry, replace));
+        void submitSettings(state.base, state.choice, state.smsChoice, state.stockResetChoice, controller.signal, pageMoves(language, setEntry, replace));
       }}
     />
   );

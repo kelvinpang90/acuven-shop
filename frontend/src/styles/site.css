@@ -378,7 +378,9 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-refund__stripe-retry { justify-self: start; }
 
 /* 后台库存重置结果 A07 的页头（A07-desktop）：内容最宽 960px，标题与说明上下排列（间距 16px）；说明内边距 10px 12px。
-   说明的底色、文字颜色、字号与圆角 site.css 写不了，记在 docs/TODO.md 的偏离里 */
+   说明的底色、文字颜色、字号与圆角 site.css 写不了，记在 docs/TODO.md 的偏离里。
+   常显的 admin.stock_reset_off_note（SHOP-TASK-192，A07-desktop 与 A07-phone）与上面的说明同一个类，间距与内边距相同，桌面与手机都显示；
+   它的底色、字号与圆角同样写不了，记在任务记录的偏离里 */
 .site-admin-stock-resets { display: grid; gap: 16px; max-width: 960px; }
 .site-admin-stock-resets__note { margin: 0; padding: 10px 12px; }
 
@@ -484,6 +486,8 @@ a.site-admin-refunds__clear { text-decoration: none; }
    site.css 写不了，记在任务记录的偏离里 */
 .site-admin-settings__cost { display: flex; gap: 8px; padding: 8px 10px; }
 .site-admin-settings__cost svg { flex-shrink: 0; margin-top: 2px; }
+/* A09 每日恢复库存一组（SHOP-TASK-192，A09-stock-reset）：一组与选项沿用上面支付方式的写法（面板内边距 20px、组内间距 10px、单选 18×18、
+   选项至少 44px 高），不另加规则。legend 与选中项的字重、提示的字号 site.css 写不了，记在任务记录的偏离里 */
 
 /* 后台运费区与演示汇率 A06（SHOP-TASK-175，A06-desktop 与 A06-desktop-states）：页面分两列，左栏为标题与三块运费，右栏为 460px 的演示汇率、
    admin.rules_apply_new 与保存（列间距 24px，各块上下间距 16px，顶端对齐）；表单区与表单不另成一层（display: contents），右栏从标题那一行起，

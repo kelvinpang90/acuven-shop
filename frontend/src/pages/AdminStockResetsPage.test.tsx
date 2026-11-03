@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+// 经 Vite 的 ?raw 读成字符串（与 AdminSiteSettingsPage.test.tsx 相同），用来逐字核对 admin.stock_reset_off_note。
+import uxCopy from "../../../docs/UX-COPY.md?raw";
 import App from "../App";
 import type { StockResetLine, StockResetList, StockResetRow } from "../api/adminStockResets";
 import { AdminFrameView } from "../components/AdminFrame";
@@ -308,6 +310,8 @@ describe("content", () => {
   // 只有这一个 h1，其后依次为说明与列表区；刚打开时列表区标 aria-busy、还没有表格或卡片。
   // SHOP-TASK-060 改动：原「shows only the title and the note in the content area」（SHOP-TASK-059 守住「内容区只有标题与说明、没有列表」，
   // 列表留给 SHOP-TASK-060）改为标题与说明之后为列表区；标题与说明的写法不变。
+  // SHOP-TASK-192 改动：UX 0.17 A07 线框在 [admin.stock_reset_note] 之下加了 [admin.stock_reset_off_note]；按顺序比较的标题与说明
+  // 补上这一段（标签与类名照 admin.stock_reset_note），其余不变。
   it.each(LANGUAGES)("shows the title and the note above the list in %s", (language) => {
     const main = element(renderSignedIn(language), "main", "acs-admin__main");
     expect(attributes(tags(main, "main")[0] ?? "").get("aria-busy")).toBe("false");
@@ -315,9 +319,14 @@ describe("content", () => {
     expect(element(main, "div", "site-admin-stock-resets")).toBe(
       `<div class="site-admin-stock-resets"><h1 class="acs-admin__h">${escapeHtml(COPY["admin.stock_reset_title"][language])}</h1>` +
         `<p class="site-admin-stock-resets__note">${escapeHtml(COPY["admin.stock_reset_note"][language])}</p>` +
+        `<p class="site-admin-stock-resets__note">${escapeHtml(COPY["admin.stock_reset_off_note"][language])}</p>` +
         `<div class="site-admin-stock-resets__list" aria-busy="true"></div></div>`,
     );
-    expect(textNodes(main)).toEqual([COPY["admin.stock_reset_title"][language], COPY["admin.stock_reset_note"][language]]);
+    expect(textNodes(main)).toEqual([
+      COPY["admin.stock_reset_title"][language],
+      COPY["admin.stock_reset_note"][language],
+      COPY["admin.stock_reset_off_note"][language],
+    ]);
     expect(INITIAL_LIST).toEqual({ busy: true, list: null, error: null });
   });
 
@@ -329,6 +338,38 @@ describe("content", () => {
     expect([...pageSource.matchAll(/from "\.\.\/api\/([^"]+)"/g)].map((m) => m[1])).toEqual(["adminStockResets", "adminStockResets"]);
     expect(pageSource).not.toMatch(/\bfetch\s*\(/);
     expect(pageSource).not.toMatch(/method:\s*"(POST|PUT|PATCH|DELETE)"/);
+  });
+
+  // UX 0.17 A07「本页不读取开关状态，[admin.stock_reset_off_note] 常显」、桌面与手机线框「[admin.stock_reset_note] / [admin.stock_reset_off_note]」
+  // 与 HANDOFF 0.80（1）「A07 的 admin.stock_reset_off_note 常显、不读取开关」：读取中、读取失败、有结果、没有结果与翻页后，这一段都紧接在
+  // admin.stock_reset_note 之下、列表区之前（不在只给桌面的表格或只给手机的卡片里），标签与类名照 admin.stock_reset_note；
+  // 页面源码不涉及站点设置的接口与开关字段。
+  it.each(LANGUAGES)("always shows the switch-off note under the note in %s", (language) => {
+    const note = `<p class="site-admin-stock-resets__note">${escapeHtml(COPY["admin.stock_reset_note"][language])}</p>`;
+    const offNote = `<p class="site-admin-stock-resets__note">${escapeHtml(COPY["admin.stock_reset_off_note"][language])}</p>`;
+    const states: ListState[] = [
+      INITIAL_LIST,
+      { busy: false, list: null, error: "common.network_check" },
+      { busy: false, list: null, error: "common.error_retry" },
+      shown(list()),
+      shown(list({ resets: [], total: 0 })),
+      shown(list({ resets: [JAN1], total: 31, page: 2 })),
+      { busy: true, list: list(), error: null },
+    ];
+    for (const state of states) {
+      const html = render({ state }, language);
+      expect(html).toContain(`${note}${offNote}<div class="site-admin-stock-resets__list"`);
+      expect(html.split(escapeHtml(COPY["admin.stock_reset_off_note"][language]))).toHaveLength(2);
+    }
+    expect(pageSource).not.toMatch(/adminSiteSettings|daily_stock_reset_enabled|site-settings/);
+  });
+
+  // SHOP-TASK-192 验收「copy.ts 按 UX-COPY 0.18 逐字加入……admin.stock_reset_off_note」：与 UX-COPY 的对应列逐字相同。
+  it.each(LANGUAGES)("has the switch-off note word for word from UX-COPY in %s", (language) => {
+    const column = { en: 2, zh: 3, ms: 4 }[language];
+    const row = uxCopy.split("\n").find((line) => line.startsWith("| `admin.stock_reset_off_note` |")) ?? "";
+    expect(row).not.toBe("");
+    expect(row.split("|")[column]?.trim()).toBe(COPY["admin.stock_reset_off_note"][language]);
   });
 });
 
@@ -726,7 +767,13 @@ describe("loading the list", () => {
       expect(area).toBe(
         `<div class="site-admin-stock-resets__list" aria-busy="false"><div class="acs-admin__alert" role="alert"><span>${escapeHtml(COPY[key][language])}</span></div></div>`,
       );
-      expect(textNodes(html)).toEqual([COPY["admin.stock_reset_title"][language], COPY["admin.stock_reset_note"][language], COPY[key][language]]);
+      // SHOP-TASK-192 改动：说明之下补上常显的 admin.stock_reset_off_note（UX 0.17 A07）。
+      expect(textNodes(html)).toEqual([
+        COPY["admin.stock_reset_title"][language],
+        COPY["admin.stock_reset_note"][language],
+        COPY["admin.stock_reset_off_note"][language],
+        COPY[key][language],
+      ]);
     }
   });
 

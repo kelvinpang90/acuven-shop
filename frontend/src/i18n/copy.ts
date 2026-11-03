@@ -2170,6 +2170,11 @@ export const COPY = {
     zh: "重置只恢复当日库存，不改动历史订单、退款与积分。",
     ms: "Tetapan semula hanya memulihkan stok hari ini. Pesanan, bayaran balik dan mata lalu tidak diubah.",
   },
+  "admin.stock_reset_off_note": {
+    en: "While daily stock reset is turned off in Site settings, no resets run and no new results appear here.",
+    zh: "在站点设置中关闭每日恢复库存期间，不会重置，这里也没有新的记录。",
+    ms: "Semasa tetapan semula stok harian dimatikan dalam Tetapan laman, tiada tetapan semula dijalankan dan tiada keputusan baharu dipaparkan di sini.",
+  },
   "admin.nav_store_design": {
     en: "Store design",
     zh: "店铺装修",
@@ -2369,6 +2374,26 @@ export const COPY = {
     en: "Saved. New requests use this setting.",
     zh: "已保存，之后的请求按此设置执行。",
     ms: "Disimpan. Permintaan baharu menggunakan tetapan ini.",
+  },
+  "admin.stock_reset_toggle": {
+    en: "Daily stock reset",
+    zh: "每日恢复库存",
+    ms: "Tetapan semula stok harian",
+  },
+  "admin.stock_reset_on": {
+    en: "On (default)",
+    zh: "开启（默认）",
+    ms: "Hidup (lalai)",
+  },
+  "admin.stock_reset_off": {
+    en: "Off",
+    zh: "关闭",
+    ms: "Mati",
+  },
+  "admin.stock_reset_toggle_hint": {
+    en: "When on, each SKU's stock for today is reset every day (Malaysia time) to its daily initial stock minus active holds. When off, stock changes only with orders, cancellations and today's adjustments, and stays at zero once sold out. If today's reset hasn't run yet, turning it back on resets today's stock within about a minute, replacing adjustments made earlier today.",
+    zh: "开启时，每天（马来西亚时间）把各 SKU 的当日库存恢复为每日初始库存减去仍有效的预留。关闭时，库存只随下单、取消与当日库存调整变化，卖完即为零。当天还没恢复的，重新开启后约一分钟内即恢复当天库存，并覆盖当天此前的调整。",
+    ms: "Apabila hidup, stok hari ini bagi setiap SKU ditetapkan semula setiap hari (waktu Malaysia) kepada stok awal harian tolak tahanan aktif. Apabila mati, stok hanya berubah dengan pesanan, pembatalan dan pelarasan hari ini, dan kekal sifar apabila habis dijual. Jika tetapan semula hari ini belum dijalankan, menghidupkannya semula menetapkan semula stok hari ini dalam kira-kira seminit, menggantikan pelarasan yang dibuat awal hari ini.",
   },
   "admin.payment_method": {
     en: "Payment method",
