@@ -784,6 +784,32 @@ describe("the summary", () => {
 // ---- 下单 ----
 
 describe("placing the order", () => {
+  // SHOP-TASK-195，UX 0.17 P05「整单上限」与任务验收「游客与会员共用同一个视图」：会员计价超出整单件数与金额上限时（服务端照有不正常行的写法返回，
+  // SHOP-TASK-178：券与积分不接受、can_place_order 为 false），各步内容之前依次为 cart.units_over_limit、cart.amount_over_limit，之下一个回购物车的链接；下单按钮禁用。
+  it.each(LANGUAGES)("shows the order limit alerts on the member step in %s", (language) => {
+    const over = memberQuoteOf({
+      units_over_limit: true,
+      amount_over_limit: true,
+      can_place_order: false,
+      coupon_applied: null,
+      coupon_discount_sen: 0,
+      points_accepted: false,
+      points_redeemed: 0,
+      points_earned: 0,
+    });
+    const quote = readyMember(over);
+    const html = render({ quote, language });
+    const alert = (value: string) => `<div class="acs-alert acs-alert--danger" role="alert"><svg[^>]*aria-hidden="true">(?:(?!</svg>)[\\s\\S])*</svg><span>${escapeRegExp(value)}</span></div>`;
+    const units = alert(filled("cart.units_over_limit", { count: "2000" }, language));
+    const amount = alert(filled("cart.amount_over_limit", { amount: "999999.99" }, language));
+    expect(html).toMatch(new RegExp(`<div class="site-checkout__changed">${units}${amount}<a class="acs-btn acs-btn--secondary site-checkout__back" href="/cart">`));
+    expect(html).not.toContain(copy("cart.item_changed", language));
+    expect(count(html, "site-checkout__back")).toBe(1);
+    expect(html.indexOf("site-checkout__changed")).toBeLessThan(html.indexOf(copy("checkout.recipient_title", language)));
+    expect(count(html, `disabled="">${copy("checkout.place_order", language)}</button>`)).toBe(2);
+    expect(canPlaceOrder(MEMBER_STEP, quote, CART)).toBe(false);
+  });
+
   // 验收「下单只带最近一次计价里 coupon_applied 为真的代码与 points_accepted 为真的积分数（运营者落实写法，HANDOFF 0.63）」：
   // 两者都接受时带上；券不适用（false）或未给（null）时不带券；积分不接受时为 0；没有计价时都不带。
   it("takes only the coupon and points that the latest quote accepted", () => {

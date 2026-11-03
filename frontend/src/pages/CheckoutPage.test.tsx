@@ -33,6 +33,7 @@ import {
   INITIAL_FORM,
   leaveTurnsSmsOff,
   leaveVerify,
+  overOrderLimit,
   quoteDestination,
   recipientComplete,
   replyEffects,
@@ -923,6 +924,129 @@ describe("changed lines", () => {
   });
 });
 
+describe("order limits (SHOP-TASK-195)", () => {
+  function regexEscape(value: string): string {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  // cart.item_changed 的提示条写法（acs-alert acs-alert--danger、role alert、同一图形）的匹配式。
+  function alert(value: string): string {
+    return `<div class="acs-alert acs-alert--danger" role="alert"><svg[^>]*aria-hidden="true">(?:(?!</svg>)[\\s\\S])*</svg><span>${regexEscape(escapeHtml(value))}</span></div>`;
+  }
+
+  function unitsText(language: Language, limit = "2000"): string {
+    return COPY["cart.units_over_limit"][language].replace("{count}", limit);
+  }
+
+  function amountText(language: Language, amount = "999999.99"): string {
+    return COPY["cart.amount_over_limit"][language].replace("{amount}", amount);
+  }
+
+  // 超出时服务端给 can_place_order 为 false（DESIGN 1.18 第 8 条，SHOP-TASK-178）。
+  const UNITS_OVER = quoteOf({ ...TO_BRITAIN, units_over_limit: true, can_place_order: false });
+  const AMOUNT_OVER = quoteOf({ ...TO_BRITAIN, amount_over_limit: true, fx_reference: null, can_place_order: false });
+  const BOTH_OVER = quoteOf({ ...TO_BRITAIN, units_over_limit: true, amount_over_limit: true, fx_reference: null, can_place_order: false });
+  const BACK_LINK = `<a class="acs-btn acs-btn--secondary site-checkout__back" href="/cart">`;
+
+  // UX 0.17 P05「整单上限」：「计价接口返回超出整单件数…上限的标记时，…在 [cart.item_changed] 的位置（各步内容之前）显示 [cart.units_over_limit]…，
+  // 可回购物车（链接文字同 [common.nav_cart]），[checkout.place_order] 禁用（接口的「可下单」为否，沿用现有写法）」；{count} 为接口返回的上限件数。
+  it.each(LANGUAGES)("shows cart.units_over_limit before the steps and disables placing in %s", (language) => {
+    const quote = readyQuote(UNITS_OVER);
+    const html = render({ form: step3(), quote, language });
+    expect(html).toMatch(new RegExp(`<div class="site-checkout__changed">${alert(unitsText(language))}${regexEscape(BACK_LINK)}`));
+    expect(html).not.toContain(copy("cart.item_changed", language));
+    expect(html).not.toContain(escapeHtml(COPY["cart.amount_over_limit"][language].split("{amount}")[0] ?? ""));
+    expect(html.indexOf("site-checkout__changed")).toBeLessThan(html.indexOf(copy("checkout.recipient_title", language)));
+    expect(count(html, `disabled="">${copy("checkout.place_order", language)}</button>`)).toBe(2);
+    expect(canPlaceOrder(step3(), quote, CART)).toBe(false);
+  });
+
+  // 同一段「…或金额上限的标记时…显示 [cart.amount_over_limit]」与 HANDOFF 0.80「{amount} 用 formatSen（不分千位）」：数字取接口返回的 amount_limit_sen；按钮禁用。
+  it.each(LANGUAGES)("shows cart.amount_over_limit with the returned limit and disables placing in %s", (language) => {
+    const quote = readyQuote(AMOUNT_OVER);
+    const html = render({ form: step3(), quote, language });
+    expect(html).toMatch(new RegExp(`<div class="site-checkout__changed">${alert(amountText(language))}${regexEscape(BACK_LINK)}`));
+    expect(html).not.toContain(escapeHtml(unitsText(language)));
+    expect(count(html, `disabled="">${copy("checkout.place_order", language)}</button>`)).toBe(2);
+    expect(canPlaceOrder(step3(), quote, CART)).toBe(false);
+    const other = render({ form: step3(), quote: readyQuote(quoteOf({ ...AMOUNT_OVER, amount_limit_sen: 12345 })) });
+    expect(other).toContain(`<span>${escapeHtml(amountText("en", "123.45"))}</span>`);
+  });
+
+  // UX P04 线框「同时存在时都显示，样式与 [cart.item_changed] 相同」（P05 沿用）：先件数后金额，三条图形相同（视觉稿 P03-P04-caps）。
+  it.each(LANGUAGES)("shows both limit alerts, units first, in %s", (language) => {
+    const html = render({ form: step3(), quote: readyQuote(BOTH_OVER), language });
+    expect(html).toMatch(new RegExp(`<div class="site-checkout__changed">${alert(unitsText(language))}${alert(amountText(language))}${regexEscape(BACK_LINK)}`));
+    const icons = [...html.matchAll(/role="alert">(<svg[\s\S]*?<\/svg>)/g)].map((m) => m[1]);
+    expect(icons).toHaveLength(2);
+    expect(new Set(icons).size).toBe(1);
+  });
+
+  // HANDOFF 0.80「有非正常行与超出上限同时出现时，三条提示依次为 cart.item_changed、cart.units_over_limit、cart.amount_over_limit，下面只有一个回购物车的链接」。
+  it.each(LANGUAGES)("shows cart.item_changed first and only one cart link in %s", (language) => {
+    const rows: QuoteLine[] = [{ sku: "gone-sku", quantity: 1, status: "unavailable" }, ...ROWS];
+    const lines = rows.map((line) => ({ sku: line.sku, slug: "x", quantity: line.quantity }));
+    const html = render({ lines, form: step3(), quote: readyQuote(quoteOf({ ...BOTH_OVER, lines: rows })), language });
+    expect(html).toMatch(
+      new RegExp(`<div class="site-checkout__changed">${alert(COPY["cart.item_changed"][language])}${alert(unitsText(language))}${alert(amountText(language))}${regexEscape(BACK_LINK)}`),
+    );
+    expect(count(html, "site-checkout__back")).toBe(1);
+    expect(count(html, "site-checkout__changed")).toBe(1);
+    // 下单 409 后（notice 为 changed）同样只有一个链接。
+    const replied = render({ form: step3({ notice: "changed" }), quote: readyQuote(UNITS_OVER), language });
+    expect(replied).toMatch(new RegExp(`${alert(COPY["cart.item_changed"][language])}${alert(unitsText(language))}${regexEscape(BACK_LINK)}`));
+    expect(count(replied, "site-checkout__back")).toBe(1);
+  });
+
+  // UX 0.17 P05「计价接口返回超出…的标记时」才显示：未超出时（夹具为 2000、false、99999999、false）两条都不显示，也没有提示块与回购物车的链接。
+  it.each(LANGUAGES)("shows no limit alert within the limits in %s", (language) => {
+    for (const form of [STEP_1, step3()]) {
+      const html = render({ form, quote: readyQuote(TO_BRITAIN), language });
+      expect(html).not.toContain(escapeHtml(COPY["cart.units_over_limit"][language].split("{count}")[0] ?? ""));
+      expect(html).not.toContain(escapeHtml(COPY["cart.amount_over_limit"][language].split("{amount}")[0] ?? ""));
+      expect(html).not.toContain("site-checkout__changed");
+    }
+    expect(overOrderLimit(TO_BRITAIN)).toBe(false);
+    expect(overOrderLimit(null)).toBe(false);
+    expect(overOrderLimit(UNITS_OVER)).toBe(true);
+    expect(overOrderLimit(AMOUNT_OVER)).toBe(true);
+  });
+
+  // HANDOFF 0.80「件数上限在第 1 步的计价里就能判断，提示照现有 cart.item_changed 的写法在任一步都显示（同一位置、同一回购物车链接），不只限第 3 步」：
+  // 第 1 步（未选目的地的计价）、第 2 步与第 3 步都显示，在各步内容之前；第 1 步没有下单按钮。
+  it("shows the limit alert on every step", () => {
+    const atStep1 = render({ form: STEP_1, quote: readyQuote(quoteOf({ units_over_limit: true })) });
+    expect(atStep1).toMatch(new RegExp(`<div class="site-checkout__changed">${alert(unitsText("en"))}${regexEscape(BACK_LINK)}`));
+    expect(atStep1.indexOf("site-checkout__changed")).toBeLessThan(atStep1.indexOf(copy("checkout.phone_continue")));
+    expect(atStep1).not.toContain(copy("checkout.place_order"));
+    const atStep2 = render({ form: STEP_2, reference: referenceOf(true), verify: checkoutVerify(SITE_KEY), quote: readyQuote(quoteOf({ units_over_limit: true })) });
+    expect(atStep2).toMatch(new RegExp(alert(unitsText("en"))));
+    const atStep3 = render({ form: step3(), quote: readyQuote(UNITS_OVER) });
+    expect(atStep3).toMatch(new RegExp(`<div class="site-checkout__changed">${alert(unitsText("en"))}${regexEscape(BACK_LINK)}`));
+  });
+
+  // 任务验收「与 cart.item_changed 用同一个 ready：重新计价进行中（pending）时照现有写法沿用上一次的结果显示，没有任何结果（首次读取中）或读取失败时不显示上限提示」；
+  // pending 时 canPlaceOrder 本来就为否。
+  it("keeps the last result while re-quoting and shows nothing without one", () => {
+    const pending = readyQuote(UNITS_OVER, true);
+    expect(render({ form: step3(), quote: pending })).toMatch(new RegExp(alert(unitsText("en"))));
+    expect(canPlaceOrder(step3(), pending, CART)).toBe(false);
+    for (const quote of [{ status: "loading" }, { status: "error" }] as const) {
+      const html = render({ form: step3(), quote });
+      expect(html).not.toContain(escapeHtml(unitsText("en")));
+      expect(html).not.toContain("site-checkout__changed");
+    }
+  });
+
+  // 任务验收「canPlaceOrder 照现有写法依赖 can_place_order，不另加判定」：超出时接口给 can_place_order 为 false、按钮禁用；
+  // 同一结果若 can_place_order 为 true，canPlaceOrder 只看它（上限判定与下单校验在服务端）。
+  it("disables placing through can_place_order only", () => {
+    expect(canPlaceOrder(step3(), readyQuote(BOTH_OVER), CART)).toBe(false);
+    expect(count(render({ form: step3(), quote: readyQuote(BOTH_OVER) }), `disabled="">${copy("checkout.place_order")}</button>`)).toBe(2);
+    expect(canPlaceOrder(step3(), readyQuote({ ...BOTH_OVER, can_place_order: true }), CART)).toBe(true);
+  });
+});
+
 describe("placing the order", () => {
   // SHOP-TASK-025 验收第 8 条「checkout.place_order 旁显示 ◆ checkout.place_order_hint」：桌面与手机的按钮之后各有一条菱形标记的提示。
   it.each(LANGUAGES)("shows the order hint next to the button in %s", (language) => {
@@ -1227,6 +1351,9 @@ describe("dictionary", () => {
       { language, form: step3({ notice: "unavailable" }), quote: readyQuote(withGone) },
       { language, form: step3({ notice: "error" }), quote: { status: "error" } },
       { language, form: SELANGOR_FORM, quote: readyQuote(TO_SELANGOR) },
+      // SHOP-TASK-195：非正常行与两条整单上限提示同时显示（第 3 步），以及第 1 步的件数上限提示。
+      { language, form: step3(), quote: readyQuote(quoteOf({ ...withGone, units_over_limit: true, amount_over_limit: true, fx_reference: null, can_place_order: false })) },
+      { language, quote: readyQuote(quoteOf({ units_over_limit: true })) },
     ];
     for (const state of states) {
       for (const value of visibleTexts(render(state))) {
@@ -1296,6 +1423,9 @@ const CHECKOUT_KEYS: readonly CopyKey[] = [
   "cart.subtotal",
   "cart.shipping_later",
   "cart.item_changed",
+  // SHOP-TASK-195：P05 的两条整单上限提示（SHOP-TASK-194 已加入字典）。
+  "cart.units_over_limit",
+  "cart.amount_over_limit",
   "cart.empty",
   "cart.continue",
 ];
