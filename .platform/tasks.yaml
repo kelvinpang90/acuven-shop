@@ -5203,14 +5203,7 @@ tasks:
     status: done
     depends_on: []
     acceptance_criteria:
-      - 页面内容与文案以 docs/UX.md 0.17 的 A09 与 A07、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.80 为准，样式以 docs/design/pages/ 的 A09-stock-reset（开关一组）、A09-stripe-desktop 与 A09-stripe-phone（其余部分）、A07-desktop 与 A07-phone 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入 admin.stock_reset_toggle、admin.stock_reset_on、admin.stock_reset_off、admin.stock_reset_toggle_hint 与 admin.stock_reset_off_note，写法与相邻条目相同（每种语言一行）
-      - 请求模块——读取的响应体另要求 daily_stock_reset_enabled 为布尔值（缺少或类型不对算不合格）并带进结果；saveAdminSiteSettings 改为同时提交三项（JSON 请求体只有 payment_method、sms_verification_enabled 与 daily_stock_reset_enabled），200 的响应体另要求 daily_stock_reset_enabled 为布尔值并带进 ok 结果；其余归类（含 stripe_not_configured 与 sms_not_configured）、请求头、no-store 与中止处理不变
-      - 表单——支付方式一组之后、common.save 之前是 admin.stock_reset_toggle 一组（fieldset 与 legend 照现有两组）两个单选 admin.stock_reset_on 与 admin.stock_reset_off（UX 线框的顺序），其下 admin.stock_reset_toggle_hint；选中项为读取（或保存后）的当前值；两个单选始终可选；不加确认框
-      - 保存——点 common.save 以三组的当前选择与读取给的 csrf_token 调用保存；ok 以返回的三项更新三组的选中项并显示 admin.settings_saved；not_configured 与 sms_not_configured 照现有写法显示、三组选中项都不变；改选开关后与改选另两组一样收起保存的提示；其余结果（none、csrf、network、failed）与读取的处理照现有写法不变
-      - A07——frontend/src/pages/AdminStockResetsPage.tsx 在 admin.stock_reset_note 之下、每日结果之前加一段常显的 admin.stock_reset_off_note（标签与类名照 admin.stock_reset_note 那一段），桌面与手机都显示；不读取开关状态，不发新的请求，列表、翻页与明细不变
-      - 代码结构沿用 frontend/src/pages/AdminSiteSettingsPage.tsx 现有写法（导出把结果变成页面状态的纯函数、接收 AbortSignal 与回调的异步函数，以及只依赖 props 的 View；改选开关另导出与 chooseSms 对应的纯函数，开关的两个选项照 SMS_OPTIONS 导出）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
-      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——frontend/src/api/adminSiteSettings.test.ts 的新字段与合格判定、请求体只有三项；frontend/src/pages/AdminSiteSettingsPage.test.tsx 的开关一组在支付方式之后、选中项随当前值、两个单选都可选、保存带三组选择、ok 更新三组、被拒时三组都不变、改选开关收起提示；frontend/src/pages/AdminStockResetsPage.test.tsx 的 admin.stock_reset_off_note 在 admin.stock_reset_note 之下常显；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - 现有测试只在必要时修改并写明原因——请求体与保存调用参数的断言、按顺序比较表单文字或单选的断言、legend 与 fieldset 的个数、状态与读取结果的整体比较、夹具与替身的 200 回答随第三项补上；A07 按顺序比较标题与说明的断言补上新的一段；短信、支付方式两组与后台框架、导航的期望不变；docs/task-records/SHOP-TASK-192.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由，不改导航；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 第 6 条与 HANDOFF 0.80），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-192.md
     allowed_change_paths:
       - frontend/src/api/adminSiteSettings.ts
       - frontend/src/api/adminSiteSettings.test.ts
@@ -5240,14 +5233,7 @@ tasks:
     status: done
     depends_on: []
     acceptance_criteria:
-      - 页面内容与文案以 docs/UX.md 0.17 的 P03、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.80 为准，样式以 docs/design/pages/ 的 P03-P04-caps（数量输入框、common.qty_capped 与整单已满）与 P03-desktop、P03-phone 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入 detail.cart_units_full 与 common.qty_capped，写法与相邻条目相同（每种语言一行）
-      - 购物车模块——MAX_LINE_QUANTITY 改为 1000（与计价接口的请求上限相同），sanitizeCart、addToCart 与 setLineQuantity 的每行判定随之为 1 到 1000；新增导出常量 MAX_CART_UNITS 为 2000；addToCart 在合并或新增后全部行的件数合计超过 MAX_CART_UNITS 时不加入、返回 null；sanitizeCart 与 setLineQuantity 不按整单合计判定；存储格式、20 行上限与其余函数不变；注释里写 99 的地方随之改写
-      - P03 可加入件数——frontend/src/pages/productOptions.ts 的 purchaseState 的 remaining 为「max_per_order 减去 productQuantity」与「MAX_CART_UNITS 减去 cartItemCount」中较小的、不小于 0；block 新增 cart_units_full，禁用原因同时满足时只给一个，依次为 limit_reached（限购剩余为 0）、cart_units_full（整单剩余为 0）、cart_full（20 行已满且所选规格不在其中）；P03 在 detail.limit_reached 的同一位置以同样的标签与类名显示 detail.cart_units_full（{count} 为 MAX_CART_UNITS），加入按钮禁用；addSelection 照现有写法在 block 不为 null 时不加入
-      - P03 数量直接输入——(-) 与 (+) 之间的 output 换成数字输入框（input，inputmode 为 numeric，aria-label 为 detail.quantity 的文字；类名照视觉稿 P03-P04-caps 的 acs-input），只收整数，回车或离开输入框时生效；输入中的文字只存在页面状态里；生效时先去掉首尾空白，余下的必须全是 ASCII 数字 0–9（不收正负号、小数点、指数写法与全角数字），按十进制读成整数；为空、不全是这些数字或小于 1 时恢复为原来的件数（这条解析写成 frontend/src/cart.ts 导出的纯函数 parseQuantityInput，返回整数或 null，SHOP-TASK-194 的 P04 复用）；大于 remaining 时改为 remaining（remaining 为 0 时恢复为原来的件数，按钮已禁用），并在数量下方（detail.max_per_order 之前）以 acs-field__hint 与 role status 显示 common.qty_capped（{count} 为 remaining）；不超过时照收；(+)(-)、改选规格、加入或再次输入后收起 common.qty_capped；(+) 的禁用条件照旧为显示的件数不小于 remaining
-      - 代码结构沿用 frontend/src/pages/ProductDetailPage.tsx 与 productOptions.ts 的现有写法（把输入文字变成件数与是否改成上限的判定写成导出的纯函数，View 只依赖 props）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
-      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与存储以替身代替）验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——frontend/src/cart.test.ts 的 1000 件每行上限、整单 2,000 件时 addToCart 拒绝、清洗不按整单丢行、parseQuantityInput 对空白、正负号、小数、指数写法与全角数字返回 null；frontend/src/pages/productOptions.test.ts 的 remaining 取两者较小、三种禁用原因的先后；frontend/src/pages/ProductDetailPage.test.tsx 的数量输入框与读屏标签、空值小数与小于 1 恢复原件数、超过时改为上限并显示 common.qty_capped、整单已满时按钮禁用并显示 detail.cart_units_full、与 detail.limit_reached 同时满足时只显示后者；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - 现有测试只在必要时修改并写明原因——cart.test.ts 里以 99 为每行上限的三条断言改为 1000；ProductDetailPage.test.tsx 里以 output 显示件数的断言改为输入框；其余期望不变
-      - docs/task-records/SHOP-TASK-193.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 P04 与 P05 页面；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 第 8 条与 HANDOFF 0.80），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-193.md
     allowed_change_paths:
       - frontend/src/cart.ts
       - frontend/src/cart.test.ts
@@ -5278,13 +5264,7 @@ tasks:
     depends_on:
       - SHOP-TASK-193
     acceptance_criteria:
-      - 页面内容与文案以 docs/UX.md 0.17 的 P04、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.80 为准，样式以 docs/design/pages/ 的 P03-P04-caps（数量输入框、common.qty_capped 与两条上限提示）与 P04-desktop、P04-phone、P04-states 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入 cart.units_over_limit 与 cart.amount_over_limit，写法与相邻条目相同（每种语言一行）
-      - 计价类型——frontend/src/api/checkout.ts 的 CheckoutQuote 加入 unit_limit（数字）、units_over_limit（布尔）、amount_limit_sen（数字，整数仙）、amount_over_limit（布尔），注释写明含义（照服务端 app/services/checkout.py 的注释）；DestinationQuote 与会员的 MemberQuote 经继承带上；请求与其他类型不变；frontend/src/api/checkout.test.ts、frontend/src/api/memberCheckout.test.ts、frontend/src/pages/CartPage.test.tsx、frontend/src/pages/CheckoutPage.test.tsx 与 frontend/src/pages/CheckoutMember.test.tsx 里构造计价结果的夹具只补这四项（未超出时为 2000、false、99999999、false），其余断言不变
-      - P04 (+)——canIncrease 另要求购物车全部行件数合计（cartItemCount）小于 MAX_CART_UNITS；每行 1000 件的判定照旧经 MAX_LINE_QUANTITY；限购的判定不变
-      - P04 数量直接输入——每个可购买行的 (-) 与 (+) 之间的件数换成数字输入框（input，inputmode 为 numeric，aria-label 为 detail.quantity 的文字；类名照视觉稿 P03-P04-caps 的 acs-input），只收整数，回车或离开输入框时生效；输入文字经 SHOP-TASK-193 的 parseQuantityInput 解析（与 P03 同一规则），为 null 时恢复为原来的件数；不大于该行现有件数时照收；大于时上限为「该行现有件数 + max(0, min(接口返回的 max_per_order 减去该商品各行合计（productTotal）, MAX_CART_UNITS 减去 cartItemCount))」，超过上限且上限大于现有件数时改为上限并在该行数量下方以 acs-field__hint 与 role status 显示 common.qty_capped（{count} 为上限），上限等于现有件数时只恢复为原件数、不显示 common.qty_capped；生效后经 changeQuantity 写回并照现有写法重新计价；该行的 (+)(-)、移除或再次输入后收起该行的 common.qty_capped；不可购买的行照旧只显示件数
-      - P04 整单上限提示——计价结果的 units_over_limit 为真时显示 cart.units_over_limit（{count} 为 unit_limit），amount_over_limit 为真时显示 cart.amount_over_limit（{amount} 为 formatSen(amount_limit_sen)）；两条都照 cart.item_changed 的提示条写法（acs-alert acs-alert--danger、role alert、同一图形），位置在 cart.item_changed 之下（没有非正常行时就在它的位置），依次为件数、金额，可同时显示，与各行的 cart.over_limit 互不影响；cart.checkout 照旧显示
-      - 代码结构沿用 frontend/src/pages/CartPage.tsx 现有写法（把输入文字变成件数、算上限的判定写成导出的纯函数，View 只依赖 props）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；用 vitest 与 react-dom/server（不加测试依赖，fetch 与存储以替身代替）验证意图（以 renderToStaticMarkup 渲染、直接调用导出的函数，不模拟点击）——CartPage.test.tsx 的整单 2,000 件时 (+) 禁用、输入框与读屏标签、空值与小于 1 恢复、减少照收、超过时改为上限并显示 common.qty_capped、后台调低限购后上限等于现有件数时只恢复不提示、两条上限提示的文字与先后、未超出时不显示；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - 现有测试只在必要时修改并写明原因——以 output 显示件数的断言改为输入框，夹具补四项，其余期望不变；docs/task-records/SHOP-TASK-194.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 P05 页面的源码；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 第 8 条与 HANDOFF 0.80），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-194.md
     allowed_change_paths:
       - frontend/src/api/checkout.ts
       - frontend/src/api/checkout.test.ts
@@ -5315,11 +5295,7 @@ tasks:
     depends_on:
       - SHOP-TASK-194
     acceptance_criteria:
-      - 页面内容与文案以 docs/UX.md 0.17 的 P05、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.80 为准，样式以 docs/design/pages/ 的 P03-P04-caps（两条上限提示）与 P05-states 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改）；cart.units_over_limit 与 cart.amount_over_limit 已由 SHOP-TASK-194 加入字典，本任务不另加文案
-      - 提示——frontend/src/pages/CheckoutPage.tsx 的 ChangedNotice 一块在有非正常行（或下单 409 后）、当前计价结果的 units_over_limit 为真、或 amount_over_limit 为真时显示：依次为 cart.item_changed（只在前一种情形）、cart.units_over_limit（{count} 为 unit_limit）、cart.amount_over_limit（{amount} 为 frontend/src/format.ts 的 formatSen(amount_limit_sen)），每条照现有 cart.item_changed 的提示条写法（acs-alert acs-alert--danger、role alert、同一图形），其下只有一个回购物车的链接（文字为 common.nav_cart，照现有写法）；任一步都显示；当前计价结果取自页面已有的 ready（游客与会员共用的计价），与 cart.item_changed 用同一个 ready：重新计价进行中（pending）时照现有写法沿用上一次的结果显示，没有任何结果（首次读取中）或读取失败时不显示上限提示
-      - 下单按钮——canPlaceOrder 照现有写法依赖 can_place_order，不另加判定；测试写明超出上限时接口给 can_place_order 为 false、按钮禁用
-      - 代码结构沿用 CheckoutPage.tsx 现有写法（显示条件写成导出的纯函数或沿用 View 的 props）；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；用 vitest 与 react-dom/server（不加测试依赖，fetch 与存储以替身代替）验证意图（以 renderToStaticMarkup 渲染、直接调用导出的函数，不模拟点击）——frontend/src/pages/CheckoutPage.test.tsx 的件数超出、金额超出与两者同时的提示与先后、与 cart.item_changed 同时出现时只有一个回购物车链接、未超出时不显示、第 1 步与第 3 步都显示、超出时下单按钮禁用；会员路径在 frontend/src/pages/CheckoutMember.test.tsx 加一条同一提示的断言；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - 现有测试只在必要时修改并写明原因；docs/task-records/SHOP-TASK-195.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；含「任一步都显示」的落实写法、偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 第 8 条与 HANDOFF 0.80），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-195.md
     allowed_change_paths:
       - frontend/src/pages/CheckoutPage.tsx
       - frontend/src/pages/CheckoutPage.test.tsx
@@ -5329,6 +5305,145 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/styles/site.css
       - docs/task-records/SHOP-TASK-195.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-196
+    title: 后台商品与分类页的路由与导航 A04、A10
+    purpose: >-
+      为 A04 新建路由 /admin/products 与页面 frontend/src/pages/AdminProductsPage.tsx、为 A10 新建路由 /admin/categories 与页面 frontend/src/pages/AdminCategoriesPage.tsx（都用后台框架渲染，内容区只有标题），
+      后台导航按 docs/UX.md 0.17「管理后台总体」的顺序在退款之后依次加入商品与分类两项。请求模块与页面内容留给之后的任务（A10 为 SHOP-TASK-198、199，A04 另行登记），未保存修改的离开确认留给 SHOP-TASK-197。不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只加路由、导航与标题，不碰金额与个人资料）。
+      拆分：两页的框架层，照 A06 的 SHOP-TASK-173；两页的导航项相邻，一起加只让现有导航断言改一次。18 个允许路径，超过拆分规则的 12 个：导航多两项后，8 个现有测试文件里按顺序列出导航项或路由表的断言必然失效
+      （运营者在登记时对 main 的导出做骨架实测：类型检查与 lint 通过，25 条测试失败，全部在这 8 个文件里），只许改这些断言，与加导航的改动拆不开。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 路由——frontend/src/router.tsx 的路由表在 /admin/refunds/:id 之后加入 /admin/products 与 /admin/categories，导出 ADMIN_PRODUCTS_PATH 与 ADMIN_CATEGORIES_PATH，文件顶部说明后台页的注释补上这两条路径（不带段值）；frontend/src/App.tsx 的页面表加入两页；前台页头、菜单与页脚没有指向它们的入口
+      - 导航——frontend/src/components/AdminFrame.tsx 的 AdminNavItem 与 ADMIN_NAV 在 refunds 之后依次加入 products（admin.nav_products）与 categories（admin.nav_categories），桌面导航与手机菜单都按这个顺序列出，手机顶栏名称为当前页的导航项名称；文件顶部「导航只列已上线的页面」一句随之改写；frontend/src/i18n/copy.ts 按 docs/UX-COPY.md 0.18 逐字加入 admin.nav_products 与 admin.nav_categories，写法与相邻条目相同（每种语言一行）
+      - 页面——两页都以后台框架渲染，current 分别为 products 与 categories；内容区只有标题 h1（类名照其他后台页的 acs-admin__h），文字分别为 admin.nav_products 与 admin.nav_categories；桌面与手机都显示标题（视觉稿 A10-phone 的内容区有标题），需要的布局写在 frontend/src/styles/site.css；不发请求，不加其他文字
+      - 测试——新增 frontend/src/pages/AdminProductsPage.test.tsx 与 AdminCategoriesPage.test.tsx，写法照 AdminShippingPage.test.tsx 的框架部分（以 renderToStaticMarkup 渲染、fetch 与路由以替身代替，不模拟点击）：当前导航项、导航顺序、手机顶栏名称、标题文字与页面文字全部来自字典；frontend/src/components/AdminFrame.test.tsx 与 frontend/src/router.test.tsx 补上两项与两条路径；每条测试写明它守住的是 UX 的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - 现有测试只改必然失效的断言并写明原因——运营者的骨架实测列出的 25 条失败：AdminFrame.test.tsx 的导航顺序（3 条）与手机菜单（3 条），AdminCouponsPage.test.tsx、AdminRefundsPage.test.tsx、AdminShippingPage.test.tsx、AdminSiteSettingsPage.test.tsx、AdminStockResetsPage.test.tsx 与 AdminStoreDesignPage.test.tsx 里按顺序比较导航项的断言（各 3 条，测试名里的「after …」随新顺序改写），router.test.tsx 的路由表（1 条）；只在期望的导航项列表或路由表里补上新项，各页面自身的其他期望不变
+      - docs/task-records/SHOP-TASK-196.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；改了哪些现有断言、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/AdminProductsPage.tsx
+      - frontend/src/pages/AdminProductsPage.test.tsx
+      - frontend/src/pages/AdminCategoriesPage.tsx
+      - frontend/src/pages/AdminCategoriesPage.test.tsx
+      - frontend/src/components/AdminFrame.tsx
+      - frontend/src/components/AdminFrame.test.tsx
+      - frontend/src/pages/AdminCouponsPage.test.tsx
+      - frontend/src/pages/AdminRefundsPage.test.tsx
+      - frontend/src/pages/AdminShippingPage.test.tsx
+      - frontend/src/pages/AdminSiteSettingsPage.test.tsx
+      - frontend/src/pages/AdminStockResetsPage.test.tsx
+      - frontend/src/pages/AdminStoreDesignPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-196.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-197
+    title: 后台未保存修改的离开确认（路由拦截与框架确认框，A04、A10 共用）
+    purpose: >-
+      按 docs/UX.md 0.17 的 A04 与 A10「列表」一段（有未保存的修改时，点另一项的编辑、新建、后台导航、手机的返回或退出，先弹确认框 admin.unsaved_confirm；admin.unsaved_leave 丢弃并继续，admin.unsaved_stay 留在本页、保留已填的值；
+      浏览器的后退与前进在本站内切页时同样弹框，选留下时把地址栏恢复为本页；刷新与关闭标签页由浏览器自己的离开提示拦一次；点「已被改动」的重新读取不再确认，Kelvin 2026-10-30 决定），
+      在路由与后台框架里提供共用的拦截与确认框，供 A10（SHOP-TASK-199）与 A04 的页面接入。本任务没有页面接入它。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.81）：路由只提供拦截，确认框由后台框架渲染；replace（401 回到登录页等）不受拦截；浏览器后退或前进被拦下时，先把当前位置以 pushState 写回地址栏，选离开后再以 push 前往原本的目标（历史记录会多一条，可接受）；
+      页内的切换（另一项的编辑、新建、手机的返回）由页面调用框架给出的函数，不经路由；确认框样式照视觉稿 A10-states 的写法（acs-admin__panel、role dialog、aria-modal）。
+      设计闸门：不适用（只做离开前的确认，不碰金额与个人资料；保存与核对仍在服务端）。
+      拆分：路由与框架一层（8 个允许路径，App.tsx、copy.ts 与 site.css 按页面任务的惯例列入），页面接入在 199 与 A04 的任务里。
+    status: ready
+    depends_on:
+      - SHOP-TASK-196
+    acceptance_criteria:
+      - 文案与样式以 docs/UX.md 0.17 的 A04、A10「列表」一段、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.81 为准，确认框样式以 docs/design/pages/A10-states 的未保存确认框为准；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局写在 frontend/src/styles/site.css（不声明颜色、字体、圆角属性，视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色与阴影不搬，记入任务记录的偏离（评审不以此要求修改）；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入 admin.unsaved_confirm、admin.unsaved_leave 与 admin.unsaved_stay，写法与相邻条目相同（每种语言一行）
+      - 路由——frontend/src/router.tsx 的路由上下文新增设置离开拦截的函数（参数为拦截函数或 null；拦截函数收到一个「继续」回调）；设有拦截时，navigate 换到与当前不同的位置前先交给拦截函数，选继续才换（与当前位置相同时照旧只回到顶部、不拦截）；replace 不拦截；浏览器 popstate 时设有拦截，先以 pushState 把地址栏写回切换前的路径与查询串、页面不换，再交给拦截函数，选继续时以 push 前往 popstate 的目标；设有拦截期间注册 beforeunload 监听（调用 preventDefault 并把 returnValue 设为空串），拦截清除后移除；没有拦截时一切行为与现在相同
+      - 框架——frontend/src/components/AdminFrame.tsx 导出供内容区使用的 hook（参数为页面当前是否有未保存的修改，返回「确认后继续」的函数）：有未保存的修改时向路由设置拦截，返回的函数弹出确认框、选离开才调用传入的回调；没有未保存的修改时不设拦截、返回的函数直接调用回调；页面卸载或改为没有修改时清除拦截；admin.logout 在有未保存的修改时先弹同一个确认框，选离开才退出；手机菜单里的导航经同一路由拦截
+      - 确认框——框架内渲染一个确认框（acs-admin__panel，role dialog，aria-modal true，以 aria-labelledby 指向文字 admin.unsaved_confirm），按钮依次为 admin.unsaved_stay（次要按钮，打开时取得焦点）与 admin.unsaved_leave（主要按钮）；留下关闭确认框、不调用回调、已填的值不变；离开关闭确认框后调用回调；按 Escape 等同留下；同时只有一个确认框，打开期间再次触发以最后一次的回调为准
+      - 代码结构——把拦截的判定（是否拦截、popstate 时写回的地址与继续时的目标）与确认框的状态变化写成导出的函数，View 只依赖 props；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 测试——用 vitest 与 react-dom/server（不加测试依赖；浏览器以 router.tsx 现有的 BrowserLike 替身代替，不模拟点击）验证意图：router.test.tsx 的有拦截时 navigate 不换位置、继续后才换、相同位置不拦截、replace 不拦截、popstate 写回切换前的地址且继续后 push 到目标、没有拦截时行为不变、beforeunload 只在有拦截时阻止；AdminFrame.test.tsx 的确认框文字与按钮顺序、留下与离开、Escape、没有修改时直接继续、退出前确认；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - 现有测试只在必要时修改并写明原因（路由上下文多一个函数，替身与夹具只补这一项）；导航、语言切换、会话读取与退出的现有期望不变
+      - docs/task-records/SHOP-TASK-197.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；导出的 hook 与函数的签名和用法，供 199 与 A04 的任务接入；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；App.tsx 按页面任务的固定写法列入，不需要时不改）；不改页面；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - frontend/src/components/AdminFrame.tsx
+      - frontend/src/components/AdminFrame.test.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-197.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-198
+    title: 后台分类的请求模块 A10
+    purpose: >-
+      为 A10 页面新建调用 SHOP-TASK-181 三个接口（读取 GET、新建 POST /api/admin/categories 与保存 PUT /api/admin/categories/{category_id}）的请求模块 frontend/src/api/adminCategories.ts 与测试，供 SHOP-TASK-199 使用；
+      不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（分类的取值规则、核对与审计在 SHOP-TASK-180、181 的服务端，依据 DESIGN 1.18 第 14 条；请求模块只传递与校验字段，不碰金额与个人资料）。
+      拆分：A10 页面的请求层（3 个允许路径），照 A06 的 SHOP-TASK-174。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 写法照 frontend/src/api/adminShippingRates.ts（同源 cookie、cache no-store、Accept 与 Content-Type、写操作带读取给的 CSRF 令牌于 pay.ts 的 CSRF_HEADER、接收 AbortSignal、只取接口记录列出的字段且多出的字段不带进结果、响应体不合格算失败、页面只按状态码与 detail 区分，不显示错误体）
+      - 读取——GET /api/admin/categories：200 且响应体为 categories 数组与非空字符串 csrf_token 时为 ok（分类按接口给的顺序）；每个分类要求 id 为正整数、slug 为非空字符串、name_en、name_zh、name_ms 各为字符串或 null、is_active 为布尔值、version 为不小于 0 的整数、visible_products 为不小于 0 的整数，任一项不合格整个读取算失败；401 为 none；其他状态与不合格为 failed；网络中断与调用方中止为 network
+      - 新建——POST /api/admin/categories，JSON 请求体只有 name_en、name_zh、name_ms（字符串，原样提交，不去空白）与 is_active（布尔值）；201 且响应体为一个合格的分类时为 ok 并带回该分类；422 且 detail 为 category_invalid 为 invalid，409 且 detail 为 category_changed 为 changed；401 为 none，403 为 csrf；其他 422 与其他状态、响应体不合格为 failed；网络中断与中止为 network
+      - 保存——PUT /api/admin/categories/{category_id}（路径段为分类 ID 的十进制），请求体为新建的四项另加 version（整数）；200 且响应体为一个合格的分类时为 ok 并带回该分类；其余归类同新建
+      - 测试验证意图（不加测试依赖，fetch 以替身代替）——frontend/src/api/adminCategories.test.ts：三个请求的方法、地址、请求头、no-store 与请求体只有规定的字段；读取的合格判定（缺字段、类型不对、负数、非整数、多出字段不带进结果、空 csrf_token）；新建与保存的各种状态与 detail 的归类；中止为 network；每条测试写明它守住的是接口记录、DESIGN 1.18 第 14 条或 UX 0.17 A10 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-198.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；导出的类型与函数签名，供 199 使用；验证到什么程度，只写实际存在的测试）；改动只落在 allowed_change_paths；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/adminCategories.ts
+      - frontend/src/api/adminCategories.test.ts
+      - docs/task-records/SHOP-TASK-198.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-199
+    title: 后台分类 A10 的列表、新建、编辑与保存（含停用确认与未保存确认）
+    purpose: >-
+      在 SHOP-TASK-196 的 A10 页面上接 SHOP-TASK-198 的请求模块与 SHOP-TASK-197 的未保存确认：按 docs/UX.md 0.17 的 A10 显示全部分类（名称、slug、前台可见商品件数、启用状态）与个数，新建与逐个编辑三语名称和启用状态并保存，
+      停用有前台可见商品的分类前确认，显示保存中与四种保存结果，依据 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 14 条。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.81）：打开页面时不选中任何分类，编辑区在点 common.edit 或 common.create 之后才显示；手机上编辑区打开时隐藏列表、编辑区上方为 common.back 按钮，照 frontend/src/pages/AdminCouponsPage.tsx 的写法（视觉稿 A10-phone 画在顶栏的返回改在页内，记入偏离）；
+      切换界面语言不重新读取、不丢失已填的值（分类数据与界面语言无关）；名称原样提交，不在页面去空白；页面只先查「勾选启用而英文名称为空（去掉首尾空白后）」一种，其余取值由服务端判断；{language} 为内容语言在当前界面语言下的名称（common.lang_zh 或 common.lang_ms 的文字）；
+      重新读取（admin.reload）整页读取后，编辑区显示同一分类的最新数据（已不存在时收起编辑区）；读取与保存的 401 照 A06 页面现有写法回到 A01；新建或保存遇到 403 时重新读取整页（取得新的 CSRF 令牌与列表），编辑区仍停在同一分类（或新建表单），已填的名称、启用状态与提交前的 version 都保留（不换成重新读取的 version，别处的改动仍由服务端以「分类已被改动」拦下），在表单上方显示 common.error_retry；新建或保存时网络中断只显示 common.network_check、保留表单，不自动重新读取（新建可能已经成功，再次提交会因英文名称重复被服务端以「取值不合格」拒绝，管理员可重新读取核对）；读取时网络中断照 A06 显示 common.network_check。
+      设计闸门：不适用（分类不碰金额与个人资料；取值核对、并发核对与审计在服务端，依据 DESIGN 1.18 第 14 条）。
+      拆分：A10 页面层（7 个允许路径，router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-196
+      - SHOP-TASK-197
+      - SHOP-TASK-198
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.17 的 A10、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.81 为准，样式以 docs/design/pages/ 的 A10-desktop、A10-phone 与 A10-states 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入本页用到而字典里还没有的键（A10 的 admin.categories_* 与 admin.category_* 各键、admin.content_language、common.edit 与 common.cancel），写法与相邻条目相同（每种语言一行）
+      - 列表——标题 admin.nav_categories 旁为 common.create；其下 admin.categories_count（{count} 为分类个数，{max} 为 30）；已有 30 个时 common.create 禁用并显示 admin.categories_full；桌面为表格（admin.category_name、admin.category_slug、admin.category_visible、admin.category_enabled 四列与每行的 common.edit），手机为卡片（英文名称、状态与 admin.category_visible 件数，整张卡片为带读屏标签 common.edit 的按钮），两套都渲染、由 site.css 按宽度显隐；顺序照接口；名称列为英文名称，为空或 null 时显示 —；状态为 admin.category_on 或 admin.category_off（样式照视觉稿）
+      - 编辑区——标题为 admin.category_edit（新建时 admin.category_new）；admin.content_language 三个按钮（common.lang_en、common.lang_zh、common.lang_ms，aria-pressed 标出当前内容语言，默认英文）切换名称输入框（可见标签 admin.category_name）显示与编辑的语言，切换不丢失其他语言已填的值；内容语言为中文或马来文且该语言名称为空（去掉首尾空白后）时在输入框下显示 admin.category_translation_missing；admin.category_enabled 勾选框（新建默认勾选）；编辑已有分类时显示 admin.category_slug 与 slug，新建时不显示；admin.category_slug_hint 常显；最后为 common.save，保存中禁用并标 aria-busy
+      - 保存——新建以三项名称与启用状态调用新建，编辑以四项另加读取（或上次保存）给的 version 调用保存；勾选启用而英文名称为空时不提交、显示 admin.category_invalid；编辑已有分类时把启用改为不启用且该分类的 visible_products 大于 0，先弹确认框（文字 admin.category_disable_confirm，{count} 为该件数；按钮 common.cancel 与 admin.category_disable；样式照 SHOP-TASK-197 的确认框），确认后才提交，为 0 时直接提交；ok 以返回的分类更新列表与编辑区（新建后进入该分类的编辑区）并显示 admin.category_saved（新建为 admin.category_created）；invalid 显示 admin.category_invalid、保留已填的值；changed 显示 admin.category_changed 与 admin.reload；其他失败 common.error_retry；改任何输入后收起保存的结果提示
+      - 未保存确认——读取或保存返回的名称为 null 时，编辑区的输入框与比较基线都当作空串（提交时为空串）；编辑区的三项名称或启用状态与最近一次读取或保存的值（按上面归一后；新建时为三项空串与勾选启用）不同即为有未保存的修改，以 SHOP-TASK-197 的 hook 接入：点另一项的 common.edit、common.create、手机的 common.back 先经确认；后台导航、浏览器前进后退、退出与刷新由框架与路由拦截；点 admin.reload 不再确认，直接丢弃修改重新读取；保存成功后不再算有修改
+      - 代码结构沿用 frontend/src/pages/AdminShippingPage.tsx 与 AdminCouponsPage.tsx 的写法（导出把结果变成页面状态的纯函数、接收 AbortSignal 与回调的异步函数、只依赖 props 的 View；判断有未保存修改、页面先查、是否要停用确认写成导出的纯函数）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 测试——用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击），写在 frontend/src/pages/AdminCategoriesPage.test.tsx：列表与个数、已满时新建禁用并显示 admin.categories_full、英文名称为空显示 —、桌面与手机两套、编辑区默认不显示、内容语言切换保留各语言的值、admin.category_translation_missing 只在中文或马来文且为空时显示、新建不显示 slug、勾选启用缺英文名称不提交、停用确认只在可见件数大于 0 时出现、四种保存结果、新建成功进入编辑区、有未保存修改的判定（含名称为 null 的分类打开后未改不算修改、改了才算）、reload 后编辑区显示最新数据、保存 403 后重新读取而编辑区与已填的值和 version 保留、新建网络中断只显示 common.network_check 且不重新读取；SHOP-TASK-196 写的只有标题的断言改为新内容；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-199.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；含手机返回改在页内的偏离、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/AdminCategoriesPage.tsx
+      - frontend/src/pages/AdminCategoriesPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-199.md
     allowed_commands:
       - lint.check
       - format.check
