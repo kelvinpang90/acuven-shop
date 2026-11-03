@@ -5507,7 +5507,7 @@ tasks:
       本任务的编辑区只有标题 admin.product_edit，输入框与未保存确认在 SHOP-TASK-203，保存在 204，新增规格值与 SKU、新建、图片与当日库存调整在 205 至 208。不装依赖，不改后端，不改设计。
       运营者落实写法（HANDOFF 0.82）：打开页面时并行读取商品列表与分类，两者都成功才显示列表；不选中任何商品，点 common.edit 后立即收起当前的编辑区、读取该商品，成功后才显示编辑区（读取期间编辑区的位置不显示内容，UX-COPY 没有读取中的文字）；
       手机上编辑区打开时隐藏列表、编辑区上方为 common.back 按钮，照 frontend/src/pages/AdminCouponsPage.tsx 与 SHOP-TASK-199 的写法（视觉稿 A04-phone-edit 画在顶栏的返回改在页内，记入偏离）；
-      列表的商品名称与分类名称按后台界面语言显示、缺译回退英文，都为 null 时显示 —；分类读取的结果留在页面状态里，供 203 的分类下拉使用；切换界面语言不重新读取。
+      列表的商品名称与分类名称按后台界面语言显示、缺译回退英文，都缺时显示 —（为 null 或空串都算缺译）；分类读取的结果留在页面状态里，供 203 的分类下拉使用；切换界面语言不重新读取。
       设计闸门：不适用（只读取与显示列表、打开编辑区，不显示也不提交金额，不碰个人资料；价格的显示与提交在 203、204，依据 DESIGN 1.18 第 11 条）。
       拆分：A04 页面的列表与打开一层（7 个允许路径，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）；登记时的预审估计显示与输入合在一层会超过约 1500 行，按它的建议拆成本任务与 203。
     status: ready
@@ -5519,7 +5519,7 @@ tasks:
       - 页面内容与文案以 docs/UX.md 0.17 的 A04、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.82 为准，样式以 docs/design/pages/ 的 A04-desktop 与 A04-phone-edit 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入本任务用到而字典里还没有的键（admin.active、admin.unpublished、admin.product_edit、common.edit 若尚无等），写法与相邻条目相同（每种语言一行）
       - 读取——打开页面时并行读取商品列表（SHOP-TASK-200）与分类（SHOP-TASK-198），两者都为 ok 才显示列表；任一为 none 时照 frontend/src/pages/AdminShippingPage.tsx 现有写法回到 A01；否则任一为 network 时显示 common.network_check，其他失败显示 common.error_retry；页面卸载时以 AbortSignal 中止
       - 列表——标题 admin.nav_products；桌面为表格（每行商品名称、分类名称、状态 admin.active 或 admin.unpublished 与 common.edit），手机为卡片（商品名称与状态，整张卡片为带读屏标签 common.edit 的按钮），两套都渲染、由 site.css 按宽度显隐；顺序照接口；名称的显示规则照 purpose 的落实写法
-      - 打开编辑区——打开页面时编辑区不显示；点某行 common.edit 照 purpose 收起当前编辑区并读取该商品，ok 时显示编辑区（标题 admin.product_edit），none 回到 A01，network 与其他失败在编辑区的位置显示 common.network_check 或 common.error_retry；读取期间再点另一行时以最后一次为准（前一次以 AbortSignal 中止，它的结果不显示）；手机上编辑区打开（含读取失败的提示）时隐藏列表、上方为 common.back，点它回到列表
+      - 打开编辑区——打开页面时编辑区不显示；点某行 common.edit 照 purpose 收起当前编辑区并读取该商品，ok 时显示编辑区（标题 admin.product_edit），none 回到 A01，network 与其他失败在编辑区的位置显示 common.network_check 或 common.error_retry；读取期间再点另一行时以最后一次为准（前一次以 AbortSignal 中止，它的结果不显示）；点编辑区已打开（或正在读取）的那一件商品的 common.edit 不做任何事；手机上点 common.edit 之后（读取期间、读取失败与打开后）都隐藏列表、上方为 common.back，点它中止尚未完成的读取、回到列表
       - 代码结构——沿用 frontend/src/pages/AdminShippingPage.tsx 与 AdminCouponsPage.tsx 的写法（导出把读取结果变成页面状态的纯函数、接收 AbortSignal 与回调的异步函数、只依赖 props 的 View；名称回退写成导出的纯函数）；页面状态里保留读取到的单件商品、分类读取结果与列表给的 CSRF 令牌，供 203 至 208 接入；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
       - 测试——用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替；以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）在 frontend/src/pages/AdminProductsPage.test.tsx 验证意图：列表两套与名称回退（界面语言有译名时用它、缺译回退英文、都为 null 显示 —）、状态文字、两个读取的组合结果（任一 none 回到 A01、network 与其他失败的提示）、编辑区默认不显示、读取单件成功后显示标题、读取失败的提示、后发的读取覆盖先发的；SHOP-TASK-196 写的只有标题的断言改为新内容；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-202.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；含手机返回改在页内的偏离、页面状态与导出函数的写法供 203 至 208 接入、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
@@ -5542,9 +5542,9 @@ tasks:
       在 SHOP-TASK-202 打开的编辑区里，按 docs/UX.md 0.17 的 A04 显示并编辑一件已有商品的三语名称与描述、分类、上架状态、每单限购、规格名与规格值的三语名称、已有 SKU 的价格、每日初始库存与启用状态，并以 SHOP-TASK-197 的 hook 接入未保存确认，
       依据 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 11 条。本任务不提交保存（common.save 与保存结果在 SHOP-TASK-204），不做新增规格值与 SKU（205）、新建（206）、图片（207）与当日库存调整（208）。不装依赖，不改后端，不改设计。
       运营者落实写法（HANDOFF 0.82）：规格列（admin.variant）为该 SKU 各规格值最近一次读取或保存的名称，按后台界面语言、缺译回退英文，以「 / 」相连，没有规格名时为 —；
-      分类下拉框的选项为分类读取结果里启用且英文名称不为 null 的分类（按接口顺序，文字按后台界面语言、缺译回退英文），商品当前分类不在其中时另加它一项排在最前（文字取商品列表该项的 category_name_*，按同样的规则），选中的不是可选分类时其下显示 admin.category_current_unavailable；
+      分类下拉框的选项为分类读取结果里启用且英文名称不为 null 的分类（按接口顺序，文字按后台界面语言、缺译回退英文），商品当前分类不在其中时另加它一项排在最前（文字取商品列表该项的 category_name_*，按同样的规则，都缺时为 —；为 null 或空串都算缺译），选中的不是可选分类时其下显示 admin.category_current_unavailable；
       读取为 null 的文案在输入框与比较基线里都当作空串；价格输入框的初值为整仙用整数运算写成的两位小数文字（照 frontend/src/pages/AdminShippingPage.tsx 的 feeText）；切换界面语言不重新读取、不丢失已填的值；
-      有未保存的修改时点另一行的 common.edit，先经确认、选离开才照 202 收起并读取。
+      有未保存的修改时点另一行的 common.edit，先经确认、选离开才照 202 收起并读取；点当前已打开的那一件商品的 common.edit 照 202 不做任何事，不经确认、不丢失修改。
       设计闸门：DESIGN 1.18（提交 5ba9796）第 11 条与 HANDOFF 0.82，价格以 RM 文字显示与编辑（本任务不提交；取值核对、并发核对与审计在服务端）。
       拆分：A04 编辑区的显示与输入一层（7 个允许路径，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入），由预审建议从 202 拆出。
     status: ready
