@@ -416,8 +416,9 @@ function CategoryList({ categories, onEdit }: { categories: readonly AdminCatego
             >
               <span className="site-admin-categories__card-text">
                 <span>{listName(category)}</span>
-                <span className="acs-admin__muted">
-                  {t("admin.category_visible")} {category.visible_products}
+                <span className="acs-admin__muted site-admin-categories__visible">
+                  <span>{t("admin.category_visible")}</span>
+                  <span>{category.visible_products}</span>
                 </span>
               </span>
               <CategoryStatus category={category} />

@@ -425,6 +425,7 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-categories__cards { display: none; margin: 0; padding: 0; list-style: none; }
 .site-admin-categories__card { display: flex; gap: 10px; align-items: center; width: 100%; min-height: 44px; padding: 12px 14px; text-align: left; cursor: pointer; }
 .site-admin-categories__card-text { display: grid; gap: 4px; flex-grow: 1; min-width: 0; overflow-wrap: anywhere; }
+.site-admin-categories__visible { display: flex; flex-wrap: wrap; gap: 4px; }
 .site-admin-categories__chevron { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; }
 .site-admin-categories__back { display: none; }
 .site-admin-categories__editor { display: grid; gap: 12px; align-content: start; min-width: 0; }
