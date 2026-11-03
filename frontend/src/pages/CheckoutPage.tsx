@@ -75,6 +75,7 @@ import { InfoIcon, PAY_PATH } from "./PayPage";
 //
 // 摘要用购物车各行 SKU 与件数（选定国家，马来西亚另须选定州属后，加国家与州属）调用计价接口，只采用最后一次请求的结果；
 // 金额只格式化接口返回的整数（formatSen、formatMinorUnits），不在浏览器相加或相乘。
+// 计价结果超出整单件数或金额上限时（SHOP-TASK-195，docs/UX.md 0.17 P05，HANDOFF 0.80），在 cart.item_changed 的位置任一步都显示两条上限提示。
 // 下单请求体与幂等键规则见 api/orders.ts；201 或 200 时清空本浏览器购物车并以站内导航进入 /pay（不带订单号）。
 // 电话与收货资料只在 React 状态里，不进网址、localStorage、sessionStorage 或 cookie（刷新后需重填）。
 
@@ -337,7 +338,7 @@ export function completeOrder(storage: CartStorage | null, navigate: (path: Rout
   navigate(PAY_PATH);
 }
 
-// 可下单：第 3 步、未在提交、必填项齐全、当前请求的计价已返回、选定了目的地且接口说可下单、没有非正常行。
+// 可下单：第 3 步、未在提交、必填项齐全、当前请求的计价已返回、选定了目的地且接口说可下单（超出整单上限时服务端给 false）、没有非正常行。
 export function canPlaceOrder(form: CheckoutForm, quote: SummaryQuote, lines: readonly CartLine[]): boolean {
   return (
     form.step === 3 &&
@@ -506,15 +507,30 @@ function HeadlineAmount({ quote, className }: { quote: DestinationQuote; classNa
   );
 }
 
-// 有非正常行（或下单时 409 order_not_placeable）：cart.item_changed，并可回购物车（链接文字为页头同一条 common.nav_cart）。
-function ChangedNotice({ lines }: { lines: readonly CartLine[] }) {
+// 计价结果超出整单件数或金额上限（docs/UX.md 0.17 P05「整单上限」，DESIGN 1.18 第 8 条）；没有结果时为否。
+// 判定在服务端，超出时接口的 can_place_order 为 false，下单按钮照 canPlaceOrder 禁用。
+export function overOrderLimit(quote: DestinationQuote | null): boolean {
+  return quote !== null && (quote.units_over_limit || quote.amount_over_limit);
+}
+
+function DangerAlert({ children }: { children: ReactNode }) {
+  return (
+    <div className="acs-alert acs-alert--danger" role="alert">
+      <AlertIcon />
+      <span>{children}</span>
+    </div>
+  );
+}
+
+// 各步内容之前的提示（任一步都显示，HANDOFF 0.80）：有非正常行（或下单时 409 order_not_placeable）时 cart.item_changed，
+// 当前计价结果超出整单上限时其后依次为 cart.units_over_limit、cart.amount_over_limit；之下只有一个回购物车的链接（文字为页头同一条 common.nav_cart）。
+function ChangedNotice({ lines, changed, quote }: { lines: readonly CartLine[]; changed: boolean; quote: DestinationQuote | null }) {
   const t = useCopy();
   return (
     <div className="site-checkout__changed">
-      <div className="acs-alert acs-alert--danger" role="alert">
-        <AlertIcon />
-        <span>{t("cart.item_changed")}</span>
-      </div>
+      {changed && <DangerAlert>{t("cart.item_changed")}</DangerAlert>}
+      {quote?.units_over_limit === true && <DangerAlert>{t("cart.units_over_limit", { count: quote.unit_limit })}</DangerAlert>}
+      {quote?.amount_over_limit === true && <DangerAlert>{t("cart.amount_over_limit", { amount: formatSen(quote.amount_limit_sen) })}</DangerAlert>}
       <Link className="acs-btn acs-btn--secondary site-checkout__back" to={CART_PATH}>
         {t("common.nav_cart", { count: cartItemCount(lines) })}
       </Link>
@@ -927,7 +943,7 @@ export function CheckoutView({ lines, reference, quote, form, actions, member, v
       </details>
       <div className="site-checkout__body">
         <div className="site-checkout__main">
-          {changed && <ChangedNotice lines={lines} />}
+          {(changed || overOrderLimit(ready)) && <ChangedNotice lines={lines} changed={changed} quote={ready} />}
           {form.step === 1 && <PhoneStep {...step} />}
           {form.step === 2 && <VerifyStep {...step} />}
           {form.step === 3 && <RecipientStep {...step} />}
