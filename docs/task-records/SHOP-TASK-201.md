@@ -1,0 +1,50 @@
+# SHOP-TASK-201 后台商品图片与当日库存调整的请求模块 A04
+
+- [x] 新增 `frontend/src/api/adminProductImages.ts` 与 `frontend/src/api/adminProductImages.test.ts`：为 A04 页面调用 SHOP-TASK-190 的 `POST /api/admin/products/{product_id}/images`（上传）、`PUT /api/admin/products/{product_id}/images`（调序）与 `DELETE /api/admin/products/{product_id}/images/{image_id}`（移除）。
+- [x] 新增 `frontend/src/api/adminStockAdjust.ts` 与 `frontend/src/api/adminStockAdjust.test.ts`：为 A04 页面调用 SHOP-TASK-182 的 `POST /api/admin/variants/{variant_id}/available-stock`。
+- 写法照 `frontend/src/api/adminShippingRates.ts`（SHOP-TASK-174）与 `frontend/src/api/adminCategories.ts`（SHOP-TASK-198）：`isRecord`、`isFilled`、`readBody`、`detailIs` 等内部函数在两个文件里各自另写，两个模块互不引用；CSRF 请求头名取 `frontend/src/api/pay.ts` 的 `CSRF_HEADER`。图片模块的图片类型以 `import type` 取 `frontend/src/api/adminProducts.ts`（SHOP-TASK-200）的 `AdminProductImage`，与单件读取的 `images` 为同一类型，没有运行时依赖。改动只在这四个文件与本文件；不做页面，不改路由与导航、后端、设计、`docs/TODO.md`、`.platform/`、CI 与部署配置，未装依赖。
+- 设计闸门：DESIGN 1.18（提交 `5ba9796`）第 12 条与 HANDOFF 0.82——当日可用库存调整的取值范围、带条件的写入（并发核对）与审计在 SHOP-TASK-182 的服务端；图片部分依据 DESIGN 1.19（提交 `6e8f655`）第 13 条，格式、大小、张数、像素与审计的规则在服务端，不碰金额与个人资料。两个请求模块只传递与校验字段。
+- 导出（供 A04 页面的任务使用，图片区为 SHOP-TASK-207、当日库存调整为 SHOP-TASK-208）：
+  - `frontend/src/api/adminProductImages.ts`：
+    - `type ImageUpload = { kind: "ok"; images: AdminProductImage[] } | { kind: "none" } | { kind: "csrf" } | { kind: "type_unsupported" } | { kind: "too_large" } | { kind: "full" } | { kind: "invalid" } | { kind: "failed" } | { kind: "network" }`。
+    - `type ImagesWrite = { kind: "ok"; images: AdminProductImage[] } | { kind: "none" } | { kind: "csrf" } | { kind: "changed" } | { kind: "failed" } | { kind: "network" }`。
+    - `uploadAdminProductImage(productId: number, file: Blob, contentType: string, csrfToken: string, signal?: AbortSignal): Promise<ImageUpload>`。
+    - `reorderAdminProductImages(productId: number, imageIds: readonly number[], csrfToken: string, signal?: AbortSignal): Promise<ImagesWrite>`。
+    - `removeAdminProductImage(productId: number, imageId: number, csrfToken: string, signal?: AbortSignal): Promise<ImagesWrite>`。
+    - `AdminProductImage` 为 `adminProducts.ts` 的 `interface AdminProductImage { id: number; storage_ref: string }`（与 `ImageOut` 一致）。
+  - `frontend/src/api/adminStockAdjust.ts`：
+    - `interface StockAdjust { expected: number; available_stock: number }`（与 `StockIn` 一致）。
+    - `type StockAdjustResult = { kind: "ok"; available_stock: number } | { kind: "changed"; available_stock: number } | { kind: "invalid" } | { kind: "none" } | { kind: "csrf" } | { kind: "failed" } | { kind: "network" }`。
+    - `adjustAdminAvailableStock(variantId: number, input: StockAdjust, csrfToken: string, signal?: AbortSignal): Promise<StockAdjustResult>`。
+- 请求：四个请求都不带查询参数，凭同源 cookie，`cache: "no-store"`，`Accept: application/json`，`X-CSRF-Token` 为调用方给出的令牌，调用方可传入 `AbortSignal`；路径段为 ID 的十进制（`String(…)`）。
+  - 上传：POST `/api/admin/products/{商品 ID}/images`，请求体为调用方给的 `Blob` 本身（不用 `FormData`），`Content-Type` 为调用方给的类型字符串（不取 `Blob.type`）。
+  - 调序：PUT `/api/admin/products/{商品 ID}/images`，`Content-Type: application/json`，请求体只有 `image_ids`（按调用方给的顺序原样写出）。
+  - 移除：DELETE `/api/admin/products/{商品 ID}/images/{图片 ID}`，没有请求体，也不带 `Content-Type`。
+  - 当日库存调整：POST `/api/admin/variants/{SKU 规格 ID}/available-stock`，`Content-Type: application/json`，请求体只有 `expected` 与 `available_stock`，按这两项重新组装，调用方对象上多出的属性不进请求体。
+- 字段与合格条件：
+  - 三个图片请求成功时的响应体为对象，`images` 为数组（可以为空，按接口给的顺序）；每项 `id` 为正整数、`storage_ref` 为非空字符串，只取这两项；任一项不合格整个结果为 `failed`。
+  - 当日库存调整 200 的响应体为对象，`variant_id` 为正整数、`sku` 为非空字符串、`available_stock` 为不小于 0 的整数；结果只带回 `available_stock`。409 的响应体须 `detail` 恰为 `stock_changed` 且 `available_stock` 为不小于 0 的整数，结果带回该当前值。
+- 归类（页面只按状态码与 detail 区分，错误体不带进结果）：
+  - 上传：`ok`（201 且响应体合格）、`none`（401）、`csrf`（403）、`type_unsupported`（415 且 `detail` 恰为 `image_type_unsupported`）、`too_large`（413，不读响应体）、`full`（409 且 `detail` 恰为 `images_full`）、`invalid`（422 且 `detail` 恰为 `image_invalid`）、`failed`（其他 415、409 与 422，404、503 与其他状态，201 但响应体不合格或不是 JSON，回 200）、`network`（fetch 抛错，含调用方中止）。
+  - 调序与移除：`ok`（200 且响应体合格）、`none`（401）、`csrf`（403）、`changed`（409 且 `detail` 恰为 `images_changed`）、`failed`（其他 409、413、415、422、404、503 与其他状态，200 但响应体不合格或不是 JSON）、`network`。
+  - 当日库存调整：`ok`（200 且响应体合格）、`changed`（409 且 `detail` 为 `stock_changed`、当前值合格）、`invalid`（422 且 `detail` 恰为 `stock_invalid`）、`none`（401）、`csrf`（403）、`failed`（409 缺当前值或当前值不合格、其他 409，路径 ID 与请求体的 422 错误列表，404 `variant_not_found`、413、415 与其他状态，200 但响应体不合格或不是 JSON）、`network`。
+- 偏离与取舍，请审阅（未改设计，未发现须停下的设计问题）：
+  - 上传的 413 照 HANDOFF 0.82 第（1）点一律为 `too_large`，不读响应体，所以接口自己的 `image_too_large` 与反向代理的 HTML 413 不加区分。
+  - 请求模块不检查文件的类型、大小与张数，也不检查库存新值是否在 0–9,999：UX 0.17 A04 的页面初步检查交给 SHOP-TASK-207、208，取值以服务端为准。`contentType` 原样放进请求头，由服务端按接口记录第 6 步判断。
+  - 路径段只做 `String(…)`，不在请求模块里检查正整数；ID 来自读取结果（已校验为正整数），不合法时服务端回 422，归 `failed`。
+  - 当日库存调整 200 的 `variant_id` 只按验收要求为正整数，不比对是否等于请求的 ID；`sku` 只校验、不带进结果（页面显示的 SKU 代码取自单件读取）。
+  - 图片列表不检查 `id` 是否重复，验收未要求。
+  - 中止归为 `network` 的四条测试守住的是本任务验收「网络中断与调用方中止为 network」：接口记录、DESIGN 1.18 第 12 条、DESIGN 1.19 第 13 条与 UX 0.17 A04 都没有关于中止的原句，测试注释照实写明，并引 UX 0.17 A04「没有未保存的修改时直接切换」为最接近的一句。
+- 留给之后：A04 的图片区交给 SHOP-TASK-207，当日库存调整交给 SHOP-TASK-208。
+- 验证到什么程度：人工逐条对照验收标准、`app/api/admin_product_images.py`、`app/api/admin_stock_adjust.py`、DESIGN 1.18 第 12 条、DESIGN 1.19 第 13 条、UX 0.17 A04 与 HANDOFF 0.82 自查。两个测试文件（vitest，fetch 以参数带类型的 `vi.fn((input, init) => …)` 替身代替，从 `mock.calls` 取值时用 `String(…)` 收窄）覆盖：
+  - `frontend/src/api/adminProductImages.test.ts`：
+    - 三个请求的地址（含 ID 7、12 与 2147483647 的十进制路径段）、方法、同源 cookie、no-store、Accept、CSRF 头与 signal；调序的 `Content-Type` 为 JSON；移除没有请求体与 `Content-Type`。
+    - 上传的请求体为原样的那个 `Blob`（同一对象、不是 `FormData`），`Content-Type` 为给定的 `image/jpeg`、`image/png` 或 `image/webp`（`Blob` 自带的类型不同）；调序请求体恰为 `image_ids` 一项、按给定顺序，调用方的数组不被改动。
+    - 三个接口共用的不合格响应体：`images` 缺少、为 null、对象或字符串，整体为数组或 null，图片的 `id` 缺少、0、负数、小数、字符串或 null，`storage_ref` 缺少、空串、数字或 null，图片为 null 或数组；另有不是 JSON 的成功状态，以及上传回 200、调序回 201、移除回 204。成功时按响应的顺序带回图片列表，多出的字段不带进结果，空列表合格。
+    - 各状态码与 detail 的归类：上传的 415、409、422 的 detail 对调、大小写不同、错误列表、空对象、不是 JSON 时为 `failed`，404、503 与其他状态为 `failed`；413 来自接口、来自反向代理（HTML）、空响应体与其他 detail 时都为 `too_large`，且响应体未被读取（`bodyUsed` 为 false）；调序与移除只有 `images_changed` 的 409 为 `changed`，其他 409、422、404 与其他状态为 `failed`（调序另有 413、415，移除另有 503）；网络中断与中止为 `network`。
+  - `frontend/src/api/adminStockAdjust.test.ts`：
+    - 地址（含 ID 31 与 2147483647）、方法、同源 cookie、no-store、Accept、Content-Type、CSRF 头与 signal；请求体恰为 `expected` 与 `available_stock` 两项，调用方对象上多出的 `sku`、`variant_id` 不进请求体。
+    - 200 只带回 `available_stock`（含 0，以响应为准），多出的字段不带进结果；`variant_id`、`sku`、`available_stock` 缺少或类型、取值不对（含负数与小数），整体为数组、null 或不是 JSON，回 201，都为 `failed`。
+    - 409 `stock_changed` 带回当前值（含 0，多出的字段不带进结果）；缺当前值、当前值为负数、小数、字符串或 null，detail 不同、大小写不同、缺少或不是 JSON 都为 `failed`。
+    - 各状态码与 detail 的归类：401、403、422 `stock_invalid`；422 的大小写不同、错误列表、空对象、不是 JSON，404 `variant_not_found`、413、415 与其他状态为 `failed`；网络中断与中止为 `network`。
+  - 除四条中止测试（见偏离一节）外，每条测试的注释写明它守住的接口记录（`app/api/admin_product_images.py`、`app/api/admin_stock_adjust.py`）、DESIGN、UX 0.17 A04 或 HANDOFF 0.82 的原句。前端检查交由 PR 的必需 CI 检查 frontend 执行（lint、类型检查、测试、构建与镜像构建；Worker 沙箱不跑前端检查）。本任务不做浏览器验收。检查命令结果由 Worker 另行记录。
