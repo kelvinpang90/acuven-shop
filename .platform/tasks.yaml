@@ -5237,7 +5237,7 @@ tasks:
       运营者落实写法（HANDOFF 0.80）：整单上限只在加入时约束（addToCart 合并或新增后全部行合计超过 2,000 即不加入），读取时的清洗不按整单合计丢行（服务端计价再判断）；P03 的可加入件数为「限购件数减去购物车中该商品已有件数」与「2,000 减去购物车全部行件数」中较小的、不小于 0；{count} 照现有 detail.cart_full 直接传数字。
       设计闸门：DESIGN 1.18（提交 5ba9796）第 8 条与 HANDOFF 0.80，购物车件数上限的提示与禁用（下单时由服务端再次校验）。
       拆分：购物车模块与 P03 一层（10 个允许路径，router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）；P04、P05 各自另成任务。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 页面内容与文案以 docs/UX.md 0.17 的 P03、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.80 为准，样式以 docs/design/pages/ 的 P03-P04-caps（数量输入框、common.qty_capped 与整单已满）与 P03-desktop、P03-phone 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入 detail.cart_units_full 与 common.qty_capped，写法与相邻条目相同（每种语言一行）
