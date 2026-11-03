@@ -2000,6 +2000,21 @@ export const COPY = {
     zh: "重新读取",
     ms: "Muat semula",
   },
+  "admin.unsaved_confirm": {
+    en: "You have unsaved changes. Leave without saving them?",
+    zh: "有未保存的修改，确定不保存就离开？",
+    ms: "Anda mempunyai perubahan yang belum disimpan. Tinggalkan tanpa menyimpannya?",
+  },
+  "admin.unsaved_leave": {
+    en: "Leave without saving",
+    zh: "不保存，离开",
+    ms: "Tinggalkan tanpa simpan",
+  },
+  "admin.unsaved_stay": {
+    en: "Keep editing",
+    zh: "继续编辑",
+    ms: "Teruskan menyunting",
+  },
   "admin.nav_stock_resets": {
     en: "Stock resets",
     zh: "库存重置",

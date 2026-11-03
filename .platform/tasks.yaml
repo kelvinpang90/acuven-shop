@@ -5356,7 +5356,7 @@ tasks:
       页内的切换（另一项的编辑、新建、手机的返回）由页面调用框架给出的函数，不经路由；确认框样式照视觉稿 A10-states 的写法（acs-admin__panel、role dialog、aria-modal）。
       设计闸门：不适用（只做离开前的确认，不碰金额与个人资料；保存与核对仍在服务端）。
       拆分：路由与框架一层（8 个允许路径，App.tsx、copy.ts 与 site.css 按页面任务的惯例列入），页面接入在 199 与 A04 的任务里。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-196
     acceptance_criteria:

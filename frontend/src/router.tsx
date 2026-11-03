@@ -268,6 +268,109 @@ export function guestPath(source: RoutePath | null): RoutePath {
 // 成功文案显示多久之后以 replace 前往 verifiedPath（毫秒）。
 export const VERIFIED_REDIRECT_MS = 1500;
 
+// 离开拦截（UX A04、A10「列表」一段的未保存确认，HANDOFF 0.81）：页面有未保存的修改时由后台框架设置，路由只拦、不渲染确认框。
+// 拦截函数收到「继续」回调，选离开时调用它才换位置；不调用即留在本页。
+// navigate 换到与当前不同的位置、浏览器的后退与前进要先经它；replace（如 401 回到登录页）不拦截；设有拦截期间刷新与关闭标签页由浏览器自己的离开提示拦一次。
+export type LeaveGuard = (proceed: () => void) => void;
+
+export function sameLocation(a: RouteLocation, b: RouteLocation): boolean {
+  return a.path === b.path && a.search === b.search;
+}
+
+// 是否交给拦截函数：设有拦截，且目标与当前位置不同（相同时照旧只回到顶部）。
+export function shouldGuard(guard: LeaveGuard | null, here: RouteLocation, next: RouteLocation): guard is LeaveGuard {
+  return guard !== null && !sameLocation(here, next);
+}
+
+// 站内跳转（navigate）：需要拦截时交给拦截函数，选继续才 push；否则与没有拦截时相同（push 并换位置，同一位置只回到顶部）。
+export function guardedPush(
+  browser: BrowserLike,
+  guard: LeaveGuard | null,
+  here: RouteLocation,
+  next: RouteLocation,
+  moveTo: (next: RouteLocation) => void,
+): void {
+  const go = () => {
+    if (pushPath(browser, next.path, next.search)) {
+      moveTo(next);
+    } else {
+      browser.scrollTo(0, 0);
+    }
+  };
+  if (shouldGuard(guard, here, next)) {
+    guard(go);
+  } else {
+    go();
+  }
+}
+
+// 替换当前历史记录（replace）：不经离开拦截（如 401 回到登录页），直接换位置。
+export function replaceTo(browser: BrowserLike, next: RouteLocation, moveTo: (next: RouteLocation) => void): void {
+  replacePath(browser, next.path, next.search);
+  moveTo(next);
+}
+
+// 浏览器后退或前进被拦下时的处理：先写回地址栏的地址（切换前的路径与查询串），选继续后前往的目标（popstate 的目标）。
+export interface PopGuard {
+  restore: string;
+  target: RouteLocation;
+}
+
+// popstate 时（地址栏已换成 target）：需要拦截时给出写回的地址与继续时的目标，不需要时为 null（照旧换到 target）。
+export function popGuard(guard: LeaveGuard | null, here: RouteLocation, target: RouteLocation): PopGuard | null {
+  return shouldGuard(guard, here, target) ? { restore: `${here.path}${here.search}`, target } : null;
+}
+
+// 浏览器后退或前进：设有拦截时先以 pushState 把地址栏写回本页、页面不换，再交给拦截函数，选继续时以 push 前往目标
+// （历史记录会多一条，HANDOFF 0.81 认可）；没有拦截时照旧换到地址栏的位置。
+export function guardedPop(
+  browser: BrowserLike,
+  guard: LeaveGuard | null,
+  here: RouteLocation,
+  moveTo: (next: RouteLocation) => void,
+): void {
+  const target = resolveLocation(browser.location.pathname, browser.location.search);
+  const held = popGuard(guard, here, target);
+  if (guard === null || held === null) {
+    moveTo(target);
+    return;
+  }
+  browser.history.pushState(null, "", held.restore);
+  guard(() => {
+    if (pushPath(browser, held.target.path, held.target.search)) {
+      moveTo(held.target);
+    }
+  });
+}
+
+// beforeunload 事件里本页用到的部分。
+export interface BeforeUnloadLike {
+  preventDefault(): void;
+  returnValue: unknown;
+}
+
+export interface UnloadTarget {
+  addEventListener(type: "beforeunload", listener: (event: BeforeUnloadLike) => void): void;
+  removeEventListener(type: "beforeunload", listener: (event: BeforeUnloadLike) => void): void;
+}
+
+// 让浏览器弹出自己的离开提示（文字由浏览器决定）。
+export function blockUnload(event: BeforeUnloadLike): void {
+  event.preventDefault();
+  event.returnValue = "";
+}
+
+// 设有拦截时注册 beforeunload 监听，返回移除它的函数；没有拦截时不注册。
+export function watchUnload(target: UnloadTarget, guarded: boolean): () => void {
+  if (!guarded) {
+    return () => undefined;
+  }
+  target.addEventListener("beforeunload", blockUnload);
+  return () => {
+    target.removeEventListener("beforeunload", blockUnload);
+  };
+}
+
 interface RouterContextValue {
   // 当前实际路径（如 /products/crew-neck-tee）。
   path: RoutePath;
@@ -281,6 +384,8 @@ interface RouterContextValue {
   replace: (path: RoutePath, search?: string) => void;
   // 读取记下的来源页（没有时为 null）。
   source: () => RoutePath | null;
+  // 设置或清除（null）离开拦截。
+  setLeaveGuard: (guard: LeaveGuard | null) => void;
 }
 
 const RouterContext = createContext<RouterContextValue | null>(null);
@@ -301,21 +406,29 @@ export function RouterProvider({ children, initialPath }: RouterProviderProps) {
   );
   const { path, search } = location;
   const match = useMemo(() => matchRoute(path) ?? HOME_MATCH, [path]);
-  // 路由状态里当前的路径（每次换位置时与状态一起更新），换位置时以它为切换前的路径记下来源。
-  const current = useRef<RoutePath>(location.path);
+  // 路由状态里当前的位置（每次换位置时与状态一起更新），换位置时以它为切换前的路径记下来源，离开拦截也以它为本页。
+  const current = useRef<RouteLocation>(location);
   const source = useRef<RoutePath | null>(null);
+  // 离开拦截只在内存里；guarded 决定是否注册 beforeunload。
+  const guard = useRef<LeaveGuard | null>(null);
+  const [guarded, setGuarded] = useState(false);
 
   const moveTo = useCallback((next: RouteLocation) => {
-    source.current = nextSource(source.current, current.current, next.path);
-    current.current = next.path;
+    source.current = nextSource(source.current, current.current.path, next.path);
+    current.current = next;
     setLocation(next);
   }, []);
 
   const readSource = useCallback(() => source.current, []);
 
+  const setLeaveGuard = useCallback((next: LeaveGuard | null) => {
+    guard.current = next;
+    setGuarded(next !== null);
+  }, []);
+
   useEffect(() => {
     const onPopState = () => {
-      moveTo(resolveLocation(window.location.pathname, window.location.search));
+      guardedPop(window, guard.current, current.current, moveTo);
     };
     window.addEventListener("popstate", onPopState);
     return () => {
@@ -323,29 +436,24 @@ export function RouterProvider({ children, initialPath }: RouterProviderProps) {
     };
   }, [moveTo]);
 
+  useEffect(() => watchUnload(window, guarded), [guarded]);
+
   // 只在换页面时回到顶部；同一页面只改查询串（如商品列表换筛选）时不动。
   useEffect(() => {
     settleLocation(window, path);
   }, [path]);
 
   const navigate = useCallback((next: RoutePath, nextSearch = "") => {
-    const normalized = normalizeSearch(nextSearch);
-    if (pushPath(window, next, normalized)) {
-      moveTo(resolveLocation(next, normalized));
-    } else {
-      window.scrollTo(0, 0);
-    }
+    guardedPush(window, guard.current, current.current, resolveLocation(next, normalizeSearch(nextSearch)), moveTo);
   }, [moveTo]);
 
   const replace = useCallback((next: RoutePath, nextSearch = "") => {
-    const normalized = normalizeSearch(nextSearch);
-    replacePath(window, next, normalized);
-    moveTo(resolveLocation(next, normalized));
+    replaceTo(window, resolveLocation(next, normalizeSearch(nextSearch)), moveTo);
   }, [moveTo]);
 
   const value = useMemo(
-    () => ({ path, search, pattern: match.pattern, params: match.params, navigate, replace, source: readSource }),
-    [path, search, match, navigate, replace, readSource],
+    () => ({ path, search, pattern: match.pattern, params: match.params, navigate, replace, source: readSource, setLeaveGuard }),
+    [path, search, match, navigate, replace, readSource, setLeaveGuard],
   );
   return <RouterContext.Provider value={value}>{children}</RouterContext.Provider>;
 }
