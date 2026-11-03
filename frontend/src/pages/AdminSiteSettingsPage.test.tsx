@@ -20,6 +20,7 @@ import AdminSiteSettingsPage, {
   AdminSiteSettingsView,
   chooseMethod,
   chooseSms,
+  chooseStockReset,
   LOADING,
   openSettings,
   readStep,
@@ -27,6 +28,7 @@ import AdminSiteSettingsPage, {
   shownState,
   SMS_NOTE_ID,
   startSaving,
+  STOCK_RESET_OPTIONS,
   STRIPE_NOTE_ID,
   submitSettings,
 } from "./AdminSiteSettingsPage";
@@ -242,6 +244,8 @@ const METHODS: PaymentMethod[] = ["simulated", "stripe_test"];
 
 // SHOP-TASK-169 改动：读取结果多了 sms_verification_enabled 与 sms_available，下面三个夹具补上短信一项（短信关闭、短信服务可用），
 // 支付方式部分不变。
+// SHOP-TASK-192 改动：读取结果多了 daily_stock_reset_enabled（SHOP-TASK-179），两个夹具补上开启（UX A09「默认 [admin.stock_reset_on]」），
+// 其余不变。
 // 读取到的设置：当前为模拟，Stripe 测试凭据可用。
 const SETTINGS: AdminSiteSettings = {
   payment_method: "simulated",
@@ -249,6 +253,7 @@ const SETTINGS: AdminSiteSettings = {
   csrf_token: "settings-csrf-1",
   sms_verification_enabled: false,
   sms_available: true,
+  daily_stock_reset_enabled: true,
 };
 // 当前已是 Stripe 测试而凭据后来失效（UX A09「当前已是「Stripe 测试」而凭据后来失效时」）。
 const STALE_STRIPE: AdminSiteSettings = {
@@ -257,6 +262,7 @@ const STALE_STRIPE: AdminSiteSettings = {
   csrf_token: "settings-csrf-1",
   sms_verification_enabled: false,
   sms_available: true,
+  daily_stock_reset_enabled: true,
 };
 // 凭据不可用、当前为模拟。
 const UNAVAILABLE: AdminSiteSettings = { ...SETTINGS, stripe_available: false };
@@ -269,6 +275,7 @@ type ReadyState = Extract<SettingsState, { status: "ready" }>;
 
 // 已取到的状态：两组的选中项默认为 base 的当前值。
 // SHOP-TASK-169 改动：补上短信的选中项（smsChoice）与短信被拒（smsRejected）。
+// SHOP-TASK-192 改动：补上每日恢复库存的选中项（stockResetChoice）。
 function readyState(overrides: Partial<ReadyState> = {}): SettingsState {
   const base = overrides.base ?? SETTINGS;
   return {
@@ -276,6 +283,7 @@ function readyState(overrides: Partial<ReadyState> = {}): SettingsState {
     base,
     choice: base.payment_method,
     smsChoice: base.sms_verification_enabled,
+    stockResetChoice: base.daily_stock_reset_enabled,
     saving: false,
     saved: false,
     rejected: false,
@@ -286,10 +294,19 @@ function readyState(overrides: Partial<ReadyState> = {}): SettingsState {
   };
 }
 
-// 本页内容区的视图（只依赖 props）。SHOP-TASK-169 改动：补上改选短信的处理函数。
+// 本页内容区的视图（只依赖 props）。SHOP-TASK-169 改动：补上改选短信的处理函数。SHOP-TASK-192 改动：补上改选每日恢复库存的处理函数。
 function render(state: SettingsState = readyState(), language: Language = "en"): string {
   return renderToStaticMarkup(
-    wrap(<AdminSiteSettingsView state={state} onChoose={() => undefined} onChooseSms={() => undefined} onSave={() => undefined} />, language),
+    wrap(
+      <AdminSiteSettingsView
+        state={state}
+        onChoose={() => undefined}
+        onChooseSms={() => undefined}
+        onChooseStockReset={() => undefined}
+        onSave={() => undefined}
+      />,
+      language,
+    ),
   );
 }
 
@@ -318,6 +335,16 @@ function smsRadios(html: string): Map<string, string>[] {
 // 支付方式的两个单选（依出现顺序）的属性。
 function paymentRadios(html: string): Map<string, string>[] {
   return radios(html).filter((input) => input.get("name") === "payment_method");
+}
+
+// 每日恢复库存一组（SHOP-TASK-192）。
+function stockResetGroup(html: string): string {
+  return element(html, "fieldset", "site-admin-settings__stock-reset");
+}
+
+// 每日恢复库存的两个单选（依出现顺序）的属性。
+function stockResetRadios(html: string): Map<string, string>[] {
+  return radios(html).filter((input) => input.get("name") === "daily_stock_reset_enabled");
 }
 
 function saveArea(html: string): string {
@@ -429,6 +456,10 @@ function allStates(): SettingsState[] {
     readyState({ base: STALE_SMS, smsChoice: false }),
     readyState({ smsChoice: true, smsRejected: true }),
     readyState({ base: STALE_SMS, smsRejected: true }),
+    // SHOP-TASK-192：每日恢复库存关闭、改选关闭与改选开启。
+    readyState({ base: { ...SETTINGS, daily_stock_reset_enabled: false } }),
+    readyState({ stockResetChoice: false }),
+    readyState({ base: { ...SETTINGS, daily_stock_reset_enabled: false }, stockResetChoice: true, saved: true }),
   ];
 }
 
@@ -453,16 +484,24 @@ describe("payment method form", () => {
       "admin.payment_simulated",
       "admin.payment_stripe",
       "admin.payment_method_hint",
+      // SHOP-TASK-192 改动：UX 0.17 A09 线框在支付方式之后、common.save 之前是每日恢复库存一组；按顺序比较的文字与单选补上这一组，
+      // legend 由 2 个改为 3 个。
+      "admin.stock_reset_toggle",
+      "admin.stock_reset_on",
+      "admin.stock_reset_off",
+      "admin.stock_reset_toggle_hint",
       "common.save",
     ];
     expect(textNodes(form)).toEqual(keys.map((key) => COPY[key][language]));
-    expect(tags(form, "legend")).toHaveLength(2);
+    expect(tags(form, "legend")).toHaveLength(3);
     expect(textNodes(group(form))[0]).toBe(COPY["admin.payment_method"][language]);
     expect(radios(form).map((input) => [input.get("name"), input.get("value"), input.has("disabled")])).toEqual([
       ["sms_verification_enabled", "on", false],
       ["sms_verification_enabled", "off", false],
       ["payment_method", "simulated", false],
       ["payment_method", "stripe_test", false],
+      ["daily_stock_reset_enabled", "on", false],
+      ["daily_stock_reset_enabled", "off", false],
     ]);
     expect(tags(form, "button")).toHaveLength(1);
     expect(saveButton(form).get("type")).toBe("submit");
@@ -478,11 +517,14 @@ describe("payment method form", () => {
         throw new Error("unexpected login");
       }
       // SHOP-TASK-169 改动：按顺序比较的单选在支付方式之前补上短信一组（SETTINGS 的短信为关闭）。
+      // SHOP-TASK-192 改动：按顺序比较的单选在支付方式之后补上每日恢复库存一组（SETTINGS 的开关为开启）。
       expect(radios(render(state)).map((input) => [input.get("value"), input.has("checked")])).toEqual([
         ["on", false],
         ["off", true],
         ["simulated", method === "simulated"],
         ["stripe_test", method === "stripe_test"],
+        ["on", true],
+        ["off", false],
       ]);
     }
   });
@@ -513,19 +555,22 @@ describe("payment method form", () => {
     const state = readyState({ base: STALE_STRIPE });
     const html = render(state, language);
     // SHOP-TASK-169 改动：按顺序比较的单选在支付方式之前补上短信一组；保存的调用补短信参数，请求体与 200 的回答改为两项。
+    // SHOP-TASK-192 改动：单选在支付方式之后补上每日恢复库存一组；保存的调用补开关参数，请求体与 200 的回答改为三项。
     expect(radios(html).map((input) => [input.get("value"), input.has("checked"), input.has("disabled")])).toEqual([
       ["on", false, false],
       ["off", true, false],
       ["simulated", false, false],
       ["stripe_test", true, true],
+      ["on", true, false],
+      ["off", false, false],
     ]);
     expect(group(html)).toContain(stripeNoteHtml(language));
     const switched = chooseMethod(state, "simulated");
-    expect(radios(render(switched, language)).map((input) => input.has("checked"))).toEqual([false, true, true, false]);
-    const request = stubFetch(json(200, { payment_method: "simulated", sms_verification_enabled: false }));
+    expect(radios(render(switched, language)).map((input) => input.has("checked"))).toEqual([false, true, true, false, true, false]);
+    const request = stubFetch(json(200, { payment_method: "simulated", sms_verification_enabled: false, daily_stock_reset_enabled: true }));
     const moves = fakeMoves(startSaving(switched));
-    await submitSettings(STALE_STRIPE, "simulated", false, new AbortController().signal, moves.target);
-    expect(bodyOf(requests(request)[0]?.init)).toEqual({ payment_method: "simulated", sms_verification_enabled: false });
+    await submitSettings(STALE_STRIPE, "simulated", false, true, new AbortController().signal, moves.target);
+    expect(bodyOf(requests(request)[0]?.init)).toEqual({ payment_method: "simulated", sms_verification_enabled: false, daily_stock_reset_enabled: true });
     expect(moves.current).toEqual(readyState({ base: { ...STALE_STRIPE, payment_method: "simulated" }, saved: true }));
   });
 
@@ -551,7 +596,8 @@ describe("SMS verification group", () => {
   it.each(LANGUAGES)("shows the SMS group before the payment method in %s", (language) => {
     const form = element(render(readyState(), language), "form", "site-admin-settings__form");
     const fieldsets = tags(form, "fieldset");
-    expect(fieldsets).toHaveLength(2);
+    // SHOP-TASK-192 改动：支付方式之后多了每日恢复库存一组，fieldset 由 2 个改为 3 个。
+    expect(fieldsets).toHaveLength(3);
     expect((attributes(fieldsets[0] ?? "").get("class") ?? "").split(/\s+/)).toEqual([
       "acs-admin__panel",
       "site-admin-settings__group",
@@ -627,10 +673,11 @@ describe("SMS verification group", () => {
     const switched = chooseSms(state, false);
     expect(switched).toEqual(readyState({ base: STALE_SMS, smsChoice: false }));
     expect(smsRadios(render(switched, language)).map((input) => input.has("checked"))).toEqual([false, true]);
-    const request = stubFetch(json(200, { payment_method: "simulated", sms_verification_enabled: false }));
+    // SHOP-TASK-192 改动：保存的调用补开关参数，请求体与 200 的回答改为三项。
+    const request = stubFetch(json(200, { payment_method: "simulated", sms_verification_enabled: false, daily_stock_reset_enabled: true }));
     const moves = fakeMoves(startSaving(switched));
-    await submitSettings(STALE_SMS, "simulated", false, new AbortController().signal, moves.target);
-    expect(bodyOf(requests(request)[0]?.init)).toEqual({ payment_method: "simulated", sms_verification_enabled: false });
+    await submitSettings(STALE_SMS, "simulated", false, true, new AbortController().signal, moves.target);
+    expect(bodyOf(requests(request)[0]?.init)).toEqual({ payment_method: "simulated", sms_verification_enabled: false, daily_stock_reset_enabled: true });
     expect(moves.current).toEqual(readyState({ base: { ...STALE_SMS, sms_verification_enabled: false }, saved: true }));
     expect(chooseSms(LOADING, false)).toBe(LOADING);
   });
@@ -658,6 +705,163 @@ describe("SMS verification group", () => {
     expect(chooseSms(readyState(), true)).toEqual(readyState({ smsChoice: true }));
     expect(pageSource).toMatch(/onChooseSms=\{\(enabled\) => \{\s*setEntry\(\(current\) => \(current\.language === language \? \{ language, state: chooseSms\(current\.state, enabled\) \}/);
     expect(render(readyState({ smsChoice: true }))).not.toMatch(/<dialog\b|role="(alert)?dialog"/);
+  });
+});
+
+// 以下为 SHOP-TASK-192（每日恢复库存开关）的测试。
+
+describe("daily stock reset group", () => {
+  // UX 0.17 A09 桌面与手机线框「[admin.payment_method] … / [admin.stock_reset_toggle] / (●) [admin.stock_reset_on] ( ) [admin.stock_reset_off] /
+  // [admin.stock_reset_toggle_hint] / ( [common.save] )」与视觉稿 A09-stock-reset：表单里第三个 fieldset 为每日恢复库存一组，排在支付方式一组之后、
+  // 保存之前，fieldset 与 legend 照另两组；组内依次为 legend、开启与关闭两个同名单选（UX 线框的顺序）与提示。
+  it.each(LANGUAGES)("shows the stock reset group after the payment method and before save in %s", (language) => {
+    const form = element(render(readyState(), language), "form", "site-admin-settings__form");
+    const fieldsets = tags(form, "fieldset");
+    expect((attributes(fieldsets[2] ?? "").get("class") ?? "").split(/\s+/)).toEqual([
+      "acs-admin__panel",
+      "site-admin-settings__group",
+      "site-admin-settings__stock-reset",
+    ]);
+    const stock = stockResetGroup(form);
+    expect(form.indexOf(group(form)) + group(form).length).toBe(form.indexOf(stock));
+    expect(form.indexOf(stock) + stock.length).toBe(form.indexOf(saveArea(form)));
+    expect(tags(stock, "legend")).toHaveLength(1);
+    expect(textNodes(stock)).toEqual(
+      (["admin.stock_reset_toggle", "admin.stock_reset_on", "admin.stock_reset_off", "admin.stock_reset_toggle_hint"] as const).map((key) => COPY[key][language]),
+    );
+    expect(STOCK_RESET_OPTIONS.map((option) => [option.enabled, option.label])).toEqual([
+      [true, "admin.stock_reset_on"],
+      [false, "admin.stock_reset_off"],
+    ]);
+    expect(stockResetRadios(stock).map((input) => input.get("value"))).toEqual(["on", "off"]);
+    expect(radios(stock)).toHaveLength(2);
+    expect(stockResetRadios(group(form))).toEqual([]);
+    expect(stockResetRadios(smsGroup(form))).toEqual([]);
+  });
+
+  // UX 0.17 A09「默认 [admin.stock_reset_on]。页面读取时服务端返回开关的当前值」与 SHOP-TASK-192 验收「选中项为读取（或保存后）的当前值」：
+  // 读取到开启或关闭，这一组里就只有那一项选中，另两组照旧。
+  it("checks the current stock reset value from the read", () => {
+    for (const enabled of [true, false]) {
+      const state = readStep({ kind: "ok", settings: { ...SETTINGS, daily_stock_reset_enabled: enabled } });
+      if (state === "login") {
+        throw new Error("unexpected login");
+      }
+      const html = render(state);
+      expect(stockResetRadios(html).map((input) => [input.get("value"), input.has("checked")])).toEqual([
+        ["on", enabled],
+        ["off", !enabled],
+      ]);
+      expect(smsRadios(html).map((input) => input.has("checked"))).toEqual([false, true]);
+      expect(paymentRadios(html).map((input) => input.has("checked"))).toEqual([true, false]);
+    }
+  });
+
+  // HANDOFF 0.80（1）「A09 的开关一组没有不可用状态」与 SHOP-TASK-192 验收「两个单选始终可选」：页面的每个状态（含 Stripe 与短信服务不可用、
+  // 保存中、保存后与被拒）里两个单选都不禁用、不指向任何说明，标签也不是次要文字。
+  it("keeps both stock reset options selectable in every state", () => {
+    const states = [...allStates(), readyState({ base: { ...UNAVAILABLE, sms_available: false } })];
+    for (const state of states) {
+      if (state.status !== "ready") {
+        continue;
+      }
+      const stock = stockResetGroup(render(state));
+      expect(stockResetRadios(stock).map((input) => [input.has("disabled"), input.get("aria-describedby")])).toEqual([
+        [false, undefined],
+        [false, undefined],
+      ]);
+      expect(tags(stock, "label").map((tag) => attributes(tag).get("class"))).toEqual(["site-admin-settings__option", "site-admin-settings__option"]);
+    }
+  });
+
+  // UX 0.17 A09「与另两项一起整页保存」、HANDOFF 0.80（1）「保存总是提交三项」与 SHOP-TASK-192 验收「点 common.save 以三组的当前选择与读取给的
+  // csrf_token 调用保存」：开关的开与关各 PUT 一次，请求体恰为三项且开关为所选的值，请求头带读取给的 CSRF 令牌。
+  it.each([true, false])("saves all three choices together (stock reset %s)", async (enabled) => {
+    const request = stubFetch(json(200, { payment_method: "stripe_test", sms_verification_enabled: true, daily_stock_reset_enabled: enabled }));
+    const moves = fakeMoves(startSaving(readyState({ choice: "stripe_test", smsChoice: true, stockResetChoice: enabled })));
+    await submitSettings(SETTINGS, "stripe_test", true, enabled, new AbortController().signal, moves.target);
+    const calls = requests(request);
+    expect(calls.map((call) => [call.method, call.url])).toEqual([["PUT", SETTINGS_URL]]);
+    expect(new Headers(calls[0]?.init?.headers).get("X-CSRF-Token")).toBe(SETTINGS.csrf_token);
+    const body = bodyOf(calls[0]?.init);
+    expect(body).toEqual({ payment_method: "stripe_test", sms_verification_enabled: true, daily_stock_reset_enabled: enabled });
+    expect(Object.keys(body as object)).toEqual(["payment_method", "sms_verification_enabled", "daily_stock_reset_enabled"]);
+  });
+
+  // UX A09「保存成功：[admin.settings_saved]」与 SHOP-TASK-192 验收「ok 以返回的三项更新三组的选中项并显示 admin.settings_saved」：保存成功后
+  // 三组的选中项与之后保存的依据都是返回的值（返回的与提交的不同时以返回的为准；两种可用状态与 CSRF 令牌沿用读取的）。
+  it.each(LANGUAGES)("updates all three groups from the reply in %s", async (language) => {
+    stubFetch(json(200, { payment_method: "stripe_test", sms_verification_enabled: true, daily_stock_reset_enabled: false }));
+    const moves = fakeMoves(startSaving(readyState({ choice: "stripe_test", smsChoice: true, stockResetChoice: false })));
+    await submitSettings(SETTINGS, "stripe_test", true, false, new AbortController().signal, moves.target);
+    expect(moves.events).toEqual(["update ready"]);
+    const saved = { ...SETTINGS, payment_method: "stripe_test" as const, sms_verification_enabled: true, daily_stock_reset_enabled: false };
+    expect(moves.current).toEqual(readyState({ base: saved, saved: true }));
+    const html = render(moves.current, language);
+    expect(radios(html).map((input) => input.has("checked"))).toEqual([true, false, false, true, false, true]);
+    expect(textNodes(saveArea(html))).toEqual([COPY["common.save"][language], COPY["admin.settings_saved"][language]]);
+    const step = saveStep({ kind: "ok", payment_method: "simulated", sms_verification_enabled: false, daily_stock_reset_enabled: true }, saved);
+    if (typeof step !== "function") {
+      throw new Error("expected a change");
+    }
+    expect(step(readyState({ base: saved, stockResetChoice: false, saving: true }))).toEqual(readyState({ base: { ...saved, payment_method: "simulated", sms_verification_enabled: false, daily_stock_reset_enabled: true }, saved: true }));
+  });
+
+  // UX 0.17 A09「任一项被拒（短信服务未配置、Stripe 未配置）则三项都不写入，被拒的项各自显示提示」与 SHOP-TASK-192 验收「not_configured 与
+  // sms_not_configured 照现有写法显示、三组选中项都不变」：改选了开关后保存被拒，三组仍是提交时的选择（开关仍为改选的关闭），读取的当前值不变。
+  it.each<[unknown, Partial<ReadyState>, CopyKey]>([
+    [{ detail: "stripe_not_configured" }, { rejected: true }, "admin.stripe_not_configured"],
+    [{ detail: "sms_not_configured" }, { smsRejected: true }, "admin.sms_not_configured"],
+  ])("keeps all three choices when the save is rejected (%o)", async (reply, flag, key) => {
+    stubFetch(json(422, reply));
+    const choices = { choice: "stripe_test" as const, smsChoice: true, stockResetChoice: false };
+    const moves = fakeMoves(startSaving(readyState(choices)));
+    await submitSettings(SETTINGS, "stripe_test", true, false, new AbortController().signal, moves.target);
+    expect(moves.current).toEqual(readyState({ ...choices, ...flag }));
+    const html = render(moves.current);
+    expect(radios(html).map((input) => input.has("checked"))).toEqual([true, false, false, true, false, true]);
+    expect(textNodes(saveArea(html))).toEqual([COPY["common.save"].en, COPY[key].en]);
+    expect(html).not.toContain(escapeHtml(COPY["admin.settings_saved"].en));
+  });
+
+  // SHOP-TASK-192 验收「改选开关后与改选另两组一样收起保存的提示」：保存成功或被拒（Stripe、短信）后改选开关的任一项，保存按钮下方的提示都收起，
+  // 选中项随改选更新，另两组不变；读取中时不改。
+  it.each(LANGUAGES)("hides the save messages after choosing a stock reset option in %s", (language) => {
+    // 各项为改选前显示提示的状态，与改选后仍保留的另两组选择。
+    const cases: [Partial<ReadyState>, Partial<ReadyState>][] = [
+      [{ saved: true }, {}],
+      [{ choice: "stripe_test", rejected: true }, { choice: "stripe_test" }],
+      [{ smsChoice: true, smsRejected: true }, { smsChoice: true }],
+    ];
+    for (const [shown, kept] of cases) {
+      for (const enabled of [true, false]) {
+        const next = chooseStockReset(readyState(shown), enabled);
+        expect(next).toEqual(readyState({ ...kept, stockResetChoice: enabled }));
+        expect(textNodes(saveArea(render(next, language)))).toEqual([COPY["common.save"][language]]);
+      }
+    }
+    expect(chooseStockReset(LOADING, false)).toBe(LOADING);
+  });
+
+  // UX 0.17 A09「页面不另加确认框」与 SHOP-TASK-192 验收「不加确认框」：改选只更新选中项，页面源码里改选开关的处理函数直接调用
+  // chooseStockReset，改选后的表单没有确认框。
+  it("switches the stock reset without a confirmation dialog", () => {
+    expect(chooseStockReset(readyState(), false)).toEqual(readyState({ stockResetChoice: false }));
+    expect(pageSource).toMatch(
+      /onChooseStockReset=\{\(enabled\) => \{\s*setEntry\(\(current\) => \(current\.language === language \? \{ language, state: chooseStockReset\(current\.state, enabled\) \}/,
+    );
+    expect(render(readyState({ stockResetChoice: false }))).not.toMatch(/<dialog\b|role="(alert)?dialog"/);
+  });
+
+  // SHOP-TASK-192 验收「copy.ts 按 UX-COPY 0.18 逐字加入 admin.stock_reset_toggle、admin.stock_reset_on、admin.stock_reset_off、
+  // admin.stock_reset_toggle_hint」：四条与 UX-COPY 的对应列逐字相同。
+  it.each(LANGUAGES)("has the four stock reset entries word for word from UX-COPY in %s", (language) => {
+    const column = { en: 2, zh: 3, ms: 4 }[language];
+    for (const key of ["admin.stock_reset_toggle", "admin.stock_reset_on", "admin.stock_reset_off", "admin.stock_reset_toggle_hint"] as const) {
+      const row = uxCopy.split("\n").find((line) => line.startsWith(`| \`${key}\` |`)) ?? "";
+      expect(row).not.toBe("");
+      expect(row.split("|")[column]?.trim()).toBe(COPY[key][language]);
+    }
   });
 });
 
@@ -737,8 +941,10 @@ describe("language", () => {
   // 同一条「离开页面时中止」：effect 的清理（startDeferred 返回的函数）中止当前语言的 controller，保存用的正是这个 controller 的 signal。
   it("aborts the read and the save together on cleanup", () => {
     expect(pageSource).toMatch(/lifetime\.current = controller;\s*return startDeferred\(controller,/);
-    // SHOP-TASK-169 改动：submitSettings 多了短信参数，匹配调用的正则随之改写。
-    expect(pageSource).toMatch(/const controller = lifetime\.current;[\s\S]*?submitSettings\(state\.base, state\.choice, state\.smsChoice, controller\.signal,/);
+    // SHOP-TASK-169 改动：submitSettings 多了短信参数，匹配调用的正则随之改写。SHOP-TASK-192 改动：又多了开关参数，正则随之改写。
+    expect(pageSource).toMatch(
+      /const controller = lifetime\.current;[\s\S]*?submitSettings\(state\.base, state\.choice, state\.smsChoice, state\.stockResetChoice, controller\.signal,/,
+    );
   });
 });
 
@@ -746,30 +952,33 @@ describe("saving", () => {
   // SHOP-TASK-139 验收第 3 条「点 common.save 以当前选择与读取给的 csrf_token 调用保存」：PUT 一次，请求头带读取给的 CSRF 令牌，
   // 请求体为当前选择，带中止用的 signal。
   // SHOP-TASK-169 改动：submitSettings 多了短信参数、200 的回答补 sms_verification_enabled，请求体的断言改为两项。
+  // SHOP-TASK-192 改动：submitSettings 多了开关参数、200 的回答补 daily_stock_reset_enabled，请求体的断言改为三项。
   it.each(METHODS)("saves the current choice with the read CSRF token (%s)", async (method) => {
-    const request = stubFetch(json(200, { payment_method: method, sms_verification_enabled: false }));
+    const request = stubFetch(json(200, { payment_method: method, sms_verification_enabled: false, daily_stock_reset_enabled: true }));
     const controller = new AbortController();
-    await submitSettings(SETTINGS, method, false, controller.signal, fakeMoves(startSaving(readyState({ choice: method }))).target);
+    await submitSettings(SETTINGS, method, false, true, controller.signal, fakeMoves(startSaving(readyState({ choice: method }))).target);
     const calls = requests(request);
     expect(calls.map((call) => [call.method, call.url])).toEqual([["PUT", SETTINGS_URL]]);
     expect(calls[0]?.init?.signal).toBe(controller.signal);
     expect(new Headers(calls[0]?.init?.headers).get("X-CSRF-Token")).toBe(SETTINGS.csrf_token);
-    expect(bodyOf(calls[0]?.init)).toEqual({ payment_method: method, sms_verification_enabled: false });
+    expect(bodyOf(calls[0]?.init)).toEqual({ payment_method: method, sms_verification_enabled: false, daily_stock_reset_enabled: true });
   });
 
   // UX 0.14 A09「保存一次提交两项」与 SHOP-TASK-169 验收第 4 条「点 common.save 以两组的当前选择与读取给的 csrf_token 调用保存」：
   // 两组的四种组合各 PUT 一次，请求体恰为这两项，请求头带读取给的 CSRF 令牌。
+  // SHOP-TASK-192 改动：UX 0.14 说明已改为「保存一次提交全部三项（0.17 起含每日恢复库存）」；调用补开关参数（开启），
+  // 200 的回答与请求体的断言改为三项（开关的各取值由下面每日恢复库存一组的测试覆盖）。
   it.each(METHODS.flatMap((method) => [true, false].map((enabled): [PaymentMethod, boolean] => [method, enabled])))(
     "saves both choices together (%s, %s)",
     async (method, enabled) => {
-      const request = stubFetch(json(200, { payment_method: method, sms_verification_enabled: enabled }));
-      await submitSettings(SETTINGS, method, enabled, new AbortController().signal, fakeMoves(startSaving(readyState({ choice: method, smsChoice: enabled }))).target);
+      const request = stubFetch(json(200, { payment_method: method, sms_verification_enabled: enabled, daily_stock_reset_enabled: true }));
+      await submitSettings(SETTINGS, method, enabled, true, new AbortController().signal, fakeMoves(startSaving(readyState({ choice: method, smsChoice: enabled }))).target);
       const calls = requests(request);
       expect(calls.map((call) => [call.method, call.url])).toEqual([["PUT", SETTINGS_URL]]);
       expect(new Headers(calls[0]?.init?.headers).get("X-CSRF-Token")).toBe(SETTINGS.csrf_token);
       const body = bodyOf(calls[0]?.init);
-      expect(body).toEqual({ payment_method: method, sms_verification_enabled: enabled });
-      expect(Object.keys(body as object)).toEqual(["payment_method", "sms_verification_enabled"]);
+      expect(body).toEqual({ payment_method: method, sms_verification_enabled: enabled, daily_stock_reset_enabled: true });
+      expect(Object.keys(body as object)).toEqual(["payment_method", "sms_verification_enabled", "daily_stock_reset_enabled"]);
     },
   );
 
@@ -789,18 +998,20 @@ describe("saving", () => {
   // 保存成功后选中项与之后保存的依据为返回的支付方式（stripe_available 与 CSRF 令牌沿用读取的），保存按钮下方显示 admin.settings_saved。
   // SHOP-TASK-169 改动：替身的 200 回答与 saveStep 的 ok 结果补 sms_verification_enabled，submitSettings 补短信参数，
   // 按顺序比较的单选在支付方式之前补上短信一组。
+  // SHOP-TASK-192 改动：200 的回答与 saveStep 的 ok 结果补 daily_stock_reset_enabled，submitSettings 补开关参数，
+  // 按顺序比较的单选在支付方式之后补上每日恢复库存一组。
   it.each(LANGUAGES)("updates the choice from the reply and shows the saved message in %s", async (language) => {
-    stubFetch(json(200, { payment_method: "stripe_test", sms_verification_enabled: false }));
+    stubFetch(json(200, { payment_method: "stripe_test", sms_verification_enabled: false, daily_stock_reset_enabled: true }));
     const moves = fakeMoves(startSaving(readyState({ choice: "stripe_test" })));
-    await submitSettings(SETTINGS, "stripe_test", false, new AbortController().signal, moves.target);
+    await submitSettings(SETTINGS, "stripe_test", false, true, new AbortController().signal, moves.target);
     expect(moves.events).toEqual(["update ready"]);
     expect(moves.current).toEqual(readyState({ base: { ...SETTINGS, payment_method: "stripe_test" }, saved: true }));
     const html = render(moves.current, language);
-    expect(radios(html).map((input) => input.has("checked"))).toEqual([false, true, false, true]);
+    expect(radios(html).map((input) => input.has("checked"))).toEqual([false, true, false, true, true, false]);
     expect(saveArea(html)).toContain(`<span role="status">${escapeHtml(COPY["admin.settings_saved"][language])}</span>`);
     expect(textNodes(saveArea(html))).toEqual([COPY["common.save"][language], COPY["admin.settings_saved"][language]]);
     // 返回的值与提交的不同时，选中项以返回的为准。
-    const step = saveStep({ kind: "ok", payment_method: "simulated", sms_verification_enabled: false }, SETTINGS);
+    const step = saveStep({ kind: "ok", payment_method: "simulated", sms_verification_enabled: false, daily_stock_reset_enabled: true }, SETTINGS);
     if (typeof step !== "function") {
       throw new Error("expected a change");
     }
@@ -820,16 +1031,17 @@ describe("saving", () => {
   // UX A09「保存时服务端再次检查，被拒则显示 [admin.stripe_not_configured]、本次保存不生效」与 SHOP-TASK-139 验收第 3 条「not_configured
   // 在保存按钮下方（与 admin.settings_saved 同一位置）显示 admin.stripe_not_configured、保留表单、选中项不变…改选任何一项后收起」。
   // SHOP-TASK-169 改动：submitSettings 补短信参数，按顺序比较的单选在支付方式之前补上短信一组。
+  // SHOP-TASK-192 改动：submitSettings 补开关参数，按顺序比较的单选在支付方式之后补上每日恢复库存一组。
   it.each(LANGUAGES)("shows the rejection under the save button and keeps the choice in %s", async (language) => {
     stubFetch(json(422, { detail: "stripe_not_configured" }));
     const moves = fakeMoves(startSaving(readyState({ choice: "stripe_test" })));
-    await submitSettings(SETTINGS, "stripe_test", false, new AbortController().signal, moves.target);
+    await submitSettings(SETTINGS, "stripe_test", false, true, new AbortController().signal, moves.target);
     expect(moves.current).toEqual(readyState({ choice: "stripe_test", rejected: true }));
     const html = render(moves.current, language);
     expect(saveArea(html)).toContain(alertHtml(COPY["admin.stripe_not_configured"][language]));
     expect(textNodes(saveArea(html))).toEqual([COPY["common.save"][language], COPY["admin.stripe_not_configured"][language]]);
     expect(saveButton(html).has("disabled")).toBe(false);
-    expect(radios(html).map((input) => input.has("checked"))).toEqual([false, true, false, true]);
+    expect(radios(html).map((input) => input.has("checked"))).toEqual([false, true, false, true, true, false]);
     expect(html).not.toContain(escapeHtml(COPY["admin.settings_saved"][language]));
     for (const method of METHODS) {
       const next = chooseMethod(moves.current, method);
@@ -858,17 +1070,18 @@ describe("saving", () => {
   // 「sms_not_configured 在保存按钮下方（与 admin.settings_saved 同一位置）显示 admin.sms_not_configured、两组选中项不变、保留表单」：
   // 被拒后保存按钮恢复可点，按钮下方只有这一句（role="alert"），两组仍是提交时的选择，不显示 admin.settings_saved 与 admin.stripe_not_configured。
   it.each(LANGUAGES)("shows the SMS rejection under the save button and keeps both choices in %s", async (language) => {
+    // SHOP-TASK-192 改动：submitSettings 补开关参数，按顺序比较的单选补上每日恢复库存一组，fieldset 由 2 个改为 3 个。
     stubFetch(json(422, { detail: "sms_not_configured" }));
     const moves = fakeMoves(startSaving(readyState({ choice: "stripe_test", smsChoice: true })));
-    await submitSettings(SETTINGS, "stripe_test", true, new AbortController().signal, moves.target);
+    await submitSettings(SETTINGS, "stripe_test", true, true, new AbortController().signal, moves.target);
     expect(moves.events).toEqual(["update ready"]);
     expect(moves.current).toEqual(readyState({ choice: "stripe_test", smsChoice: true, smsRejected: true }));
     const html = render(moves.current, language);
     expect(saveArea(html)).toContain(alertHtml(COPY["admin.sms_not_configured"][language]));
     expect(textNodes(saveArea(html))).toEqual([COPY["common.save"][language], COPY["admin.sms_not_configured"][language]]);
     expect(saveButton(html).has("disabled")).toBe(false);
-    expect(radios(html).map((input) => input.has("checked"))).toEqual([true, false, false, true]);
-    expect(tags(html, "fieldset")).toHaveLength(2);
+    expect(radios(html).map((input) => input.has("checked"))).toEqual([true, false, false, true, true, false]);
+    expect(tags(html, "fieldset")).toHaveLength(3);
     expect(html).not.toContain(escapeHtml(COPY["admin.settings_saved"][language]));
     expect(html).not.toContain(escapeHtml(COPY["admin.stripe_not_configured"][language]));
   });
@@ -909,15 +1122,17 @@ describe("saving", () => {
 
   // UX A09「保存成功：[admin.settings_saved]」与 SHOP-TASK-169 验收第 4 条「ok 以返回的两项更新两组的选中项并显示 admin.settings_saved」：
   // 保存成功后两组的选中项与之后保存的依据都是返回的值（返回的与提交的不同时以返回的为准；两种可用状态与 CSRF 令牌沿用读取的）。
+  // SHOP-TASK-192 改动：200 的回答与 saveStep 的 ok 结果补 daily_stock_reset_enabled，submitSettings 补开关参数，
+  // 按顺序比较的单选补上每日恢复库存一组。
   it.each(LANGUAGES)("updates both groups from the reply in %s", async (language) => {
-    stubFetch(json(200, { payment_method: "stripe_test", sms_verification_enabled: true }));
+    stubFetch(json(200, { payment_method: "stripe_test", sms_verification_enabled: true, daily_stock_reset_enabled: true }));
     const moves = fakeMoves(startSaving(readyState({ choice: "stripe_test", smsChoice: true })));
-    await submitSettings(SETTINGS, "stripe_test", true, new AbortController().signal, moves.target);
+    await submitSettings(SETTINGS, "stripe_test", true, true, new AbortController().signal, moves.target);
     expect(moves.current).toEqual(readyState({ base: { ...SETTINGS, payment_method: "stripe_test", sms_verification_enabled: true }, saved: true }));
     const html = render(moves.current, language);
-    expect(radios(html).map((input) => input.has("checked"))).toEqual([true, false, false, true]);
+    expect(radios(html).map((input) => input.has("checked"))).toEqual([true, false, false, true, true, false]);
     expect(textNodes(saveArea(html))).toEqual([COPY["common.save"][language], COPY["admin.settings_saved"][language]]);
-    const step = saveStep({ kind: "ok", payment_method: "simulated", sms_verification_enabled: false }, SETTINGS);
+    const step = saveStep({ kind: "ok", payment_method: "simulated", sms_verification_enabled: false, daily_stock_reset_enabled: true }, SETTINGS);
     if (typeof step !== "function") {
       throw new Error("expected a change");
     }
@@ -934,17 +1149,18 @@ describe("saving", () => {
   });
 
   // SHOP-TASK-139 验收第 3 条「none 进入 /admin/login」：保存得到 401 时以 replace 进入 /admin/login，不更新表单。
-  // SHOP-TASK-169 改动：本条及以下 submitSettings 的调用补短信参数。
+  // SHOP-TASK-169 改动：本条及以下 submitSettings 的调用补短信参数。SHOP-TASK-192 改动：本条及以下的调用再补开关参数。
   it("goes to the login page on 401", async () => {
     stubFetch(json(401, { detail: "admin_session_required" }));
     const moves = fakeMoves(startSaving(readyState()));
-    await submitSettings(SETTINGS, "simulated", false, new AbortController().signal, moves.target);
+    await submitSettings(SETTINGS, "simulated", false, true, new AbortController().signal, moves.target);
     expect(moves.events).toEqual([`replace ${LOGIN_PATH}`]);
   });
 
   // 同一条「csrf 照 AdminStoreDesignPage.tsx 的写法重新读取后在表单上方显示 common.error_retry」：403 后先显示读取中（不显示表单），
   // 再以同一 signal 读取；取得后选中项按新结果重置，表单最上方为 common.error_retry。
   // SHOP-TASK-169 改动：403 后的读取结果补 sms_verification_enabled 与 sms_available。
+  // SHOP-TASK-192 改动：403 后的读取结果补 daily_stock_reset_enabled（关闭，与提交时不同，选中项按新结果重置）。
   it.each(LANGUAGES)("reads again after 403 and shows the error above the form in %s", async (language) => {
     const fresh: AdminSiteSettings = {
       payment_method: "stripe_test",
@@ -952,11 +1168,12 @@ describe("saving", () => {
       csrf_token: "settings-csrf-2",
       sms_verification_enabled: true,
       sms_available: true,
+      daily_stock_reset_enabled: false,
     };
     const request = stubFetch(json(403, { detail: "csrf_invalid" }), json(200, fresh));
     const moves = fakeMoves(startSaving(readyState()));
     const controller = new AbortController();
-    await submitSettings(SETTINGS, "simulated", false, controller.signal, moves.target);
+    await submitSettings(SETTINGS, "simulated", false, true, controller.signal, moves.target);
     const calls = requests(request);
     expect(calls.map((call) => [call.method, call.url])).toEqual([
       ["PUT", SETTINGS_URL],
@@ -978,7 +1195,7 @@ describe("saving", () => {
   ])("handles the read after 403 like the first read (%#)", async (reread, events, state) => {
     stubFetch(json(403, { detail: "csrf_invalid" }), reread);
     const moves = fakeMoves(startSaving(readyState()));
-    await submitSettings(SETTINGS, "simulated", false, new AbortController().signal, moves.target);
+    await submitSettings(SETTINGS, "simulated", false, true, new AbortController().signal, moves.target);
     expect(moves.events).toEqual(events);
     if (state !== null) {
       expect(moves.current).toEqual(state);
@@ -996,7 +1213,7 @@ describe("saving", () => {
     stubFetch(reply);
     const moves = fakeMoves(startSaving(readyState({ choice: "stripe_test" })));
     moves.target.update((current) => chooseMethod(current, "simulated"));
-    await submitSettings(SETTINGS, "stripe_test", false, new AbortController().signal, moves.target);
+    await submitSettings(SETTINGS, "stripe_test", false, true, new AbortController().signal, moves.target);
     expect(moves.current).toEqual(readyState({ saveError: key }));
     for (const language of LANGUAGES) {
       const html = render(moves.current, language);
@@ -1004,7 +1221,8 @@ describe("saving", () => {
       expect(saveArea(html)).toContain(alertHtml(COPY[key][language]));
       expect(saveButton(html).has("disabled")).toBe(false);
       // SHOP-TASK-169 改动：表单里多了短信一组，fieldset 由 1 个改为 2 个；也不按短信被拒显示 admin.sms_not_configured。
-      expect(tags(html, "fieldset")).toHaveLength(2);
+      // SHOP-TASK-192 改动：表单里多了每日恢复库存一组，fieldset 由 2 个改为 3 个。
+      expect(tags(html, "fieldset")).toHaveLength(3);
       expect(html).not.toContain(escapeHtml(COPY["admin.settings_saved"][language]));
       expect(html).not.toContain(escapeHtml(COPY["admin.stripe_not_configured"][language]));
       expect(html).not.toContain(escapeHtml(COPY["admin.sms_not_configured"][language]));
@@ -1013,8 +1231,9 @@ describe("saving", () => {
 
   // SHOP-TASK-139 验收第 3 条「离开页面时中止，中止后的结果不再更新页面」：保存的 signal 中止后，不论回答什么都不更新、不跳转，
   // 也不在 403 后重新读取。SHOP-TASK-169 改动：200 的回答补 sms_verification_enabled，并加入 422 sms_not_configured。
+  // SHOP-TASK-192 改动：200 的回答补 daily_stock_reset_enabled，submitSettings 补开关参数。
   it.each([
-    json(200, { payment_method: "simulated", sms_verification_enabled: false }),
+    json(200, { payment_method: "simulated", sms_verification_enabled: false, daily_stock_reset_enabled: true }),
     json(401, { detail: "admin_session_required" }),
     json(403, { detail: "csrf_invalid" }),
     json(422, { detail: "stripe_not_configured" }),
@@ -1025,7 +1244,7 @@ describe("saving", () => {
     const request = stubFetch(reply, json(200, SETTINGS));
     const controller = new AbortController();
     const moves = fakeMoves(startSaving(readyState()));
-    const pending = submitSettings(SETTINGS, "simulated", false, controller.signal, moves.target);
+    const pending = submitSettings(SETTINGS, "simulated", false, true, controller.signal, moves.target);
     controller.abort();
     await pending;
     expect(moves.events).toEqual([]);

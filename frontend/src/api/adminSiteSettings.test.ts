@@ -9,7 +9,15 @@ afterEach(() => {
 });
 
 // SHOP-TASK-169 改动：读取的响应体多了 sms_verification_enabled 与 sms_available（SHOP-TASK-168），夹具随之补上。
-const SETTINGS = { payment_method: "simulated", stripe_available: true, csrf_token: "csrf-abc", sms_verification_enabled: false, sms_available: true };
+// SHOP-TASK-192 改动：读取的响应体多了 daily_stock_reset_enabled（SHOP-TASK-179），夹具随之补上。
+const SETTINGS = {
+  payment_method: "simulated",
+  stripe_available: true,
+  csrf_token: "csrf-abc",
+  sms_verification_enabled: false,
+  sms_available: true,
+  daily_stock_reset_enabled: true,
+};
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -85,11 +93,13 @@ describe("reading the site settings", () => {
   // payment_method、stripe_available、csrf_token 之后加 sms_verification_enabled……与 sms_available」与 SHOP-TASK-138 验收第 2 条「多出的字段
   // 不带进结果」：两种取值、两种凭据状态、短信开关的开与关、短信服务可用与否都合格，多出的字段不进结果。
   // SHOP-TASK-169 改动：原先把 sms_verification_enabled 当作多出的字段，现在它是要带进结果的字段；各组设置补上两个短信字段，多出的字段改为别的名字。
+  // SHOP-TASK-192 改动：SHOP-TASK-192 验收「读取的响应体另要求 daily_stock_reset_enabled 为布尔值……并带进结果」：各组设置补上开关
+  // （开与关都有），它随之进入结果。
   it.each([
-    { payment_method: "simulated", stripe_available: false, csrf_token: "t1", sms_verification_enabled: false, sms_available: false },
-    { payment_method: "stripe_test", stripe_available: true, csrf_token: "t2", sms_verification_enabled: true, sms_available: true },
-    { payment_method: "simulated", stripe_available: true, csrf_token: "t3", sms_verification_enabled: true, sms_available: false },
-    { payment_method: "simulated", stripe_available: true, csrf_token: "t4", sms_verification_enabled: false, sms_available: true },
+    { payment_method: "simulated", stripe_available: false, csrf_token: "t1", sms_verification_enabled: false, sms_available: false, daily_stock_reset_enabled: true },
+    { payment_method: "stripe_test", stripe_available: true, csrf_token: "t2", sms_verification_enabled: true, sms_available: true, daily_stock_reset_enabled: false },
+    { payment_method: "simulated", stripe_available: true, csrf_token: "t3", sms_verification_enabled: true, sms_available: false, daily_stock_reset_enabled: true },
+    { payment_method: "simulated", stripe_available: true, csrf_token: "t4", sms_verification_enabled: false, sms_available: true, daily_stock_reset_enabled: false },
   ])("keeps only the agreed fields (%o)", async (settings) => {
     stubFetch(json(200, { ...settings, sms_provider: "twilio", updated_at: "2026-10-22" }));
     await expect(readAdminSiteSettings()).resolves.toEqual({ kind: "ok", settings });
@@ -149,6 +159,11 @@ describe("reading the site settings", () => {
     ["sms available as string", { ...SETTINGS, sms_available: "true" }],
     ["sms available as number", { ...SETTINGS, sms_available: 1 }],
     ["sms available null", { ...SETTINGS, sms_available: null }],
+    // SHOP-TASK-192 验收「读取的响应体另要求 daily_stock_reset_enabled 为布尔值（缺少或类型不对算不合格）」。
+    ["daily stock reset enabled missing", { ...SETTINGS, daily_stock_reset_enabled: undefined }],
+    ["daily stock reset enabled as string", { ...SETTINGS, daily_stock_reset_enabled: "true" }],
+    ["daily stock reset enabled as number", { ...SETTINGS, daily_stock_reset_enabled: 1 }],
+    ["daily stock reset enabled null", { ...SETTINGS, daily_stock_reset_enabled: null }],
   ])("treats malformed settings as a failure: %s", async (_name, body) => {
     stubFetch(json(200, body));
     await expect(readAdminSiteSettings()).resolves.toEqual({ kind: "failed" });
@@ -162,16 +177,18 @@ describe("reading the site settings", () => {
 });
 
 // 保存成功的响应体（SHOP-TASK-168 记录「成功回 200 与保存后的 payment_method 和 sms_verification_enabled」）。
-const SAVED = { payment_method: "simulated", sms_verification_enabled: false };
+// SHOP-TASK-192 改动：SHOP-TASK-179 记录「PUT 响应在 sms_verification_enabled 之后加保存后的值」，补上 daily_stock_reset_enabled。
+const SAVED = { payment_method: "simulated", sms_verification_enabled: false, daily_stock_reset_enabled: true };
 
 describe("saving the payment method", () => {
   // SHOP-TASK-138 验收第 1 条「PUT /api/admin/site-settings（同源 cookie，cache 为 no-store；不带查询参数；PUT 带 X-CSRF-Token 为调用方
   // 给出的 csrf_token，Content-Type 为 application/json）」，并带上调用方的 signal。
   // SHOP-TASK-169 改动：saveAdminSiteSettings 多了短信开关参数，调用与 200 的回答随之补上。
+  // SHOP-TASK-192 改动：又多了每日恢复库存开关参数，调用与 200 的回答随之补上。
   it("puts the payment method with the CSRF token", async () => {
-    const fetchMock = stubFetch(json(200, { payment_method: "stripe_test", sms_verification_enabled: true }));
+    const fetchMock = stubFetch(json(200, { payment_method: "stripe_test", sms_verification_enabled: true, daily_stock_reset_enabled: true }));
     const controller = new AbortController();
-    await saveAdminSiteSettings("stripe_test", true, "csrf-abc", controller.signal);
+    await saveAdminSiteSettings("stripe_test", true, true, "csrf-abc", controller.signal);
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(sentUrl(fetchMock, 0)).toBe("/api/admin/site-settings");
     const init = sentInit(fetchMock, 0);
@@ -185,27 +202,42 @@ describe("saving the payment method", () => {
   // SHOP-TASK-169 验收第 2 条「saveAdminSiteSettings 改为同时提交支付方式与短信开关（JSON 请求体只有 payment_method 与
   // sms_verification_enabled 两项）」与 HANDOFF 0.65 / UX A09「保存一次提交两项」：两种支付方式与短信开关的开与关各发一次，请求体恰为这两项。
   // SHOP-TASK-169 改动：原先断言请求体只有 payment_method、没有任何短信字段（SHOP-TASK-138 当时的约定），随两项改写。
-  it.each<[PaymentMethod, boolean]>(PAYMENT_METHODS.flatMap((method) => [true, false].map((enabled): [PaymentMethod, boolean] => [method, enabled])))(
-    "sends only payment_method and sms_verification_enabled for %s, %s",
-    async (method, enabled) => {
-      const fetchMock = stubFetch(json(200, { payment_method: method, sms_verification_enabled: enabled }));
-      await saveAdminSiteSettings(method, enabled, "csrf-abc");
-      const body = sentBody(fetchMock, 0);
-      expect(body).toEqual({ payment_method: method, sms_verification_enabled: enabled });
-      expect(Object.keys(body as object)).toEqual(["payment_method", "sms_verification_enabled"]);
-    },
-  );
+  // SHOP-TASK-192 改动：SHOP-TASK-192 验收「JSON 请求体只有 payment_method、sms_verification_enabled 与 daily_stock_reset_enabled」与
+  // HANDOFF 0.80（1）「保存总是提交三项」：再按开关的开与关各发一次，请求体恰为这三项。
+  it.each<[PaymentMethod, boolean, boolean]>(
+    PAYMENT_METHODS.flatMap((method) =>
+      [true, false].flatMap((enabled) => [true, false].map((stockReset): [PaymentMethod, boolean, boolean] => [method, enabled, stockReset])),
+    ),
+  )("sends only payment_method, sms_verification_enabled and daily_stock_reset_enabled for %s, %s, %s", async (method, enabled, stockReset) => {
+    const fetchMock = stubFetch(json(200, { payment_method: method, sms_verification_enabled: enabled, daily_stock_reset_enabled: stockReset }));
+    await saveAdminSiteSettings(method, enabled, stockReset, "csrf-abc");
+    const body = sentBody(fetchMock, 0);
+    expect(body).toEqual({ payment_method: method, sms_verification_enabled: enabled, daily_stock_reset_enabled: stockReset });
+    expect(Object.keys(body as object)).toEqual(["payment_method", "sms_verification_enabled", "daily_stock_reset_enabled"]);
+  });
 
   // SHOP-TASK-122 记录「成功或与当前值相同都回 200」与 SHOP-TASK-168 记录「成功回 200 与保存后的 payment_method 和 sms_verification_enabled」、
   // SHOP-TASK-169 验收第 2 条「200 的响应体另要求 sms_verification_enabled 为布尔值并带进 ok 结果」：结果带保存后的两项（以响应为准），
   // 多出的字段不带进结果。
   // SHOP-TASK-169 改动：原先断言多出的 sms_verification_enabled 不带进结果，现在它是要带进结果的字段，改为断言两项都在、其余不在。
+  // SHOP-TASK-192 改动：SHOP-TASK-192 验收「200 的响应体另要求 daily_stock_reset_enabled 为布尔值并带进 ok 结果」：回答补上开关
+  // （与提交的不同），改为断言三项都在（以响应为准）、其余不在。
   it("returns the saved payment method and SMS switch only", async () => {
-    stubFetch(json(200, { payment_method: "stripe_test", sms_verification_enabled: true, stripe_available: true, sms_available: true, csrf_token: "x" }));
-    await expect(saveAdminSiteSettings("simulated", false, "csrf-abc")).resolves.toEqual({
+    stubFetch(
+      json(200, {
+        payment_method: "stripe_test",
+        sms_verification_enabled: true,
+        daily_stock_reset_enabled: false,
+        stripe_available: true,
+        sms_available: true,
+        csrf_token: "x",
+      }),
+    );
+    await expect(saveAdminSiteSettings("simulated", false, true, "csrf-abc")).resolves.toEqual({
       kind: "ok",
       payment_method: "stripe_test",
       sms_verification_enabled: true,
+      daily_stock_reset_enabled: false,
     });
   });
 
@@ -232,8 +264,9 @@ describe("saving the payment method", () => {
     [json(500, { detail: "stripe_not_configured" }), "failed"],
     [networkDown, "network"],
   ])("sorts the reply into a kind (%#)", async (reply, kind) => {
+    // SHOP-TASK-192 改动：本条及以下 saveAdminSiteSettings 的调用补每日恢复库存开关参数。
     stubFetch(reply);
-    await expect(saveAdminSiteSettings("stripe_test", true, "csrf-abc")).resolves.toEqual({ kind });
+    await expect(saveAdminSiteSettings("stripe_test", true, false, "csrf-abc")).resolves.toEqual({ kind });
   });
 
   // SHOP-TASK-138 验收第 3 条「调用方可传入 AbortSignal，中止时按 adminStoreDesign.ts 的做法处理」：中止后 fetch 抛错，归为 network。
@@ -241,7 +274,7 @@ describe("saving the payment method", () => {
     const controller = new AbortController();
     const fetchMock = stubFetch(json(200, SAVED));
     controller.abort();
-    await expect(saveAdminSiteSettings("simulated", false, "csrf-abc", controller.signal)).resolves.toEqual({ kind: "network" });
+    await expect(saveAdminSiteSettings("simulated", false, true, "csrf-abc", controller.signal)).resolves.toEqual({ kind: "network" });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -263,14 +296,20 @@ describe("saving the payment method", () => {
     ["sms verification enabled as string", { ...SAVED, sms_verification_enabled: "false" }],
     ["sms verification enabled as number", { ...SAVED, sms_verification_enabled: 1 }],
     ["sms verification enabled null", { ...SAVED, sms_verification_enabled: null }],
+    // SHOP-TASK-192 验收「200 的响应体另要求 daily_stock_reset_enabled 为布尔值」：缺少（含 SHOP-TASK-179 之前只有两项的回答）或类型不对。
+    ["payment method and SMS switch only", { payment_method: "simulated", sms_verification_enabled: false }],
+    ["daily stock reset enabled missing", { ...SAVED, daily_stock_reset_enabled: undefined }],
+    ["daily stock reset enabled as string", { ...SAVED, daily_stock_reset_enabled: "true" }],
+    ["daily stock reset enabled as number", { ...SAVED, daily_stock_reset_enabled: 0 }],
+    ["daily stock reset enabled null", { ...SAVED, daily_stock_reset_enabled: null }],
   ])("treats a malformed saved value as a failure: %s", async (_name, body) => {
     stubFetch(json(200, body));
-    await expect(saveAdminSiteSettings("simulated", false, "csrf-abc")).resolves.toEqual({ kind: "failed" });
+    await expect(saveAdminSiteSettings("simulated", false, true, "csrf-abc")).resolves.toEqual({ kind: "failed" });
   });
 
   // 同一条「响应体不合格算失败」：200 但响应体不是 JSON 也算 failed。
   it("treats a body that is not JSON as a failure", async () => {
     stubFetch(new Response("", { status: 200 }));
-    await expect(saveAdminSiteSettings("simulated", false, "csrf-abc")).resolves.toEqual({ kind: "failed" });
+    await expect(saveAdminSiteSettings("simulated", false, true, "csrf-abc")).resolves.toEqual({ kind: "failed" });
   });
 });

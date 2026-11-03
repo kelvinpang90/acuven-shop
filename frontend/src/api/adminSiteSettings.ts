@@ -4,6 +4,8 @@ import { CSRF_HEADER } from "./pay";
 // PUT /api/admin/site-settings，都不带查询参数。后台会话凭服务端发的 HttpOnly cookie；读取不要求 CSRF，保存带读取返回的 CSRF 令牌。
 // 支付方式与短信验证开关（SHOP-TASK-168，DESIGN 1.15「边界与原则」短信验证开关一条与 HANDOFF 0.65）。只取 SHOP-TASK-122 与 168 记录
 // 列出的字段，多出的字段不带进结果；响应体不合格算失败。凭据与短信服务配置的检查和审计在服务端，这里只传递与校验字段。
+// 每日恢复库存开关（SHOP-TASK-192，DESIGN 1.18「计价、优惠、积分与库存」第 6 条与 HANDOFF 0.80）：读取与保存的响应都带
+// daily_stock_reset_enabled（SHOP-TASK-179）；服务端允许保存时省略它，这里总是提交三项。取值核对与审计在服务端。
 // 页面只按状态码区分，不显示错误体（422 的 stripe_not_configured 与 sms_not_configured 除外）。
 
 export const ADMIN_SITE_SETTINGS_URL = "/api/admin/site-settings";
@@ -13,25 +15,28 @@ export const PAYMENT_METHODS = ["simulated", "stripe_test"] as const;
 
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
-// 读取的结果：当前支付方式、此刻 Stripe 测试凭据是否可用、只用于保存请求头的 CSRF 令牌、短信验证开关的当前值与此刻短信服务是否可用。
+// 读取的结果：当前支付方式、此刻 Stripe 测试凭据是否可用、只用于保存请求头的 CSRF 令牌、短信验证开关的当前值、此刻短信服务是否可用
+// 与每日恢复库存开关的当前值。
 export interface AdminSiteSettings {
   payment_method: PaymentMethod;
   stripe_available: boolean;
   csrf_token: string;
   sms_verification_enabled: boolean;
   sms_available: boolean;
+  daily_stock_reset_enabled: boolean;
 }
 
-// 保存后的两项（200 的响应体）。
+// 保存后的三项（200 的响应体）。
 export interface SavedSiteSettings {
   payment_method: PaymentMethod;
   sms_verification_enabled: boolean;
+  daily_stock_reset_enabled: boolean;
 }
 
 // 读取的结果：取到（200）、没有会话（401）、其他失败（含 200 但响应体不合格）、网络中断（含调用方中止）。
 export type SiteSettingsRead = { kind: "ok"; settings: AdminSiteSettings } | { kind: "none" } | { kind: "failed" } | { kind: "network" };
 
-// 保存的结果：保存了（200，含与当前相同，带保存后的支付方式与短信开关）、没有会话（401）、CSRF 令牌不对（403）、Stripe 测试凭据不可用
+// 保存的结果：保存了（200，含与当前相同，带保存后的支付方式、短信开关与每日恢复库存开关）、没有会话（401）、CSRF 令牌不对（403）、Stripe 测试凭据不可用
 // （422 且 detail 为 stripe_not_configured）、短信服务不可用（422 且 detail 为 sms_not_configured）、其他失败（含其他 422 与 200 但
 // 响应体不合格）、网络中断（含调用方中止）。
 export type SiteSettingsSave =
@@ -55,35 +60,36 @@ function isFilled(value: unknown): value is string {
   return typeof value === "string" && value !== "";
 }
 
-// 读取的响应体：payment_method 为两种取值之一、stripe_available 为布尔值、csrf_token 为非空字符串、sms_verification_enabled 与
-// sms_available 为布尔值。
+// 读取的响应体：payment_method 为两种取值之一、stripe_available 为布尔值、csrf_token 为非空字符串、sms_verification_enabled、
+// sms_available 与 daily_stock_reset_enabled 为布尔值。
 function readSettings(value: unknown): AdminSiteSettings | null {
   if (!isRecord(value)) {
     return null;
   }
-  const { payment_method, stripe_available, csrf_token, sms_verification_enabled, sms_available } = value;
+  const { payment_method, stripe_available, csrf_token, sms_verification_enabled, sms_available, daily_stock_reset_enabled } = value;
   if (
     !isPaymentMethod(payment_method) ||
     typeof stripe_available !== "boolean" ||
     !isFilled(csrf_token) ||
     typeof sms_verification_enabled !== "boolean" ||
-    typeof sms_available !== "boolean"
+    typeof sms_available !== "boolean" ||
+    typeof daily_stock_reset_enabled !== "boolean"
   ) {
     return null;
   }
-  return { payment_method, stripe_available, csrf_token, sms_verification_enabled, sms_available };
+  return { payment_method, stripe_available, csrf_token, sms_verification_enabled, sms_available, daily_stock_reset_enabled };
 }
 
-// 保存的响应体：保存后的 payment_method（两种取值之一）与 sms_verification_enabled（布尔值）。
+// 保存的响应体：保存后的 payment_method（两种取值之一）、sms_verification_enabled 与 daily_stock_reset_enabled（布尔值）。
 function readSaved(value: unknown): SavedSiteSettings | null {
   if (!isRecord(value)) {
     return null;
   }
-  const { payment_method, sms_verification_enabled } = value;
-  if (!isPaymentMethod(payment_method) || typeof sms_verification_enabled !== "boolean") {
+  const { payment_method, sms_verification_enabled, daily_stock_reset_enabled } = value;
+  if (!isPaymentMethod(payment_method) || typeof sms_verification_enabled !== "boolean" || typeof daily_stock_reset_enabled !== "boolean") {
     return null;
   }
-  return { payment_method, sms_verification_enabled };
+  return { payment_method, sms_verification_enabled, daily_stock_reset_enabled };
 }
 
 // 422 的响应体：detail 为 stripe_not_configured 或 sms_not_configured 时为对应的结果；其他 422（含请求体不合格的错误列表）为 null。
@@ -132,10 +138,12 @@ export async function readAdminSiteSettings(signal?: AbortSignal): Promise<SiteS
   return settings === null ? { kind: "failed" } : { kind: "ok", settings };
 }
 
-// PUT /api/admin/site-settings：JSON 请求体只有 payment_method 与 sms_verification_enabled，请求头带读取给的 CSRF 令牌；同源 cookie、不缓存。
+// PUT /api/admin/site-settings：JSON 请求体只有 payment_method、sms_verification_enabled 与 daily_stock_reset_enabled，请求头带读取给的
+// CSRF 令牌；同源 cookie、不缓存。
 export async function saveAdminSiteSettings(
   paymentMethod: PaymentMethod,
   smsVerificationEnabled: boolean,
+  dailyStockResetEnabled: boolean,
   csrfToken: string,
   signal?: AbortSignal,
 ): Promise<SiteSettingsSave> {
@@ -146,7 +154,11 @@ export async function saveAdminSiteSettings(
       credentials: "same-origin",
       cache: "no-store",
       headers: { Accept: "application/json", "Content-Type": "application/json", [CSRF_HEADER]: csrfToken },
-      body: JSON.stringify({ payment_method: paymentMethod, sms_verification_enabled: smsVerificationEnabled }),
+      body: JSON.stringify({
+        payment_method: paymentMethod,
+        sms_verification_enabled: smsVerificationEnabled,
+        daily_stock_reset_enabled: dailyStockResetEnabled,
+      }),
       signal: signal ?? null,
     });
   } catch {
