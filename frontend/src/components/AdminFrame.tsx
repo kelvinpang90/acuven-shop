@@ -1,5 +1,5 @@
-import { useEffect, useId, useRef, useState } from "react";
-import type { MouseEvent, ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 
 import { readAdminSession, submitAdminLogout } from "../api/admin";
 import type { SessionRead } from "../api/admin";
@@ -29,6 +29,8 @@ import type { RoutePath } from "../router";
 // 即 UX「管理后台总体」的全部导航项。
 // 打开时读后台会话：200 才显示页面内容，401 换成登录页 A01；CSRF 令牌只在 React 状态与退出请求头里。
 // 根元素为 acs-admin，深浅色随管理员设备设置：服务端渲染与首次客户端渲染都是浅色，挂载后才读 prefers-color-scheme。
+// 未保存修改的确认（UX A04、A10「列表」一段，HANDOFF 0.81，SHOP-TASK-197）：内容区以 useUnsavedConfirm 报告是否有未保存的修改；
+// 有修改时框架向路由设置离开拦截（后台导航、手机菜单、浏览器后退与前进），admin.logout 也先确认；确认框由框架渲染，同时只有一个。
 
 export type ColorMode = "light" | "dark";
 
@@ -214,6 +216,103 @@ export async function leaveFrame(csrfToken: string, signal: AbortSignal, moves: 
   settleFrame(step, signal, moves);
 }
 
+// 未保存确认框的状态：关闭，或打开并记着选离开后要继续的事（同时只有一个，打开期间再次触发以最后一次为准）。
+export type LeaveConfirm = { open: false } | { open: true; proceed: () => void };
+
+export const CLOSED_CONFIRM: LeaveConfirm = { open: false };
+
+// 打开确认框；已打开时换成这一次的回调。
+export function askLeave(proceed: () => void): LeaveConfirm {
+  return { open: true, proceed };
+}
+
+// admin.unsaved_stay 或 Escape：关闭确认框，不继续，页面里已填的值不动。
+export function stayHere(): LeaveConfirm {
+  return CLOSED_CONFIRM;
+}
+
+// admin.unsaved_leave：关闭确认框，并给出要继续的事（确认框没有打开时为 null）。
+export function leaveHere(state: LeaveConfirm): { next: LeaveConfirm; proceed: (() => void) | null } {
+  return { next: CLOSED_CONFIRM, proceed: state.open ? state.proceed : null };
+}
+
+// 有未保存的修改时先问（ask 打开确认框），没有时直接继续。
+export function confirmOrProceed(dirty: boolean, ask: (proceed: () => void) => void, proceed: () => void): void {
+  if (dirty) {
+    ask(proceed);
+  } else {
+    proceed();
+  }
+}
+
+interface UnsavedFrame {
+  ask: (proceed: () => void) => void;
+  setDirty: (dirty: boolean) => void;
+}
+
+const UnsavedContext = createContext<UnsavedFrame | null>(null);
+
+function useUnsavedFrame(): UnsavedFrame {
+  const value = useContext(UnsavedContext);
+  if (!value) {
+    throw new Error("useUnsavedConfirm must be used inside AdminFrame");
+  }
+  return value;
+}
+
+// 供后台框架内容区使用（A04、A10 等有编辑区的页面）：dirty 为页面当前是否有未保存的修改。
+// 有修改时框架向路由设置离开拦截，返回的函数先弹确认框、选 admin.unsaved_leave 才调用传入的回调（页内的切换：另一项的编辑、新建、手机顶栏的返回）；
+// 没有修改时不设拦截，返回的函数直接调用回调。页面卸载或改为没有修改时清除拦截。
+export function useUnsavedConfirm(dirty: boolean): (proceed: () => void) => void {
+  const { ask, setDirty } = useUnsavedFrame();
+  useEffect(() => {
+    setDirty(dirty);
+    return () => {
+      setDirty(false);
+    };
+  }, [dirty, setDirty]);
+  return useCallback(
+    (proceed: () => void) => {
+      confirmOrProceed(dirty, ask, proceed);
+    },
+    [dirty, ask],
+  );
+}
+
+export interface UnsavedConfirmProps {
+  onStay: () => void;
+  onLeave: () => void;
+}
+
+// 确认框（视觉稿 A10-states 的未保存确认框）：admin.unsaved_confirm，按钮依次为 admin.unsaved_stay（次要，打开时取得焦点）
+// 与 admin.unsaved_leave（主要）；Escape 等同留下。
+export function UnsavedConfirm({ onStay, onLeave }: UnsavedConfirmProps) {
+  const t = useCopy();
+  const labelId = useId();
+  return (
+    <div
+      className="site-admin__overlay"
+      onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+        if (event.key === "Escape") {
+          onStay();
+        }
+      }}
+    >
+      <div className="acs-admin__panel site-admin__confirm" role="dialog" aria-modal="true" aria-labelledby={labelId}>
+        <p id={labelId}>{t("admin.unsaved_confirm")}</p>
+        <div className="site-admin__confirm-actions">
+          <button className="acs-admin__btn acs-admin__btn--secondary" type="button" autoFocus onClick={onStay}>
+            {t("admin.unsaved_stay")}
+          </button>
+          <button className="acs-admin__btn" type="button" onClick={onLeave}>
+            {t("admin.unsaved_leave")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MenuIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
@@ -248,12 +347,14 @@ export interface AdminFrameViewProps {
   onToggleMenu: () => void;
   onCloseMenu: () => void;
   onLogOut: () => void;
+  // 未保存确认框打开时为它的两个处理，关闭时不给或为 null。
+  unsaved?: UnsavedConfirmProps | null | undefined;
   children: ReactNode;
 }
 
 // 会话请求返回前即显示横幅、导航与语言切换；内容区标 aria-busy，退出按钮禁用（还没有 CSRF 令牌）。
 // 手机菜单（A00-phone-menu）展开时顶栏的图形换成 ✕、名称换成 common.nav_menu，菜单占据内容区。
-export function AdminFrameView({ mode, current, state, busy, menuOpen, onToggleMenu, onCloseMenu, onLogOut, children }: AdminFrameViewProps) {
+export function AdminFrameView({ mode, current, state, busy, menuOpen, onToggleMenu, onCloseMenu, onLogOut, unsaved = null, children }: AdminFrameViewProps) {
   const t = useCopy();
   const menuId = useId();
   const logout = (
@@ -305,6 +406,7 @@ export function AdminFrameView({ mode, current, state, busy, menuOpen, onToggleM
           {state.status === "in" && children}
         </main>
       </div>
+      {unsaved !== null && <UnsavedConfirm onStay={unsaved.onStay} onLeave={unsaved.onLeave} />}
     </div>
   );
 }
@@ -316,10 +418,13 @@ export interface AdminFrameProps {
 
 export default function AdminFrame({ current, children }: AdminFrameProps) {
   const mode = useColorMode();
-  const { replace } = useRouter();
+  const { replace, setLeaveGuard } = useRouter();
   const [state, setState] = useState<FrameState>(INITIAL_FRAME);
   const [busy, setBusy] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // 内容区报告的「有未保存的修改」与确认框。
+  const [dirty, setDirty] = useState(false);
+  const [leaving, setLeaving] = useState<LeaveConfirm>(CLOSED_CONFIRM);
   // 离开页面时中止进行中的会话请求，之后不再更新页面。
   const lifetime = useRef<AbortController | null>(null);
 
@@ -332,36 +437,73 @@ export default function AdminFrame({ current, children }: AdminFrameProps) {
     };
   }, [replace]);
 
+  const ask = useCallback((proceed: () => void) => {
+    setLeaving(askLeave(proceed));
+  }, []);
+
+  // 有未保存的修改时向路由设置拦截（后台导航、手机菜单、浏览器后退与前进都经它），改为没有修改或卸载时清除。
+  useEffect(() => {
+    if (!dirty) {
+      return undefined;
+    }
+    setLeaveGuard(ask);
+    return () => {
+      setLeaveGuard(null);
+    };
+  }, [dirty, ask, setLeaveGuard]);
+
+  const unsaved = useMemo(() => ({ ask, setDirty }), [ask]);
+
+  const logOutNow = () => {
+    const controller = lifetime.current;
+    if (state.status !== "in" || busy || controller === null) {
+      return;
+    }
+    setBusy(true);
+    setState({ ...state, error: null });
+    void leaveFrame(state.csrfToken, controller.signal, {
+      show: (next) => {
+        setState(next);
+        setBusy(false);
+      },
+      replace,
+    });
+  };
+
   return (
-    <AdminFrameView
-      mode={mode}
-      current={current}
-      state={state}
-      busy={busy}
-      menuOpen={menuOpen}
-      onToggleMenu={() => {
-        setMenuOpen((open) => !open);
-      }}
-      onCloseMenu={() => {
-        setMenuOpen(false);
-      }}
-      onLogOut={() => {
-        const controller = lifetime.current;
-        if (state.status !== "in" || busy || controller === null) {
-          return;
+    <UnsavedContext.Provider value={unsaved}>
+      <AdminFrameView
+        mode={mode}
+        current={current}
+        state={state}
+        busy={busy}
+        menuOpen={menuOpen}
+        onToggleMenu={() => {
+          setMenuOpen((open) => !open);
+        }}
+        onCloseMenu={() => {
+          setMenuOpen(false);
+        }}
+        onLogOut={() => {
+          confirmOrProceed(dirty, ask, logOutNow);
+        }}
+        unsaved={
+          leaving.open
+            ? {
+                onStay: () => {
+                  setLeaving(stayHere());
+                },
+                onLeave: () => {
+                  const { next, proceed } = leaveHere(leaving);
+                  setLeaving(next);
+                  proceed?.();
+                },
+              }
+            : null
         }
-        setBusy(true);
-        setState({ ...state, error: null });
-        void leaveFrame(state.csrfToken, controller.signal, {
-          show: (next) => {
-            setState(next);
-            setBusy(false);
-          },
-          replace,
-        });
-      }}
-    >
-      {children}
-    </AdminFrameView>
+      >
+        {children}
+      </AdminFrameView>
+    </UnsavedContext.Provider>
   );
 }

@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { createElement, isValidElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -13,15 +14,21 @@ import { RouterProvider } from "../router";
 import {
   ADMIN_NAV,
   AdminFrameView,
+  askLeave,
+  CLOSED_CONFIRM,
+  confirmOrProceed,
   DARK_SCHEME_QUERY,
   INITIAL_FRAME,
   leaveFrame,
+  leaveHere,
   logOut,
   openFrame,
   sessionStep,
+  stayHere,
+  UnsavedConfirm,
   watchColorScheme,
 } from "./AdminFrame";
-import type { AdminFrameViewProps, ColorMode, FrameMoves, FrameState, SchemeQuery } from "./AdminFrame";
+import type { AdminFrameViewProps, ColorMode, FrameMoves, FrameState, LeaveConfirm, SchemeQuery, UnsavedConfirmProps } from "./AdminFrame";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -711,6 +718,160 @@ describe("dictionary", () => {
         expect(allowed.has(unescapeHtml(m[1] ?? "")), m[0]).toBe(true);
       }
       for (const value of visibleTexts(html)) {
+        expect(allowed.has(value), value).toBe(true);
+      }
+    }
+  });
+});
+
+type AnyElement = ReactElement<Record<string, unknown>>;
+
+// 元素树：展开子组件（直接调用，仍在语言与路由的上下文里），用来取按钮与按键的处理函数（不模拟点击）。
+function expand(node: ReactNode): AnyElement[] {
+  if (Array.isArray(node)) {
+    return node.flatMap((child: ReactNode) => expand(child));
+  }
+  if (!isValidElement(node)) {
+    return [];
+  }
+  const element = node as AnyElement;
+  if (typeof element.type === "function") {
+    const component = element.type as (props: Record<string, unknown>) => ReactNode;
+    return [element, ...expand(component(element.props))];
+  }
+  return [element, ...expand(element.props.children as ReactNode)];
+}
+
+function confirmTree(confirmProps: UnsavedConfirmProps): AnyElement[] {
+  let found: AnyElement[] = [];
+  const probe = () => {
+    found = expand(UnsavedConfirm(confirmProps));
+    return null;
+  };
+  renderToStaticMarkup(wrap(createElement(probe), "en"));
+  return found;
+}
+
+const UNSAVED: UnsavedConfirmProps = { onStay: noop, onLeave: noop };
+
+function dialogTags(html: string): string[] {
+  return tags(html, "div").filter((tag) => attributes(tag).get("role") === "dialog");
+}
+
+describe("unsaved changes", () => {
+  // UX A04、A10「列表」一段「有未保存的修改时…先弹确认框 [admin.unsaved_confirm]」、UX 线框「[admin.unsaved_confirm] ( [admin.unsaved_stay] ) ( [admin.unsaved_leave] )」
+  // 与 SHOP-TASK-197 验收「确认框」一条（视觉稿 A10-states）：框架内渲染一个 acs-admin__panel、role dialog、aria-modal true 的确认框，
+  // aria-labelledby 指向文字 admin.unsaved_confirm；按钮依次为 admin.unsaved_stay（次要按钮）与 admin.unsaved_leave（主要按钮）。没有打开时不渲染。
+  it.each(LANGUAGES)("shows the confirm dialog with stay before leave in %s", (language) => {
+    expect(dialogTags(render({}, language))).toEqual([]);
+    const html = render({ unsaved: UNSAVED }, language);
+    const dialogs = dialogTags(html);
+    expect(dialogs).toHaveLength(1);
+    const dialogTag = dialogs[0] ?? "";
+    expect(classes(dialogTag)).toEqual(expect.arrayContaining(["acs-admin__panel"]));
+    expect(attributes(dialogTag).get("aria-modal")).toBe("true");
+    const labelId = attributes(dialogTag).get("aria-labelledby") ?? "";
+    expect(labelId).not.toBe("");
+    const dialog = element(html, "div", "site-admin__confirm");
+    expect(dialog).toContain(`<p id="${escapeHtml(labelId)}">${escapeHtml(COPY["admin.unsaved_confirm"][language])}</p>`);
+    expect(tags(dialog, "button").map((tag) => [attributes(tag).get("type"), classes(tag)])).toEqual([
+      ["button", ["acs-admin__btn", "acs-admin__btn--secondary"]],
+      ["button", ["acs-admin__btn"]],
+    ]);
+    expect(visibleTexts(dialog)).toEqual([
+      COPY["admin.unsaved_confirm"][language],
+      COPY["admin.unsaved_stay"][language],
+      COPY["admin.unsaved_leave"][language],
+    ]);
+    expect(classes(rootTag(html))).toContain("acs-admin");
+  });
+
+  // 同一条「admin.unsaved_stay 打开时取得焦点」「按 Escape 等同留下」与验收「代码结构」一条「传给事件属性的处理函数不返回 Promise」：
+  // 留下按钮带 autoFocus、点击用 onStay，离开按钮用 onLeave；Escape 调用 onStay、其他按键不处理，处理函数都返回 undefined。
+  it("hands stay, leave and Escape to the frame", () => {
+    const onStay = vi.fn(noop);
+    const onLeave = vi.fn(noop);
+    const elements = confirmTree({ onStay, onLeave });
+    const pressed = elements.filter((item) => item.type === "button");
+    expect(pressed.map((item) => item.props.onClick)).toEqual([onStay, onLeave]);
+    expect(pressed.map((item) => item.props.autoFocus)).toEqual([true, undefined]);
+    const overlay = elements.find((item) => item.props.className === "site-admin__overlay");
+    const keyDown = overlay?.props.onKeyDown as (event: { key: string }) => unknown;
+    expect(keyDown({ key: "Enter" })).toBeUndefined();
+    expect(onStay).not.toHaveBeenCalled();
+    expect(keyDown({ key: "Escape" })).toBeUndefined();
+    expect(onStay).toHaveBeenCalledTimes(1);
+    expect(onLeave).not.toHaveBeenCalled();
+  });
+
+  // UX A04、A10「列表」一段「[admin.unsaved_leave] 丢弃修改并继续，[admin.unsaved_stay] 留在本页、保留已填的值」（Kelvin 2026-10-30 决定）
+  // 与验收「确认框」一条「同时只有一个确认框，打开期间再次触发以最后一次的回调为准」：留下只关闭、不调用回调（页面状态不经确认框，已填的值不动）；
+  // 离开关闭后只调用最后一次的回调；没有打开时选离开不调用任何回调。
+  it("stays without continuing and leaves with the last request", () => {
+    const first = vi.fn(noop);
+    const second = vi.fn(noop);
+    expect(CLOSED_CONFIRM).toEqual({ open: false });
+    expect(askLeave(first)).toEqual({ open: true, proceed: first });
+    const again = askLeave(second);
+    expect(stayHere()).toEqual(CLOSED_CONFIRM);
+    expect(first).not.toHaveBeenCalled();
+    expect(second).not.toHaveBeenCalled();
+    const left = leaveHere(again);
+    expect(left.next).toEqual(CLOSED_CONFIRM);
+    left.proceed?.();
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+    expect(leaveHere(CLOSED_CONFIRM).proceed).toBeNull();
+  });
+
+  // UX A04、A10「列表」一段「没有未保存的修改时直接切换」：没有修改时直接调用回调、不弹确认框；有修改时只弹确认框、不调用回调。
+  it("continues at once without unsaved changes", () => {
+    const ask = vi.fn<(proceed: () => void) => void>();
+    const proceed = vi.fn(noop);
+    confirmOrProceed(false, ask, proceed);
+    expect(proceed).toHaveBeenCalledTimes(1);
+    expect(ask).not.toHaveBeenCalled();
+    confirmOrProceed(true, ask, proceed);
+    expect(ask).toHaveBeenCalledWith(proceed);
+    expect(proceed).toHaveBeenCalledTimes(1);
+  });
+
+  // UX A04、A10「列表」一段「有未保存的修改时，点…[admin.logout]，先弹确认框」：退出经同一确认框——选留下不退出，选离开才退出；
+  // 两个退出按钮（桌面、手机）都交给框架的 onLogOut。
+  it("asks before logging out with unsaved changes", () => {
+    let opened: LeaveConfirm = CLOSED_CONFIRM;
+    const ask = (proceed: () => void) => {
+      opened = askLeave(proceed);
+    };
+    const logOutNow = vi.fn(noop);
+    confirmOrProceed(true, ask, logOutNow);
+    expect(opened).toEqual({ open: true, proceed: logOutNow });
+    opened = stayHere();
+    expect(logOutNow).not.toHaveBeenCalled();
+    confirmOrProceed(true, ask, logOutNow);
+    leaveHere(opened).proceed?.();
+    expect(logOutNow).toHaveBeenCalledTimes(1);
+
+    const onLogOut = vi.fn(noop);
+    const html = render({ onLogOut, unsaved: UNSAVED });
+    expect(buttons(html, "site-admin__logout")).toHaveLength(2);
+    let found: AnyElement[] = [];
+    const probe = () => {
+      found = expand(AdminFrameView(props({ onLogOut, unsaved: UNSAVED })));
+      return null;
+    };
+    renderToStaticMarkup(wrap(createElement(probe), "en"));
+    const logouts = found.filter(
+      (item) => item.type === "button" && typeof item.props.className === "string" && item.props.className.includes("site-admin__logout"),
+    );
+    expect(logouts.map((item) => item.props.onClick)).toEqual([onLogOut, onLogOut]);
+  });
+
+  // 验收「测试」一条「页面文字全部来自字典」：确认框打开时（菜单收起与展开），每段文字都是当前语言的某条字典文案。
+  it.each(LANGUAGES)("shows only dictionary text with the dialog open in %s", (language) => {
+    const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language]));
+    for (const menuOpen of [false, true]) {
+      for (const value of visibleTexts(render({ unsaved: UNSAVED, menuOpen }, language))) {
         expect(allowed.has(value), value).toBe(true);
       }
     }
