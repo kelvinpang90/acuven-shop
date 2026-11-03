@@ -5405,20 +5405,13 @@ tasks:
       重新读取（admin.reload）整页读取后，编辑区显示同一分类的最新数据（已不存在时收起编辑区）；读取与保存的 401 照 A06 页面现有写法回到 A01；新建或保存遇到 403 时重新读取整页（取得新的 CSRF 令牌与列表），编辑区仍停在同一分类（或新建表单），已填的名称、启用状态与提交前的 version 都保留（不换成重新读取的 version，别处的改动仍由服务端以「分类已被改动」拦下），在表单上方显示 common.error_retry；新建或保存时网络中断只显示 common.network_check、保留表单，不自动重新读取（新建可能已经成功，再次提交会因英文名称重复被服务端以「取值不合格」拒绝，管理员可重新读取核对）；读取时网络中断照 A06 显示 common.network_check。
       设计闸门：不适用（分类不碰金额与个人资料；取值核对、并发核对与审计在服务端，依据 DESIGN 1.18 第 14 条）。
       拆分：A10 页面层（7 个允许路径，router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-196
       - SHOP-TASK-197
       - SHOP-TASK-198
     acceptance_criteria:
-      - 页面内容与文案以 docs/UX.md 0.17 的 A10、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.81 为准，样式以 docs/design/pages/ 的 A10-desktop、A10-phone 与 A10-states 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入本页用到而字典里还没有的键（A10 的 admin.categories_* 与 admin.category_* 各键、admin.content_language、common.edit 与 common.cancel），写法与相邻条目相同（每种语言一行）
-      - 列表——标题 admin.nav_categories 旁为 common.create；其下 admin.categories_count（{count} 为分类个数，{max} 为 30）；已有 30 个时 common.create 禁用并显示 admin.categories_full；桌面为表格（admin.category_name、admin.category_slug、admin.category_visible、admin.category_enabled 四列与每行的 common.edit），手机为卡片（英文名称、状态与 admin.category_visible 件数，整张卡片为带读屏标签 common.edit 的按钮），两套都渲染、由 site.css 按宽度显隐；顺序照接口；名称列为英文名称，为空或 null 时显示 —；状态为 admin.category_on 或 admin.category_off（样式照视觉稿）
-      - 编辑区——标题为 admin.category_edit（新建时 admin.category_new）；admin.content_language 三个按钮（common.lang_en、common.lang_zh、common.lang_ms，aria-pressed 标出当前内容语言，默认英文）切换名称输入框（可见标签 admin.category_name）显示与编辑的语言，切换不丢失其他语言已填的值；内容语言为中文或马来文且该语言名称为空（去掉首尾空白后）时在输入框下显示 admin.category_translation_missing；admin.category_enabled 勾选框（新建默认勾选）；编辑已有分类时显示 admin.category_slug 与 slug，新建时不显示；admin.category_slug_hint 常显；最后为 common.save，保存中禁用并标 aria-busy
-      - 保存——新建以三项名称与启用状态调用新建，编辑以四项另加读取（或上次保存）给的 version 调用保存；勾选启用而英文名称为空时不提交、显示 admin.category_invalid；编辑已有分类时把启用改为不启用且该分类的 visible_products 大于 0，先弹确认框（文字 admin.category_disable_confirm，{count} 为该件数；按钮 common.cancel 与 admin.category_disable；样式照 SHOP-TASK-197 的确认框），确认后才提交，为 0 时直接提交；ok 以返回的分类更新列表与编辑区（新建后进入该分类的编辑区）并显示 admin.category_saved（新建为 admin.category_created）；invalid 显示 admin.category_invalid、保留已填的值；changed 显示 admin.category_changed 与 admin.reload；其他失败 common.error_retry；改任何输入后收起保存的结果提示
-      - 未保存确认——读取或保存返回的名称为 null 时，编辑区的输入框与比较基线都当作空串（提交时为空串）；编辑区的三项名称或启用状态与最近一次读取或保存的值（按上面归一后；新建时为三项空串与勾选启用）不同即为有未保存的修改，以 SHOP-TASK-197 的 hook 接入：点另一项的 common.edit、common.create、手机的 common.back 先经确认；后台导航、浏览器前进后退、退出与刷新由框架与路由拦截；点 admin.reload 不再确认，直接丢弃修改重新读取；保存成功后不再算有修改
-      - 代码结构沿用 frontend/src/pages/AdminShippingPage.tsx 与 AdminCouponsPage.tsx 的写法（导出把结果变成页面状态的纯函数、接收 AbortSignal 与回调的异步函数、只依赖 props 的 View；判断有未保存修改、页面先查、是否要停用确认写成导出的纯函数）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
-      - 测试——用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击），写在 frontend/src/pages/AdminCategoriesPage.test.tsx：列表与个数、已满时新建禁用并显示 admin.categories_full、英文名称为空显示 —、桌面与手机两套、编辑区默认不显示、内容语言切换保留各语言的值、admin.category_translation_missing 只在中文或马来文且为空时显示、新建不显示 slug、勾选启用缺英文名称不提交、停用确认只在可见件数大于 0 时出现、四种保存结果、新建成功进入编辑区、有未保存修改的判定（含名称为 null 的分类打开后未改不算修改、改了才算）、reload 后编辑区显示最新数据、保存 403 后重新读取而编辑区与已填的值和 version 保留、新建网络中断只显示 common.network_check 且不重新读取；SHOP-TASK-196 写的只有标题的断言改为新内容；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - docs/task-records/SHOP-TASK-199.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；含手机返回改在页内的偏离、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-199.md
     allowed_change_paths:
       - frontend/src/pages/AdminCategoriesPage.tsx
       - frontend/src/pages/AdminCategoriesPage.test.tsx
