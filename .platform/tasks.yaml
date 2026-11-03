@@ -5382,7 +5382,7 @@ tasks:
       不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
       设计闸门：不适用（分类的取值规则、核对与审计在 SHOP-TASK-180、181 的服务端，依据 DESIGN 1.18 第 14 条；请求模块只传递与校验字段，不碰金额与个人资料）。
       拆分：A10 页面的请求层（3 个允许路径），照 A06 的 SHOP-TASK-174。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 写法照 frontend/src/api/adminShippingRates.ts（同源 cookie、cache no-store、Accept 与 Content-Type、写操作带读取给的 CSRF 令牌于 pay.ts 的 CSRF_HEADER、接收 AbortSignal、只取接口记录列出的字段且多出的字段不带进结果、响应体不合格算失败、页面只按状态码与 detail 区分，不显示错误体）
