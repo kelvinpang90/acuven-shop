@@ -5200,7 +5200,7 @@ tasks:
       运营者落实写法（HANDOFF 0.80）：开关一组没有「不可用」状态，两个单选始终可选；保存的请求体总是带三项（服务端允许省略开关，但页面总是提交当前选择）；视觉稿 A09-stock-reset 只画了这一组，支付方式部分照 A09-stripe 两张。
       设计闸门：DESIGN 1.18（提交 5ba9796）第 6 条与 HANDOFF 0.76、0.80，库存开关的显示与提交（取值核对与审计在服务端）。
       拆分：请求模块与页面放在同一个任务（照 SHOP-TASK-169：请求模块改了保存的参数与结果，页面的调用必须同时改）；A07 只加一行常显说明，同属开关的页面部分，一并做；11 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 页面内容与文案以 docs/UX.md 0.17 的 A09 与 A07、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.80 为准，样式以 docs/design/pages/ 的 A09-stock-reset（开关一组）、A09-stripe-desktop 与 A09-stripe-phone（其余部分）、A07-desktop 与 A07-phone 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入 admin.stock_reset_toggle、admin.stock_reset_on、admin.stock_reset_off、admin.stock_reset_toggle_hint 与 admin.stock_reset_off_note，写法与相邻条目相同（每种语言一行）
