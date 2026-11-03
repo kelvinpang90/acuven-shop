@@ -1,0 +1,25 @@
+# SHOP-TASK-198 后台分类的请求模块 A10
+
+- [x] 新增 `frontend/src/api/adminCategories.ts` 与 `frontend/src/api/adminCategories.test.ts`：为 A10 页面调用 SHOP-TASK-181 的 `GET /api/admin/categories`、`POST /api/admin/categories` 与 `PUT /api/admin/categories/{category_id}`，供 SHOP-TASK-199 使用。写法照 `frontend/src/api/adminShippingRates.ts`（SHOP-TASK-174），`isRecord`、`isFilled`、`readBody`、`detailIs` 等内部函数在本文件另写；CSRF 请求头名取 `frontend/src/api/pay.ts` 的 `CSRF_HEADER`。改动只在这两个文件与本文件；不做页面，不改路由与导航、后端、设计、`docs/TODO.md`、`.platform/`、CI 与部署配置，未装依赖。设计闸门：不适用（分类的取值规则、核对与审计在 SHOP-TASK-180、181 的服务端，依据 DESIGN 1.18 第 14 条；请求模块只传递与校验字段，不碰金额与个人资料）。
+- 导出（供 SHOP-TASK-199 使用）：
+  - `ADMIN_CATEGORIES_URL = "/api/admin/categories"`。
+  - `interface AdminCategory { id: number; slug: string; name_en: string | null; name_zh: string | null; name_ms: string | null; is_active: boolean; version: number; visible_products: number }`（与 `CategoryOut` 一致）。
+  - `interface CategoryCreate { name_en: string; name_zh: string; name_ms: string; is_active: boolean }`（与 `CategoryIn` 一致）。
+  - `interface CategorySave extends CategoryCreate { version: number }`（与 `CategorySaveIn` 一致）。
+  - `type CategoriesRead = { kind: "ok"; categories: AdminCategory[]; csrf_token: string } | { kind: "none" } | { kind: "failed" } | { kind: "network" }`。
+  - `type CategoryWrite = { kind: "ok"; category: AdminCategory } | { kind: "none" } | { kind: "csrf" } | { kind: "invalid" } | { kind: "changed" } | { kind: "failed" } | { kind: "network" }`。
+  - `readAdminCategories(signal?: AbortSignal): Promise<CategoriesRead>`。
+  - `createAdminCategory(input: CategoryCreate, csrfToken: string, signal?: AbortSignal): Promise<CategoryWrite>`。
+  - `saveAdminCategory(categoryId: number, input: CategorySave, csrfToken: string, signal?: AbortSignal): Promise<CategoryWrite>`。
+- 请求：三个请求都不带查询参数，凭同源 cookie，`cache: "no-store"`，`Accept: application/json`，调用方可传入 `AbortSignal`。
+  - 读取：GET，没有请求体与 CSRF 头。
+  - 新建：POST 到 `/api/admin/categories`；保存：PUT 到 `/api/admin/categories/{分类 ID 的十进制}`（`String(categoryId)`）。两者 `Content-Type: application/json`，`X-CSRF-Token` 为调用方给出的令牌。新建的 JSON 请求体只有 `name_en`、`name_zh`、`name_ms`、`is_active`，保存另加 `version`；按这几项重新组装，调用方对象上多出的属性不进请求体，名称原样提交、不去空白。
+- 字段与合格条件：读取 200 的响应体为对象，`categories` 为数组、`csrf_token` 为非空字符串；每个分类 `id` 为正整数、`slug` 为非空字符串、`name_en`、`name_zh`、`name_ms` 各为字符串或 null、`is_active` 为布尔值、`version` 与 `visible_products` 为不小于 0 的整数。只取这些字段，多出的字段不带进结果；分类按接口给的顺序，不重排；任一项不合格整个读取为 `failed`。新建 201 与保存 200 的响应体按同一条件读取一个分类。
+- 归类：读取为 `ok`、`none`（401）、`failed`（其他状态，含 200 但响应体不合格或不是 JSON）与 `network`（fetch 抛错，含调用方中止）。新建与保存为 `ok`（新建 201、保存 200，且分类合格）、`none`（401）、`csrf`（403）、`invalid`（422 且 `detail` 恰为 `category_invalid`）、`changed`（409 且 `detail` 恰为 `category_changed`）、`failed`（其他 422 含路径 ID 与请求体的错误列表、其他 409、413、415、其他状态与成功状态但响应体不合格；新建回 200、保存回 201 也归 `failed`）与 `network`。错误体不带进结果。
+- 偏离与取舍，请审阅（未改设计，未发现须停下的设计问题）：
+  - `version` 按验收标准收不小于 0 的整数；DESIGN 1.18 第 14 条写「新建为 1」，服务端不会给 0，这里不比验收更严。
+  - 分类 ID 的路径段只做 `String(categoryId)`，不在请求模块里检查正整数；ID 来自读取结果（已校验为正整数），不合法时服务端回 422 `category_id_invalid`，归 `failed`。
+  - 不在请求模块里检查分类个数上限 30、名称长度、英文名称必填与重复：取值以服务端为准（SHOP-TASK-181 记录「偏离与取舍」），页面的提交前检查交给 SHOP-TASK-199。
+  - 中止归为 `network` 的三条测试守住的是本任务验收「网络中断与调用方中止为 network」：SHOP-TASK-181 记录、DESIGN 1.18 第 14 条与 UX 0.17 A10 都没有关于中止的原句，测试注释照实写明，并引 UX 0.17 A10「没有未保存的修改时直接切换」为最接近的一句。
+- 留给之后：A10 页面、路由与导航交给 SHOP-TASK-199。
+- 验证到什么程度：人工逐条对照验收标准、`app/api/admin_categories.py`、SHOP-TASK-181 记录、DESIGN 1.18 第 14 条与 UX 0.17 A10 自查。`frontend/src/api/adminCategories.test.ts`（vitest，fetch 以参数带类型的 `vi.fn` 替身代替，从 `mock.calls` 取值时用 `String(…)` 收窄）覆盖：三个请求的地址（保存含 ID 1 与 2147483647 的十进制路径段）、方法、同源 cookie、no-store、Accept、Content-Type、CSRF 头（读取没有）与 signal；新建请求体恰为四项、保存恰为五项，名称原样（含首尾空白与空串），调用方对象上多出的属性不进请求体；读取按接口顺序带回分类与令牌、空列表与名称全为 null 的分类合格、顶层与分类上多出的字段不带进结果；读取、新建与保存共用的不合格分类（`id` 缺少、0、负数、小数或字符串，`slug` 缺少、空串、null 或数字，三语名称缺少或为数字、布尔值、数组，`is_active` 缺少、字符串、数字或 null，`version` 缺少、负数、小数、字符串或 null，`visible_products` 缺少、负数、小数或字符串）；读取的 `categories` 缺少、不是数组、为 null 或含 null，`csrf_token` 缺少、为空、数字或 null，整体不是对象或不是 JSON；新建与保存的成功响应体为数组、列表、null 或不是 JSON；新建回 200 或 204、保存回 201 或 204 归 `failed`；读取、新建与保存各状态码与 detail 的归类（422 与 409 的 detail 对调、大小写不同、错误列表、空对象、不是 JSON 时归 `failed`，413、415 与其他状态归 `failed`）、网络中断与中止。除三条中止测试（见偏离一节）外，每条测试的注释写明它守住的 SHOP-TASK-181 记录、DESIGN 1.18 第 14 条或 UX 0.17 A10 的原句。前端检查交由 PR 的必需 CI 检查 frontend 执行（lint、类型检查、测试、构建与镜像构建；Worker 沙箱不跑前端检查）。本任务不做浏览器验收。检查命令结果由 Worker 另行记录。
