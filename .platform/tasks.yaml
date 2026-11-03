@@ -5318,7 +5318,7 @@ tasks:
       设计闸门：不适用（只加路由、导航与标题，不碰金额与个人资料）。
       拆分：两页的框架层，照 A06 的 SHOP-TASK-173；两页的导航项相邻，一起加只让现有导航断言改一次。18 个允许路径，超过拆分规则的 12 个：导航多两项后，8 个现有测试文件里按顺序列出导航项或路由表的断言必然失效
       （运营者在登记时对 main 的导出做骨架实测：类型检查与 lint 通过，25 条测试失败，全部在这 8 个文件里），只许改这些断言，与加导航的改动拆不开。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 路由——frontend/src/router.tsx 的路由表在 /admin/refunds/:id 之后加入 /admin/products 与 /admin/categories，导出 ADMIN_PRODUCTS_PATH 与 ADMIN_CATEGORIES_PATH，文件顶部说明后台页的注释补上这两条路径（不带段值）；frontend/src/App.tsx 的页面表加入两页；前台页头、菜单与页脚没有指向它们的入口
