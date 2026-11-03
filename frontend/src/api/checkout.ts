@@ -48,6 +48,12 @@ export interface CheckoutQuote {
   lines: QuoteLine[];
   // 商品小计：服务端给出的正常、超出限购与库存不足各行行小计之和。
   subtotal_sen: number;
+  // 整单件数上限（恒为 2000，SHOP-TASK-178）；所有行（含不可购买的行）的件数合计大于它时 units_over_limit 为真。
+  unit_limit: number;
+  units_over_limit: boolean;
+  // 整单金额上限（MYR 整数仙，恒为 99999999）；商品小计加运费（没给收货国家时只看小计）大于它时 amount_over_limit 为真。
+  amount_limit_sen: number;
+  amount_over_limit: boolean;
 }
 
 // 示例运费（MYR 整数仙）与所用运费区。

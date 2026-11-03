@@ -435,6 +435,16 @@ export const COPY = {
     zh: "此商品每单限购 {count} 件，请减少数量。",
     ms: "Produk ini dihadkan kepada {count} unit bagi setiap pesanan. Sila kurangkan kuantiti.",
   },
+  "cart.units_over_limit": {
+    en: "Your cart has more than {count} items in total. Please reduce the quantities.",
+    zh: "购物车商品合计超过 {count} 件，请减少数量。",
+    ms: "Troli anda mempunyai lebih daripada {count} unit secara keseluruhan. Sila kurangkan kuantiti.",
+  },
+  "cart.amount_over_limit": {
+    en: "One order can't exceed RM {amount} (items plus shipping, before coupons and points). Please reduce the quantities.",
+    zh: "一张订单（商品加运费，优惠券与积分抵扣之前）不能超过 RM {amount}，请减少数量。",
+    ms: "Satu pesanan tidak boleh melebihi RM {amount} (item serta penghantaran, sebelum kupon dan mata). Sila kurangkan kuantiti.",
+  },
   "cart.checkout": {
     en: "Check out",
     zh: "去结账",
