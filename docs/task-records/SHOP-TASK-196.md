@@ -19,3 +19,17 @@
 - 偏离：无。视觉稿 A10-desktop 与 A10-phone 的标题都是不带其他类的 `acs-admin__h`，`site.css` 里没有在手机上隐藏它的规则，桌面与手机都显示标题不需要新的布局，因此 `frontend/src/styles/site.css` 未改动。A04 的视觉稿是之后的列表与编辑内容，本任务只取标题。
 - 留给之后的任务：A10 的请求模块与页面内容由 SHOP-TASK-198、199 实现，A04 的请求模块与页面内容另行登记；有未保存的修改时离开本页的确认由 SHOP-TASK-197 实现。未做浏览器验收。
 - 验证到什么程度：人工逐条对照 UX「管理后台总体」的导航顺序、A04 与 A10 线框的手机顶栏与标题、UX-COPY 0.18 的两条文案与视觉稿 A10 的标题写法；上述测试为本次新增或修改的测试代码，前端检查由 PR 的必需 CI `frontend` 执行。
+
+## 登记时的验收标准（原文）
+
+2026-11-03 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 路由——frontend/src/router.tsx 的路由表在 /admin/refunds/:id 之后加入 /admin/products 与 /admin/categories，导出 ADMIN_PRODUCTS_PATH 与 ADMIN_CATEGORIES_PATH，文件顶部说明后台页的注释补上这两条路径（不带段值）；frontend/src/App.tsx 的页面表加入两页；前台页头、菜单与页脚没有指向它们的入口
+      - 导航——frontend/src/components/AdminFrame.tsx 的 AdminNavItem 与 ADMIN_NAV 在 refunds 之后依次加入 products（admin.nav_products）与 categories（admin.nav_categories），桌面导航与手机菜单都按这个顺序列出，手机顶栏名称为当前页的导航项名称；文件顶部「导航只列已上线的页面」一句随之改写；frontend/src/i18n/copy.ts 按 docs/UX-COPY.md 0.18 逐字加入 admin.nav_products 与 admin.nav_categories，写法与相邻条目相同（每种语言一行）
+      - 页面——两页都以后台框架渲染，current 分别为 products 与 categories；内容区只有标题 h1（类名照其他后台页的 acs-admin__h），文字分别为 admin.nav_products 与 admin.nav_categories；桌面与手机都显示标题（视觉稿 A10-phone 的内容区有标题），需要的布局写在 frontend/src/styles/site.css；不发请求，不加其他文字
+      - 测试——新增 frontend/src/pages/AdminProductsPage.test.tsx 与 AdminCategoriesPage.test.tsx，写法照 AdminShippingPage.test.tsx 的框架部分（以 renderToStaticMarkup 渲染、fetch 与路由以替身代替，不模拟点击）：当前导航项、导航顺序、手机顶栏名称、标题文字与页面文字全部来自字典；frontend/src/components/AdminFrame.test.tsx 与 frontend/src/router.test.tsx 补上两项与两条路径；每条测试写明它守住的是 UX 的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - 现有测试只改必然失效的断言并写明原因——运营者的骨架实测列出的 25 条失败：AdminFrame.test.tsx 的导航顺序（3 条）与手机菜单（3 条），AdminCouponsPage.test.tsx、AdminRefundsPage.test.tsx、AdminShippingPage.test.tsx、AdminSiteSettingsPage.test.tsx、AdminStockResetsPage.test.tsx 与 AdminStoreDesignPage.test.tsx 里按顺序比较导航项的断言（各 3 条，测试名里的「after …」随新顺序改写），router.test.tsx 的路由表（1 条）；只在期望的导航项列表或路由表里补上新项，各页面自身的其他期望不变
+      - docs/task-records/SHOP-TASK-196.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；改了哪些现有断言、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
+```
