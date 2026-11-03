@@ -11,6 +11,7 @@ import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { RouterProvider } from "../router";
 import { ProductDetailView, addSelection, detailRedirect } from "./ProductDetailPage";
 import type { AddNotice } from "./ProductDetailPage";
+import { quantityInputResult } from "./productOptions";
 import type { Selection } from "./productOptions";
 
 function text(value: string, english_fallback = false) {
@@ -50,6 +51,8 @@ interface RenderOptions {
   item?: ProductDetail;
   selection?: Selection;
   quantity?: number;
+  draft?: string | null;
+  capped?: boolean;
   lines?: readonly CartLine[];
   notice?: AddNotice;
   image?: number;
@@ -60,6 +63,8 @@ function render({
   item = product(),
   selection = {},
   quantity = 1,
+  draft = null,
+  capped = false,
   lines = [],
   notice = null,
   image = 0,
@@ -72,11 +77,15 @@ function render({
           product={item}
           selection={selection}
           quantity={quantity}
+          draft={draft}
+          capped={capped}
           lines={lines}
           notice={notice}
           image={image}
           onToggle={() => undefined}
           onQuantity={() => undefined}
+          onDraft={() => undefined}
+          onQuantityInput={() => undefined}
           onAdd={() => undefined}
           onImage={() => undefined}
         />
@@ -97,6 +106,8 @@ const crumbs = (html: string) => part(html, /<nav class="acs-body-s site-detail_
 const buy = (html: string) => part(html, /<div class="acs site-detail__buy">[\s\S]*?<\/button><\/div>/);
 const stepper = (html: string) => part(html, /<div class="acs-stepper"[\s\S]*?<\/div>/);
 const addButton = (html: string) => part(html, /<button class="acs-btn acs-btn--primary[^"]*"[^>]*>[^<]*<\/button>/);
+const quantityInput = (html: string) => part(html, /<input class="acs-input site-detail__qty-input"[^>]*\/>/);
+const shownValue = (html: string) => part(quantityInput(html), /value="[^"]*"/);
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
@@ -236,6 +247,8 @@ describe("product detail page", () => {
       { language, notice: "error" },
       { language, lines: [{ sku: "tee-red-s", slug: "crew-neck-tee", quantity: 5 }] },
       { language, item: product({ name: text("Crew Neck Tee", true) }) },
+      { language, quantity: 5, capped: true },
+      { language, lines: [{ sku: "bag-std", slug: "zip-pouch", quantity: 1000 }, { sku: "mug-std", slug: "mug", quantity: 1000 }] },
     ];
     const productData = new Set(["Crew Neck Tee", "Apparel", "Colour", "Size", "Red", "Blue", "S", "M", "A soft cotton tee."]);
     const patterns = [BRAND, ...Object.values(COPY).map((entry) => entry[language])].map(copyPattern);
@@ -294,15 +307,28 @@ describe("options and price", () => {
 });
 
 describe("quantity and purchase limit", () => {
-  // SHOP-TASK-017 验收第 2 条「数量 (+)(-) 用图形而不是文字节点（读屏标签用 common.a11y_qty_increase、common.a11y_qty_decrease）」与 COMPONENTS「Options」：值放在 output 里，最小值时 (-) 禁用。
-  it.each(LANGUAGES)("uses labelled graphic buttons around the quantity in %s", (language) => {
+  // SHOP-TASK-017 验收第 2 条「数量 (+)(-) 用图形而不是文字节点（读屏标签用 common.a11y_qty_increase、common.a11y_qty_decrease）」，最小值时 (-) 禁用；
+  // 值原放在 output 里，SHOP-TASK-193 按 docs/UX.md P03「(-) 与 (+) 之间是数字输入框（读屏标签 [detail.quantity]）」改为输入框
+  // （视觉稿 P03-P04-caps 的 acs-input，inputmode 为 numeric）。
+  it.each(LANGUAGES)("uses labelled graphic buttons around a numeric quantity box in %s", (language) => {
     const box = stepper(render({ language }));
     expect(box).toMatch(
       new RegExp(`<button type="button" aria-label="${COPY["common.a11y_qty_decrease"][language]}" disabled=""><svg[^>]*aria-hidden="true"`),
     );
     expect(box).toMatch(new RegExp(`<button type="button" aria-label="${COPY["common.a11y_qty_increase"][language]}"><svg[^>]*aria-hidden="true"`));
-    expect(box).toContain(`<output aria-live="polite">1</output>`);
-    expect(visibleTexts(box)).toEqual(["1", COPY["common.a11y_qty_decrease"][language], COPY["common.a11y_qty_increase"][language]]);
+    const input = quantityInput(box);
+    expect(input).toMatch(/\sinputmode="numeric"/i);
+    expect(input).toContain(`aria-label="${COPY["detail.quantity"][language]}"`);
+    expect(input).toContain(`value="1"`);
+    expect(box).not.toContain("<output");
+    expect(visibleTexts(box)).toEqual([COPY["common.a11y_qty_decrease"][language], COPY["detail.quantity"][language], COPY["common.a11y_qty_increase"][language]]);
+  });
+
+  // 任务契约「输入中的文字只存在页面状态里」：未生效的文字原样显示在输入框里，不改件数，(+) 仍按显示的件数判断。
+  it("shows the text being typed until it takes effect", () => {
+    const html = render({ quantity: 2, draft: "4x" });
+    expect(shownValue(html)).toBe(`value="4x"`);
+    expect(stepper(html)).not.toMatch(new RegExp(`aria-label="${COPY["common.a11y_qty_increase"].en}" disabled=""`));
   });
 
   // UX P03 线框 [detail.max_per_order]：显示该商品的限购件数。
@@ -316,11 +342,12 @@ describe("quantity and purchase limit", () => {
       { sku: "tee-blue-m", slug: "crew-neck-tee", quantity: 3 },
       { sku: "bag-std", slug: "zip-pouch", quantity: 9 },
     ];
+    // 件数原以 output 显示，SHOP-TASK-193 改为输入框的 value。
     const atTwo = stepper(render({ selection: { color: "red", size: "s" }, quantity: 2, lines }));
-    expect(atTwo).toContain(`<output aria-live="polite">2</output>`);
+    expect(shownValue(atTwo)).toBe(`value="2"`);
     expect(atTwo).toMatch(new RegExp(`aria-label="${COPY["common.a11y_qty_increase"].en}" disabled=""`));
     const clamped = stepper(render({ quantity: 4, lines }));
-    expect(clamped).toContain(`<output aria-live="polite">2</output>`);
+    expect(shownValue(clamped)).toBe(`value="2"`);
     const atOne = stepper(render({ quantity: 1, lines }));
     expect(atOne).not.toMatch(new RegExp(`aria-label="${COPY["common.a11y_qty_increase"].en}" disabled=""`));
   });
@@ -349,6 +376,46 @@ describe("quantity and purchase limit", () => {
     expect(addButton(red)).not.toContain(`disabled=""`);
   });
 
+  // docs/UX.md P03「购物车全部行合计已达 2,000 件：( [detail.add_to_cart] ) 禁用，旁边显示 [detail.cart_units_full]」（{count} 为 2,000，
+  // HANDOFF 0.80「{count} 直接传数字」）；与 detail.limit_reached 同一位置、同样的标签与类名，(+) 同样禁用（视觉稿 P03-P04-caps）。
+  it.each(LANGUAGES)("disables adding and explains why once the whole cart holds 2,000 items in %s", (language) => {
+    const lines = [
+      { sku: "bag-std", slug: "zip-pouch", quantity: 1000 },
+      { sku: "mug-std", slug: "mug", quantity: 1000 },
+    ];
+    const html = render({ selection: { color: "red", size: "s" }, lines, language });
+    const area = buy(html);
+    expect(area).toContain(`<p class="acs-field__hint" role="status">${escapeHtml(COPY["detail.cart_units_full"][language].replace("{count}", "2000"))}</p>`);
+    expect(addButton(area)).toContain(`disabled=""`);
+    expect(area).not.toContain(escapeHtml(COPY["detail.limit_reached"][language].replace("{count}", "5")));
+    expect(stepper(html)).toMatch(new RegExp(`aria-label="${escapeHtml(COPY["common.a11y_qty_increase"][language])}" disabled=""`));
+    // 少 1 件时不禁用。
+    const oneLess = [
+      { sku: "bag-std", slug: "zip-pouch", quantity: 1000 },
+      { sku: "mug-std", slug: "mug", quantity: 999 },
+    ];
+    const roomForOne = buy(render({ selection: { color: "red", size: "s" }, lines: oneLess, language }));
+    expect(roomForOne).not.toContain(escapeHtml(COPY["detail.cart_units_full"][language].replace("{count}", "2000")));
+    expect(addButton(roomForOne)).not.toContain(`disabled=""`);
+  });
+
+  // docs/UX.md P03「与另两种禁用原因同时满足时只显示一条，依次为 [detail.limit_reached]、[detail.cart_units_full]、[detail.cart_full]」：
+  // 本商品已达限购、整单 2,000 件且 20 行已满时只显示 detail.limit_reached。
+  it.each(LANGUAGES)("shows only the limit reached message when the whole cart is also full in %s", (language) => {
+    const lines = [
+      { sku: "tee-red-s", slug: "crew-neck-tee", quantity: 5 },
+      { sku: "bag-std", slug: "zip-pouch", quantity: 1000 },
+      { sku: "mug-std", slug: "mug", quantity: 978 },
+      ...Array.from({ length: 17 }, (_, index) => ({ sku: `x-${String(index)}`, slug: `x-${String(index)}`, quantity: 1 })),
+    ];
+    const area = buy(render({ selection: { color: "blue", size: "m" }, lines, language }));
+    expect(area.match(/<p class="acs-field__hint" role="status">/g)).toHaveLength(1);
+    expect(area).toContain(`<p class="acs-field__hint" role="status">${COPY["detail.limit_reached"][language].replace("{count}", "5")}</p>`);
+    expect(area).not.toContain(escapeHtml(COPY["detail.cart_units_full"][language].replace("{count}", "2000")));
+    expect(area).not.toContain(escapeHtml(COPY["detail.cart_full"][language].replace("{count}", "20")));
+    expect(addButton(area)).toContain(`disabled=""`);
+  });
+
   // SHOP-TASK-017 验收第 5 条「未选全就点加入时显示 detail.select_all_options」：按钮在未选全时仍可点，点后显示提示。
   it.each(LANGUAGES)("keeps the button enabled and asks to choose all options in %s", (language) => {
     expect(addButton(buy(render({ language })))).not.toContain("disabled");
@@ -363,6 +430,44 @@ describe("quantity and purchase limit", () => {
     expect(alert).toMatch(new RegExp(`<span class="site-detail__added-text"><svg[^>]*aria-hidden="true">[\\s\\S]*</svg>${COPY["detail.added"][language]}</span>`));
     expect(alert).toContain(`<a href="/cart">${COPY["detail.view_cart"][language]}</a></div>`);
     expect(visibleTexts(alert)).toEqual([COPY["detail.added"][language], COPY["detail.view_cart"][language]]);
+  });
+});
+
+describe("typing a quantity", () => {
+  // 生效时页面以 quantityInputResult 的结果重新渲染（与页面的 onQuantityInput 相同），这里直接调用它再渲染 View，不模拟输入。
+  const lines = [{ sku: "tee-blue-m", slug: "crew-neck-tee", quantity: 1 }];
+
+  // docs/UX.md P03「数量可直接输入」「为空、小于 1 或不是整数时恢复为原来的件数」：件数仍为原来的 3，不显示 common.qty_capped。
+  it.each(["", "  ", "0", "-1", "2.5", "1e1", "３"])("restores the previous quantity for %j", (typed) => {
+    const result = quantityInputResult(typed, 3, 4);
+    const html = render({ quantity: result.quantity, capped: result.capped, lines });
+    expect(shownValue(html)).toBe(`value="3"`);
+    expect(html).not.toContain("the most you can have in this order");
+  });
+
+  // 同上「超过上限时改为上限，并在数量下方显示 [common.qty_capped]（{count} 为上限）」：限购 5、购物车已有本商品 1 件，上限 4；
+  // 提示用 acs-field__hint 与 role status，位于数量之后、detail.max_per_order 之前（视觉稿 P03-P04-caps）。
+  it.each(LANGUAGES)("caps a typed quantity above the limit and says so in %s", (language) => {
+    const result = quantityInputResult("25", 1, 4);
+    expect(result).toEqual({ quantity: 4, capped: true });
+    const html = render({ quantity: result.quantity, capped: result.capped, lines, language });
+    expect(shownValue(html)).toBe(`value="4"`);
+    const hint = `<p class="acs-field__hint" role="status">${COPY["common.qty_capped"][language].replace("{count}", "4")}</p>`;
+    expect(html).toContain(hint);
+    const position = html.indexOf(hint);
+    expect(position).toBeGreaterThan(html.indexOf(`<div class="acs-stepper"`));
+    expect(position).toBeLessThan(html.indexOf(COPY["detail.max_per_order"][language].replace("{count}", "5")));
+    expect(stepper(html)).toMatch(new RegExp(`aria-label="${escapeHtml(COPY["common.a11y_qty_increase"][language])}" disabled=""`));
+  });
+
+  // 同上「超过上限时改为上限」的反面：不超过时照收，不显示提示；任务契约「(+)(-)、改选规格、加入或再次输入后收起 common.qty_capped」——
+  // 收起后（capped 为 false）不再显示。
+  it("takes a quantity within the limit without a message", () => {
+    const result = quantityInputResult("4", 1, 4);
+    expect(result).toEqual({ quantity: 4, capped: false });
+    const html = render({ quantity: result.quantity, capped: result.capped, lines });
+    expect(shownValue(html)).toBe(`value="4"`);
+    expect(html).not.toContain(COPY["common.qty_capped"].en.replace("{count}", "4"));
   });
 });
 
@@ -416,6 +521,25 @@ describe("adding to the browser cart", () => {
     expect(readCart(fullStorage)).toEqual(full);
   });
 
+  // docs/UX.md P03「购物车全部行合计已达 2,000 件：( [detail.add_to_cart] ) 禁用」：即使被调用也不加入；
+  // 差 3 件时加入的件数不超过整单剩余（「数量的上限取…较小的」）。
+  it("does not add past 2,000 items in the whole cart", () => {
+    const full = [
+      { sku: "bag-std", slug: "zip-pouch", quantity: 1000 },
+      { sku: "mug-std", slug: "mug", quantity: 1000 },
+    ];
+    const storage = memoryStorage(full);
+    expect(addSelection(storage, item, { color: "red", size: "s" }, 1, full)).toBeNull();
+    expect(readCart(storage)).toEqual(full);
+    const almost = [
+      { sku: "bag-std", slug: "zip-pouch", quantity: 1000 },
+      { sku: "mug-std", slug: "mug", quantity: 997 },
+    ];
+    const almostStorage = memoryStorage(almost);
+    expect(addSelection(almostStorage, item, { color: "red", size: "s" }, 5, almost)).toBe("added");
+    expect(readCart(almostStorage)).toEqual([...almost, { sku: "tee-red-s", slug: "crew-neck-tee", quantity: 3 }]);
+  });
+
   // SHOP-TASK-017 验收第 4 条「读写失败时页面照常可用」：写入失败时不抛错，显示 common.error_retry（字典里的一般失败提示）。
   it("reports a failed write instead of throwing", () => {
     const failing: CartStorage = {
@@ -453,12 +577,14 @@ const DETAIL_KEYS: readonly CopyKey[] = [
   "detail.max_per_order",
   "detail.limit_reached",
   "detail.cart_full",
+  "detail.cart_units_full",
   "detail.description",
   "detail.english_only",
   "detail.a11y_image",
   "detail.demo_hint",
   "common.a11y_qty_decrease",
   "common.a11y_qty_increase",
+  "common.qty_capped",
 ];
 
 describe("dictionary", () => {

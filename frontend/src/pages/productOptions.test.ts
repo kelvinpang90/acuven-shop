@@ -8,6 +8,7 @@ import {
   initialSelection,
   isValueEnabled,
   purchaseState,
+  quantityInputResult,
   selectedVariant,
   toggleValue,
 } from "./productOptions";
@@ -169,5 +170,72 @@ describe("purchase limit and cart size", () => {
     expect(purchaseState(twoSkus, red, withRed)).toEqual({ remaining: 9, block: null });
     expect(purchaseState(twoSkus, null, withRed).block).toBeNull();
     expect(purchaseState(twoSkus, blue, full).block).toBeNull();
+  });
+
+  // docs/UX.md P03「整单件数上限」「数量…的上限取限购件数减去购物车中该商品已有的件数与 2,000 减去购物车全部行的件数中较小的」。
+  it("caps the quantity at the smaller of the product limit and the whole-cart room", () => {
+    const big = product(twoSkus.variants, { max_per_order: 1000 });
+    const others = [
+      { sku: "bag-std", slug: "bag", quantity: 1000 },
+      { sku: "mug-std", slug: "mug", quantity: 995 },
+    ];
+    expect(purchaseState(big, null, others)).toEqual({ remaining: 5, block: null });
+    const withTee = [{ sku: "tee-red-s", slug: "tee", quantity: 997 }, { sku: "bag-std", slug: "bag", quantity: 100 }];
+    expect(purchaseState(big, null, withTee)).toEqual({ remaining: 3, block: null });
+    expect(purchaseState(twoSkus, null, others)).toEqual({ remaining: 5, block: null });
+    expect(purchaseState(twoSkus, null, [{ sku: "bag-std", slug: "bag", quantity: 1000 }])).toEqual({ remaining: 10, block: null });
+  });
+
+  // docs/UX.md P03「后者为 0 时加入按钮禁用并显示 [detail.cart_units_full]」：购物车全部行合计已达 2,000 件（不小于 0）。
+  it("blocks adding once the whole cart holds 2,000 items", () => {
+    const full = [
+      { sku: "bag-std", slug: "bag", quantity: 1000 },
+      { sku: "mug-std", slug: "mug", quantity: 1000 },
+    ];
+    expect(purchaseState(twoSkus, null, full)).toEqual({ remaining: 0, block: "cart_units_full" });
+    expect(purchaseState(twoSkus, twoSkus.variants[0] ?? null, full)).toEqual({ remaining: 0, block: "cart_units_full" });
+    const over = [...full, { sku: "cup-std", slug: "cup", quantity: 7 }];
+    expect(purchaseState(twoSkus, null, over)).toEqual({ remaining: 0, block: "cart_units_full" });
+  });
+
+  // docs/UX.md P03「与另两种禁用原因同时满足时只显示一条，依次为 [detail.limit_reached]、[detail.cart_units_full]、[detail.cart_full]」。
+  it("gives one reason in the order limit reached, whole cart full, twenty lines", () => {
+    const blue = selectedVariant(twoSkus, { color: "blue", size: "m" });
+    // 20 行（不含蓝/M），其中本商品红/S 10 件（达到限购），合计 2,000 件：三种原因同时满足。
+    const allThree = [
+      { sku: "tee-red-s", slug: "tee", quantity: 10 },
+      { sku: "x-0", slug: "x-0", quantity: 1000 },
+      { sku: "x-1", slug: "x-1", quantity: 973 },
+      ...Array.from({ length: 17 }, (_, index) => ({ sku: `y-${String(index)}`, slug: `y-${String(index)}`, quantity: 1 })),
+    ];
+    expect(allThree).toHaveLength(20);
+    expect(allThree.reduce((sum, item) => sum + item.quantity, 0)).toBe(2000);
+    expect(purchaseState(twoSkus, blue, allThree)).toEqual({ remaining: 0, block: "limit_reached" });
+    // 限购未满（红/S 9 件），整单 2,000 件且 20 行：只给整单已满。
+    const unitsAndLines = allThree.map((item) => (item.sku === "tee-red-s" ? { ...item, quantity: 9 } : item.sku === "x-1" ? { ...item, quantity: 974 } : item));
+    expect(purchaseState(twoSkus, blue, unitsAndLines)).toEqual({ remaining: 0, block: "cart_units_full" });
+    // 整单未满（少 1 件）且 20 行：只给 20 行已满。
+    const linesOnly = unitsAndLines.map((item) => (item.sku === "x-1" ? { ...item, quantity: 973 } : item));
+    expect(purchaseState(twoSkus, blue, linesOnly)).toEqual({ remaining: 1, block: "cart_full" });
+  });
+});
+
+describe("typing a quantity", () => {
+  // docs/UX.md P03「数量可直接输入」「为空、小于 1 或不是整数时恢复为原来的件数」：件数不变，不显示 common.qty_capped。
+  it.each(["", "  ", "0", "-2", "1.5", "1e2", "３"])("restores the previous quantity for %j", (text) => {
+    expect(quantityInputResult(text, 4, 10)).toEqual({ quantity: 4, capped: false });
+  });
+
+  // 同上「超过上限时改为上限，并在数量下方显示 [common.qty_capped]」；不超过时照收。
+  it("takes a quantity within the cap and caps one above it", () => {
+    expect(quantityInputResult(" 7 ", 4, 10)).toEqual({ quantity: 7, capped: false });
+    expect(quantityInputResult("10", 4, 10)).toEqual({ quantity: 10, capped: false });
+    expect(quantityInputResult("11", 4, 10)).toEqual({ quantity: 10, capped: true });
+    expect(quantityInputResult("25", 4, 10)).toEqual({ quantity: 10, capped: true });
+  });
+
+  // 任务契约「remaining 为 0 时恢复为原来的件数（按钮已禁用）」：不改成 0 件，也不显示 common.qty_capped。
+  it("keeps the previous quantity when nothing more can be added", () => {
+    expect(quantityInputResult("3", 1, 0)).toEqual({ quantity: 1, capped: false });
   });
 });

@@ -2,15 +2,19 @@ import { useSyncExternalStore } from "react";
 
 // 浏览器购物车（docs/UX.md P03「每单限购」、P04）：只存在本浏览器的 localStorage，不发给服务端保存。
 // 每行只有 SKU、商品 slug 与件数，不存价格、名称或任何个人资料；价格与可否下单一律由服务端计价（P04 起）。
-// 商品详情 P03、购物车 P04 与页头的购物车件数共用本模块。限购与 20 行上限在这里只用于提示与禁用按钮，下单时由服务端再次校验。
+// 商品详情 P03、购物车 P04 与页头的购物车件数共用本模块。限购、20 行与整单 2,000 件上限在这里只用于提示与禁用按钮，下单时由服务端再次校验。
 // 存储格式：键 acuven-shop.cart，值为 JSON 数组，每项 {"sku": …, "slug": …, "quantity": …}。
 
 export const CART_STORAGE_KEY = "acuven-shop.cart";
 
-// 购物车最多 20 行（每行一个 SKU）；每行件数 1 到 99（与计价接口的请求上限相同）。
+// 购物车最多 20 行（每行一个 SKU）；每行件数 1 到 1000（与计价接口的请求上限相同）。
 export const MAX_CART_LINES = 20;
 export const MIN_LINE_QUANTITY = 1;
-export const MAX_LINE_QUANTITY = 99;
+export const MAX_LINE_QUANTITY = 1000;
+
+// 整单所有行的件数合计至多 2,000（DESIGN 1.18「计价、优惠、积分与库存」第 8 条）。只在加入时约束（HANDOFF 0.80）：
+// 读取时的清洗与购物车页改件数不按整单合计判定，由服务端计价再判断。
+export const MAX_CART_UNITS = 2000;
 
 export interface CartLine {
   sku: string;
@@ -28,8 +32,8 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value !== "";
 }
 
-// 清洗读到的内容：不是数组时为空；丢弃格式不对的行（SKU 或 slug 不是非空字符串、件数不是 1 到 99 的整数）、
-// 与前面重复的 SKU，以及第 20 行之后的部分。每行只保留三个字段，多出的字段不带出来。
+// 清洗读到的内容：不是数组时为空；丢弃格式不对的行（SKU 或 slug 不是非空字符串、件数不是 1 到 1000 的整数）、
+// 与前面重复的 SKU，以及第 20 行之后的部分。每行只保留三个字段，多出的字段不带出来。不按整单合计丢行。
 export function sanitizeCart(raw: unknown): CartLine[] {
   if (!Array.isArray(raw)) {
     return [];
@@ -101,23 +105,26 @@ export function isCartFullFor(lines: readonly CartLine[], sku: string): boolean 
 }
 
 // 加入购物车：同一 SKU 已在购物车中时合并件数（行的位置不变），否则加在末尾。
-// 件数不是 1 到 99 的整数、合并后超过 99、或购物车已满且是新行时不加入，返回 null。
+// 件数不是 1 到 1000 的整数、合并后超过 1000、购物车已满且是新行、或加入后全部行合计超过 2,000 件时不加入，返回 null。
 export function addToCart(lines: readonly CartLine[], added: CartLine): CartLine[] | null {
   if (!isNonEmptyString(added.sku) || !isNonEmptyString(added.slug) || !isLineQuantity(added.quantity)) {
     return null;
   }
   const existing = lines.find((line) => line.sku === added.sku);
+  let next: CartLine[];
   if (existing) {
     const quantity = existing.quantity + added.quantity;
     if (quantity > MAX_LINE_QUANTITY) {
       return null;
     }
-    return lines.map((line) => (line === existing ? { ...line, quantity } : line));
+    next = lines.map((line) => (line === existing ? { ...line, quantity } : line));
+  } else {
+    if (isCartFullFor(lines, added.sku)) {
+      return null;
+    }
+    next = [...lines, { sku: added.sku, slug: added.slug, quantity: added.quantity }];
   }
-  if (isCartFullFor(lines, added.sku)) {
-    return null;
-  }
-  return [...lines, { sku: added.sku, slug: added.slug, quantity: added.quantity }];
+  return cartItemCount(next) > MAX_CART_UNITS ? null : next;
 }
 
 // 页头 common.nav_cart 的 {count}：购物车各行件数之和（件数，不是金额）。
@@ -125,7 +132,20 @@ export function cartItemCount(lines: readonly CartLine[]): number {
   return lines.reduce((sum, line) => sum + line.quantity, 0);
 }
 
-// 购物车页改件数：只改该 SKU 的件数（位置不变）。件数不是 1 到 99 的整数或 SKU 不在购物车中时不改，返回 null。
+// P03、P04 数量输入框的文字（docs/UX.md P03「数量可直接输入」）：去掉首尾空白后必须全是 ASCII 数字 0–9
+// （不收正负号、小数点、指数写法与全角数字），按十进制读成整数；为空、不全是这些数字或小于 1 时为 null（恢复原来的件数）。
+// 上限不在这里判断。
+export function parseQuantityInput(text: string): number | null {
+  const trimmed = text.trim();
+  if (!/^[0-9]+$/.test(trimmed)) {
+    return null;
+  }
+  const quantity = Number.parseInt(trimmed, 10);
+  return quantity >= MIN_LINE_QUANTITY ? quantity : null;
+}
+
+// 购物车页改件数：只改该 SKU 的件数（位置不变）。件数不是 1 到 1000 的整数或 SKU 不在购物车中时不改，返回 null。
+// 不按整单合计判定。
 export function setLineQuantity(lines: readonly CartLine[], sku: string, quantity: number): CartLine[] | null {
   if (!isLineQuantity(quantity) || !lines.some((line) => line.sku === sku)) {
     return null;
