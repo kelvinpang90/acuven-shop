@@ -3,7 +3,17 @@ import { useEffect, useState } from "react";
 import { latestQuoter, quoteRequestBody } from "../api/checkout";
 import type { CheckoutQuote, PricedQuoteLine, QuoteLine, QuoteOutcome } from "../api/checkout";
 import type { LocalizedText } from "../api/catalog";
-import { MAX_LINE_QUANTITY, MIN_LINE_QUANTITY, removeLine, saveCart, setLineQuantity, useCartLines } from "../cart";
+import {
+  MAX_CART_UNITS,
+  MAX_LINE_QUANTITY,
+  MIN_LINE_QUANTITY,
+  cartItemCount,
+  parseQuantityInput,
+  removeLine,
+  saveCart,
+  setLineQuantity,
+  useCartLines,
+} from "../cart";
 import type { CartLine, CartStorage } from "../cart";
 import { CatalogImage, PlaceholderShape } from "../components/ProductCard";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
@@ -15,6 +25,8 @@ import type { RoutePath } from "../router";
 // 购物车页 P04（docs/UX.md P04）：读本浏览器购物车（cart.ts），用各行的 SKU 与件数调用计价接口（api/checkout.ts），
 // 显示接口返回的每行图片、名称与规格、行小计和商品小计；可改件数、移除。金额只格式化接口返回的整数仙，
 // 不在浏览器相加或相乘；不给收货国家（运费在结账时算）。
+// 件数可在 (-)(+) 之间直接输入（UX P04「整单上限」，0.17）；计价返回超出整单件数或金额上限时在 cart.item_changed 之下提示，
+// cart.checkout 照旧显示（上限判定与下单校验在服务端）。
 // 页面打开、改件数、移除与切换语言后重新计价，连续修改时只采用最后一次请求的结果；
 // 新结果返回之前仍显示上一次的结果（件数显示购物车里的值），主体标 aria-busy。
 // 结账页 P05 已进路由表（/checkout，SHOP-TASK-025）：cart.checkout 按路由规则渲染并链到 /checkout；是否渲染仍只由路由表决定。
@@ -101,12 +113,41 @@ export function productTotal(rows: readonly QuoteLine[], lines: readonly CartLin
   return total;
 }
 
-// 数量 (+)：同一商品各行件数合计达到接口返回的 max_per_order，或该行已到 99 件时禁用。
+// 数量 (+)：同一商品各行件数合计达到接口返回的 max_per_order、该行已到 1000 件，或购物车全部行合计达到 2,000 件时禁用。
 export function canIncrease(rows: readonly QuoteLine[], lines: readonly CartLine[], row: PricedQuoteLine, quantity: number): boolean {
-  return quantity < MAX_LINE_QUANTITY && productTotal(rows, lines, row.product_slug) < row.max_per_order;
+  return (
+    quantity < MAX_LINE_QUANTITY && productTotal(rows, lines, row.product_slug) < row.max_per_order && cartItemCount(lines) < MAX_CART_UNITS
+  );
 }
 
-// 改件数并写回本浏览器购物车；件数低于 1、高于 99 或写入失败时返回 false，购物车不变。
+// 直接输入件数时该行的上限（UX P04「整单上限」）：现有件数 + max(0, min(限购减去该商品各行合计, 2,000 减去全部行合计))。
+// 后台调低限购后购物车可能已超出，这时上限就是现有件数。
+export function quantityLimit(rows: readonly QuoteLine[], lines: readonly CartLine[], row: PricedQuoteLine, quantity: number): number {
+  const productRemaining = row.max_per_order - productTotal(rows, lines, row.product_slug);
+  const unitsRemaining = MAX_CART_UNITS - cartItemCount(lines);
+  return quantity + Math.max(0, Math.min(productRemaining, unitsRemaining));
+}
+
+// 数量输入框生效（回车或离开输入框）后的件数，以及是否显示 common.qty_capped：
+// 为空、不全是数字或小于 1 时恢复为原来的件数；不大于现有件数或不超过上限时照收；
+// 超过上限时改为上限并显示提示，上限等于现有件数时只恢复为原件数、不提示（原因由 cart.over_limit 说明）。
+export interface LineQuantityInput {
+  quantity: number;
+  capped: boolean;
+}
+
+export function lineQuantityInput(text: string, current: number, limit: number): LineQuantityInput {
+  const parsed = parseQuantityInput(text);
+  if (parsed === null) {
+    return { quantity: current, capped: false };
+  }
+  if (parsed <= current || parsed <= limit) {
+    return { quantity: parsed, capped: false };
+  }
+  return limit > current ? { quantity: limit, capped: true } : { quantity: current, capped: false };
+}
+
+// 改件数并写回本浏览器购物车；件数低于 1、高于 1000 或写入失败时返回 false，购物车不变。
 export function changeQuantity(storage: CartStorage | null, lines: readonly CartLine[], sku: string, quantity: number): boolean {
   const next = setLineQuantity(lines, sku, quantity);
   return next !== null && saveCart(storage, next);
@@ -121,7 +162,13 @@ interface LineProps {
   row: QuoteLine;
   rows: readonly QuoteLine[];
   lines: readonly CartLine[];
+  // 该行输入框里尚未生效的文字；null 时显示件数。
+  draft: string | null;
+  // 该行上一次输入超过上限、已改为上限时的上限；null 时不显示 common.qty_capped。
+  capped: number | null;
   onQuantity: (sku: string, quantity: number) => void;
+  onDraft: (sku: string, text: string) => void;
+  onQuantityInput: (sku: string, result: LineQuantityInput) => void;
   onRemove: (sku: string) => void;
 }
 
@@ -140,9 +187,9 @@ function RemoveButton({ sku, onRemove }: { sku: string; onRemove: (sku: string) 
   );
 }
 
-// 一行：图片、名称与规格、数量、行小计、移除；超出限购时行下 cart.over_limit。
+// 一行：图片、名称与规格、数量（(-) 输入框 (+)）、行小计、移除；输入超过上限时行下 common.qty_capped，超出限购时行下 cart.over_limit。
 // 不可购买的行只显示接口返回的 SKU 与件数，只能移除。
-function CartLineItem({ row, rows, lines, onQuantity, onRemove }: LineProps) {
+function CartLineItem({ row, rows, lines, draft, capped, onQuantity, onDraft, onQuantityInput, onRemove }: LineProps) {
   const t = useCopy();
   const quantity = lines.find((line) => line.sku === row.sku)?.quantity ?? row.quantity;
 
@@ -164,6 +211,12 @@ function CartLineItem({ row, rows, lines, onQuantity, onRemove }: LineProps) {
       </div>
     );
   }
+
+  const commitDraft = () => {
+    if (draft !== null) {
+      onQuantityInput(row.sku, lineQuantityInput(draft, quantity, quantityLimit(rows, lines, row, quantity)));
+    }
+  };
 
   return (
     <div className="site-cart__item">
@@ -197,7 +250,21 @@ function CartLineItem({ row, rows, lines, onQuantity, onRemove }: LineProps) {
           >
             <MinusIcon />
           </button>
-          <output aria-live="polite">{quantity}</output>
+          <input
+            className="acs-input site-cart__qty-input"
+            inputMode="numeric"
+            aria-label={t("detail.quantity")}
+            value={draft ?? String(quantity)}
+            onChange={(event) => {
+              onDraft(row.sku, event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                commitDraft();
+              }
+            }}
+            onBlur={commitDraft}
+          />
           <button
             type="button"
             aria-label={t("common.a11y_qty_increase")}
@@ -212,6 +279,11 @@ function CartLineItem({ row, rows, lines, onQuantity, onRemove }: LineProps) {
         <span className="acs-price site-cart__price">{t("common.price_myr", { amount: formatSen(row.line_subtotal_sen) })}</span>
         <RemoveButton sku={row.sku} onRemove={onRemove} />
       </div>
+      {capped !== null && (
+        <p className="acs-field__hint site-cart__note" role="status">
+          {t("common.qty_capped", { count: capped })}
+        </p>
+      )}
       {row.status === "over_limit" && <p className="acs-field__error site-cart__note">{t("cart.over_limit", { count: row.max_per_order })}</p>}
     </div>
   );
@@ -222,11 +294,32 @@ export interface CartViewProps {
   quote: QuoteState;
   // 写回本浏览器失败（存储已满、隐私模式等）。
   writeFailed: boolean;
+  // 正在输入的那一行与输入框里尚未生效的文字；null 时各行显示件数。
+  draft: QuantityDraft | null;
+  // 上一次输入超过上限、已改为上限的各行（SKU 到上限），在该行下显示 common.qty_capped。
+  capped: ReadonlyMap<string, number>;
   onQuantity: (sku: string, quantity: number) => void;
+  onDraft: (sku: string, text: string) => void;
+  onQuantityInput: (sku: string, result: LineQuantityInput) => void;
   onRemove: (sku: string) => void;
 }
 
-export function CartView({ lines, quote, writeFailed, onQuantity, onRemove }: CartViewProps) {
+export interface QuantityDraft {
+  sku: string;
+  text: string;
+}
+
+// cart.item_changed 与整单件数、金额上限的提示条（视觉稿 P04-states、P03-P04-caps）。
+function CartAlert({ children }: { children: string }) {
+  return (
+    <div className="acs-alert acs-alert--danger" role="alert">
+      <AlertIcon />
+      <span>{children}</span>
+    </div>
+  );
+}
+
+export function CartView({ lines, quote, writeFailed, draft, capped, onQuantity, onDraft, onQuantityInput, onRemove }: CartViewProps) {
   const t = useCopy();
   const checkout = checkoutPath();
   const empty = lines.length === 0;
@@ -287,15 +380,23 @@ export function CartView({ lines, quote, writeFailed, onQuantity, onRemove }: Ca
           {writeFailed && <ErrorNotice />}
           <div className="site-cart__lines">
             {rows.map((row) => (
-              <CartLineItem key={row.sku} row={row} rows={rows} lines={lines} onQuantity={onQuantity} onRemove={onRemove} />
+              <CartLineItem
+                key={row.sku}
+                row={row}
+                rows={rows}
+                lines={lines}
+                draft={draft?.sku === row.sku ? draft.text : null}
+                capped={capped.get(row.sku) ?? null}
+                onQuantity={onQuantity}
+                onDraft={onDraft}
+                onQuantityInput={onQuantityInput}
+                onRemove={onRemove}
+              />
             ))}
           </div>
-          {hasChangedLine(rows) && (
-            <div className="acs-alert acs-alert--danger" role="alert">
-              <AlertIcon />
-              <span>{t("cart.item_changed")}</span>
-            </div>
-          )}
+          {hasChangedLine(rows) && <CartAlert>{t("cart.item_changed")}</CartAlert>}
+          {quote.quote.units_over_limit && <CartAlert>{t("cart.units_over_limit", { count: quote.quote.unit_limit })}</CartAlert>}
+          {quote.quote.amount_over_limit && <CartAlert>{t("cart.amount_over_limit", { amount: formatSen(quote.quote.amount_limit_sen) })}</CartAlert>}
           <div className="site-phone-only site-cart__notes">
             <p className="acs-body-s acs-muted">{t("cart.shipping_later")}</p>
             <p className="acs-body-s acs-muted">{t("cart.price_recheck")}</p>
@@ -340,7 +441,21 @@ export default function CartPage() {
   const [quoter] = useState(() => latestQuoter());
   const [settled, setSettled] = useState<SettledQuote | null>(null);
   const [writeFailed, setWriteFailed] = useState(false);
+  const [draft, setDraft] = useState<QuantityDraft | null>(null);
+  const [capped, setCapped] = useState<ReadonlyMap<string, number>>(() => new Map());
   const key = quoteKey(language, lines);
+
+  // 该行的 (+)(-)、移除或再次输入后收起该行的 common.qty_capped。
+  const uncap = (sku: string) => {
+    setCapped((previous) => {
+      if (!previous.has(sku)) {
+        return previous;
+      }
+      const next = new Map(previous);
+      next.delete(sku);
+      return next;
+    });
+  };
 
   // 购物车内容（同一份存储内容是同一个数组）或语言变了就重新计价；作废的请求由 latestQuoter 中止并丢弃。
   useEffect(() => {
@@ -366,10 +481,36 @@ export default function CartPage() {
       lines={lines}
       quote={quoteState(key, settled)}
       writeFailed={writeFailed}
+      draft={draft}
+      capped={capped}
       onQuantity={(sku, quantity) => {
+        setDraft(null);
+        uncap(sku);
         setWriteFailed(!changeQuantity(storage, lines, sku, quantity));
       }}
+      onDraft={(sku, text) => {
+        setDraft({ sku, text });
+        uncap(sku);
+      }}
+      onQuantityInput={(sku, { quantity, capped: wasCapped }) => {
+        setDraft(null);
+        setCapped((previous) => {
+          const next = new Map(previous);
+          if (wasCapped) {
+            next.set(sku, quantity);
+          } else {
+            next.delete(sku);
+          }
+          return next;
+        });
+        const current = lines.find((line) => line.sku === sku)?.quantity;
+        if (quantity !== current) {
+          setWriteFailed(!changeQuantity(storage, lines, sku, quantity));
+        }
+      }}
       onRemove={(sku) => {
+        setDraft(null);
+        uncap(sku);
         setWriteFailed(!removeFromCart(storage, lines, sku));
       }}
     />

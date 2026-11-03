@@ -115,6 +115,8 @@ body { margin: 0; }
 .site-cart__options { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .site-cart__option { display: inline-flex; align-items: center; gap: 4px; }
 .site-cart__qty { grid-area: qty; }
+/* 数量输入框（视觉稿 P03-P04-caps）：宽 72px、最低 44px、左右内边距 8px，居中 */
+.site-cart__qty-input { box-sizing: border-box; width: 72px; min-height: 44px; padding: 0 8px; text-align: center; }
 .site-cart__price { grid-area: price; text-align: right; }
 .site-cart__remove { grid-area: remove; }
 .site-cart__note { margin-left: 136px; }

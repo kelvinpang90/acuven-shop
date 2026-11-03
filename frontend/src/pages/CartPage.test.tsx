@@ -10,8 +10,8 @@ import { BRAND, COPY, LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { RouterProvider } from "../router";
-import { CartView, canIncrease, changeQuantity, hasChangedLine, quoteKey, quoteState, removeFromCart } from "./CartPage";
-import type { QuoteState } from "./CartPage";
+import { CartView, canIncrease, changeQuantity, hasChangedLine, lineQuantityInput, quantityLimit, quoteKey, quoteState, removeFromCart } from "./CartPage";
+import type { QuantityDraft, QuoteState } from "./CartPage";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -49,8 +49,10 @@ function cartOf(rows: readonly QuoteLine[]): CartLine[] {
   return rows.map((row) => ({ sku: row.sku, slug: row.status === "unavailable" ? "gone" : row.product_slug, quantity: row.quantity }));
 }
 
-function ready(lines: QuoteLine[], subtotal_sen = 0): QuoteState {
-  return { status: "ready", quote: { lines, subtotal_sen }, pending: false };
+const WITHIN_LIMITS = { unit_limit: 2000, units_over_limit: false, amount_limit_sen: 99999999, amount_over_limit: false };
+
+function ready(lines: QuoteLine[], subtotal_sen = 0, limits: Partial<CheckoutQuote> = {}): QuoteState {
+  return { status: "ready", quote: { lines, subtotal_sen, ...WITHIN_LIMITS, ...limits }, pending: false };
 }
 
 function languageStorage(language: Language) {
@@ -64,22 +66,34 @@ interface RenderOptions {
   lines?: readonly CartLine[];
   quote?: QuoteState;
   writeFailed?: boolean;
+  draft?: QuantityDraft | null;
+  capped?: ReadonlyMap<string, number>;
   language?: Language;
 }
 
-function render({ lines = [], quote = { status: "loading" }, writeFailed = false, language = "en" }: RenderOptions = {}): string {
+function render({ lines = [], quote = { status: "loading" }, writeFailed = false, draft = null, capped = new Map(), language = "en" }: RenderOptions = {}): string {
   return renderToStaticMarkup(
     <LanguageProvider storage={languageStorage(language)}>
       <RouterProvider initialPath="/cart">
-        <CartView lines={lines} quote={quote} writeFailed={writeFailed} onQuantity={() => undefined} onRemove={() => undefined} />
+        <CartView
+          lines={lines}
+          quote={quote}
+          writeFailed={writeFailed}
+          draft={draft}
+          capped={capped}
+          onQuantity={() => undefined}
+          onDraft={() => undefined}
+          onQuantityInput={() => undefined}
+          onRemove={() => undefined}
+        />
       </RouterProvider>
     </LanguageProvider>,
   );
 }
 
-function renderRows(rows: QuoteLine[], options: Omit<RenderOptions, "lines" | "quote"> & { subtotal?: number } = {}): string {
-  const { subtotal = 0, ...rest } = options;
-  return render({ lines: cartOf(rows), quote: ready(rows, subtotal), ...rest });
+function renderRows(rows: QuoteLine[], options: Omit<RenderOptions, "lines" | "quote"> & { subtotal?: number; limits?: Partial<CheckoutQuote> } = {}): string {
+  const { subtotal = 0, limits = {}, ...rest } = options;
+  return render({ lines: cartOf(rows), quote: ready(rows, subtotal, limits), ...rest });
 }
 
 function part(html: string, pattern: RegExp): string {
@@ -91,8 +105,14 @@ function part(html: string, pattern: RegExp): string {
 }
 
 function items(html: string): string[] {
-  return [...html.matchAll(/<div class="site-cart__item">[\s\S]*?<\/button><\/div>(?:<p class="acs-field__error site-cart__note">[^<]*<\/p>)?<\/div>/g)].map((m) => m[0]);
+  return [...html.matchAll(/<div class="site-cart__item">[\s\S]*?<\/button><\/div>(?:<p class="acs-field__(?:hint|error) site-cart__note"[^>]*>[^<]*<\/p>)*<\/div>/g)].map((m) => m[0]);
 }
+
+function regexEscape(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+const quantityInput = (html: string) => part(html, /<input class="acs-input site-cart__qty-input"[^>]*\/>/);
 
 function escapeHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
@@ -130,14 +150,14 @@ const decrease = (language: Language) => escapeHtml(COPY["common.a11y_qty_decrea
 
 describe("lines and amounts", () => {
   // UX P04 线框「[图] <名称> / <规格> (-) 2 (+) [M1] ([cart.remove])」与 SHOP-TASK-018 验收第 3 条「显示返回的每行图片、名称与规格、件数、行小计」：
-  // 名称链到商品详情，规格值之间是图形分隔，件数在步进器的 output 里。
+  // 名称链到商品详情，规格值之间是图形分隔，件数在步进器的数量输入框里（0.17 起数量可直接输入，原为 output；本任务改这一条断言）。
   it.each(LANGUAGES)("shows the image, name, options, quantity, line subtotal and remove button in %s", (language) => {
     const row = priced("tee-black-m", { quantity: 2, line_subtotal_sen: 7800 });
     const [item = ""] = items(renderRows([row], { language }));
     expect(item).toContain(`<span class="acs-cat__img site-cart__img"><img class="site-img" src="/img/tee.svg" alt="" loading="lazy"/></span>`);
     expect(item).toContain(`<a href="/products/crew-neck-tee">Crew Neck Tee</a>`);
     expect(item).toMatch(/<span>Black<\/span><\/span><span class="site-cart__option"><svg[^>]*aria-hidden="true">[\s\S]*?<\/svg><span>M<\/span>/);
-    expect(item).toContain(`<output aria-live="polite">2</output>`);
+    expect(quantityInput(item)).toContain(`value="2"`);
     expect(item).toContain(`<span class="acs-price site-cart__price">RM 78.00</span>`);
     expect(item).toContain(`type="button">${COPY["cart.remove"][language]}</button>`);
   });
@@ -210,7 +230,7 @@ describe("lines and amounts", () => {
   // UX P04 金额元素 M1「不信任浏览器保存的价格」与 SHOP-TASK-018 验收第 3 条：从购物车移除的行在新结果返回前就不再显示（用上一次的结果时只显示仍在购物车里的行）。
   it("hides a removed line before the new quote arrives", () => {
     const rows = [priced("tee-black-m"), priced("candle", { product_slug: "candle", name: text("Soy Wax Candle") })];
-    const html = render({ lines: cartOf(rows).slice(1), quote: { status: "ready", quote: { lines: rows, subtotal_sen: 0 }, pending: true } });
+    const html = render({ lines: cartOf(rows).slice(1), quote: { status: "ready", quote: { lines: rows, subtotal_sen: 0, ...WITHIN_LIMITS }, pending: true } });
     expect(html).not.toContain("Crew Neck Tee");
     expect(html).toContain("Soy Wax Candle");
     expect(html).toContain(`<main class="site-cart" aria-busy="true">`);
@@ -290,6 +310,139 @@ describe("changed lines and the purchase limit", () => {
   });
 });
 
+describe("order caps and typed quantities", () => {
+  const line = (sku: string, slug: string, quantity: number): CartLine => ({ sku, slug, quantity });
+
+  // UX P04「整单上限」「购物车全部行的件数合计达到 2,000 时，各行的数量 (+) 禁用」：三件商品 1000 + 500 + 500 件（每单限购都是 1000），
+  // 后两行没到限购也没到每行 1000 件，(+) 仍禁用；合计 1999 件时可用。
+  it("disables (+) on every line when the cart holds 2000 items", () => {
+    const tee = priced("tee-black-m", { quantity: 1000, max_per_order: 1000 });
+    const candle = priced("candle", { product_slug: "candle", quantity: 500, max_per_order: 1000 });
+    const tote = priced("tote", { product_slug: "tote", quantity: 500, max_per_order: 1000 });
+    const rows = [tee, candle, tote];
+    const full = [line("tee-black-m", "crew-neck-tee", 1000), line("candle", "candle", 500), line("tote", "tote", 500)];
+    expect(canIncrease(rows, full, candle, 500)).toBe(false);
+    expect(canIncrease(rows, full, tote, 500)).toBe(false);
+    const almost = [line("tee-black-m", "crew-neck-tee", 1000), line("candle", "candle", 500), line("tote", "tote", 499)];
+    expect(canIncrease(rows, almost, tote, 499)).toBe(true);
+    expect(canIncrease(rows, almost, candle, 500)).toBe(true);
+    const all = items(render({ lines: full, quote: ready(rows) }));
+    expect(all).toHaveLength(3);
+    for (const item of all) {
+      expect(item).toContain(`aria-label="${increase("en")}" disabled=""`);
+    }
+  });
+
+  // UX P04「(-) 与 (+) 之间是数字输入框（读屏标签 [detail.quantity]）」与视觉稿 P03-P04-caps 的 acs-input、inputmode numeric：
+  // 每个可购买行的 (-) 与 (+) 之间是显示件数的输入框；输入中的文字原样显示；不可购买的行照旧只显示件数（见上一组的最后一条）。
+  it.each(LANGUAGES)("puts a numeric input with the quantity label between (-) and (+) in %s", (language) => {
+    const rows = [priced("tee-black-m", { quantity: 3 }), priced("candle", { product_slug: "candle", quantity: 1 })];
+    const [tee = "", candle = ""] = items(renderRows(rows, { language, draft: { sku: "candle", text: "12" } }));
+    const stepper = part(tee, /<div class="acs-stepper site-cart__qty">[\s\S]*?<\/div>/);
+    expect(stepper).toMatch(new RegExp(`aria-label="${decrease(language)}"[\\s\\S]*<input class="acs-input site-cart__qty-input"[\\s\\S]*aria-label="${increase(language)}"`));
+    const input = quantityInput(tee);
+    expect(input).toMatch(/\sinputmode="numeric"/i);
+    expect(input).toContain(`aria-label="${escapeHtml(COPY["detail.quantity"][language])}"`);
+    expect(input).toContain(`value="3"`);
+    expect(quantityInput(candle)).toContain(`value="12"`);
+  });
+
+  // UX P04「为空、小于 1 或不是整数时恢复为原来的件数」（经 parseQuantityInput，与 P03 同一规则）：件数仍为原来的 3，不显示 common.qty_capped。
+  it("restores the quantity when the input is empty, below 1 or not a whole number", () => {
+    for (const text of ["", "  ", "0", "-2", "1.5", "2e1", "abc"]) {
+      expect(lineQuantityInput(text, 3, 10), text).toEqual({ quantity: 3, capped: false });
+    }
+  });
+
+  // UX P04「输入值不大于该行现有件数时照收（减少件数不受上限约束）」：后台调低限购到 5、该行已有 8 件（上限即 8），输入 6 照收；
+  // 不超过上限的增加也照收。
+  it("accepts a lower quantity even above the purchase limit", () => {
+    const row = priced("tee-black-m", { quantity: 8, max_per_order: 5, status: "over_limit" });
+    const limit = quantityLimit([row], [line("tee-black-m", "crew-neck-tee", 8)], row, 8);
+    expect(limit).toBe(8);
+    expect(lineQuantityInput("6", 8, limit)).toEqual({ quantity: 6, capped: false });
+    expect(lineQuantityInput("8", 8, limit)).toEqual({ quantity: 8, capped: false });
+    expect(lineQuantityInput("7", 2, 10)).toEqual({ quantity: 7, capped: false });
+    expect(lineQuantityInput("10", 2, 10)).toEqual({ quantity: 10, capped: false });
+  });
+
+  // UX P04 上限「该行现有件数 + max(0, min(限购件数减去该商品各行合计, 2,000 减去全部行合计))」：
+  // 限购 10、同一商品两行 2 + 3 件，该行上限 2 + 5 = 7；全部行合计 1995 件时整单剩 5 件，限购 1000 的那行上限为现有件数 + 5。
+  it("computes the limit from the purchase limit and the 2000-item cap", () => {
+    const black = priced("tee-black-m", { quantity: 2, max_per_order: 10 });
+    const white = priced("tee-white-s", { quantity: 3, max_per_order: 10 });
+    expect(quantityLimit([black, white], [line("tee-black-m", "crew-neck-tee", 2), line("tee-white-s", "crew-neck-tee", 3)], black, 2)).toBe(7);
+    const big = priced("big", { product_slug: "big", quantity: 995, max_per_order: 1000 });
+    const other = priced("candle", { product_slug: "candle", quantity: 1000, max_per_order: 1000 });
+    expect(quantityLimit([big, other], [line("big", "big", 995), line("candle", "candle", 1000)], big, 995)).toBe(1000);
+    const many = priced("many", { product_slug: "many", quantity: 10, max_per_order: 1000 });
+    const rest = [priced("x", { product_slug: "x", quantity: 1000 }), priced("y", { product_slug: "y", quantity: 985 })];
+    expect(quantityLimit([many, ...rest], [line("many", "many", 10), line("x", "x", 1000), line("y", "y", 985)], many, 10)).toBe(15);
+  });
+
+  // UX P04「超过上限时改为上限，并在数量下方显示 [common.qty_capped]（{count} 为上限）」与 Kelvin 2026-10-30 决定（HANDOFF 0.80 第 2 条）：
+  // 上限 10、输入 25 时改为 10 并提示；提示以 acs-field__hint 与 role status 显示在该行下（视觉稿 P03-P04-caps），只在该行。
+  it.each(LANGUAGES)("caps the quantity and shows common.qty_capped under that line in %s", (language) => {
+    expect(lineQuantityInput("25", 2, 10)).toEqual({ quantity: 10, capped: true });
+    const rows = [priced("tee-black-m", { quantity: 10, max_per_order: 10 }), priced("candle", { product_slug: "candle" })];
+    const [tee = "", candle = ""] = items(renderRows(rows, { language, capped: new Map([["tee-black-m", 10]]) }));
+    const hint = `<p class="acs-field__hint site-cart__note" role="status">${escapeHtml(COPY["common.qty_capped"][language].replace("{count}", "10"))}</p></div>`;
+    expect(tee.endsWith(hint)).toBe(true);
+    expect(candle).not.toContain("acs-field__hint");
+    expect(renderRows(rows, { language })).not.toContain("acs-field__hint");
+  });
+
+  // UX P04「后台调低限购后购物车可能已超出，这时上限就是现有件数：输入更大的数只恢复为原件数，不显示 [common.qty_capped]」：
+  // 限购调到 5、该行 7 件，输入 9 后仍为 7、不提示。
+  it("only restores the quantity when the limit equals the current quantity", () => {
+    const row = priced("tee-black-m", { quantity: 7, max_per_order: 5, status: "over_limit" });
+    const limit = quantityLimit([row], [line("tee-black-m", "crew-neck-tee", 7)], row, 7);
+    expect(limit).toBe(7);
+    expect(lineQuantityInput("9", 7, limit)).toEqual({ quantity: 7, capped: false });
+  });
+
+  // UX P04「计价接口返回超出整单件数上限的标记时显示 [cart.units_over_limit]（{count} 为接口返回的上限件数），返回超出整单金额上限的标记时显示
+  // [cart.amount_over_limit]（{amount} 为接口返回的上限金额，按整数仙格式化）；…同时存在时都显示，样式与 [cart.item_changed] 相同，位置在它之下」，
+  // HANDOFF 0.80 第 3 条「{amount} 用 formatSen（不分千位）」：依次为 item_changed、件数、金额，同一提示条写法；cart.checkout 照旧显示。
+  it.each(LANGUAGES)("shows both cap alerts below cart.item_changed in %s", (language) => {
+    const rows = [priced("tee-black-m", { status: "insufficient_stock" })];
+    const html = renderRows(rows, { language, limits: { unit_limit: 2000, units_over_limit: true, amount_limit_sen: 99999999, amount_over_limit: true } });
+    const alert = (copy: string) => `<div class="acs-alert acs-alert--danger" role="alert"><svg[^>]*aria-hidden="true">(?:(?!</svg>)[\\s\\S])*</svg><span>${regexEscape(escapeHtml(copy))}</span></div>`;
+    const changed = alert(COPY["cart.item_changed"][language]);
+    const units = alert(COPY["cart.units_over_limit"][language].replace("{count}", "2000"));
+    const amount = alert(COPY["cart.amount_over_limit"][language].replace("{amount}", "999999.99"));
+    expect(html).toMatch(new RegExp(changed + units + amount));
+    // 三条用同一图形（cart.item_changed 的图形，视觉稿 P03-P04-caps）。
+    const icons = [...html.matchAll(/role="alert">(<svg[\s\S]*?<\/svg>)/g)].map((m) => m[1]);
+    expect(icons).toHaveLength(3);
+    expect(new Set(icons).size).toBe(1);
+    expect(html).toContain(`href="/checkout">${COPY["cart.checkout"][language]}</a>`);
+  });
+
+  // 同一条「两者与各行的标注互不影响」与线框「[cart.item_changed] 的位置下另显示」：全部行正常时提示条在 cart.item_changed 的位置，
+  // 只超出金额时只有金额一条；数字取接口返回的值。
+  it("shows a cap alert on its own when every line is fine", () => {
+    const rows = [priced("tee-black-m")];
+    const amountOnly = renderRows(rows, { limits: { amount_over_limit: true, amount_limit_sen: 12345 } });
+    expect(amountOnly).not.toContain(COPY["cart.item_changed"].en);
+    expect(amountOnly).not.toContain(COPY["cart.units_over_limit"].en.replace("{count}", "2000"));
+    expect(amountOnly).toContain(`<span>${escapeHtml(COPY["cart.amount_over_limit"].en.replace("{amount}", "123.45"))}</span>`);
+    const unitsOnly = renderRows(rows, { limits: { units_over_limit: true, unit_limit: 1800 } });
+    expect(unitsOnly).toContain(`<span>${COPY["cart.units_over_limit"].en.replace("{count}", "1800")}</span>`);
+    expect(unitsOnly).not.toContain("RM 999999.99");
+    const lines = part(unitsOnly, /<div class="site-cart__lines">[\s\S]*?<div class="acs-alert/);
+    expect(lines).toContain("Crew Neck Tee");
+  });
+
+  // UX P04「计价接口返回超出…的标记时」才显示：未超出时两条都不显示（夹具为 2000、false、99999999、false）。
+  it.each(LANGUAGES)("shows no cap alert within the limits in %s", (language) => {
+    const html = renderRows([priced("tee-black-m")], { language });
+    expect(html).not.toContain(COPY["cart.units_over_limit"][language].split("{count}")[0] ?? "");
+    expect(html).not.toContain(escapeHtml(COPY["cart.amount_over_limit"][language].split("{amount}")[0] ?? ""));
+    expect(html).not.toContain(`role="alert"`);
+  });
+});
+
 describe("empty cart, loading and errors", () => {
   // UX P04「空：[cart.empty] ([cart.continue])」与 SHOP-TASK-018 验收第 5 条：空购物车显示 cart.empty 与链到商品列表的 cart.continue，仍有 ★ cart.demo_hint，不显示小计。
   it.each(LANGUAGES)("shows the empty cart in %s", (language) => {
@@ -357,7 +510,7 @@ describe("empty cart, loading and errors", () => {
 });
 
 describe("which quote is shown", () => {
-  const first: CheckoutQuote = { lines: [priced("a")], subtotal_sen: 3900 };
+  const first: CheckoutQuote = { lines: [priced("a")], subtotal_sen: 3900, ...WITHIN_LIMITS };
 
   // SHOP-TASK-018 验收第 3 条「用购物车各行的 SKU 与件数…调用计价接口」：请求标识只由语言与 SKU、件数决定（slug 变化不重新计价），空购物车不请求。
   it("keys the request by language, SKU and quantity only", () => {
@@ -438,6 +591,13 @@ describe("dictionary", () => {
       { language, lines: cartOf(rows), quote: { status: "error" } },
       { language, lines: cartOf(rows), quote: ready(rows, 27300) },
       { language, lines: cartOf(rows), quote: ready(rows, 27300), writeFailed: true },
+      // 本任务加的状态：输入超过上限的提示与两条整单上限提示。
+      {
+        language,
+        lines: cartOf(rows),
+        quote: ready(rows, 27300, { units_over_limit: true, amount_over_limit: true }),
+        capped: new Map([["candle", 4]]),
+      },
     ];
     const productData = new Set(["Crew Neck Tee", "Soy Wax Candle", "Black", "M", "gone-sku"]);
     const patterns = [BRAND, ...Object.values(COPY).map((entry) => entry[language])].map(copyPattern);
@@ -460,6 +620,8 @@ const CART_KEYS: readonly CopyKey[] = [
   "cart.price_recheck",
   "cart.item_changed",
   "cart.over_limit",
+  "cart.units_over_limit",
+  "cart.amount_over_limit",
   "cart.checkout",
   "cart.continue",
   "cart.demo_hint",
@@ -468,6 +630,8 @@ const CART_KEYS: readonly CopyKey[] = [
   "common.error_retry",
   "common.a11y_qty_decrease",
   "common.a11y_qty_increase",
+  "common.qty_capped",
+  "detail.quantity",
 ];
 
 describe("dictionary keys", () => {

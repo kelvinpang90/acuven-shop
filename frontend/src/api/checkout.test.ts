@@ -15,7 +15,7 @@ const cart: CartLine[] = [
 ];
 
 function quote(subtotal_sen: number): CheckoutQuote {
-  return { lines: [], subtotal_sen };
+  return { lines: [], subtotal_sen, unit_limit: 2000, units_over_limit: false, amount_limit_sen: 99999999, amount_over_limit: false };
 }
 
 function okResponse(body: unknown) {
@@ -155,7 +155,19 @@ describe("only the latest quote is used", () => {
 });
 
 function destinationQuote(overrides: Partial<DestinationQuote> = {}): DestinationQuote {
-  return { lines: [], subtotal_sen: 11000, shipping: null, total_sen: null, fx_reference: null, can_place_order: false, ...overrides };
+  return {
+    lines: [],
+    subtotal_sen: 11000,
+    unit_limit: 2000,
+    units_over_limit: false,
+    amount_limit_sen: 99999999,
+    amount_over_limit: false,
+    shipping: null,
+    total_sen: null,
+    fx_reference: null,
+    can_place_order: false,
+    ...overrides,
+  };
 }
 
 describe("checkout quote with a destination", () => {

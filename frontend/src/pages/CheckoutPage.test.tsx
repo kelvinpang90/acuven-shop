@@ -103,7 +103,19 @@ const ROWS: QuoteLine[] = [
 ];
 
 function quoteOf(overrides: Partial<DestinationQuote> = {}): DestinationQuote {
-  return { lines: ROWS, subtotal_sen: 11000, shipping: null, total_sen: null, fx_reference: null, can_place_order: false, ...overrides };
+  return {
+    lines: ROWS,
+    subtotal_sen: 11000,
+    unit_limit: 2000,
+    units_over_limit: false,
+    amount_limit_sen: 99999999,
+    amount_over_limit: false,
+    shipping: null,
+    total_sen: null,
+    fx_reference: null,
+    can_place_order: false,
+    ...overrides,
+  };
 }
 
 const NO_COUNTRY = quoteOf();
