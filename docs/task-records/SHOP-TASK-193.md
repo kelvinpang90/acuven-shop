@@ -27,3 +27,19 @@
   - `common.qty_capped` 的 `{count}` 取渲染时的 `remaining`（契约「{count} 为 remaining」）；若提示显示期间别的标签页改动了购物车，数字随之更新。
   - 输入框不设 `type`，与视觉稿相同（浏览器默认为文本框），配合 `inputmode="numeric"` 在手机上弹出数字键盘；不用 `type="number"`，以免浏览器自行接受小数与指数写法。
 - 验证到什么程度：人工逐条对照验收标准、UX 0.17 P03 的「整单件数上限」「数量可直接输入」两段与线框、UX-COPY 0.18 的两条原句、DESIGN 1.18 第 8 条与 HANDOFF 0.80，样式对照 P03-P04-caps、P03-desktop 与 P03-phone；上面列出的测试都在 `cart.test.ts`、`pages/productOptions.test.ts` 与 `pages/ProductDetailPage.test.tsx` 中。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查；检查结果由 Worker 另行记录。未做浏览器验收（未在真实浏览器中打开页面、未实际输入与回车，也未与视觉稿逐像素对比）。
+
+## 登记时的验收标准（原文）
+
+2026-11-03 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.17 的 P03、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.80 为准，样式以 docs/design/pages/ 的 P03-P04-caps（数量输入框、common.qty_capped 与整单已满）与 P03-desktop、P03-phone 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入 detail.cart_units_full 与 common.qty_capped，写法与相邻条目相同（每种语言一行）
+      - 购物车模块——MAX_LINE_QUANTITY 改为 1000（与计价接口的请求上限相同），sanitizeCart、addToCart 与 setLineQuantity 的每行判定随之为 1 到 1000；新增导出常量 MAX_CART_UNITS 为 2000；addToCart 在合并或新增后全部行的件数合计超过 MAX_CART_UNITS 时不加入、返回 null；sanitizeCart 与 setLineQuantity 不按整单合计判定；存储格式、20 行上限与其余函数不变；注释里写 99 的地方随之改写
+      - P03 可加入件数——frontend/src/pages/productOptions.ts 的 purchaseState 的 remaining 为「max_per_order 减去 productQuantity」与「MAX_CART_UNITS 减去 cartItemCount」中较小的、不小于 0；block 新增 cart_units_full，禁用原因同时满足时只给一个，依次为 limit_reached（限购剩余为 0）、cart_units_full（整单剩余为 0）、cart_full（20 行已满且所选规格不在其中）；P03 在 detail.limit_reached 的同一位置以同样的标签与类名显示 detail.cart_units_full（{count} 为 MAX_CART_UNITS），加入按钮禁用；addSelection 照现有写法在 block 不为 null 时不加入
+      - P03 数量直接输入——(-) 与 (+) 之间的 output 换成数字输入框（input，inputmode 为 numeric，aria-label 为 detail.quantity 的文字；类名照视觉稿 P03-P04-caps 的 acs-input），只收整数，回车或离开输入框时生效；输入中的文字只存在页面状态里；生效时先去掉首尾空白，余下的必须全是 ASCII 数字 0–9（不收正负号、小数点、指数写法与全角数字），按十进制读成整数；为空、不全是这些数字或小于 1 时恢复为原来的件数（这条解析写成 frontend/src/cart.ts 导出的纯函数 parseQuantityInput，返回整数或 null，SHOP-TASK-194 的 P04 复用）；大于 remaining 时改为 remaining（remaining 为 0 时恢复为原来的件数，按钮已禁用），并在数量下方（detail.max_per_order 之前）以 acs-field__hint 与 role status 显示 common.qty_capped（{count} 为 remaining）；不超过时照收；(+)(-)、改选规格、加入或再次输入后收起 common.qty_capped；(+) 的禁用条件照旧为显示的件数不小于 remaining
+      - 代码结构沿用 frontend/src/pages/ProductDetailPage.tsx 与 productOptions.ts 的现有写法（把输入文字变成件数与是否改成上限的判定写成导出的纯函数，View 只依赖 props）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与存储以替身代替）验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——frontend/src/cart.test.ts 的 1000 件每行上限、整单 2,000 件时 addToCart 拒绝、清洗不按整单丢行、parseQuantityInput 对空白、正负号、小数、指数写法与全角数字返回 null；frontend/src/pages/productOptions.test.ts 的 remaining 取两者较小、三种禁用原因的先后；frontend/src/pages/ProductDetailPage.test.tsx 的数量输入框与读屏标签、空值小数与小于 1 恢复原件数、超过时改为上限并显示 common.qty_capped、整单已满时按钮禁用并显示 detail.cart_units_full、与 detail.limit_reached 同时满足时只显示后者；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - 现有测试只在必要时修改并写明原因——cart.test.ts 里以 99 为每行上限的三条断言改为 1000；ProductDetailPage.test.tsx 里以 output 显示件数的断言改为输入框；其余期望不变
+      - docs/task-records/SHOP-TASK-193.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 P04 与 P05 页面；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 第 8 条与 HANDOFF 0.80），不合并、不直推
+```

@@ -17,3 +17,16 @@
   - `site.css` 写不了而未搬的视觉稿属性（评审不以此要求修改）：无新增。
   - 没有用到 UX-COPY 以外的界面文字。
 - 验证到什么程度：人工逐条对照验收标准、UX 0.17 P05「整单上限」一段、UX-COPY 0.18 的两条原句、DESIGN 1.18 第 8 条与 HANDOFF 0.80，样式对照 P03-P04-caps 与 P05-states；上面列出的测试在 `pages/CheckoutPage.test.tsx` 与 `pages/CheckoutMember.test.tsx` 中。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查；检查结果由 Worker 另行记录。未做浏览器验收（未在真实浏览器中打开页面，也未与视觉稿逐像素对比）。
+
+## 登记时的验收标准（原文）
+
+2026-11-03 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.17 的 P05、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.80 为准，样式以 docs/design/pages/ 的 P03-P04-caps（两条上限提示）与 P05-states 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改）；cart.units_over_limit 与 cart.amount_over_limit 已由 SHOP-TASK-194 加入字典，本任务不另加文案
+      - 提示——frontend/src/pages/CheckoutPage.tsx 的 ChangedNotice 一块在有非正常行（或下单 409 后）、当前计价结果的 units_over_limit 为真、或 amount_over_limit 为真时显示：依次为 cart.item_changed（只在前一种情形）、cart.units_over_limit（{count} 为 unit_limit）、cart.amount_over_limit（{amount} 为 frontend/src/format.ts 的 formatSen(amount_limit_sen)），每条照现有 cart.item_changed 的提示条写法（acs-alert acs-alert--danger、role alert、同一图形），其下只有一个回购物车的链接（文字为 common.nav_cart，照现有写法）；任一步都显示；当前计价结果取自页面已有的 ready（游客与会员共用的计价），与 cart.item_changed 用同一个 ready：重新计价进行中（pending）时照现有写法沿用上一次的结果显示，没有任何结果（首次读取中）或读取失败时不显示上限提示
+      - 下单按钮——canPlaceOrder 照现有写法依赖 can_place_order，不另加判定；测试写明超出上限时接口给 can_place_order 为 false、按钮禁用
+      - 代码结构沿用 CheckoutPage.tsx 现有写法（显示条件写成导出的纯函数或沿用 View 的 props）；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；用 vitest 与 react-dom/server（不加测试依赖，fetch 与存储以替身代替）验证意图（以 renderToStaticMarkup 渲染、直接调用导出的函数，不模拟点击）——frontend/src/pages/CheckoutPage.test.tsx 的件数超出、金额超出与两者同时的提示与先后、与 cart.item_changed 同时出现时只有一个回购物车链接、未超出时不显示、第 1 步与第 3 步都显示、超出时下单按钮禁用；会员路径在 frontend/src/pages/CheckoutMember.test.tsx 加一条同一提示的断言；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - 现有测试只在必要时修改并写明原因；docs/task-records/SHOP-TASK-195.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；含「任一步都显示」的落实写法、偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 第 8 条与 HANDOFF 0.80），不合并、不直推
+```

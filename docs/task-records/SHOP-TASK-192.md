@@ -22,3 +22,19 @@
   - A09-stock-reset 只画了开关一组，支付方式部分省略了说明文字（画板标注写明照 A09-stripe-desktop）；页面的支付方式部分照旧按 A09-stripe 两张。
   - 「saves both choices together」（SHOP-TASK-169 写的四种组合）只在调用里补开关参数为开启，开关的开与关由新的「saves all three choices together」与请求模块的八种组合覆盖。
 - 验证到什么程度：人工逐条对照验收标准、UX 0.17 A09 与 A07、UX-COPY 0.18 的五条原句、DESIGN 1.18 第 6 条与 HANDOFF 0.76、0.80，样式对照 A09-stock-reset、A09-stripe-desktop、A09-stripe-phone、A07-desktop 与 A07-phone；上面列出的测试都在 `api/adminSiteSettings.test.ts`、`pages/AdminSiteSettingsPage.test.tsx` 与 `pages/AdminStockResetsPage.test.tsx` 中。lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI 检查 frontend 执行，Worker 沙箱不跑前端检查；检查结果由 Worker 另行记录。未做浏览器验收（未在真实浏览器中打开页面，也未与视觉稿逐像素对比）。
+
+## 登记时的验收标准（原文）
+
+2026-11-03 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.17 的 A09 与 A07、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.80 为准，样式以 docs/design/pages/ 的 A09-stock-reset（开关一组）、A09-stripe-desktop 与 A09-stripe-phone（其余部分）、A07-desktop 与 A07-phone 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入 admin.stock_reset_toggle、admin.stock_reset_on、admin.stock_reset_off、admin.stock_reset_toggle_hint 与 admin.stock_reset_off_note，写法与相邻条目相同（每种语言一行）
+      - 请求模块——读取的响应体另要求 daily_stock_reset_enabled 为布尔值（缺少或类型不对算不合格）并带进结果；saveAdminSiteSettings 改为同时提交三项（JSON 请求体只有 payment_method、sms_verification_enabled 与 daily_stock_reset_enabled），200 的响应体另要求 daily_stock_reset_enabled 为布尔值并带进 ok 结果；其余归类（含 stripe_not_configured 与 sms_not_configured）、请求头、no-store 与中止处理不变
+      - 表单——支付方式一组之后、common.save 之前是 admin.stock_reset_toggle 一组（fieldset 与 legend 照现有两组）两个单选 admin.stock_reset_on 与 admin.stock_reset_off（UX 线框的顺序），其下 admin.stock_reset_toggle_hint；选中项为读取（或保存后）的当前值；两个单选始终可选；不加确认框
+      - 保存——点 common.save 以三组的当前选择与读取给的 csrf_token 调用保存；ok 以返回的三项更新三组的选中项并显示 admin.settings_saved；not_configured 与 sms_not_configured 照现有写法显示、三组选中项都不变；改选开关后与改选另两组一样收起保存的提示；其余结果（none、csrf、network、failed）与读取的处理照现有写法不变
+      - A07——frontend/src/pages/AdminStockResetsPage.tsx 在 admin.stock_reset_note 之下、每日结果之前加一段常显的 admin.stock_reset_off_note（标签与类名照 admin.stock_reset_note 那一段），桌面与手机都显示；不读取开关状态，不发新的请求，列表、翻页与明细不变
+      - 代码结构沿用 frontend/src/pages/AdminSiteSettingsPage.tsx 现有写法（导出把结果变成页面状态的纯函数、接收 AbortSignal 与回调的异步函数，以及只依赖 props 的 View；改选开关另导出与 chooseSms 对应的纯函数，开关的两个选项照 SMS_OPTIONS 导出）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——frontend/src/api/adminSiteSettings.test.ts 的新字段与合格判定、请求体只有三项；frontend/src/pages/AdminSiteSettingsPage.test.tsx 的开关一组在支付方式之后、选中项随当前值、两个单选都可选、保存带三组选择、ok 更新三组、被拒时三组都不变、改选开关收起提示；frontend/src/pages/AdminStockResetsPage.test.tsx 的 admin.stock_reset_off_note 在 admin.stock_reset_note 之下常显；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - 现有测试只在必要时修改并写明原因——请求体与保存调用参数的断言、按顺序比较表单文字或单选的断言、legend 与 fieldset 的个数、状态与读取结果的整体比较、夹具与替身的 200 回答随第三项补上；A07 按顺序比较标题与说明的断言补上新的一段；短信、支付方式两组与后台框架、导航的期望不变；docs/task-records/SHOP-TASK-192.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由，不改导航；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 第 6 条与 HANDOFF 0.80），不合并、不直推
+```
