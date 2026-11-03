@@ -5385,12 +5385,7 @@ tasks:
     status: done
     depends_on: []
     acceptance_criteria:
-      - 写法照 frontend/src/api/adminShippingRates.ts（同源 cookie、cache no-store、Accept 与 Content-Type、写操作带读取给的 CSRF 令牌于 pay.ts 的 CSRF_HEADER、接收 AbortSignal、只取接口记录列出的字段且多出的字段不带进结果、响应体不合格算失败、页面只按状态码与 detail 区分，不显示错误体）
-      - 读取——GET /api/admin/categories：200 且响应体为 categories 数组与非空字符串 csrf_token 时为 ok（分类按接口给的顺序）；每个分类要求 id 为正整数、slug 为非空字符串、name_en、name_zh、name_ms 各为字符串或 null、is_active 为布尔值、version 为不小于 0 的整数、visible_products 为不小于 0 的整数，任一项不合格整个读取算失败；401 为 none；其他状态与不合格为 failed；网络中断与调用方中止为 network
-      - 新建——POST /api/admin/categories，JSON 请求体只有 name_en、name_zh、name_ms（字符串，原样提交，不去空白）与 is_active（布尔值）；201 且响应体为一个合格的分类时为 ok 并带回该分类；422 且 detail 为 category_invalid 为 invalid，409 且 detail 为 category_changed 为 changed；401 为 none，403 为 csrf；其他 422 与其他状态、响应体不合格为 failed；网络中断与中止为 network
-      - 保存——PUT /api/admin/categories/{category_id}（路径段为分类 ID 的十进制），请求体为新建的四项另加 version（整数）；200 且响应体为一个合格的分类时为 ok 并带回该分类；其余归类同新建
-      - 测试验证意图（不加测试依赖，fetch 以替身代替）——frontend/src/api/adminCategories.test.ts：三个请求的方法、地址、请求头、no-store 与请求体只有规定的字段；读取的合格判定（缺字段、类型不对、负数、非整数、多出字段不带进结果、空 csrf_token）；新建与保存的各种状态与 detail 的归类；中止为 network；每条测试写明它守住的是接口记录、DESIGN 1.18 第 14 条或 UX 0.17 A10 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - docs/task-records/SHOP-TASK-198.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；导出的类型与函数签名，供 199 使用；验证到什么程度，只写实际存在的测试）；改动只落在 allowed_change_paths；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-198.md
     allowed_change_paths:
       - frontend/src/api/adminCategories.ts
       - frontend/src/api/adminCategories.test.ts
