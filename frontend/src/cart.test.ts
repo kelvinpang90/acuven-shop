@@ -3,11 +3,14 @@ import { describe, expect, it } from "vitest";
 import {
   CART_STORAGE_KEY,
   MAX_CART_LINES,
+  MAX_CART_UNITS,
+  MAX_LINE_QUANTITY,
   addToCart,
   cartItemCount,
   cartSnapshot,
   clearCart,
   isCartFullFor,
+  parseQuantityInput,
   productQuantity,
   readCart,
   removeLine,
@@ -62,23 +65,32 @@ describe("cart storage format", () => {
     expect(readCart(memoryStorage({ [CART_STORAGE_KEY]: stored }))).toEqual([]);
   });
 
-  // SHOP-TASK-017 验收第 4 条「读取时丢弃格式不对、件数不在 1 到 99…的部分」：坏行丢掉，好行照用，多出的字段不带出来。
-  it("drops malformed lines and quantities outside 1 to 99", () => {
+  // SHOP-TASK-017 验收第 4 条「读取时丢弃格式不对、件数不在…范围的部分」，范围随 DESIGN 1.18 第 8 条「每行 1–1000 件」改为 1 到 1000
+  // （SHOP-TASK-193 改写：原以 99 为上限）：坏行丢掉，好行照用，多出的字段不带出来。
+  it("drops malformed lines and quantities outside 1 to 1000", () => {
     const stored = [
       line("ok-1", 1),
       { sku: "", slug: "tee", quantity: 1 },
       { sku: "no-slug", quantity: 1 },
       { sku: 7, slug: "tee", quantity: 1 },
       { sku: "zero", slug: "tee", quantity: 0 },
-      { sku: "hundred", slug: "tee", quantity: 100 },
+      { sku: "over", slug: "tee", quantity: 1001 },
       { sku: "half", slug: "tee", quantity: 1.5 },
       { sku: "text", slug: "tee", quantity: "2" },
       null,
       "ok-2",
       [line("nested")],
-      { sku: "ok-99", slug: "tee", quantity: 99, price_sen: 1 },
+      { sku: "ok-1000", slug: "tee", quantity: 1000, price_sen: 1 },
     ];
-    expect(sanitizeCart(stored)).toEqual([line("ok-1", 1), line("ok-99", 99)]);
+    expect(sanitizeCart(stored)).toEqual([line("ok-1", 1), line("ok-1000", 1000)]);
+  });
+
+  // HANDOFF 0.80「读取时的清洗不按整单合计丢行（服务端计价再判断）」：合计超过 2,000 件的购物车读回时各行照留。
+  it("keeps every line when the whole cart is over 2,000 items", () => {
+    const over = [line("a", 1000), line("b", 1000), line("c", 5)];
+    expect(cartItemCount(over)).toBeGreaterThan(MAX_CART_UNITS);
+    expect(sanitizeCart(over)).toEqual(over);
+    expect(readCart(memoryStorage({ [CART_STORAGE_KEY]: JSON.stringify(over) }))).toEqual(over);
   });
 
   // SHOP-TASK-017 验收第 4 条「读取时丢弃…重复 SKU…的部分」：同一 SKU 只保留第一行。
@@ -139,12 +151,25 @@ describe("adding to the cart", () => {
     expect(isCartFullFor(lines(19), "new")).toBe(false);
   });
 
-  // 派生实现约束（实现选择）：守住 SHOP-TASK-017 验收第 4 条「件数不在 1 到 99」——加入后的行同样只能是 1 到 99 件。
-  it("refuses quantities that would leave 1 to 99", () => {
+  // DESIGN 1.18「计价、优惠、积分与库存」第 8 条「每行 1–1000 件」（SHOP-TASK-193 改写：原以 99 为上限）——加入后的行同样只能是 1 到 1000 件。
+  it("refuses quantities that would leave 1 to 1000", () => {
+    expect(MAX_LINE_QUANTITY).toBe(1000);
     expect(addToCart([], line("a", 0))).toBeNull();
-    expect(addToCart([], line("a", 100))).toBeNull();
-    expect(addToCart([line("a", 98)], line("a", 2))).toBeNull();
-    expect(addToCart([line("a", 98)], line("a", 1))).toEqual([line("a", 99)]);
+    expect(addToCart([], line("a", 1001))).toBeNull();
+    expect(addToCart([], line("a", 1000))).toEqual([line("a", 1000)]);
+    expect(addToCart([line("a", 998)], line("a", 3))).toBeNull();
+    expect(addToCart([line("a", 998)], line("a", 2))).toEqual([line("a", 1000)]);
+  });
+
+  // DESIGN 1.18 第 8 条「整单所有行合计不超过 2,000 件」与 HANDOFF 0.80「addToCart 合并或新增后全部行合计超过 2,000 即不加入」：
+  // 恰好 2,000 件照加，多 1 件不论合并还是新增都返回 null。
+  it("refuses to take the whole cart over 2,000 items", () => {
+    expect(MAX_CART_UNITS).toBe(2000);
+    const cart = [line("a", 1000), line("b", 999, "bag")];
+    expect(addToCart(cart, line("c", 1, "mug"))).toEqual([...cart, line("c", 1, "mug")]);
+    expect(addToCart(cart, line("c", 2, "mug"))).toBeNull();
+    expect(addToCart(cart, line("b", 1, "bag"))).toEqual([line("a", 1000), line("b", 1000, "bag")]);
+    expect(addToCart([line("a", 1000), line("b", 1000, "bag")], line("c", 1, "mug"))).toBeNull();
   });
 
   // UX P03「同一商品所有规格在本浏览器购物车中的件数合计计入限购」：按 slug 合计各行件数。
@@ -163,20 +188,47 @@ describe("changing the cart on the cart page", () => {
     expect(cartItemCount([])).toBe(0);
   });
 
-  // UX P04「查看、修改已选商品规格与数量」与 SHOP-TASK-018 验收第 4 条「件数不低于 1」：只改该行件数，位置不变；低于 1、高于 99 或不在购物车中的 SKU 不改。
-  it("sets the quantity of one line within 1 to 99", () => {
+  // UX P04「查看、修改已选商品规格与数量」与 SHOP-TASK-018 验收第 4 条「件数不低于 1」：只改该行件数，位置不变；低于 1、
+  // 高于 1000（DESIGN 1.18 第 8 条「每行 1–1000 件」，SHOP-TASK-193 改写：原以 99 为上限）或不在购物车中的 SKU 不改。
+  it("sets the quantity of one line within 1 to 1000", () => {
     const cart = [line("a", 2), line("b", 1)];
     expect(setLineQuantity(cart, "b", 4)).toEqual([line("a", 2), line("b", 4)]);
+    expect(setLineQuantity(cart, "b", 1000)).toEqual([line("a", 2), line("b", 1000)]);
     expect(setLineQuantity(cart, "a", 0)).toBeNull();
-    expect(setLineQuantity(cart, "a", 100)).toBeNull();
+    expect(setLineQuantity(cart, "a", 1001)).toBeNull();
     expect(setLineQuantity(cart, "a", 1.5)).toBeNull();
     expect(setLineQuantity(cart, "missing", 1)).toBeNull();
+  });
+
+  // HANDOFF 0.80「整单上限只在加入时约束」：购物车页改件数不按整单合计判定（由服务端计价再判断）。
+  it("does not check the whole-cart total when setting a line", () => {
+    expect(setLineQuantity([line("a", 1000), line("b", 999)], "b", 1000)).toEqual([line("a", 1000), line("b", 1000)]);
+    expect(setLineQuantity([line("a", 1000), line("b", 1000), line("c", 1)], "c", 2)).toEqual([line("a", 1000), line("b", 1000), line("c", 2)]);
   });
 
   // UX P04 线框「([cart.remove])」：移除一行，其余行与顺序不变。
   it("removes one line and keeps the others in order", () => {
     expect(removeLine([line("a"), line("b"), line("c")], "b")).toEqual([line("a"), line("c")]);
     expect(removeLine([line("a")], "missing")).toEqual([line("a")]);
+  });
+});
+
+describe("typing a quantity", () => {
+  // docs/UX.md P03「数量可直接输入」「只收整数…为空、小于 1 或不是整数时恢复为原来的件数」：去掉首尾空白后的 ASCII 数字按十进制读成整数。
+  it.each([
+    ["1", 1],
+    ["25", 25],
+    ["  7 ", 7],
+    ["007", 7],
+    ["1000", 1000],
+    ["2500", 2500],
+  ])("reads %j as %i", (text, quantity) => {
+    expect(parseQuantityInput(text)).toBe(quantity);
+  });
+
+  // 同上「为空、小于 1 或不是整数时恢复为原来的件数」与任务契约「不收正负号、小数点、指数写法与全角数字」：都返回 null。
+  it.each(["", "   ", "0", "00", "-1", "+3", "1.5", "2.", "1e3", "１２", "3 4", "abc", "0x10"])("rejects %j", (text) => {
+    expect(parseQuantityInput(text)).toBeNull();
   });
 });
 

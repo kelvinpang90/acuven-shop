@@ -1,5 +1,5 @@
 import type { ProductDetail, VariantDetail } from "../api/catalog";
-import { isCartFullFor, productQuantity } from "../cart";
+import { MAX_CART_UNITS, cartItemCount, isCartFullFor, parseQuantityInput, productQuantity } from "../cart";
 import type { CartLine } from "../cart";
 import type { CopyKey, CopyVars } from "../i18n/copy";
 import { formatSen } from "../format";
@@ -72,12 +72,13 @@ export function detailPriceCopy(product: Product, variant: VariantDetail | null)
 }
 
 // 加入购物车按钮的状态。
-export type PurchaseBlock = "limit_reached" | "cart_full" | null;
+export type PurchaseBlock = "limit_reached" | "cart_units_full" | "cart_full" | null;
 
 export interface PurchaseState {
-  // 数量 (+) 的上限：限购件数减去购物车中同一商品各行件数之和，不小于 0。
+  // 数量（(+) 与直接输入）的上限：「限购件数减去购物车中同一商品各行件数之和」与
+  // 「整单 2,000 件减去购物车全部行件数之和」中较小的，不小于 0（docs/UX.md P03「整单件数上限」）。
   remaining: number;
-  // 按钮禁用的原因；null 时可点。
+  // 按钮禁用的原因；null 时可点。同时满足时只给一个，依次为 limit_reached、cart_units_full、cart_full。
   block: PurchaseBlock;
 }
 
@@ -86,9 +87,14 @@ export function purchaseState(
   variant: VariantDetail | null,
   lines: readonly CartLine[],
 ): PurchaseState {
-  const remaining = Math.max(0, product.max_per_order - productQuantity(lines, product.slug));
-  if (remaining === 0) {
+  const productRemaining = Math.max(0, product.max_per_order - productQuantity(lines, product.slug));
+  const unitsRemaining = Math.max(0, MAX_CART_UNITS - cartItemCount(lines));
+  const remaining = Math.min(productRemaining, unitsRemaining);
+  if (productRemaining === 0) {
     return { remaining, block: "limit_reached" };
+  }
+  if (unitsRemaining === 0) {
+    return { remaining, block: "cart_units_full" };
   }
   if (variant && isCartFullFor(lines, variant.sku)) {
     return { remaining, block: "cart_full" };
@@ -99,4 +105,23 @@ export function purchaseState(
 // 显示的数量：在 1 与剩余件数之间（剩余为 0 时仍显示 1，按钮已禁用）。
 export function clampQuantity(quantity: number, remaining: number): number {
   return Math.min(Math.max(1, quantity), Math.max(1, remaining));
+}
+
+// 数量输入框生效（回车或离开输入框）后的件数，以及是否显示 common.qty_capped（docs/UX.md P03「数量可直接输入」）：
+// 为空、不全是数字或小于 1 时恢复为原来的件数；超过上限时改为上限并显示提示（上限为 0 时恢复原来的件数、不提示，按钮已禁用）；
+// 不超过时照收。
+export interface QuantityInputResult {
+  quantity: number;
+  capped: boolean;
+}
+
+export function quantityInputResult(text: string, current: number, remaining: number): QuantityInputResult {
+  const parsed = parseQuantityInput(text);
+  if (parsed === null) {
+    return { quantity: current, capped: false };
+  }
+  if (parsed > remaining) {
+    return remaining === 0 ? { quantity: current, capped: false } : { quantity: remaining, capped: true };
+  }
+  return { quantity: parsed, capped: false };
 }

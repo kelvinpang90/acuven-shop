@@ -180,6 +180,11 @@ export const COPY = {
     zh: "增加数量",
     ms: "Tambah kuantiti",
   },
+  "common.qty_capped": {
+    en: "Set to {count}, the most you can have in this order.",
+    zh: "已改为 {count} 件，这是本单最多可买的件数。",
+    ms: "Ditetapkan kepada {count}, jumlah maksimum untuk pesanan ini.",
+  },
   "home.hero_title": {
     en: "Try a complete online store, end to end",
     zh: "完整体验一家网店的购物流程",
@@ -364,6 +369,11 @@ export const COPY = {
     en: "Your cart can hold up to {count} different items. Remove one to add another.",
     zh: "购物车最多可放 {count} 种商品规格，请先移除一项再加入。",
     ms: "Troli anda boleh memuatkan sehingga {count} item berbeza. Buang satu untuk menambah yang lain.",
+  },
+  "detail.cart_units_full": {
+    en: "Your cart can hold up to {count} items in total.",
+    zh: "购物车所有商品合计最多 {count} 件。",
+    ms: "Troli anda boleh memuatkan sehingga {count} unit secara keseluruhan.",
   },
   "detail.description": {
     en: "Description",

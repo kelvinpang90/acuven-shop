@@ -93,6 +93,8 @@ body { margin: 0; }
 .site-detail__title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .site-detail__options { display: grid; gap: 16px; }
 .site-detail__quantity { display: flex; align-items: center; gap: 16px; }
+/* 数量输入框：尺寸取自视觉稿 P03-P04-caps */
+.site-detail__qty-input { box-sizing: border-box; width: 72px; min-height: 44px; padding: 0 8px; text-align: center; }
 .site-detail__buy { display: grid; gap: 10px; }
 .site-detail__added { justify-content: space-between; align-items: center; }
 .site-detail__added-text { display: flex; align-items: center; gap: 8px; }

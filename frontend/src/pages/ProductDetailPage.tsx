@@ -2,7 +2,7 @@ import { useEffect, useId, useState } from "react";
 
 import { productDetailUrl, useCatalog } from "../api/catalog";
 import type { FilterOption, LocalizedText, ProductDetail, Remote } from "../api/catalog";
-import { MAX_CART_LINES, addToCart, saveCart, useCartLines } from "../cart";
+import { MAX_CART_LINES, MAX_CART_UNITS, addToCart, saveCart, useCartLines } from "../cart";
 import type { CartLine, CartStorage } from "../cart";
 import { PlaceholderShape } from "../components/ProductCard";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
@@ -16,15 +16,17 @@ import {
   initialSelection,
   isValueEnabled,
   purchaseState,
+  quantityInputResult,
   selectedVariant,
   toggleValue,
 } from "./productOptions";
-import type { Selection } from "./productOptions";
+import type { QuantityInputResult, Selection } from "./productOptions";
 
 // 商品详情 P03（docs/UX.md P03）：面包屑、图片、名称（回退英文时 detail.english_only）、价格、规格、数量、
 // 每单限购与当日库存、加入购物车、★ detail.demo_hint、描述。数据来自商品详情接口（随当前语言），
 // 接口返回之前页面主体为空（没有文字、表单或链接）；接口 404（不存在或未发布）时替换为商品列表，不另显示文字。
-// 购物车只在本浏览器（cart.ts）；限购与 20 行上限只用于提示与禁用按钮，下单时由服务端再次校验。
+// 购物车只在本浏览器（cart.ts）；限购、20 行与整单 2,000 件上限只用于提示与禁用按钮，下单时由服务端再次校验。
+// 数量可直接输入（UX 0.17）：输入中的文字只存在页面状态里，回车或离开输入框时生效。
 // 桌面缩略图点选切换主图；767px 以下主图横向滑动、描述可折叠、加入按钮固定在底部（site.css）。
 // 购物车页 P04 自 SHOP-TASK-018 起在路由表中：detail.view_cart 按路由规则渲染，链到 /cart。
 
@@ -180,11 +182,17 @@ export interface ProductDetailViewProps {
   product: ProductDetail;
   selection: Selection;
   quantity: number;
+  // 数量输入框里尚未生效的文字；null 时显示当前件数。
+  draft: string | null;
+  // 上一次输入超过上限、已改为上限：在数量下方显示 common.qty_capped。
+  capped: boolean;
   lines: readonly CartLine[];
   notice: AddNotice;
   image: number;
   onToggle: (optionCode: string, valueCode: string) => void;
   onQuantity: (quantity: number) => void;
+  onDraft: (text: string) => void;
+  onQuantityInput: (result: QuantityInputResult) => void;
   onAdd: () => void;
   onImage: (index: number) => void;
 }
@@ -193,11 +201,15 @@ export function ProductDetailView({
   product,
   selection,
   quantity,
+  draft,
+  capped,
   lines,
   notice,
   image,
   onToggle,
   onQuantity,
+  onDraft,
+  onQuantityInput,
   onAdd,
   onImage,
 }: ProductDetailViewProps) {
@@ -209,6 +221,11 @@ export function ProductDetailView({
   const shownQuantity = clampQuantity(quantity, remaining);
   const englishOnly = product.name.english_fallback || product.description.english_fallback;
   const cart = cartPath();
+  const commitDraft = () => {
+    if (draft !== null) {
+      onQuantityInput(quantityInputResult(draft, shownQuantity, remaining));
+    }
+  };
 
   return (
     <main className="site-detail">
@@ -246,7 +263,21 @@ export function ProductDetailView({
               >
                 <MinusIcon />
               </button>
-              <output aria-live="polite">{shownQuantity}</output>
+              <input
+                className="acs-input site-detail__qty-input"
+                inputMode="numeric"
+                aria-label={t("detail.quantity")}
+                value={draft ?? String(shownQuantity)}
+                onChange={(event) => {
+                  onDraft(event.target.value);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    commitDraft();
+                  }
+                }}
+                onBlur={commitDraft}
+              />
               <button
                 type="button"
                 aria-label={t("common.a11y_qty_increase")}
@@ -259,6 +290,11 @@ export function ProductDetailView({
               </button>
             </div>
           </div>
+          {capped && (
+            <p className="acs-field__hint" role="status">
+              {t("common.qty_capped", { count: remaining })}
+            </p>
+          )}
           <span className="acs-caption">{t("detail.max_per_order", { count: product.max_per_order })}</span>
           {variant && <span className="acs-caption">{t("detail.stock_left", { count: variant.available_stock })}</span>}
           <div className="acs site-detail__buy">
@@ -280,6 +316,11 @@ export function ProductDetailView({
             {block === "limit_reached" && (
               <p className="acs-field__hint" role="status">
                 {t("detail.limit_reached", { count: product.max_per_order })}
+              </p>
+            )}
+            {block === "cart_units_full" && (
+              <p className="acs-field__hint" role="status">
+                {t("detail.cart_units_full", { count: MAX_CART_UNITS })}
               </p>
             )}
             {block === "cart_full" && (
@@ -306,7 +347,7 @@ export function ProductDetailView({
   );
 }
 
-// 加入购物车：未选全时提示 detail.select_all_options；按钮禁用（限购已满或购物车已满）时不加入；
+// 加入购物车：未选全时提示 detail.select_all_options；按钮禁用（限购已满、整单件数已满或购物车已满）时不加入；
 // 写入本浏览器失败时显示 common.error_retry，购物车不变。返回加入后要显示的提示。
 export function addSelection(
   storage: CartStorage | null,
@@ -335,11 +376,13 @@ export function detailRedirect(remote: Remote<ProductDetail>): RoutePath | null 
 interface PageState {
   selection: Selection | null;
   quantity: number;
+  draft: string | null;
+  capped: boolean;
   notice: AddNotice;
   image: number;
 }
 
-const INITIAL_STATE: PageState = { selection: null, quantity: 1, notice: null, image: 0 };
+const INITIAL_STATE: PageState = { selection: null, quantity: 1, draft: null, capped: false, notice: null, image: 0 };
 
 export default function ProductDetailPage() {
   const { language } = useLanguage();
@@ -369,18 +412,26 @@ export default function ProductDetailPage() {
       product={product}
       selection={selection}
       quantity={state.quantity}
+      draft={state.draft}
+      capped={state.capped}
       lines={lines}
       notice={state.notice}
       image={Math.min(state.image, Math.max(0, product.images.length - 1))}
       onToggle={(optionCode, valueCode) => {
-        setState({ ...state, selection: toggleValue(product, selection, optionCode, valueCode), notice: null });
+        setState({ ...state, selection: toggleValue(product, selection, optionCode, valueCode), capped: false, notice: null });
       }}
       onQuantity={(quantity) => {
-        setState({ ...state, quantity, notice: null });
+        setState({ ...state, quantity, draft: null, capped: false, notice: null });
+      }}
+      onDraft={(draft) => {
+        setState({ ...state, draft, capped: false });
+      }}
+      onQuantityInput={({ quantity, capped }) => {
+        setState({ ...state, quantity, draft: null, capped, notice: null });
       }}
       onAdd={() => {
         const notice = addSelection(storage, product, selection, state.quantity, lines);
-        setState({ ...state, selection, notice, quantity: notice === "added" ? 1 : state.quantity });
+        setState({ ...state, selection, notice, capped: false, quantity: notice === "added" ? 1 : state.quantity });
       }}
       onImage={(image) => {
         setState({ ...state, image });
