@@ -130,6 +130,16 @@ export const COPY = {
     zh: "新建",
     ms: "Baharu",
   },
+  "common.edit": {
+    en: "Edit",
+    zh: "编辑",
+    ms: "Sunting",
+  },
+  "common.cancel": {
+    en: "Cancel",
+    zh: "取消",
+    ms: "Batal",
+  },
   "common.rate_limited": {
     en: "Too many attempts. Please wait and try again later.",
     zh: "尝试次数过多，请稍后再试。",
@@ -2014,6 +2024,101 @@ export const COPY = {
     en: "Keep editing",
     zh: "继续编辑",
     ms: "Teruskan menyunting",
+  },
+  "admin.content_language": {
+    en: "Content language",
+    zh: "内容语言",
+    ms: "Bahasa kandungan",
+  },
+  "admin.categories_count": {
+    en: "{count} of {max} categories",
+    zh: "已有 {count} 个分类，最多 {max} 个",
+    ms: "{count} daripada {max} kategori",
+  },
+  "admin.categories_full": {
+    en: "The store already has the maximum of 30 categories. Categories can't be deleted; rename and re-enable a disabled one instead.",
+    zh: "已达 30 个分类的上限。分类不能删除，可把已停用的分类改名后重新启用。",
+    ms: "Kedai sudah mempunyai maksimum 30 kategori. Kategori tidak boleh dipadam; namakan semula dan aktifkan semula kategori yang dinyahaktifkan.",
+  },
+  "admin.category_name": {
+    en: "Category name",
+    zh: "分类名称",
+    ms: "Nama kategori",
+  },
+  "admin.category_slug": {
+    en: "Link code",
+    zh: "链接代码",
+    ms: "Kod pautan",
+  },
+  "admin.category_slug_hint": {
+    en: "Created from the English name and never changes, so filter links keep working. Categories can't be deleted; disable one you no longer use.",
+    zh: "按英文名称生成，之后不变，筛选链接因此一直有效。分类不能删除，不再用的请停用。",
+    ms: "Dicipta daripada nama bahasa Inggeris dan tidak berubah, jadi pautan penapis terus berfungsi. Kategori tidak boleh dipadam; nyahaktifkan yang tidak digunakan lagi.",
+  },
+  "admin.category_visible": {
+    en: "Products shown",
+    zh: "前台可见商品",
+    ms: "Produk dipaparkan",
+  },
+  "admin.category_enabled": {
+    en: "Enabled",
+    zh: "启用",
+    ms: "Aktif",
+  },
+  "admin.category_on": {
+    en: "Enabled",
+    zh: "启用中",
+    ms: "Aktif",
+  },
+  "admin.category_off": {
+    en: "Disabled",
+    zh: "已停用",
+    ms: "Dinyahaktifkan",
+  },
+  "admin.category_edit": {
+    en: "Edit category",
+    zh: "编辑分类",
+    ms: "Sunting kategori",
+  },
+  "admin.category_new": {
+    en: "New category",
+    zh: "新建分类",
+    ms: "Kategori baharu",
+  },
+  "admin.category_translation_missing": {
+    en: "{language} name is missing and will fall back to English. An English name is required to enable the category.",
+    zh: "缺少{language}名称，将回退英文；缺少英文名称则不能启用。",
+    ms: "Nama {language} tiada dan akan kembali kepada bahasa Inggeris. Nama bahasa Inggeris diperlukan untuk mengaktifkan kategori.",
+  },
+  "admin.category_disable_confirm": {
+    en: "Products from this category shown in the store: {count}. After disabling, the category and these products disappear from the store (including featured products on the home page), and carts can't check out with them. Disable it?",
+    zh: "此分类下正在前台显示的商品：{count} 件。停用后，该分类与这些商品都不再在前台显示（含首页精选），购物车里的这些商品不能下单。确定停用？",
+    ms: "Produk daripada kategori ini yang dipaparkan di kedai: {count}. Selepas dinyahaktifkan, kategori dan produk ini hilang dari kedai (termasuk produk pilihan di halaman utama), dan troli tidak boleh membuat pesanan untuknya. Nyahaktifkan?",
+  },
+  "admin.category_disable": {
+    en: "Disable",
+    zh: "停用",
+    ms: "Nyahaktifkan",
+  },
+  "admin.category_saved": {
+    en: "Saved. The storefront now uses these categories.",
+    zh: "已保存，前台已改用这些分类。",
+    ms: "Disimpan. Kedai kini menggunakan kategori ini.",
+  },
+  "admin.category_created": {
+    en: "Category created.",
+    zh: "分类已新建。",
+    ms: "Kategori dicipta.",
+  },
+  "admin.category_invalid": {
+    en: "Check the values: names up to 200 characters; English names must differ from those of other categories; a new or enabled category needs an English name; up to 30 categories.",
+    zh: "请检查：名称不超过 200 个字符；英文名称不能与其他分类重复；新建或启用的分类须有英文名称；分类至多 30 个。",
+    ms: "Semak nilai: nama sehingga 200 aksara; nama bahasa Inggeris mesti berbeza daripada kategori lain; kategori baharu atau aktif memerlukan nama bahasa Inggeris; sehingga 30 kategori.",
+  },
+  "admin.category_changed": {
+    en: "This category was changed elsewhere. Reload to see the latest version. Your unsaved changes will be lost.",
+    zh: "此分类已在别处修改，请重新读取最新版本，未保存的修改会丢失。",
+    ms: "Kategori ini telah diubah di tempat lain. Muat semula untuk melihat versi terkini. Perubahan yang belum disimpan akan hilang.",
   },
   "admin.nav_stock_resets": {
     en: "Stock resets",
