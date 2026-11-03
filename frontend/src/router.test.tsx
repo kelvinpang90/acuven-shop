@@ -10,23 +10,32 @@ import {
   adminOrderPath,
   adminRefundPath,
   adminRefundsOrderPath,
+  blockUnload,
   canonicalizeLocation,
+  guardedPop,
+  guardedPush,
   guestPath,
   isPlainLeftClick,
   isRoutePath,
   isSourcePath,
   matchRoute,
   nextSource,
+  popGuard,
   productPath,
   pushPath,
   replacePath,
+  replaceTo,
   resolveHref,
   resolvePath,
+  RouterProvider,
   settleLocation,
+  shouldGuard,
+  useRouter,
   VERIFIED_REDIRECT_MS,
   verifiedPath,
+  watchUnload,
 } from "./router";
-import type { BrowserLike, RoutePath } from "./router";
+import type { BeforeUnloadLike, BrowserLike, LeaveGuard, RouteLocation, RoutePath, UnloadTarget } from "./router";
 
 function fakeBrowser(pathname: string, search = "") {
   const calls: string[] = [];
@@ -67,6 +76,11 @@ const PRODUCT_LIST_KEYS = ["q", "category", "option", "sort", "page"];
 
 function render(path: string): string {
   return renderToStaticMarkup(<App initialPath={path} storage={null} />);
+}
+
+// 只输出路由上下文里 setLeaveGuard 的类型。
+function LeaveGuardProbe() {
+  return <>{typeof useRouter().setLeaveGuard}</>;
 }
 
 describe("route table", () => {
@@ -662,6 +676,17 @@ describe("in-site navigation", () => {
     expect(VERIFIED_REDIRECT_MS).toBe(1500);
   });
 
+  // SHOP-TASK-197 验收「路由」一条「没有拦截时一切行为与现在相同」：路由上下文多了 setLeaveGuard，其余照旧；
+  // 服务端渲染的页面（路由表各页）不受影响，见下方「links on … point only to routes in the table」。
+  it("offers setLeaveGuard in the router context", () => {
+    const html = renderToStaticMarkup(
+      <RouterProvider initialPath="/admin/products">
+        <LeaveGuardProbe />
+      </RouterProvider>,
+    );
+    expect(html).toBe("function");
+  });
+
   // 验收：路由表是唯一来源，站内链接只指向表里的路径；路径与查询参数里没有订单号或电话。
   // 查询参数只允许商品列表的条件（如首页分类链接 /products?category=…）。
   it.each([...ROUTE_PATHS])("links on %s point only to routes in the table", (path) => {
@@ -674,5 +699,147 @@ describe("in-site navigation", () => {
         expect(PRODUCT_LIST_KEYS, href).toContain(key);
       }
     }
+  });
+});
+
+// 离开拦截的替身：记下每次收到的「继续」回调、不自己调用（等同确认框还开着，管理员还没选）。
+function fakeGuard() {
+  const asked: (() => void)[] = [];
+  const guard: LeaveGuard = (proceed) => {
+    asked.push(proceed);
+  };
+  return { guard, asked };
+}
+
+// 路由状态的替身：记下每次换到的位置。
+function fakeMoves() {
+  const moves: RouteLocation[] = [];
+  const moveTo = (next: RouteLocation) => {
+    moves.push(next);
+  };
+  return { moveTo, moves };
+}
+
+const PRODUCTS_HERE: RouteLocation = { path: "/admin/products", search: "" };
+const ORDERS_THERE: RouteLocation = { path: "/admin/orders", search: "" };
+
+describe("leave guard", () => {
+  // UX A04、A10「列表」一段「有未保存的修改时，点…后台导航…先弹确认框」「[admin.unsaved_stay] 留在本页」（Kelvin 2026-10-30 决定）
+  // 与 SHOP-TASK-197 验收「路由」一条「设有拦截时，navigate 换到与当前不同的位置前先交给拦截函数，选继续才换」：
+  // 交给拦截函数之后地址栏与页面都不动（管理员选留下即不调用继续）；调用继续后才 push 并换位置。
+  it("holds navigate until the guard continues", () => {
+    const { browser, calls } = fakeBrowser("/admin/products");
+    const { guard, asked } = fakeGuard();
+    const { moveTo, moves } = fakeMoves();
+    guardedPush(browser, guard, PRODUCTS_HERE, ORDERS_THERE, moveTo);
+    expect(asked).toHaveLength(1);
+    expect(calls).toEqual([]);
+    expect(moves).toEqual([]);
+    expect(browser.location).toEqual({ pathname: "/admin/products", search: "" });
+    asked[0]?.();
+    expect(calls).toEqual(["push /admin/orders"]);
+    expect(moves).toEqual([ORDERS_THERE]);
+  });
+
+  // 同一条「与当前位置相同时照旧只回到顶部、不拦截」：点当前页的导航项不弹确认框，只回到顶部、不记历史、不换位置。
+  it("does not guard the current location", () => {
+    const { browser, calls } = fakeBrowser("/admin/products");
+    const { guard, asked } = fakeGuard();
+    const { moveTo, moves } = fakeMoves();
+    expect(shouldGuard(guard, PRODUCTS_HERE, { path: "/admin/products", search: "" })).toBe(false);
+    guardedPush(browser, guard, PRODUCTS_HERE, PRODUCTS_HERE, moveTo);
+    expect(asked).toEqual([]);
+    expect(calls).toEqual(["scroll 0,0"]);
+    expect(moves).toEqual([]);
+    expect(shouldGuard(guard, { path: "/products", search: "?q=tee" }, { path: "/products", search: "" })).toBe(true);
+  });
+
+  // HANDOFF 0.81「replace（401 回到登录页等）不受拦截」：设有拦截时 replace 照旧替换当前记录并换位置，拦截函数不被调用。
+  it("does not guard replace", () => {
+    const { browser, calls } = fakeBrowser("/admin/products");
+    const { asked } = fakeGuard();
+    const { moveTo, moves } = fakeMoves();
+    const login: RouteLocation = { path: "/admin/login", search: "" };
+    replaceTo(browser, login, moveTo);
+    expect(asked).toEqual([]);
+    expect(calls).toEqual(["replace /admin/login"]);
+    expect(moves).toEqual([login]);
+  });
+
+  // UX A04、A10「列表」一段「浏览器的后退与前进在本站内切页…同样弹这个确认框，选 [admin.unsaved_stay] 时把地址栏恢复为本页」与
+  // HANDOFF 0.81「先把当前位置以 pushState 写回地址栏，选离开后再以 push 前往原本的目标」：浏览器已把地址栏换成目标（/admin/orders），
+  // 路由先以 pushState 写回切换前的路径、页面不换，再交给拦截函数；调用继续后以 push 前往目标并换位置。
+  it("restores the address on popstate and pushes the target after continuing", () => {
+    const { browser, calls } = fakeBrowser("/admin/orders");
+    const { guard, asked } = fakeGuard();
+    const { moveTo, moves } = fakeMoves();
+    guardedPop(browser, guard, PRODUCTS_HERE, moveTo);
+    expect(calls).toEqual(["push /admin/products"]);
+    expect(browser.location).toEqual({ pathname: "/admin/products", search: "" });
+    expect(moves).toEqual([]);
+    expect(asked).toHaveLength(1);
+    asked[0]?.();
+    expect(calls).toEqual(["push /admin/products", "push /admin/orders"]);
+    expect(moves).toEqual([ORDERS_THERE]);
+  });
+
+  // 同一条「写回切换前的路径与查询串」：写回的地址带本页的查询串，继续时的目标为 popstate 的目标；没有拦截或目标即本页时不写回。
+  it("writes back the path and the query string of the current location", () => {
+    const { guard } = fakeGuard();
+    const here: RouteLocation = { path: "/products", search: "?q=tee&page=2" };
+    expect(popGuard(guard, here, ORDERS_THERE)).toEqual({ restore: "/products?q=tee&page=2", target: ORDERS_THERE });
+    expect(popGuard(null, here, ORDERS_THERE)).toBeNull();
+    expect(popGuard(guard, here, { path: "/products", search: "?q=tee&page=2" })).toBeNull();
+  });
+
+  // SHOP-TASK-197 验收「路由」一条「没有拦截时一切行为与现在相同」：navigate 直接 push 并换位置，同一位置只回到顶部；
+  // 浏览器后退与前进直接换到地址栏的位置，不写历史记录。
+  it("behaves as before without a guard", () => {
+    const pushed = fakeBrowser("/admin/products");
+    const pushMoves = fakeMoves();
+    guardedPush(pushed.browser, null, PRODUCTS_HERE, ORDERS_THERE, pushMoves.moveTo);
+    guardedPush(pushed.browser, null, ORDERS_THERE, ORDERS_THERE, pushMoves.moveTo);
+    expect(pushed.calls).toEqual(["push /admin/orders", "scroll 0,0"]);
+    expect(pushMoves.moves).toEqual([ORDERS_THERE]);
+
+    const popped = fakeBrowser("/products", "?q=tee");
+    const popMoves = fakeMoves();
+    guardedPop(popped.browser, null, PRODUCTS_HERE, popMoves.moveTo);
+    expect(popped.calls).toEqual([]);
+    expect(popMoves.moves).toEqual([{ path: "/products", search: "?q=tee" }]);
+  });
+
+  // UX A04、A10「列表」一段「刷新与关闭标签页由浏览器自己的离开提示拦一次（文字由浏览器决定）」与 SHOP-TASK-197 验收「路由」一条
+  // 「设有拦截期间注册 beforeunload 监听（调用 preventDefault 并把 returnValue 设为空串），拦截清除后移除」：
+  // 没有拦截时不注册；有拦截时注册的监听阻止离开，清除后移除。
+  it("blocks beforeunload only while guarded", () => {
+    const listeners = new Set<(event: BeforeUnloadLike) => void>();
+    const target: UnloadTarget = {
+      addEventListener: (_type, listener) => {
+        listeners.add(listener);
+      },
+      removeEventListener: (_type, listener) => {
+        listeners.delete(listener);
+      },
+    };
+    watchUnload(target, false)();
+    expect(listeners.size).toBe(0);
+
+    const stop = watchUnload(target, true);
+    expect([...listeners]).toEqual([blockUnload]);
+    let prevented = 0;
+    const event: BeforeUnloadLike = {
+      returnValue: undefined,
+      preventDefault: () => {
+        prevented += 1;
+      },
+    };
+    for (const listener of listeners) {
+      listener(event);
+    }
+    expect(prevented).toBe(1);
+    expect(event.returnValue).toBe("");
+    stop();
+    expect(listeners.size).toBe(0);
   });
 });

@@ -298,6 +298,13 @@ body { margin: 0; }
 .site-admin__lang a { padding: 0; }
 .site-admin__bar, .site-admin__menu { display: none; }
 
+/* 未保存修改的确认框（A10-states、A04-states，A04 与 A10 共用，SHOP-TASK-197）：盖在页面上方、居中；框按视觉稿为 grid、间距 16px、内边距 20px、
+   至多 440px 宽，两个按钮靠右、间距 10px。视觉稿的阴影不搬（site.css 不声明颜色） */
+.site-admin__overlay { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; }
+.site-admin__confirm { display: grid; gap: 16px; width: 100%; max-width: 440px; padding: 20px; }
+.site-admin__confirm p { margin: 0; }
+.site-admin__confirm-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+
 /* 后台订单 A02 的列表（A02-desktop-list、A02-desktop-empty）：标题、搜索与筛选、列表依次排列；搜索框 280px 与状态筛选同一行；
    桌面为表格（合计列靠右），手机卡片在桌面不显示；翻页按钮在列表下方靠右 */
 .site-admin-orders { display: grid; gap: 16px; }
