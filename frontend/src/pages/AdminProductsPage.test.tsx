@@ -890,7 +890,7 @@ describe("AdminProductsPage", () => {
     expect(textareaValue(field(html, COPY["admin.product_description"][language]))).toBe("A soft cotton tee.");
     expect(selectOptions(field(html, COPY["admin.product_category"][language])).filter(([, , selected]) => selected).map(([value]) => value)).toEqual(["1"]);
     expect(isChecked(field(html, COPY["admin.active"][language]))).toBe(true);
-    expect(isChecked(field(form(render(opened(changeActive(editorOf(3, SHIRT), false))), language), COPY["admin.active"][language]))).toBe(false);
+    expect(isChecked(field(form(render(opened(changeActive(editorOf(3, SHIRT), false)), language)), COPY["admin.active"][language]))).toBe(false);
     const limit = field(html, COPY["admin.max_per_order"][language]);
     expect(inputValue(limit)).toBe("10");
     expect(attributes(tags(limit, "input")[0] ?? "").get("inputmode")).toBe("numeric");
