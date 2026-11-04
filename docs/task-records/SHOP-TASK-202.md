@@ -1,0 +1,27 @@
+# SHOP-TASK-202 后台商品 A04 的列表与打开编辑区（读取、失败与中止）
+
+- [x] 依据：`docs/UX.md` 0.17 的 A04、`docs/UX-COPY.md` 0.18、`docs/HANDOFF.md` 0.82 第（2）点的运营者落实写法与视觉稿 `A04-desktop`、`A04-phone-edit`；DESIGN 1.18「计价、优惠、积分与库存」第 11 条（列表含未上架的，按接口给的顺序）。设计闸门：不适用（只读取与显示列表、打开编辑区，不显示也不提交金额，不碰个人资料；价格的显示与提交在 SHOP-TASK-203、204）。不装依赖、不改后端、不改设计、不新增路由；`frontend/src/router.tsx` 与 `frontend/src/App.tsx` 不需要改动（路由与页面入口已由 SHOP-TASK-196 加好），未改；后台框架与路由的拦截未改。
+- [x] 文案：`frontend/src/i18n/copy.ts` 按 UX-COPY 0.18 逐字加入 `admin.product_edit`、`admin.active`、`admin.unpublished`（在 `admin.category_changed` 之后），写法同相邻条目；`common.edit`、`common.back`、`common.network_check`、`common.error_retry` 与 `admin.nav_products` 字典里已有。没有用到 UX-COPY 以外的界面文字。
+- [x] 页面（`frontend/src/pages/AdminProductsPage.tsx`，写法照 `AdminShippingPage.tsx`、`AdminCouponsPage.tsx` 与 SHOP-TASK-199 的 `AdminCategoriesPage.tsx`）：
+  - 页面状态 `ProductsState`：`loading`、`failed`（`error`）与 `ready`；`ready` 里有按接口顺序的 `products`、分类读取的结果 `categories`（供 SHOP-TASK-203 的分类下拉）、列表给的 `csrfToken`（供 204 至 208 的写请求）与编辑区 `editing`（没有点 `common.edit` 时为 null）。编辑区 `Editing` 为 `loading`、`failed`（`error`）或 `ready`（`product` 为读取到的单件 `AdminProduct`，供 203 起填表），都带被点的商品 `id`。
+  - 导出的纯函数：`localName`（界面语言有译名时用它，null 或空串回退英文，英文也缺时为 —）、`productName` 与 `categoryName`（列表一行照 `localName`）、`readStep`（两个读取的组合：任一 none 为 login，否则任一 network 为 `common.network_check`，否则任一 failed 为 `common.error_retry`，都 ok 才为 ready 且不选中商品）、`editingId`、`startEditing`（换成读取中、收起原先的编辑区；点的正是已打开或正在读取的那一件、或列表还没取到时为 null，表示不做任何事；读取失败的那一件再点时重新读取）、`productStep`（单件结果：ok 为 ready，none 为 login，network 与其他失败（含 404）为 failed）、`settleEditing`（单件结果只换掉仍在读取同一件的编辑区）、`closeEditing`（`common.back`）。
+  - 接收 AbortSignal 与回调（`ProductsMoves`：show、update、replace）的异步函数：`openProducts`（以 `Promise.all` 并行读取商品列表与分类，signal 中止后不再更新）、`openProduct`（读取单件，signal 中止后不再更新，结果经 `settleEditing` 写入）。
+  - 只依赖 props 的 `AdminProductsView`；容器 `AdminProductsContent` 挂载时读取一次（照 A10 推迟到下一轮事件循环的 `startDeferred`），不依赖界面语言，切换界面语言不重新读取。单件读取另有一个 AbortController：点另一行 `common.edit` 时先中止前一次再发新的，点 `common.back` 时中止并收起，离开页面时中止。传给事件属性的处理函数都不返回 Promise。
+  - 列表：标题 h1 `admin.nav_products`；桌面表格（每行第一格为商品名称与其下的分类名称，照 A04-desktop；然后为状态与 `common.edit`），手机卡片（整张卡片为 `aria-label` 为 `common.edit` 的按钮，里面为商品名称、状态与 ›）；两套都渲染，顺序照接口。状态为 `admin.active`（`acs-tag--neutral`）或 `admin.unpublished`（`acs-tag--outline`），照 A04-desktop。
+  - 编辑区：打开页面时不显示；点 `common.edit` 后根元素加 `--editing`，编辑区为页内 `common.back`（桌面由 site.css 隐藏）与其下的内容：读取中不显示内容（标 `aria-busy`），读取失败为 `AdminAlert`，取到后为面板与 h2 `admin.product_edit`。401（列表、分类与单件）以 replace 回到 A01。
+- [x] 样式：`frontend/src/styles/site.css` 在 A10 一段之后加入 `.site-admin-products*`：没有点 `common.edit` 时列表占满一栏，点了之后列表为左边 280px 一栏、编辑区占其余（间距 24px，照 A04-desktop 的 `grid-template-columns: 280px minmax(0, 1fr)`）；列表一栏间距 12px；编辑区面板内边距 20px、各项间距 18px；767px 及以下的媒体查询里为一栏、间距 14px，表格不显示、卡片显示（内边距 12px 14px，› 区域 44×44，照 A10 的卡片），`--editing` 时隐藏列表一栏、显示至少 44px 高的 `common.back`，面板内边距 14px。没有声明颜色、字体与圆角，未改 `acuven-shop.css`。
+- 偏离与说明：
+  - 视觉稿 A04-phone-edit 把返回画在顶栏（顶栏文字为 `admin.product_edit`）；按 HANDOFF 0.82 改为编辑区上方页内的 `common.back` 按钮（照 A05 优惠券页与 A10 的写法），顶栏仍为 ☰ 与 `admin.nav_products`。
+  - 视觉稿里 site.css 写不了而没有搬入的：h2 的 17px 字号、分类名称的 12px 字号。没有借用其他组件的类来取颜色（分类名称的 `acs-admin__muted` 与状态标签的 `acs-tag` 都是视觉稿本身用的类）。
+  - A04-desktop 的列表表格没有列头，这里照视觉稿也不加；A04-desktop 在选中行上标了 `aria-selected`，表格不是 grid 角色，这里不标（同 A10）。
+  - UX 线框的 `common.create` 在 SHOP-TASK-206 加入，本任务没有；手机列表没有单独的视觉稿，卡片照 UX 手机线框与 A10 的卡片写法。
+  - 手机卡片为整张卡片的 `button`，与 SHOP-TASK-199 记下的一样：后台根元素不给按钮继承字体与颜色，卡片文字取浏览器默认的按钮样式，未做浏览器核对。
+  - 文档没有写到、这里的取法：未点 `common.edit` 时列表占满一栏（视觉稿只画了打开编辑区的样子）；读取中编辑区的位置在桌面上为空白一栏（列表已收窄为 280px）；单件读取失败时编辑区没有打开，再点同一件商品的 `common.edit` 重新读取（验收「不做任何事」只针对已打开或正在读取的那一件）。
+  - 未保存确认（`useUnsavedConfirm`）本任务没有接入：编辑区还没有输入框，不会有未保存的修改；SHOP-TASK-203 加输入框时在 `onEdit` 与 `onBack` 外包一层确认。
+- 供 SHOP-TASK-203 至 208 接入：`ReadyState` 的 `categories` 与 `csrfToken`、`Editing` 的 `ready.product`；`settleEditing` 只在编辑区仍在读取同一件时写入，后续的保存与重新读取可照它的写法只更新对应的编辑区；`EditorView` 里 `site-admin-products__form` 一块是放表单的位置。
+- [x] 测试（`frontend/src/pages/AdminProductsPage.test.tsx`；vitest 与 react-dom/server，fetch 以参数带类型的 `vi.fn((input, init) => …)` 替身按 URL 给出回答，可由测试决定回答的时机；以 `renderToStaticMarkup` 渲染 View、直接调用导出的函数，不模拟点击；每条注明守住的 UX、HANDOFF 0.82 或本任务验收的句子）：
+  - 沿用 SHOP-TASK-196 的三条：经路由打开渲染后台框架、两套导航里商品为当前项且排在退款之后、手机顶栏名称。
+  - SHOP-TASK-196 的「内容区只有标题」改为读取中内容区以 h1 `admin.nav_products` 开始、列表区标 `aria-busy`、没有编辑区；「不发请求」改为打开时两个 GET 在任何一个回答之前都已发出、带同一个 signal，都取到后不选中商品、保留分类与列表给的 CSRF 令牌。
+  - 新增：两个读取结果的全部 16 种组合；分类 401 回到 A01，列表网络中断与 500 只显示提示、不显示列表；离开页面（signal 中止）后结果不更新页面；名称回退（界面语言有译名时用它、null 与空串回退英文、都缺时为 —）；桌面表格按接口顺序的各行（名称、分类、状态、`common.edit`）与状态标签的类；手机卡片（type=button、`aria-label` 为 `common.edit`、名称与状态）；编辑区默认不显示；点 `common.edit` 换成读取中、点已打开或正在读取的同一件不做任何事、读取失败的那一件再点重新读取、读取中只有 `common.back` 且标 `aria-busy`；单件取到后显示 `admin.product_edit`；单件 401 回到 A01、网络中断与 404 在编辑区显示提示；后发的读取覆盖先发的（先发的被中止、它的回答先到也不更新页面，`settleEditing` 不让旧结果换掉别的编辑区）；三种编辑区里根元素都有 `--editing`、第一个按钮为 `common.back`，返回后被中止的读取不更新页面；页面文字全部来自字典或商品与分类数据（三种语言）。
+  - 没有测试覆盖的：`AdminProductsContent` 里的接线（effect 中的读取、单件读取的 AbortController 与各处理函数改状态）——react-dom/server 不执行 effect，也没有加测试依赖；site.css 的显隐与布局。
+- 验证到什么程度：人工逐条对照 UX A04、UX-COPY 0.18 的三条新文案、HANDOFF 0.82 第（2）点与两张视觉稿；上面列出的是实际存在的测试代码，前端的 lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI `frontend` 执行（Worker 沙箱不跑前端检查）。未做浏览器验收（包括桌面两栏与手机一栏的布局、卡片按钮的字体与颜色、深色模式）。

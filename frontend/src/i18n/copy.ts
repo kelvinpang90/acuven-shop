@@ -2120,6 +2120,21 @@ export const COPY = {
     zh: "此分类已在别处修改，请重新读取最新版本，未保存的修改会丢失。",
     ms: "Kategori ini telah diubah di tempat lain. Muat semula untuk melihat versi terkini. Perubahan yang belum disimpan akan hilang.",
   },
+  "admin.product_edit": {
+    en: "Edit product",
+    zh: "编辑商品",
+    ms: "Sunting produk",
+  },
+  "admin.active": {
+    en: "Published",
+    zh: "上架",
+    ms: "Diterbitkan",
+  },
+  "admin.unpublished": {
+    en: "Not published",
+    zh: "未上架",
+    ms: "Tidak diterbitkan",
+  },
   "admin.nav_stock_resets": {
     en: "Stock resets",
     zh: "库存重置",
