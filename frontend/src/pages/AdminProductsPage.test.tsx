@@ -33,22 +33,33 @@ import {
   formOf,
   isChoosable,
   isDirty,
+  limitCount,
   localName,
   LOADING,
   openProduct,
   openProducts,
+  priceSen,
   priceText,
   productName,
   productStep,
+  publishReady,
   readStep,
+  reloadProducts,
+  rereadStep,
+  savedItem,
+  saveInput,
+  saveStep,
   settleEditing,
   skuRows,
   startEditing,
+  startSaving,
+  stockCount,
+  submitProduct,
   texts,
   translationMissing,
   variantText,
 } from "./AdminProductsPage";
-import type { AdminProductsViewProps, Editing, OpenEditor, ProductForm, ProductsMoves, ProductsState } from "./AdminProductsPage";
+import type { AdminProductsViewProps, Editing, OpenEditor, ProductForm, ProductsMoves, ProductsState, SaveNotice } from "./AdminProductsPage";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -235,6 +246,8 @@ const HANDLERS: Omit<AdminProductsViewProps, "state"> = {
   onPrice: () => undefined,
   onStock: () => undefined,
   onVariantActive: () => undefined,
+  onSave: () => undefined,
+  onReload: () => undefined,
 };
 
 function view(state: ProductsState): ReactNode {
@@ -332,9 +345,9 @@ function rootClasses(html: string): string[] {
   return classes(tags(html, "div")[0] ?? "");
 }
 
-// 编辑区的面板（含其内容）。
+// 编辑区的面板（form，含其内容）。
 function form(html: string): string {
-  return element(html, "div", "site-admin-products__form");
+  return element(html, "form", "site-admin-products__form");
 }
 
 // 全部 label 元素（label 不嵌套）；field 为第一个文本节点是 text 的那一个。
@@ -422,6 +435,32 @@ function stubFetch(replies: Record<string, Reply[]>): Call[] {
 
 const LIST_OK = () => json(200, { products: LISTED, csrf_token: "csrf-1" });
 const CATEGORIES_OK = () => json(200, { categories: [APPAREL, BAGS], csrf_token: "category-csrf" });
+
+// common.save 旁的五种保存结果（SHOP-TASK-204）。
+const NOTICES: readonly SaveNotice[] = ["admin.product_saved", "admin.product_invalid", "admin.product_changed", "common.network_check", "common.error_retry"];
+
+// 写请求的 JSON 请求体与 CSRF 请求头。
+function bodyOf(call: Call | undefined): unknown {
+  return JSON.parse(typeof call?.init.body === "string" ? call.init.body : "null");
+}
+
+function csrfOf(call: Call | undefined): string | null {
+  return new Headers(call?.init.headers).get("X-CSRF-Token");
+}
+
+// 已取到的编辑区（不是时测试失败）。
+function openOf(state: ProductsState): OpenEditor {
+  const editing = state.status === "ready" ? state.editing : null;
+  if (editing === null || editing.status !== "ready") {
+    throw new Error("no open editor");
+  }
+  return editing;
+}
+
+// common.save 与其旁的保存结果（含其内容）。
+function saveArea(html: string): string {
+  return element(html, "div", "site-admin-products__save");
+}
 
 // 页面对结果的处理：show 换成新状态、update 按当前状态改动、replace 记下去向；set 模拟页面自己改状态（点 common.edit 与 common.back）。
 function runner(initial: ProductsState) {
@@ -709,12 +748,21 @@ describe("AdminProductsPage", () => {
     await openProduct(3, controller.signal, run.moves);
     expect(calls.map((call) => [call.url, call.init.method])).toEqual([["/api/admin/products/3", "GET"]]);
     expect(calls[0]?.init.signal).toBe(controller.signal);
-    expect(editingOf(run.state)).toEqual({ status: "ready", id: 3, product: TEE_PRODUCT, base: formOf(TEE_PRODUCT), form: formOf(TEE_PRODUCT), content: "en" });
+    expect(editingOf(run.state)).toEqual({
+      status: "ready",
+      id: 3,
+      product: TEE_PRODUCT,
+      base: formOf(TEE_PRODUCT),
+      form: formOf(TEE_PRODUCT),
+      content: "en",
+      saving: false,
+      notice: null,
+    });
     const html = render(run.state, language);
     const editor = element(html, "div", "site-admin-products__editor");
     expect(attributes(tags(editor, "div")[0] ?? "").get("aria-busy")).toBe("false");
     expect(
-      form(editor).startsWith(`<div class="acs-admin__panel site-admin-products__form"><h2 class="acs-admin__h">${escapeHtml(COPY["admin.product_edit"][language])}</h2>`),
+      form(editor).startsWith(`<form class="acs-admin__panel site-admin-products__form"><h2 class="acs-admin__h">${escapeHtml(COPY["admin.product_edit"][language])}</h2>`),
     ).toBe(true);
     expect(hasClass(html, "site-admin-products__list")).toBe(true);
   });
@@ -802,7 +850,7 @@ describe("AdminProductsPage", () => {
   });
 
   // SHOP-TASK-202 与本任务验收「测试」一条「页面文字全部来自字典」：经路由打开、读取中、读取失败、列表与编辑区的各种状态（含缺译提示、
-  // 当前分类不可选的提示与中文、马来文内容语言）里，看得见或读得出的每段文字都是当前语言的字典文案，或商品与分类数据本身（名称、描述、
+  // 当前分类不可选的提示与中文、马来文内容语言，以及 SHOP-TASK-204 的保存中与各种保存结果）里，看得见或读得出的每段文字都是当前语言的字典文案，或商品与分类数据本身（名称、描述、
   // SKU 代码、规格列、当日可用库存与缺失时的 —）。
   it.each(LANGUAGES)("shows only dictionary text in %s", (language) => {
     const allowed = dictionary(language);
@@ -833,6 +881,9 @@ describe("AdminProductsPage", () => {
       renderSignedIn(language, ready(LISTED, { status: "loading", id: 3 })),
       renderSignedIn(language, ready(LISTED, { status: "failed", id: 3, error: "common.error_retry" })),
       ...editors.map((editor) => renderSignedIn(language, opened(editor, [SEASONAL_TEE, TOTE], CATEGORIES))),
+      // SHOP-TASK-204：保存中与五种保存结果。
+      renderSignedIn(language, opened(startSaving(editorOf(3, SHIRT)), [SEASONAL_TEE, TOTE], CATEGORIES)),
+      ...NOTICES.map((notice) => renderSignedIn(language, opened({ ...editorOf(3, SHIRT), notice }, [SEASONAL_TEE, TOTE], CATEGORIES))),
     ];
     for (const page of html) {
       for (const value of visibleTexts(page)) {
@@ -878,7 +929,7 @@ describe("AdminProductsPage", () => {
       ],
     };
     expect(formOf(SHIRT)).toEqual(expected);
-    expect(editorOf(3, SHIRT)).toEqual({ status: "ready", id: 3, product: SHIRT, base: expected, form: expected, content: "en" });
+    expect(editorOf(3, SHIRT)).toEqual({ status: "ready", id: 3, product: SHIRT, base: expected, form: expected, content: "en", saving: false, notice: null });
   });
 
   // UX A04 线框「[admin.product_name] [____]」「[admin.product_description] [____]」「[admin.product_category] [▾] [admin.active] ☐」
@@ -1100,9 +1151,10 @@ describe("AdminProductsPage", () => {
 
   // UX A04 线框的常显文字与本任务验收「常显的说明——admin.publish_requirements、admin.product_options 一组下的 admin.options_fixed_note、
   // admin.max_per_order_hint、admin.no_delete_note、admin.initial_stock_note 与 admin.rules_apply_new，位置照视觉稿」「规格名与规格值只能改名称，
-  // 不显示去掉的按钮；不显示 common.create、common.save、图片区与当日库存调整的按钮」：说明按视觉稿顺序都在；每个规格名一行（admin.option_name、
-  // admin.option_values 与读屏标签 admin.option_value 的规格值输入框）；编辑区里的按钮只有内容语言三个，没有图片。
-  it.each(LANGUAGES)("shows the standing notes and no buttons beyond the content languages in %s", (language) => {
+  // 不显示去掉的按钮；不显示 common.create、图片区与当日库存调整的按钮」：说明按视觉稿顺序都在；每个规格名一行（admin.option_name、
+  // admin.option_values 与读屏标签 admin.option_value 的规格值输入框）；编辑区里的按钮只有内容语言三个与（SHOP-TASK-204 起）最后的
+  // common.save（UX A04 线框最后一行「( [common.save] )」），没有图片。
+  it.each(LANGUAGES)("shows the standing notes and no buttons beyond the content languages and common.save in %s", (language) => {
     const html = form(render(opened(editorOf(3, SHIRT)), language));
     const nodes = textNodes(html);
     const notes = (
@@ -1128,12 +1180,12 @@ describe("AdminProductsPage", () => {
       COPY["admin.options_fixed_note"][language],
     ]);
     expect(tags(options, "input").filter((tag) => attributes(tag).get("aria-label") === COPY["admin.option_value"][language])).toHaveLength(4);
-    expect(tags(html, "button").map((tag) => attributes(tag).get("aria-pressed"))).toEqual(["true", "false", "false"]);
+    expect(tags(html, "button").map((tag) => attributes(tag).get("aria-pressed"))).toEqual(["true", "false", "false", undefined]);
+    expect(attributes(tags(html, "button")[3] ?? "").get("type")).toBe("submit");
+    expect(nodes[nodes.length - 1]).toBe(COPY["common.save"][language]);
     expect(html).not.toMatch(/<img\b/);
     expect(tags(html, "input").filter((tag) => attributes(tag).get("type") === "file")).toEqual([]);
-    for (const key of ["common.create", "common.save"] as const) {
-      expect(nodes).not.toContain(COPY[key][language]);
-    }
+    expect(nodes).not.toContain(COPY["common.create"][language]);
   });
 
   // 本任务验收「未保存确认」一条：三语名称与描述、分类、上架、每单限购、规格名与规格值的三语名称、各 SKU 的价格文字、每日初始库存文字与启用状态，
@@ -1166,5 +1218,356 @@ describe("AdminProductsPage", () => {
       expect(isDirty(chooseContent(changed, "en")), name).toBe(true);
       expect(isDirty(revert(changed)), name).toBe(false);
     }
+  });
+
+  // ---- SHOP-TASK-204 保存已有商品 ----
+
+  // 保存返回的商品：英文名称改了、改到 Bags 分类并下架，version 5。
+  const SAVED: AdminProduct = { ...SHIRT, version: 5, name_en: "Crew Neck Tee II", category_id: 2, is_active: false };
+
+  // HANDOFF 0.82 第（3）点「价格照 A06 运费的写法按文字换成整仙（不经浮点数），超过 50,000,000 仙不合格」、UX A04「价格按 RM 输入、至多两位小数，
+  // 提交时按文字换成整仙（不经浮点数相乘，与 A06 运费相同）」与「上限提示」「价格 RM0.00–RM500,000.00」：合格的例子换成整仙；0.29 与 1.15 为
+  // 29 与 115（浮点数乘 100 会得 28.999… 与 114.999…）；超过上限、三位小数、空串、带空白、负号与非数字都不合格。
+  it("turns price text into whole sen without floating point", () => {
+    expect(["0", "0.05", "8", "8.5", "12.34", "500000.00", "500000", "0.29", "1.15"].map(priceSen)).toEqual([0, 5, 800, 850, 1234, 50000000, 50000000, 29, 115]);
+    const rejected = ["500000.01", "500001", "1.234", "", " ", " 8", "8 ", "-1", "-0.05", "abc", "RM8", "8.", ".5", "1e3", "1,000", "0x10", "1234567890"];
+    expect(rejected.map(priceSen)).toEqual(rejected.map(() => null));
+  });
+
+  // UX A04「库存与限购只收整数」「上限提示」「每单限购 1–1000」「每日初始库存…0–9,999」与 HANDOFF 0.82 第（3）点「库存为 1–4 位数字，限购 1–1000」：
+  // 库存 0 与 9999 合格、10000 不合格；限购 1 与 1000 合格、0 与 1001 不合格；空串、带空白、负号与小数都不合格。任一项不合格时 saveInput 为 null。
+  it("checks the stock and limit formats and ranges", () => {
+    expect(["0", "7", "0007", "9999"].map(stockCount)).toEqual([0, 7, 7, 9999]);
+    const badStock = ["10000", "", "-1", "1.0", " 5", "5 ", "abc"];
+    expect(badStock.map(stockCount)).toEqual(badStock.map(() => null));
+    expect(["1", "10", "1000", "0001"].map(limitCount)).toEqual([1, 10, 1000, 1]);
+    const badLimit = ["0", "1001", "9999", "10000", "", "-1", "1.5", " 10"];
+    expect(badLimit.map(limitCount)).toEqual(badLimit.map(() => null));
+    const base = editorOf(3, SHIRT);
+    for (const editor of [changeStock(base, 2, "9999"), changeStock(base, 2, "0"), changeMaxPerOrder(base, "1"), changeMaxPerOrder(base, "1000"), changePrice(base, 0, "500000.00")]) {
+      expect(saveInput(editor.form, 4)).not.toBeNull();
+    }
+    for (const editor of [
+      changeStock(base, 2, "10000"),
+      changeMaxPerOrder(base, "0"),
+      changeMaxPerOrder(base, "1001"),
+      changePrice(base, 0, "500000.01"),
+      changePrice(base, 1, "1.234"),
+      changePrice(base, 2, ""),
+    ]) {
+      expect(saveInput(editor.form, 4)).toBeNull();
+    }
+  });
+
+  // UX A04「上架」「勾选 [admin.active] 时页面先按请求里能看到的部分检查（英文名称与描述、全部规格名与规格值的英文名称、至少一个启用的 SKU），
+  // 不满足即不提交…分类是否启用由服务端判断。下架不检查」与 HANDOFF 0.82 第（3）点：上架时英文名称、英文描述、某个规格名或规格值的英文名称
+  // 为空或只有空白、或没有启用的 SKU 各自拦下；同样的值下架时不拦；中文、马来文为空不拦；当前分类不可选也不在页面拦。
+  it("checks the publish requirements only when published", () => {
+    const base = editorOf(3, SHIRT);
+    expect(publishReady(base.form)).toBe(true);
+    const blocked: [string, OpenEditor][] = [
+      ["english name", changeName(base, "  ")],
+      ["english description", changeDescription(base, "")],
+      ["option name", changeOptionName(base, 1, " ")],
+      ["value name", changeValueName(base, 0, 1, "\t")],
+      ["no enabled sku", changeVariantActive(changeVariantActive(base, 0, false), 2, false)],
+    ];
+    for (const [name, editor] of blocked) {
+      expect(publishReady(editor.form), name).toBe(false);
+      expect(saveInput(editor.form, 4), name).toBeNull();
+      expect(saveInput(changeActive(editor, false).form, 4), name).not.toBeNull();
+    }
+    expect(saveInput(changeName(chooseContent(base, "zh"), "").form, 4)).not.toBeNull();
+    expect(saveInput(editorOf(3, SEASONAL_SHIRT).form, 4)).not.toBeNull();
+  });
+
+  // UX A04「输入不是这些格式、超出范围时页面不提交、直接显示 [admin.product_invalid]…页面保留已填的值」与本任务验收「不通过时不提交、显示
+  // admin.product_invalid、保留已填的值」：没有发出任何请求，编辑区已填的值不变、保存中解除，common.save 旁为 admin.product_invalid。
+  it("does not submit when the page check fails", async () => {
+    const calls = stubFetch({});
+    const editor = startSaving(changeDescription(changePrice(editorOf(3, SHIRT), 0, "39.999"), "New text"));
+    const run = runner(opened(editor));
+    await submitProduct("csrf-1", editor, new AbortController().signal, run.moves);
+    expect(calls).toEqual([]);
+    expect(openOf(run.state)).toEqual({ ...editor, saving: false, notice: "admin.product_invalid" });
+    const area = saveArea(render(run.state, "zh"));
+    expect(textNodes(area)).toEqual([COPY["common.save"].zh, COPY["admin.product_invalid"].zh]);
+    expect(area).toContain('role="alert"');
+  });
+
+  // UX A04「一次保存」与本任务验收「提交——…以 SHOP-TASK-200 的保存提交读取（或上次保存）给的 version、文案原样、下拉框所选的分类 ID、上架、
+  // 每单限购、全部规格名与规格值（id 与三语名称，按读取的顺序）与全部 SKU（id、价格整仙、每日初始库存与启用，按读取的顺序），不带 SKU 的规格值组合；
+  // CSRF 令牌为列表读取给的」：saveInput 与实际发出的 PUT 请求体相同；首尾空白与换行原样，null 的文案为空串，没有 option_values。
+  it("submits every editable field in read order", async () => {
+    let editor = editorOf(3, SHIRT);
+    editor = changeName(editor, "  Crew Neck Tee  ");
+    editor = changeDescription(chooseContent(editor, "zh"), "柔软\n");
+    editor = changeValueName(editor, 1, 1, " 大 ");
+    editor = chooseContent(editor, "en");
+    editor = changeCategory(editor, 2);
+    editor = changePrice(editor, 0, "8.5");
+    editor = changeStock(editor, 2, "9999");
+    editor = changeVariantActive(editor, 1, true);
+    editor = changeMaxPerOrder(editor, "1000");
+    const expected = {
+      version: 4,
+      category_id: 2,
+      name_en: "  Crew Neck Tee  ",
+      name_zh: "圆领T恤",
+      name_ms: "",
+      description_en: "A soft cotton tee.",
+      description_zh: "柔软\n",
+      description_ms: "",
+      is_active: true,
+      max_per_order: 1000,
+      options: [
+        {
+          id: 21,
+          name_en: "Colour",
+          name_zh: "颜色",
+          name_ms: "Warna",
+          values: [
+            { id: 31, name_en: "Black", name_zh: "黑色", name_ms: "Hitam" },
+            { id: 32, name_en: "Navy", name_zh: "", name_ms: "" },
+          ],
+        },
+        {
+          id: 22,
+          name_en: "Size",
+          name_zh: "尺码",
+          name_ms: "",
+          values: [
+            { id: 33, name_en: "M", name_zh: "中", name_ms: "Sederhana" },
+            { id: 34, name_en: "L", name_zh: " 大 ", name_ms: "" },
+          ],
+        },
+      ],
+      variants: [
+        { id: 41, price_sen: 850, daily_initial_stock: 20, is_active: true },
+        { id: 42, price_sen: 0, daily_initial_stock: 0, is_active: true },
+        { id: 43, price_sen: 5, daily_initial_stock: 9999, is_active: true },
+      ],
+    };
+    expect(saveInput(editor.form, 4)).toStrictEqual(expected);
+    const calls = stubFetch({ "/api/admin/products/3": [json(200, SHIRT)] });
+    const controller = new AbortController();
+    const saving = startSaving(editor);
+    await submitProduct("csrf-1", saving, controller.signal, runner(opened(saving)).moves);
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([["/api/admin/products/3", "PUT"]]);
+    expect(calls[0]?.init.signal).toBe(controller.signal);
+    expect(csrfOf(calls[0])).toBe("csrf-1");
+    expect(bodyOf(calls[0])).toStrictEqual(expected);
+    expect(JSON.stringify(bodyOf(calls[0]))).not.toContain("option_values");
+  });
+
+  // UX A04「保存结果：成功时页面改显示服务端返回的保存后数据（版本号随之更新），显示 [admin.product_saved]」「有未保存的修改（编辑区的值与最近一次
+  // 读取或保存的不同…）」与本任务 purpose「保存成功后列表中该行的名称、分类名称（取自分类读取结果）与状态随返回的商品更新」：编辑区为返回的商品
+  // （version 5，新的基线，内容语言不变），不再算有修改；列表该行改为新名称、Bags 与未上架，其他行不变；common.save 旁为 role="status" 的提示。
+  // 保存期间又打开了别的商品时，结果不覆盖那个编辑区（列表仍更新）。
+  it("shows the saved product and updates its list row", async () => {
+    stubFetch({ "/api/admin/products/3": [json(200, SAVED)] });
+    const editor = startSaving(chooseContent(changeActive(changeCategory(changeName(editorOf(3, SHIRT), "Crew Neck Tee II"), 2), false), "zh"));
+    const run = runner(opened(editor));
+    await submitProduct("csrf-1", editor, new AbortController().signal, run.moves);
+    expect(run.events).toEqual(["update"]);
+    const saved = openOf(run.state);
+    expect(saved).toEqual({ ...editorOf(3, SAVED), content: "zh", notice: "admin.product_saved" });
+    expect(saved.product.version).toBe(5);
+    expect(isDirty(saved)).toBe(false);
+    const row: AdminProductListItem = {
+      ...TEE,
+      name_en: "Crew Neck Tee II",
+      name_zh: "圆领T恤",
+      name_ms: null,
+      is_active: false,
+      category_id: 2,
+      category_name_en: "Bags",
+      category_name_zh: null,
+      category_name_ms: "",
+    };
+    expect(run.state.status === "ready" ? run.state.products : null).toEqual([TOTE, row, NAMELESS]);
+    const html = render(run.state);
+    const table = element(html, "div", "site-admin-products__table");
+    expect(textNodes(table).slice(4, 7)).toEqual(["Crew Neck Tee II", "Bags", COPY["admin.unpublished"].en]);
+    const area = saveArea(html);
+    expect(textNodes(area)).toEqual([COPY["common.save"].en, COPY["admin.product_saved"].en]);
+    expect(area).toContain('<span role="status">');
+    expect(savedItem(TEE, { ...SHIRT, category_id: 1 }, [])).toEqual({ ...TEE, name_ms: null });
+    expect(savedItem(TEE, { ...SHIRT, category_id: 9 }, [])).toMatchObject({ category_id: 9, category_name_en: null, category_name_zh: null, category_name_ms: null });
+    const step = saveStep({ kind: "ok", product: SAVED }, 3);
+    if (typeof step !== "function") {
+      throw new Error("ok is a change");
+    }
+    const elsewhere = step(ready(LISTED, { status: "loading", id: 5 }));
+    expect(editingOf(elsewhere)).toEqual({ status: "loading", id: 5 });
+    expect(elsewhere.status === "ready" ? elsewhere.products[1] : null).toEqual(row);
+  });
+
+  // UX A04「服务端回答「取值不合格」时同样显示」「两者都整次保存不生效，页面保留已填的值」「服务端回答「商品已被改动」时显示 [admin.product_changed]
+  // 与 [admin.reload]」「其他失败显示 [common.error_retry]，保留已填的值」与 HANDOFF 0.82 第（3）点「网络中断只提示、不自动重新读取」：
+  // 422、409、500 与网络中断各只发了那一次 PUT，已填的值与 version 不变、仍算有修改，common.save 旁为对应的提示（409 另有 type=button 的 admin.reload）。
+  it.each(LANGUAGES)("keeps the values on invalid, changed, other failures and network loss in %s", async (language) => {
+    const cases = [
+      [json(422, { detail: "product_invalid" }), "admin.product_invalid"],
+      [json(409, { detail: "product_changed" }), "admin.product_changed"],
+      [json(500, {}), "common.error_retry"],
+      ["network", "common.network_check"],
+    ] as const;
+    for (const [reply, notice] of cases) {
+      const calls = stubFetch({ "/api/admin/products/3": [reply] });
+      const editor = startSaving(changePrice(editorOf(3, SHIRT), 0, "8.50"));
+      const run = runner(opened(editor));
+      await submitProduct("csrf-1", editor, new AbortController().signal, run.moves);
+      expect(calls.map((call) => call.init.method)).toEqual(["PUT"]);
+      expect(run.events).toEqual(["update"]);
+      expect(openOf(run.state)).toEqual({ ...editor, saving: false, notice });
+      expect(isDirty(openOf(run.state))).toBe(true);
+      const area = saveArea(render(run.state, language));
+      if (notice === "admin.product_changed") {
+        expect(textNodes(area)).toEqual([COPY["common.save"][language], COPY["admin.product_changed"][language], COPY["admin.reload"][language]]);
+        expect(attributes(tags(area, "button")[1] ?? "").get("type")).toBe("button");
+      } else {
+        expect(textNodes(area)).toEqual([COPY["common.save"][language], COPY[notice][language]]);
+      }
+      expect(area).toContain('role="alert"');
+    }
+  });
+
+  // HANDOFF 0.82 第（3）点与 UX A04「保存结果」：保存 401 时照现有写法以 replace 回到 A01，没有其他请求。
+  it("returns to A01 when the save has no session", async () => {
+    const calls = stubFetch({ "/api/admin/products/3": [json(401, {})] });
+    const editor = startSaving(editorOf(3, SHIRT));
+    const run = runner(opened(editor));
+    await submitProduct("csrf-1", editor, new AbortController().signal, run.moves);
+    expect(calls).toHaveLength(1);
+    expect(run.events).toEqual([`replace ${LOGIN}`]);
+    expect(saveStep({ kind: "none" }, 3)).toBe("login");
+    expect(saveStep({ kind: "csrf" }, 3)).toBe("reread");
+  });
+
+  // UX A04「点它重新读取，未保存的修改丢弃，不自动合并」「点「已被改动」提示里的 [admin.reload] 是明确放弃修改，不再确认」与本任务 purpose
+  // 「admin.reload 整页重新读取（列表与分类）后重新读取同一商品，未保存的修改丢弃」：先显示读取中，依次读取列表、分类与该商品，编辑区为新读取的
+  // 商品（照 editorOf，没有提示、不算有修改）。整页读取 401 时回到 A01；其他失败只有提示、不读取商品。
+  it("reloads the page and then the same product on admin.reload", async () => {
+    const fresh: AdminProduct = { ...SHIRT, version: 6, name_en: "Changed elsewhere" };
+    const calls = stubFetch({
+      "/api/admin/products": [json(200, { products: LISTED, csrf_token: "csrf-9" })],
+      "/api/admin/categories": [CATEGORIES_OK()],
+      "/api/admin/products/3": [json(200, fresh)],
+    });
+    const run = runner(opened({ ...changeName(editorOf(3, SHIRT), "Mine"), notice: "admin.product_changed" }));
+    const controller = new AbortController();
+    await reloadProducts(3, controller.signal, run.moves);
+    expect(run.events).toEqual(["show loading", "show ready", "update"]);
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ["/api/admin/products", "GET"],
+      ["/api/admin/categories", "GET"],
+      ["/api/admin/products/3", "GET"],
+    ]);
+    expect(calls.every((call) => call.init.signal === controller.signal)).toBe(true);
+    expect(run.state).toEqual({ ...ready(LISTED, editorOf(3, fresh)), csrfToken: "csrf-9" });
+    expect(isDirty(openOf(run.state))).toBe(false);
+    stubFetch({ "/api/admin/products": [json(401, {})], "/api/admin/categories": [CATEGORIES_OK()] });
+    const login = runner(opened(editorOf(3, SHIRT)));
+    await reloadProducts(3, new AbortController().signal, login.moves);
+    expect(login.events).toEqual(["show loading", `replace ${LOGIN}`]);
+    const failed = stubFetch({ "/api/admin/products": [LIST_OK()], "/api/admin/categories": [json(500, {})] });
+    const broken = runner(opened(editorOf(3, SHIRT)));
+    await reloadProducts(3, new AbortController().signal, broken.moves);
+    expect(failed).toHaveLength(2);
+    expect(broken.state).toEqual({ status: "failed", error: "common.error_retry" });
+  });
+
+  // HANDOFF 0.82 第（3）点「保存 403 时重新读取取得新令牌，编辑区、已填的值与 version 都保留」与本任务 purpose「显示 common.error_retry」：
+  // 403 后重新读取列表与分类，页面换成新列表、新分类与新令牌，编辑区仍是 version 4 的那份、已填的值不变，common.save 旁为 common.error_retry；
+  // 下一次保存以新令牌与 version 4 提交；改任何输入后提示收起。
+  it("re-reads after a 403 and keeps the editor, values and version", async () => {
+    const elsewhere: AdminProductListItem = { ...TEE, name_en: "Elsewhere" };
+    const calls = stubFetch({
+      "/api/admin/products/3": [json(403, { detail: "csrf_invalid" })],
+      "/api/admin/products": [json(200, { products: [elsewhere], csrf_token: "csrf-2" })],
+      "/api/admin/categories": [json(200, { categories: [APPAREL, BAGS, KITCHEN], csrf_token: "category-csrf" })],
+    });
+    const editor = startSaving(changeMaxPerOrder(changeName(editorOf(3, SHIRT), "Mine"), "12"));
+    const run = runner(opened(editor));
+    await submitProduct("csrf-1", editor, new AbortController().signal, run.moves);
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ["/api/admin/products/3", "PUT"],
+      ["/api/admin/products", "GET"],
+      ["/api/admin/categories", "GET"],
+    ]);
+    const kept = { ...editor, saving: false, notice: "common.error_retry" as const };
+    expect(run.state).toEqual({ ...ready([elsewhere], kept, [APPAREL, BAGS, KITCHEN]), csrfToken: "csrf-2" });
+    expect(openOf(run.state).product.version).toBe(4);
+    expect(textNodes(saveArea(render(run.state)))).toEqual([COPY["common.save"].en, COPY["common.error_retry"].en]);
+    expect(changeName(openOf(run.state), "Mine!").notice).toBeNull();
+    const retry = stubFetch({ "/api/admin/products/3": [json(200, SHIRT)] });
+    const again = startSaving(openOf(run.state));
+    await submitProduct(run.state.status === "ready" ? run.state.csrfToken : "", again, new AbortController().signal, runner(run.state).moves);
+    expect(csrfOf(retry[0])).toBe("csrf-2");
+    expect(bodyOf(retry[0])).toMatchObject({ version: 4, name_en: "Mine", max_per_order: 12 });
+  });
+
+  // 本任务 purpose「该次重新读取为 none 时回到 A01，network 或其他失败时改显示 common.network_check 或 common.error_retry，编辑区照样保留，
+  // 令牌仍为旧的」：403 后列表网络中断时为 common.network_check、分类 500 时为 common.error_retry，列表、编辑区与令牌 csrf-1 都不变；
+  // 分类 401 时以 replace 回到 A01。
+  it("keeps the old token when the re-read after a 403 fails", async () => {
+    for (const [products, categories, notice] of [
+      ["network", CATEGORIES_OK(), "common.network_check"],
+      [LIST_OK(), json(500, {}), "common.error_retry"],
+    ] as const) {
+      stubFetch({ "/api/admin/products/3": [json(403, {})], "/api/admin/products": [products], "/api/admin/categories": [categories] });
+      const editor = startSaving(changeName(editorOf(3, SHIRT), "Mine"));
+      const run = runner(opened(editor));
+      await submitProduct("csrf-1", editor, new AbortController().signal, run.moves);
+      expect(run.state).toEqual(opened({ ...editor, saving: false, notice }));
+    }
+    stubFetch({ "/api/admin/products/3": [json(403, {})], "/api/admin/products": [LIST_OK()], "/api/admin/categories": [json(401, {})] });
+    const editor = startSaving(editorOf(3, SHIRT));
+    const login = runner(opened(editor));
+    await submitProduct("csrf-1", editor, new AbortController().signal, login.moves);
+    expect(login.events).toEqual([`replace ${LOGIN}`]);
+    expect(rereadStep({ kind: "none" }, { kind: "ok", categories: [APPAREL], csrf_token: "category-csrf" }, 3)).toBe("login");
+  });
+
+  // 本任务 purpose「这些提示与其他保存结果一样，改任何输入后收起」：五种提示在改名称、描述、分类、上架、限购、规格名、规格值、价格、库存与启用
+  // 任一项后都收起；只切换内容语言不算改输入，提示保留。
+  it("clears the save result on any input change", () => {
+    const changes: ((editor: OpenEditor) => OpenEditor)[] = [
+      (e) => changeName(e, "x"),
+      (e) => changeDescription(e, "x"),
+      (e) => changeCategory(e, 2),
+      (e) => changeActive(e, false),
+      (e) => changeMaxPerOrder(e, "9"),
+      (e) => changeOptionName(e, 0, "x"),
+      (e) => changeValueName(e, 0, 0, "x"),
+      (e) => changePrice(e, 0, "1"),
+      (e) => changeStock(e, 0, "1"),
+      (e) => changeVariantActive(e, 0, false),
+    ];
+    for (const notice of NOTICES) {
+      const noticed: OpenEditor = { ...editorOf(3, SHIRT), notice };
+      for (const change of changes) {
+        expect(change(noticed).notice, notice).toBeNull();
+      }
+      expect(chooseContent(noticed, "ms").notice).toBe(notice);
+    }
+  });
+
+  // UX A04「保存中按钮禁用，防重复提交」、视觉稿 A04-states「保存中：Save 禁用」与本任务验收「保存中禁用并标 aria-busy」：未保存时 common.save
+  // 为 type=submit、可用、aria-busy=false；startSaving 后禁用、aria-busy=true，先前的提示收起。
+  it("disables common.save while saving", () => {
+    const idle = tags(saveArea(render(opened(editorOf(3, SHIRT)))), "button")[0] ?? "";
+    expect(attributes(idle).get("type")).toBe("submit");
+    expect(attributes(idle).has("disabled")).toBe(false);
+    expect(attributes(idle).get("aria-busy")).toBe("false");
+    const saving = startSaving({ ...editorOf(3, SHIRT), notice: "admin.product_saved" });
+    expect(saving.saving).toBe(true);
+    expect(saving.notice).toBeNull();
+    const area = saveArea(render(opened(saving)));
+    const busy = tags(area, "button")[0] ?? "";
+    expect(attributes(busy).has("disabled")).toBe(true);
+    expect(attributes(busy).get("aria-busy")).toBe("true");
+    expect(textNodes(area)).toEqual([COPY["common.save"].en]);
   });
 });

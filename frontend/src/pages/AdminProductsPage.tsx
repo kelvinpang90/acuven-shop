@@ -1,10 +1,21 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { ChangeEvent, Dispatch, SetStateAction } from "react";
+import type { ChangeEvent, Dispatch, FormEvent, SetStateAction } from "react";
 
 import { readAdminCategories } from "../api/adminCategories";
 import type { AdminCategory, CategoriesRead } from "../api/adminCategories";
-import { readAdminProduct, readAdminProducts } from "../api/adminProducts";
-import type { AdminProduct, AdminProductListItem, AdminVariant, ProductRead, ProductsRead } from "../api/adminProducts";
+import { readAdminProduct, readAdminProducts, saveAdminProduct } from "../api/adminProducts";
+import type {
+  AdminProduct,
+  AdminProductListItem,
+  AdminVariant,
+  ExistingVariant,
+  Names,
+  ProductRead,
+  ProductSave,
+  ProductsRead,
+  ProductWrite,
+  SavedOption,
+} from "../api/adminProducts";
 import AdminFrame, { AdminAlert, LANGUAGE_LABEL, useUnsavedConfirm } from "../components/AdminFrame";
 import { LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
@@ -12,7 +23,7 @@ import { htmlLang, useCopy, useLanguage } from "../i18n/language";
 import { ADMIN_LOGIN_PATH, useRouter } from "../router";
 import type { RoutePath } from "../router";
 import { startDeferred } from "./AdminOrderDetail";
-import { feeText } from "./AdminShippingPage";
+import { feeSen, feeText } from "./AdminShippingPage";
 
 // A04 后台商品（docs/UX.md 0.17 A04，视觉稿 A04-desktop 与 A04-phone-edit；HANDOFF 0.82 第（2）点）：用后台框架渲染，当前导航项为商品。
 // 内容区为标题 admin.nav_products 与全部商品（含未上架的，按接口给的顺序；桌面表格、手机卡片，两套都渲染，由 site.css 按宽度显隐），
@@ -21,8 +32,11 @@ import { feeText } from "./AdminShippingPage";
 // 单件为 GET /api/admin/products/{id}（经 api/adminProducts.ts 与 api/adminCategories.ts；DESIGN 1.18「计价、优惠、积分与库存」第 11 条）。
 // 401 换成登录页 A01；离开页面时中止进行中的读取，之后不再更新页面。
 // 编辑区（SHOP-TASK-203）：内容语言三个按钮切换三语名称、描述与规格名、规格值名称的输入框，另有分类下拉、上架、每单限购与已有 SKU 的价格、
-// 每日初始库存与启用；输入框保留所填的原文，本任务不校验、不提交。有未保存的修改（与最近一次读取的值不同）时以 useUnsavedConfirm
-// （SHOP-TASK-197）接入离开确认。保存在 204，新增规格值与 SKU、新建、图片与当日库存调整在 205 至 208。
+// 每日初始库存与启用；输入框保留所填的原文。有未保存的修改（与最近一次读取或保存的值不同）时以 useUnsavedConfirm
+// （SHOP-TASK-197）接入离开确认。
+// 保存（SHOP-TASK-204，UX A04「一次保存」「上架」「保存结果」「上限提示」与 HANDOFF 0.82 第（3）点）：编辑区最后为 common.save，页面先查格式、
+// 范围与上架条件中请求里看得到的部分，价格按文字换成整仙后以 PUT /api/admin/products/{id} 一次提交全部可改内容；结果显示在 common.save 旁。
+// 新增规格值与 SKU、新建、图片与当日库存调整在 205 至 208。
 
 // 三语名称（读取给的，可为 null）。
 export type ListNames = Readonly<Record<Language, string | null>>;
@@ -110,20 +124,32 @@ export function formOf(product: AdminProduct): ProductForm {
   };
 }
 
+// common.save 旁的保存结果（A04-states）：成功（role 为 status）、取值不合格、商品已被改动（带 admin.reload）、网络中断与其他失败。
+export type SaveNotice = "admin.product_saved" | "admin.product_invalid" | "admin.product_changed" | "common.network_check" | "common.error_retry";
+
 // 编辑区：读取中（该位置不显示内容）、读取失败（只有提示）、已取到。id 为点了 common.edit 的商品。
-// 已取到时 product 为最近一次读取的商品（规格列与 SKU 代码、当日可用库存取自它），base 为比较基线，form 为已填的值，content 为内容语言
-// （供 204 至 208 接入：保存成功后以返回的商品换掉 product 与 base）。
+// 已取到时 product 为最近一次读取或保存返回的商品（version、规格列与 SKU 代码、当日可用库存取自它），base 为比较基线，form 为已填的值，
+// content 为内容语言，saving 为保存进行中，notice 为 common.save 旁的保存结果。
 export type Editing =
   | { status: "loading"; id: number }
   | { status: "failed"; id: number; error: CopyKey }
-  | { status: "ready"; id: number; product: AdminProduct; base: ProductForm; form: ProductForm; content: Language };
+  | {
+      status: "ready";
+      id: number;
+      product: AdminProduct;
+      base: ProductForm;
+      form: ProductForm;
+      content: Language;
+      saving: boolean;
+      notice: SaveNotice | null;
+    };
 
 export type OpenEditor = Extract<Editing, { status: "ready" }>;
 
-// 打开编辑区：基线与已填的值都为读取的值，内容语言默认英文。
+// 打开编辑区：基线与已填的值都为读取的值，内容语言默认英文，没有保存结果。
 export function editorOf(id: number, product: AdminProduct): OpenEditor {
   const base = formOf(product);
-  return { status: "ready", id, product, base, form: base, content: "en" };
+  return { status: "ready", id, product, base, form: base, content: "en", saving: false, notice: null };
 }
 
 function sameTexts(a: Texts, b: Texts): boolean {
@@ -236,9 +262,9 @@ export function skuRows(editor: OpenEditor, language: Language): SkuRow[] {
   });
 }
 
-// 编辑区的改动：只换掉对应的一项，其余（含其他语言已填的值）不变。
+// 编辑区的改动：只换掉对应的一项，其余（含其他语言已填的值）不变；改任何输入都收起 common.save 旁的保存结果（含 403 后的提示）。
 function withForm(editor: OpenEditor, change: (form: ProductForm) => ProductForm): OpenEditor {
-  return { ...editor, form: change(editor.form) };
+  return { ...editor, form: change(editor.form), notice: null };
 }
 
 function withText(values: Texts, language: Language, value: string): Texts {
@@ -277,7 +303,7 @@ export function changeValueName(editor: OpenEditor, optionIndex: number, valueIn
   }));
 }
 
-// 改分类、上架与每单限购（原文，不校验）。
+// 改分类、上架与每单限购（原文，保存时才查）。
 export function changeCategory(editor: OpenEditor, categoryId: number): OpenEditor {
   return withForm(editor, (form) => ({ ...form, categoryId }));
 }
@@ -290,7 +316,7 @@ export function changeMaxPerOrder(editor: OpenEditor, text: string): OpenEditor 
   return withForm(editor, (form) => ({ ...form, maxPerOrder: text }));
 }
 
-// 改某个 SKU 的价格、每日初始库存（原文，不校验）与启用状态；index 为在 form.variants 里的位置。
+// 改某个 SKU 的价格、每日初始库存（原文，保存时才查）与启用状态；index 为在 form.variants 里的位置。
 function withVariant(editor: OpenEditor, variantIndex: number, change: (row: VariantForm) => VariantForm): OpenEditor {
   return withForm(editor, (form) => ({ ...form, variants: form.variants.map((row, index) => (index === variantIndex ? change(row) : row)) }));
 }
@@ -307,6 +333,92 @@ export function changeVariantActive(editor: OpenEditor, variantIndex: number, ch
   return withVariant(editor, variantIndex, (row) => ({ ...row, isActive: checked }));
 }
 
+// 价格上限（UX A04「上限提示」：RM500,000.00）。
+export const MAX_PRICE_SEN = 50000000;
+// 每日初始库存与每单限购：一到四位数字（HANDOFF 0.82 第（3）点）；限购另须在 1–1000。
+const COUNT_PATTERN = /^\d{1,4}$/;
+const MAX_PER_ORDER = 1000;
+
+// 价格文字换成整仙：照 A06 运费的 feeSen（一到九位数字，可再跟小数点与一到两位数字；整数部分乘 100 加补足两位的小数部分，不经浮点数相乘），
+// 超过 MAX_PRICE_SEN 不合格；不合格为 null。
+export function priceSen(text: string): number | null {
+  const sen = feeSen(text);
+  return sen === null || sen > MAX_PRICE_SEN ? null : sen;
+}
+
+// 每日初始库存：一到四位数字（0–9,999）；不合格为 null。
+export function stockCount(text: string): number | null {
+  return COUNT_PATTERN.test(text) ? Number(text) : null;
+}
+
+// 每单限购：一到四位数字且在 1–1000；不合格为 null。
+export function limitCount(text: string): number | null {
+  if (!COUNT_PATTERN.test(text)) {
+    return null;
+  }
+  const count = Number(text);
+  return count >= 1 && count <= MAX_PER_ORDER ? count : null;
+}
+
+// 上架条件中请求里看得到的部分（UX A04「上架」）：英文名称与英文描述、全部规格名与规格值的英文名称去掉首尾空白后都不为空，且至少一个 SKU
+// 勾选启用。分类是否启用、名称长度与重复由服务端判断。
+export function publishReady(form: ProductForm): boolean {
+  const filled = (values: Texts) => values.en.trim() !== "";
+  return (
+    filled(form.names) &&
+    filled(form.descriptions) &&
+    form.options.every((option) => filled(option.names) && option.values.every((value) => filled(value.names))) &&
+    form.variants.some((variant) => variant.isActive)
+  );
+}
+
+function namesOf(values: Texts): Names {
+  return { name_en: values.en, name_zh: values.zh, name_ms: values.ms };
+}
+
+// 保存的请求体（SHOP-TASK-200 的 ProductSave）：读取（或上次保存）给的 version、文案原样（不去空白）、下拉框所选的分类 ID、上架、每单限购、
+// 全部规格名与规格值（id 与三语名称，按读取的顺序）与全部 SKU（id、价格整仙、每日初始库存与启用，按读取的顺序，不带规格值组合）。
+// 页面先查：价格、每日初始库存与每单限购任一格式或范围不对，或勾选上架而 publishReady 不满足时为 null（不提交）。
+export function saveInput(form: ProductForm, version: number): ProductSave | null {
+  const maxPerOrder = limitCount(form.maxPerOrder);
+  if (maxPerOrder === null || (form.isActive && !publishReady(form))) {
+    return null;
+  }
+  const variants: ExistingVariant[] = [];
+  for (const row of form.variants) {
+    const price = priceSen(row.price);
+    const stock = stockCount(row.stock);
+    if (price === null || stock === null) {
+      return null;
+    }
+    variants.push({ id: row.id, price_sen: price, daily_initial_stock: stock, is_active: row.isActive });
+  }
+  const options: SavedOption[] = form.options.map((option) => ({
+    id: option.id,
+    ...namesOf(option.names),
+    values: option.values.map((value) => ({ id: value.id, ...namesOf(value.names) })),
+  }));
+  return {
+    version,
+    category_id: form.categoryId,
+    name_en: form.names.en,
+    name_zh: form.names.zh,
+    name_ms: form.names.ms,
+    description_en: form.descriptions.en,
+    description_zh: form.descriptions.zh,
+    description_ms: form.descriptions.ms,
+    is_active: form.isActive,
+    max_per_order: maxPerOrder,
+    options,
+    variants,
+  };
+}
+
+// 点 common.save：按钮禁用并标 aria-busy，先前的保存结果收起。
+export function startSaving(editor: OpenEditor): OpenEditor {
+  return { ...editor, saving: true, notice: null };
+}
+
 // 页面的状态：读取中（标 aria-busy）、读取失败（只有提示）、已取到（按接口顺序的商品、分类读取的结果（供 203 的分类下拉）、
 // 列表给的只用于写请求头的 CSRF 令牌与编辑区；没有点 common.edit 时为 null）。
 export type ProductsState =
@@ -320,7 +432,7 @@ export const LOADING: ProductsState = { status: "loading" };
 
 // 按两个读取的结果决定（HANDOFF 0.82）：都取到时显示列表、不选中任何商品；任一 401 回到 A01（login）；否则任一网络中断
 // common.network_check，其他失败 common.error_retry。
-export function readStep(products: ProductsRead, categories: CategoriesRead): ProductsState | "login" {
+export function readStep(products: ProductsRead, categories: CategoriesRead): Exclude<ProductsState, { status: "loading" }> | "login" {
   if (products.kind === "none" || categories.kind === "none") {
     return "login";
   }
@@ -379,6 +491,92 @@ export function closeEditing(state: ProductsState): ProductsState {
 // 对当前状态的一次改动（请求的结果按结果到达时的状态更新）。
 export type ProductsChange = (current: ProductsState) => ProductsState;
 
+// 保存成功后列表中该行：名称与状态取自返回的商品，分类名称取自分类读取的结果（分类不在其中时，分类没变则沿用该行原有的名称，否则为 null，显示 —）。
+export function savedItem(item: AdminProductListItem, product: AdminProduct, categories: readonly AdminCategory[]): AdminProductListItem {
+  const category = categories.find((row) => row.id === product.category_id);
+  const names =
+    category !== undefined
+      ? { category_name_en: category.name_en, category_name_zh: category.name_zh, category_name_ms: category.name_ms }
+      : item.category_id === product.category_id
+        ? { category_name_en: item.category_name_en, category_name_zh: item.category_name_zh, category_name_ms: item.category_name_ms }
+        : { category_name_en: null, category_name_zh: null, category_name_ms: null };
+  return {
+    ...item,
+    name_en: product.name_en,
+    name_zh: product.name_zh,
+    name_ms: product.name_ms,
+    is_active: product.is_active,
+    category_id: product.category_id,
+    ...names,
+  };
+}
+
+// 只改保存进行中的那一件的编辑区：保存期间又切换到别的商品或收起（经未保存确认）时，结果不覆盖之后的编辑区。
+function withSavingEditor(current: ProductsState, id: number, change: (editor: OpenEditor) => OpenEditor): ProductsState {
+  if (current.status !== "ready" || current.editing === null || current.editing.status !== "ready") {
+    return current;
+  }
+  const { editing } = current;
+  return editing.id === id && editing.saving ? { ...current, editing: change(editing) } : current;
+}
+
+function failedSave(id: number, notice: SaveNotice): ProductsChange {
+  return (current) => withSavingEditor(current, id, (editor) => ({ ...editor, saving: false, notice }));
+}
+
+// 按保存结果决定（UX A04「保存结果」）：成功时编辑区改显示返回的商品（新的比较基线与 version，内容语言不变）、列表该行照 savedItem 更新，
+// 显示 admin.product_saved；401 回到 A01；403 重新读取（reread）；取值不合格 admin.product_invalid、商品已被改动 admin.product_changed、
+// 网络中断 common.network_check（不自动重新读取）、其他失败 common.error_retry，都保留已填的值。
+export function saveStep(write: ProductWrite, id: number): ProductsChange | "login" | "reread" {
+  switch (write.kind) {
+    case "ok":
+      return (current) => {
+        if (current.status !== "ready") {
+          return current;
+        }
+        const products = current.products.map((item) => (item.id === write.product.id ? savedItem(item, write.product, current.categories) : item));
+        return withSavingEditor({ ...current, products }, id, (editor) => ({
+          ...editorOf(id, write.product),
+          content: editor.content,
+          notice: "admin.product_saved",
+        }));
+      };
+    case "none":
+      return "login";
+    case "csrf":
+      return "reread";
+    case "invalid":
+      return failedSave(id, "admin.product_invalid");
+    case "changed":
+      return failedSave(id, "admin.product_changed");
+    case "network":
+      return failedSave(id, "common.network_check");
+    case "failed":
+      return failedSave(id, "common.error_retry");
+  }
+}
+
+// 403 之后重新读取列表与分类的结果（HANDOFF 0.82 第（3）点）：都取到时换成新的列表、分类与 CSRF 令牌，编辑区、已填的值与提交前的 version
+// 都保留（product 不换），在 common.save 旁显示 common.error_retry；任一 401 回到 A01；否则任一网络中断 common.network_check、其他失败
+// common.error_retry，列表、编辑区与令牌（仍为旧的）都不变。
+export function rereadStep(products: ProductsRead, categories: CategoriesRead, id: number): ProductsChange | "login" {
+  const step = readStep(products, categories);
+  if (step === "login") {
+    return "login";
+  }
+  if (step.status === "failed") {
+    return failedSave(id, step.error === "common.network_check" ? "common.network_check" : "common.error_retry");
+  }
+  return (current) =>
+    current.status === "ready"
+      ? withSavingEditor({ ...current, products: step.products, categories: step.categories, csrfToken: step.csrfToken }, id, (editor) => ({
+          ...editor,
+          saving: false,
+          notice: "common.error_retry",
+        }))
+      : current;
+}
+
 // 页面对结果的处理：换成某个状态、按当前状态改动，或用路由的 replace 换成 A01（不留后台页的历史记录）。
 export interface ProductsMoves {
   show: (state: ProductsState) => void;
@@ -411,6 +609,60 @@ export async function openProduct(id: number, signal: AbortSignal, moves: Produc
     moves.replace(ADMIN_LOGIN_PATH);
   } else {
     moves.update((current) => settleEditing(current, step));
+  }
+}
+
+// 点 admin.reload（HANDOFF 0.82 第（3）点）：先显示读取中、不再确认，未保存的修改丢弃；整页重新读取列表与分类，取到后编辑区为读取中，
+// 再重新读取同一商品（照 openProduct）。整页读取为 none 时回到 A01，其他失败只有提示。signal 中止之后不再更新。
+export async function reloadProducts(id: number, signal: AbortSignal, moves: ProductsMoves): Promise<void> {
+  moves.show(LOADING);
+  const [products, categories] = await Promise.all([readAdminProducts(signal), readAdminCategories(signal)]);
+  if (signal.aborted) {
+    return;
+  }
+  const step = readStep(products, categories);
+  if (step === "login") {
+    moves.replace(ADMIN_LOGIN_PATH);
+    return;
+  }
+  if (step.status === "failed") {
+    moves.show(step);
+    return;
+  }
+  moves.show({ ...step, editing: { status: "loading", id } });
+  await openProduct(id, signal, moves);
+}
+
+// 保存一件已有商品：先照 saveInput 查，不通过时不发请求、显示 admin.product_invalid（保留已填的值）；通过时以列表给的 CSRF 令牌提交。
+// 403 时重新读取列表与分类（rereadStep）；signal 中止（离开页面）之后其结果不再更新页面。调用前编辑区已经 startSaving。
+export async function submitProduct(csrfToken: string, editor: OpenEditor, signal: AbortSignal, moves: ProductsMoves): Promise<void> {
+  const input = saveInput(editor.form, editor.product.version);
+  if (input === null) {
+    moves.update(failedSave(editor.id, "admin.product_invalid"));
+    return;
+  }
+  const write = await saveAdminProduct(editor.id, input, csrfToken, signal);
+  if (signal.aborted) {
+    return;
+  }
+  const step = saveStep(write, editor.id);
+  if (step === "login") {
+    moves.replace(ADMIN_LOGIN_PATH);
+    return;
+  }
+  if (step !== "reread") {
+    moves.update(step);
+    return;
+  }
+  const [products, categories] = await Promise.all([readAdminProducts(signal), readAdminCategories(signal)]);
+  if (signal.aborted) {
+    return;
+  }
+  const reread = rereadStep(products, categories, editor.id);
+  if (reread === "login") {
+    moves.replace(ADMIN_LOGIN_PATH);
+  } else {
+    moves.update(reread);
   }
 }
 
@@ -521,7 +773,13 @@ interface InputHandlers {
   onVariantActive: (variantIndex: number, checked: boolean) => void;
 }
 
-interface EditorHandlers extends InputHandlers {
+// 保存与「商品已被改动」提示里的 admin.reload。
+interface SaveHandlers {
+  onSave: () => void;
+  onReload: () => void;
+}
+
+interface EditorHandlers extends InputHandlers, SaveHandlers {
   onBack: () => void;
 }
 
@@ -693,10 +951,40 @@ function SkuCards({ rows, handlers }: { rows: readonly SkuRow[]; handlers: Input
   );
 }
 
+// common.save 与其旁的保存结果（A04-states，照 A06 与 A10）：保存中禁用并标 aria-busy；admin.product_saved 为 role="status"，
+// 其他为 AdminAlert；admin.product_changed 带次要按钮 admin.reload。
+function SaveArea({ editor, onReload }: { editor: OpenEditor } & Pick<SaveHandlers, "onReload">) {
+  const t = useCopy();
+  const { notice } = editor;
+  return (
+    <div className="site-admin-products__save">
+      <button className="acs-admin__btn" type="submit" disabled={editor.saving} aria-busy={editor.saving}>
+        {t("common.save")}
+      </button>
+      {notice === "admin.product_saved" && <span role="status">{t("admin.product_saved")}</span>}
+      {notice === "admin.product_changed" && (
+        <div className="acs-admin__alert site-admin-products__changed" role="alert">
+          <span>{t("admin.product_changed")}</span>
+          <button
+            className="acs-admin__btn acs-admin__btn--secondary"
+            type="button"
+            onClick={() => {
+              onReload();
+            }}
+          >
+            {t("admin.reload")}
+          </button>
+        </div>
+      )}
+      {notice !== null && notice !== "admin.product_saved" && notice !== "admin.product_changed" && <AdminAlert error={notice} />}
+    </div>
+  );
+}
+
 // 已取到的编辑区（照 A04-desktop 与 A04-phone-edit 的顺序）：标题 admin.product_edit、内容语言三个按钮（aria-pressed）、商品名称与描述
 // （多行）、缺译提示（至多一条）、分类下拉与 admin.category_current_unavailable、上架勾选框、常显的 admin.publish_requirements、规格区、
-// 桌面的 SKU 表格、每单限购与 admin.max_per_order_hint、手机的 SKU 卡片、admin.no_delete_note、admin.initial_stock_note 与 admin.rules_apply_new。
-// 桌面的表格在限购之前、手机的卡片在限购之后（两套都渲染，由 site.css 按宽度显隐）。
+// 桌面的 SKU 表格、每单限购与 admin.max_per_order_hint、手机的 SKU 卡片、admin.no_delete_note、admin.initial_stock_note 与 admin.rules_apply_new，
+// 最后为 common.save 与保存结果。桌面的表格在限购之前、手机的卡片在限购之后（两套都渲染，由 site.css 按宽度显隐）。
 function EditorForm({
   editor,
   categories,
@@ -706,7 +994,7 @@ function EditorForm({
   editor: OpenEditor;
   categories: readonly AdminCategory[];
   item: AdminProductListItem | undefined;
-  handlers: InputHandlers;
+  handlers: InputHandlers & SaveHandlers;
 }) {
   const t = useCopy();
   const { language } = useLanguage();
@@ -720,7 +1008,13 @@ function EditorForm({
   const unavailable = categoryUnavailable(categories, form.categoryId);
   const rows = skuRows(editor, language);
   return (
-    <div className="acs-admin__panel site-admin-products__form">
+    <form
+      className="acs-admin__panel site-admin-products__form"
+      onSubmit={(event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        handlers.onSave();
+      }}
+    >
       <h2 className="acs-admin__h">{t("admin.product_edit")}</h2>
       <div className="site-admin-products__languages" role="group" aria-labelledby={languagesId}>
         <span id={languagesId} className="acs-admin__muted">
@@ -831,7 +1125,8 @@ function EditorForm({
         <span>{t("admin.initial_stock_note")}</span>
         <span>{t("admin.rules_apply_new")}</span>
       </div>
-    </div>
+      <SaveArea editor={editor} onReload={handlers.onReload} />
+    </form>
   );
 }
 
@@ -888,11 +1183,14 @@ export function AdminProductsView({ state, onEdit, ...handlers }: AdminProductsV
 export function AdminProductsContent() {
   const { replace } = useRouter();
   const [state, setState] = useState<ProductsState>(LOADING);
-  // 单件读取的中止：又点了另一行、点了 common.back 或离开页面时中止前一次。
+  // 单件读取（含 admin.reload）的中止：又点了另一行、点了 common.back、又点了 admin.reload 或离开页面时中止前一次。
   const productRequest = useRef<AbortController | null>(null);
+  // 打开页面与保存（含 403 后的重新读取）共用的中止；离开页面时中止。保存的结果只改仍在保存的同一件（withSavingEditor）。
+  const lifetime = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
+    lifetime.current = controller;
     return startDeferred(controller, () => {
       void openProducts(controller.signal, pageMoves(setState, replace));
     });
@@ -969,6 +1267,26 @@ export function AdminProductsContent() {
       }}
       onVariantActive={(variantIndex, checked) => {
         edit((current) => changeVariantActive(current, variantIndex, checked));
+      }}
+      onSave={() => {
+        const controller = lifetime.current;
+        if (state.status !== "ready" || state.editing === null || state.editing.status !== "ready" || state.editing.saving || controller === null) {
+          return;
+        }
+        const editor = state.editing;
+        edit(startSaving);
+        void submitProduct(state.csrfToken, editor, controller.signal, pageMoves(setState, replace));
+      }}
+      onReload={() => {
+        if (state.status !== "ready" || state.editing === null || state.editing.status !== "ready" || state.editing.saving) {
+          return;
+        }
+        // 明确放弃修改，不经确认（UX A04「点「已被改动」提示里的 [admin.reload] 是明确放弃修改，不再确认」）。
+        const { id } = state.editing;
+        productRequest.current?.abort();
+        const controller = new AbortController();
+        productRequest.current = controller;
+        void reloadProducts(id, controller.signal, pageMoves(setState, replace));
       }}
     />
   );
