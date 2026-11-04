@@ -5528,7 +5528,7 @@ tasks:
       有未保存的修改时点另一行的 common.edit，先经确认、选离开才照 202 收起并读取；点当前已打开的那一件商品的 common.edit 照 202 不做任何事，不经确认、不丢失修改。
       设计闸门：DESIGN 1.18（提交 5ba9796）第 11 条与 HANDOFF 0.82，价格以 RM 文字显示与编辑（本任务不提交；取值核对、并发核对与审计在服务端）。
       拆分：A04 编辑区的显示与输入一层（7 个允许路径，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入），由预审建议从 202 拆出。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-197
       - SHOP-TASK-202
