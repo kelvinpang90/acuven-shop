@@ -13,9 +13,11 @@ import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { ADMIN_PRODUCTS_PATH, RouterProvider } from "../router";
 import type { RoutePath } from "../router";
 import {
+  addOption,
   addSku,
   addValue,
   AdminProductsView,
+  canAddOption,
   canAddSku,
   canAddValue,
   categoryChoices,
@@ -34,6 +36,9 @@ import {
   chooseContent,
   chooseValue,
   closeEditing,
+  createdItem,
+  createInput,
+  createStep,
   editorOf,
   formOf,
   isChoosable,
@@ -41,18 +46,25 @@ import {
   limitCount,
   localName,
   LOADING,
+  MAX_OPTIONS,
   MAX_VALUES,
   MAX_VARIANTS,
+  newCategoryChoices,
+  newEditor,
+  newForm,
   newSkuRows,
   openProduct,
   openProducts,
+  optionRemovable,
   priceSen,
   priceText,
   productName,
   productStep,
   publishReady,
   readStep,
+  reloadNewProduct,
   reloadProducts,
+  removeOption,
   removeSku,
   removeValue,
   rereadStep,
@@ -61,10 +73,13 @@ import {
   saveStep,
   settleEditing,
   showsAddSku,
+  skuRemovable,
   skuRows,
+  startCreating,
   startEditing,
   startSaving,
   stockCount,
+  submitNewProduct,
   submitProduct,
   texts,
   translationMissing,
@@ -72,7 +87,7 @@ import {
   valueRemovable,
   variantText,
 } from "./AdminProductsPage";
-import type { AdminProductsViewProps, Editing, OpenEditor, ProductForm, ProductsMoves, ProductsState, SaveNotice } from "./AdminProductsPage";
+import type { AdminProductsViewProps, Editing, NewEditor, OpenEditor, ProductForm, ProductsMoves, ProductsState, SaveNotice } from "./AdminProductsPage";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -264,8 +279,11 @@ const HANDLERS: Omit<AdminProductsViewProps, "state"> = {
   onAddSku: () => undefined,
   onRemoveSku: () => undefined,
   onChooseValue: () => undefined,
+  onAddOption: () => undefined,
+  onRemoveOption: () => undefined,
   onSave: () => undefined,
   onReload: () => undefined,
+  onCreate: () => undefined,
 };
 
 function view(state: ProductsState): ReactNode {
@@ -565,10 +583,13 @@ describe("AdminProductsPage", () => {
   // UX A04 桌面线框内容区第一行「[admin.nav_products]」与本任务验收「列表——标题 admin.nav_products」「打开页面时编辑区不显示」
   // （SHOP-TASK-196 原先「内容区只有标题」的断言改为此条）：已登录、读取中时内容区以 h1 admin.nav_products 开始，其下列表区标 aria-busy，
   // 没有编辑区。
+  // SHOP-TASK-206 改动：UX A04 桌面线框第一行「[admin.nav_products] ( [common.create] )」，标题旁多了 common.create，原来「内容区只有标题」的
+  // 文字断言因此改为标题与 common.create（读取中禁用，列表取到后才可点）。
   it.each(LANGUAGES)("starts the content area with the products title while loading in %s", (language) => {
     const main = element(renderSignedIn(language, LOADING), "main", "acs-admin__main");
     expect(tags(main, "h1")).toEqual(['<h1 class="acs-admin__h">']);
-    expect(textNodes(main)).toEqual([COPY["admin.nav_products"][language]]);
+    expect(textNodes(main)).toEqual([COPY["admin.nav_products"][language], COPY["common.create"][language]]);
+    expect(attributes(tags(element(main, "div", "site-admin-products__title"), "button")[0] ?? "").has("disabled")).toBe(true);
     expect(element(main, "div", "site-admin-products__body")).toContain('aria-busy="true"');
     expect(hasClass(main, "site-admin-products__editor")).toBe(false);
   });
@@ -1984,6 +2005,519 @@ describe("AdminProductsPage", () => {
     }
     for (const editor of editors) {
       for (const value of visibleTexts(renderSignedIn(language, opened(editor)))) {
+        expect(allowed.has(value), value).toBe(true);
+      }
+    }
+  });
+
+  // ---- SHOP-TASK-206 新建商品 ----
+
+  // 新建表单（不是时测试失败）。
+  const newOf = (state: ProductsState): NewEditor => {
+    const editing = editingOf(state);
+    if (editing === null || editing.status !== "new") {
+      throw new Error("no new product form");
+    }
+    return editing;
+  };
+
+  // (✗) 的读屏标签、type 与是否禁用。
+  const removesOf = (part: string) => buttonsOf(part, "site-admin-products__remove").map((tag) => [attributes(tag).get("aria-label"), attributes(tag).get("type"), attributes(tag).has("disabled")]);
+
+  // 每个 select 的选项（value、文字、是否选中）。
+  const selectOptionsOf = (html: string): [string, string, boolean][][] => [...html.matchAll(/<select\b[^>]*>[\s\S]*?<\/select>/g)].map((m) => selectOptions(m[0]));
+
+  // tbody 的各行（不含 tr 标签）。
+  const bodyRows = (table: string): string[] => [...(/<tbody>([\s\S]*)<\/tbody>/.exec(table)?.[1] ?? "").matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map((m) => m[1] ?? "");
+
+  // 没有规格名的新建表单：名称 Insulated Bottle、分类 Bags、价格 15.00、每日初始库存 40（视觉稿 A04-desktop-new 下半的例子）。
+  const filledNew = (): NewEditor => changeStock(changePrice(changeCategory(changeName(newEditor([APPAREL, BAGS]), "Insulated Bottle"), 2), 0, "15.00"), 0, "40");
+
+  // 新建返回的商品（201）：ID 9、分类 Bags、未上架、一个 SKU（代码由服务端生成）。
+  const CREATED: AdminProduct = {
+    ...product(9, "Insulated Bottle"),
+    slug: "insulated-bottle",
+    version: 1,
+    category_id: 2,
+    description_en: null,
+    is_active: false,
+    variants: [{ id: 51, sku: "insulated-bottle-std", price_sen: 1500, daily_initial_stock: 40, available_stock: 40, is_active: true, option_value_ids: [] }],
+  };
+
+  // UX A04 桌面线框第一行「[admin.nav_products] ( [common.create] )」「[admin.product_edit]（新建时为 [admin.product_new]）」、HANDOFF 0.82 第（5）点
+  // 「新建表单：分类默认第一项，上架不勾选，限购 10，没有规格名时 SKU 表固定一行」与本任务 purpose 的初值（文案全为空串；规格名为零个，显示 admin.no_options；
+  // SKU 表固定一行：admin.sku_code_on_save、价格与每日初始库存为空串、admin.sku_enabled 勾选、当日可用库存 —，没有下拉框与 (✗)）：列表取到后
+  // common.create 可点；startCreating 打开空白表单（分类为第一个可选的分类 Apparel，停用的 Seasonal 不算）；面板以 h2 admin.product_new 开始，
+  // 不显示 admin.category_current_unavailable、admin.add_sku 与任何 (✗)；规格区为 admin.no_options 与 admin.add_option。列表还没取到时不变。
+  it.each(LANGUAGES)("opens a blank new product form with a single SKU row in %s", (language) => {
+    expect(attributes(tags(element(render(ready(), language), "div", "site-admin-products__title"), "button")[0] ?? "").has("disabled")).toBe(false);
+    expect(startCreating(LOADING)).toBeNull();
+    expect(startCreating(ready())).toEqual(ready(LISTED, newEditor([APPAREL, BAGS])));
+    expect(newForm(CATEGORIES)).toEqual({
+      names: { en: "", zh: "", ms: "" },
+      descriptions: { en: "", zh: "", ms: "" },
+      categoryId: 1,
+      isActive: false,
+      maxPerOrder: "10",
+      options: [],
+      variants: [{ tempId: "s1", choices: [], price: "", stock: "", isActive: true }],
+    });
+    const state = startCreating(ready(LISTED, null, CATEGORIES));
+    expect(state === null ? null : newOf(state)).toEqual({ status: "new", base: newForm(CATEGORIES), form: newForm(CATEGORIES), content: "en", saving: false, notice: null });
+    const html = render(ready(LISTED, newEditor(CATEGORIES), CATEGORIES), language);
+    expect(rootClasses(html)).toContain("site-admin-products--editing");
+    const panel = form(html);
+    expect(panel.startsWith(`<form class="acs-admin__panel site-admin-products__form"><h2 class="acs-admin__h">${escapeHtml(COPY["admin.product_new"][language])}</h2>`)).toBe(true);
+    expect(inputValue(field(panel, COPY["admin.product_name"][language]))).toBe("");
+    expect(textareaValue(field(panel, COPY["admin.product_description"][language]))).toBe("");
+    expect(selectOptions(field(panel, COPY["admin.product_category"][language]))).toEqual(
+      newCategoryChoices(CATEGORIES, language).map((choice, index) => [String(choice.id), choice.label, index === 0]),
+    );
+    expect(newCategoryChoices(CATEGORIES, "en").map((choice) => choice.id)).toEqual([1, 2, 12]);
+    expect(isChecked(field(panel, COPY["admin.active"][language]))).toBe(false);
+    expect(inputValue(field(panel, COPY["admin.max_per_order"][language]))).toBe("10");
+    expect(textNodes(panel)).not.toContain(COPY["admin.category_current_unavailable"][language]);
+    expect(textNodes(element(panel, "div", "site-admin-products__options"))).toEqual([
+      COPY["admin.product_options"][language],
+      COPY["admin.no_options"][language],
+      COPY["admin.add_option"][language],
+      COPY["admin.options_fixed_note"][language],
+    ]);
+    const table = element(panel, "div", "site-admin-products__skus");
+    expect(tags(table, "th")).toHaveLength(6);
+    const rows = bodyRows(table);
+    expect(rows).toHaveLength(1);
+    expect(textNodes(rows[0] ?? "")).toEqual([COPY["admin.sku_code_on_save"][language], "—", "—"]);
+    expect(tags(rows[0] ?? "", "input").map((tag) => attributes(tag).get("value") ?? attributes(tag).has("checked"))).toEqual(["", "", true]);
+    const cards = element(panel, "ul", "site-admin-products__sku-cards");
+    expect(textNodes(cards)).toEqual([
+      COPY["admin.sku_code_on_save"][language],
+      COPY["admin.price"][language],
+      COPY["admin.initial_stock"][language],
+      COPY["admin.sku_enabled"][language],
+      COPY["admin.available_today"][language],
+      "—",
+    ]);
+    expect(tags(panel, "select")).toHaveLength(1);
+    expect(buttonsOf(panel, "site-admin-products__remove")).toEqual([]);
+    expect(buttonsOf(panel, "site-admin-products__add-sku")).toEqual([]);
+    expect(buttonsOf(panel, "site-admin-products__add-option").map((tag) => attributes(tag).has("disabled"))).toEqual([false]);
+  });
+
+  // UX A04「规格」「规格名只在新建商品时给出（0–3 个，[admin.add_option] 达 3 个后禁用）」与本任务 purpose「admin.add_option 新增一个规格名（三语名称、
+  // 一个空的值与 admin.add_value、(✗)），达 3 个后禁用；每行 SKU 随之多一个下拉框…（默认空选项）；有规格名时显示 admin.add_sku」：每次新增的规格名
+  // 三语名称为空串、带一个空的值，临时编号递增；SKU 那一行每次多一个空选项的下拉框；第 3 个之后 admin.add_option 禁用、再加不变。
+  it.each(LANGUAGES)("adds up to 3 options and then disables admin.add_option in %s", (language) => {
+    const one = addOption(newEditor([APPAREL]));
+    expect(one.form.options).toEqual([{ tempId: "o1", names: { en: "", zh: "", ms: "" }, values: [{ tempId: "v1", names: { en: "", zh: "", ms: "" } }] }]);
+    expect(one.form.variants).toEqual([{ tempId: "s1", choices: [""], price: "", stock: "", isActive: true }]);
+    const two = addOption(one);
+    const addButtons = (e: NewEditor) => buttonsOf(form(render(ready(LISTED, e), language)), "site-admin-products__add-option").map((tag) => attributes(tag).has("disabled"));
+    expect(addButtons(two)).toEqual([false]);
+    const full = addOption(two);
+    expect(MAX_OPTIONS).toBe(3);
+    expect(full.form.options.map((option) => ("tempId" in option ? [option.tempId, option.values.map((value) => ("tempId" in value ? value.tempId : ""))] : null))).toEqual([
+      ["o1", ["v1"]],
+      ["o2", ["v2"]],
+      ["o3", ["v3"]],
+    ]);
+    expect(full.form.variants[0]).toEqual({ tempId: "s1", choices: ["", "", ""], price: "", stock: "", isActive: true });
+    expect(canAddOption(full.form)).toBe(false);
+    expect(addOption(full)).toBe(full);
+    expect(addButtons(full)).toEqual([true]);
+    const html = form(render(ready(LISTED, full), language));
+    const options = element(html, "div", "site-admin-products__options");
+    expect(textNodes(options)).not.toContain(COPY["admin.no_options"][language]);
+    expect(tags(options, "input").filter((tag) => attributes(tag).get("aria-label") === COPY["admin.option_value"][language])).toHaveLength(3);
+    const row = bodyRows(element(html, "div", "site-admin-products__skus"))[0] ?? "";
+    expect(selectOptionsOf(row)).toEqual([
+      [["", "", true], ["v1", "", false]],
+      [["", "", true], ["v2", "", false]],
+      [["", "", true], ["v3", "", false]],
+    ]);
+    expect(buttonsOf(html, "site-admin-products__add-sku")).toHaveLength(2);
+  });
+
+  // UX A04「规格」「被本次新增的 SKU 选用的规格值（或其值被选用的规格名）的 (✗) 禁用」、视觉稿 A04-desktop-new 的标注「被新 SKU 选用的规格值及其规格名，
+  // (✕) 禁用」、HANDOFF 0.82 第（5）点「被选用的值、只剩一个的值、有值被选用的规格名，其 (✗) 禁用」与本任务 purpose「每行带 (✗)，只剩一行时禁用」
+  // 「(✗) 读屏标签沿用 admin.remove」：只有一个值时该值的 (✗) 禁用、规格名的可用，SKU 只剩一行时它的 (✗) 禁用（桌面与手机）；再加一个值并让 SKU 选用
+  // 第一个值后，第一个值与规格名的 (✗) 禁用、第二个值的可用；多一行 SKU 后两行的 (✗) 都可用。禁用时去掉不变。
+  it.each(LANGUAGES)("disables each (✗) on the new product form by its rule in %s", (language) => {
+    const label = COPY["admin.remove"][language];
+    const one = addOption(newEditor([APPAREL]));
+    expect(valueRemovable(one.form, 0, 0)).toBe(false);
+    expect(optionRemovable(one.form, 0)).toBe(true);
+    expect(skuRemovable(one.form, 0)).toBe(false);
+    const first = form(render(ready(LISTED, one), language));
+    expect(removesOf(element(first, "div", "site-admin-products__options"))).toEqual([
+      [label, "button", true],
+      [label, "button", false],
+    ]);
+    expect(removesOf(element(first, "div", "site-admin-products__skus"))).toEqual([[label, "button", true]]);
+    expect(removesOf(element(first, "ul", "site-admin-products__sku-cards"))).toEqual([[label, "button", true]]);
+    expect(removeValue(one, 0, 0)).toBe(one);
+    expect(removeSku(one, 0)).toBe(one);
+    const chosen = chooseValue(addValue(one, 0), 0, 0, "v1");
+    expect([0, 1].map((index) => valueRemovable(chosen.form, 0, index))).toEqual([false, true]);
+    expect(optionRemovable(chosen.form, 0)).toBe(false);
+    expect(removesOf(element(form(render(ready(LISTED, chosen), language)), "div", "site-admin-products__options"))).toEqual([
+      [label, "button", true],
+      [label, "button", false],
+      [label, "button", true],
+    ]);
+    expect(removeValue(chosen, 0, 0)).toBe(chosen);
+    expect(removeOption(chosen, 0)).toBe(chosen);
+    expect(removeValue(chosen, 0, 1).form.options[0]?.values).toHaveLength(1);
+    expect(optionRemovable(chooseValue(chosen, 0, 0, "").form, 0)).toBe(true);
+    const rows = addSku(chosen);
+    expect([0, 1].map((index) => skuRemovable(rows.form, index))).toEqual([true, true]);
+    const html = form(render(ready(LISTED, rows), language));
+    expect(removesOf(element(html, "div", "site-admin-products__skus"))).toEqual([
+      [label, "button", false],
+      [label, "button", false],
+    ]);
+    expect(removesOf(element(html, "ul", "site-admin-products__sku-cards"))).toEqual([
+      [label, "button", false],
+      [label, "button", false],
+    ]);
+    expect(removeSku(rows, 0).form.variants.map((row) => ("tempId" in row ? row.tempId : null))).toEqual(["s2"]);
+  });
+
+  // HANDOFF 0.82 第（5）点「规格名减到零个时只留第一行」与本任务 purpose「规格名减到零个时 SKU 表只保留第一行并清除其下拉框」：去掉第二个规格名时每行 SKU
+  // 去掉它之下所选的值、保留第一个规格名下所选的；再去掉最后一个规格名后只剩第一行（价格等已填的值保留）、没有所选的值，页面又为 admin.no_options、
+  // 没有下拉框、admin.add_sku 与 (✗)。
+  it("keeps only the first SKU row once the options go to zero", () => {
+    let editor = addSku(addOption(addOption(newEditor([APPAREL]))));
+    editor = changePrice(chooseValue(editor, 0, 0, "v1"), 0, "15.00");
+    editor = changePrice(editor, 1, "9");
+    const choices = (e: NewEditor) => e.form.variants.map((row) => ("tempId" in row ? [row.tempId, row.choices] : null));
+    expect(choices(editor)).toEqual([
+      ["s1", ["v1", ""]],
+      ["s2", ["", ""]],
+    ]);
+    const single = removeOption(editor, 1);
+    expect(single.form.options).toHaveLength(1);
+    expect(choices(single)).toEqual([
+      ["s1", ["v1"]],
+      ["s2", [""]],
+    ]);
+    const none = removeOption(chooseValue(single, 0, 0, ""), 0);
+    expect(none.form.options).toEqual([]);
+    expect(none.form.variants).toEqual([{ tempId: "s1", choices: [], price: "15.00", stock: "", isActive: true }]);
+    const html = form(render(ready(LISTED, none)));
+    expect(textNodes(element(html, "div", "site-admin-products__options"))).toContain(COPY["admin.no_options"].en);
+    expect(bodyRows(element(html, "div", "site-admin-products__skus"))).toHaveLength(1);
+    expect(tags(html, "select")).toHaveLength(1);
+    expect(buttonsOf(html, "site-admin-products__add-sku")).toEqual([]);
+    expect(buttonsOf(html, "site-admin-products__remove")).toEqual([]);
+  });
+
+  // HANDOFF 0.82 第（5）点与本任务 purpose「没有可选分类时下拉框为空，页面先查拦下」「页面先查在 SHOP-TASK-204、205 的基础上另查已选分类」：只有停用
+  // 或缺英文名称的分类时下拉框没有选项、分类为 0，其余都填好也不提交（没有请求，显示 admin.product_invalid，表单保留）；所选的分类停用时同样拦下，
+  // 可选时通过。价格、库存与限购格式不对、有规格名未选值、上架而缺英文描述时也拦下；规格名与值的英文名称为空在下架时不拦（由服务端判断）。
+  it("blocks the create without a choosable category and checks the rest like a save", async () => {
+    const blocked = changeStock(changePrice(changeName(newEditor([SEASONAL, NO_EN]), "Insulated Bottle"), 0, "15.00"), 0, "40");
+    expect(blocked.form.categoryId).toBe(0);
+    expect(selectOptions(field(form(render(ready(LISTED, blocked, [SEASONAL, NO_EN]))), COPY["admin.product_category"].en))).toEqual([]);
+    expect(createInput(blocked.form, [SEASONAL, NO_EN])).toBeNull();
+    const calls = stubFetch({});
+    const saving = startSaving(blocked);
+    const run = runner(ready(LISTED, saving, [SEASONAL, NO_EN]));
+    await submitNewProduct("csrf-1", saving, [SEASONAL, NO_EN], new AbortController().signal, run.moves);
+    expect(calls).toEqual([]);
+    expect(newOf(run.state)).toEqual({ ...saving, saving: false, notice: "admin.product_invalid" });
+    expect(textNodes(saveArea(render(run.state)))).toEqual([COPY["common.save"].en, COPY["admin.product_invalid"].en]);
+    const filled = filledNew();
+    expect(createInput(filled.form, [APPAREL, BAGS])).not.toBeNull();
+    expect(createInput(changeCategory(filled, 4).form, CATEGORIES)).toBeNull();
+    for (const [name, editor] of [
+      ["empty price", changePrice(filled, 0, "")],
+      ["stock over the cap", changeStock(filled, 0, "10000")],
+      ["limit 0", changeMaxPerOrder(filled, "0")],
+      ["published without an English description", changeActive(filled, true)],
+      ["no value chosen", addOption(filled)],
+    ] as const) {
+      expect(createInput(editor.form, [APPAREL, BAGS]), name).toBeNull();
+    }
+    const unnamed = chooseValue(addOption(filled), 0, 0, "v1");
+    expect(createInput(unnamed.form, [APPAREL, BAGS])).not.toBeNull();
+    expect(createInput(changeActive(changeDescription(unnamed, "Keeps drinks cold."), true).form, [APPAREL, BAGS])).toBeNull();
+  });
+
+  // DESIGN 1.18 第 11 条「新建商品的价格按文字换成整仙提交」、SHOP-TASK-200 的新建请求体与本任务验收「以 SHOP-TASK-200 的新建提交下拉框所选的分类 ID、
+  // 文案原样、上架、每单限购、规格名（按顺序，三语名称与值）、值（temp_id 与三语名称）与 SKU（temp_id、option_values 以 temp_id 按规格名的顺序引用值，
+  // 没有规格名时为空数组；价格整仙、每日初始库存与启用）；临时编号在一次请求里不重复」：没有规格名时 options 为空、option_values 为空数组；以列表给的
+  // CSRF 令牌 POST /api/admin/products，请求体与 createInput 相同。有两个规格名（Colour：Red、Green；Size：500 ml）与两行 SKU 时按顺序写出，SKU 以
+  // temp_id 引用值，临时编号互不重复。
+  it("writes the create request with temporary ids", async () => {
+    const plain = {
+      category_id: 2,
+      name_en: "Insulated Bottle",
+      name_zh: "",
+      name_ms: "",
+      description_en: "",
+      description_zh: "",
+      description_ms: "",
+      is_active: false,
+      max_per_order: 10,
+      options: [],
+      variants: [{ temp_id: "s1", option_values: [], price_sen: 1500, daily_initial_stock: 40, is_active: true }],
+    };
+    expect(createInput(filledNew().form, [APPAREL, BAGS])).toStrictEqual(plain);
+    const calls = stubFetch({ "/api/admin/products": [json(201, CREATED)] });
+    const saving = startSaving(filledNew());
+    await submitNewProduct("csrf-1", saving, [APPAREL, BAGS], new AbortController().signal, runner(ready(LISTED, saving)).moves);
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([["/api/admin/products", "POST"]]);
+    expect(csrfOf(calls[0])).toBe("csrf-1");
+    expect(bodyOf(calls[0])).toStrictEqual(plain);
+
+    let editor = addOption(changeName(newEditor([APPAREL]), " Insulated Bottle "));
+    editor = changeValueName(changeOptionName(editor, 0, "Colour"), 0, 0, "Red");
+    editor = changeValueName(changeOptionName(chooseContent(editor, "zh"), 0, "颜色"), 0, 0, "红");
+    editor = chooseContent(editor, "en");
+    editor = changeValueName(addValue(editor, 0), 0, 1, "Green");
+    editor = changeValueName(changeOptionName(addOption(editor), 1, "Size"), 1, 0, "500 ml");
+    editor = chooseValue(chooseValue(editor, 0, 0, "v1"), 0, 1, "v3");
+    editor = changeStock(changePrice(editor, 0, "29.00"), 0, "30");
+    editor = addSku(editor);
+    editor = chooseValue(chooseValue(editor, 1, 0, "v2"), 1, 1, "v3");
+    editor = changeVariantActive(changeStock(changePrice(editor, 1, "29.5"), 1, "0"), 1, false);
+    const expected = {
+      category_id: 1,
+      name_en: " Insulated Bottle ",
+      name_zh: "",
+      name_ms: "",
+      description_en: "",
+      description_zh: "",
+      description_ms: "",
+      is_active: false,
+      max_per_order: 10,
+      options: [
+        {
+          name_en: "Colour",
+          name_zh: "颜色",
+          name_ms: "",
+          values: [
+            { temp_id: "v1", name_en: "Red", name_zh: "红", name_ms: "" },
+            { temp_id: "v2", name_en: "Green", name_zh: "", name_ms: "" },
+          ],
+        },
+        { name_en: "Size", name_zh: "", name_ms: "", values: [{ temp_id: "v3", name_en: "500 ml", name_zh: "", name_ms: "" }] },
+      ],
+      variants: [
+        { temp_id: "s1", option_values: [{ temp_id: "v1" }, { temp_id: "v3" }], price_sen: 2900, daily_initial_stock: 30, is_active: true },
+        { temp_id: "s2", option_values: [{ temp_id: "v2" }, { temp_id: "v3" }], price_sen: 2950, daily_initial_stock: 0, is_active: false },
+      ],
+    };
+    expect(createInput(editor.form, [APPAREL])).toStrictEqual(expected);
+    const declared = [...expected.options.flatMap((option) => option.values), ...expected.variants].map((row) => row.temp_id);
+    expect(new Set(declared).size).toBe(declared.length);
+    const optionCalls = stubFetch({ "/api/admin/products": [json(201, CREATED)] });
+    const options = startSaving(editor);
+    await submitNewProduct("csrf-1", options, [APPAREL], new AbortController().signal, runner(ready(LISTED, options, [APPAREL])).moves);
+    expect(bodyOf(optionCalls[0])).toStrictEqual(expected);
+  });
+
+  // UX A04「保存结果」「新建成功后进入该商品的编辑区、显示 [admin.product_created]」与本任务 purpose「新建成功后以返回的商品在列表最前加一行（分类名称取自
+  // 分类读取结果）、进入它的编辑区并显示 admin.product_created」「之后按已有商品编辑与保存」：只有那一次 POST；列表最前多出 Insulated Bottle（分类 Bags
+  // 的三语名称），编辑区为返回的商品（照 editorOf，内容语言不变）、标题 admin.product_edit、common.save 旁为 role="status" 的 admin.product_created，
+  // 不算有修改；之后以返回的 version 照 saveInput 保存。分类不在读取结果里时该行的分类名称为 null。
+  it.each(LANGUAGES)("adds the created product to the top of the list and opens it in %s", async (language) => {
+    const calls = stubFetch({ "/api/admin/products": [json(201, CREATED)] });
+    const saving = startSaving(chooseContent(filledNew(), "zh"));
+    const run = runner(ready(LISTED, saving));
+    await submitNewProduct("csrf-1", saving, [APPAREL, BAGS], new AbortController().signal, run.moves);
+    expect(calls).toHaveLength(1);
+    expect(run.events).toEqual(["update"]);
+    const item = createdItem(CREATED, [APPAREL, BAGS]);
+    expect(item).toEqual({
+      id: 9,
+      slug: "insulated-bottle",
+      name_en: "Insulated Bottle",
+      name_zh: null,
+      name_ms: null,
+      is_active: false,
+      category_id: 2,
+      category_name_en: "Bags",
+      category_name_zh: null,
+      category_name_ms: "",
+    });
+    expect(createdItem(CREATED, [APPAREL])).toMatchObject({ category_name_en: null, category_name_zh: null, category_name_ms: null });
+    const after = openOf(run.state);
+    expect(run.state).toEqual(ready([item, ...LISTED], { ...editorOf(9, CREATED), content: "zh", notice: "admin.product_created" }));
+    expect(isDirty(after)).toBe(false);
+    const html = render(run.state, language);
+    const rows = [...element(html, "div", "site-admin-products__table").matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map((m) => textNodes(m[1] ?? ""));
+    expect(rows[0]?.slice(0, 2)).toEqual([productName(item, language), categoryName(item, language)]);
+    expect(form(html).startsWith(`<form class="acs-admin__panel site-admin-products__form"><h2 class="acs-admin__h">${escapeHtml(COPY["admin.product_edit"][language])}</h2>`)).toBe(true);
+    const area = saveArea(html);
+    expect(textNodes(area)).toEqual([COPY["common.save"][language], COPY["admin.product_created"][language]]);
+    expect(area).toContain('role="status"');
+    expect(saveInput(changePrice(after, 0, "16").form, after.product.version)).toMatchObject({ version: 1, variants: [{ id: 51, price_sen: 1600 }] });
+  });
+
+  // 本任务 purpose「网络中断只显示 common.network_check、保留表单、不自动重新读取（新建可能已经成功…再次提交会多出一件商品；由管理员核对列表后把多余的下架）」
+  // （HANDOFF 0.82 第（5）点，Kelvin 2026-11-03 确认）与验收「invalid 显示 admin.product_invalid 并保留表单；changed、csrf、network、none 与其他失败照 purpose
+  // 与 204 的写法」：422、409、500 与网络中断各只发了那一次 POST、没有重新读取，新建表单与已填的值不变、仍算有修改，common.save 旁为对应的提示（409 另有
+  // admin.reload）；401 以 replace 回到 A01。
+  it("keeps the form on invalid, changed, other failures and network loss without re-reading", async () => {
+    const cases = [
+      [json(422, { detail: "product_invalid" }), "admin.product_invalid"],
+      [json(409, { detail: "product_changed" }), "admin.product_changed"],
+      [json(500, {}), "common.error_retry"],
+      ["network", "common.network_check"],
+    ] as const;
+    for (const [reply, notice] of cases) {
+      const calls = stubFetch({ "/api/admin/products": [reply] });
+      const saving = startSaving(filledNew());
+      const run = runner(ready(LISTED, saving));
+      await submitNewProduct("csrf-1", saving, [APPAREL, BAGS], new AbortController().signal, run.moves);
+      expect(calls.map((call) => call.init.method), notice).toEqual(["POST"]);
+      expect(run.events).toEqual(["update"]);
+      expect(run.state).toEqual(ready(LISTED, { ...saving, saving: false, notice }));
+      expect(isDirty(newOf(run.state))).toBe(true);
+      const area = saveArea(render(run.state));
+      const shown = notice === "admin.product_changed" ? [COPY["common.save"].en, COPY[notice].en, COPY["admin.reload"].en] : [COPY["common.save"].en, COPY[notice].en];
+      expect(textNodes(area)).toEqual(shown);
+      expect(area).toContain('role="alert"');
+    }
+    stubFetch({ "/api/admin/products": [json(401, {})] });
+    const saving = startSaving(filledNew());
+    const login = runner(ready(LISTED, saving));
+    await submitNewProduct("csrf-1", saving, [APPAREL, BAGS], new AbortController().signal, login.moves);
+    expect(login.events).toEqual([`replace ${LOGIN}`]);
+    expect(createStep({ kind: "none" })).toBe("login");
+    expect(createStep({ kind: "csrf" })).toBe("reread");
+  });
+
+  // 本任务 purpose「403 照 204 重新读取并保留表单」：POST 403 后重新读取列表与分类，页面换成新列表、新分类与新令牌，新建表单与已填的值保留、common.save 旁为
+  // common.error_retry；下一次新建以新令牌提交。
+  it("re-reads after a 403 and keeps the new product form", async () => {
+    const calls = stubFetch({
+      "/api/admin/products": [json(403, { detail: "csrf_invalid" }), json(200, { products: [TEE], csrf_token: "csrf-2" })],
+      "/api/admin/categories": [json(200, { categories: [BAGS, KITCHEN], csrf_token: "category-csrf" })],
+    });
+    const saving = startSaving(filledNew());
+    const run = runner(ready(LISTED, saving));
+    await submitNewProduct("csrf-1", saving, [APPAREL, BAGS], new AbortController().signal, run.moves);
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ["/api/admin/products", "POST"],
+      ["/api/admin/products", "GET"],
+      ["/api/admin/categories", "GET"],
+    ]);
+    expect(run.state).toEqual({ ...ready([TEE], { ...saving, saving: false, notice: "common.error_retry" }, [BAGS, KITCHEN]), csrfToken: "csrf-2" });
+    const retry = stubFetch({ "/api/admin/products": [json(201, CREATED)] });
+    const again = startSaving(newOf(run.state));
+    await submitNewProduct("csrf-2", again, [BAGS, KITCHEN], new AbortController().signal, runner(run.state).moves);
+    expect(csrfOf(retry[0])).toBe("csrf-2");
+    expect(rereadStep({ kind: "none" }, { kind: "ok", categories: [APPAREL], csrf_token: "category-csrf" }, "new")).toBe("login");
+  });
+
+  // 本任务 purpose「changed 时 admin.reload 整页重新读取，新建表单恢复为空白」：先显示读取中，读取列表与分类后为空白的新建表单（分类为新读取结果里的第一个
+  // 可选分类），已填的值丢弃、不算有修改；整页读取失败时只有提示。
+  it("reloads the page into a blank form on admin.reload", async () => {
+    const calls = stubFetch({
+      "/api/admin/products": [json(200, { products: [TEE], csrf_token: "csrf-3" })],
+      "/api/admin/categories": [json(200, { categories: [SEASONAL, BAGS, APPAREL], csrf_token: "category-csrf" })],
+    });
+    const run = runner(ready(LISTED, { ...changeName(filledNew(), "Mine"), notice: "admin.product_changed" }));
+    await reloadNewProduct(new AbortController().signal, run.moves);
+    expect(run.events).toEqual(["show loading", "show ready"]);
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([
+      ["/api/admin/products", "GET"],
+      ["/api/admin/categories", "GET"],
+    ]);
+    expect(run.state).toEqual({ ...ready([TEE], newEditor([SEASONAL, BAGS, APPAREL]), [SEASONAL, BAGS, APPAREL]), csrfToken: "csrf-3" });
+    expect(newOf(run.state).form.categoryId).toBe(2);
+    expect(isDirty(newOf(run.state))).toBe(false);
+    stubFetch({ "/api/admin/products": [LIST_OK()], "/api/admin/categories": [json(500, {})] });
+    const broken = runner(ready(LISTED, filledNew()));
+    await reloadNewProduct(new AbortController().signal, broken.moves);
+    expect(broken.state).toEqual({ status: "failed", error: "common.error_retry" });
+  });
+
+  // 本任务验收「新建表单中任一项与初值不同即为有未保存的修改（扩展导出的判定函数）」与 UX A04「列表」（有未保存的修改时点 [common.edit]、[common.create] 先弹
+  // 确认框）：初值不算、切换内容语言不算；名称、描述、分类、上架、限购、价格、库存、启用、新增规格名、规格名与值的名称、新增 SKU 任一项改了都算；改回原值、
+  // 加了又去掉的规格名不算。新建表单打开时点某件商品的 common.edit 照常改为读取中。
+  it("detects unsaved changes on the new product form", () => {
+    const base = newEditor([APPAREL, BAGS]);
+    expect(isDirty(base)).toBe(false);
+    expect(isDirty(chooseContent(base, "ms"))).toBe(false);
+    const withOption = addOption(base);
+    const changes: [string, NewEditor][] = [
+      ["name", changeName(base, "x")],
+      ["description", changeDescription(base, "x")],
+      ["category", changeCategory(base, 2)],
+      ["published", changeActive(base, true)],
+      ["limit", changeMaxPerOrder(base, "11")],
+      ["price", changePrice(base, 0, "1")],
+      ["stock", changeStock(base, 0, "1")],
+      ["enabled", changeVariantActive(base, 0, false)],
+      ["option", withOption],
+      ["option name", changeOptionName(withOption, 0, "x")],
+      ["value name", changeValueName(withOption, 0, 0, "x")],
+      ["sku", addSku(withOption)],
+    ];
+    for (const [name, editor] of changes) {
+      expect(isDirty(editor), name).toBe(true);
+    }
+    expect(isDirty(changeName(changeName(base, "x"), ""))).toBe(false);
+    expect(isDirty(changeMaxPerOrder(changeMaxPerOrder(base, "11"), "10"))).toBe(false);
+    expect(isDirty(removeOption(withOption, 0))).toBe(false);
+    expect(startEditing(ready(LISTED, changeName(base, "x")), 3)).toEqual(ready(LISTED, { status: "loading", id: 3 }));
+  });
+
+  // UX A04「内容语言」（[admin.translation_missing] 只在内容语言为中文或马来文、且该语言的商品名称、描述或任一规格名、规格值的名称有缺时显示）与本任务验收
+  // 「admin.translation_missing 涵盖新建表单的名称、描述、规格名与值」：中文内容语言下空白表单有提示；填了中文名称与描述后没有；新增规格名后又有，规格名与
+  // 值都填了中文后没有；英文内容语言下没有。
+  it("covers the new product form in the translation notice", () => {
+    let editor = chooseContent(newEditor([APPAREL]), "zh");
+    expect(translationMissing(editor)).toBe(true);
+    const notice = COPY["admin.translation_missing"].en.replace("{language}", COPY["common.lang_zh"].en);
+    expect(textNodes(form(render(ready(LISTED, editor))))).toContain(notice);
+    editor = changeDescription(changeName(editor, "保温瓶"), "保冷保温。");
+    expect(translationMissing(editor)).toBe(false);
+    editor = addOption(editor);
+    expect(translationMissing(editor)).toBe(true);
+    editor = changeOptionName(editor, 0, "颜色");
+    expect(translationMissing(editor)).toBe(true);
+    editor = changeValueName(editor, 0, 0, "红");
+    expect(translationMissing(editor)).toBe(false);
+    expect(translationMissing(chooseContent(addValue(editor, 0), "en"))).toBe(false);
+    expect(textNodes(form(render(ready(LISTED, editor))))).not.toContain(notice);
+  });
+
+  // 本任务验收「页面文字全部来自字典」：新建表单（空白、有规格名与 SKU、没有可选分类、新建中）里看得见或读得出的每段文字都是当前语言的字典文案，或数据本身
+  // （列表的商品与分类名称、分类下拉的分类名称、下拉框里的规格值名称与当日可用库存、规格列的 —）。
+  it.each(LANGUAGES)("shows only dictionary text on the new product form in %s", (language) => {
+    const allowed = dictionary(language);
+    allowed.add("—");
+    for (const item of LISTED) {
+      allowed.add(productName(item, language));
+      allowed.add(categoryName(item, language));
+    }
+    for (const label of ["common.lang_zh", "common.lang_ms"] as const) {
+      allowed.add(COPY["admin.translation_missing"][language].replace("{language}", COPY[label][language]));
+    }
+    for (const choice of newCategoryChoices([APPAREL, BAGS], language)) {
+      allowed.add(choice.label);
+    }
+    const named = chooseValue(changeValueName(changeOptionName(addOption(filledNew()), 0, "Colour"), 0, 0, "Red"), 0, 0, "v1");
+    const states = [
+      ready(LISTED, newEditor([APPAREL, BAGS])),
+      ready(LISTED, chooseContent(addSku(named), "zh")),
+      ready(LISTED, newEditor([SEASONAL]), [SEASONAL]),
+      ready(LISTED, startSaving(named)),
+    ];
+    for (const state of states) {
+      for (const row of newSkuRows(newOf(state), language)) {
+        for (const select of row.selects) {
+          for (const choice of select.choices) {
+            allowed.add(choice.label);
+          }
+        }
+      }
+      for (const value of visibleTexts(renderSignedIn(language, state))) {
         expect(allowed.has(value), value).toBe(true);
       }
     }

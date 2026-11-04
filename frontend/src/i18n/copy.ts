@@ -2125,6 +2125,11 @@ export const COPY = {
     zh: "编辑商品",
     ms: "Sunting produk",
   },
+  "admin.product_new": {
+    en: "New product",
+    zh: "新建商品",
+    ms: "Produk baharu",
+  },
   "admin.active": {
     en: "Published",
     zh: "上架",
@@ -2230,6 +2235,16 @@ export const COPY = {
     zh: "新增规格值",
     ms: "Tambah nilai",
   },
+  "admin.add_option": {
+    en: "Add option",
+    zh: "新增规格名",
+    ms: "Tambah pilihan",
+  },
+  "admin.no_options": {
+    en: "No options: this product has a single SKU.",
+    zh: "无规格：此商品只有一个 SKU。",
+    ms: "Tiada pilihan: produk ini mempunyai satu SKU sahaja.",
+  },
   "admin.options_fixed_note": {
     en: "Options can't be added or removed after the product is created. To change them, create a new product and unpublish this one.",
     zh: "规格名在新建商品后不能增减。要换规格，请新建商品并把此商品下架。",
@@ -2259,6 +2274,11 @@ export const COPY = {
     en: "Saved. New quotes and orders use these values.",
     zh: "已保存，之后的计价与下单按新值执行。",
     ms: "Disimpan. Sebut harga dan pesanan baharu menggunakan nilai ini.",
+  },
+  "admin.product_created": {
+    en: "Product created. You can now upload images.",
+    zh: "商品已新建，现在可以上传图片。",
+    ms: "Produk dicipta. Anda kini boleh memuat naik imej.",
   },
   "admin.product_invalid": {
     en: "Check the values: names up to 200 characters, descriptions up to 5,000, option and value names up to 100; English names are required for a new product and for new options and values, with no duplicates; prices RM0.00–RM500,000.00; daily initial stock 0–9,999; limit per order 1–1000; each SKU a different combination; up to 3 options, 20 values per option and 50 SKUs. To publish, the requirements above must also be met.",
