@@ -442,6 +442,23 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-categories__save > [role="status"] { padding: 10px 12px; }
 .site-admin-categories__changed { display: grid; gap: 10px; justify-items: start; }
 
+/* 后台商品 A04（A04-desktop，SHOP-TASK-202）：没有点 common.edit 时列表占满一栏；点了之后列表为左边 280px 一栏、编辑区占其余
+   （间距 24px，顶端对齐；读取中编辑区的位置不显示内容）。列表一栏的标题与表格上下排列（间距 12px）；表格可横向滚动，每行第一格为商品名称
+   与其下的分类名称；手机卡片与 common.back 在桌面不显示。编辑区为一张面板（内边距 20px，各项间距 18px）。
+   视觉稿的字号、字重 site.css 写不了，记在任务记录的偏离里 */
+.site-admin-products { display: grid; grid-template-columns: minmax(0, 1fr); column-gap: 24px; row-gap: 16px; align-items: start; }
+.site-admin-products--editing { grid-template-columns: 280px minmax(0, 1fr); }
+.site-admin-products__list, .site-admin-products__body { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.site-admin-products__table { overflow-x: auto; }
+.site-admin-products__names { display: grid; }
+.site-admin-products__cards { display: none; margin: 0; padding: 0; list-style: none; }
+.site-admin-products__card { display: flex; gap: 10px; align-items: center; width: 100%; min-height: 44px; padding: 12px 14px; text-align: left; cursor: pointer; }
+.site-admin-products__card-name { flex-grow: 1; min-width: 0; overflow-wrap: anywhere; }
+.site-admin-products__chevron { display: grid; place-items: center; flex-shrink: 0; width: 44px; height: 44px; }
+.site-admin-products__back { display: none; }
+.site-admin-products__editor { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.site-admin-products__form { display: grid; gap: 18px; padding: 20px; min-width: 0; }
+
 /* A07 的每日结果（A07-desktop）：表格在可横向滚动的面板里，SKU 数靠右；每天的展开处在该日下方另起一行（单元格不留内边距，
    details 内边距 8px 12px，明细表与 summary 间距 6px）；卡片不显示，翻页按钮靠右。summary 的字重、明细的字号 site.css 写不了，
    记在 docs/TODO.md 的偏离里 */
@@ -1016,6 +1033,18 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-categories__enabled input { width: 20px; height: 20px; }
   .site-admin-categories__save > .acs-admin__btn { justify-self: stretch; justify-content: center; min-height: 44px; }
   .site-admin-categories__changed .acs-admin__btn { min-height: 44px; }
+
+  /* 后台商品 A04（A04-phone-edit）：一栏，各项间距 14px；表格不显示，每件商品一张卡片（内边距 12px 14px，间距 10px，› 区域 44×44）。
+     点了 common.edit 之后（读取中、读取失败与打开后）隐藏列表一栏，编辑区上方为页内的 common.back（至少 44px 高，靠左；视觉稿画在顶栏，
+     HANDOFF 0.82 改在页内）。编辑区各项间距 14px、内边距 14px */
+  .site-admin-products, .site-admin-products--editing { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .site-admin-products__list, .site-admin-products__body { gap: 14px; }
+  .site-admin-products__table { display: none; }
+  .site-admin-products__cards { display: grid; gap: 14px; }
+  .site-admin-products--editing > .site-admin-products__list { display: none; }
+  .site-admin-products__editor { gap: 14px; }
+  .site-admin-products__back { display: block; justify-self: start; min-height: 44px; }
+  .site-admin-products__form { gap: 14px; padding: 14px; }
 
   /* A07 的每日结果（A07-phone）：表格不显示、卡片显示（间距 10px，卡片内边距 12px，各项间距 8px，第一行日期与结果标签两端对齐、可换行），
      展开处在卡片里（summary 至少 32px 高，每个 SKU 一项、SKU 与 breakdown 上下排列、间距 2px、上下内边距 6px）；翻页按钮居中、至少 44×44。
