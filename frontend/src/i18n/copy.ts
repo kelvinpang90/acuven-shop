@@ -2240,6 +2240,21 @@ export const COPY = {
     zh: "商品、规格名、规格值与 SKU 不能删除（订单会引用它们）。不再卖的商品请下架，SKU 请停用。",
     ms: "Produk, pilihan, nilai dan SKU tidak boleh dipadam kerana pesanan merujuknya. Nyahterbitkan produk atau nyahaktifkan SKU sebagai ganti.",
   },
+  "admin.product_saved": {
+    en: "Saved. New quotes and orders use these values.",
+    zh: "已保存，之后的计价与下单按新值执行。",
+    ms: "Disimpan. Sebut harga dan pesanan baharu menggunakan nilai ini.",
+  },
+  "admin.product_invalid": {
+    en: "Check the values: names up to 200 characters, descriptions up to 5,000, option and value names up to 100; English names are required for a new product and for new options and values, with no duplicates; prices RM0.00–RM500,000.00; daily initial stock 0–9,999; limit per order 1–1000; each SKU a different combination; up to 3 options, 20 values per option and 50 SKUs. To publish, the requirements above must also be met.",
+    zh: "请检查：名称不超过 200 个字符，描述不超过 5,000 个字符，规格名与规格值的名称不超过 100 个字符；新建商品与新增的规格名、规格值须有英文名称且不重复；价格 RM0.00 到 RM500,000.00；每日初始库存 0 到 9,999；每单限购 1 到 1000；每个 SKU 的规格组合不同；至多 3 个规格名、每个规格名 20 个值、50 个 SKU。上架还须满足上面的条件。",
+    ms: "Semak nilai: nama sehingga 200 aksara, penerangan sehingga 5,000, nama pilihan dan nilai sehingga 100; nama bahasa Inggeris diperlukan untuk produk baharu serta pilihan dan nilai baharu, tanpa pendua; harga RM0.00–RM500,000.00; stok awal harian 0–9,999; had setiap pesanan 1–1000; setiap SKU gabungan yang berbeza; sehingga 3 pilihan, 20 nilai setiap pilihan dan 50 SKU. Untuk diterbitkan, syarat di atas juga mesti dipenuhi.",
+  },
+  "admin.product_changed": {
+    en: "This product was changed elsewhere. Reload to see the latest version. Your unsaved changes will be lost.",
+    zh: "此商品已在别处修改，请重新读取最新版本，未保存的修改会丢失。",
+    ms: "Produk ini telah diubah di tempat lain. Muat semula untuk melihat versi terkini. Perubahan yang belum disimpan akan hilang.",
+  },
   "admin.nav_stock_resets": {
     en: "Stock resets",
     zh: "库存重置",

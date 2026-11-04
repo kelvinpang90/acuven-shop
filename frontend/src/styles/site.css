@@ -495,6 +495,12 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-products__limit-field { display: flex; gap: 12px; align-items: center; }
 .site-admin-products__limit-field .acs-admin__input { box-sizing: border-box; width: 90px; }
 .site-admin-products__notes { display: grid; gap: 6px; padding: 10px 12px; }
+/* A04 的保存（A04-desktop 与 A04-states，SHOP-TASK-204）：common.save 靠左，其下为保存结果（间距 10px；成功的提示内边距 10px 12px）；
+   「商品已被改动」的提示里文字与 admin.reload 上下排列（间距 10px，靠左） */
+.site-admin-products__save { display: grid; gap: 10px; }
+.site-admin-products__save > .acs-admin__btn { justify-self: start; }
+.site-admin-products__save > [role="status"] { padding: 10px 12px; }
+.site-admin-products__changed { display: grid; gap: 10px; justify-items: start; }
 
 /* A07 的每日结果（A07-desktop）：表格在可横向滚动的面板里，SKU 数靠右；每天的展开处在该日下方另起一行（单元格不留内边距，
    details 内边距 8px 12px，明细表与 summary 间距 6px）；卡片不显示，翻页按钮靠右。summary 的字重、明细的字号 site.css 写不了，
@@ -1105,6 +1111,9 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-products__sku-cards { display: grid; gap: 14px; }
   .site-admin-products__limit-field { display: grid; gap: 6px; }
   .site-admin-products__limit-field .acs-admin__input { min-height: 44px; }
+  /* 保存（A04-phone-edit，SHOP-TASK-204）：common.save 占满宽度、文字居中、至少 44px 高；admin.reload 至少 44px 高 */
+  .site-admin-products__save > .acs-admin__btn { justify-self: stretch; justify-content: center; min-height: 44px; }
+  .site-admin-products__changed .acs-admin__btn { min-height: 44px; }
 
   /* A07 的每日结果（A07-phone）：表格不显示、卡片显示（间距 10px，卡片内边距 12px，各项间距 8px，第一行日期与结果标签两端对齐、可换行），
      展开处在卡片里（summary 至少 32px 高，每个 SKU 一项、SKU 与 breakdown 上下排列、间距 2px、上下内边距 6px）；翻页按钮居中、至少 44×44。
