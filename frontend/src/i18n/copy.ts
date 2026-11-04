@@ -2225,6 +2225,11 @@ export const COPY = {
     zh: "规格值",
     ms: "Nilai pilihan",
   },
+  "admin.add_value": {
+    en: "Add value",
+    zh: "新增规格值",
+    ms: "Tambah nilai",
+  },
   "admin.options_fixed_note": {
     en: "Options can't be added or removed after the product is created. To change them, create a new product and unpublish this one.",
     zh: "规格名在新建商品后不能增减。要换规格，请新建商品并把此商品下架。",
@@ -2234,6 +2239,16 @@ export const COPY = {
     en: "Enabled",
     zh: "启用",
     ms: "Aktif",
+  },
+  "admin.sku_code_on_save": {
+    en: "Code created on save",
+    zh: "保存时生成代码",
+    ms: "Kod dicipta semasa simpan",
+  },
+  "admin.add_sku": {
+    en: "Add SKU",
+    zh: "新增 SKU",
+    ms: "Tambah SKU",
   },
   "admin.no_delete_note": {
     en: "Products, options, values and SKUs can't be deleted because orders refer to them. Unpublish a product or disable a SKU instead.",

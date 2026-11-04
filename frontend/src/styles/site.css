@@ -501,6 +501,17 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-products__save > .acs-admin__btn { justify-self: start; }
 .site-admin-products__save > [role="status"] { padding: 10px 12px; }
 .site-admin-products__changed { display: grid; gap: 10px; justify-items: start; }
+/* A04 的新增规格值与 SKU（A04-desktop，SHOP-TASK-205）：新增的值为输入框与其右的 (✗)（间距 4px）；(✗) 为 32px 宽、图标居中、没有内边距；
+   admin.add_value 接在该规格名的值之后。SKU 表格与其下靠左的 admin.add_sku 上下排列（间距 10px）；新增行的规格值下拉框各 96px 宽、间距 6px，
+   SKU 代码一格为 admin.sku_code_on_save。手机的卡片与其下的 admin.add_sku 在桌面不显示 */
+.site-admin-products__new-value { display: inline-flex; gap: 4px; align-items: center; }
+.site-admin-products__remove { display: inline-flex; justify-content: center; align-items: center; box-sizing: border-box; width: 32px; min-width: 32px; padding: 0; }
+.site-admin-products__sku-table { display: grid; gap: 10px; min-width: 0; }
+.site-admin-products__sku-table > .site-admin-products__add-sku { justify-self: start; }
+.site-admin-products__choices { display: flex; gap: 6px; }
+.site-admin-products__choices .acs-admin__select { box-sizing: border-box; width: 96px; }
+.site-admin-products__new-head { align-items: center; }
+.site-admin-products__sku-list { display: none; }
 
 /* A07 的每日结果（A07-desktop）：表格在可横向滚动的面板里，SKU 数靠右；每天的展开处在该日下方另起一行（单元格不留内边距，
    details 内边距 8px 12px，明细表与 summary 间距 6px）；卡片不显示，翻页按钮靠右。summary 的字重、明细的字号 site.css 写不了，
@@ -1114,6 +1125,16 @@ a.site-admin-refunds__clear { text-decoration: none; }
   /* 保存（A04-phone-edit，SHOP-TASK-204）：common.save 占满宽度、文字居中、至少 44px 高；admin.reload 至少 44px 高 */
   .site-admin-products__save > .acs-admin__btn { justify-self: stretch; justify-content: center; min-height: 44px; }
   .site-admin-products__changed .acs-admin__btn { min-height: 44px; }
+  /* 新增规格值与 SKU（A04-phone-edit，SHOP-TASK-205）：(✗) 为 44px 宽、至少 44px 高；admin.add_value 在值之下占满宽度、文字居中、至少 44px 高；
+     表格与其下的 admin.add_sku 不显示，卡片与其下的 admin.add_sku 显示（间距 14px，按钮占满宽度、文字居中、至少 44px 高）；新增卡片的
+     第一行为 admin.sku_code_on_save 与 (✗)（两端对齐、垂直居中），规格值下拉框两栏（间距 8px，至少 44px 高） */
+  .site-admin-products__remove { width: 44px; min-width: 44px; min-height: 44px; }
+  .site-admin-products__add-value { justify-content: center; min-height: 44px; }
+  .site-admin-products__sku-table { display: none; }
+  .site-admin-products__sku-list { display: grid; gap: 14px; }
+  .site-admin-products__sku-list > .site-admin-products__add-sku { justify-content: center; min-height: 44px; }
+  .site-admin-products__choices { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+  .site-admin-products__choices .acs-admin__select { width: auto; min-width: 0; min-height: 44px; }
 
   /* A07 的每日结果（A07-phone）：表格不显示、卡片显示（间距 10px，卡片内边距 12px，各项间距 8px，第一行日期与结果标签两端对齐、可换行），
      展开处在卡片里（summary 至少 32px 高，每个 SKU 一项、SKU 与 breakdown 上下排列、间距 2px、上下内边距 6px）；翻页按钮居中、至少 44×44。

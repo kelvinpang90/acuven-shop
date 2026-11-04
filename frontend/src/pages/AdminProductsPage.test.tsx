@@ -13,7 +13,11 @@ import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { ADMIN_PRODUCTS_PATH, RouterProvider } from "../router";
 import type { RoutePath } from "../router";
 import {
+  addSku,
+  addValue,
   AdminProductsView,
+  canAddSku,
+  canAddValue,
   categoryChoices,
   categoryName,
   categoryUnavailable,
@@ -28,6 +32,7 @@ import {
   changeValueName,
   changeVariantActive,
   chooseContent,
+  chooseValue,
   closeEditing,
   editorOf,
   formOf,
@@ -36,6 +41,9 @@ import {
   limitCount,
   localName,
   LOADING,
+  MAX_VALUES,
+  MAX_VARIANTS,
+  newSkuRows,
   openProduct,
   openProducts,
   priceSen,
@@ -45,11 +53,14 @@ import {
   publishReady,
   readStep,
   reloadProducts,
+  removeSku,
+  removeValue,
   rereadStep,
   savedItem,
   saveInput,
   saveStep,
   settleEditing,
+  showsAddSku,
   skuRows,
   startEditing,
   startSaving,
@@ -57,6 +68,8 @@ import {
   submitProduct,
   texts,
   translationMissing,
+  valueChoices,
+  valueRemovable,
   variantText,
 } from "./AdminProductsPage";
 import type { AdminProductsViewProps, Editing, OpenEditor, ProductForm, ProductsMoves, ProductsState, SaveNotice } from "./AdminProductsPage";
@@ -246,6 +259,11 @@ const HANDLERS: Omit<AdminProductsViewProps, "state"> = {
   onPrice: () => undefined,
   onStock: () => undefined,
   onVariantActive: () => undefined,
+  onAddValue: () => undefined,
+  onRemoveValue: () => undefined,
+  onAddSku: () => undefined,
+  onRemoveSku: () => undefined,
+  onChooseValue: () => undefined,
   onSave: () => undefined,
   onReload: () => undefined,
 };
@@ -1154,7 +1172,10 @@ describe("AdminProductsPage", () => {
   // 不显示去掉的按钮；不显示 common.create、图片区与当日库存调整的按钮」：说明按视觉稿顺序都在；每个规格名一行（admin.option_name、
   // admin.option_values 与读屏标签 admin.option_value 的规格值输入框）；编辑区里的按钮只有内容语言三个与（SHOP-TASK-204 起）最后的
   // common.save（UX A04 线框最后一行「( [common.save] )」），没有图片。
-  it.each(LANGUAGES)("shows the standing notes and no buttons beyond the content languages and common.save in %s", (language) => {
+  // SHOP-TASK-205 改动：UX A04 线框「[admin.option_values] [<值>__] [<值>__] ( [admin.add_value] )」「( [admin.add_sku] )」，每个规格名的值后多了
+  // admin.add_value、SKU 区下方多了 admin.add_sku（桌面与手机各一个），原来「只有内容语言与保存」的按钮断言与规格区的文字顺序因此失效；改为文字顺序
+  // 含 admin.add_value，按钮依次为内容语言三个、两个 admin.add_value、两个 admin.add_sku 与 common.save，仍没有 (✗)（没有新增行）。
+  it.each(LANGUAGES)("shows the standing notes and no buttons beyond the content languages, the add buttons and common.save in %s", (language) => {
     const html = form(render(opened(editorOf(3, SHIRT)), language));
     const nodes = textNodes(html);
     const notes = (
@@ -1175,13 +1196,24 @@ describe("AdminProductsPage", () => {
       COPY["admin.product_options"][language],
       COPY["admin.option_name"][language],
       COPY["admin.option_values"][language],
+      COPY["admin.add_value"][language],
       COPY["admin.option_name"][language],
       COPY["admin.option_values"][language],
+      COPY["admin.add_value"][language],
       COPY["admin.options_fixed_note"][language],
     ]);
     expect(tags(options, "input").filter((tag) => attributes(tag).get("aria-label") === COPY["admin.option_value"][language])).toHaveLength(4);
-    expect(tags(html, "button").map((tag) => attributes(tag).get("aria-pressed"))).toEqual(["true", "false", "false", undefined]);
-    expect(attributes(tags(html, "button")[3] ?? "").get("type")).toBe("submit");
+    const buttons = tags(html, "button");
+    expect(buttons.map((tag) => attributes(tag).get("aria-pressed"))).toEqual(["true", "false", "false", undefined, undefined, undefined, undefined, undefined]);
+    expect(buttons.slice(3).map((tag) => classes(tag).find((name) => name.startsWith("site-admin-products__add-")))).toEqual([
+      "site-admin-products__add-value",
+      "site-admin-products__add-value",
+      "site-admin-products__add-sku",
+      "site-admin-products__add-sku",
+      undefined,
+    ]);
+    expect(attributes(buttons[7] ?? "").get("type")).toBe("submit");
+    expect(html).not.toContain(`aria-label="${escapeHtml(COPY["admin.remove"][language])}"`);
     expect(nodes[nodes.length - 1]).toBe(COPY["common.save"][language]);
     expect(html).not.toMatch(/<img\b/);
     expect(tags(html, "input").filter((tag) => attributes(tag).get("type") === "file")).toEqual([]);
@@ -1569,5 +1601,391 @@ describe("AdminProductsPage", () => {
     expect(attributes(busy).has("disabled")).toBe(true);
     expect(attributes(busy).get("aria-busy")).toBe("true");
     expect(textNodes(area)).toEqual([COPY["common.save"].en]);
+  });
+
+  // ---- SHOP-TASK-205 新增规格值与 SKU ----
+
+  // 已有商品 SHIRT 上：Colour 新增 Olive（v1，位置 2）与 Sand（v2，位置 3），一行新增 SKU（s1，位置 3）选 Olive / L，价格与库存未填。
+  const withNewRows = (): OpenEditor => {
+    let editor = addValue(addValue(editorOf(3, SHIRT), 0), 0);
+    editor = changeValueName(editor, 0, 2, "Olive");
+    editor = changeValueName(editor, 0, 3, "Sand");
+    editor = addSku(editor);
+    return chooseValue(chooseValue(editor, 3, 0, "v1"), 3, 1, "34");
+  };
+
+  // class 含 className 的按钮（开始标签）。
+  const buttonsOf = (html: string, className: string): string[] => tags(html, "button").filter((tag) => classes(tag).includes(className));
+
+  // UX A04「规格」「每个规格名 1–20 个值，[admin.add_value] 达 20 个后禁用」与本任务验收「每个规格名的值后为 admin.add_value，该规格名下已有的与新增的值
+  // 合计达 20 个时禁用」：Colour 已有 2 个，新增到 19 个时两个 admin.add_value 都可用；第 20 个之后 Colour 的禁用、再加不变，Size 的不受影响。
+  it("disables admin.add_value at 20 values per option", () => {
+    let editor = editorOf(3, SHIRT);
+    for (let count = 2; count < MAX_VALUES - 1; count += 1) {
+      editor = addValue(editor, 0);
+    }
+    expect(editor.form.options[0]?.values).toHaveLength(19);
+    const disabled = (e: OpenEditor) => buttonsOf(form(render(opened(e))), "site-admin-products__add-value").map((tag) => attributes(tag).has("disabled"));
+    expect(disabled(editor)).toEqual([false, false]);
+    const full = addValue(editor, 0);
+    expect(MAX_VALUES).toBe(20);
+    expect(full.form.options[0]?.values).toHaveLength(20);
+    expect(full.form.options.map(canAddValue)).toEqual([false, true]);
+    expect(disabled(full)).toEqual([true, false]);
+    expect(addValue(full, 0)).toBe(full);
+  });
+
+  // UX A04「SKU」「一件商品至多 50 个 SKU，达到后按钮禁用」与本任务验收「该商品已有的与新增的 SKU 合计达 50 个时禁用」：已有 3 个，新增到 49 个时
+  // 桌面与手机的 admin.add_sku 都可用；第 50 个之后都禁用、再加不变。
+  it("disables admin.add_sku at 50 SKUs", () => {
+    let editor = editorOf(3, SHIRT);
+    for (let count = 3; count < MAX_VARIANTS - 1; count += 1) {
+      editor = addSku(editor);
+    }
+    expect(editor.form.variants).toHaveLength(49);
+    const disabled = (e: OpenEditor) => buttonsOf(form(render(opened(e))), "site-admin-products__add-sku").map((tag) => attributes(tag).has("disabled"));
+    expect(disabled(editor)).toEqual([false, false]);
+    const full = addSku(editor);
+    expect(MAX_VARIANTS).toBe(50);
+    expect(full.form.variants).toHaveLength(50);
+    expect(canAddSku(full.form)).toBe(false);
+    expect(disabled(full)).toEqual([true, true]);
+    expect(addSku(full)).toBe(full);
+  });
+
+  // UX A04「SKU」「没有规格名的商品固定一个 SKU，不显示 [admin.add_sku]」与本任务验收「没有规格名的商品不显示」：没有规格名的商品既没有 admin.add_sku
+  // 按钮也没有它的文字，addSku 不变；有规格名的商品桌面与手机各一个。
+  it.each(LANGUAGES)("hides admin.add_sku for a product without options in %s", (language) => {
+    const single = editorOf(3, TEE_PRODUCT);
+    expect(showsAddSku(single.form)).toBe(false);
+    expect(canAddSku(single.form)).toBe(false);
+    expect(addSku(single)).toBe(single);
+    const html = form(render(opened(single), language));
+    expect(buttonsOf(html, "site-admin-products__add-sku")).toEqual([]);
+    expect(textNodes(html)).not.toContain(COPY["admin.add_sku"][language]);
+    const shirt = textNodes(form(render(opened(editorOf(3, SHIRT)), language)));
+    expect(shirt.filter((text) => text === COPY["admin.add_sku"][language])).toHaveLength(2);
+  });
+
+  // HANDOFF 0.82 第（4）点「新增 SKU 的规格值下拉框首项为空选项、默认选它」与本任务 purpose「每个规格名一个下拉框（读屏标签 admin.option_value；首项为值与
+  // 文字都为空的空选项，默认选它；其余为该规格名下已有的与本次新增的值，文字按后台界面语言、缺译回退英文，都为空时为空文字）」：中文界面下 Colour 为
+  // 空选项、黑色、Navy（缺中文回退英文）、新增的 Olive（只有英文）与名称全空的新增值（空文字），Size 为空选项、中、L；桌面与手机都默认选空选项。
+  it("lists an empty choice first, then existing and new values", () => {
+    let editor = addValue(addValue(editorOf(3, SHIRT), 0), 0);
+    editor = changeValueName(editor, 0, 2, "Olive");
+    editor = addSku(editor);
+    const colour = [
+      ["", "", true],
+      ["31", "黑色", false],
+      ["32", "Navy", false],
+      ["v1", "Olive", false],
+      ["v2", "", false],
+    ];
+    const size = [
+      ["", "", true],
+      ["33", "中", false],
+      ["34", "L", false],
+    ];
+    expect(newSkuRows(editor, "zh")).toEqual([
+      {
+        index: 3,
+        form: editor.form.variants[3],
+        selects: [colour, size].map((choices) => ({ choices: choices.map(([value, label]) => ({ value, label })), selected: "" })),
+      },
+    ]);
+    const sizeOption = editor.form.options[1];
+    expect(sizeOption === undefined ? null : valueChoices(sizeOption, "ms")).toEqual([
+      { value: "", label: "" },
+      { value: "33", label: "Sederhana" },
+      { value: "34", label: "L" },
+    ]);
+    const html = form(render(opened(editor), "zh"));
+    for (const part of [element(html, "div", "site-admin-products__skus"), element(html, "ul", "site-admin-products__sku-cards")]) {
+      const selects = [...part.matchAll(/<select\b[^>]*>[\s\S]*?<\/select>/g)].map((m) => m[0]);
+      expect(selects.map((select) => attributes(tags(select, "select")[0] ?? "").get("aria-label"))).toEqual([COPY["admin.option_value"].zh, COPY["admin.option_value"].zh]);
+      expect(selects.map(selectOptions)).toEqual([colour, size]);
+    }
+    const chosen = form(render(opened(chooseValue(editor, 3, 0, "v1")), "zh"));
+    const first = /<select\b[^>]*>[\s\S]*?<\/select>/.exec(element(chosen, "div", "site-admin-products__skus"))?.[0] ?? "";
+    expect(selectOptions(first).filter(([, , selected]) => selected).map(([value]) => value)).toEqual(["v1"]);
+  });
+
+  // UX A04「规格」「本次新增、还没保存的规格值与 SKU 可用 (✗) 去掉…被本次新增的 SKU 选用的规格值…的 (✗) 禁用，先去掉或改选那些 SKU」、视觉稿 A04-desktop
+  // 的标注「被新 SKU 选用的规格值（此例 Olive）的 (✕) 禁用…未被选用的（此例 Sand）可去掉」与 HANDOFF 0.82 第（4）点「A04 的 (✗) 没有专用读屏标签，
+  // 沿用 A06 的 admin.remove」：已有的值没有 (✗)；被新增 SKU 选用的 Olive 禁用、Sand 可去掉；改选或去掉那行 SKU 后 Olive 也可去掉；
+  // 新增 SKU 的 (✗) 在桌面末行与手机卡片各一个、可用，已有 SKU 不能去掉。
+  it.each(LANGUAGES)("disables (✗) on new values chosen by a new SKU in %s", (language) => {
+    const editor = withNewRows();
+    expect([0, 1, 2, 3].map((index) => valueRemovable(editor.form, 0, index))).toEqual([false, false, false, true]);
+    expect([0, 1].map((index) => valueRemovable(editor.form, 1, index))).toEqual([false, false]);
+    const html = form(render(opened(editor), language));
+    const removes = (part: string) => buttonsOf(part, "site-admin-products__remove").map((tag) => [attributes(tag).get("aria-label"), attributes(tag).get("type"), attributes(tag).has("disabled")]);
+    const label = COPY["admin.remove"][language];
+    expect(removes(element(html, "div", "site-admin-products__options"))).toEqual([
+      [label, "button", true],
+      [label, "button", false],
+    ]);
+    expect(removes(element(html, "div", "site-admin-products__skus"))).toEqual([[label, "button", false]]);
+    expect(removes(element(html, "ul", "site-admin-products__sku-cards"))).toEqual([[label, "button", false]]);
+    const names = (e: OpenEditor) => e.form.options[0]?.values.map((value) => value.names.en);
+    expect(removeValue(editor, 0, 2)).toBe(editor);
+    expect(removeValue(editor, 0, 0)).toBe(editor);
+    expect(names(removeValue(editor, 0, 3))).toEqual(["Black", "Navy", "Olive"]);
+    const unchosen = chooseValue(editor, 3, 0, "");
+    expect(valueRemovable(unchosen.form, 0, 2)).toBe(true);
+    expect(names(removeValue(unchosen, 0, 2))).toEqual(["Black", "Navy", "Sand"]);
+    const dropped = removeSku(editor, 3);
+    expect(dropped.form.variants).toHaveLength(3);
+    expect(valueRemovable(dropped.form, 0, 2)).toBe(true);
+    expect(removeSku(editor, 0)).toBe(editor);
+    expect(chooseValue(editor, 0, 0, "32")).toBe(editor);
+  });
+
+  // 本任务 purpose「新增 SKU 一行为每个规格名一个下拉框…、admin.sku_code_on_save、价格与每日初始库存输入框（初值空串）、admin.sku_enabled 勾选框（默认勾选）、
+  // 当日可用库存显示 —、(✗)」与验收「桌面在表格末尾、手机为一张卡片」「已有 SKU 的规格值组合仍只显示、不能改」：新增行排在三个已有行之后，已有行仍没有下拉框；
+  // 表格多一列（列头为空）；手机卡片同样排在最后，为 admin.sku_code_on_save 与 (✗)、两个下拉框、价格与库存、启用与当日可用库存 —。
+  it.each(LANGUAGES)("renders a new SKU at the end of the table and as a card in %s", (language) => {
+    const editor = addSku(editorOf(3, SHIRT));
+    expect(editor.form.variants[3]).toEqual({ tempId: "s1", choices: ["", ""], price: "", stock: "", isActive: true });
+    const html = form(render(opened(editor), language));
+    const withoutSelects = (part: string) => textNodes(part.replace(/<select\b[\s\S]*?<\/select>/g, ""));
+    const table = element(html, "div", "site-admin-products__skus");
+    const thead = /<thead>[\s\S]*<\/thead>/.exec(table)?.[0] ?? "";
+    expect(tags(thead, "th")).toHaveLength(7);
+    expect(textNodes(thead)).toHaveLength(6);
+    const rows = [...(/<tbody>([\s\S]*)<\/tbody>/.exec(table)?.[1] ?? "").matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map((m) => m[1] ?? "");
+    expect(rows).toHaveLength(4);
+    expect(rows.slice(0, 3).map((row) => tags(row, "select"))).toEqual([[], [], []]);
+    const last = rows[3] ?? "";
+    expect(withoutSelects(last)).toEqual([COPY["admin.sku_code_on_save"][language], "—"]);
+    expect(tags(last, "select")).toHaveLength(2);
+    expect(tags(last, "input").map((tag) => [attributes(tag).get("aria-label"), attributes(tag).get("value") ?? attributes(tag).has("checked")])).toEqual([
+      [COPY["admin.price"][language], ""],
+      [COPY["admin.initial_stock"][language], ""],
+      [COPY["admin.sku_enabled"][language], true],
+    ]);
+    const cards = [...element(html, "ul", "site-admin-products__sku-cards").matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1] ?? "");
+    expect(cards).toHaveLength(4);
+    const card = cards[3] ?? "";
+    expect(withoutSelects(card)).toEqual([
+      COPY["admin.sku_code_on_save"][language],
+      COPY["admin.price"][language],
+      COPY["admin.initial_stock"][language],
+      COPY["admin.sku_enabled"][language],
+      COPY["admin.available_today"][language],
+      "—",
+    ]);
+    expect(tags(card, "select")).toHaveLength(2);
+    expect(tags(card, "input").map((tag) => attributes(tag).get("value") ?? attributes(tag).has("checked"))).toEqual(["", "", true]);
+  });
+
+  // 本任务验收「缺译提示（admin.translation_missing）把新增的值也算进去」与 purpose「新增规格值为一组三语名称（随内容语言显示该语言的输入框，读屏标签
+  // admin.option_value）」：三语齐全的商品在中文内容语言下新增一个值即有缺译提示，填了中文后没有、换到马来文又有；新增值的输入框显示内容语言的名称。
+  it("counts new values in the translation notice", () => {
+    const full = chooseContent(editorOf(3, FULL), "zh");
+    expect(translationMissing(full)).toBe(false);
+    const added = addValue(full, 0);
+    expect(translationMissing(added)).toBe(true);
+    const named = changeValueName(added, 0, 2, "橄榄");
+    expect(translationMissing(named)).toBe(false);
+    expect(translationMissing(chooseContent(named, "ms"))).toBe(true);
+    const html = form(render(opened(named)));
+    const input = tags(element(html, "span", "site-admin-products__new-value"), "input").map((tag) => [
+      attributes(tag).get("aria-label"),
+      attributes(tag).get("value"),
+      attributes(tag).get("lang"),
+    ]);
+    expect(input).toEqual([[COPY["admin.option_value"].en, "橄榄", "zh-Hans"]]);
+  });
+
+  // 本任务 purpose「新增 SKU 任一规格名未选值时页面先查拦下、显示 admin.product_invalid；新增规格值的英文名称是否为空与重复、组合是否重复由服务端判断」与验收
+  // 「页面先查扩展到新增 SKU（价格、每日初始库存的格式与范围；任一规格名未选值即不合格；上架时启用的 SKU 计入新增的）与新增规格值（上架时英文名称不为空）」：
+  // 未选值、价格或库存为空或超出范围时上架与下架都拦下；新增值英文名称为空只在上架时拦下，与已有值重名不拦；只有新增 SKU 启用时仍满足上架条件；
+  // 拦下时没有请求、显示 admin.product_invalid。
+  it("checks the new rows before submitting", async () => {
+    const filled = changeStock(changePrice(withNewRows(), 3, "39.00"), 3, "12");
+    expect(saveInput(filled.form, 4)).not.toBeNull();
+    const blocked: [string, OpenEditor][] = [
+      ["no colour", chooseValue(filled, 3, 0, "")],
+      ["no size", chooseValue(filled, 3, 1, "")],
+      ["empty price", changePrice(filled, 3, "")],
+      ["price over the cap", changePrice(filled, 3, "500000.01")],
+      ["empty stock", changeStock(filled, 3, "")],
+      ["stock over the cap", changeStock(filled, 3, "10000")],
+    ];
+    for (const [name, editor] of blocked) {
+      expect(saveInput(editor.form, 4), name).toBeNull();
+      expect(saveInput(changeActive(editor, false).form, 4), name).toBeNull();
+    }
+    const blankValue = changeValueName(filled, 0, 3, " ");
+    expect(publishReady(blankValue.form)).toBe(false);
+    expect(saveInput(blankValue.form, 4)).toBeNull();
+    expect(saveInput(changeActive(blankValue, false).form, 4)).not.toBeNull();
+    expect(saveInput(changeValueName(filled, 0, 3, "Black").form, 4)).not.toBeNull();
+    const onlyNew = changeVariantActive(changeVariantActive(filled, 0, false), 2, false);
+    expect(publishReady(onlyNew.form)).toBe(true);
+    expect(publishReady(changeVariantActive(onlyNew, 3, false).form)).toBe(false);
+    const calls = stubFetch({});
+    const saving = startSaving(chooseValue(filled, 3, 1, ""));
+    const run = runner(opened(saving));
+    await submitProduct("csrf-1", saving, new AbortController().signal, run.moves);
+    expect(calls).toEqual([]);
+    expect(openOf(run.state)).toEqual({ ...saving, saving: false, notice: "admin.product_invalid" });
+    expect(textNodes(saveArea(render(run.state)))).toEqual([COPY["common.save"].en, COPY["admin.product_invalid"].en]);
+  });
+
+  // DESIGN 1.18 第 11 条「新增的规格值与 SKU 各带请求内的临时编号，按请求顺序排在已有的之后」、本任务验收「保存请求在已有的规格值之后按新增顺序写出新增规格值
+  // （temp_id 与三语名称），在已有的 SKU 之后按新增顺序写出新增 SKU（temp_id、option_values 按规格名的顺序，已有的值以 id、新增的值以 temp_id 引用，价格整仙、
+  // 每日初始库存与启用）」与 purpose「临时编号由页面按新增顺序生成、在一次请求里不重复（如规格值 v1、v2，SKU s1、s2）」：先加后去掉的值与 SKU 不进请求，
+  // 之后新增的编号继续递增；saveInput 与实际 PUT 的请求体相同，临时编号互不重复。
+  it("writes the new values and SKUs after the existing ones with unique temporary ids", async () => {
+    let editor = changeValueName(addValue(editorOf(3, SHIRT), 0), 0, 2, "Olive");
+    editor = changeValueName(chooseContent(addValue(editor, 1), "zh"), 1, 2, "特大");
+    editor = changeValueName(chooseContent(editor, "en"), 1, 2, "XL");
+    editor = removeValue(addValue(editor, 0), 0, 3);
+    editor = removeSku(addSku(addSku(editor)), 3);
+    editor = chooseValue(chooseValue(editor, 3, 0, "v1"), 3, 1, "34");
+    editor = changeStock(changePrice(editor, 3, "39"), 3, "12");
+    editor = addSku(editor);
+    editor = chooseValue(chooseValue(editor, 4, 0, "31"), 4, 1, "v2");
+    editor = changeVariantActive(changeStock(changePrice(editor, 4, "42.5"), 4, "0"), 4, false);
+    const expected = {
+      version: 4,
+      category_id: 1,
+      name_en: "Crew Neck Tee",
+      name_zh: "圆领T恤",
+      name_ms: "",
+      description_en: "A soft cotton tee.",
+      description_zh: "柔软的棉质T恤。",
+      description_ms: "",
+      is_active: true,
+      max_per_order: 10,
+      options: [
+        {
+          id: 21,
+          name_en: "Colour",
+          name_zh: "颜色",
+          name_ms: "Warna",
+          values: [
+            { id: 31, name_en: "Black", name_zh: "黑色", name_ms: "Hitam" },
+            { id: 32, name_en: "Navy", name_zh: "", name_ms: "" },
+            { temp_id: "v1", name_en: "Olive", name_zh: "", name_ms: "" },
+          ],
+        },
+        {
+          id: 22,
+          name_en: "Size",
+          name_zh: "尺码",
+          name_ms: "",
+          values: [
+            { id: 33, name_en: "M", name_zh: "中", name_ms: "Sederhana" },
+            { id: 34, name_en: "L", name_zh: "", name_ms: "" },
+            { temp_id: "v2", name_en: "XL", name_zh: "特大", name_ms: "" },
+          ],
+        },
+      ],
+      variants: [
+        { id: 41, price_sen: 3900, daily_initial_stock: 20, is_active: true },
+        { id: 42, price_sen: 0, daily_initial_stock: 0, is_active: false },
+        { id: 43, price_sen: 5, daily_initial_stock: 7, is_active: true },
+        { temp_id: "s2", option_values: [{ temp_id: "v1" }, { id: 34 }], price_sen: 3900, daily_initial_stock: 12, is_active: true },
+        { temp_id: "s3", option_values: [{ id: 31 }, { temp_id: "v2" }], price_sen: 4250, daily_initial_stock: 0, is_active: false },
+      ],
+    };
+    expect(saveInput(editor.form, 4)).toStrictEqual(expected);
+    const calls = stubFetch({ "/api/admin/products/3": [json(200, SHIRT)] });
+    const saving = startSaving(editor);
+    await submitProduct("csrf-1", saving, new AbortController().signal, runner(opened(saving)).moves);
+    expect(calls.map((call) => [call.url, call.init.method])).toEqual([["/api/admin/products/3", "PUT"]]);
+    expect(bodyOf(calls[0])).toStrictEqual(expected);
+    const declared = [...expected.options.flatMap((option) => option.values), ...expected.variants].flatMap((row) => ("temp_id" in row ? [row.temp_id] : []));
+    expect(declared).toEqual(["v1", "v2", "s2", "s3"]);
+    expect(new Set(declared).size).toBe(declared.length);
+  });
+
+  // 本任务 purpose「保存成功后以返回的商品为准（新增的变为已有的）」与验收「ok 时以返回的商品为准，新增行全部变为已有行」：返回的商品里 Olive 为 35、
+  // 新 SKU 为 44（当日可用库存等于每日初始库存 12，UX A04「SKU」）；编辑区照 editorOf 换成它，没有新增行、没有 (✗)、不算有修改，规格列与 SKU 代码取自返回的商品。
+  it("turns the new rows into existing ones after a successful save", async () => {
+    const olive: AdminOptionValue = { id: 35, code: "olive", name_en: "Olive", name_zh: null, name_ms: null };
+    const saved: AdminProduct = {
+      ...SHIRT,
+      version: 5,
+      options: [{ ...COLOUR, values: [BLACK, NAVY, olive] }, SIZE],
+      variants: [
+        ...SHIRT.variants,
+        { id: 44, sku: "crew-neck-tee-olive-l", price_sen: 3900, daily_initial_stock: 12, available_stock: 12, is_active: true, option_value_ids: [35, 34] },
+      ],
+    };
+    stubFetch({ "/api/admin/products/3": [json(200, saved)] });
+    const editor = startSaving(changeStock(changePrice(removeValue(withNewRows(), 0, 3), 3, "39.00"), 3, "12"));
+    const run = runner(opened(editor));
+    await submitProduct("csrf-1", editor, new AbortController().signal, run.moves);
+    const after = openOf(run.state);
+    expect(after).toEqual({ ...editorOf(3, saved), notice: "admin.product_saved" });
+    expect(isDirty(after)).toBe(false);
+    expect(newSkuRows(after, "en")).toEqual([]);
+    expect(after.form.options[0]?.values[2]).toEqual({ id: 35, names: { en: "Olive", zh: "", ms: "" } });
+    expect(skuRows(after, "en").map((row) => [row.sku, row.variant, row.available])[3]).toEqual(["crew-neck-tee-olive-l", "Olive / L", 12]);
+    const html = form(render(run.state));
+    expect(textNodes(html)).not.toContain(COPY["admin.sku_code_on_save"].en);
+    expect(buttonsOf(html, "site-admin-products__remove")).toEqual([]);
+  });
+
+  // 本任务验收「有任一新增规格值或新增 SKU 即为有未保存的修改（扩展 SHOP-TASK-203 的导出判定函数）；admin.reload 与切换商品丢弃新增行」：新增一个值或一行
+  // SKU 即算修改（切换内容语言后仍算），加了又去掉不算；重新读取（admin.reload 与打开商品都照 productStep）得到的编辑区没有新增行；点另一件商品的
+  // common.edit 后编辑区换成读取中，不再有修改。
+  it("counts new rows as unsaved changes and drops them on reload or switching", () => {
+    const base = editorOf(3, SHIRT);
+    expect(isDirty(addValue(base, 1))).toBe(true);
+    expect(isDirty(addSku(base))).toBe(true);
+    expect(isDirty(chooseContent(addSku(base), "zh"))).toBe(true);
+    expect(isDirty(removeValue(addValue(base, 1), 1, 2))).toBe(false);
+    expect(isDirty(removeSku(addSku(base), 3))).toBe(false);
+    const changed = withNewRows();
+    expect(isDirty(changed)).toBe(true);
+    const reread = productStep({ kind: "ok", product: SHIRT }, 3);
+    expect(reread).toEqual(editorOf(3, SHIRT));
+    expect(isDirty(reread === "login" ? null : reread)).toBe(false);
+    const switched = startEditing(opened(changed), 5);
+    expect(switched === null ? null : editingOf(switched)).toEqual({ status: "loading", id: 5 });
+    expect(isDirty(switched === null ? null : editingOf(switched))).toBe(false);
+  });
+
+  // 本任务验收「页面文字全部来自字典」：有新增规格值与新增 SKU（含中文内容语言与保存中）时，看得见或读得出的每段文字都是当前语言的字典文案，或商品数据本身
+  // （名称、描述、SKU 代码、规格列、当日可用库存、下拉框里的规格值名称与新增 SKU 当日可用库存的 —）。
+  it.each(LANGUAGES)("shows only dictionary text with new rows in %s", (language) => {
+    const allowed = dictionary(language);
+    allowed.add("—");
+    const editors = [withNewRows(), chooseContent(addSku(withNewRows()), "zh"), startSaving(withNewRows())];
+    for (const item of LISTED) {
+      allowed.add(productName(item, language));
+      allowed.add(categoryName(item, language));
+    }
+    for (const label of ["common.lang_zh", "common.lang_ms"] as const) {
+      allowed.add(COPY["admin.translation_missing"][language].replace("{language}", COPY[label][language]));
+    }
+    for (const editor of editors) {
+      allowed.add(editor.form.descriptions[editor.content]);
+      for (const choice of categoryChoices([APPAREL, BAGS], editor.product, TEE, language)) {
+        allowed.add(choice.label);
+      }
+      for (const row of skuRows(editor, language)) {
+        allowed.add(row.sku);
+        allowed.add(row.variant);
+        allowed.add(String(row.available));
+      }
+      for (const row of newSkuRows(editor, language)) {
+        for (const select of row.selects) {
+          for (const choice of select.choices) {
+            allowed.add(choice.label);
+          }
+        }
+      }
+    }
+    for (const editor of editors) {
+      for (const value of visibleTexts(renderSignedIn(language, opened(editor)))) {
+        expect(allowed.has(value), value).toBe(true);
+      }
+    }
   });
 });

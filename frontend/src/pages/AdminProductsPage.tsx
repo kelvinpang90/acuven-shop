@@ -10,11 +10,13 @@ import type {
   AdminVariant,
   ExistingVariant,
   Names,
+  NewVariant,
   ProductRead,
   ProductSave,
   ProductsRead,
   ProductWrite,
   SavedOption,
+  ValueRef,
 } from "../api/adminProducts";
 import AdminFrame, { AdminAlert, LANGUAGE_LABEL, useUnsavedConfirm } from "../components/AdminFrame";
 import { LANGUAGES } from "../i18n/copy";
@@ -36,7 +38,9 @@ import { feeSen, feeText } from "./AdminShippingPage";
 // （SHOP-TASK-197）接入离开确认。
 // 保存（SHOP-TASK-204，UX A04「一次保存」「上架」「保存结果」「上限提示」与 HANDOFF 0.82 第（3）点）：编辑区最后为 common.save，页面先查格式、
 // 范围与上架条件中请求里看得到的部分，价格按文字换成整仙后以 PUT /api/admin/products/{id} 一次提交全部可改内容；结果显示在 common.save 旁。
-// 新增规格值与 SKU、新建、图片与当日库存调整在 205 至 208。
+// 新增规格值与 SKU（SHOP-TASK-205，UX A04「规格」「SKU」与 HANDOFF 0.82 第（4）点）：每个规格名的值后为 admin.add_value，SKU 区下方为
+// admin.add_sku；新增的值与 SKU 排在已有的之后、各带页面生成的临时编号，随 common.save 一次提交，(✗) 去掉（读屏标签沿用 admin.remove）。
+// 新建、图片与当日库存调整在 206 至 208。
 
 // 三语名称（读取给的，可为 null）。
 export type ListNames = Readonly<Record<Language, string | null>>;
@@ -68,10 +72,19 @@ export interface ValueForm {
   names: Texts;
 }
 
+// 新增、还没保存的规格值（SHOP-TASK-205）：页面生成的临时编号（v1、v2…）与三语名称。
+export interface NewValueForm {
+  tempId: string;
+  names: Texts;
+}
+
+export type OptionValueForm = ValueForm | NewValueForm;
+
+// 规格名的值：已有的按接口顺序，新增的按新增顺序排在其后。
 export interface OptionForm {
   id: number;
   names: Texts;
-  values: readonly ValueForm[];
+  values: readonly OptionValueForm[];
 }
 
 export interface VariantForm {
@@ -81,7 +94,19 @@ export interface VariantForm {
   isActive: boolean;
 }
 
-// 编辑区的值：三语名称与描述、分类、上架、每单限购的原文、规格名（按接口顺序）与 SKU（按接口顺序）。
+// 新增、还没保存的 SKU（SHOP-TASK-205）：临时编号（s1、s2…）、按规格名顺序每个规格名所选的值（valueKey，未选为空串）、价格与每日初始库存的原文
+// 与启用状态。
+export interface NewVariantForm {
+  tempId: string;
+  choices: readonly string[];
+  price: string;
+  stock: string;
+  isActive: boolean;
+}
+
+export type SkuForm = VariantForm | NewVariantForm;
+
+// 编辑区的值：三语名称与描述、分类、上架、每单限购的原文、规格名（按接口顺序）与 SKU（已有的按接口顺序，新增的按新增顺序排在其后）。
 export interface ProductForm {
   names: Texts;
   descriptions: Texts;
@@ -89,7 +114,20 @@ export interface ProductForm {
   isActive: boolean;
   maxPerOrder: string;
   options: readonly OptionForm[];
-  variants: readonly VariantForm[];
+  variants: readonly SkuForm[];
+}
+
+export function isNewValue(value: OptionValueForm): value is NewValueForm {
+  return "tempId" in value;
+}
+
+export function isNewVariant(variant: SkuForm): variant is NewVariantForm {
+  return "tempId" in variant;
+}
+
+// 规格值在下拉框与新增 SKU 所选里的写法：已有的为 ID 的十进制，新增的为临时编号（以字母开头，与 ID 不会相同）。
+export function valueKey(value: OptionValueForm): string {
+  return isNewValue(value) ? value.tempId : String(value.id);
 }
 
 // 读取给的三语文案换成输入框的值：null 当作空串。
@@ -156,25 +194,33 @@ function sameTexts(a: Texts, b: Texts): boolean {
   return LANGUAGES.every((language) => a[language] === b[language]);
 }
 
+function sameValue(a: OptionValueForm, b: OptionValueForm | undefined): boolean {
+  return b !== undefined && isNewValue(a) === isNewValue(b) && valueKey(a) === valueKey(b) && sameTexts(a.names, b.names);
+}
+
 function sameOption(a: OptionForm, b: OptionForm | undefined): boolean {
   return (
     b !== undefined &&
     a.id === b.id &&
     sameTexts(a.names, b.names) &&
     a.values.length === b.values.length &&
-    a.values.every((value, index) => {
-      const other = b.values[index];
-      return other !== undefined && value.id === other.id && sameTexts(value.names, other.names);
-    })
+    a.values.every((value, index) => sameValue(value, b.values[index]))
   );
 }
 
-function sameVariant(a: VariantForm, b: VariantForm | undefined): boolean {
-  return b !== undefined && a.id === b.id && a.price === b.price && a.stock === b.stock && a.isActive === b.isActive;
+function sameRow(a: SkuForm, b: SkuForm | undefined): boolean {
+  if (b === undefined || a.price !== b.price || a.stock !== b.stock || a.isActive !== b.isActive) {
+    return false;
+  }
+  if (isNewVariant(a) || isNewVariant(b)) {
+    return isNewVariant(a) && isNewVariant(b) && a.tempId === b.tempId && a.choices.length === b.choices.length && a.choices.every((choice, index) => choice === b.choices[index]);
+  }
+  return a.id === b.id;
 }
 
 // 有未保存的修改：编辑区已取到，且三语名称与描述、分类、上架、每单限购、规格名与规格值的三语名称、各 SKU 的价格文字、
-// 每日初始库存文字与启用状态任一项与基线不同（改回原值不算）。切换内容语言不算修改；没有编辑区、读取中与读取失败时没有修改。
+// 每日初始库存文字与启用状态任一项与基线不同（改回原值不算），或有任一新增的规格值或 SKU（基线取自读取的商品，没有新增的，个数即不同；
+// SHOP-TASK-205）。切换内容语言不算修改；没有编辑区、读取中与读取失败时没有修改。
 export function isDirty(editing: Editing | null): boolean {
   if (editing === null || editing.status !== "ready") {
     return false;
@@ -189,11 +235,11 @@ export function isDirty(editing: Editing | null): boolean {
     form.options.length === base.options.length &&
     form.options.every((option, index) => sameOption(option, base.options[index])) &&
     form.variants.length === base.variants.length &&
-    form.variants.every((variant, index) => sameVariant(variant, base.variants[index]))
+    form.variants.every((variant, index) => sameRow(variant, base.variants[index]))
   );
 }
 
-// 缺译提示：内容语言为中文或马来文，且该语言的商品名称、描述或任一规格名、规格值的名称为空（去掉首尾空白后）；只显示一条。
+// 缺译提示：内容语言为中文或马来文，且该语言的商品名称、描述或任一规格名、规格值（含新增的）的名称为空（去掉首尾空白后）；只显示一条。
 export function translationMissing(editor: OpenEditor): boolean {
   const { content, form } = editor;
   if (content === "en") {
@@ -257,10 +303,79 @@ export interface SkuRow {
 
 export function skuRows(editor: OpenEditor, language: Language): SkuRow[] {
   return editor.form.variants.flatMap((form, index) => {
+    if (isNewVariant(form)) {
+      return [];
+    }
     const read = editor.product.variants.find((variant) => variant.id === form.id);
     return read === undefined ? [] : [{ index, form, sku: read.sku, variant: variantText(editor.product, read, language), available: read.available_stock }];
   });
 }
+
+// 新增 SKU 的规格值下拉框的一项：value 为 valueKey（空选项为空串），label 为显示的文字。
+export interface ValueChoice {
+  value: string;
+  label: string;
+}
+
+// 下拉框的选项（HANDOFF 0.82 第（4）点与本任务 purpose）：首项为值与文字都为空的空选项；其余为该规格名下已有的与本次新增的值（按 form 里的顺序），
+// 文字为已填的名称，按后台界面语言、缺译（空串）回退英文，都为空时为空文字。
+export function valueChoices(option: OptionForm, language: Language): ValueChoice[] {
+  return [
+    { value: "", label: "" },
+    ...option.values.map((value) => ({ value: valueKey(value), label: value.names[language] !== "" ? value.names[language] : value.names.en })),
+  ];
+}
+
+// 新增 SKU 一行（桌面表格末尾与手机卡片共用）：index 为在 form.variants 里的位置，selects 为每个规格名一个下拉框的选项与所选的值。
+export interface NewSkuRow {
+  index: number;
+  form: NewVariantForm;
+  selects: { choices: ValueChoice[]; selected: string }[];
+}
+
+export function newSkuRows(editor: OpenEditor, language: Language): NewSkuRow[] {
+  const { options, variants } = editor.form;
+  return variants.flatMap((form, index) =>
+    isNewVariant(form)
+      ? [{ index, form, selects: options.map((option, optionIndex) => ({ choices: valueChoices(option, language), selected: form.choices[optionIndex] ?? "" })) }]
+      : [],
+  );
+}
+
+// 每个规格名至多 20 个值、一件商品至多 50 个 SKU（UX A04「规格」「SKU」）；已有的与新增的合计。
+export const MAX_VALUES = 20;
+export const MAX_VARIANTS = 50;
+
+// admin.add_value 是否可用：该规格名下的值未达 20 个。
+export function canAddValue(option: OptionForm): boolean {
+  return option.values.length < MAX_VALUES;
+}
+
+// admin.add_sku：没有规格名的商品不显示；SKU 未达 50 个时可用。
+export function showsAddSku(form: ProductForm): boolean {
+  return form.options.length > 0;
+}
+
+export function canAddSku(form: ProductForm): boolean {
+  return showsAddSku(form) && form.variants.length < MAX_VARIANTS;
+}
+
+// 新增规格值的 (✗) 是否可用：是新增的值，且没有被任一新增 SKU 在该规格名下选用（UX A04「规格」）。已有的值没有 (✗)。
+export function valueRemovable(form: ProductForm, optionIndex: number, valueIndex: number): boolean {
+  const value = form.options[optionIndex]?.values[valueIndex];
+  return value !== undefined && isNewValue(value) && !form.variants.some((variant) => isNewVariant(variant) && variant.choices[optionIndex] === value.tempId);
+}
+
+// 临时编号：前缀加数字，取同一种新增里已用的最大数字加一（按新增顺序递增；去掉之后再新增也不会与请求里的重复）。
+function nextTempId(prefix: "v" | "s", used: readonly string[]): string {
+  return `${prefix}${String(Math.max(0, ...used.map((id) => Number(id.slice(1)))) + 1)}`;
+}
+
+function newValueIds(form: ProductForm): string[] {
+  return form.options.flatMap((option) => option.values.filter(isNewValue).map((value) => value.tempId));
+}
+
+const NO_TEXT: Texts = { en: "", zh: "", ms: "" };
 
 // 编辑区的改动：只换掉对应的一项，其余（含其他语言已填的值）不变；改任何输入都收起 common.save 旁的保存结果（含 403 后的提示）。
 function withForm(editor: OpenEditor, change: (form: ProductForm) => ProductForm): OpenEditor {
@@ -316,8 +431,8 @@ export function changeMaxPerOrder(editor: OpenEditor, text: string): OpenEditor 
   return withForm(editor, (form) => ({ ...form, maxPerOrder: text }));
 }
 
-// 改某个 SKU 的价格、每日初始库存（原文，保存时才查）与启用状态；index 为在 form.variants 里的位置。
-function withVariant(editor: OpenEditor, variantIndex: number, change: (row: VariantForm) => VariantForm): OpenEditor {
+// 改某个 SKU（已有的或新增的）的价格、每日初始库存（原文，保存时才查）与启用状态；index 为在 form.variants 里的位置。
+function withVariant(editor: OpenEditor, variantIndex: number, change: (row: SkuForm) => SkuForm): OpenEditor {
   return withForm(editor, (form) => ({ ...form, variants: form.variants.map((row, index) => (index === variantIndex ? change(row) : row)) }));
 }
 
@@ -331,6 +446,63 @@ export function changeStock(editor: OpenEditor, variantIndex: number, text: stri
 
 export function changeVariantActive(editor: OpenEditor, variantIndex: number, checked: boolean): OpenEditor {
   return withVariant(editor, variantIndex, (row) => ({ ...row, isActive: checked }));
+}
+
+// 点 admin.add_value：在该规格名的值之后加一个新增的值（三语名称为空串）。达 20 个时不变。
+export function addValue(editor: OpenEditor, optionIndex: number): OpenEditor {
+  const option = editor.form.options[optionIndex];
+  if (option === undefined || !canAddValue(option)) {
+    return editor;
+  }
+  const value: NewValueForm = { tempId: nextTempId("v", newValueIds(editor.form)), names: NO_TEXT };
+  return withForm(editor, (form) => ({
+    ...form,
+    options: form.options.map((row, index) => (index === optionIndex ? { ...row, values: [...row.values, value] } : row)),
+  }));
+}
+
+// 新增规格值的 (✗)：去掉该值。已有的值、或被新增 SKU 选用时（valueRemovable 为假）不变。
+export function removeValue(editor: OpenEditor, optionIndex: number, valueIndex: number): OpenEditor {
+  if (!valueRemovable(editor.form, optionIndex, valueIndex)) {
+    return editor;
+  }
+  return withForm(editor, (form) => ({
+    ...form,
+    options: form.options.map((row, index) => (index === optionIndex ? { ...row, values: row.values.filter((_, at) => at !== valueIndex) } : row)),
+  }));
+}
+
+// 点 admin.add_sku：在全部 SKU 之后加一行新增的 SKU（每个规格名选空选项，价格与每日初始库存为空串，默认启用）。没有规格名或达 50 个时不变。
+export function addSku(editor: OpenEditor): OpenEditor {
+  if (!canAddSku(editor.form)) {
+    return editor;
+  }
+  const row: NewVariantForm = {
+    tempId: nextTempId("s", editor.form.variants.filter(isNewVariant).map((variant) => variant.tempId)),
+    choices: editor.form.options.map(() => ""),
+    price: "",
+    stock: "",
+    isActive: true,
+  };
+  return withForm(editor, (form) => ({ ...form, variants: [...form.variants, row] }));
+}
+
+// 新增 SKU 的 (✗)：去掉该行。已有的 SKU 不变。
+export function removeSku(editor: OpenEditor, variantIndex: number): OpenEditor {
+  const row = editor.form.variants[variantIndex];
+  if (row === undefined || !isNewVariant(row)) {
+    return editor;
+  }
+  return withForm(editor, (form) => ({ ...form, variants: form.variants.filter((_, index) => index !== variantIndex) }));
+}
+
+// 改新增 SKU 在某个规格名下所选的值（valueKey，空选项为空串）。已有 SKU 的规格值组合不能改，不变。
+export function chooseValue(editor: OpenEditor, variantIndex: number, optionIndex: number, key: string): OpenEditor {
+  const row = editor.form.variants[variantIndex];
+  if (row === undefined || !isNewVariant(row)) {
+    return editor;
+  }
+  return withVariant(editor, variantIndex, () => ({ ...row, choices: row.choices.map((choice, index) => (index === optionIndex ? key : choice)) }));
 }
 
 // 价格上限（UX A04「上限提示」：RM500,000.00）。
@@ -360,8 +532,8 @@ export function limitCount(text: string): number | null {
   return count >= 1 && count <= MAX_PER_ORDER ? count : null;
 }
 
-// 上架条件中请求里看得到的部分（UX A04「上架」）：英文名称与英文描述、全部规格名与规格值的英文名称去掉首尾空白后都不为空，且至少一个 SKU
-// 勾选启用。分类是否启用、名称长度与重复由服务端判断。
+// 上架条件中请求里看得到的部分（UX A04「上架」）：英文名称与英文描述、全部规格名与规格值（含新增的）的英文名称去掉首尾空白后都不为空，
+// 且至少一个 SKU（含新增的）勾选启用。分类是否启用、名称长度与重复、组合是否重复由服务端判断。
 export function publishReady(form: ProductForm): boolean {
   const filled = (values: Texts) => values.en.trim() !== "";
   return (
@@ -376,27 +548,53 @@ function namesOf(values: Texts): Names {
   return { name_en: values.en, name_zh: values.zh, name_ms: values.ms };
 }
 
+// 新增 SKU 所选的值按规格名的顺序换成引用：已有的值以 id、新增的值以 temp_id。个数与规格名不同、任一规格名未选值（空串）或所选的值
+// 不在该规格名下时为 null。
+function valueRefs(options: readonly OptionForm[], choices: readonly string[]): ValueRef[] | null {
+  if (choices.length !== options.length) {
+    return null;
+  }
+  const refs: ValueRef[] = [];
+  for (const [index, option] of options.entries()) {
+    const value = option.values.find((row) => valueKey(row) === choices[index]);
+    if (value === undefined) {
+      return null;
+    }
+    refs.push(isNewValue(value) ? { temp_id: value.tempId } : { id: value.id });
+  }
+  return refs;
+}
+
 // 保存的请求体（SHOP-TASK-200 的 ProductSave）：读取（或上次保存）给的 version、文案原样（不去空白）、下拉框所选的分类 ID、上架、每单限购、
-// 全部规格名与规格值（id 与三语名称，按读取的顺序）与全部 SKU（id、价格整仙、每日初始库存与启用，按读取的顺序，不带规格值组合）。
-// 页面先查：价格、每日初始库存与每单限购任一格式或范围不对，或勾选上架而 publishReady 不满足时为 null（不提交）。
+// 全部规格名与规格值（已有的值为 id 与三语名称，按读取的顺序；新增的值为 temp_id 与三语名称，按新增顺序排在其后）与全部 SKU（已有的为 id、
+// 价格整仙、每日初始库存与启用，按读取的顺序，不带规格值组合；新增的为 temp_id、按规格名顺序的 option_values 与这三项，按新增顺序排在其后）。
+// 页面先查：价格、每日初始库存与每单限购任一格式或范围不对，任一新增 SKU 有规格名未选值，或勾选上架而 publishReady 不满足时为 null（不提交）。
 export function saveInput(form: ProductForm, version: number): ProductSave | null {
   const maxPerOrder = limitCount(form.maxPerOrder);
   if (maxPerOrder === null || (form.isActive && !publishReady(form))) {
     return null;
   }
-  const variants: ExistingVariant[] = [];
+  const variants: (ExistingVariant | NewVariant)[] = [];
   for (const row of form.variants) {
     const price = priceSen(row.price);
     const stock = stockCount(row.stock);
     if (price === null || stock === null) {
       return null;
     }
-    variants.push({ id: row.id, price_sen: price, daily_initial_stock: stock, is_active: row.isActive });
+    if (isNewVariant(row)) {
+      const refs = valueRefs(form.options, row.choices);
+      if (refs === null) {
+        return null;
+      }
+      variants.push({ temp_id: row.tempId, option_values: refs, price_sen: price, daily_initial_stock: stock, is_active: row.isActive });
+    } else {
+      variants.push({ id: row.id, price_sen: price, daily_initial_stock: stock, is_active: row.isActive });
+    }
   }
   const options: SavedOption[] = form.options.map((option) => ({
     id: option.id,
     ...namesOf(option.names),
-    values: option.values.map((value) => ({ id: value.id, ...namesOf(value.names) })),
+    values: option.values.map((value) => (isNewValue(value) ? { temp_id: value.tempId, ...namesOf(value.names) } : { id: value.id, ...namesOf(value.names) })),
   }));
   return {
     version,
@@ -771,6 +969,12 @@ interface InputHandlers {
   onPrice: (variantIndex: number, text: string) => void;
   onStock: (variantIndex: number, text: string) => void;
   onVariantActive: (variantIndex: number, checked: boolean) => void;
+  // 新增规格值与 SKU（SHOP-TASK-205）：key 为所选值的 valueKey（空选项为空串）。
+  onAddValue: (optionIndex: number) => void;
+  onRemoveValue: (optionIndex: number, valueIndex: number) => void;
+  onAddSku: () => void;
+  onRemoveSku: (variantIndex: number) => void;
+  onChooseValue: (variantIndex: number, optionIndex: number, key: string) => void;
 }
 
 // 保存与「商品已被改动」提示里的 admin.reload。
@@ -783,8 +987,52 @@ interface EditorHandlers extends InputHandlers, SaveHandlers {
   onBack: () => void;
 }
 
+function CrossIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  );
+}
+
+// 新增规格值与新增 SKU 的 (✗)：次要按钮，读屏标签沿用 admin.remove（UX 没有为 A04 的 (✗) 另给读屏标签，HANDOFF 0.82 第（4）点），图标不读出。
+function RemoveButton({ disabled, onRemove }: { disabled: boolean; onRemove: () => void }) {
+  const t = useCopy();
+  return (
+    <button
+      className="acs-admin__btn acs-admin__btn--secondary site-admin-products__remove"
+      type="button"
+      aria-label={t("admin.remove")}
+      disabled={disabled}
+      onClick={() => {
+        onRemove();
+      }}
+    >
+      <CrossIcon />
+    </button>
+  );
+}
+
+// 规格值输入框（读屏标签 admin.option_value），显示与编辑内容语言下的名称。
+function ValueInput({ text, content, describedBy, onChange }: { text: string; content: Language; describedBy: string | undefined; onChange: (text: string) => void }) {
+  const t = useCopy();
+  return (
+    <input
+      className="acs-admin__input"
+      aria-label={t("admin.option_value")}
+      value={text}
+      lang={htmlLang(content)}
+      aria-describedby={describedBy}
+      onChange={(event: ChangeEvent<HTMLInputElement>) => {
+        onChange(event.target.value);
+      }}
+    />
+  );
+}
+
 // 规格区：admin.product_options 一组，每个规格名一行（admin.option_name 输入框、admin.option_values 与各规格值输入框，读屏标签
-// admin.option_value），都显示与编辑内容语言下的名称；只能改名称，没有去掉与新增的按钮；其下常显 admin.options_fixed_note。
+// admin.option_value），都显示与编辑内容语言下的名称；已有的规格名与规格值只能改名称，没有 (✗)；新增的值排在已有的之后、各带 (✗)
+// （被新增 SKU 选用时禁用）；每个规格名的值后为 admin.add_value（达 20 个禁用）；其下常显 admin.options_fixed_note。
 function OptionsGroup({ editor, describedBy, handlers }: { editor: OpenEditor; describedBy: string | undefined; handlers: InputHandlers }) {
   const t = useCopy();
   const { content, form } = editor;
@@ -807,20 +1055,35 @@ function OptionsGroup({ editor, describedBy, handlers }: { editor: OpenEditor; d
           </label>
           <span className="acs-admin__muted">{t("admin.option_values")}</span>
           <div className="site-admin-products__values">
-            {option.values.map((value, valueIndex) => (
-              <input
-                key={value.id}
-                className="acs-admin__input"
-                aria-label={t("admin.option_value")}
-                value={value.names[content]}
-                lang={htmlLang(content)}
-                aria-describedby={describedBy}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                  handlers.onValueName(optionIndex, valueIndex, event.target.value);
-                }}
-              />
-            ))}
+            {option.values.map((value, valueIndex) => {
+              const onChange = (text: string) => {
+                handlers.onValueName(optionIndex, valueIndex, text);
+              };
+              return isNewValue(value) ? (
+                <span key={value.tempId} className="site-admin-products__new-value">
+                  <ValueInput text={value.names[content]} content={content} describedBy={describedBy} onChange={onChange} />
+                  <RemoveButton
+                    disabled={!valueRemovable(form, optionIndex, valueIndex)}
+                    onRemove={() => {
+                      handlers.onRemoveValue(optionIndex, valueIndex);
+                    }}
+                  />
+                </span>
+              ) : (
+                <ValueInput key={value.id} text={value.names[content]} content={content} describedBy={describedBy} onChange={onChange} />
+              );
+            })}
           </div>
+          <button
+            className="acs-admin__btn acs-admin__btn--secondary site-admin-products__add-value"
+            type="button"
+            disabled={!canAddValue(option)}
+            onClick={() => {
+              handlers.onAddValue(optionIndex);
+            }}
+          >
+            {t("admin.add_value")}
+          </button>
         </div>
       ))}
       <span className="acs-admin__muted">{t("admin.options_fixed_note")}</span>
@@ -828,126 +1091,241 @@ function OptionsGroup({ editor, describedBy, handlers }: { editor: OpenEditor; d
   );
 }
 
-// 桌面的 SKU 表格：admin.sku、admin.variant、admin.price、admin.initial_stock、admin.sku_enabled、admin.available_today 六列；
-// 价格与每日初始库存为输入框（读屏标签为列名），启用为勾选框，当日可用库存只显示。
-function SkuTable({ rows, handlers }: { rows: readonly SkuRow[]; handlers: InputHandlers }) {
+// 新增 SKU 每个规格名一个下拉框（读屏标签 admin.option_value），选项照 valueChoices。
+function ValueSelects({ row, handlers }: { row: NewSkuRow; handlers: InputHandlers }) {
   const t = useCopy();
   return (
-    <div className="site-admin-products__skus">
-      <table className="acs-admin__table">
-        <thead>
-          <tr>
-            <th>{t("admin.sku")}</th>
-            <th>{t("admin.variant")}</th>
-            <th>{t("admin.price")}</th>
-            <th>{t("admin.initial_stock")}</th>
-            <th>{t("admin.sku_enabled")}</th>
-            <th>{t("admin.available_today")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.form.id}>
-              <td className="site-admin-products__sku">{row.sku}</td>
-              <td>{row.variant}</td>
-              <td>
-                <input
-                  className="acs-admin__input site-admin-products__price"
-                  aria-label={t("admin.price")}
-                  inputMode="decimal"
-                  value={row.form.price}
-                  onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                    handlers.onPrice(row.index, event.target.value);
-                  }}
-                />
-              </td>
-              <td>
-                <input
-                  className="acs-admin__input site-admin-products__stock"
-                  aria-label={t("admin.initial_stock")}
-                  inputMode="numeric"
-                  value={row.form.stock}
-                  onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                    handlers.onStock(row.index, event.target.value);
-                  }}
-                />
-              </td>
-              <td>
-                <input
-                  className="site-admin-products__check"
-                  type="checkbox"
-                  aria-label={t("admin.sku_enabled")}
-                  checked={row.form.isActive}
-                  onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                    handlers.onVariantActive(row.index, event.target.checked);
-                  }}
-                />
-              </td>
-              <td>{row.available}</td>
-            </tr>
+    <div className="site-admin-products__choices">
+      {row.selects.map((select, optionIndex) => (
+        <select
+          key={optionIndex}
+          className="acs-admin__select"
+          aria-label={t("admin.option_value")}
+          value={select.selected}
+          onChange={(event: ChangeEvent<HTMLSelectElement>) => {
+            handlers.onChooseValue(row.index, optionIndex, event.target.value);
+          }}
+        >
+          {select.choices.map((choice) => (
+            <option key={choice.value} value={choice.value}>
+              {choice.label}
+            </option>
           ))}
-        </tbody>
-      </table>
+        </select>
+      ))}
     </div>
   );
 }
 
-// 手机的 SKU 卡片：每个 SKU 一张，同样六项（SKU 代码、规格列、价格与每日初始库存输入框、启用勾选框、当日可用库存）。
-function SkuCards({ rows, handlers }: { rows: readonly SkuRow[]; handlers: InputHandlers }) {
+// admin.add_sku（桌面在表格之下、手机在卡片之下，各渲染一个）：没有规格名的商品不显示，达 50 个 SKU 禁用。
+function AddSkuButton({ form, onAddSku }: { form: ProductForm; onAddSku: () => void }) {
+  const t = useCopy();
+  if (!showsAddSku(form)) {
+    return null;
+  }
+  return (
+    <button
+      className="acs-admin__btn acs-admin__btn--secondary site-admin-products__add-sku"
+      type="button"
+      disabled={!canAddSku(form)}
+      onClick={() => {
+        onAddSku();
+      }}
+    >
+      {t("admin.add_sku")}
+    </button>
+  );
+}
+
+// 桌面的 SKU 表格：admin.sku、admin.variant、admin.price、admin.initial_stock、admin.sku_enabled、admin.available_today 六列；
+// 价格与每日初始库存为输入框（读屏标签为列名），启用为勾选框，当日可用库存只显示。新增的 SKU 排在表格末尾（SHOP-TASK-205）：admin.sku_code_on_save、
+// 每个规格名一个下拉框、价格与每日初始库存输入框、启用勾选框、当日可用库存 — 与 (✗)；有新增行时多一列（列头为空，已有行该格为空）放 (✗)。
+// 表格之下为 admin.add_sku。
+function SkuTable({ form, rows, newRows, handlers }: { form: ProductForm; rows: readonly SkuRow[]; newRows: readonly NewSkuRow[]; handlers: InputHandlers }) {
+  const t = useCopy();
+  const extra = newRows.length > 0;
+  return (
+    <div className="site-admin-products__sku-table">
+      <div className="site-admin-products__skus">
+        <table className="acs-admin__table">
+          <thead>
+            <tr>
+              <th>{t("admin.sku")}</th>
+              <th>{t("admin.variant")}</th>
+              <th>{t("admin.price")}</th>
+              <th>{t("admin.initial_stock")}</th>
+              <th>{t("admin.sku_enabled")}</th>
+              <th>{t("admin.available_today")}</th>
+              {extra && <th />}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.form.id}>
+                <td className="site-admin-products__sku">{row.sku}</td>
+                <td>{row.variant}</td>
+                <SkuCells index={row.index} form={row.form} handlers={handlers} />
+                <td>{row.available}</td>
+                {extra && <td />}
+              </tr>
+            ))}
+            {newRows.map((row) => (
+              <tr key={row.form.tempId}>
+                <td className="acs-admin__muted site-admin-products__sku">{t("admin.sku_code_on_save")}</td>
+                <td>
+                  <ValueSelects row={row} handlers={handlers} />
+                </td>
+                <SkuCells index={row.index} form={row.form} handlers={handlers} />
+                <td>—</td>
+                <td>
+                  <RemoveButton
+                    disabled={false}
+                    onRemove={() => {
+                      handlers.onRemoveSku(row.index);
+                    }}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <AddSkuButton form={form} onAddSku={handlers.onAddSku} />
+    </div>
+  );
+}
+
+// 表格一行的价格与每日初始库存输入框（读屏标签为列名）与启用勾选框，已有的与新增的 SKU 共用；index 为在 form.variants 里的位置。
+function SkuCells({ index, form, handlers }: { index: number; form: SkuForm; handlers: InputHandlers }) {
   const t = useCopy();
   return (
-    <ul className="site-admin-products__sku-cards">
-      {rows.map((row) => (
-        <li key={row.form.id} className="acs-admin__panel site-admin-products__sku-card">
-          <div className="site-admin-products__sku-row">
-            <span>{t("admin.sku")}</span>
-            <span>{row.sku}</span>
-          </div>
-          <div className="site-admin-products__sku-row">
-            <span>{t("admin.variant")}</span>
-            <span>{row.variant}</span>
-          </div>
-          <div className="site-admin-products__sku-inputs">
-            <label className="site-admin-products__field">
-              <span>{t("admin.price")}</span>
-              <input
-                className="acs-admin__input"
-                inputMode="decimal"
-                value={row.form.price}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                  handlers.onPrice(row.index, event.target.value);
+    <>
+      <td>
+        <input
+          className="acs-admin__input site-admin-products__price"
+          aria-label={t("admin.price")}
+          inputMode="decimal"
+          value={form.price}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => {
+            handlers.onPrice(index, event.target.value);
+          }}
+        />
+      </td>
+      <td>
+        <input
+          className="acs-admin__input site-admin-products__stock"
+          aria-label={t("admin.initial_stock")}
+          inputMode="numeric"
+          value={form.stock}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => {
+            handlers.onStock(index, event.target.value);
+          }}
+        />
+      </td>
+      <td>
+        <input
+          className="site-admin-products__check"
+          type="checkbox"
+          aria-label={t("admin.sku_enabled")}
+          checked={form.isActive}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => {
+            handlers.onVariantActive(index, event.target.checked);
+          }}
+        />
+      </td>
+    </>
+  );
+}
+
+// 卡片里的价格与每日初始库存输入框（可见标签，两栏）与启用勾选框，已有的与新增的 SKU 共用。
+function CardInputs({ index, form, handlers }: { index: number; form: SkuForm; handlers: InputHandlers }) {
+  const t = useCopy();
+  return (
+    <>
+      <div className="site-admin-products__sku-inputs">
+        <label className="site-admin-products__field">
+          <span>{t("admin.price")}</span>
+          <input
+            className="acs-admin__input"
+            inputMode="decimal"
+            value={form.price}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => {
+              handlers.onPrice(index, event.target.value);
+            }}
+          />
+        </label>
+        <label className="site-admin-products__field">
+          <span>{t("admin.initial_stock")}</span>
+          <input
+            className="acs-admin__input"
+            inputMode="numeric"
+            value={form.stock}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => {
+              handlers.onStock(index, event.target.value);
+            }}
+          />
+        </label>
+      </div>
+      <label className="site-admin-products__toggle">
+        <input
+          type="checkbox"
+          checked={form.isActive}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => {
+            handlers.onVariantActive(index, event.target.checked);
+          }}
+        />
+        {t("admin.sku_enabled")}
+      </label>
+    </>
+  );
+}
+
+// 手机的 SKU 卡片：每个 SKU 一张，同样六项（SKU 代码、规格列、价格与每日初始库存输入框、启用勾选框、当日可用库存）。新增的 SKU 各一张排在其后
+// （SHOP-TASK-205）：第一行为 admin.sku_code_on_save 与 (✗)，其下为规格值下拉框、价格与每日初始库存、启用与当日可用库存 —。卡片之下为 admin.add_sku。
+function SkuCards({ form, rows, newRows, handlers }: { form: ProductForm; rows: readonly SkuRow[]; newRows: readonly NewSkuRow[]; handlers: InputHandlers }) {
+  const t = useCopy();
+  return (
+    <div className="site-admin-products__sku-list">
+      <ul className="site-admin-products__sku-cards">
+        {rows.map((row) => (
+          <li key={row.form.id} className="acs-admin__panel site-admin-products__sku-card">
+            <div className="site-admin-products__sku-row">
+              <span>{t("admin.sku")}</span>
+              <span>{row.sku}</span>
+            </div>
+            <div className="site-admin-products__sku-row">
+              <span>{t("admin.variant")}</span>
+              <span>{row.variant}</span>
+            </div>
+            <CardInputs index={row.index} form={row.form} handlers={handlers} />
+            <div className="site-admin-products__sku-row">
+              <span>{t("admin.available_today")}</span>
+              <span>{row.available}</span>
+            </div>
+          </li>
+        ))}
+        {newRows.map((row) => (
+          <li key={row.form.tempId} className="acs-admin__panel site-admin-products__sku-card">
+            <div className="site-admin-products__sku-row site-admin-products__new-head">
+              <span className="acs-admin__muted">{t("admin.sku_code_on_save")}</span>
+              <RemoveButton
+                disabled={false}
+                onRemove={() => {
+                  handlers.onRemoveSku(row.index);
                 }}
               />
-            </label>
-            <label className="site-admin-products__field">
-              <span>{t("admin.initial_stock")}</span>
-              <input
-                className="acs-admin__input"
-                inputMode="numeric"
-                value={row.form.stock}
-                onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                  handlers.onStock(row.index, event.target.value);
-                }}
-              />
-            </label>
-          </div>
-          <label className="site-admin-products__toggle">
-            <input
-              type="checkbox"
-              checked={row.form.isActive}
-              onChange={(event: ChangeEvent<HTMLInputElement>) => {
-                handlers.onVariantActive(row.index, event.target.checked);
-              }}
-            />
-            {t("admin.sku_enabled")}
-          </label>
-          <div className="site-admin-products__sku-row">
-            <span>{t("admin.available_today")}</span>
-            <span>{row.available}</span>
-          </div>
-        </li>
-      ))}
-    </ul>
+            </div>
+            <ValueSelects row={row} handlers={handlers} />
+            <CardInputs index={row.index} form={row.form} handlers={handlers} />
+            <div className="site-admin-products__sku-row">
+              <span>{t("admin.available_today")}</span>
+              <span>—</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <AddSkuButton form={form} onAddSku={handlers.onAddSku} />
+    </div>
   );
 }
 
@@ -983,7 +1361,7 @@ function SaveArea({ editor, onReload }: { editor: OpenEditor } & Pick<SaveHandle
 
 // 已取到的编辑区（照 A04-desktop 与 A04-phone-edit 的顺序）：标题 admin.product_edit、内容语言三个按钮（aria-pressed）、商品名称与描述
 // （多行）、缺译提示（至多一条）、分类下拉与 admin.category_current_unavailable、上架勾选框、常显的 admin.publish_requirements、规格区、
-// 桌面的 SKU 表格、每单限购与 admin.max_per_order_hint、手机的 SKU 卡片、admin.no_delete_note、admin.initial_stock_note 与 admin.rules_apply_new，
+// 桌面的 SKU 表格与 admin.add_sku、每单限购与 admin.max_per_order_hint、手机的 SKU 卡片与 admin.add_sku、admin.no_delete_note、admin.initial_stock_note 与 admin.rules_apply_new，
 // 最后为 common.save 与保存结果。桌面的表格在限购之前、手机的卡片在限购之后（两套都渲染，由 site.css 按宽度显隐）。
 function EditorForm({
   editor,
@@ -1007,6 +1385,7 @@ function EditorForm({
   const describedBy = missing ? missingId : undefined;
   const unavailable = categoryUnavailable(categories, form.categoryId);
   const rows = skuRows(editor, language);
+  const newRows = newSkuRows(editor, language);
   return (
     <form
       className="acs-admin__panel site-admin-products__form"
@@ -1101,7 +1480,7 @@ function EditorForm({
       </div>
       <span className="acs-admin__muted">{t("admin.publish_requirements")}</span>
       <OptionsGroup editor={editor} describedBy={describedBy} handlers={handlers} />
-      <SkuTable rows={rows} handlers={handlers} />
+      <SkuTable form={form} rows={rows} newRows={newRows} handlers={handlers} />
       <div className="site-admin-products__limit">
         <label className="site-admin-products__limit-field">
           <span>{t("admin.max_per_order")}</span>
@@ -1119,7 +1498,7 @@ function EditorForm({
           {t("admin.max_per_order_hint")}
         </span>
       </div>
-      <SkuCards rows={rows} handlers={handlers} />
+      <SkuCards form={form} rows={rows} newRows={newRows} handlers={handlers} />
       <span className="acs-admin__muted">{t("admin.no_delete_note")}</span>
       <div className="site-admin-products__notes">
         <span>{t("admin.initial_stock_note")}</span>
@@ -1267,6 +1646,21 @@ export function AdminProductsContent() {
       }}
       onVariantActive={(variantIndex, checked) => {
         edit((current) => changeVariantActive(current, variantIndex, checked));
+      }}
+      onAddValue={(optionIndex) => {
+        edit((current) => addValue(current, optionIndex));
+      }}
+      onRemoveValue={(optionIndex, valueIndex) => {
+        edit((current) => removeValue(current, optionIndex, valueIndex));
+      }}
+      onAddSku={() => {
+        edit(addSku);
+      }}
+      onRemoveSku={(variantIndex) => {
+        edit((current) => removeSku(current, variantIndex));
+      }}
+      onChooseValue={(variantIndex, optionIndex, key) => {
+        edit((current) => chooseValue(current, variantIndex, optionIndex, key));
       }}
       onSave={() => {
         const controller = lifetime.current;
