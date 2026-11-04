@@ -5598,7 +5598,7 @@ tasks:
       临时编号由页面按新增顺序生成、在一次请求里不重复（如规格值 v1、v2，SKU s1、s2），保存成功后以返回的商品为准（新增的变为已有的）。
       设计闸门：DESIGN 1.18（提交 5ba9796）第 11 条与 HANDOFF 0.82，新增 SKU 的价格按文字换成整仙提交（取值核对、并发核对与审计在服务端）。
       拆分：A04 的新增规格值与 SKU 一层（7 个允许路径，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-204
     acceptance_criteria:
