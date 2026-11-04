@@ -1,24 +1,28 @@
-import { useEffect, useRef, useState } from "react";
-import type { Dispatch, SetStateAction } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import type { ChangeEvent, Dispatch, SetStateAction } from "react";
 
 import { readAdminCategories } from "../api/adminCategories";
 import type { AdminCategory, CategoriesRead } from "../api/adminCategories";
 import { readAdminProduct, readAdminProducts } from "../api/adminProducts";
-import type { AdminProduct, AdminProductListItem, ProductRead, ProductsRead } from "../api/adminProducts";
-import AdminFrame, { AdminAlert } from "../components/AdminFrame";
+import type { AdminProduct, AdminProductListItem, AdminVariant, ProductRead, ProductsRead } from "../api/adminProducts";
+import AdminFrame, { AdminAlert, LANGUAGE_LABEL, useUnsavedConfirm } from "../components/AdminFrame";
+import { LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
-import { useCopy, useLanguage } from "../i18n/language";
+import { htmlLang, useCopy, useLanguage } from "../i18n/language";
 import { ADMIN_LOGIN_PATH, useRouter } from "../router";
 import type { RoutePath } from "../router";
 import { startDeferred } from "./AdminOrderDetail";
+import { feeText } from "./AdminShippingPage";
 
 // A04 后台商品（docs/UX.md 0.17 A04，视觉稿 A04-desktop 与 A04-phone-edit；HANDOFF 0.82 第（2）点）：用后台框架渲染，当前导航项为商品。
 // 内容区为标题 admin.nav_products 与全部商品（含未上架的，按接口给的顺序；桌面表格、手机卡片，两套都渲染，由 site.css 按宽度显隐），
 // 点 common.edit 后读取该商品，成功才显示编辑区（桌面在列表右侧；手机从点击起隐藏列表，编辑区上方为页内的 common.back）。
 // 打开页面时并行调用 GET /api/admin/products 与 GET /api/admin/categories，两者都取到才显示列表；切换界面语言不重新读取。
 // 单件为 GET /api/admin/products/{id}（经 api/adminProducts.ts 与 api/adminCategories.ts；DESIGN 1.18「计价、优惠、积分与库存」第 11 条）。
-// 401 换成登录页 A01；离开页面时中止进行中的读取，之后不再更新页面。本任务的编辑区只有标题 admin.product_edit；输入框与未保存确认在
-// SHOP-TASK-203，保存在 204，新增规格值与 SKU、新建、图片与当日库存调整在 205 至 208。
+// 401 换成登录页 A01；离开页面时中止进行中的读取，之后不再更新页面。
+// 编辑区（SHOP-TASK-203）：内容语言三个按钮切换三语名称、描述与规格名、规格值名称的输入框，另有分类下拉、上架、每单限购与已有 SKU 的价格、
+// 每日初始库存与启用；输入框保留所填的原文，本任务不校验、不提交。有未保存的修改（与最近一次读取的值不同）时以 useUnsavedConfirm
+// （SHOP-TASK-197）接入离开确认。保存在 204，新增规格值与 SKU、新建、图片与当日库存调整在 205 至 208。
 
 // 三语名称（读取给的，可为 null）。
 export type ListNames = Readonly<Record<Language, string | null>>;
@@ -41,11 +45,267 @@ export function categoryName(item: AdminProductListItem, language: Language): st
   return localName({ en: item.category_name_en, zh: item.category_name_zh, ms: item.category_name_ms }, language);
 }
 
-// 编辑区：读取中（该位置不显示内容）、读取失败（只有提示）、已取到（读取到的单件商品，供 203 至 208 接入）。id 为点了 common.edit 的商品。
+// 三语文案（输入框里的值，读取为 null 时为空串）。
+export type Texts = Readonly<Record<Language, string>>;
+
+// 规格值、规格名与已有 SKU 的输入：规格值与规格名只能改三语名称；SKU 的价格与每日初始库存为输入框的原文，启用为勾选状态。
+export interface ValueForm {
+  id: number;
+  names: Texts;
+}
+
+export interface OptionForm {
+  id: number;
+  names: Texts;
+  values: readonly ValueForm[];
+}
+
+export interface VariantForm {
+  id: number;
+  price: string;
+  stock: string;
+  isActive: boolean;
+}
+
+// 编辑区的值：三语名称与描述、分类、上架、每单限购的原文、规格名（按接口顺序）与 SKU（按接口顺序）。
+export interface ProductForm {
+  names: Texts;
+  descriptions: Texts;
+  categoryId: number;
+  isActive: boolean;
+  maxPerOrder: string;
+  options: readonly OptionForm[];
+  variants: readonly VariantForm[];
+}
+
+// 读取给的三语文案换成输入框的值：null 当作空串。
+export function texts(names: ListNames): Texts {
+  return { en: names.en ?? "", zh: names.zh ?? "", ms: names.ms ?? "" };
+}
+
+// 价格输入框的初值：整仙用整数运算写成两位小数文字（照 AdminShippingPage.tsx 的 feeText；0 为 0.00，5 为 0.05）。
+export function priceText(sen: number): string {
+  return feeText(sen);
+}
+
+// 读取到的商品换成编辑区的值（也是比较基线）：文案 null 当作空串，价格为 priceText，库存与限购为十进制文字。
+export function formOf(product: AdminProduct): ProductForm {
+  return {
+    names: texts({ en: product.name_en, zh: product.name_zh, ms: product.name_ms }),
+    descriptions: texts({ en: product.description_en, zh: product.description_zh, ms: product.description_ms }),
+    categoryId: product.category_id,
+    isActive: product.is_active,
+    maxPerOrder: String(product.max_per_order),
+    options: product.options.map((option) => ({
+      id: option.id,
+      names: texts({ en: option.name_en, zh: option.name_zh, ms: option.name_ms }),
+      values: option.values.map((value) => ({ id: value.id, names: texts({ en: value.name_en, zh: value.name_zh, ms: value.name_ms }) })),
+    })),
+    variants: product.variants.map((variant) => ({
+      id: variant.id,
+      price: priceText(variant.price_sen),
+      stock: String(variant.daily_initial_stock),
+      isActive: variant.is_active,
+    })),
+  };
+}
+
+// 编辑区：读取中（该位置不显示内容）、读取失败（只有提示）、已取到。id 为点了 common.edit 的商品。
+// 已取到时 product 为最近一次读取的商品（规格列与 SKU 代码、当日可用库存取自它），base 为比较基线，form 为已填的值，content 为内容语言
+// （供 204 至 208 接入：保存成功后以返回的商品换掉 product 与 base）。
 export type Editing =
   | { status: "loading"; id: number }
   | { status: "failed"; id: number; error: CopyKey }
-  | { status: "ready"; id: number; product: AdminProduct };
+  | { status: "ready"; id: number; product: AdminProduct; base: ProductForm; form: ProductForm; content: Language };
+
+export type OpenEditor = Extract<Editing, { status: "ready" }>;
+
+// 打开编辑区：基线与已填的值都为读取的值，内容语言默认英文。
+export function editorOf(id: number, product: AdminProduct): OpenEditor {
+  const base = formOf(product);
+  return { status: "ready", id, product, base, form: base, content: "en" };
+}
+
+function sameTexts(a: Texts, b: Texts): boolean {
+  return LANGUAGES.every((language) => a[language] === b[language]);
+}
+
+function sameOption(a: OptionForm, b: OptionForm | undefined): boolean {
+  return (
+    b !== undefined &&
+    a.id === b.id &&
+    sameTexts(a.names, b.names) &&
+    a.values.length === b.values.length &&
+    a.values.every((value, index) => {
+      const other = b.values[index];
+      return other !== undefined && value.id === other.id && sameTexts(value.names, other.names);
+    })
+  );
+}
+
+function sameVariant(a: VariantForm, b: VariantForm | undefined): boolean {
+  return b !== undefined && a.id === b.id && a.price === b.price && a.stock === b.stock && a.isActive === b.isActive;
+}
+
+// 有未保存的修改：编辑区已取到，且三语名称与描述、分类、上架、每单限购、规格名与规格值的三语名称、各 SKU 的价格文字、
+// 每日初始库存文字与启用状态任一项与基线不同（改回原值不算）。切换内容语言不算修改；没有编辑区、读取中与读取失败时没有修改。
+export function isDirty(editing: Editing | null): boolean {
+  if (editing === null || editing.status !== "ready") {
+    return false;
+  }
+  const { base, form } = editing;
+  return !(
+    sameTexts(form.names, base.names) &&
+    sameTexts(form.descriptions, base.descriptions) &&
+    form.categoryId === base.categoryId &&
+    form.isActive === base.isActive &&
+    form.maxPerOrder === base.maxPerOrder &&
+    form.options.length === base.options.length &&
+    form.options.every((option, index) => sameOption(option, base.options[index])) &&
+    form.variants.length === base.variants.length &&
+    form.variants.every((variant, index) => sameVariant(variant, base.variants[index]))
+  );
+}
+
+// 缺译提示：内容语言为中文或马来文，且该语言的商品名称、描述或任一规格名、规格值的名称为空（去掉首尾空白后）；只显示一条。
+export function translationMissing(editor: OpenEditor): boolean {
+  const { content, form } = editor;
+  if (content === "en") {
+    return false;
+  }
+  const blank = (values: Texts) => values[content].trim() === "";
+  return blank(form.names) || blank(form.descriptions) || form.options.some((option) => blank(option.names) || option.values.some((value) => blank(value.names)));
+}
+
+// 可选的分类：启用、英文名称不为 null 且去掉首尾空白后不为空。
+export function isChoosable(category: AdminCategory): boolean {
+  return category.is_active && category.name_en !== null && category.name_en.trim() !== "";
+}
+
+// 分类下拉的一项：value 为分类 ID，label 为显示的文字，choosable 为是否可选的分类。
+export interface CategoryChoice {
+  id: number;
+  label: string;
+  choosable: boolean;
+}
+
+// 分类下拉的选项（HANDOFF 0.82）：可选的分类按接口顺序，文字按后台界面语言、缺译回退英文；商品当前分类不在其中时另加它一项排在最前，
+// 文字取商品列表该项的 category_name_*（同样的回退，都缺时为 —；列表该项不在或其分类已不是读取到的分类时也为 —）。
+export function categoryChoices(categories: readonly AdminCategory[], product: AdminProduct, item: AdminProductListItem | undefined, language: Language): CategoryChoice[] {
+  const choices = categories
+    .filter(isChoosable)
+    .map((category) => ({ id: category.id, label: localName({ en: category.name_en, zh: category.name_zh, ms: category.name_ms }, language), choosable: true }));
+  if (choices.some((choice) => choice.id === product.category_id)) {
+    return choices;
+  }
+  const label = item !== undefined && item.category_id === product.category_id ? categoryName(item, language) : "—";
+  return [{ id: product.category_id, label, choosable: false }, ...choices];
+}
+
+// 选中的不是可选分类时，下拉框之下显示 admin.category_current_unavailable。
+export function categoryUnavailable(categories: readonly AdminCategory[], categoryId: number): boolean {
+  return !categories.some((category) => category.id === categoryId && isChoosable(category));
+}
+
+// 规格列（admin.variant）：该 SKU 各规格值最近一次读取的名称，按后台界面语言、缺译回退英文（照 localName），以「 / 」相连；没有规格名时为 —。
+export function variantText(product: AdminProduct, variant: AdminVariant, language: Language): string {
+  if (product.options.length === 0) {
+    return "—";
+  }
+  return variant.option_value_ids
+    .map((valueId, index) => {
+      const value = product.options[index]?.values.find((row) => row.id === valueId);
+      return value === undefined ? "—" : localName({ en: value.name_en, zh: value.name_zh, ms: value.name_ms }, language);
+    })
+    .join(" / ");
+}
+
+// SKU 区的一行（桌面表格与手机卡片共用）：index 为在 form.variants 里的位置，SKU 代码、规格列与当日可用库存取自读取的商品。
+export interface SkuRow {
+  index: number;
+  form: VariantForm;
+  sku: string;
+  variant: string;
+  available: number;
+}
+
+export function skuRows(editor: OpenEditor, language: Language): SkuRow[] {
+  return editor.form.variants.flatMap((form, index) => {
+    const read = editor.product.variants.find((variant) => variant.id === form.id);
+    return read === undefined ? [] : [{ index, form, sku: read.sku, variant: variantText(editor.product, read, language), available: read.available_stock }];
+  });
+}
+
+// 编辑区的改动：只换掉对应的一项，其余（含其他语言已填的值）不变。
+function withForm(editor: OpenEditor, change: (form: ProductForm) => ProductForm): OpenEditor {
+  return { ...editor, form: change(editor.form) };
+}
+
+function withText(values: Texts, language: Language, value: string): Texts {
+  return { ...values, [language]: value };
+}
+
+// 切换内容语言：只换输入框显示与编辑的语言，各语言已填的值不变。
+export function chooseContent(editor: OpenEditor, content: Language): OpenEditor {
+  return { ...editor, content };
+}
+
+// 改内容语言下的商品名称、描述、规格名与规格值的名称。
+export function changeName(editor: OpenEditor, value: string): OpenEditor {
+  return withForm(editor, (form) => ({ ...form, names: withText(form.names, editor.content, value) }));
+}
+
+export function changeDescription(editor: OpenEditor, value: string): OpenEditor {
+  return withForm(editor, (form) => ({ ...form, descriptions: withText(form.descriptions, editor.content, value) }));
+}
+
+export function changeOptionName(editor: OpenEditor, optionIndex: number, value: string): OpenEditor {
+  return withForm(editor, (form) => ({
+    ...form,
+    options: form.options.map((option, index) => (index === optionIndex ? { ...option, names: withText(option.names, editor.content, value) } : option)),
+  }));
+}
+
+export function changeValueName(editor: OpenEditor, optionIndex: number, valueIndex: number, value: string): OpenEditor {
+  return withForm(editor, (form) => ({
+    ...form,
+    options: form.options.map((option, index) =>
+      index === optionIndex
+        ? { ...option, values: option.values.map((row, at) => (at === valueIndex ? { ...row, names: withText(row.names, editor.content, value) } : row)) }
+        : option,
+    ),
+  }));
+}
+
+// 改分类、上架与每单限购（原文，不校验）。
+export function changeCategory(editor: OpenEditor, categoryId: number): OpenEditor {
+  return withForm(editor, (form) => ({ ...form, categoryId }));
+}
+
+export function changeActive(editor: OpenEditor, checked: boolean): OpenEditor {
+  return withForm(editor, (form) => ({ ...form, isActive: checked }));
+}
+
+export function changeMaxPerOrder(editor: OpenEditor, text: string): OpenEditor {
+  return withForm(editor, (form) => ({ ...form, maxPerOrder: text }));
+}
+
+// 改某个 SKU 的价格、每日初始库存（原文，不校验）与启用状态；index 为在 form.variants 里的位置。
+function withVariant(editor: OpenEditor, variantIndex: number, change: (row: VariantForm) => VariantForm): OpenEditor {
+  return withForm(editor, (form) => ({ ...form, variants: form.variants.map((row, index) => (index === variantIndex ? change(row) : row)) }));
+}
+
+export function changePrice(editor: OpenEditor, variantIndex: number, text: string): OpenEditor {
+  return withVariant(editor, variantIndex, (row) => ({ ...row, price: text }));
+}
+
+export function changeStock(editor: OpenEditor, variantIndex: number, text: string): OpenEditor {
+  return withVariant(editor, variantIndex, (row) => ({ ...row, stock: text }));
+}
+
+export function changeVariantActive(editor: OpenEditor, variantIndex: number, checked: boolean): OpenEditor {
+  return withVariant(editor, variantIndex, (row) => ({ ...row, isActive: checked }));
+}
 
 // 页面的状态：读取中（标 aria-busy）、读取失败（只有提示）、已取到（按接口顺序的商品、分类读取的结果（供 203 的分类下拉）、
 // 列表给的只用于写请求头的 CSRF 令牌与编辑区；没有点 common.edit 时为 null）。
@@ -87,12 +347,12 @@ export function startEditing(state: ProductsState, id: number): ProductsState | 
   return { ...state, editing: { status: "loading", id } };
 }
 
-// 按单件读取的结果决定：取到时显示编辑区；401 回到 A01（login）；网络中断 common.network_check，其他失败（含商品不存在）common.error_retry，
-// 都显示在编辑区的位置。
+// 按单件读取的结果决定：取到时显示编辑区（照 editorOf）；401 回到 A01（login）；网络中断 common.network_check，其他失败（含商品不存在）
+// common.error_retry，都显示在编辑区的位置。
 export function productStep(read: ProductRead, id: number): Editing | "login" {
   switch (read.kind) {
     case "ok":
-      return { status: "ready", id, product: read.product };
+      return editorOf(id, read.product);
     case "none":
       return "login";
     case "network":
@@ -246,13 +506,343 @@ function ProductList({ products, onEdit }: { products: readonly AdminProductList
   );
 }
 
-interface EditorHandlers {
+// 编辑区输入的处理：optionIndex、valueIndex 与 variantIndex 为在 form 里的位置。
+interface InputHandlers {
+  onContent: (content: Language) => void;
+  onName: (value: string) => void;
+  onDescription: (value: string) => void;
+  onCategory: (categoryId: number) => void;
+  onActive: (checked: boolean) => void;
+  onMaxPerOrder: (text: string) => void;
+  onOptionName: (optionIndex: number, value: string) => void;
+  onValueName: (optionIndex: number, valueIndex: number, value: string) => void;
+  onPrice: (variantIndex: number, text: string) => void;
+  onStock: (variantIndex: number, text: string) => void;
+  onVariantActive: (variantIndex: number, checked: boolean) => void;
+}
+
+interface EditorHandlers extends InputHandlers {
   onBack: () => void;
 }
 
-// 编辑区的位置：手机上方为 common.back（桌面由 site.css 隐藏）；读取中不显示内容（标 aria-busy），读取失败只有提示，
-// 取到后为面板与标题 admin.product_edit（输入框在 SHOP-TASK-203）。
-function EditorView({ editing, onBack }: { editing: Editing } & EditorHandlers) {
+// 规格区：admin.product_options 一组，每个规格名一行（admin.option_name 输入框、admin.option_values 与各规格值输入框，读屏标签
+// admin.option_value），都显示与编辑内容语言下的名称；只能改名称，没有去掉与新增的按钮；其下常显 admin.options_fixed_note。
+function OptionsGroup({ editor, describedBy, handlers }: { editor: OpenEditor; describedBy: string | undefined; handlers: InputHandlers }) {
+  const t = useCopy();
+  const { content, form } = editor;
+  return (
+    <div className="site-admin-products__options">
+      <span>{t("admin.product_options")}</span>
+      {form.options.map((option, optionIndex) => (
+        <div key={option.id} className="site-admin-products__option">
+          <label className="site-admin-products__option-name">
+            <span>{t("admin.option_name")}</span>
+            <input
+              className="acs-admin__input"
+              value={option.names[content]}
+              lang={htmlLang(content)}
+              aria-describedby={describedBy}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                handlers.onOptionName(optionIndex, event.target.value);
+              }}
+            />
+          </label>
+          <span className="acs-admin__muted">{t("admin.option_values")}</span>
+          <div className="site-admin-products__values">
+            {option.values.map((value, valueIndex) => (
+              <input
+                key={value.id}
+                className="acs-admin__input"
+                aria-label={t("admin.option_value")}
+                value={value.names[content]}
+                lang={htmlLang(content)}
+                aria-describedby={describedBy}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  handlers.onValueName(optionIndex, valueIndex, event.target.value);
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+      <span className="acs-admin__muted">{t("admin.options_fixed_note")}</span>
+    </div>
+  );
+}
+
+// 桌面的 SKU 表格：admin.sku、admin.variant、admin.price、admin.initial_stock、admin.sku_enabled、admin.available_today 六列；
+// 价格与每日初始库存为输入框（读屏标签为列名），启用为勾选框，当日可用库存只显示。
+function SkuTable({ rows, handlers }: { rows: readonly SkuRow[]; handlers: InputHandlers }) {
+  const t = useCopy();
+  return (
+    <div className="site-admin-products__skus">
+      <table className="acs-admin__table">
+        <thead>
+          <tr>
+            <th>{t("admin.sku")}</th>
+            <th>{t("admin.variant")}</th>
+            <th>{t("admin.price")}</th>
+            <th>{t("admin.initial_stock")}</th>
+            <th>{t("admin.sku_enabled")}</th>
+            <th>{t("admin.available_today")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.form.id}>
+              <td className="site-admin-products__sku">{row.sku}</td>
+              <td>{row.variant}</td>
+              <td>
+                <input
+                  className="acs-admin__input site-admin-products__price"
+                  aria-label={t("admin.price")}
+                  inputMode="decimal"
+                  value={row.form.price}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                    handlers.onPrice(row.index, event.target.value);
+                  }}
+                />
+              </td>
+              <td>
+                <input
+                  className="acs-admin__input site-admin-products__stock"
+                  aria-label={t("admin.initial_stock")}
+                  inputMode="numeric"
+                  value={row.form.stock}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                    handlers.onStock(row.index, event.target.value);
+                  }}
+                />
+              </td>
+              <td>
+                <input
+                  className="site-admin-products__check"
+                  type="checkbox"
+                  aria-label={t("admin.sku_enabled")}
+                  checked={row.form.isActive}
+                  onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                    handlers.onVariantActive(row.index, event.target.checked);
+                  }}
+                />
+              </td>
+              <td>{row.available}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// 手机的 SKU 卡片：每个 SKU 一张，同样六项（SKU 代码、规格列、价格与每日初始库存输入框、启用勾选框、当日可用库存）。
+function SkuCards({ rows, handlers }: { rows: readonly SkuRow[]; handlers: InputHandlers }) {
+  const t = useCopy();
+  return (
+    <ul className="site-admin-products__sku-cards">
+      {rows.map((row) => (
+        <li key={row.form.id} className="acs-admin__panel site-admin-products__sku-card">
+          <div className="site-admin-products__sku-row">
+            <span>{t("admin.sku")}</span>
+            <span>{row.sku}</span>
+          </div>
+          <div className="site-admin-products__sku-row">
+            <span>{t("admin.variant")}</span>
+            <span>{row.variant}</span>
+          </div>
+          <div className="site-admin-products__sku-inputs">
+            <label className="site-admin-products__field">
+              <span>{t("admin.price")}</span>
+              <input
+                className="acs-admin__input"
+                inputMode="decimal"
+                value={row.form.price}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  handlers.onPrice(row.index, event.target.value);
+                }}
+              />
+            </label>
+            <label className="site-admin-products__field">
+              <span>{t("admin.initial_stock")}</span>
+              <input
+                className="acs-admin__input"
+                inputMode="numeric"
+                value={row.form.stock}
+                onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                  handlers.onStock(row.index, event.target.value);
+                }}
+              />
+            </label>
+          </div>
+          <label className="site-admin-products__toggle">
+            <input
+              type="checkbox"
+              checked={row.form.isActive}
+              onChange={(event: ChangeEvent<HTMLInputElement>) => {
+                handlers.onVariantActive(row.index, event.target.checked);
+              }}
+            />
+            {t("admin.sku_enabled")}
+          </label>
+          <div className="site-admin-products__sku-row">
+            <span>{t("admin.available_today")}</span>
+            <span>{row.available}</span>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+// 已取到的编辑区（照 A04-desktop 与 A04-phone-edit 的顺序）：标题 admin.product_edit、内容语言三个按钮（aria-pressed）、商品名称与描述
+// （多行）、缺译提示（至多一条）、分类下拉与 admin.category_current_unavailable、上架勾选框、常显的 admin.publish_requirements、规格区、
+// 桌面的 SKU 表格、每单限购与 admin.max_per_order_hint、手机的 SKU 卡片、admin.no_delete_note、admin.initial_stock_note 与 admin.rules_apply_new。
+// 桌面的表格在限购之前、手机的卡片在限购之后（两套都渲染，由 site.css 按宽度显隐）。
+function EditorForm({
+  editor,
+  categories,
+  item,
+  handlers,
+}: {
+  editor: OpenEditor;
+  categories: readonly AdminCategory[];
+  item: AdminProductListItem | undefined;
+  handlers: InputHandlers;
+}) {
+  const t = useCopy();
+  const { language } = useLanguage();
+  const languagesId = useId();
+  const missingId = useId();
+  const unavailableId = useId();
+  const limitHintId = useId();
+  const { content, form } = editor;
+  const missing = translationMissing(editor);
+  const describedBy = missing ? missingId : undefined;
+  const unavailable = categoryUnavailable(categories, form.categoryId);
+  const rows = skuRows(editor, language);
+  return (
+    <div className="acs-admin__panel site-admin-products__form">
+      <h2 className="acs-admin__h">{t("admin.product_edit")}</h2>
+      <div className="site-admin-products__languages" role="group" aria-labelledby={languagesId}>
+        <span id={languagesId} className="acs-admin__muted">
+          {t("admin.content_language")}
+        </span>
+        {LANGUAGES.map((option) => (
+          <button
+            key={option}
+            className={option === content ? "acs-admin__btn" : "acs-admin__btn acs-admin__btn--secondary"}
+            type="button"
+            lang={htmlLang(option)}
+            aria-pressed={option === content}
+            onClick={() => {
+              handlers.onContent(option);
+            }}
+          >
+            {t(LANGUAGE_LABEL[option])}
+          </button>
+        ))}
+      </div>
+      <label className="site-admin-products__field">
+        <span>{t("admin.product_name")}</span>
+        <input
+          className="acs-admin__input"
+          value={form.names[content]}
+          lang={htmlLang(content)}
+          aria-describedby={describedBy}
+          onChange={(event: ChangeEvent<HTMLInputElement>) => {
+            handlers.onName(event.target.value);
+          }}
+        />
+      </label>
+      <label className="site-admin-products__field">
+        <span>{t("admin.product_description")}</span>
+        <textarea
+          className="acs-admin__input site-admin-products__description"
+          rows={2}
+          value={form.descriptions[content]}
+          lang={htmlLang(content)}
+          aria-describedby={describedBy}
+          onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
+            handlers.onDescription(event.target.value);
+          }}
+        />
+      </label>
+      {missing && (
+        <p id={missingId} className="site-admin-products__missing">
+          {t("admin.translation_missing", { language: t(LANGUAGE_LABEL[content]) })}
+        </p>
+      )}
+      <div className="site-admin-products__placement">
+        <label className="site-admin-products__field site-admin-products__category">
+          <span>{t("admin.product_category")}</span>
+          <select
+            className="acs-admin__select"
+            value={String(form.categoryId)}
+            aria-describedby={unavailable ? unavailableId : undefined}
+            onChange={(event: ChangeEvent<HTMLSelectElement>) => {
+              handlers.onCategory(Number(event.target.value));
+            }}
+          >
+            {categoryChoices(categories, editor.product, item, language).map((choice) => (
+              <option key={choice.id} value={String(choice.id)}>
+                {choice.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {unavailable && (
+          <p id={unavailableId} className="site-admin-products__unavailable">
+            {t("admin.category_current_unavailable")}
+          </p>
+        )}
+        <label className="site-admin-products__toggle site-admin-products__active">
+          <input
+            type="checkbox"
+            checked={form.isActive}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => {
+              handlers.onActive(event.target.checked);
+            }}
+          />
+          {t("admin.active")}
+        </label>
+      </div>
+      <span className="acs-admin__muted">{t("admin.publish_requirements")}</span>
+      <OptionsGroup editor={editor} describedBy={describedBy} handlers={handlers} />
+      <SkuTable rows={rows} handlers={handlers} />
+      <div className="site-admin-products__limit">
+        <label className="site-admin-products__limit-field">
+          <span>{t("admin.max_per_order")}</span>
+          <input
+            className="acs-admin__input"
+            inputMode="numeric"
+            value={form.maxPerOrder}
+            aria-describedby={limitHintId}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => {
+              handlers.onMaxPerOrder(event.target.value);
+            }}
+          />
+        </label>
+        <span id={limitHintId} className="acs-admin__muted">
+          {t("admin.max_per_order_hint")}
+        </span>
+      </div>
+      <SkuCards rows={rows} handlers={handlers} />
+      <span className="acs-admin__muted">{t("admin.no_delete_note")}</span>
+      <div className="site-admin-products__notes">
+        <span>{t("admin.initial_stock_note")}</span>
+        <span>{t("admin.rules_apply_new")}</span>
+      </div>
+    </div>
+  );
+}
+
+// 编辑区的位置：手机上方为 common.back（桌面由 site.css 隐藏）；读取中不显示内容（标 aria-busy），读取失败只有提示，取到后为 EditorForm。
+function EditorView({
+  editing,
+  categories,
+  item,
+  onBack,
+  ...handlers
+}: { editing: Editing; categories: readonly AdminCategory[]; item: AdminProductListItem | undefined } & EditorHandlers) {
   const t = useCopy();
   return (
     <div className="site-admin-products__editor" aria-busy={editing.status === "loading"}>
@@ -260,11 +850,7 @@ function EditorView({ editing, onBack }: { editing: Editing } & EditorHandlers) 
         {t("common.back")}
       </button>
       {editing.status === "failed" && <AdminAlert error={editing.error} />}
-      {editing.status === "ready" && (
-        <div className="acs-admin__panel site-admin-products__form">
-          <h2 className="acs-admin__h">{t("admin.product_edit")}</h2>
-        </div>
-      )}
+      {editing.status === "ready" && <EditorForm editor={editing} categories={categories} item={item} handlers={handlers} />}
     </div>
   );
 }
@@ -274,7 +860,7 @@ export interface AdminProductsViewProps extends ListHandlers, EditorHandlers {
 }
 
 // 标题之下为列表区：读取中标 aria-busy；读取失败时只有提示。点了 common.edit 之后根元素加 --editing（桌面两栏，手机隐藏列表）。
-export function AdminProductsView({ state, onEdit, onBack }: AdminProductsViewProps) {
+export function AdminProductsView({ state, onEdit, ...handlers }: AdminProductsViewProps) {
   const t = useCopy();
   const editing = state.status === "ready" ? state.editing : null;
   return (
@@ -286,7 +872,14 @@ export function AdminProductsView({ state, onEdit, onBack }: AdminProductsViewPr
           {state.status === "ready" && <ProductList products={state.products} onEdit={onEdit} />}
         </div>
       </div>
-      {editing !== null && <EditorView editing={editing} onBack={onBack} />}
+      {state.status === "ready" && editing !== null && (
+        <EditorView
+          editing={editing}
+          categories={state.categories}
+          item={state.products.find((product) => product.id === editing.id)}
+          {...handlers}
+        />
+      )}
     </div>
   );
 }
@@ -312,24 +905,70 @@ export function AdminProductsContent() {
     [],
   );
 
+  const confirmLeave = useUnsavedConfirm(isDirty(state.status === "ready" ? state.editing : null));
+
+  // 只改已取到的编辑区。
+  const edit = (change: (editor: OpenEditor) => OpenEditor) => {
+    setState((current) =>
+      current.status === "ready" && current.editing !== null && current.editing.status === "ready" ? { ...current, editing: change(current.editing) } : current,
+    );
+  };
+
   return (
     <AdminProductsView
       state={state}
       onEdit={(item) => {
-        const next = startEditing(state, item.id);
-        if (next === null) {
+        // 点的正是已打开或正在读取的那一件：不做任何事，不经确认。
+        if (startEditing(state, item.id) === null) {
           return;
         }
-        productRequest.current?.abort();
-        const controller = new AbortController();
-        productRequest.current = controller;
-        setState(next);
-        void openProduct(item.id, controller.signal, pageMoves(setState, replace));
+        confirmLeave(() => {
+          productRequest.current?.abort();
+          const controller = new AbortController();
+          productRequest.current = controller;
+          setState((current) => startEditing(current, item.id) ?? current);
+          void openProduct(item.id, controller.signal, pageMoves(setState, replace));
+        });
       }}
       onBack={() => {
-        productRequest.current?.abort();
-        productRequest.current = null;
-        setState(closeEditing);
+        confirmLeave(() => {
+          productRequest.current?.abort();
+          productRequest.current = null;
+          setState(closeEditing);
+        });
+      }}
+      onContent={(content) => {
+        edit((current) => chooseContent(current, content));
+      }}
+      onName={(value) => {
+        edit((current) => changeName(current, value));
+      }}
+      onDescription={(value) => {
+        edit((current) => changeDescription(current, value));
+      }}
+      onCategory={(categoryId) => {
+        edit((current) => changeCategory(current, categoryId));
+      }}
+      onActive={(checked) => {
+        edit((current) => changeActive(current, checked));
+      }}
+      onMaxPerOrder={(text) => {
+        edit((current) => changeMaxPerOrder(current, text));
+      }}
+      onOptionName={(optionIndex, value) => {
+        edit((current) => changeOptionName(current, optionIndex, value));
+      }}
+      onValueName={(optionIndex, valueIndex, value) => {
+        edit((current) => changeValueName(current, optionIndex, valueIndex, value));
+      }}
+      onPrice={(variantIndex, text) => {
+        edit((current) => changePrice(current, variantIndex, text));
+      }}
+      onStock={(variantIndex, text) => {
+        edit((current) => changeStock(current, variantIndex, text));
+      }}
+      onVariantActive={(variantIndex, checked) => {
+        edit((current) => changeVariantActive(current, variantIndex, checked));
       }}
     />
   );

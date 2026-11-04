@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "../App";
 import type { AdminCategory, CategoriesRead } from "../api/adminCategories";
-import type { AdminProduct, AdminProductListItem, ProductsRead } from "../api/adminProducts";
+import type { AdminOption, AdminOptionValue, AdminProduct, AdminProductListItem, ProductsRead } from "../api/adminProducts";
 import { AdminFrameView } from "../components/AdminFrame";
 import type { FrameState } from "../components/AdminFrame";
 import { COPY, LANGUAGES } from "../i18n/copy";
@@ -14,19 +14,41 @@ import { ADMIN_PRODUCTS_PATH, RouterProvider } from "../router";
 import type { RoutePath } from "../router";
 import {
   AdminProductsView,
+  categoryChoices,
   categoryName,
+  categoryUnavailable,
+  changeActive,
+  changeCategory,
+  changeDescription,
+  changeMaxPerOrder,
+  changeName,
+  changeOptionName,
+  changePrice,
+  changeStock,
+  changeValueName,
+  changeVariantActive,
+  chooseContent,
   closeEditing,
+  editorOf,
+  formOf,
+  isChoosable,
+  isDirty,
   localName,
   LOADING,
   openProduct,
   openProducts,
+  priceText,
   productName,
   productStep,
   readStep,
   settleEditing,
+  skuRows,
   startEditing,
+  texts,
+  translationMissing,
+  variantText,
 } from "./AdminProductsPage";
-import type { Editing, ProductsMoves, ProductsState } from "./AdminProductsPage";
+import type { AdminProductsViewProps, Editing, OpenEditor, ProductForm, ProductsMoves, ProductsState } from "./AdminProductsPage";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -124,6 +146,58 @@ function product(id: number, name: string): AdminProduct {
 const TEE_PRODUCT = product(3, "Crew Neck Tee");
 const TOTE_PRODUCT = product(5, "Linen Tote Bag");
 
+// 带两个规格名的商品（列表的 TEE，分类 1）：马来文名称与描述为 null、中文描述有值；Navy 的中文为 null、马来文为空串，L 只有英文。
+// 三个 SKU 的价格为 3900、0 与 5 仙。
+const BLACK: AdminOptionValue = { id: 31, code: "black", name_en: "Black", name_zh: "黑色", name_ms: "Hitam" };
+const NAVY: AdminOptionValue = { id: 32, code: "navy", name_en: "Navy", name_zh: null, name_ms: "" };
+const MEDIUM: AdminOptionValue = { id: 33, code: "m", name_en: "M", name_zh: "中", name_ms: "Sederhana" };
+const LARGE: AdminOptionValue = { id: 34, code: "l", name_en: "L", name_zh: null, name_ms: null };
+const COLOUR: AdminOption = { id: 21, code: "colour", name_en: "Colour", name_zh: "颜色", name_ms: "Warna", values: [BLACK, NAVY] };
+const SIZE: AdminOption = { id: 22, code: "size", name_en: "Size", name_zh: "尺码", name_ms: null, values: [MEDIUM, LARGE] };
+const SHIRT: AdminProduct = {
+  id: 3,
+  slug: "crew-neck-tee",
+  version: 4,
+  category_id: 1,
+  name_en: "Crew Neck Tee",
+  name_zh: "圆领T恤",
+  name_ms: null,
+  description_en: "A soft cotton tee.",
+  description_zh: "柔软的棉质T恤。",
+  description_ms: null,
+  is_active: true,
+  max_per_order: 10,
+  options: [COLOUR, SIZE],
+  variants: [
+    { id: 41, sku: "crew-neck-tee-black-m", price_sen: 3900, daily_initial_stock: 20, available_stock: 18, is_active: true, option_value_ids: [31, 33] },
+    { id: 42, sku: "crew-neck-tee-navy-m", price_sen: 0, daily_initial_stock: 0, available_stock: 0, is_active: false, option_value_ids: [32, 33] },
+    { id: 43, sku: "crew-neck-tee-navy-l", price_sen: 5, daily_initial_stock: 7, available_stock: 3, is_active: true, option_value_ids: [32, 34] },
+  ],
+  images: [],
+};
+// 同一件商品、三种语言的文案都齐全。
+const FULL: AdminProduct = {
+  ...SHIRT,
+  name_ms: "Baju Leher Bulat",
+  description_ms: "Baju kapas lembut.",
+  options: [
+    { ...COLOUR, values: [BLACK, { ...NAVY, name_zh: "藏青", name_ms: "Biru Tua" }] },
+    { ...SIZE, name_ms: "Saiz", values: [MEDIUM, { ...LARGE, name_zh: "大", name_ms: "Besar" }] },
+  ],
+};
+
+// 分类读取的结果（接口顺序）：可选的为 Apparel、Bags 与 Kitchen；Seasonal 停用，其余英文名称为 null、空串或只有空白。
+const SEASONAL: AdminCategory = { id: 4, slug: "seasonal", name_en: "Seasonal", name_zh: "季节", name_ms: null, is_active: false, version: 2, visible_products: 0 };
+const NO_EN: AdminCategory = { id: 6, slug: "category-6", name_en: null, name_zh: "无名", name_ms: null, is_active: true, version: 1, visible_products: 0 };
+const EMPTY_EN: AdminCategory = { id: 8, slug: "category-8", name_en: "", name_zh: "空", name_ms: null, is_active: true, version: 1, visible_products: 0 };
+const BLANK_EN: AdminCategory = { id: 10, slug: "category-10", name_en: "   ", name_zh: "空白", name_ms: null, is_active: true, version: 1, visible_products: 0 };
+const KITCHEN: AdminCategory = { id: 12, slug: "kitchen", name_en: "Kitchen", name_zh: "厨房", name_ms: "", is_active: true, version: 1, visible_products: 2 };
+const CATEGORIES = [SEASONAL, APPAREL, NO_EN, BAGS, EMPTY_EN, BLANK_EN, KITCHEN];
+
+// 当前分类为停用的 Seasonal 的商品与它在列表里的那一项。
+const SEASONAL_SHIRT: AdminProduct = { ...SHIRT, category_id: 4 };
+const SEASONAL_TEE: AdminProductListItem = { ...TEE, category_id: 4, category_name_en: "Seasonal", category_name_zh: "季节", category_name_ms: null };
+
 function storage(language: Language) {
   return {
     getItem: (key: string) => (key === LANGUAGE_STORAGE_KEY ? language : null),
@@ -143,12 +217,28 @@ function renderApp(language: Language): string {
   return renderToStaticMarkup(<App initialPath={PRODUCTS_PATH} storage={storage(language)} />);
 }
 
-function ready(products: AdminProductListItem[] = LISTED, editing: Editing | null = null): ProductsState {
-  return { status: "ready", products, categories: [APPAREL, BAGS], csrfToken: "csrf-1", editing };
+function ready(products: AdminProductListItem[] = LISTED, editing: Editing | null = null, categories: AdminCategory[] = [APPAREL, BAGS]): ProductsState {
+  return { status: "ready", products, categories, csrfToken: "csrf-1", editing };
 }
 
+const HANDLERS: Omit<AdminProductsViewProps, "state"> = {
+  onEdit: () => undefined,
+  onBack: () => undefined,
+  onContent: () => undefined,
+  onName: () => undefined,
+  onDescription: () => undefined,
+  onCategory: () => undefined,
+  onActive: () => undefined,
+  onMaxPerOrder: () => undefined,
+  onOptionName: () => undefined,
+  onValueName: () => undefined,
+  onPrice: () => undefined,
+  onStock: () => undefined,
+  onVariantActive: () => undefined,
+};
+
 function view(state: ProductsState): ReactNode {
-  return <AdminProductsView state={state} onEdit={() => undefined} onBack={() => undefined} />;
+  return <AdminProductsView state={state} {...HANDLERS} />;
 }
 
 function render(state: ProductsState, language: Language = "en"): string {
@@ -240,6 +330,50 @@ function hasClass(html: string, className: string): boolean {
 // 根元素（第一个 div）的类名。
 function rootClasses(html: string): string[] {
   return classes(tags(html, "div")[0] ?? "");
+}
+
+// 编辑区的面板（含其内容）。
+function form(html: string): string {
+  return element(html, "div", "site-admin-products__form");
+}
+
+// 全部 label 元素（label 不嵌套）；field 为第一个文本节点是 text 的那一个。
+function labels(html: string): string[] {
+  return [...html.matchAll(/<label\b[^>]*>[\s\S]*?<\/label>/g)].map((m) => m[0]);
+}
+
+function field(html: string, text: string): string {
+  const found = labels(html).find((label) => textNodes(label)[0] === text);
+  if (found === undefined) {
+    throw new Error(`no label ${text}`);
+  }
+  return found;
+}
+
+// 第一个 input 的 value 与是否勾选；textarea 的内容；select 的各项（value、文字、是否选中）。
+function inputValue(html: string): string | undefined {
+  return attributes(tags(html, "input")[0] ?? "").get("value");
+}
+
+function isChecked(html: string): boolean {
+  return attributes(tags(html, "input")[0] ?? "").has("checked");
+}
+
+function textareaValue(html: string): string | undefined {
+  const m = /<textarea\b[^>]*>([\s\S]*?)<\/textarea>/.exec(html);
+  return m === null ? undefined : unescapeHtml(m[1] ?? "");
+}
+
+function selectOptions(html: string): [string, string, boolean][] {
+  return [...html.matchAll(/<option\b([^>]*)>([^<]*)<\/option>/g)].map((m) => {
+    const found = attributes(`<option${m[1] ?? ""}>`);
+    return [found.get("value") ?? "", unescapeHtml(m[2] ?? ""), found.has("selected")];
+  });
+}
+
+// 编辑区已打开的页面状态。
+function opened(editor: OpenEditor, products: AdminProductListItem[] = LISTED, categories: AdminCategory[] = [APPAREL, BAGS]): ProductsState {
+  return ready(products, editor, categories);
 }
 
 function json(status: number, body: unknown): Response {
@@ -545,14 +679,16 @@ describe("AdminProductsPage", () => {
 
   // HANDOFF 0.82「点编辑后先收起当前编辑区、读取单件成功后才显示编辑区（读取期间不显示内容…）」「点已打开的那一件商品的编辑不做任何事」与
   // 本任务验收「点编辑区已打开（或正在读取）的那一件商品的 common.edit 不做任何事」：点另一件时编辑区换成读取中（原先的单件商品不再显示）；
-  // 点正在读取或已打开的同一件时为 null；列表还没取到时也为 null；读取失败（编辑区没有打开）的那一件再点时重新读取。
+  // 点正在读取或已打开的同一件时为 null（本任务 purpose「点当前已打开的那一件商品的 common.edit 照 202 不做任何事，不经确认、不丢失修改」：
+  // 有修改时也为 null，页面据此不弹确认）；列表还没取到时也为 null；读取失败（编辑区没有打开）的那一件再点时重新读取。
   // 读取中的编辑区标 aria-busy，只有 common.back，没有标题。
   it("collapses the editor and starts reading on common.edit", () => {
-    const opened = ready(LISTED, { status: "ready", id: 3, product: TEE_PRODUCT });
-    const reading = startEditing(opened, 5);
+    const open = ready(LISTED, editorOf(3, TEE_PRODUCT));
+    const reading = startEditing(open, 5);
     expect(reading).toEqual(ready(LISTED, { status: "loading", id: 5 }));
     expect(reading === null ? null : startEditing(reading, 5)).toBeNull();
-    expect(startEditing(opened, 3)).toBeNull();
+    expect(startEditing(open, 3)).toBeNull();
+    expect(startEditing(ready(LISTED, changeName(editorOf(3, TEE_PRODUCT), "Changed")), 3)).toBeNull();
     expect(startEditing(LOADING, 3)).toBeNull();
     expect(startEditing(ready(LISTED, { status: "failed", id: 7, error: "common.error_retry" }), 7)).toEqual(ready(LISTED, { status: "loading", id: 7 }));
     const html = render(ready(LISTED, { status: "loading", id: 5 }));
@@ -563,8 +699,9 @@ describe("AdminProductsPage", () => {
     expect(html).not.toContain(COPY["admin.product_edit"].en);
   });
 
-  // 本任务验收「点某行 common.edit…读取该商品，ok 时显示编辑区（标题 admin.product_edit）」与「页面状态里保留读取到的单件商品」：
-  // GET /api/admin/products/{id} 带传入的 signal；取到后编辑区为该商品，渲染出面板与 h2 admin.product_edit，列表仍在。
+  // SHOP-TASK-202 验收「点某行 common.edit…读取该商品，ok 时显示编辑区（标题 admin.product_edit）」与「页面状态里保留读取到的单件商品」：
+  // GET /api/admin/products/{id} 带传入的 signal；取到后编辑区为该商品（基线与已填的值都为读取的值、内容语言英文，照 editorOf），
+  // 面板以 h2 admin.product_edit 开始，列表仍在。
   it.each(LANGUAGES)("shows admin.product_edit once the product is read in %s", async (language) => {
     const calls = stubFetch({ "/api/admin/products/3": [json(200, TEE_PRODUCT)] });
     const controller = new AbortController();
@@ -572,13 +709,13 @@ describe("AdminProductsPage", () => {
     await openProduct(3, controller.signal, run.moves);
     expect(calls.map((call) => [call.url, call.init.method])).toEqual([["/api/admin/products/3", "GET"]]);
     expect(calls[0]?.init.signal).toBe(controller.signal);
-    expect(editingOf(run.state)).toEqual({ status: "ready", id: 3, product: TEE_PRODUCT });
+    expect(editingOf(run.state)).toEqual({ status: "ready", id: 3, product: TEE_PRODUCT, base: formOf(TEE_PRODUCT), form: formOf(TEE_PRODUCT), content: "en" });
     const html = render(run.state, language);
     const editor = element(html, "div", "site-admin-products__editor");
     expect(attributes(tags(editor, "div")[0] ?? "").get("aria-busy")).toBe("false");
-    expect(element(editor, "div", "site-admin-products__form")).toBe(
-      `<div class="acs-admin__panel site-admin-products__form"><h2 class="acs-admin__h">${escapeHtml(COPY["admin.product_edit"][language])}</h2></div>`,
-    );
+    expect(
+      form(editor).startsWith(`<div class="acs-admin__panel site-admin-products__form"><h2 class="acs-admin__h">${escapeHtml(COPY["admin.product_edit"][language])}</h2>`),
+    ).toBe(true);
     expect(hasClass(html, "site-admin-products__list")).toBe(true);
   });
 
@@ -625,8 +762,8 @@ describe("AdminProductsPage", () => {
     tote.resolve(json(200, TOTE_PRODUCT));
     await readingTote;
     expect(run.events).toEqual(["update"]);
-    expect(editingOf(run.state)).toEqual({ status: "ready", id: 5, product: TOTE_PRODUCT });
-    const late: Editing = { status: "ready", id: 3, product: TEE_PRODUCT };
+    expect(editingOf(run.state)).toEqual(editorOf(5, TOTE_PRODUCT));
+    const late: Editing = editorOf(3, TEE_PRODUCT);
     expect(settleEditing(ready(LISTED, { status: "loading", id: 5 }), late)).toEqual(ready(LISTED, { status: "loading", id: 5 }));
     expect(settleEditing(run.state, late)).toEqual(run.state);
     expect(settleEditing(ready(), late)).toEqual(ready());
@@ -639,7 +776,7 @@ describe("AdminProductsPage", () => {
     const states: Editing[] = [
       { status: "loading", id: 3 },
       { status: "failed", id: 3, error: "common.network_check" },
-      { status: "ready", id: 3, product: TEE_PRODUCT },
+      editorOf(3, TEE_PRODUCT),
     ];
     for (const editing of states) {
       const html = render(ready(LISTED, editing), "zh");
@@ -664,13 +801,29 @@ describe("AdminProductsPage", () => {
     expect(closeEditing(LOADING)).toBe(LOADING);
   });
 
-  // 本任务验收「测试」一条「页面文字全部来自字典」：经路由打开、读取中、读取失败、列表与编辑区的三种状态里，看得见或读得出的每段文字都是
-  // 当前语言的字典文案，或商品与分类数据本身（名称与名称缺失时的 —）。
+  // SHOP-TASK-202 与本任务验收「测试」一条「页面文字全部来自字典」：经路由打开、读取中、读取失败、列表与编辑区的各种状态（含缺译提示、
+  // 当前分类不可选的提示与中文、马来文内容语言）里，看得见或读得出的每段文字都是当前语言的字典文案，或商品与分类数据本身（名称、描述、
+  // SKU 代码、规格列、当日可用库存与缺失时的 —）。
   it.each(LANGUAGES)("shows only dictionary text in %s", (language) => {
     const allowed = dictionary(language);
-    for (const item of LISTED) {
+    const editors = [editorOf(3, TEE_PRODUCT), editorOf(3, SHIRT), chooseContent(editorOf(3, SHIRT), "zh"), chooseContent(editorOf(3, SEASONAL_SHIRT), "ms")];
+    for (const item of [...LISTED, SEASONAL_TEE]) {
       allowed.add(productName(item, language));
       allowed.add(categoryName(item, language));
+    }
+    for (const label of ["common.lang_zh", "common.lang_ms"] as const) {
+      allowed.add(COPY["admin.translation_missing"][language].replace("{language}", COPY[label][language]));
+    }
+    for (const editor of editors) {
+      allowed.add(editor.form.descriptions[editor.content]);
+      for (const choice of categoryChoices(CATEGORIES, editor.product, SEASONAL_TEE, language)) {
+        allowed.add(choice.label);
+      }
+      for (const row of skuRows(editor, language)) {
+        allowed.add(row.sku);
+        allowed.add(row.variant);
+        allowed.add(String(row.available));
+      }
     }
     const html = [
       renderApp(language),
@@ -679,12 +832,339 @@ describe("AdminProductsPage", () => {
       renderSignedIn(language, ready()),
       renderSignedIn(language, ready(LISTED, { status: "loading", id: 3 })),
       renderSignedIn(language, ready(LISTED, { status: "failed", id: 3, error: "common.error_retry" })),
-      renderSignedIn(language, ready(LISTED, { status: "ready", id: 3, product: TEE_PRODUCT })),
+      ...editors.map((editor) => renderSignedIn(language, opened(editor, [SEASONAL_TEE, TOTE], CATEGORIES))),
     ];
     for (const page of html) {
       for (const value of visibleTexts(page)) {
         expect(allowed.has(value), value).toBe(true);
       }
+    }
+  });
+
+  // 本任务验收「读取为 null 的文案在输入框与比较基线里都当作空串」「价格输入框的初值为整仙用整数运算写成的两位小数文字（照 feeText）」：
+  // formOf 给出的值（也是 editorOf 的基线）里 null 为空串，价格 3900、0 与 5 仙为 39.00、0.00 与 0.05，库存与限购为十进制文字；
+  // 规格名与规格值、SKU 都按接口顺序。
+  it("turns the read product into the initial values", () => {
+    expect([0, 5, 99, 3900, 50000000].map(priceText)).toEqual(["0.00", "0.05", "0.99", "39.00", "500000.00"]);
+    expect(texts({ en: "Tee", zh: null, ms: "" })).toEqual({ en: "Tee", zh: "", ms: "" });
+    const expected: ProductForm = {
+      names: { en: "Crew Neck Tee", zh: "圆领T恤", ms: "" },
+      descriptions: { en: "A soft cotton tee.", zh: "柔软的棉质T恤。", ms: "" },
+      categoryId: 1,
+      isActive: true,
+      maxPerOrder: "10",
+      options: [
+        {
+          id: 21,
+          names: { en: "Colour", zh: "颜色", ms: "Warna" },
+          values: [
+            { id: 31, names: { en: "Black", zh: "黑色", ms: "Hitam" } },
+            { id: 32, names: { en: "Navy", zh: "", ms: "" } },
+          ],
+        },
+        {
+          id: 22,
+          names: { en: "Size", zh: "尺码", ms: "" },
+          values: [
+            { id: 33, names: { en: "M", zh: "中", ms: "Sederhana" } },
+            { id: 34, names: { en: "L", zh: "", ms: "" } },
+          ],
+        },
+      ],
+      variants: [
+        { id: 41, price: "39.00", stock: "20", isActive: true },
+        { id: 42, price: "0.00", stock: "0", isActive: false },
+        { id: 43, price: "0.05", stock: "7", isActive: true },
+      ],
+    };
+    expect(formOf(SHIRT)).toEqual(expected);
+    expect(editorOf(3, SHIRT)).toEqual({ status: "ready", id: 3, product: SHIRT, base: expected, form: expected, content: "en" });
+  });
+
+  // UX A04 线框「[admin.product_name] [____]」「[admin.product_description] [____]」「[admin.product_category] [▾] [admin.active] ☐」
+  // 「[admin.max_per_order] [M3 __]」与本任务验收「描述为多行输入框」「读取单件后的各输入框初值（含 null 当作空串）」：英文内容语言下
+  // 名称输入框、描述 textarea、分类下拉（选中商品的分类）、上架勾选框与每单限购输入框为读取的值；马来文内容语言下 null 的名称与描述为空串。
+  it.each(LANGUAGES)("renders the read values in the inputs in %s", (language) => {
+    const html = form(render(opened(editorOf(3, SHIRT)), language));
+    expect(inputValue(field(html, COPY["admin.product_name"][language]))).toBe("Crew Neck Tee");
+    expect(textareaValue(field(html, COPY["admin.product_description"][language]))).toBe("A soft cotton tee.");
+    expect(selectOptions(field(html, COPY["admin.product_category"][language])).filter(([, , selected]) => selected).map(([value]) => value)).toEqual(["1"]);
+    expect(isChecked(field(html, COPY["admin.active"][language]))).toBe(true);
+    expect(isChecked(field(form(render(opened(changeActive(editorOf(3, SHIRT), false)), language)), COPY["admin.active"][language]))).toBe(false);
+    const limit = field(html, COPY["admin.max_per_order"][language]);
+    expect(inputValue(limit)).toBe("10");
+    expect(attributes(tags(limit, "input")[0] ?? "").get("inputmode")).toBe("numeric");
+    const malay = form(render(opened(chooseContent(editorOf(3, SHIRT), "ms")), language));
+    expect(inputValue(field(malay, COPY["admin.product_name"][language]))).toBe("");
+    expect(textareaValue(field(malay, COPY["admin.product_description"][language]))).toBe("");
+  });
+
+  // UX A04 线框「[admin.content_language] ([common.lang_en]) ([common.lang_zh]) ([common.lang_ms])」与本任务验收「三个按钮（aria-pressed
+  // 标出当前内容语言，默认英文）切换商品名称、描述以及每个规格名与规格值的名称输入框显示与编辑的语言，切换不丢失其他语言已填的值」。
+  it("switches the content language without losing other languages", () => {
+    const start = editorOf(3, SHIRT);
+    const pressed = (editor: OpenEditor) =>
+      tags(element(form(render(opened(editor))), "div", "site-admin-products__languages"), "button").map((tag) => attributes(tag).get("aria-pressed"));
+    expect(pressed(start)).toEqual(["true", "false", "false"]);
+    expect(textNodes(element(form(render(opened(start))), "div", "site-admin-products__languages"))).toEqual([
+      COPY["admin.content_language"].en,
+      COPY["common.lang_en"].en,
+      COPY["common.lang_zh"].en,
+      COPY["common.lang_ms"].en,
+    ]);
+    let editor = changeName(chooseContent(start, "zh"), "圆领T恤（新）");
+    editor = changeOptionName(editor, 0, "色");
+    editor = changeValueName(editor, 1, 1, "大");
+    editor = changeDescription(chooseContent(editor, "ms"), "Baju kapas.");
+    editor = chooseContent(editor, "en");
+    expect(pressed(editor)).toEqual(["true", "false", "false"]);
+    expect(editor.form.names).toEqual({ en: "Crew Neck Tee", zh: "圆领T恤（新）", ms: "" });
+    expect(editor.form.descriptions).toEqual({ en: "A soft cotton tee.", zh: "柔软的棉质T恤。", ms: "Baju kapas." });
+    expect(editor.form.options.map((option) => option.names.zh)).toEqual(["色", "尺码"]);
+    expect(editor.form.options.map((option) => option.values.map((value) => value.names.zh))).toEqual([["黑色", ""], ["中", "大"]]);
+    const zh = chooseContent(editor, "zh");
+    expect(pressed(zh)).toEqual(["false", "true", "false"]);
+    const html = form(render(opened(zh)));
+    expect(inputValue(field(html, COPY["admin.product_name"].en))).toBe("圆领T恤（新）");
+    expect(textareaValue(field(html, COPY["admin.product_description"].en))).toBe("柔软的棉质T恤。");
+    const options = element(html, "div", "site-admin-products__options");
+    expect(labels(options).map(inputValue)).toEqual(["色", "尺码"]);
+    const values = tags(options, "input").filter((tag) => attributes(tag).get("aria-label") === COPY["admin.option_value"].en);
+    expect(values.map((tag) => attributes(tag).get("value"))).toEqual(["黑色", "", "中", "大"]);
+    expect([...new Set(tags(html, "input").filter((tag) => attributes(tag).has("lang")).map((tag) => attributes(tag).get("lang")))]).toEqual(["zh-Hans"]);
+    expect(textareaValue(field(form(render(opened(chooseContent(editor, "ms")))), COPY["admin.product_description"].en))).toBe("Baju kapas.");
+  });
+
+  // UX A04「[admin.translation_missing]（缺译时）」与本任务验收「内容语言为中文或马来文且该语言的商品名称、描述或任一规格名、规格值的名称为空
+  // （去掉首尾空白后）时显示一条 admin.translation_missing（{language} 为该语言在当前界面语言下的名称）」：文案齐全时三种内容语言都没有；
+  // 英文内容语言即使中文、马来文有缺也没有；中文或马来文下名称、描述、规格名、规格值任一项为空或只有空白时有，且只有一条。
+  it.each(LANGUAGES)("shows one translation notice only for missing Chinese or Malay text in %s", (language) => {
+    const count = (editor: OpenEditor) => (render(opened(editor), language).match(/class="site-admin-products__missing"/g) ?? []).length;
+    for (const content of LANGUAGES) {
+      expect(translationMissing(chooseContent(editorOf(3, FULL), content))).toBe(false);
+      expect(count(chooseContent(editorOf(3, FULL), content))).toBe(0);
+    }
+    expect(translationMissing(editorOf(3, SHIRT))).toBe(false);
+    expect(count(editorOf(3, SHIRT))).toBe(0);
+    expect(count(chooseContent(editorOf(3, SHIRT), "ms"))).toBe(1);
+    for (const content of ["zh", "ms"] as const) {
+      const full = chooseContent(editorOf(3, FULL), content);
+      const blanks = [
+        changeName(full, "  "),
+        changeDescription(full, ""),
+        changeOptionName(full, 1, " "),
+        changeValueName(full, 0, 1, ""),
+        changeValueName(full, 1, 0, "\t"),
+      ];
+      for (const editor of blanks) {
+        expect(translationMissing(editor)).toBe(true);
+        expect(count(editor)).toBe(1);
+        expect(translationMissing(chooseContent(editor, "en"))).toBe(false);
+      }
+      const html = render(opened(changeName(full, "")), language);
+      expect(element(html, "p", "site-admin-products__missing")).toContain(
+        escapeHtml(COPY["admin.translation_missing"][language].replace("{language}", COPY[content === "zh" ? "common.lang_zh" : "common.lang_ms"][language])),
+      );
+    }
+  });
+
+  // HANDOFF 0.82 第（2）点「分类下拉只列启用且有英文名称（不为 null、去掉首尾空白后不为空）的分类，商品当前分类不在其中时另加一项排在最前」
+  // 与本任务 purpose 的落实写法（按接口顺序，文字按后台界面语言、缺译回退英文；另加的一项文字取商品列表该项的 category_name_*，都缺时为 —）：
+  // 停用的、英文名称为 null、空串或只有空白的都不列。
+  it("lists only choosable categories, with an unavailable current category first", () => {
+    expect(CATEGORIES.map(isChoosable)).toEqual([false, true, false, true, false, false, true]);
+    expect(categoryChoices(CATEGORIES, SHIRT, TEE, "en")).toEqual([
+      { id: 1, label: "Apparel", choosable: true },
+      { id: 2, label: "Bags", choosable: true },
+      { id: 12, label: "Kitchen", choosable: true },
+    ]);
+    expect(categoryChoices(CATEGORIES, SHIRT, TEE, "zh").map((choice) => choice.label)).toEqual(["服饰", "Bags", "厨房"]);
+    expect(categoryChoices(CATEGORIES, SHIRT, TEE, "ms").map((choice) => choice.label)).toEqual(["Pakaian", "Bags", "Kitchen"]);
+    expect(categoryChoices(CATEGORIES, SEASONAL_SHIRT, SEASONAL_TEE, "zh")).toEqual([
+      { id: 4, label: "季节", choosable: false },
+      { id: 1, label: "服饰", choosable: true },
+      { id: 2, label: "Bags", choosable: true },
+      { id: 12, label: "厨房", choosable: true },
+    ]);
+    expect(categoryChoices(CATEGORIES, SEASONAL_SHIRT, SEASONAL_TEE, "ms")[0]).toEqual({ id: 4, label: "Seasonal", choosable: false });
+    const nameless = { ...SEASONAL_TEE, category_name_en: "", category_name_zh: null, category_name_ms: "" };
+    expect(categoryChoices(CATEGORIES, SEASONAL_SHIRT, nameless, "zh")[0]).toEqual({ id: 4, label: "—", choosable: false });
+    expect(categoryChoices(CATEGORIES, SEASONAL_SHIRT, undefined, "en")[0]).toEqual({ id: 4, label: "—", choosable: false });
+    const noEnglish = { ...SEASONAL_TEE, category_id: 6, category_name_en: null, category_name_zh: "无名", category_name_ms: null };
+    expect(categoryChoices(CATEGORIES, { ...SHIRT, category_id: 6 }, noEnglish, "zh")[0]).toEqual({ id: 6, label: "无名", choosable: false });
+    expect(categoryChoices(CATEGORIES, { ...SHIRT, category_id: 6 }, noEnglish, "en")[0]).toEqual({ id: 6, label: "—", choosable: false });
+    expect([1, 2, 12].map((id) => categoryUnavailable(CATEGORIES, id))).toEqual([false, false, false]);
+    expect([4, 6, 8, 10, 99].map((id) => categoryUnavailable(CATEGORIES, id))).toEqual([true, true, true, true, true]);
+  });
+
+  // UX A04「[admin.category_current_unavailable]（当前分类已停用或缺英文名称时）」、视觉稿 A04-states「下拉框仍显示它、可以保留」与本任务验收
+  // 「选中的不是可选分类时其下显示 admin.category_current_unavailable」：当前分类为停用的 Seasonal 时下拉框以它为第一项且选中，其下有提示；
+  // 改选 Apparel 后提示不显示、Seasonal 仍是第一项；当前分类可选时没有提示。
+  it.each(LANGUAGES)("explains an unavailable current category under the select in %s", (language) => {
+    const start = editorOf(3, SEASONAL_SHIRT);
+    const html = form(render(opened(start, [SEASONAL_TEE, TOTE], CATEGORIES), language));
+    const category = element(html, "div", "site-admin-products__placement");
+    const labelText = (id: number) => categoryChoices(CATEGORIES, SEASONAL_SHIRT, SEASONAL_TEE, language).find((choice) => choice.id === id)?.label ?? "";
+    expect(selectOptions(category)).toEqual([
+      ["4", labelText(4), true],
+      ["1", labelText(1), false],
+      ["2", labelText(2), false],
+      ["12", labelText(12), false],
+    ]);
+    expect(textNodes(element(category, "p", "site-admin-products__unavailable"))).toEqual([COPY["admin.category_current_unavailable"][language]]);
+    const moved = form(render(opened(changeCategory(start, 1), [SEASONAL_TEE, TOTE], CATEGORIES), language));
+    expect(selectOptions(moved).map(([value, , selected]) => [value, selected])).toEqual([
+      ["4", false],
+      ["1", true],
+      ["2", false],
+      ["12", false],
+    ]);
+    expect(hasClass(moved, "site-admin-products__unavailable")).toBe(false);
+    expect(hasClass(form(render(opened(editorOf(3, SHIRT), LISTED, CATEGORIES), language)), "site-admin-products__unavailable")).toBe(false);
+  });
+
+  // 本任务 purpose 的落实写法「规格列（admin.variant）为该 SKU 各规格值最近一次读取或保存的名称，按后台界面语言、缺译回退英文，以「 / 」相连，
+  // 没有规格名时为 —」：Navy 的中文为 null、马来文为空串时回退英文；L 只有英文；规格值改名后（未保存）规格列仍为读取的名称。
+  it("writes the option values column", () => {
+    const [blackM, navyM, navyL] = SHIRT.variants;
+    if (blackM === undefined || navyM === undefined || navyL === undefined) {
+      throw new Error("fixture");
+    }
+    expect([blackM, navyM, navyL].map((variant) => variantText(SHIRT, variant, "en"))).toEqual(["Black / M", "Navy / M", "Navy / L"]);
+    expect([blackM, navyM, navyL].map((variant) => variantText(SHIRT, variant, "zh"))).toEqual(["黑色 / 中", "Navy / 中", "Navy / L"]);
+    expect([blackM, navyM, navyL].map((variant) => variantText(SHIRT, variant, "ms"))).toEqual(["Hitam / Sederhana", "Navy / Sederhana", "Navy / L"]);
+    const single = TEE_PRODUCT.variants[0];
+    expect(single === undefined ? null : variantText(TEE_PRODUCT, single, "zh")).toBe("—");
+    const renamed = changeValueName(editorOf(3, SHIRT), 0, 0, "Jet");
+    expect(skuRows(renamed, "en").map((row) => row.variant)).toEqual(["Black / M", "Navy / M", "Navy / L"]);
+  });
+
+  // UX A04 桌面线框「[admin.sku] [admin.variant] [admin.price] [admin.initial_stock] [admin.sku_enabled] [admin.available_today]」「<sku> <规格值>
+  // [M1 ____] [M2 ___] ☑ <n>」、手机线框「SKU 卡片」六项与本任务验收「桌面为表格…手机为每个 SKU 一张卡片（同样六项），两套都渲染」：
+  // 表格六个列头；每行为 SKU 代码、规格列、价格与每日初始库存输入框（读取的文字）、启用勾选框、当日可用库存；卡片按同样顺序有六项。
+  // 表格在每单限购之前、卡片在其后（照 A04-desktop 与 A04-phone-edit）；没有 admin.adjust_today（SHOP-TASK-208）。
+  it.each(LANGUAGES)("renders the SKUs as a desktop table and phone cards in %s", (language) => {
+    const html = form(render(opened(changePrice(editorOf(3, SHIRT), 2, "0.5 RM")), language));
+    const table = element(html, "div", "site-admin-products__skus");
+    expect(textNodes(/<thead>[\s\S]*<\/thead>/.exec(table)?.[0] ?? "")).toEqual(
+      (["admin.sku", "admin.variant", "admin.price", "admin.initial_stock", "admin.sku_enabled", "admin.available_today"] as const).map((key) => COPY[key][language]),
+    );
+    const variants = skuRows(editorOf(3, SHIRT), language).map((row) => row.variant);
+    const rows = [...(/<tbody>([\s\S]*)<\/tbody>/.exec(table)?.[1] ?? "").matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map((m) => m[1] ?? "");
+    expect(rows.map(textNodes)).toEqual([
+      ["crew-neck-tee-black-m", variants[0], "18"],
+      ["crew-neck-tee-navy-m", variants[1], "0"],
+      ["crew-neck-tee-navy-l", variants[2], "3"],
+    ]);
+    const cells = (row: string) => tags(row, "input").map((tag) => [attributes(tag).get("aria-label"), attributes(tag).get("value") ?? attributes(tag).has("checked")]);
+    expect(rows.map(cells)).toEqual(
+      [
+        ["39.00", "20", true],
+        ["0.00", "0", false],
+        ["0.5 RM", "7", true],
+      ].map(([price, stock, enabled]) => [
+        [COPY["admin.price"][language], price],
+        [COPY["admin.initial_stock"][language], stock],
+        [COPY["admin.sku_enabled"][language], enabled],
+      ]),
+    );
+    const cards = [...element(html, "ul", "site-admin-products__sku-cards").matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1] ?? "");
+    expect(cards.map(textNodes)).toEqual(
+      [
+        ["crew-neck-tee-black-m", variants[0], "18"],
+        ["crew-neck-tee-navy-m", variants[1], "0"],
+        ["crew-neck-tee-navy-l", variants[2], "3"],
+      ].map(([sku, variant, available]) => [
+        COPY["admin.sku"][language],
+        sku,
+        COPY["admin.variant"][language],
+        variant,
+        COPY["admin.price"][language],
+        COPY["admin.initial_stock"][language],
+        COPY["admin.sku_enabled"][language],
+        COPY["admin.available_today"][language],
+        available,
+      ]),
+    );
+    expect(cards.map((card) => tags(card, "input").map((tag) => attributes(tag).get("value") ?? attributes(tag).has("checked")))).toEqual([
+      ["39.00", "20", true],
+      ["0.00", "0", false],
+      ["0.5 RM", "7", true],
+    ]);
+    const limit = html.indexOf('class="site-admin-products__limit"');
+    expect(html.indexOf('class="site-admin-products__skus"')).toBeLessThan(limit);
+    expect(html.indexOf('class="site-admin-products__sku-cards"')).toBeGreaterThan(limit);
+    expect(tags(table, "button")).toEqual([]);
+    expect(tags(element(html, "ul", "site-admin-products__sku-cards"), "button")).toEqual([]);
+  });
+
+  // UX A04 线框的常显文字与本任务验收「常显的说明——admin.publish_requirements、admin.product_options 一组下的 admin.options_fixed_note、
+  // admin.max_per_order_hint、admin.no_delete_note、admin.initial_stock_note 与 admin.rules_apply_new，位置照视觉稿」「规格名与规格值只能改名称，
+  // 不显示去掉的按钮；不显示 common.create、common.save、图片区与当日库存调整的按钮」：说明按视觉稿顺序都在；每个规格名一行（admin.option_name、
+  // admin.option_values 与读屏标签 admin.option_value 的规格值输入框）；编辑区里的按钮只有内容语言三个，没有图片。
+  it.each(LANGUAGES)("shows the standing notes and no buttons beyond the content languages in %s", (language) => {
+    const html = form(render(opened(editorOf(3, SHIRT)), language));
+    const nodes = textNodes(html);
+    const notes = (
+      [
+        "admin.publish_requirements",
+        "admin.product_options",
+        "admin.options_fixed_note",
+        "admin.max_per_order_hint",
+        "admin.no_delete_note",
+        "admin.initial_stock_note",
+        "admin.rules_apply_new",
+      ] as const
+    ).map((key) => nodes.indexOf(COPY[key][language]));
+    expect(notes.every((index) => index >= 0)).toBe(true);
+    expect([...notes].sort((a, b) => a - b)).toEqual(notes);
+    const options = element(html, "div", "site-admin-products__options");
+    expect(textNodes(options)).toEqual([
+      COPY["admin.product_options"][language],
+      COPY["admin.option_name"][language],
+      COPY["admin.option_values"][language],
+      COPY["admin.option_name"][language],
+      COPY["admin.option_values"][language],
+      COPY["admin.options_fixed_note"][language],
+    ]);
+    expect(tags(options, "input").filter((tag) => attributes(tag).get("aria-label") === COPY["admin.option_value"][language])).toHaveLength(4);
+    expect(tags(html, "button").map((tag) => attributes(tag).get("aria-pressed"))).toEqual(["true", "false", "false"]);
+    expect(html).not.toMatch(/<img\b/);
+    expect(tags(html, "input").filter((tag) => attributes(tag).get("type") === "file")).toEqual([]);
+    for (const key of ["common.create", "common.save"] as const) {
+      expect(nodes).not.toContain(COPY[key][language]);
+    }
+  });
+
+  // 本任务验收「未保存确认」一条：三语名称与描述、分类、上架、每单限购、规格名与规格值的三语名称、各 SKU 的价格文字、每日初始库存文字与启用状态，
+  // 任一项与最近一次读取的值（null 当作空串，价格为读取值写成的文字）不同即为有未保存的修改——未改不算、改了才算、改回原值不算；
+  // 只切换内容语言不算；没有编辑区、读取中与读取失败时不算。价格 39.00 改为 39.0 算修改（比较的是文字）。
+  it("detects unsaved changes against the last read values", () => {
+    const base = editorOf(3, SHIRT);
+    expect(isDirty(null)).toBe(false);
+    expect(isDirty({ status: "loading", id: 3 })).toBe(false);
+    expect(isDirty({ status: "failed", id: 3, error: "common.error_retry" })).toBe(false);
+    expect(isDirty(base)).toBe(false);
+    expect(isDirty(chooseContent(chooseContent(base, "zh"), "ms"))).toBe(false);
+    expect(isDirty(changeName(chooseContent(base, "ms"), ""))).toBe(false);
+    const changes: [string, (editor: OpenEditor) => OpenEditor, (editor: OpenEditor) => OpenEditor][] = [
+      ["name", (e) => changeName(e, "Tee"), (e) => changeName(e, "Crew Neck Tee")],
+      ["null name", (e) => changeName(chooseContent(e, "ms"), "Baju"), (e) => changeName(e, "")],
+      ["description", (e) => changeDescription(chooseContent(e, "zh"), "新描述"), (e) => changeDescription(e, "柔软的棉质T恤。")],
+      ["category", (e) => changeCategory(e, 2), (e) => changeCategory(e, 1)],
+      ["published", (e) => changeActive(e, false), (e) => changeActive(e, true)],
+      ["limit", (e) => changeMaxPerOrder(e, "11"), (e) => changeMaxPerOrder(e, "10")],
+      ["option name", (e) => changeOptionName(e, 1, "Fit"), (e) => changeOptionName(e, 1, "Size")],
+      ["value name", (e) => changeValueName(chooseContent(e, "zh"), 0, 1, "藏青"), (e) => changeValueName(e, 0, 1, "")],
+      ["price", (e) => changePrice(e, 0, "39.0"), (e) => changePrice(e, 0, "39.00")],
+      ["stock", (e) => changeStock(e, 2, "07"), (e) => changeStock(e, 2, "7")],
+      ["enabled", (e) => changeVariantActive(e, 1, true), (e) => changeVariantActive(e, 1, false)],
+    ];
+    for (const [name, change, revert] of changes) {
+      const changed = change(base);
+      expect(isDirty(changed), name).toBe(true);
+      expect(isDirty(chooseContent(changed, "en")), name).toBe(true);
+      expect(isDirty(revert(changed)), name).toBe(false);
     }
   });
 });

@@ -459,6 +459,43 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-products__editor { display: grid; gap: 12px; align-content: start; min-width: 0; }
 .site-admin-products__form { display: grid; gap: 18px; padding: 20px; min-width: 0; }
 
+/* A04 编辑区的输入（A04-desktop，SHOP-TASK-203）：内容语言的标签与三个按钮一行（间距 8px，可换行）；名称、描述与分类为标签在上的一栏
+   （间距 6px）；分类下拉框 220px 宽，与上架勾选框同一行（间距 24px，底端对齐，勾选框 16×16、与文字间距 8px，一行至少 36px 高），
+   admin.category_current_unavailable 在这一行之下占满宽度（内边距 10px 12px，照 A04-states）。规格区各行间距 10px：规格名输入框 120px、
+   规格值输入框 80px，可换行。SKU 表格可横向滚动，价格输入框 100px、库存输入框 70px、勾选框 16×16，SKU 代码不换行；手机的 SKU 卡片
+   在桌面不显示。每单限购的标签与 90px 宽的输入框一行（间距 12px），提示在下（间距 6px）；admin.initial_stock_note 与 admin.rules_apply_new
+   一块（内边距 10px 12px，间距 6px）。视觉稿的字号、字重、底色与 textarea 的字体 site.css 写不了，记在任务记录的偏离里 */
+.site-admin-products__languages { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.site-admin-products__field { display: grid; gap: 6px; min-width: 0; }
+.site-admin-products__field .acs-admin__input, .site-admin-products__field .acs-admin__select { box-sizing: border-box; min-width: 0; max-width: 100%; }
+.site-admin-products__description { padding: 8px 10px; }
+.site-admin-products__missing { margin: 0; }
+.site-admin-products__placement { display: grid; grid-template-columns: auto auto; justify-content: start; align-items: end; column-gap: 24px; row-gap: 18px; }
+.site-admin-products__category { grid-column: 1; grid-row: 1; }
+.site-admin-products__category .acs-admin__select { width: 220px; }
+.site-admin-products__active { grid-column: 2; grid-row: 1; }
+.site-admin-products__unavailable { grid-column: 1 / -1; grid-row: 2; margin: 0; padding: 10px 12px; }
+.site-admin-products__toggle { display: flex; gap: 8px; align-items: center; min-height: 36px; }
+.site-admin-products__toggle input, .site-admin-products__check { width: 16px; height: 16px; margin: 0; }
+.site-admin-products__options { display: grid; gap: 10px; min-width: 0; }
+.site-admin-products__option { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.site-admin-products__option-name { display: flex; gap: 10px; align-items: center; }
+.site-admin-products__option-name .acs-admin__input { box-sizing: border-box; width: 120px; }
+.site-admin-products__values { display: flex; flex-wrap: wrap; gap: 10px; }
+.site-admin-products__values .acs-admin__input { box-sizing: border-box; width: 80px; }
+.site-admin-products__skus { overflow-x: auto; }
+.site-admin-products__sku { white-space: nowrap; }
+.site-admin-products__price { box-sizing: border-box; width: 100px; }
+.site-admin-products__stock { box-sizing: border-box; width: 70px; }
+.site-admin-products__sku-cards { display: none; margin: 0; padding: 0; list-style: none; }
+.site-admin-products__sku-card { display: grid; gap: 8px; padding: 14px; }
+.site-admin-products__sku-row { display: flex; justify-content: space-between; gap: 12px; overflow-wrap: anywhere; }
+.site-admin-products__sku-inputs { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.site-admin-products__limit { display: grid; gap: 6px; }
+.site-admin-products__limit-field { display: flex; gap: 12px; align-items: center; }
+.site-admin-products__limit-field .acs-admin__input { box-sizing: border-box; width: 90px; }
+.site-admin-products__notes { display: grid; gap: 6px; padding: 10px 12px; }
+
 /* A07 的每日结果（A07-desktop）：表格在可横向滚动的面板里，SKU 数靠右；每天的展开处在该日下方另起一行（单元格不留内边距，
    details 内边距 8px 12px，明细表与 summary 间距 6px）；卡片不显示，翻页按钮靠右。summary 的字重、明细的字号 site.css 写不了，
    记在 docs/TODO.md 的偏离里 */
@@ -1045,6 +1082,29 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-products__editor { gap: 14px; }
   .site-admin-products__back { display: block; justify-self: start; min-height: 44px; }
   .site-admin-products__form { gap: 14px; padding: 14px; }
+  /* 编辑区的输入（A04-phone-edit，SHOP-TASK-203）：内容语言的标签独占一行，三个按钮间距 6px、至少 44px 高；输入框与下拉框至少 44px 高；
+     分类、admin.category_current_unavailable 与上架勾选框上下排列（间距 14px），勾选框 20×20、与文字间距 10px，一行至少 44px 高；
+     规格名的标签在输入框上方（间距 6px），规格名之间间距 14px、规格值输入框 96px 宽（间距 6px）；表格不显示，每个 SKU 一张卡片
+     （间距 14px，内边距 14px，各项间距 8px，价格与库存两栏）；每单限购的标签在输入框上方（间距 6px） */
+  .site-admin-products__languages { gap: 8px 6px; }
+  .site-admin-products__languages > span { flex-basis: 100%; }
+  .site-admin-products__languages .acs-admin__btn { min-height: 44px; }
+  .site-admin-products__field .acs-admin__input, .site-admin-products__field .acs-admin__select { min-height: 44px; }
+  .site-admin-products__placement { grid-template-columns: minmax(0, 1fr); row-gap: 14px; }
+  .site-admin-products__category, .site-admin-products__active, .site-admin-products__unavailable { grid-column: auto; grid-row: auto; }
+  .site-admin-products__category .acs-admin__select { width: auto; }
+  .site-admin-products__toggle { gap: 10px; min-height: 44px; }
+  .site-admin-products__toggle input { width: 20px; height: 20px; }
+  .site-admin-products__options { gap: 14px; }
+  .site-admin-products__option { display: grid; gap: 8px; }
+  .site-admin-products__option-name { display: grid; gap: 6px; }
+  .site-admin-products__option-name .acs-admin__input { width: auto; min-height: 44px; }
+  .site-admin-products__values { gap: 6px; }
+  .site-admin-products__values .acs-admin__input { width: 96px; min-height: 44px; }
+  .site-admin-products__skus { display: none; }
+  .site-admin-products__sku-cards { display: grid; gap: 14px; }
+  .site-admin-products__limit-field { display: grid; gap: 6px; }
+  .site-admin-products__limit-field .acs-admin__input { min-height: 44px; }
 
   /* A07 的每日结果（A07-phone）：表格不显示、卡片显示（间距 10px，卡片内边距 12px，各项间距 8px，第一行日期与结果标签两端对齐、可换行），
      展开处在卡片里（summary 至少 32px 高，每个 SKU 一项、SKU 与 breakdown 上下排列、间距 2px、上下内边距 6px）；翻页按钮居中、至少 44×44。

@@ -2135,6 +2135,111 @@ export const COPY = {
     zh: "未上架",
     ms: "Tidak diterbitkan",
   },
+  "admin.product_name": {
+    en: "Product name",
+    zh: "商品名称",
+    ms: "Nama produk",
+  },
+  "admin.product_description": {
+    en: "Description",
+    zh: "描述",
+    ms: "Penerangan",
+  },
+  "admin.product_category": {
+    en: "Category",
+    zh: "分类",
+    ms: "Kategori",
+  },
+  "admin.variant": {
+    en: "Option values",
+    zh: "规格",
+    ms: "Nilai pilihan",
+  },
+  "admin.product_options": {
+    en: "Options (e.g. colour, size)",
+    zh: "规格（如颜色、尺寸）",
+    ms: "Pilihan (cth. warna, saiz)",
+  },
+  "admin.sku": {
+    en: "SKU",
+    zh: "SKU",
+    ms: "SKU",
+  },
+  "admin.price": {
+    en: "Price (MYR)",
+    zh: "价格（MYR）",
+    ms: "Harga (MYR)",
+  },
+  "admin.initial_stock": {
+    en: "Daily initial stock",
+    zh: "每日初始库存",
+    ms: "Stok awal harian",
+  },
+  "admin.max_per_order": {
+    en: "Limit per order",
+    zh: "每单限购",
+    ms: "Had setiap pesanan",
+  },
+  "admin.max_per_order_hint": {
+    en: "1–1000 items, counted across all options of this product. Changes apply to new orders only.",
+    zh: "1–1000 件，按此商品所有规格合计。修改只影响新订单。",
+    ms: "1–1000 unit, dikira merentas semua pilihan produk ini. Perubahan hanya terpakai untuk pesanan baharu.",
+  },
+  "admin.available_today": {
+    en: "Available today",
+    zh: "今日可用",
+    ms: "Tersedia hari ini",
+  },
+  "admin.initial_stock_note": {
+    en: "Changes to initial stock take effect from the next daily reset.",
+    zh: "修改初始库存从下一次每日重置起生效。",
+    ms: "Perubahan stok awal berkuat kuasa dari tetapan semula harian berikutnya.",
+  },
+  "admin.translation_missing": {
+    en: "{language} text is missing and will fall back to English. English text is required to publish.",
+    zh: "缺少{language}文案，将回退英文；缺少英文则不能上架。",
+    ms: "Teks {language} tiada dan akan kembali kepada bahasa Inggeris. Teks bahasa Inggeris diperlukan untuk diterbitkan.",
+  },
+  "admin.category_current_unavailable": {
+    en: "This product's current category is disabled or has no English name. You can keep it, but the product can't be published until you choose an enabled category.",
+    zh: "此商品当前所属的分类已停用或缺少英文名称。可以保留不改，但要改选一个启用的分类才能上架。",
+    ms: "Kategori semasa produk ini dinyahaktifkan atau tiada nama bahasa Inggeris. Anda boleh mengekalkannya, tetapi produk tidak boleh diterbitkan sehingga anda memilih kategori yang aktif.",
+  },
+  "admin.publish_requirements": {
+    en: "To publish: English name and description, English names for every option and value, at least one enabled SKU, and an enabled category with an English name.",
+    zh: "上架须有：英文名称与描述、全部规格名与规格值的英文名称、至少一个启用的 SKU，以及启用且有英文名称的分类。",
+    ms: "Untuk diterbitkan: nama dan penerangan bahasa Inggeris, nama bahasa Inggeris bagi setiap pilihan dan nilai, sekurang-kurangnya satu SKU aktif, dan kategori aktif yang mempunyai nama bahasa Inggeris.",
+  },
+  "admin.option_values": {
+    en: "Values",
+    zh: "规格值",
+    ms: "Nilai",
+  },
+  "admin.option_name": {
+    en: "Option name",
+    zh: "规格名",
+    ms: "Nama pilihan",
+  },
+  "admin.option_value": {
+    en: "Option value",
+    zh: "规格值",
+    ms: "Nilai pilihan",
+  },
+  "admin.options_fixed_note": {
+    en: "Options can't be added or removed after the product is created. To change them, create a new product and unpublish this one.",
+    zh: "规格名在新建商品后不能增减。要换规格，请新建商品并把此商品下架。",
+    ms: "Pilihan tidak boleh ditambah atau dibuang selepas produk dicipta. Untuk mengubahnya, cipta produk baharu dan nyahterbitkan produk ini.",
+  },
+  "admin.sku_enabled": {
+    en: "Enabled",
+    zh: "启用",
+    ms: "Aktif",
+  },
+  "admin.no_delete_note": {
+    en: "Products, options, values and SKUs can't be deleted because orders refer to them. Unpublish a product or disable a SKU instead.",
+    zh: "商品、规格名、规格值与 SKU 不能删除（订单会引用它们）。不再卖的商品请下架，SKU 请停用。",
+    ms: "Produk, pilihan, nilai dan SKU tidak boleh dipadam kerana pesanan merujuknya. Nyahterbitkan produk atau nyahaktifkan SKU sebagai ganti.",
+  },
   "admin.nav_stock_resets": {
     en: "Stock resets",
     zh: "库存重置",
