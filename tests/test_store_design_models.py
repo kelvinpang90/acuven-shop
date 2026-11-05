@@ -142,6 +142,12 @@ def _setting_values(**overrides: Any) -> dict[str, Any]:
         "theme": DEFAULT_THEME,
         "accent": DEFAULT_ACCENT,
         "updated_at": UPDATED,
+        # 检查约束按整行求值，缺列会让标志的约束求值出错。
+        "logo_file_name": None,
+        "logo_source_format": None,
+        "logo_width": None,
+        "logo_height": None,
+        "logo_byte_size": None,
     }
     return values | overrides
 
@@ -253,8 +259,9 @@ def test_valid_setting_blocks_and_featured_products_are_accepted(session: Sessio
 
 def test_columns_nullability_and_lengths() -> None:
     """「主色……管理员只能从中选一个」，未选即该主题的默认主色：只有主色可空，其余列都非空
-    （检查约束遇到空值会放行，非空约束不能省）；主题与主色列长 20。Kelvin 2026-10-06「首版先不含
-    标志图」：设置表没有标志图的列。
+    （检查约束遇到空值会放行，非空约束不能省）；主题与主色列长 20。DESIGN 1.20 第 15 条「记录」：
+    设置行新增标志的五列，「五项同为空（没有标志）或同不为空」，故五列都可空；文件名列长 32、
+    格式列长 4（HANDOFF 0.84）。
     """
     settings = StoreDesignSetting.__table__.c
     assert [column.name for column in settings] == [
@@ -263,10 +270,24 @@ def test_columns_nullability_and_lengths() -> None:
         "theme",
         "accent",
         "updated_at",
+        "logo_file_name",
+        "logo_source_format",
+        "logo_width",
+        "logo_height",
+        "logo_byte_size",
     ]
-    assert [column.name for column in settings if column.nullable] == ["accent"]
+    assert [column.name for column in settings if column.nullable] == [
+        "accent",
+        "logo_file_name",
+        "logo_source_format",
+        "logo_width",
+        "logo_height",
+        "logo_byte_size",
+    ]
     assert settings.theme.type.length == 20
     assert settings.accent.type.length == 20
+    assert settings.logo_file_name.type.length == 32
+    assert settings.logo_source_format.type.length == 4
     for model in (StoreHomeBlock, StoreFeaturedProduct):
         assert not any(column.nullable for column in model.__table__.c)
 
@@ -569,12 +590,32 @@ def _schema(conn: Connection) -> dict[str, Any]:
 def test_migration_schema_matches_models(migrated: Connection) -> None:
     """alembic check 不比较检查约束：迁移建出的三张表与按模型建出的逐列（类型、可空）、逐个
     检查约束（名字与表达式）、唯一约束与外键（含 RESTRICT）相同。downgrade 删掉三张表。
+    只比较迁移 0016 建出的部分：DESIGN 1.20 第 15 条的标志五列与三个约束由迁移 0025 加上
+    （只在 MySQL 上执行），从按模型建出的结构里去掉再比较。
     """
     engine = create_engine("sqlite://")
     with engine.connect() as model_conn:
         Base.metadata.create_all(model_conn)
         expected = _schema(model_conn)
     engine.dispose()
+
+    logo_columns = {
+        "logo_file_name",
+        "logo_source_format",
+        "logo_width",
+        "logo_height",
+        "logo_byte_size",
+    }
+    logo_checks = {
+        "ck_store_design_settings_logo_all_or_none",
+        "ck_store_design_settings_logo_source_format_valid",
+        "ck_store_design_settings_logo_display_size_range",
+    }
+    settings = expected["store_design_settings"]
+    assert logo_columns <= {column[0] for column in settings["columns"]}
+    assert logo_checks <= {check[0] for check in settings["checks"]}
+    settings["columns"] = [c for c in settings["columns"] if c[0] not in logo_columns]
+    settings["checks"] = [c for c in settings["checks"] if c[0] not in logo_checks]
 
     assert _schema(migrated) == expected
     assert expected["store_design_settings"]["checks"]
