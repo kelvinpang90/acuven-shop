@@ -5706,7 +5706,7 @@ tasks:
       调整的 403 由页面重新读取列表与分类取得新的 CSRF 令牌（编辑区与已填的值、展开区所填的新值保留），显示 common.error_retry；网络中断显示 common.network_check、保留所填的新值。
       设计闸门：DESIGN 1.18（提交 5ba9796）第 12 条与 HANDOFF 0.82，当日可用库存的调整（取值核对与并发核对、审计在 SHOP-TASK-182 的服务端）。
       拆分：A04 的当日库存调整一层（9 个允许路径：新组件与测试，页面与页面测试只为接入，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-201
       - SHOP-TASK-207
