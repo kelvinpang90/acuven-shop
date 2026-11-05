@@ -14,6 +14,10 @@ app/api/admin_store_design.py：主题须在 THEMES、主色为空或属于所�
 保存锁定设置单例行后在同一事务里整体替换四个区块与精选各行并写审计。
 请求结构（恰好四个区块且为一个排列、精选 0 到 4 件不重复）由接口校验。本模块不写日志。
 未挑选或挑选的商品都不可见时显示最新 4 件的规则由前台按设置显示的任务实现，这里不补。
+
+店铺标志图（docs/DESIGN.md 1.20（提交 a870f78）同一节第 15 条「读取与显示」，SHOP-TASK-211）：
+公开与后台读取都带 logo，有标志时为 app/services/store_logo.py 的提供路径，没有时为 None。标志的
+替换与移除在 store_logo 模块；保存（save_store_design）不读写标志五列，审计值不含标志。
 """
 
 from __future__ import annotations
@@ -41,6 +45,7 @@ from app.models.store_design import (
     THEME_ACCENTS,
     THEMES,
 )
+from app.services import store_logo
 from app.services.admin_auth import record_audit
 from app.services.catalog import Language, published
 
@@ -67,6 +72,8 @@ class StoreDesign:
     home_blocks: list[HomeBlock]
     # 按位置排序、只含前台目录可见的精选商品；可能为空。
     featured_slugs: list[str]
+    # 标志的提供路径 /api/store-logos/<文件名>.webp；没有标志或设置行不存在时为空。
+    logo: str | None
 
 
 @dataclass(frozen=True)
@@ -97,6 +104,8 @@ class AdminStoreDesign:
     home_blocks: list[HomeBlock]
     # 按位置排序，含已不满足 published() 的精选商品。
     featured: list[FeaturedProduct]
+    # 同 StoreDesign.logo。
+    logo: str | None
 
 
 class StoreDesignInvalid(Exception):
@@ -110,8 +119,9 @@ class StoreDesignInvalid(Exception):
 def read_store_design(db: Session) -> StoreDesign:
     """当前的店铺装修设置。
 
-    设置行不存在时主题与主色取 DEFAULT_THEME、DEFAULT_ACCENT。区块按位置排序；区块表缺少某些
-    区块时，缺少的按 HOME_BLOCKS 的默认顺序补在已有区块之后并显示，结果总是四个区块（四行齐全
+    设置行不存在时主题与主色取 DEFAULT_THEME、DEFAULT_ACCENT，标志为空（有标志时为
+    store_logo.logo_path 给出的提供路径）。区块按位置排序；区块表缺少某些区块时，缺少的按
+    HOME_BLOCKS 的默认顺序补在已有区块之后并显示，结果总是四个区块（四行齐全
     由迁移初始化、由写入方保持，这里只为缺行兜底，不写回库里）。精选商品按位置排序，只留满足
     app/services/catalog.py 的 published() 的商品（商品启用、分类启用、英文资料齐全、至少一件
     启用规格）；之后下架的商品仍在表里，只是不出现在结果中，其余商品的顺序不变。
@@ -125,7 +135,7 @@ def read_store_design(db: Session) -> StoreDesign:
 
 
 def _read(db: Session) -> StoreDesign:
-    theme, accent = _theme_and_accent(db)
+    theme, accent, logo = _setting_values(db)
     home_blocks = _filled_blocks(_stored_blocks(db))
 
     # published() 要求已 join Category；外层不选 ProductVariant，其中的子查询照常关联商品。
@@ -143,18 +153,23 @@ def _read(db: Session) -> StoreDesign:
         accent=accent,
         home_blocks=home_blocks,
         featured_slugs=featured_slugs,
+        logo=logo,
     )
 
 
-def _theme_and_accent(db: Session) -> tuple[str, str | None]:
-    setting_stmt = select(StoreDesignSetting.theme, StoreDesignSetting.accent)
+def _setting_values(db: Session) -> tuple[str, str | None, str | None]:
+    """主题、主色与标志的提供路径（没有标志时为空）；设置行不存在时取默认值、标志为空。"""
+    setting_stmt = select(
+        StoreDesignSetting.theme, StoreDesignSetting.accent, StoreDesignSetting.logo_file_name
+    )
     setting = db.execute(
         setting_stmt.where(StoreDesignSetting.singleton_slot == SINGLETON_SLOT)
     ).first()
     if setting is None:
-        return DEFAULT_THEME, DEFAULT_ACCENT
-    theme, accent = setting
-    return theme, accent
+        return DEFAULT_THEME, DEFAULT_ACCENT, None
+    theme, accent, logo_file_name = setting
+    logo = None if logo_file_name is None else store_logo.logo_path(logo_file_name)
+    return theme, accent, logo
 
 
 def _stored_blocks(db: Session) -> list[HomeBlock]:
@@ -232,15 +247,16 @@ def _featured(db: Session, lang: Language) -> list[FeaturedProduct]:
 def read_admin_store_design(db: Session, lang: Language) -> AdminStoreDesign:
     """后台看到的当前设置。只读。
 
-    主题、主色与区块的读取规则同 read_store_design（设置行不存在时取默认值，区块缺行时补齐）；
-    精选商品按位置列出全部各行，已不满足 published() 的也列出、published 为假。
+    主题、主色、标志与区块的读取规则同 read_store_design（设置行不存在时取默认值、标志为空，
+    区块缺行时补齐）；精选商品按位置列出全部各行，已不满足 published() 的也列出、published 为假。
     """
-    theme, accent = _theme_and_accent(db)
+    theme, accent, logo = _setting_values(db)
     return AdminStoreDesign(
         theme=theme,
         accent=accent,
         home_blocks=_filled_blocks(_stored_blocks(db)),
         featured=_featured(db, lang),
+        logo=logo,
     )
 
 
@@ -331,6 +347,8 @@ def save_store_design(
     now: datetime,
 ) -> tuple[AdminStoreDesign, bool]:
     """保存装修设置，返回保存后的设置与是否实际改动（与当前完全相同为假）。
+
+    标志五列不读写：返回的设置照常带当前标志（logo），完全相同的判断与审计值都不含标志。
 
     调用方须已校验结构：home_blocks 恰为四个区块的一个排列（列表顺序即位置），featured_ids
     为 0 到 FEATURED_MAX 个不重复的正整数（列表顺序即位置）；admin_account_id 须在调用前取出
