@@ -5633,7 +5633,7 @@ tasks:
       页面先查在 SHOP-TASK-204、205 的基础上另查已选分类；新建成功后以返回的商品在列表最前加一行（分类名称取自分类读取结果）、进入它的编辑区并显示 admin.product_created；changed 时 admin.reload 整页重新读取，新建表单恢复为空白；403 照 204 重新读取并保留表单；网络中断只显示 common.network_check、保留表单、不自动重新读取（新建可能已经成功，商品名称不要求唯一，再次提交会多出一件商品；由管理员核对列表后把多余的下架）。
       设计闸门：DESIGN 1.18（提交 5ba9796）第 11 条与 HANDOFF 0.82，新建商品的价格按文字换成整仙提交（取值核对、上架条件、代码生成与审计在服务端）。
       拆分：A04 的新建一层（7 个允许路径，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-205
     acceptance_criteria:
