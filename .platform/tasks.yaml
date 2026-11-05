@@ -5669,7 +5669,7 @@ tasks:
       新建表单（还没保存）时 admin.upload 禁用，旁边显示 admin.image_save_first，张数为 0。
       设计闸门：不适用（图片的格式、大小、像素、元数据与存放规则在 SHOP-TASK-187 至 191 的服务端，依据 DESIGN 1.19 第 13 条；页面只做格式与大小的初步检查，不碰金额与个人资料）。
       拆分：A04 的图片一层（9 个允许路径：新组件与测试，页面与页面测试只为接入，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-201
       - SHOP-TASK-206
