@@ -4,10 +4,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "../App";
 import type { AdminCategory, CategoriesRead } from "../api/adminCategories";
-import type { AdminOption, AdminOptionValue, AdminProduct, AdminProductListItem, ProductsRead } from "../api/adminProducts";
+import type { AdminOption, AdminOptionValue, AdminProduct, AdminProductImage, AdminProductListItem, ProductsRead } from "../api/adminProducts";
 import { AdminFrameView } from "../components/AdminFrame";
 import type { FrameState } from "../components/AdminFrame";
-import { COPY, LANGUAGES } from "../i18n/copy";
+import { COPY, formatCopy, LANGUAGES } from "../i18n/copy";
 import type { Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { ADMIN_PRODUCTS_PATH, RouterProvider } from "../router";
@@ -68,6 +68,7 @@ import {
   removeSku,
   removeValue,
   rereadStep,
+  rereadToken,
   savedItem,
   saveInput,
   saveStep,
@@ -82,10 +83,12 @@ import {
   submitNewProduct,
   submitProduct,
   texts,
+  tokenStep,
   translationMissing,
   valueChoices,
   valueRemovable,
   variantText,
+  withImages,
 } from "./AdminProductsPage";
 import type { AdminProductsViewProps, Editing, NewEditor, OpenEditor, ProductForm, ProductsMoves, ProductsState, SaveNotice } from "./AdminProductsPage";
 
@@ -284,6 +287,12 @@ const HANDLERS: Omit<AdminProductsViewProps, "state"> = {
   onSave: () => undefined,
   onReload: () => undefined,
   onCreate: () => undefined,
+  // 图片区（SHOP-TASK-207）。
+  imagesBusy: false,
+  onImages: () => undefined,
+  onReread: () => Promise.resolve("ok" as const),
+  onLogin: () => undefined,
+  onImagesBusy: () => undefined,
 };
 
 function view(state: ProductsState): ReactNode {
@@ -533,8 +542,10 @@ function editingOf(state: ProductsState): Editing | null {
   return state.status === "ready" ? state.editing : null;
 }
 
+// SHOP-TASK-207 改动：编辑区多了图片区，其中 admin.image_count 的 {count}（0–8 张）与 {max}（8）为运行时数据，填好的文字也算字典文案。
 function dictionary(language: Language): Set<string> {
-  return new Set<string>(Object.values(COPY).map((entry) => entry[language]));
+  const counts = Array.from({ length: 9 }, (_, count) => formatCopy(COPY["admin.image_count"][language], { count, max: 8 }));
+  return new Set<string>([...Object.values(COPY).map((entry) => entry[language]), ...counts]);
 }
 
 describe("AdminProductsPage", () => {
@@ -1196,6 +1207,8 @@ describe("AdminProductsPage", () => {
   // SHOP-TASK-205 改动：UX A04 线框「[admin.option_values] [<值>__] [<值>__] ( [admin.add_value] )」「( [admin.add_sku] )」，每个规格名的值后多了
   // admin.add_value、SKU 区下方多了 admin.add_sku（桌面与手机各一个），原来「只有内容语言与保存」的按钮断言与规格区的文字顺序因此失效；改为文字顺序
   // 含 admin.add_value，按钮依次为内容语言三个、两个 admin.add_value、两个 admin.add_sku 与 common.save，仍没有 (✗)（没有新增行）。
+  // SHOP-TASK-207 改动：UX A04 线框在 admin.publish_requirements 与 admin.product_options 之间多了图片区「( [admin.upload] )」，原来「没有图片区的按钮」
+  // 「没有文件输入框」的断言因此失效；改为内容语言之后多一个 admin.upload（这件商品没有图片，没有 (‹)(›)(✗) 与 img），图片区里有一个文件输入框。
   it.each(LANGUAGES)("shows the standing notes and no buttons beyond the content languages, the add buttons and common.save in %s", (language) => {
     const html = form(render(opened(editorOf(3, SHIRT)), language));
     const nodes = textNodes(html);
@@ -1225,19 +1238,22 @@ describe("AdminProductsPage", () => {
     ]);
     expect(tags(options, "input").filter((tag) => attributes(tag).get("aria-label") === COPY["admin.option_value"][language])).toHaveLength(4);
     const buttons = tags(html, "button");
-    expect(buttons.map((tag) => attributes(tag).get("aria-pressed"))).toEqual(["true", "false", "false", undefined, undefined, undefined, undefined, undefined]);
-    expect(buttons.slice(3).map((tag) => classes(tag).find((name) => name.startsWith("site-admin-products__add-")))).toEqual([
+    expect(buttons.map((tag) => attributes(tag).get("aria-pressed"))).toEqual(["true", "false", "false", undefined, undefined, undefined, undefined, undefined, undefined]);
+    const upload = element(html, "div", "site-admin-images__upload");
+    expect(tags(upload, "button")).toEqual([buttons[3]]);
+    expect(textNodes(upload)).toEqual([COPY["admin.upload"][language]]);
+    expect(buttons.slice(4).map((tag) => classes(tag).find((name) => name.startsWith("site-admin-products__add-")))).toEqual([
       "site-admin-products__add-value",
       "site-admin-products__add-value",
       "site-admin-products__add-sku",
       "site-admin-products__add-sku",
       undefined,
     ]);
-    expect(attributes(buttons[7] ?? "").get("type")).toBe("submit");
+    expect(attributes(buttons[8] ?? "").get("type")).toBe("submit");
     expect(html).not.toContain(`aria-label="${escapeHtml(COPY["admin.remove"][language])}"`);
     expect(nodes[nodes.length - 1]).toBe(COPY["common.save"][language]);
     expect(html).not.toMatch(/<img\b/);
-    expect(tags(html, "input").filter((tag) => attributes(tag).get("type") === "file")).toEqual([]);
+    expect(tags(element(html, "div", "site-admin-images"), "input").filter((tag) => attributes(tag).get("type") === "file")).toHaveLength(1);
     expect(nodes).not.toContain(COPY["common.create"][language]);
   });
 
@@ -2521,5 +2537,116 @@ describe("AdminProductsPage", () => {
         expect(allowed.has(value), value).toBe(true);
       }
     }
+  });
+
+  // ---- SHOP-TASK-207 图片区的接入 ----
+
+  const PHOTOS: AdminProductImage[] = [
+    { id: 61, storage_ref: "/media/products/61.webp" },
+    { id: 62, storage_ref: "/media/products/62.webp" },
+  ];
+  const PHOTO_SHIRT: AdminProduct = { ...SHIRT, images: PHOTOS };
+
+  // 图片区（含其内容）。
+  const imageArea = (html: string): string => element(html, "div", "site-admin-images");
+
+  // UX A04 桌面线框「[admin.publish_requirements]」之后为「[admin.product_images] [admin.image_count]」至「[admin.images_immediate]」，再为
+  // 「[admin.product_options]」，「新建未保存：( [admin.upload] ) 禁用，旁边 [admin.image_save_first]」；本任务验收「位置在每单限购与规格区之前（照视觉稿）」
+  // 「接入——…把图片区放进编辑区、传入商品 ID、当前图片…」「测试——…编辑区出现图片区」：已有商品的编辑区里图片区在 admin.publish_requirements 与规格区之间，
+  // 缩略图为该商品的图片（按接口顺序），张数为 2，admin.upload 可用；新建表单的同一位置为 0 张、没有缩略图、admin.upload 禁用，旁边为 admin.image_save_first。
+  it.each(LANGUAGES)("puts the image area between the publish note and the options in %s", (language) => {
+    const html = form(render(opened(editorOf(3, PHOTO_SHIRT)), language));
+    const area = imageArea(html);
+    const at = html.indexOf(area);
+    expect(html.indexOf(escapeHtml(COPY["admin.publish_requirements"][language]))).toBeLessThan(at);
+    expect(html.indexOf('class="site-admin-products__options"')).toBeGreaterThan(at);
+    expect(tags(area, "img").map((tag) => attributes(tag).get("src"))).toEqual(PHOTOS.map((photo) => photo.storage_ref));
+    expect(textNodes(area)).toContain(formatCopy(COPY["admin.image_count"][language], { count: 2, max: 8 }));
+    expect(attributes(tags(element(area, "div", "site-admin-images__upload"), "button")[0] ?? "").has("disabled")).toBe(false);
+    const created = form(render(ready(LISTED, newEditor([APPAREL, BAGS])), language));
+    const empty = imageArea(created);
+    expect(created.indexOf(escapeHtml(COPY["admin.publish_requirements"][language]))).toBeLessThan(created.indexOf(empty));
+    expect(created.indexOf('class="site-admin-products__options"')).toBeGreaterThan(created.indexOf(empty));
+    expect(tags(empty, "img")).toEqual([]);
+    expect(textNodes(empty)).toContain(formatCopy(COPY["admin.image_count"][language], { count: 0, max: 8 }));
+    expect(textNodes(element(empty, "div", "site-admin-images__upload"))).toEqual([COPY["admin.upload"][language], COPY["admin.image_save_first"][language]]);
+    expect(attributes(tags(empty, "button")[0] ?? "").has("disabled")).toBe(true);
+  });
+
+  // UX A04「列表」「有未保存的修改（…图片与当日库存调整立即生效，不算在内）」、「图片」「…不需要 [common.save]，也不改商品的版本号」与本任务验收「编辑区未保存的
+  // 修改与 version 不因图片操作改变，未保存判定不含图片」「测试——…图片变化不算未保存的修改」：withImages 只换该商品的 product.images；没有修改的编辑区换了图片
+  // 仍不算有修改，有修改的编辑区已填的值、基线与 version 都不变、仍算有修改；编辑区已是别的商品、读取中、新建表单或页面还没取到时不变。
+  it("replaces only the images of the open product and keeps the edits", () => {
+    const clean = editorOf(3, SHIRT);
+    const replaced = withImages(opened(clean), 3, PHOTOS);
+    expect(replaced).toEqual(opened({ ...clean, product: { ...SHIRT, images: PHOTOS } }));
+    expect(isDirty(editingOf(replaced))).toBe(false);
+    const edited = changeName(clean, "Tee");
+    const after = openOf(withImages(opened(edited), 3, PHOTOS));
+    expect(after.form).toBe(edited.form);
+    expect(after.base).toBe(edited.base);
+    expect(after.product.version).toBe(SHIRT.version);
+    expect(after.product.images).toEqual(PHOTOS);
+    expect(isDirty(after)).toBe(true);
+    for (const state of [opened(clean), ready(LISTED, { status: "loading", id: 3 }), ready(LISTED, newEditor([APPAREL])), LOADING]) {
+      expect(withImages(state, state === LOADING ? 3 : 5, PHOTOS)).toBe(state);
+    }
+    const loading = ready(LISTED, { status: "loading", id: 3 });
+    expect(withImages(loading, 3, PHOTOS)).toBe(loading);
+  });
+
+  // 本任务 purpose「商品保存或新建进行中图片区的按钮也都禁用，图片操作进行中 common.save 禁用（两者互斥，避免较晚到达的保存结果以旧的图片列表覆盖较新的）」：
+  // imagesBusy 为真时 common.save 禁用；保存中（startSaving）与新建中图片区的按钮（admin.upload 与每张的 (‹)(›)(✗)）都禁用；都不在进行中时 common.save 与
+  // admin.upload 可用。
+  it("keeps saving and image work apart", () => {
+    const state = opened(editorOf(3, PHOTO_SHIRT));
+    const busy = renderToStaticMarkup(wrap(<AdminProductsView state={state} {...HANDLERS} imagesBusy />, "en"));
+    expect(attributes(tags(saveArea(busy), "button")[0] ?? "").has("disabled")).toBe(true);
+    const idle = render(state);
+    expect(attributes(tags(saveArea(idle), "button")[0] ?? "").has("disabled")).toBe(false);
+    expect(attributes(tags(element(idle, "div", "site-admin-images__upload"), "button")[0] ?? "").has("disabled")).toBe(false);
+    const saving = tags(imageArea(render(opened(startSaving(editorOf(3, PHOTO_SHIRT))))), "button");
+    expect(saving).toHaveLength(7);
+    expect(saving.every((tag) => attributes(tag).has("disabled"))).toBe(true);
+    const creating = tags(imageArea(render(ready(LISTED, startSaving(newEditor([APPAREL, BAGS]))))), "button");
+    expect(creating.every((tag) => attributes(tag).has("disabled"))).toBe(true);
+  });
+
+  // 本任务 purpose「商品保存成功后图片区以返回的商品为准」：保存成功时编辑区的图片为返回商品的图片，图片区随之改显示返回的列表。
+  it("shows the saved product's images after a save", () => {
+    const step = saveStep({ kind: "ok", product: { ...SHIRT, version: 5, images: PHOTOS } }, 3);
+    if (typeof step === "string") {
+      throw new Error("expected a change");
+    }
+    const next = step(opened(startSaving(editorOf(3, SHIRT))));
+    expect(openOf(next).product.images).toEqual(PHOTOS);
+    expect(tags(imageArea(render(next)), "img").map((tag) => attributes(tag).get("src"))).toEqual(PHOTOS.map((photo) => photo.storage_ref));
+  });
+
+  // 本任务 purpose「图片操作的 403 由页面重新读取列表与分类取得新的 CSRF 令牌（编辑区与已填的值保留）」：rereadToken 并行读取列表与分类（带图片区的 signal），
+  // 都取到时换成新的列表、分类与令牌，编辑区（含已填的值与 version）不变并返回 ok；任一 401 返回 login、网络中断 network、其他失败 failed，页面都不变；
+  // tokenStep 的结果同样。
+  it("rereads the list for a new token and keeps the editor", async () => {
+    const editor = changeName(editorOf(3, SHIRT), "Tee");
+    const calls = stubFetch({
+      "/api/admin/products": [json(200, { products: [TEE], csrf_token: "csrf-2" }), json(401, { detail: "not_authenticated" }), "network", json(500, {})],
+      "/api/admin/categories": [json(200, { categories: [BAGS], csrf_token: "category-csrf" }), CATEGORIES_OK(), CATEGORIES_OK(), CATEGORIES_OK()],
+    });
+    const controller = new AbortController();
+    const run = runner(opened(editor));
+    expect(await rereadToken(controller.signal, run.moves)).toBe("ok");
+    expect(calls.slice(0, 2).map((call) => [call.url, call.init.signal])).toEqual([
+      ["/api/admin/products", controller.signal],
+      ["/api/admin/categories", controller.signal],
+    ]);
+    expect(run.state).toEqual({ ...ready([TEE], editor, [BAGS]), csrfToken: "csrf-2" });
+    const kept = run.state;
+    for (const outcome of ["login", "network", "failed"]) {
+      expect(await rereadToken(controller.signal, run.moves)).toBe(outcome);
+      expect(run.state).toBe(kept);
+    }
+    expect(tokenStep({ kind: "none" }, { kind: "ok", categories: [], csrf_token: "c" })).toBe("login");
+    expect(tokenStep({ kind: "network" }, { kind: "failed" })).toBe("network");
+    expect(tokenStep({ kind: "failed" }, { kind: "ok", categories: [], csrf_token: "c" })).toBe("failed");
   });
 });

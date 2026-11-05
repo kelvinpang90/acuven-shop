@@ -2155,6 +2155,96 @@ export const COPY = {
     zh: "分类",
     ms: "Kategori",
   },
+  "admin.product_images": {
+    en: "Images",
+    zh: "图片",
+    ms: "Imej",
+  },
+  "admin.upload": {
+    en: "Upload",
+    zh: "上传",
+    ms: "Muat naik",
+  },
+  "admin.image_rules": {
+    en: "JPEG, PNG or WebP, up to 5 MB.",
+    zh: "JPEG、PNG 或 WebP，不超过 5 MB。",
+    ms: "JPEG, PNG atau WebP, sehingga 5 MB.",
+  },
+  "admin.product_image_rules": {
+    en: "200–4,000 pixels on each side. Up to 8 images; the first is the cover. Location and other photo data are removed, and the original file isn't kept.",
+    zh: "宽与高 200 到 4,000 像素。最多 8 张，第一张为封面。拍摄地点等照片资料会被去掉，不保留原文件。",
+    ms: "Setiap sisi 200–4,000 piksel. Sehingga 8 imej; yang pertama ialah kulit. Lokasi dan data foto lain dibuang, dan fail asal tidak disimpan.",
+  },
+  "admin.image_count": {
+    en: "{count} of {max} images",
+    zh: "已有 {count} 张，最多 {max} 张",
+    ms: "{count} daripada {max} imej",
+  },
+  "admin.image_cover": {
+    en: "Cover",
+    zh: "封面",
+    ms: "Imej utama",
+  },
+  "admin.image_move_earlier": {
+    en: "Move earlier",
+    zh: "前移",
+    ms: "Alih ke depan",
+  },
+  "admin.image_move_later": {
+    en: "Move later",
+    zh: "后移",
+    ms: "Alih ke belakang",
+  },
+  "admin.image_remove": {
+    en: "Remove image",
+    zh: "移除图片",
+    ms: "Buang imej",
+  },
+  "admin.image_remove_confirm": {
+    en: "Remove this image? It can't be restored; upload it again if you need it.",
+    zh: "移除这张图片？移除后无法恢复，需要时请重新上传。",
+    ms: "Buang imej ini? Ia tidak boleh dipulihkan; muat naik semula jika perlu.",
+  },
+  "admin.images_immediate": {
+    en: "Image changes are saved straight away and don't need Save.",
+    zh: "图片的上传、排序与移除立即生效，不需要点保存。",
+    ms: "Perubahan imej disimpan serta-merta dan tidak memerlukan Simpan.",
+  },
+  "admin.image_save_first": {
+    en: "Save the new product first, then upload images.",
+    zh: "请先保存新商品，再上传图片。",
+    ms: "Simpan produk baharu dahulu, kemudian muat naik imej.",
+  },
+  "admin.image_uploading": {
+    en: "Uploading…",
+    zh: "正在上传…",
+    ms: "Sedang memuat naik…",
+  },
+  "admin.image_type_unsupported": {
+    en: "This file type isn't supported. Use JPEG, PNG or WebP.",
+    zh: "不支持此文件格式，请用 JPEG、PNG 或 WebP。",
+    ms: "Jenis fail ini tidak disokong. Gunakan JPEG, PNG atau WebP.",
+  },
+  "admin.image_too_large": {
+    en: "This file is larger than 5 MB.",
+    zh: "文件超过 5 MB。",
+    ms: "Fail ini melebihi 5 MB.",
+  },
+  "admin.images_full": {
+    en: "This product already has 8 images. Remove one before uploading another.",
+    zh: "此商品已有 8 张图片，请先移除一张再上传。",
+    ms: "Produk ini sudah mempunyai 8 imej. Buang satu sebelum memuat naik yang lain.",
+  },
+  "admin.image_invalid": {
+    en: "This image can't be used. It must be a single still image, 200–4,000 pixels on each side.",
+    zh: "这张图片不能使用：须为单张静态图，宽与高都在 200 到 4,000 像素之间。",
+    ms: "Imej ini tidak boleh digunakan. Ia mesti satu imej pegun, 200–4,000 piksel pada setiap sisi.",
+  },
+  "admin.images_changed": {
+    en: "Images were changed elsewhere. Reload to see the latest images.",
+    zh: "图片已在别处修改，请重新读取最新的图片。",
+    ms: "Imej telah diubah di tempat lain. Muat semula untuk melihat imej terkini.",
+  },
   "admin.variant": {
     en: "Option values",
     zh: "规格",

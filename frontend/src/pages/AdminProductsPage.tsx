@@ -6,6 +6,7 @@ import type { AdminCategory, CategoriesRead } from "../api/adminCategories";
 import { createAdminProduct, readAdminProduct, readAdminProducts, saveAdminProduct } from "../api/adminProducts";
 import type {
   AdminProduct,
+  AdminProductImage,
   AdminProductListItem,
   AdminVariant,
   CreateVariant,
@@ -30,6 +31,8 @@ import { htmlLang, useCopy, useLanguage } from "../i18n/language";
 import { ADMIN_LOGIN_PATH, useRouter } from "../router";
 import type { RoutePath } from "../router";
 import { startDeferred } from "./AdminOrderDetail";
+import AdminProductImages from "./AdminProductImages";
+import type { RereadOutcome } from "./AdminProductImages";
 import { feeSen, feeText } from "./AdminShippingPage";
 
 // A04 后台商品（docs/UX.md 0.17 A04，视觉稿 A04-desktop 与 A04-phone-edit；HANDOFF 0.82 第（2）点）：用后台框架渲染，当前导航项为商品。
@@ -48,7 +51,9 @@ import { feeSen, feeText } from "./AdminShippingPage";
 // 新建商品（SHOP-TASK-206，UX A04「新建商品」「规格」与 HANDOFF 0.82 第（5）点）：标题旁为 common.create，经未保存确认后显示新建表单（标题
 // admin.product_new；文案为空串、分类为下拉框第一项、不上架、限购 10、没有规格名、SKU 表固定一行）；admin.add_option 新增规格名（至多 3 个），
 // 规格名、值与 SKU 各带 (✗)；以 POST /api/admin/products 提交，成功后在列表最前加一行、进入该商品的编辑区并显示 admin.product_created。
-// 图片与当日库存调整在 207、208。
+// 图片区（SHOP-TASK-207，UX A04「图片」与 HANDOFF 0.82 第（6）点）：AdminProductImages.tsx 放在 admin.publish_requirements 与规格区之间，
+// 页面传入商品 ID、当前图片（product.images）与 CSRF 令牌；图片操作只换 product.images，不算未保存的修改、不改 version；图片操作进行中
+// common.save 禁用，保存或新建进行中图片区的按钮禁用。当日库存调整在 208。
 
 // 三语名称（读取给的，可为 null）。
 export type ListNames = Readonly<Record<Language, string | null>>;
@@ -1034,6 +1039,44 @@ export function rereadStep(products: ProductsRead, categories: CategoriesRead, t
       : current;
 }
 
+// 图片区返回的图片列表（SHOP-TASK-207）：只换已取到的编辑区里该商品的 product.images；基线、已填的值、version 与保存结果都不变（图片不算在
+// 未保存的修改里，也不改版本号）。编辑区已不是该商品（切到别的商品、收起、读取中或新建表单）时不变。
+export function withImages(state: ProductsState, id: number, images: AdminProductImage[]): ProductsState {
+  if (state.status !== "ready" || state.editing === null || state.editing.status !== "ready" || state.editing.id !== id) {
+    return state;
+  }
+  const { editing } = state;
+  return { ...state, editing: { ...editing, product: { ...editing.product, images } } };
+}
+
+// 图片操作 403 之后重新读取列表与分类的结果（SHOP-TASK-207 purpose）：都取到时换成新的列表、分类与 CSRF 令牌，编辑区与已填的值都保留；
+// 任一 401 为 login，否则任一网络中断为 network、其他失败为 failed（列表、编辑区与令牌都不变）。图片区按它提示。
+export function tokenStep(products: ProductsRead, categories: CategoriesRead): ProductsChange | Exclude<RereadOutcome, "ok"> {
+  const step = readStep(products, categories);
+  if (step === "login") {
+    return "login";
+  }
+  if (step.status === "failed") {
+    return step.error === "common.network_check" ? "network" : "failed";
+  }
+  return (current) =>
+    current.status === "ready" ? { ...current, products: step.products, categories: step.categories, csrfToken: step.csrfToken } : current;
+}
+
+// 图片区的 onReread：并行读取列表与分类，照 tokenStep 更新页面并返回结果（401 由图片区回到 A01）。signal 中止之后不再更新（返回 failed）。
+export async function rereadToken(signal: AbortSignal, moves: ProductsMoves): Promise<RereadOutcome> {
+  const [products, categories] = await Promise.all([readAdminProducts(signal), readAdminCategories(signal)]);
+  if (signal.aborted) {
+    return "failed";
+  }
+  const step = tokenStep(products, categories);
+  if (typeof step === "string") {
+    return step;
+  }
+  moves.update(step);
+  return "ok";
+}
+
 // 页面对结果的处理：换成某个状态、按当前状态改动，或用路由的 replace 换成 A01（不留后台页的历史记录）。
 export interface ProductsMoves {
   show: (state: ProductsState) => void;
@@ -1289,9 +1332,26 @@ interface SaveHandlers {
   onReload: () => void;
 }
 
-interface EditorHandlers extends InputHandlers, SaveHandlers {
+// 图片区（SHOP-TASK-207）：onImages 以图片操作返回的列表替换该商品的图片，onReread 在图片操作 403 后重新读取列表与分类，onLogin 回到 A01，
+// onImagesBusy 记下图片操作是否进行中（须为不变的函数）。
+interface ImageHandlers {
+  onImages: (id: number, images: AdminProductImage[]) => void;
+  onReread: (signal: AbortSignal) => Promise<RereadOutcome>;
+  onLogin: () => void;
+  onImagesBusy: (busy: boolean) => void;
+}
+
+interface EditorHandlers extends InputHandlers, SaveHandlers, ImageHandlers {
   onBack: () => void;
 }
+
+// 图片区要的页面数据：列表给的 CSRF 令牌与图片操作是否进行中。
+interface ImageContext {
+  csrfToken: string;
+  imagesBusy: boolean;
+}
+
+const NO_IMAGES: readonly AdminProductImage[] = [];
 
 function CrossIcon() {
   return (
@@ -1663,15 +1723,15 @@ function SkuCards({ form, rows, newRows, handlers }: { form: ProductForm; rows: 
   );
 }
 
-// common.save 与其旁的保存结果（A04-states，照 A06 与 A10）：保存中禁用并标 aria-busy；admin.product_saved 与 admin.product_created
-// 为 role="status"，其他为 AdminAlert；admin.product_changed 带次要按钮 admin.reload。
-function SaveArea({ editor, onReload }: { editor: FormEditor } & Pick<SaveHandlers, "onReload">) {
+// common.save 与其旁的保存结果（A04-states，照 A06 与 A10）：保存中禁用并标 aria-busy，图片操作进行中也禁用（SHOP-TASK-207）；
+// admin.product_saved 与 admin.product_created 为 role="status"，其他为 AdminAlert；admin.product_changed 带次要按钮 admin.reload。
+function SaveArea({ editor, imagesBusy, onReload }: { editor: FormEditor; imagesBusy: boolean } & Pick<SaveHandlers, "onReload">) {
   const t = useCopy();
   const { notice } = editor;
   const done = notice === "admin.product_saved" || notice === "admin.product_created";
   return (
     <div className="site-admin-products__save">
-      <button className="acs-admin__btn" type="submit" disabled={editor.saving} aria-busy={editor.saving}>
+      <button className="acs-admin__btn" type="submit" disabled={editor.saving || imagesBusy} aria-busy={editor.saving}>
         {t("common.save")}
       </button>
       {notice !== null && done && <span role="status">{t(notice)}</span>}
@@ -1700,16 +1760,20 @@ function SaveArea({ editor, onReload }: { editor: FormEditor } & Pick<SaveHandle
 // 最后为 common.save 与保存结果。桌面的表格在限购之前、手机的卡片在限购之后（两套都渲染，由 site.css 按宽度显隐）。
 // 新建表单（SHOP-TASK-206，视觉稿 A04-desktop-new）标题为 admin.product_new，分类下拉只有可选的分类（照 newCategoryChoices），不显示
 // admin.category_current_unavailable，规格区多 admin.no_options 与 admin.add_option，SKU 全是新增行（不显示 slug、SKU 代码与当日可用库存的值）。
+// 图片区（SHOP-TASK-207，视觉稿 A04-desktop 与 A04-desktop-new）在 admin.publish_requirements 之后、规格区之前；以商品 ID 作 key（新建表单为
+// new），换了商品即重新挂载；新建表单没有商品 ID 与图片。
 function EditorForm({
   editor,
   categories,
   item,
+  context,
   handlers,
 }: {
   editor: OpenEditor | NewEditor;
   categories: readonly AdminCategory[];
   item: AdminProductListItem | undefined;
-  handlers: InputHandlers & SaveHandlers;
+  context: ImageContext;
+  handlers: InputHandlers & SaveHandlers & ImageHandlers;
 }) {
   const t = useCopy();
   const { language } = useLanguage();
@@ -1725,6 +1789,7 @@ function EditorForm({
   const choices = editor.status === "ready" ? categoryChoices(categories, editor.product, item, language) : newCategoryChoices(categories, language);
   const rows = editor.status === "ready" ? skuRows(editor, language) : [];
   const newRows = newSkuRows(editor, language);
+  const productId = editor.status === "ready" ? editor.id : null;
   return (
     <form
       className="acs-admin__panel site-admin-products__form"
@@ -1818,6 +1883,21 @@ function EditorForm({
         </label>
       </div>
       <span className="acs-admin__muted">{t("admin.publish_requirements")}</span>
+      <AdminProductImages
+        key={productId ?? "new"}
+        productId={productId}
+        images={editor.status === "ready" ? editor.product.images : NO_IMAGES}
+        csrfToken={context.csrfToken}
+        locked={editor.saving}
+        onImages={(images) => {
+          if (productId !== null) {
+            handlers.onImages(productId, images);
+          }
+        }}
+        onReread={handlers.onReread}
+        onLogin={handlers.onLogin}
+        onBusy={handlers.onImagesBusy}
+      />
       <OptionsGroup editor={editor} creating={creating} describedBy={describedBy} handlers={handlers} />
       <SkuTable form={form} rows={rows} newRows={newRows} handlers={handlers} />
       <div className="site-admin-products__limit">
@@ -1843,7 +1923,7 @@ function EditorForm({
         <span>{t("admin.initial_stock_note")}</span>
         <span>{t("admin.rules_apply_new")}</span>
       </div>
-      <SaveArea editor={editor} onReload={handlers.onReload} />
+      <SaveArea editor={editor} imagesBusy={context.imagesBusy} onReload={handlers.onReload} />
     </form>
   );
 }
@@ -1853,9 +1933,10 @@ function EditorView({
   editing,
   categories,
   item,
+  context,
   onBack,
   ...handlers
-}: { editing: Editing; categories: readonly AdminCategory[]; item: AdminProductListItem | undefined } & EditorHandlers) {
+}: { editing: Editing; categories: readonly AdminCategory[]; item: AdminProductListItem | undefined; context: ImageContext } & EditorHandlers) {
   const t = useCopy();
   return (
     <div className="site-admin-products__editor" aria-busy={editing.status === "loading"}>
@@ -1863,7 +1944,7 @@ function EditorView({
         {t("common.back")}
       </button>
       {editing.status === "failed" && <AdminAlert error={editing.error} />}
-      {(editing.status === "ready" || editing.status === "new") && <EditorForm editor={editing} categories={categories} item={item} handlers={handlers} />}
+      {(editing.status === "ready" || editing.status === "new") && <EditorForm editor={editing} categories={categories} item={item} context={context} handlers={handlers} />}
     </div>
   );
 }
@@ -1872,11 +1953,13 @@ export interface AdminProductsViewProps extends ListHandlers, EditorHandlers {
   state: ProductsState;
   // 标题旁的 common.create（SHOP-TASK-206）。
   onCreate: () => void;
+  // 图片操作进行中（SHOP-TASK-207）：common.save 禁用。
+  imagesBusy: boolean;
 }
 
 // 标题与 common.create（列表取到后可点）之下为列表区：读取中标 aria-busy；读取失败时只有提示。点了 common.edit 或 common.create 之后
 // 根元素加 --editing（桌面两栏，手机隐藏列表）。
-export function AdminProductsView({ state, onEdit, onCreate, ...handlers }: AdminProductsViewProps) {
+export function AdminProductsView({ state, imagesBusy, onEdit, onCreate, ...handlers }: AdminProductsViewProps) {
   const t = useCopy();
   const editing = state.status === "ready" ? state.editing : null;
   return (
@@ -1905,6 +1988,7 @@ export function AdminProductsView({ state, onEdit, onCreate, ...handlers }: Admi
           editing={editing}
           categories={state.categories}
           item={editing.status === "new" ? undefined : state.products.find((product) => product.id === editing.id)}
+          context={{ csrfToken: state.csrfToken, imagesBusy }}
           {...handlers}
         />
       )}
@@ -1920,6 +2004,8 @@ export function AdminProductsContent() {
   const productRequest = useRef<AbortController | null>(null);
   // 打开页面与保存（含 403 后的重新读取）共用的中止；离开页面时中止。保存的结果只改仍在保存的同一件（withSavingEditor）。
   const lifetime = useRef<AbortController | null>(null);
+  // 图片操作进行中（SHOP-TASK-207）：由图片区经 onImagesBusy 设定，为真时 common.save 禁用、不提交。
+  const [imagesBusy, setImagesBusy] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1950,6 +2036,15 @@ export function AdminProductsContent() {
   return (
     <AdminProductsView
       state={state}
+      imagesBusy={imagesBusy}
+      onImages={(id, images) => {
+        setState((current) => withImages(current, id, images));
+      }}
+      onReread={(signal) => rereadToken(signal, pageMoves(setState, replace))}
+      onLogin={() => {
+        replace(ADMIN_LOGIN_PATH);
+      }}
+      onImagesBusy={setImagesBusy}
       onCreate={() => {
         if (state.status !== "ready") {
           return;
@@ -2037,7 +2132,8 @@ export function AdminProductsContent() {
       }}
       onSave={() => {
         const controller = lifetime.current;
-        if (state.status !== "ready" || state.editing === null || controller === null) {
+        // 图片操作进行中不保存（两者互斥，SHOP-TASK-207）。
+        if (state.status !== "ready" || state.editing === null || controller === null || imagesBusy) {
           return;
         }
         const editor = state.editing;
