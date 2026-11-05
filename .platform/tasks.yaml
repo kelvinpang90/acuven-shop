@@ -5745,7 +5745,7 @@ tasks:
       不做接口与前端，不改模型与迁移，不改设计。
       设计闸门：DESIGN 1.20（提交 a870f78）第 15 条与 HANDOFF 0.84，店铺标志图的存放、替换、移除与审计。
       拆分：服务层（5 个允许路径），接口为 SHOP-TASK-212、213。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-209
       - SHOP-TASK-210
