@@ -515,6 +515,21 @@ a.site-admin-refunds__clear { text-decoration: none; }
 /* A04 的新建商品（A04-desktop-new，SHOP-TASK-206）：标题与 common.create 一行、两端对齐（垂直居中）；admin.add_option 在规格名之后、靠左 */
 .site-admin-products__title { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .site-admin-products__add-option { justify-self: start; }
+/* A04 的图片区（A04-desktop、A04-desktop-new 与 A04-images-stock，SHOP-TASK-207）：各项上下排列（间距 10px）；标题与张数一行（间距 10px，
+   基线对齐）；缩略图一行可换行（间距 14px），每张为 96×96 的图（裁切填满）与其下的 (‹)(›)(✗)（间距 6px，靠左），admin.image_cover 在图的
+   左上角（距边 6px）；三个按钮间距 4px，各 32px 宽、图标居中、没有内边距；admin.upload 与其旁的 admin.image_save_first、admin.image_uploading
+   一行（间距 12px，垂直居中，可换行）；「图片已被改动」的提示里文字与 admin.reload 上下排列（间距 10px，靠左）。确认框沿用 .site-admin__confirm */
+.site-admin-images { display: grid; gap: 10px; min-width: 0; }
+.site-admin-images__head { display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; }
+.site-admin-images__list { display: flex; flex-wrap: wrap; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.site-admin-images__item { display: grid; gap: 6px; justify-items: start; }
+.site-admin-images__thumb { position: relative; display: block; width: 96px; height: 96px; overflow: hidden; }
+.site-admin-images__thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.site-admin-images__cover { position: absolute; left: 6px; top: 6px; }
+.site-admin-images__actions { display: flex; gap: 4px; }
+.site-admin-images__icon { display: inline-flex; justify-content: center; align-items: center; box-sizing: border-box; width: 32px; min-width: 32px; padding: 0; }
+.site-admin-images__upload { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.site-admin-images__changed { display: grid; gap: 10px; justify-items: start; }
 
 /* A07 的每日结果（A07-desktop）：表格在可横向滚动的面板里，SKU 数靠右；每天的展开处在该日下方另起一行（单元格不留内边距，
    details 内边距 8px 12px，明细表与 summary 间距 6px）；卡片不显示，翻页按钮靠右。summary 的字重、明细的字号 site.css 写不了，
@@ -1143,6 +1158,15 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-products__title { display: grid; gap: 14px; }
   .site-admin-products__title .acs-admin__btn { justify-content: center; min-height: 44px; }
   .site-admin-products__add-option { justify-self: stretch; justify-content: center; min-height: 44px; }
+  /* 图片区（A04-phone-edit，SHOP-TASK-207；UX A04 手机线框「（横向滚动）」）：缩略图一行不换行、横向滚动，每张 80×80；(‹)(›)(✗) 各 44px 宽、
+     至少 44px 高；admin.upload 占满宽度、文字居中、至少 44px 高，admin.image_save_first 与 admin.image_uploading 在其下；admin.reload 至少 44px 高 */
+  .site-admin-images__list { flex-wrap: nowrap; overflow-x: auto; }
+  .site-admin-images__item { flex-shrink: 0; }
+  .site-admin-images__thumb { width: 80px; height: 80px; }
+  .site-admin-images__icon { width: 44px; min-width: 44px; min-height: 44px; }
+  .site-admin-images__upload { display: grid; gap: 10px; }
+  .site-admin-images__upload > .acs-admin__btn { justify-content: center; min-height: 44px; }
+  .site-admin-images__changed .acs-admin__btn { min-height: 44px; }
 
   /* A07 的每日结果（A07-phone）：表格不显示、卡片显示（间距 10px，卡片内边距 12px，各项间距 8px，第一行日期与结果标签两端对齐、可换行），
      展开处在卡片里（summary 至少 32px 高，每个 SKU 一项、SKU 与 breakdown 上下排列、间距 2px、上下内边距 6px）；翻页按钮居中、至少 44×44。
