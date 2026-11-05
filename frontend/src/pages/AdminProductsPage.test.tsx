@@ -16,6 +16,7 @@ import {
   addOption,
   addSku,
   addValue,
+  adjustingVariant,
   AdminProductsView,
   canAddOption,
   canAddSku,
@@ -88,6 +89,7 @@ import {
   valueChoices,
   valueRemovable,
   variantText,
+  withAvailable,
   withImages,
 } from "./AdminProductsPage";
 import type { AdminProductsViewProps, Editing, NewEditor, OpenEditor, ProductForm, ProductsMoves, ProductsState, SaveNotice } from "./AdminProductsPage";
@@ -293,6 +295,10 @@ const HANDLERS: Omit<AdminProductsViewProps, "state"> = {
   onReread: () => Promise.resolve("ok" as const),
   onLogin: () => undefined,
   onImagesBusy: () => undefined,
+  // 当日库存调整（SHOP-TASK-208）：没有展开。
+  adjusting: null,
+  onAdjust: () => undefined,
+  onAvailable: () => undefined,
 };
 
 function view(state: ProductsState): ReactNode {
@@ -1143,7 +1149,10 @@ describe("AdminProductsPage", () => {
   // UX A04 桌面线框「[admin.sku] [admin.variant] [admin.price] [admin.initial_stock] [admin.sku_enabled] [admin.available_today]」「<sku> <规格值>
   // [M1 ____] [M2 ___] ☑ <n>」、手机线框「SKU 卡片」六项与本任务验收「桌面为表格…手机为每个 SKU 一张卡片（同样六项），两套都渲染」：
   // 表格六个列头；每行为 SKU 代码、规格列、价格与每日初始库存输入框（读取的文字）、启用勾选框、当日可用库存；卡片按同样顺序有六项。
-  // 表格在每单限购之前、卡片在其后（照 A04-desktop 与 A04-phone-edit）；没有 admin.adjust_today（SHOP-TASK-208）。
+  // 表格在每单限购之前、卡片在其后（照 A04-desktop 与 A04-phone-edit）。
+  // SHOP-TASK-208 改动：UX A04 桌面线框「<sku> <规格值> [M1 ____] [M2 ___] ☑ <n> ([admin.adjust_today])」与手机线框「[admin.available_today] <n>
+  // ([admin.adjust_today])」，每个已有 SKU 多了 admin.adjust_today，原来「没有 admin.adjust_today」「表格与卡片里没有按钮」的断言因此失效；改为每行、
+  // 每张卡片最后为 admin.adjust_today（次要按钮，type="button"），表格多一列（列头为空）。
   it.each(LANGUAGES)("renders the SKUs as a desktop table and phone cards in %s", (language) => {
     const html = form(render(opened(changePrice(editorOf(3, SHIRT), 2, "0.5 RM")), language));
     const table = element(html, "div", "site-admin-products__skus");
@@ -1151,11 +1160,13 @@ describe("AdminProductsPage", () => {
       (["admin.sku", "admin.variant", "admin.price", "admin.initial_stock", "admin.sku_enabled", "admin.available_today"] as const).map((key) => COPY[key][language]),
     );
     const variants = skuRows(editorOf(3, SHIRT), language).map((row) => row.variant);
+    expect(tags(/<thead>[\s\S]*<\/thead>/.exec(table)?.[0] ?? "", "th")).toHaveLength(7);
+    const adjustText = COPY["admin.adjust_today"][language];
     const rows = [...(/<tbody>([\s\S]*)<\/tbody>/.exec(table)?.[1] ?? "").matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map((m) => m[1] ?? "");
     expect(rows.map(textNodes)).toEqual([
-      ["crew-neck-tee-black-m", variants[0], "18"],
-      ["crew-neck-tee-navy-m", variants[1], "0"],
-      ["crew-neck-tee-navy-l", variants[2], "3"],
+      ["crew-neck-tee-black-m", variants[0], "18", adjustText],
+      ["crew-neck-tee-navy-m", variants[1], "0", adjustText],
+      ["crew-neck-tee-navy-l", variants[2], "3", adjustText],
     ]);
     const cells = (row: string) => tags(row, "input").map((tag) => [attributes(tag).get("aria-label"), attributes(tag).get("value") ?? attributes(tag).has("checked")]);
     expect(rows.map(cells)).toEqual(
@@ -1185,6 +1196,7 @@ describe("AdminProductsPage", () => {
         COPY["admin.sku_enabled"][language],
         COPY["admin.available_today"][language],
         available,
+        adjustText,
       ]),
     );
     expect(cards.map((card) => tags(card, "input").map((tag) => attributes(tag).get("value") ?? attributes(tag).has("checked")))).toEqual([
@@ -1195,8 +1207,13 @@ describe("AdminProductsPage", () => {
     const limit = html.indexOf('class="site-admin-products__limit"');
     expect(html.indexOf('class="site-admin-products__skus"')).toBeLessThan(limit);
     expect(html.indexOf('class="site-admin-products__sku-cards"')).toBeGreaterThan(limit);
-    expect(tags(table, "button")).toEqual([]);
-    expect(tags(element(html, "ul", "site-admin-products__sku-cards"), "button")).toEqual([]);
+    for (const part of [table, element(html, "ul", "site-admin-products__sku-cards")]) {
+      expect(tags(part, "button").map((tag) => [attributes(tag).get("type"), classes(tag).includes("acs-admin__btn--secondary")])).toEqual([
+        ["button", true],
+        ["button", true],
+        ["button", true],
+      ]);
+    }
   });
 
   // UX A04 线框的常显文字与本任务验收「常显的说明——admin.publish_requirements、admin.product_options 一组下的 admin.options_fixed_note、
@@ -1209,6 +1226,9 @@ describe("AdminProductsPage", () => {
   // 含 admin.add_value，按钮依次为内容语言三个、两个 admin.add_value、两个 admin.add_sku 与 common.save，仍没有 (✗)（没有新增行）。
   // SHOP-TASK-207 改动：UX A04 线框在 admin.publish_requirements 与 admin.product_options 之间多了图片区「( [admin.upload] )」，原来「没有图片区的按钮」
   // 「没有文件输入框」的断言因此失效；改为内容语言之后多一个 admin.upload（这件商品没有图片，没有 (‹)(›)(✗) 与 img），图片区里有一个文件输入框。
+  // SHOP-TASK-208 改动：UX A04 线框「<n> ([admin.adjust_today])」，三个已有 SKU 在表格与卡片里各多一个 admin.adjust_today，原来按位置列出的按钮
+  // 断言因此失效；改为两个 admin.add_value 之后依次为表格的三个 admin.adjust_today、表格下的 admin.add_sku、卡片的三个 admin.adjust_today、卡片下的
+  // admin.add_sku 与 common.save。
   it.each(LANGUAGES)("shows the standing notes and no buttons beyond the content languages, the add buttons and common.save in %s", (language) => {
     const html = form(render(opened(editorOf(3, SHIRT)), language));
     const nodes = textNodes(html);
@@ -1238,18 +1258,25 @@ describe("AdminProductsPage", () => {
     ]);
     expect(tags(options, "input").filter((tag) => attributes(tag).get("aria-label") === COPY["admin.option_value"][language])).toHaveLength(4);
     const buttons = tags(html, "button");
-    expect(buttons.map((tag) => attributes(tag).get("aria-pressed"))).toEqual(["true", "false", "false", undefined, undefined, undefined, undefined, undefined, undefined]);
+    expect(buttons.map((tag) => attributes(tag).get("aria-pressed"))).toEqual(["true", "false", "false", ...Array.from({ length: 12 }, () => undefined)]);
     const upload = element(html, "div", "site-admin-images__upload");
     expect(tags(upload, "button")).toEqual([buttons[3]]);
     expect(textNodes(upload)).toEqual([COPY["admin.upload"][language]]);
-    expect(buttons.slice(4).map((tag) => classes(tag).find((name) => name.startsWith("site-admin-products__add-")))).toEqual([
+    const adjust = "site-admin-products__adjust-today";
+    expect(buttons.slice(4).map((tag) => classes(tag).find((name) => name.startsWith("site-admin-products__add-") || name === adjust))).toEqual([
       "site-admin-products__add-value",
       "site-admin-products__add-value",
+      adjust,
+      adjust,
+      adjust,
       "site-admin-products__add-sku",
+      adjust,
+      adjust,
+      adjust,
       "site-admin-products__add-sku",
       undefined,
     ]);
-    expect(attributes(buttons[8] ?? "").get("type")).toBe("submit");
+    expect(attributes(buttons[14] ?? "").get("type")).toBe("submit");
     expect(html).not.toContain(`aria-label="${escapeHtml(COPY["admin.remove"][language])}"`);
     expect(nodes[nodes.length - 1]).toBe(COPY["common.save"][language]);
     expect(html).not.toMatch(/<img\b/);
@@ -2648,5 +2675,111 @@ describe("AdminProductsPage", () => {
     expect(tokenStep({ kind: "none" }, { kind: "ok", categories: [], csrf_token: "c" })).toBe("login");
     expect(tokenStep({ kind: "network" }, { kind: "failed" })).toBe("network");
     expect(tokenStep({ kind: "failed" }, { kind: "ok", categories: [], csrf_token: "c" })).toBe("failed");
+  });
+
+  // SHOP-TASK-208：编辑区的 SKU 区按 adjusting 渲染（View 只依赖 props）。
+  const adjustingView = (state: ProductsState, adjusting: number | null, language: Language = "en"): string =>
+    form(renderToStaticMarkup(wrap(<AdminProductsView state={state} {...HANDLERS} adjusting={adjusting} />, language)));
+  const adjustButtons = (html: string): string[] => tags(html, "button").filter((tag) => classes(tag).includes("site-admin-products__adjust-today"));
+
+  // UX A04「当日库存调整」「新增、还没保存的 SKU 没有这个按钮」与本任务验收「每个已有 SKU（桌面表格的行与手机的卡片）在 admin.available_today 旁为
+  // admin.adjust_today；新增、还没保存的 SKU 与新建表单的 SKU 没有这个按钮」：三个已有 SKU 加一个新增 SKU 时，表格前三行与前三张卡片各有一个
+  // admin.adjust_today（在当日可用库存之后），新增行与新增卡片没有；新建表单（有无规格名）一个也没有。
+  it.each(LANGUAGES)("offers admin.adjust_today on saved SKUs only in %s", (language) => {
+    const html = adjustingView(opened(addSku(editorOf(3, SHIRT))), null, language);
+    const text = COPY["admin.adjust_today"][language];
+    const table = element(html, "div", "site-admin-products__skus");
+    const rows = [...(/<tbody>([\s\S]*)<\/tbody>/.exec(table)?.[1] ?? "").matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map((m) => m[1] ?? "");
+    expect(rows.map((row) => adjustButtons(row).length)).toEqual([1, 1, 1, 0]);
+    expect(rows.slice(0, 3).map((row) => textNodes(row).slice(-2))).toEqual([
+      ["18", text],
+      ["0", text],
+      ["3", text],
+    ]);
+    const cards = [...element(html, "ul", "site-admin-products__sku-cards").matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1] ?? "");
+    expect(cards.map((card) => adjustButtons(card).length)).toEqual([1, 1, 1, 0]);
+    expect(cards.slice(0, 3).map((card) => textNodes(card).slice(-3))).toEqual([
+      [COPY["admin.available_today"][language], "18", text],
+      [COPY["admin.available_today"][language], "0", text],
+      [COPY["admin.available_today"][language], "3", text],
+    ]);
+    let creating = newEditor([APPAREL, BAGS]);
+    expect(adjustButtons(adjustingView(ready(LISTED, creating), null, language))).toEqual([]);
+    creating = addSku(addOption(creating));
+    expect(adjustButtons(adjustingView(ready(LISTED, creating), null, language))).toEqual([]);
+    expect(textNodes(adjustingView(ready(LISTED, creating), null, language))).not.toContain(text);
+  });
+
+  // UX A04 线框「当日库存调整（0.17，点某行 [admin.adjust_today] 后在该行下展开，同时只展开一行）」与本任务 purpose「同时只展开一个 SKU」「展开区在桌面为
+  // 该行下方的整行，在手机为该 SKU 卡片内」：adjusting 为 Navy / M 时表格在该行之后多一整行（一格跨七列），里面为该 SKU 的调整区（admin.adjust_title 的
+  // {sku} 为它的代码、admin.adjust_shown 的 {count} 为该行的 0），该行不再显示 admin.adjust_today，另两行照常；卡片里只有第二张有调整区。换成 Black / M
+  // 即只展开那一个；adjustingVariant 只在编辑区仍是记下的商品时给出展开的 SKU。
+  it.each(LANGUAGES)("expands one SKU at a time in %s", (language) => {
+    const state = opened(editorOf(3, SHIRT));
+    const html = adjustingView(state, 42, language);
+    const table = element(html, "div", "site-admin-products__skus");
+    const body = /<tbody>([\s\S]*)<\/tbody>/.exec(table)?.[1] ?? "";
+    const allRows = [...body.matchAll(/<tr\b([^>]*)>([\s\S]*?)<\/tr>/g)];
+    expect(allRows.map((m) => classes(`<tr${m[1] ?? ""}>`).includes("site-admin-products__adjust-row"))).toEqual([false, false, true, false]);
+    const expanded = allRows[2]?.[2] ?? "";
+    expect(tags(expanded, "td").map((tag) => attributes(tag).get("colspan"))).toEqual(["7"]);
+    const title = formatCopy(COPY["admin.adjust_title"][language], { sku: "crew-neck-tee-navy-m" });
+    const shown = formatCopy(COPY["admin.adjust_shown"][language], { count: 0 });
+    expect(textNodes(expanded).slice(0, 3)).toEqual([title, shown, COPY["admin.adjust_new"][language]]);
+    expect(allRows.map((m) => adjustButtons(m[2] ?? "").length)).toEqual([1, 0, 0, 1]);
+    expect(tags(html, "div").filter((tag) => classes(tag).includes("site-admin-adjust"))).toHaveLength(2);
+    const cards = [...element(html, "ul", "site-admin-products__sku-cards").matchAll(/<li\b[^>]*>([\s\S]*?)<\/li>/g)].map((m) => m[1] ?? "");
+    expect(cards.map((card) => tags(card, "div").some((tag) => classes(tag).includes("site-admin-adjust")))).toEqual([false, true, false]);
+    expect(cards.map((card) => adjustButtons(card).length)).toEqual([1, 0, 1]);
+    expect(textNodes(cards[1] ?? "")).toContain(title);
+    const other = adjustingView(state, 41, language);
+    expect(textNodes(other)).toContain(formatCopy(COPY["admin.adjust_title"][language], { sku: "crew-neck-tee-black-m" }));
+    expect(textNodes(other)).not.toContain(title);
+    expect(tags(other, "div").filter((tag) => classes(tag).includes("site-admin-adjust"))).toHaveLength(2);
+    expect(tags(adjustingView(state, null, language), "div").filter((tag) => classes(tag).includes("site-admin-adjust"))).toEqual([]);
+    const open = { productId: 3, variantId: 42 };
+    expect(adjustingVariant(state, open)).toBe(42);
+    expect(adjustingVariant(state, null)).toBeNull();
+    expect(adjustingVariant(opened(editorOf(5, TOTE_PRODUCT)), open)).toBeNull();
+    expect(adjustingVariant(ready(LISTED, { status: "loading", id: 3 }), open)).toBeNull();
+    expect(adjustingVariant(ready(LISTED, newEditor([APPAREL])), open)).toBeNull();
+    expect(adjustingVariant(ready(), open)).toBeNull();
+    expect(adjustingVariant(LOADING, open)).toBeNull();
+  });
+
+  // UX A04「列表」「有未保存的修改（…图片与当日库存调整立即生效，不算在内）」、「当日库存调整」「成功后该行的 [admin.available_today] 改为新值」「也不影响编辑区里
+  // 未保存的修改」与本任务 purpose「当日可用库存不算在未保存的修改里，调整不改商品的版本号与编辑区已填的值；商品保存成功后以返回的商品为准」：withAvailable
+  // 只换该商品该 SKU 的 available_stock；没有修改的编辑区调整后仍不算有修改，有修改的编辑区已填的值、基线与 version 都不变、仍算有修改；表格与卡片里该 SKU
+  // 改显示新值、调整区的 admin.adjust_shown 随之改为新值；编辑区已是别的商品、读取中、新建表单或页面还没取到时不变；之后保存成功以返回的商品的值为准。
+  it("updates today's stock without touching the edits or the version", () => {
+    const clean = editorOf(3, SHIRT);
+    const adjusted = withAvailable(opened(clean), 3, 42, 9);
+    expect(openOf(adjusted).product.variants.map((variant) => variant.available_stock)).toEqual([18, 9, 3]);
+    expect(openOf(adjusted).base).toBe(clean.base);
+    expect(openOf(adjusted).form).toBe(clean.form);
+    expect(isDirty(editingOf(adjusted))).toBe(false);
+    const edited = changeName(clean, "Tee");
+    const after = openOf(withAvailable(opened(edited), 3, 42, 9));
+    expect(after.form).toBe(edited.form);
+    expect(after.base).toBe(edited.base);
+    expect(after.product.version).toBe(SHIRT.version);
+    expect(after.notice).toBe(edited.notice);
+    expect(isDirty(after)).toBe(true);
+    const html = adjustingView(adjusted, 42);
+    const rows = [...(/<tbody>([\s\S]*)<\/tbody>/.exec(element(html, "div", "site-admin-products__skus"))?.[1] ?? "").matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map((m) => m[1] ?? "");
+    expect(rows.map((row) => textNodes(row)[2])).toEqual(["18", "9", "3"]);
+    expect(textNodes(html).filter((text) => text === formatCopy(COPY["admin.adjust_shown"].en, { count: 9 }))).toHaveLength(2);
+    for (const state of [opened(clean), ready(LISTED, { status: "loading", id: 3 }), ready(LISTED, newEditor([APPAREL])), LOADING]) {
+      expect(withAvailable(state, state === LOADING ? 3 : 5, 42, 9)).toBe(state);
+    }
+    const loading = ready(LISTED, { status: "loading", id: 3 });
+    expect(withAvailable(loading, 3, 42, 9)).toBe(loading);
+    const step = saveStep({ kind: "ok", product: { ...SHIRT, version: 5 } }, 3);
+    if (typeof step === "string") {
+      throw new Error("expected a change");
+    }
+    const saved = openOf(step(withAvailable(opened(startSaving(clean)), 3, 42, 9)));
+    expect(saved.product.variants.map((variant) => variant.available_stock)).toEqual([18, 0, 3]);
+    expect(saved.product.version).toBe(5);
   });
 });

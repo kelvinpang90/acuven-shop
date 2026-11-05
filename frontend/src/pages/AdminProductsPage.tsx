@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useRef, useState } from "react";
 import type { ChangeEvent, Dispatch, FormEvent, SetStateAction } from "react";
 
 import { readAdminCategories } from "../api/adminCategories";
@@ -34,6 +34,7 @@ import { startDeferred } from "./AdminOrderDetail";
 import AdminProductImages from "./AdminProductImages";
 import type { RereadOutcome } from "./AdminProductImages";
 import { feeSen, feeText } from "./AdminShippingPage";
+import AdminStockAdjust from "./AdminStockAdjust";
 
 // A04 后台商品（docs/UX.md 0.17 A04，视觉稿 A04-desktop 与 A04-phone-edit；HANDOFF 0.82 第（2）点）：用后台框架渲染，当前导航项为商品。
 // 内容区为标题 admin.nav_products 与全部商品（含未上架的，按接口给的顺序；桌面表格、手机卡片，两套都渲染，由 site.css 按宽度显隐），
@@ -53,7 +54,10 @@ import { feeSen, feeText } from "./AdminShippingPage";
 // 规格名、值与 SKU 各带 (✗)；以 POST /api/admin/products 提交，成功后在列表最前加一行、进入该商品的编辑区并显示 admin.product_created。
 // 图片区（SHOP-TASK-207，UX A04「图片」与 HANDOFF 0.82 第（6）点）：AdminProductImages.tsx 放在 admin.publish_requirements 与规格区之间，
 // 页面传入商品 ID、当前图片（product.images）与 CSRF 令牌；图片操作只换 product.images，不算未保存的修改、不改 version；图片操作进行中
-// common.save 禁用，保存或新建进行中图片区的按钮禁用。当日库存调整在 208。
+// common.save 禁用，保存或新建进行中图片区的按钮禁用。
+// 当日库存调整（SHOP-TASK-208，UX A04「当日库存调整」与 HANDOFF 0.82 第（6）点）：每个已有 SKU 在 admin.available_today 旁为 admin.adjust_today，
+// 点它展开 AdminStockAdjust.tsx（桌面为该行下方的整行，手机在该 SKU 卡片内；同时只展开一个，页面记下展开的 SKU）；调整返回的值只换
+// product.variants 里该 SKU 的 available_stock，不算未保存的修改、不改 version。
 
 // 三语名称（读取给的，可为 null）。
 export type ListNames = Readonly<Record<Language, string | null>>;
@@ -1049,6 +1053,31 @@ export function withImages(state: ProductsState, id: number, images: AdminProduc
   return { ...state, editing: { ...editing, product: { ...editing.product, images } } };
 }
 
+// 调整区返回的当日可用库存（SHOP-TASK-208）：只换已取到的编辑区里该商品、该 SKU 的 product.variants[].available_stock；基线、已填的值、version 与
+// 保存结果都不变（当日可用库存不算在未保存的修改里，调整也不改版本号）。编辑区已不是该商品时不变。
+export function withAvailable(state: ProductsState, id: number, variantId: number, count: number): ProductsState {
+  if (state.status !== "ready" || state.editing === null || state.editing.status !== "ready" || state.editing.id !== id) {
+    return state;
+  }
+  const { editing } = state;
+  const variants = editing.product.variants.map((variant) => (variant.id === variantId ? { ...variant, available_stock: count } : variant));
+  return { ...state, editing: { ...editing, product: { ...editing.product, variants } } };
+}
+
+// 展开的调整区（SHOP-TASK-208）：所在商品的 ID 与 SKU 规格 ID；只在编辑区仍是该商品时展开（productId 不同即视为没有展开）。
+export interface AdjustOpen {
+  productId: number;
+  variantId: number;
+}
+
+// 编辑区里展开的 SKU：编辑区已取到、为 open 所在的商品时为 open 的 SKU 规格 ID，否则（含没有展开、新建表单、读取中）为 null。
+export function adjustingVariant(state: ProductsState, open: AdjustOpen | null): number | null {
+  if (open === null || state.status !== "ready" || state.editing === null || state.editing.status !== "ready") {
+    return null;
+  }
+  return state.editing.id === open.productId ? open.variantId : null;
+}
+
 // 图片操作 403 之后重新读取列表与分类的结果（SHOP-TASK-207 purpose）：都取到时换成新的列表、分类与 CSRF 令牌，编辑区与已填的值都保留；
 // 任一 401 为 login，否则任一网络中断为 network、其他失败为 failed（列表、编辑区与令牌都不变）。图片区按它提示。
 export function tokenStep(products: ProductsRead, categories: CategoriesRead): ProductsChange | Exclude<RereadOutcome, "ok"> {
@@ -1341,14 +1370,29 @@ interface ImageHandlers {
   onImagesBusy: (busy: boolean) => void;
 }
 
-interface EditorHandlers extends InputHandlers, SaveHandlers, ImageHandlers {
+// 当日库存调整（SHOP-TASK-208）：onAdjust 展开某个 SKU 的调整区（另一个随之收起）或收起（null）；onAvailable 以调整返回的值改显示该商品、
+// 该 SKU 的当日可用库存。403 后的重新读取与回到 A01 沿用图片区的 onReread 与 onLogin。
+interface AdjustHandlers {
+  onAdjust: (variantId: number | null) => void;
+  onAvailable: (id: number, variantId: number, count: number) => void;
+}
+
+interface EditorHandlers extends InputHandlers, SaveHandlers, ImageHandlers, AdjustHandlers {
   onBack: () => void;
 }
 
-// 图片区要的页面数据：列表给的 CSRF 令牌与图片操作是否进行中。
-interface ImageContext {
+// 图片区与调整区要的页面数据：列表给的 CSRF 令牌、图片操作是否进行中与展开调整区的 SKU 规格 ID（没有展开为 null）。
+interface EditorContext {
   csrfToken: string;
   imagesBusy: boolean;
+  adjusting: number | null;
+}
+
+// SKU 表格与卡片里调整区要的：商品 ID、页面数据与回调；新建表单为 null（没有已有 SKU）。
+interface SkuAdjust {
+  productId: number;
+  context: EditorContext;
+  handlers: AdjustHandlers & Pick<ImageHandlers, "onReread" | "onLogin">;
 }
 
 const NO_IMAGES: readonly AdminProductImage[] = [];
@@ -1526,14 +1570,73 @@ function AddSkuButton({ form, onAddSku }: { form: ProductForm; onAddSku: () => v
   );
 }
 
+// 已有 SKU 的 admin.adjust_today（SHOP-TASK-208；桌面在 admin.available_today 之后一格，手机在卡片的 admin.available_today 之下）：点它展开该 SKU
+// 的调整区。展开时这个按钮不显示（照 A04-phone-edit），由调整区的 common.cancel 收起。
+function AdjustButton({ row, adjust }: { row: SkuRow; adjust: SkuAdjust }) {
+  const t = useCopy();
+  if (adjust.context.adjusting === row.form.id) {
+    return null;
+  }
+  return (
+    <button
+      className="acs-admin__btn acs-admin__btn--secondary site-admin-products__adjust-today"
+      type="button"
+      onClick={() => {
+        adjust.handlers.onAdjust(row.form.id);
+      }}
+    >
+      {t("admin.adjust_today")}
+    </button>
+  );
+}
+
+// 展开的调整区（AdminStockAdjust）：传入该 SKU 的 ID、代码、页面显示的当日可用库存、列表给的 CSRF 令牌与回调；没有展开时为 null。
+function AdjustArea({ row, adjust }: { row: SkuRow; adjust: SkuAdjust }) {
+  const { productId, context, handlers } = adjust;
+  if (context.adjusting !== row.form.id) {
+    return null;
+  }
+  return (
+    <AdminStockAdjust
+      variantId={row.form.id}
+      sku={row.sku}
+      shown={row.available}
+      csrfToken={context.csrfToken}
+      onAvailable={(count) => {
+        handlers.onAvailable(productId, row.form.id, count);
+      }}
+      onReread={handlers.onReread}
+      onLogin={handlers.onLogin}
+      onCancel={() => {
+        handlers.onAdjust(null);
+      }}
+    />
+  );
+}
+
 // 桌面的 SKU 表格：admin.sku、admin.variant、admin.price、admin.initial_stock、admin.sku_enabled、admin.available_today 六列；
 // 价格与每日初始库存为输入框（读屏标签为列名），启用为勾选框，当日可用库存只显示。新增的 SKU 排在表格末尾（SHOP-TASK-205）：admin.sku_code_on_save、
 // 每个规格名一个下拉框、价格与每日初始库存输入框、启用勾选框、当日可用库存 — 与 (✗)；有新增行时多一列（列头为空，已有行该格为空）放 (✗)。
 // 表格之下为 admin.add_sku。新建表单（SHOP-TASK-206）的行全是新增的；没有规格名时那一行的规格列为 —、没有 (✗)，表格也不多那一列；
 // 有规格名时只剩一行的 (✗) 禁用。
-function SkuTable({ form, rows, newRows, handlers }: { form: ProductForm; rows: readonly SkuRow[]; newRows: readonly NewSkuRow[]; handlers: InputHandlers }) {
+// 当日库存调整（SHOP-TASK-208，照 A04-desktop）：有已有行时同样多那一列，已有行该格为 admin.adjust_today；展开的调整区为该行下方的一整行
+// （一格跨全部列）。
+function SkuTable({
+  form,
+  rows,
+  newRows,
+  adjust,
+  handlers,
+}: {
+  form: ProductForm;
+  rows: readonly SkuRow[];
+  newRows: readonly NewSkuRow[];
+  adjust: SkuAdjust | null;
+  handlers: InputHandlers;
+}) {
   const t = useCopy();
-  const extra = newRows.length > 0 && form.options.length > 0;
+  const removable = newRows.length > 0 && form.options.length > 0;
+  const extra = removable || rows.length > 0;
   return (
     <div className="site-admin-products__sku-table">
       <div className="site-admin-products__skus">
@@ -1551,13 +1654,22 @@ function SkuTable({ form, rows, newRows, handlers }: { form: ProductForm; rows: 
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.form.id}>
-                <td className="site-admin-products__sku">{row.sku}</td>
-                <td>{row.variant}</td>
-                <SkuCells index={row.index} form={row.form} handlers={handlers} />
-                <td>{row.available}</td>
-                {extra && <td />}
-              </tr>
+              <Fragment key={row.form.id}>
+                <tr>
+                  <td className="site-admin-products__sku">{row.sku}</td>
+                  <td>{row.variant}</td>
+                  <SkuCells index={row.index} form={row.form} handlers={handlers} />
+                  <td>{row.available}</td>
+                  <td>{adjust !== null && <AdjustButton row={row} adjust={adjust} />}</td>
+                </tr>
+                {adjust !== null && adjust.context.adjusting === row.form.id && (
+                  <tr className="site-admin-products__adjust-row">
+                    <td colSpan={7}>
+                      <AdjustArea row={row} adjust={adjust} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
             {newRows.map((row) => (
               <tr key={row.form.tempId}>
@@ -1567,12 +1679,14 @@ function SkuTable({ form, rows, newRows, handlers }: { form: ProductForm; rows: 
                 <td>—</td>
                 {extra && (
                   <td>
-                    <RemoveButton
-                      disabled={!skuRemovable(form, row.index)}
-                      onRemove={() => {
-                        handlers.onRemoveSku(row.index);
-                      }}
-                    />
+                    {removable && (
+                      <RemoveButton
+                        disabled={!skuRemovable(form, row.index)}
+                        onRemove={() => {
+                          handlers.onRemoveSku(row.index);
+                        }}
+                      />
+                    )}
                   </td>
                 )}
               </tr>
@@ -1673,7 +1787,20 @@ function CardInputs({ index, form, handlers }: { index: number; form: SkuForm; h
 // 手机的 SKU 卡片：每个 SKU 一张，同样六项（SKU 代码、规格列、价格与每日初始库存输入框、启用勾选框、当日可用库存）。新增的 SKU 各一张排在其后
 // （SHOP-TASK-205）：第一行为 admin.sku_code_on_save 与 (✗)，其下为规格值下拉框、价格与每日初始库存、启用与当日可用库存 —。卡片之下为 admin.add_sku。
 // 新建表单没有规格名时那一张没有 (✗) 与下拉框（SHOP-TASK-206）。
-function SkuCards({ form, rows, newRows, handlers }: { form: ProductForm; rows: readonly SkuRow[]; newRows: readonly NewSkuRow[]; handlers: InputHandlers }) {
+// 当日库存调整（SHOP-TASK-208，照 A04-phone-edit）：已有 SKU 的卡片在 admin.available_today 之下为 admin.adjust_today，展开时调整区在卡片内代替它。
+function SkuCards({
+  form,
+  rows,
+  newRows,
+  adjust,
+  handlers,
+}: {
+  form: ProductForm;
+  rows: readonly SkuRow[];
+  newRows: readonly NewSkuRow[];
+  adjust: SkuAdjust | null;
+  handlers: InputHandlers;
+}) {
   const t = useCopy();
   const removable = form.options.length > 0;
   return (
@@ -1694,6 +1821,8 @@ function SkuCards({ form, rows, newRows, handlers }: { form: ProductForm; rows: 
               <span>{t("admin.available_today")}</span>
               <span>{row.available}</span>
             </div>
+            {adjust !== null && <AdjustButton row={row} adjust={adjust} />}
+            {adjust !== null && <AdjustArea row={row} adjust={adjust} />}
           </li>
         ))}
         {newRows.map((row) => (
@@ -1762,6 +1891,7 @@ function SaveArea({ editor, imagesBusy, onReload }: { editor: FormEditor; images
 // admin.category_current_unavailable，规格区多 admin.no_options 与 admin.add_option，SKU 全是新增行（不显示 slug、SKU 代码与当日可用库存的值）。
 // 图片区（SHOP-TASK-207，视觉稿 A04-desktop 与 A04-desktop-new）在 admin.publish_requirements 之后、规格区之前；以商品 ID 作 key（新建表单为
 // new），换了商品即重新挂载；新建表单没有商品 ID 与图片。
+// 当日库存调整（SHOP-TASK-208）只在已有商品的已有 SKU 上；新建表单与新增的 SKU 没有 admin.adjust_today。
 function EditorForm({
   editor,
   categories,
@@ -1772,8 +1902,8 @@ function EditorForm({
   editor: OpenEditor | NewEditor;
   categories: readonly AdminCategory[];
   item: AdminProductListItem | undefined;
-  context: ImageContext;
-  handlers: InputHandlers & SaveHandlers & ImageHandlers;
+  context: EditorContext;
+  handlers: InputHandlers & SaveHandlers & ImageHandlers & AdjustHandlers;
 }) {
   const t = useCopy();
   const { language } = useLanguage();
@@ -1790,6 +1920,7 @@ function EditorForm({
   const rows = editor.status === "ready" ? skuRows(editor, language) : [];
   const newRows = newSkuRows(editor, language);
   const productId = editor.status === "ready" ? editor.id : null;
+  const adjust: SkuAdjust | null = productId === null ? null : { productId, context, handlers };
   return (
     <form
       className="acs-admin__panel site-admin-products__form"
@@ -1899,7 +2030,7 @@ function EditorForm({
         onBusy={handlers.onImagesBusy}
       />
       <OptionsGroup editor={editor} creating={creating} describedBy={describedBy} handlers={handlers} />
-      <SkuTable form={form} rows={rows} newRows={newRows} handlers={handlers} />
+      <SkuTable form={form} rows={rows} newRows={newRows} adjust={adjust} handlers={handlers} />
       <div className="site-admin-products__limit">
         <label className="site-admin-products__limit-field">
           <span>{t("admin.max_per_order")}</span>
@@ -1917,7 +2048,7 @@ function EditorForm({
           {t("admin.max_per_order_hint")}
         </span>
       </div>
-      <SkuCards form={form} rows={rows} newRows={newRows} handlers={handlers} />
+      <SkuCards form={form} rows={rows} newRows={newRows} adjust={adjust} handlers={handlers} />
       <span className="acs-admin__muted">{t("admin.no_delete_note")}</span>
       <div className="site-admin-products__notes">
         <span>{t("admin.initial_stock_note")}</span>
@@ -1936,7 +2067,7 @@ function EditorView({
   context,
   onBack,
   ...handlers
-}: { editing: Editing; categories: readonly AdminCategory[]; item: AdminProductListItem | undefined; context: ImageContext } & EditorHandlers) {
+}: { editing: Editing; categories: readonly AdminCategory[]; item: AdminProductListItem | undefined; context: EditorContext } & EditorHandlers) {
   const t = useCopy();
   return (
     <div className="site-admin-products__editor" aria-busy={editing.status === "loading"}>
@@ -1955,11 +2086,13 @@ export interface AdminProductsViewProps extends ListHandlers, EditorHandlers {
   onCreate: () => void;
   // 图片操作进行中（SHOP-TASK-207）：common.save 禁用。
   imagesBusy: boolean;
+  // 展开调整区的 SKU 规格 ID（SHOP-TASK-208，照 adjustingVariant）；没有展开为 null。
+  adjusting: number | null;
 }
 
 // 标题与 common.create（列表取到后可点）之下为列表区：读取中标 aria-busy；读取失败时只有提示。点了 common.edit 或 common.create 之后
 // 根元素加 --editing（桌面两栏，手机隐藏列表）。
-export function AdminProductsView({ state, imagesBusy, onEdit, onCreate, ...handlers }: AdminProductsViewProps) {
+export function AdminProductsView({ state, imagesBusy, adjusting, onEdit, onCreate, ...handlers }: AdminProductsViewProps) {
   const t = useCopy();
   const editing = state.status === "ready" ? state.editing : null;
   return (
@@ -1988,7 +2121,7 @@ export function AdminProductsView({ state, imagesBusy, onEdit, onCreate, ...hand
           editing={editing}
           categories={state.categories}
           item={editing.status === "new" ? undefined : state.products.find((product) => product.id === editing.id)}
-          context={{ csrfToken: state.csrfToken, imagesBusy }}
+          context={{ csrfToken: state.csrfToken, imagesBusy, adjusting }}
           {...handlers}
         />
       )}
@@ -2006,6 +2139,8 @@ export function AdminProductsContent() {
   const lifetime = useRef<AbortController | null>(null);
   // 图片操作进行中（SHOP-TASK-207）：由图片区经 onImagesBusy 设定，为真时 common.save 禁用、不提交。
   const [imagesBusy, setImagesBusy] = useState(false);
+  // 展开调整区的 SKU（SHOP-TASK-208）：同时只展开一个；切换商品、新建、收起编辑区与 admin.reload 时收起。
+  const [adjustOpen, setAdjustOpen] = useState<AdjustOpen | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2037,8 +2172,17 @@ export function AdminProductsContent() {
     <AdminProductsView
       state={state}
       imagesBusy={imagesBusy}
+      adjusting={adjustingVariant(state, adjustOpen)}
       onImages={(id, images) => {
         setState((current) => withImages(current, id, images));
+      }}
+      onAdjust={(variantId) => {
+        // 展开另一个或 common.cancel：先前展开的调整区卸载，所填的新值丢弃（不经确认）。
+        const id = state.status === "ready" && state.editing !== null && state.editing.status === "ready" ? state.editing.id : null;
+        setAdjustOpen(variantId === null || id === null ? null : { productId: id, variantId });
+      }}
+      onAvailable={(id, variantId, count) => {
+        setState((current) => withAvailable(current, id, variantId, count));
       }}
       onReread={(signal) => rereadToken(signal, pageMoves(setState, replace))}
       onLogin={() => {
@@ -2053,6 +2197,7 @@ export function AdminProductsContent() {
         confirmLeave(() => {
           productRequest.current?.abort();
           productRequest.current = null;
+          setAdjustOpen(null);
           setState((current) => startCreating(current) ?? current);
         });
       }}
@@ -2065,6 +2210,7 @@ export function AdminProductsContent() {
           productRequest.current?.abort();
           const controller = new AbortController();
           productRequest.current = controller;
+          setAdjustOpen(null);
           setState((current) => startEditing(current, item.id) ?? current);
           void openProduct(item.id, controller.signal, pageMoves(setState, replace));
         });
@@ -2073,6 +2219,7 @@ export function AdminProductsContent() {
         confirmLeave(() => {
           productRequest.current?.abort();
           productRequest.current = null;
+          setAdjustOpen(null);
           setState(closeEditing);
         });
       }}
@@ -2157,6 +2304,7 @@ export function AdminProductsContent() {
         productRequest.current?.abort();
         const controller = new AbortController();
         productRequest.current = controller;
+        setAdjustOpen(null);
         if (editor.status === "ready") {
           void reloadProducts(editor.id, controller.signal, pageMoves(setState, replace));
         } else {

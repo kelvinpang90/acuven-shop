@@ -2285,6 +2285,11 @@ export const COPY = {
     zh: "今日可用",
     ms: "Tersedia hari ini",
   },
+  "admin.adjust_today": {
+    en: "Adjust today's stock",
+    zh: "调整当日库存",
+    ms: "Laraskan stok hari ini",
+  },
   "admin.initial_stock_note": {
     en: "Changes to initial stock take effect from the next daily reset.",
     zh: "修改初始库存从下一次每日重置起生效。",
@@ -2379,6 +2384,46 @@ export const COPY = {
     en: "This product was changed elsewhere. Reload to see the latest version. Your unsaved changes will be lost.",
     zh: "此商品已在别处修改，请重新读取最新版本，未保存的修改会丢失。",
     ms: "Produk ini telah diubah di tempat lain. Muat semula untuk melihat versi terkini. Perubahan yang belum disimpan akan hilang.",
+  },
+  "admin.adjust_title": {
+    en: "Adjust today's stock for {sku}",
+    zh: "调整 {sku} 的当日库存",
+    ms: "Laraskan stok hari ini untuk {sku}",
+  },
+  "admin.adjust_shown": {
+    en: "Shown now: {count}",
+    zh: "当前显示：{count}",
+    ms: "Dipaparkan kini: {count}",
+  },
+  "admin.adjust_new": {
+    en: "New stock for today",
+    zh: "新的当日库存",
+    ms: "Stok baharu hari ini",
+  },
+  "admin.adjust_save": {
+    en: "Set today's stock",
+    zh: "改为此值",
+    ms: "Tetapkan stok hari ini",
+  },
+  "admin.adjust_note": {
+    en: "Takes effect now and lasts until the next daily reset. The daily initial stock and existing orders are not changed.",
+    zh: "立即生效，保留到下一次每日重置；不改每日初始库存，也不改已有订单。",
+    ms: "Berkuat kuasa sekarang hingga tetapan semula harian berikutnya. Stok awal harian dan pesanan sedia ada tidak diubah.",
+  },
+  "admin.adjust_saved": {
+    en: "Today's stock updated.",
+    zh: "当日库存已更新。",
+    ms: "Stok hari ini dikemas kini.",
+  },
+  "admin.stock_changed": {
+    en: "Today's stock changed in the meantime (for example, an order was placed or cancelled). It is now {count}. Check it and set it again if needed.",
+    zh: "当日库存在此期间已变动（例如有订单下单或取消），现在为 {count}。请核对后视需要再次调整。",
+    ms: "Stok hari ini telah berubah sementara itu (contohnya, pesanan dibuat atau dibatalkan). Kini {count}. Semak dan tetapkan semula jika perlu.",
+  },
+  "admin.adjust_invalid": {
+    en: "Enter a whole number from 0 to 9,999.",
+    zh: "请输入 0 到 9,999 的整数。",
+    ms: "Masukkan nombor bulat dari 0 hingga 9,999.",
   },
   "admin.nav_stock_resets": {
     en: "Stock resets",
