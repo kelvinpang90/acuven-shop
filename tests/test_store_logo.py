@@ -272,6 +272,25 @@ def test_replace_without_logo_writes_columns_and_audit(
     ]
 
 
+def test_replace_puts_object_outside_any_transaction(
+    db: Session, admin_id: int, store: FakeStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """第 15 条「先在锁外完成校验与处理，再在任何数据库事务之外写入新对象」：调用方会话里已有
+    事务时，写入对象那一刻会话没有活动事务（此前的事务已回滚、锁定事务尚未开始）。"""
+    current_logo_file_name(db)
+    assert db.in_transaction()
+    in_transaction: list[bool] = []
+
+    def put_image(settings: Settings, file_name: str, data: bytes, *, prefix: str) -> None:
+        in_transaction.append(db.in_transaction())
+        store.put_image(settings, file_name, data, prefix=prefix)
+
+    monkeypatch.setattr(image_store, "put_image", put_image)
+    replace_logo(db, SETTINGS, admin_id, IMAGE, NOW)
+
+    assert in_transaction == [False]
+
+
 def test_replace_with_logo_deletes_old_object_after_commit(
     db: Session, admin_id: int, setting_id: int, store: FakeStore
 ) -> None:
