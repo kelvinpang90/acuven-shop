@@ -25,3 +25,18 @@
   - `frontend/src/pages/AdminProductsPage.test.tsx`（只为接入）：测试用的 `HANDLERS` 加上 `adjusting: null` 与 `onAdjust`、`onAvailable`；「renders the SKUs as a desktop table and phone cards」与「shows the standing notes and no buttons beyond …」两条按 UX 线框改为每个已有 SKU 的行与卡片最后多一个 `admin.adjust_today`（原来「没有 admin.adjust_today」「表格与卡片里没有按钮」与按位置列出的按钮断言随本任务失效，测试里写明了改动）。新增：只有已有 SKU 有 `admin.adjust_today`，新增 SKU 与新建表单（有无规格名）没有（三种语言）；同时只展开一个（桌面为该行下方一格跨七列的整行、手机在该卡片内，标题与当前显示为该 SKU 的，展开的那个不显示按钮，换一个即只展开那一个）与 `adjustingVariant`（别的商品、读取中、新建表单与未打开时为 null）（三种语言）；`withAvailable` 只换该 SKU 的当日可用库存，调整后未保存判定、已填的值、基线、version 与保存结果不变，表格与调整区改显示新值，别的商品、读取中、新建表单与未取到时不变，之后保存成功以返回商品的值为准。
   - 没有测试覆盖的：容器 `AdminStockAdjust` 与 `AdminProductsContent` 里的接线（`adjustOpen` 的设定与收起、卸载时中止请求、`autoFocus` 的焦点）——react-dom/server 不执行 effect、不模拟点击，也没有加测试依赖；site.css 的布局。
 - 验证到什么程度：人工逐条对照 UX A04「当日库存调整」与线框、UX-COPY 0.18 的 9 条新文案、HANDOFF 0.82 第（6）点与本任务 purpose 的落实写法、视觉稿 `A04-images-stock`、`A04-desktop` 与 `A04-phone-edit`、DESIGN 1.18 第 12 条；上面列出的是实际存在的测试代码，前端的 lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI `frontend` 执行（Worker 沙箱不跑前端检查）。未做浏览器验收（包括展开行与卡片内的布局、焦点、深色模式与窗口宽度切换），也没有对真实的后台接口试过调整与「库存已变动」。
+
+## 登记时的验收标准（原文）
+
+2026-11-05 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.17 的 A04、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.82 为准，样式以 docs/design/pages/ 的 A04-images-stock、A04-desktop 与 A04-phone-edit 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性，视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改）；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入调整区用到而字典里还没有的键，写法与相邻条目相同
+      - 按钮——每个已有 SKU（桌面表格的行与手机的卡片）在 admin.available_today 旁为 admin.adjust_today；新增、还没保存的 SKU 与新建表单的 SKU 没有这个按钮
+      - 展开区——admin.adjust_title（{sku} 为该 SKU 的代码）、admin.adjust_shown（{count} 为页面当前显示的当日可用库存）、带可见标签 admin.adjust_new 的新值输入框、admin.adjust_save、common.cancel 与常显的 admin.adjust_note；admin.adjust_save 提交中禁用并标 aria-busy
+      - 提交与结果——新值须为 1–4 位数字（0–9,999），否则不提交、显示 admin.adjust_invalid；提交时 expected 为 admin.adjust_shown 的值、available_stock 为新值；ok 照 purpose 更新并显示 admin.adjust_saved；changed 显示 admin.stock_changed（{count} 为返回的当前值），admin.adjust_shown 与该行改为当前值，输入框保留；invalid 显示 admin.adjust_invalid；none 照现有写法回到 A01；csrf、network 与其他失败照 purpose；改输入后收起提示
+      - 接入——frontend/src/pages/AdminProductsPage.tsx 只为把调整区放进 SKU 行、记录展开的是哪个 SKU、传入 SKU 的 ID、代码、当前值、CSRF 令牌与回调（更新当日可用库存、重新读取列表、回到 A01）而改；编辑区未保存的修改与 version 不因调整改变，未保存判定不含当日可用库存
+      - 代码结构与测试——组件写法沿用 frontend/src/pages/AdminShippingPage.tsx（导出把调整结果变成状态的纯函数、接收 AbortSignal 与回调的异步函数、只依赖 props 的 View；新值的先查写成导出的纯函数）；传给事件属性的处理函数不返回 Promise；排版不在验收范围内，评审不以此要求修改；用 vitest 与 react-dom/server（不加测试依赖，fetch 以替身代替；以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）在 frontend/src/pages/AdminStockAdjust.test.tsx 验证意图：展开区的文字与 {sku}、{count}、新值先查（0 与 9999 合格，10000、-1、1.5、空串与带空白不合格）、请求带页面显示的值、四种结果（含 changed 后显示当前值且输入框保留）、提交中按钮禁用；frontend/src/pages/AdminProductsPage.test.tsx 只为接入补测试（只有已有 SKU 有按钮、同时只展开一个、调整后未保存判定不变）；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-208.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：DESIGN 1.18 第 12 条，同上），不合并、不直推
+```

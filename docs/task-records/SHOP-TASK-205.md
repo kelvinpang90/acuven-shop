@@ -22,3 +22,18 @@
   - 新增：Colour 有 19 个值时两个 `admin.add_value` 可用、20 个时 Colour 的禁用而 Size 的不受影响、再加不变；49 个 SKU 时桌面与手机的 `admin.add_sku` 可用、50 个时都禁用、再加不变；没有规格名的商品没有 `admin.add_sku`（三种语言）；中文界面下新增 SKU 的两个下拉框（读屏标签 `admin.option_value`）的选项为空选项（默认选中）、已有的值（缺译回退英文）与新增的值（名称全空时为空文字），桌面与手机相同，改选后选中该值，以及马来文的 `valueChoices`；被新增 SKU 选用的 Olive 的 (✗) 禁用、未选用的 Sand 可去掉，已有的值没有 (✗)，改选或去掉那行 SKU 后 Olive 可去掉，新增 SKU 的 (✗) 在桌面与手机各一个、可用，已有 SKU 不能去掉、不能改选（三种语言）；新增 SKU 在表格末尾（七个列头、六个有文字）与手机卡片最后的文字与输入框（价格与库存为空串、默认启用、当日可用库存 —），已有行没有下拉框（三种语言）；中文内容语言下新增值算进缺译提示，其输入框显示内容语言的名称；未选值、价格或库存为空或超出范围时上架与下架都拦下，新增值英文名称为空只在上架时拦下、与已有值重名不拦，只有新增 SKU 启用时满足上架条件，拦下时没有请求并显示 `admin.product_invalid`；请求体整份（新增值排在已有值之后、新增 SKU 排在已有 SKU 之后、已有值以 id 与新增值以 temp_id 引用、价格整仙；先加后去掉的值与 SKU 不在其中、编号继续递增为 v1、v2 与 s2、s3，互不重复）与实际 PUT 的请求体相同；保存成功后编辑区为返回的商品（新增行变为已有行、没有 (✗)、不算有修改，新 SKU 的代码与规格列取自返回的商品）；新增一个值或一行 SKU 即算修改、加了又去掉不算，重新读取与切换商品后没有新增行；有新增行时（含中文内容语言与保存中）页面文字全部来自字典或商品数据（三种语言）。
   - 没有测试覆盖的：`AdminProductsContent` 里五个新处理函数的接线——react-dom/server 不执行 effect、不模拟点击，也没有加测试依赖；site.css 的布局。
 - 验证到什么程度：人工逐条对照 UX A04「规格」「SKU」与线框、UX-COPY 0.18 的 3 条新文案、HANDOFF 0.82 第（4）点、本任务 purpose 的落实写法与视觉稿 A04-desktop、A04-phone-edit；上面列出的是实际存在的测试代码，前端的 lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI `frontend` 执行（Worker 沙箱不跑前端检查）。未做浏览器验收（包括新增行与按钮的布局、手机上按钮的尺寸、深色模式）。
+
+## 登记时的验收标准（原文）
+
+2026-11-05 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.17 的 A04、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.82 为准，样式以 docs/design/pages/ 的 A04-desktop 与 A04-phone-edit 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性，视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改）；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入本任务用到而字典里还没有的键（admin.add_value、admin.add_sku、admin.sku_code_on_save、admin.remove 若尚无等），写法与相邻条目相同
+      - 新增规格值——每个规格名的值后为 admin.add_value，该规格名下已有的与新增的值合计达 20 个时禁用；新增的值照 purpose 的写法显示与编辑，缺译提示（admin.translation_missing）把新增的值也算进去；(✗) 去掉该值，被新增 SKU 选用时禁用；已有的规格名与规格值仍只能改名称
+      - 新增 SKU——SKU 区下方为 admin.add_sku，该商品已有的与新增的 SKU 合计达 50 个时禁用，没有规格名的商品不显示；新增一行照 purpose 的写法，桌面在表格末尾、手机为一张卡片，(✗) 去掉该行；已有 SKU 的规格值组合仍只显示、不能改
+      - 页面先查与提交——SHOP-TASK-204 的页面先查扩展到新增 SKU（价格、每日初始库存的格式与范围；任一规格名未选值即不合格；上架时启用的 SKU 计入新增的）与新增规格值（上架时英文名称不为空）；保存请求在已有的规格值之后按新增顺序写出新增规格值（temp_id 与三语名称），在已有的 SKU 之后按新增顺序写出新增 SKU（temp_id、option_values 按规格名的顺序，已有的值以 id、新增的值以 temp_id 引用，价格整仙、每日初始库存与启用）；ok 时以返回的商品为准，新增行全部变为已有行
+      - 未保存确认——有任一新增规格值或新增 SKU 即为有未保存的修改（扩展 SHOP-TASK-203 的导出判定函数）；admin.reload 与切换商品丢弃新增行
+      - 代码结构与测试——沿用 SHOP-TASK-203、204 的写法（新增、去掉、(✗) 是否禁用、按钮是否禁用与组成请求体写成导出的纯函数，View 只依赖 props）；传给事件属性的处理函数不返回 Promise；排版不在验收范围内，评审不以此要求修改；用 vitest 与 react-dom/server（不加测试依赖，以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）在 frontend/src/pages/AdminProductsPage.test.tsx 验证意图：20 个值与 50 个 SKU 时按钮禁用、没有规格名时不显示 admin.add_sku、下拉框的选项（空选项在前、含新增的值）、被选用的新增值的 (✗) 禁用而未选用的可去掉、未选值时先查拦下、请求体的顺序与 temp_id 引用（已有值用 id、新增值用 temp_id，临时编号不重复）、保存成功后新增行变为已有行、有新增行即算修改；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-205.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；含 (✗) 读屏标签沿用 admin.remove 的说明、偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：DESIGN 1.18 第 11 条，同上），不合并、不直推
+```

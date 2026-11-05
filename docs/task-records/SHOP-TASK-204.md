@@ -21,3 +21,18 @@
   - 新增：价格换算（0、0.05、8、8.5、12.34、500000.00、500000 合格，0.29 与 1.15 为 29 与 115；500000.01、500001、1.234、空串、空白、首尾带空白、负号、`RM8`、`8.`、`.5`、`1e3`、`1,000`、`0x10` 与十位数字不合格）；库存 0、9999 合格与 10000 不合格，限购 1、1000 合格与 0、1001、10000 不合格，以及这些值经 `saveInput` 的结果；上架时缺英文名称、英文描述、某个规格名或规格值的英文名称、没有启用的 SKU 各自拦下，同样的值下架不拦，中文为空与当前分类不可选不在页面拦；先查不通过时没有请求、保留已填的值并显示 `admin.product_invalid`；`saveInput` 的整个请求体与实际 PUT 的地址、方法、signal、CSRF 头与请求体（文案首尾空白与换行原样、null 为空串、按读取的顺序、没有 `option_values`）；ok 时编辑区为返回的商品（version 5、内容语言不变）、不再算有修改、列表该行的名称、分类名称与状态更新、`role="status"` 的提示，以及 `savedItem` 的两种回退和切到别的商品后结果不覆盖编辑区；422、409、500 与网络中断各只有一次 PUT、保留已填的值、对应的提示（409 带 type=button 的 `admin.reload`）；401 回到 A01；`admin.reload` 依次读取列表、分类与该商品、丢弃修改，整页读取 401 回到 A01、500 只有提示且不读取商品；403 后重新读取、页面换成新列表与新令牌、编辑区与已填的值和 version 4 保留、提示 `common.error_retry`，下一次保存带新令牌与 version 4，改输入后提示收起；403 后重新读取网络中断或 500 时为对应提示、旧令牌与列表不变，401 回到 A01；五种提示在十种输入改动后都收起、切换内容语言不收起；保存中按钮 `disabled` 与 `aria-busy`。
   - 没有测试覆盖的：`AdminProductsContent` 里的接线（`onSave` 的 `startSaving` 与调用、`onReload` 的中止与调用、`lifetime` 的中止）——react-dom/server 不执行 effect、不模拟点击，也没有加测试依赖；site.css 的布局。
 - 验证到什么程度：人工逐条对照 UX A04、UX-COPY 0.18 的 3 条新文案、HANDOFF 0.82 第（3）点、本任务 purpose 的落实写法与视觉稿 A04-desktop、A04-phone-edit、A04-states；上面列出的是实际存在的测试代码，前端的 lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI `frontend` 执行（Worker 沙箱不跑前端检查）。未做浏览器验收（包括保存按钮与提示的布局、手机上按钮的宽度、深色模式）。
+
+## 登记时的验收标准（原文）
+
+2026-11-05 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.17 的 A04、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.82 为准，样式以 docs/design/pages/ 的 A04-desktop 与 A04-states 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局写在 frontend/src/styles/site.css（不声明颜色、字体、圆角属性，视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改）；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入本任务用到而字典里还没有的键（admin.product_saved、admin.product_invalid、admin.product_changed 等），写法与相邻条目相同
+      - 页面先查——写成导出的纯函数，照 purpose 的落实写法检查价格、每日初始库存与每单限购的格式与范围，勾选上架时另查发布条件中请求里看得到的部分；不通过时不提交、显示 admin.product_invalid、保留已填的值；价格换成整仙的函数不经浮点数相乘（测试至少覆盖 0、0.05、8、8.5、12.34、500000.00 合格，500000.01、1.234、空串、带空白、负号与非数字不合格）
+      - 提交——编辑区最后为 common.save，保存中禁用并标 aria-busy；以 SHOP-TASK-200 的保存提交读取（或上次保存）给的 version、文案原样、下拉框所选的分类 ID、上架、每单限购、全部规格名与规格值（id 与三语名称，按读取的顺序）与全部 SKU（id、价格整仙、每日初始库存与启用，按读取的顺序），不带 SKU 的规格值组合；CSRF 令牌为列表读取给的
+      - 保存结果——ok 时编辑区改显示返回的商品（新的比较基线与 version），列表该行照 purpose 更新，显示 admin.product_saved，之后不再算有未保存的修改；invalid 显示 admin.product_invalid、保留已填的值；changed 显示 admin.product_changed 与 admin.reload，点 admin.reload 照 purpose 重新读取；none 照现有写法回到 A01；csrf、network 与其他失败照 purpose；改任何输入后收起保存结果的提示
+      - 代码结构沿用 SHOP-TASK-202、203 与 frontend/src/pages/AdminShippingPage.tsx 的写法（导出把保存结果变成页面状态的纯函数、接收 AbortSignal 与回调的异步函数、只依赖 props 的 View；组成保存请求体写成导出的纯函数）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 测试——用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替；以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）在 frontend/src/pages/AdminProductsPage.test.tsx 验证意图：价格换算与各项格式范围（含上面列出的例子、库存 9999 合格与 10000 不合格、限购 0 与 1001 不合格）、上架时的先查（下架不查；缺英文描述、某个规格值缺英文名称、没有启用的 SKU 各自拦下）、请求体的字段与顺序（文案不去空白、不带组合）、四种保存结果与 admin.reload、403 后重新读取而编辑区与已填的值和 version 保留、网络中断只显示 common.network_check 且不重新读取、保存成功后不再算有修改、保存中按钮禁用；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-204.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：DESIGN 1.18 第 11 条，同上），不合并、不直推
+```

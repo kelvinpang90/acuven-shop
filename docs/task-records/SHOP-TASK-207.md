@@ -22,3 +22,18 @@
   - `frontend/src/pages/AdminProductsPage.test.tsx`（只为接入）：测试用的 `HANDLERS` 加上 `imagesBusy` 与四个图片区回调；`dictionary` 加入填好的 `admin.image_count`（0–8 张），因为编辑区多了图片区；「shows the standing notes and no buttons beyond …」一条按 UX 线框改为内容语言之后多一个 `admin.upload`、图片区里有一个文件输入框（原来「没有文件输入框」的断言随本任务失效）。新增：编辑区出现图片区（在 `admin.publish_requirements` 与规格区之间，缩略图为该商品的图片，新建表单为 0 张、`admin.upload` 禁用并显示 `admin.image_save_first`）（三种语言）；`withImages` 只换图片，图片变化不算未保存的修改、已填的值与 version 不变，别的商品、读取中、新建表单与未取到时不变；`imagesBusy` 时 `common.save` 禁用、保存与新建进行中图片区按钮都禁用；保存成功后图片区为返回商品的图片；`rereadToken` 换新令牌并保留编辑区，401、网络中断与其他失败页面不变。
   - 没有测试覆盖的：容器 `AdminProductImages` 与 `AdminProductsContent` 里的接线（`onBusy` 的开始、结束与卸载时的调用，`key` 换商品时的重新挂载，点 `admin.upload` 打开文件选择框）——react-dom/server 不执行 effect、不模拟点击，也没有加测试依赖；site.css 的布局。
 - 验证到什么程度：人工逐条对照 UX A04「图片」与线框、UX-COPY 0.18 的 18 条新文案、HANDOFF 0.82 第（6）点与本任务 purpose 的落实写法、视觉稿 `A04-desktop`、`A04-desktop-new`、`A04-phone-edit` 与 `A04-images-stock`；上面列出的是实际存在的测试代码，前端的 lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI `frontend` 执行（Worker 沙箱不跑前端检查）。未做浏览器验收（包括缩略图与按钮的布局、手机上的横向滚动、文件选择框、确认框的焦点与深色模式），也没有用真实图片与存储（R2）试过上传、调序与移除。
+
+## 登记时的验收标准（原文）
+
+2026-11-05 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.17 的 A04、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.82 为准，样式以 docs/design/pages/ 的 A04-desktop、A04-desktop-new、A04-phone-edit 与 A04-images-stock 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机上缩略图横向滚动，写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性，视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改）；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入图片区用到而字典里还没有的键，写法与相邻条目相同
+      - 显示——图片区标题 admin.product_images 与 admin.image_count（{count} 为现有张数，{max} 为 8）；缩略图按接口顺序，第一张标 admin.image_cover；每张有 (‹)(›)(✗)，读屏标签依次为 admin.image_move_earlier、admin.image_move_later 与 admin.image_remove，第一张的 (‹) 与最后一张的 (›) 照常显示但禁用；admin.upload 在已有 8 张、新建表单或有图片操作进行中时禁用，上传中旁边显示 admin.image_uploading；admin.image_rules、admin.product_image_rules 与 admin.images_immediate 常显；位置在每单限购与规格区之前（照视觉稿）
+      - 操作——上传、调序与移除照 purpose 的落实写法；ok 时图片区改显示返回的图片列表；上传的 type_unsupported、too_large、full 与 invalid 依次显示 admin.image_type_unsupported、admin.image_too_large、admin.images_full 与 admin.image_invalid；调序与移除的 changed 显示 admin.images_changed 与 admin.reload；none 照现有写法回到 A01；csrf、network 与其他失败照 purpose；下一次操作开始时收起上一次的提示
+      - 接入——frontend/src/pages/AdminProductsPage.tsx 只为把图片区放进编辑区、传入商品 ID、当前图片、CSRF 令牌与回调（替换图片、重新读取列表、回到 A01）而改；编辑区未保存的修改与 version 不因图片操作改变，未保存判定不含图片
+      - 代码结构——组件写法沿用 frontend/src/pages/AdminShippingPage.tsx（导出把请求结果变成图片区状态的纯函数、接收 AbortSignal 与回调的异步函数、只依赖 props 的 View；上传前的先查、调序后的 ID 顺序、各按钮是否禁用写成导出的纯函数）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 测试——用 vitest 与 react-dom/server（不加测试依赖，fetch 以替身代替；以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）在 frontend/src/pages/AdminProductImages.test.tsx 验证意图：封面标记只在第一张、张数文字、首末按钮禁用、8 张与新建表单时 admin.upload 禁用且后者显示 admin.image_save_first、上传前的类型与大小先查（5,242,880 字节合格、多一字节不合格）、调序交换后的 ID 顺序、移除确认框的文字与按钮顺序、各种结果的提示、admin.reload 只替换图片区、操作进行中按钮禁用；frontend/src/pages/AdminProductsPage.test.tsx 只为接入补测试（编辑区出现图片区、图片变化不算未保存的修改）；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-207.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收、没有用真实图片与存储试过上传）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
+```
