@@ -302,6 +302,92 @@ def test_delete_removes_object() -> None:
         stubber.assert_no_pending_responses()
 
 
+# ------------------------------------------------------ 店铺标志图的键前缀（SHOP-TASK-210）
+
+LOGO_KEY = f"store-logos/{FILE_NAME}.webp"
+
+
+def test_key_prefix_constants() -> None:
+    """守住 DESIGN 1.20 第 15 条「展示图存为存储桶里键为 store-logos/<文件名>.webp 的对象」与
+    第 13 条的 product-images/：两个前缀的取值。"""
+    assert image_store.KEY_PREFIX == "product-images/"
+    assert image_store.LOGO_KEY_PREFIX == "store-logos/"
+
+
+def test_logo_prefix_put_get_delete_use_logo_key() -> None:
+    """守住 DESIGN 1.20 第 15 条「展示图存为存储桶里键为 store-logos/<文件名>.webp 的对象」与
+    「存储桶、R2 client、超时与尝试次数……都照第 13 条」：传 prefix=LOGO_KEY_PREFIX 时写入、
+    读取与删除的键都以 store-logos/ 开头，写入与读取走读写 client，删除走删除 client。"""
+    settings = _settings()
+    read_write = image_store.read_write_client(settings)
+    delete = image_store.delete_client(settings)
+    prefix = image_store.LOGO_KEY_PREFIX
+    with Stubber(read_write) as rw_stub, Stubber(delete) as delete_stub:
+        rw_stub.add_response(
+            "put_object",
+            {},
+            {"Bucket": BUCKET, "Key": LOGO_KEY, "Body": DATA, "ContentType": "image/webp"},
+        )
+        rw_stub.add_response(
+            "get_object",
+            {"Body": StreamingBody(io.BytesIO(DATA), len(DATA))},
+            {"Bucket": BUCKET, "Key": LOGO_KEY},
+        )
+        delete_stub.add_response("delete_object", {}, {"Bucket": BUCKET, "Key": LOGO_KEY})
+
+        assert image_store.put_image(settings, FILE_NAME, DATA, prefix=prefix) is None
+        assert image_store.get_image(settings, FILE_NAME, prefix=prefix) == DATA
+        assert image_store.delete_image(settings, FILE_NAME, prefix=prefix) is None
+        rw_stub.assert_no_pending_responses()
+        delete_stub.assert_no_pending_responses()
+
+
+def test_default_prefix_put_get_delete_use_product_key() -> None:
+    """守住 DESIGN 1.20 第 15 条「除下面写明的不同之处外，存储桶……都照第 13 条」的另一面：
+    不传 prefix 时写入、读取与删除的键仍为 product-images/<文件名>.webp。"""
+    settings = _settings()
+    read_write = image_store.read_write_client(settings)
+    delete = image_store.delete_client(settings)
+    with Stubber(read_write) as rw_stub, Stubber(delete) as delete_stub:
+        rw_stub.add_response(
+            "put_object",
+            {},
+            {"Bucket": BUCKET, "Key": KEY, "Body": DATA, "ContentType": "image/webp"},
+        )
+        rw_stub.add_response(
+            "get_object",
+            {"Body": StreamingBody(io.BytesIO(DATA), len(DATA))},
+            {"Bucket": BUCKET, "Key": KEY},
+        )
+        delete_stub.add_response("delete_object", {}, {"Bucket": BUCKET, "Key": KEY})
+
+        assert image_store.put_image(settings, FILE_NAME, DATA) is None
+        assert image_store.get_image(settings, FILE_NAME) == DATA
+        assert image_store.delete_image(settings, FILE_NAME) is None
+        rw_stub.assert_no_pending_responses()
+        delete_stub.assert_no_pending_responses()
+
+
+def test_logo_prefix_failure_log_has_no_key(caplog: pytest.LogCaptureFixture) -> None:
+    """守住 DESIGN 1.20 第 15 条「日志约束……都照第 13 条」（「只记操作名、文件名与异常类名」）：
+    传 prefix=LOGO_KEY_PREFIX 时写入失败的日志与商品图片相同，不带键。"""
+    settings = _settings()
+    client = image_store.read_write_client(settings)
+    caplog.set_level(logging.INFO, logger=LOGGER)
+    with Stubber(client) as stubber:
+        stubber.add_client_error(
+            "put_object",
+            service_error_code="AccessDenied",
+            service_message=STUB_MESSAGE,
+            http_status_code=403,
+        )
+        with pytest.raises(ImageStoreUnavailable) as error:
+            image_store.put_image(settings, FILE_NAME, DATA, prefix=image_store.LOGO_KEY_PREFIX)
+    _assert_bare(error.value)
+    _assert_safe_log(caplog.text, "put", client.exceptions.from_code("AccessDenied").__name__)
+    assert "store-logos/" not in caplog.text
+
+
 # ---------------------------------------------------------------- 失败
 
 

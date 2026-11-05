@@ -1,0 +1,24 @@
+# SHOP-TASK-211 店铺标志图的替换与移除规则，装修读取加上标志（服务层）
+
+- [x] 依据：`docs/DESIGN.md` 1.20（提交 `a870f78`）「计价、优惠、积分与库存」第 15 条「存放与替换」「移除」「审计」三段与「读取与显示」一段的读取部分；`docs/HANDOFF.md` 0.84 的落实写法（两个改动函数都先回滚，再以 `store_design._lock_setting` 锁定单例行；存储经 `image_store` 模块属性调用、一律传 `prefix=image_store.LOGO_KEY_PREFIX`；审计对象为 `store_design`、以单例行 ID 记录；A08 的保存不读写标志五列）。设计闸门：DESIGN 1.20（提交 `a870f78`）第 15 条与 HANDOFF 0.84。不做接口（SHOP-TASK-212、213）与前端，不改模型与迁移，不改 `image_store.py`、`image_processing.py`，不改设计。
+- [x] 新增 `app/services/store_logo.py`（函数都是同步函数，由调用方放进线程；本模块不写日志）：
+  - 常量：`ADMIN_STORE_LOGO_UPLOADED = "admin_store_logo_uploaded"`、`ADMIN_STORE_LOGO_REMOVED = "admin_store_logo_removed"`、`FILE_NAME_BYTES = 16`、`LOGO_PATH_PREFIX = "/api/store-logos/"`、`LOGO_PATH_SUFFIX = ".webp"`。
+  - `logo_path(file_name: str) -> str`：返回 `/api/store-logos/<文件名>.webp`，不查库、不校验文件名。
+  - `current_logo_file_name(db: Session) -> str | None`：单例行的 `logo_file_name`，没有行或没有标志时为 `None`；只发 SELECT，查询期间关闭 autoflush。SHOP-TASK-213 的提供接口可用它判断「文件名不是单例行当前记录的标志即 404」。
+  - `replace_logo(db, settings, admin_account_id, image: ProcessedImage, now) -> str`：返回新标志的提供路径。顺序：`secrets.token_hex(16)` 生成文件名 → `db.rollback()` → 事务之外 `image_store.put_image(..., prefix=LOGO_KEY_PREFIX)`（失败抛 `ImageStoreUnavailable`，记录不变）→ `_lock_setting(db, now)` 锁定单例行、读出原有文件名 → 改写五列（文件名、`image.source_format`、`image.width`、`image.height`、`len(image.data)`）与 `updated_at = now` → `record_audit`（旧值为原有文件名或空，新值为新文件名）→ 提交。锁定到提交之间任何异常（`BaseException`）都回滚、以 `delete_image` 删除新对象后重新抛出；提交成功后原来有标志的再 `delete_image` 删除原有对象。
+  - `remove_logo(db, settings, admin_account_id, now) -> None`：`db.rollback()` → `_lock_setting(db, now)`；没有标志时回滚并返回（不写审计、不调用存储、不改更新时间）；有标志时五列置空、`updated_at = now`、`record_audit`（旧值为原有文件名，新值为空）、提交，提交后 `delete_image` 删除该对象（存储未配置时 `delete_image` 只记日志）。提交之前的任何异常都回滚再抛出。
+  - 两个改动函数的审计：`target_type=store_design.AUDIT_TARGET_STORE_DESIGN`、`target_id` 为单例行 ID、`occurred_at` 为传入的 `now`（不带时区的 UTC）、`admin_account_id` 为传入值（须在调用前取出，函数开头会回滚）。
+- [x] `app/services/store_design.py`：
+  - `StoreDesign` 与 `AdminStoreDesign` 末尾各加 `logo: str | None`（有标志时为 `logo_path(文件名)`，没有标志或设置行不存在时为 `None`）。
+  - `_theme_and_accent` 改为 `_setting_values`，同一条 SELECT 多取 `logo_file_name`，`read_store_design`、`read_admin_store_design` 都按它填 `logo`；`save_store_design` 返回的设置因此带当前标志，它的完全相同判断、审计值与写入都不涉及标志五列（代码未改，只补说明）。
+- [x] 供 SHOP-TASK-212、213 的调用写法：上传接口在会话里取出管理员 ID 后，于线程里依次调用 `process_image(data, min_side=LOGO_MIN_SIDE, min_long_side=LOGO_MIN_LONG_SIDE)` 与 `replace_logo(db, settings, admin_id, image, now)`，`ImageRejected` 与 `ImageStoreUnavailable` 由接口转成相应回答；移除接口调用 `remove_logo(db, settings, admin_id, now)`；公开与后台的装修读取接口把 `design.logo` 输出为 `logo` 字段（本任务没有改接口，所以接口的响应暂不含它）。
+- [x] 测试：
+  - 新增 `tests/test_store_logo.py`（SQLite 内存库按模型建表并写入单例行；`ProcessedImage` 直接构造；`monkeypatch` 替换 `image_store.put_image` 与 `delete_image`，假函数的 `prefix` 只限关键字且没有默认值，记录调用与 prefix）：提供路径与当前文件名（只发 SELECT）；公开与后台读取在有标志、没有标志与没有设置行时的 `logo`；没有标志时替换写入五列与审计（旧值为空）、不删任何对象；已有标志时替换，提交后才删除原有对象（`delete_image` 里查库已是新文件名）；写入失败不改记录、不写审计；提交失败删除新对象、记录与审计不变；移除清空五列、写审计、提交后才删除对象；没有标志时移除不写审计、不调用存储、不改更新时间；移除提交失败时标志与审计不变；替换与移除之后 A08 的保存不改标志五列、返回与之后的读取都带当前标志、保存的审计值不含文件名；两个改动函数回滚后的第一条语句是按 MySQL 方言编译带 `FOR UPDATE` 的单例行锁定查询，之后不再加锁。每条测试的文档字符串写明它守住的第 15 条原句。
+  - `tests/test_store_design.py`：两处 `StoreDesign(...)` 的比较补上 `logo=None`，其余不改。
+- 偏离与取舍：
+  - `store_logo` 与 `store_design` 互相引用，两边都写成 `from app.services import <模块>`、在调用时取属性（`store_logo` 用 `store_design._lock_setting` 与 `store_design.AUDIT_TARGET_STORE_DESIGN`，`store_design` 用 `store_logo.logo_path`），先导入哪一个都不会在导入时取到未定义的名字。
+  - 读取不另调 `current_logo_file_name`，而是在原有取主题与主色的那条 SELECT 里多取一列，读取的语句条数不变。
+  - 替换时若单例行不存在，`_lock_setting` 按默认值插入后再锁定（同 A08 的保存），标志随后写在这一行；移除时若单例行不存在，插入的默认行随回滚撤销。
+  - 增加了「移除提交失败时标志与审计不变、不删除对象」一条测试。
+  - 运营者接手（Worker run 49857fcd 在修复第 1 轮推送、CI 通过后因主机断网以 worker_lease_expired 结束，第二轮评审没有跑成）：独立审查指出锁定顺序测试看不出 `put_image` 是否在事务之外（假函数不发 SQL），补了一条测试，在写入对象那一刻断言会话没有活动事务（调用前会话已有事务）。
+- 验证范围：上面列出的是本次新增与调整的测试代码；存储以假函数替代，不访问 R2，SQLite 不生成行锁，锁定查询以 MySQL 方言编译核对。结果由 PR 的必需 CI 检查 backend 执行。

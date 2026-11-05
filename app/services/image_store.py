@@ -1,4 +1,9 @@
-"""商品图片的 R2 存储读写：配置判定、共用 client、写入、读取与删除。
+"""图片的 R2 存储读写：配置判定、共用 client、写入、读取与删除。
+
+对象键为键前缀加文件名加 .webp：商品图片的前缀为 KEY_PREFIX（product-images/，默认值），店铺
+标志图的为 LOGO_KEY_PREFIX（store-logos/），依据 docs/DESIGN.md 1.20（提交 a870f78）同一节第 15 条
+「展示图存为存储桶里键为 store-logos/<文件名>.webp 的对象」。按 docs/HANDOFF.md 0.84 的落实写法，
+前缀是写入、读取与删除只限关键字的参数；两者共用同一组 client、超时、尝试次数与日志约束。
 
 依据 docs/DESIGN.md 1.19（提交 6e8f655）「计价、优惠、积分与库存」第 13 条开头一段：展示图存在
 Cloudflare R2 的一个私有存储桶，经 S3 兼容接口用 boto3 访问；四项配置缺任一项或为空字符串即视为
@@ -27,6 +32,7 @@ from app.core.config import Settings
 logger = logging.getLogger(__name__)
 
 KEY_PREFIX = "product-images/"
+LOGO_KEY_PREFIX = "store-logos/"
 CONTENT_TYPE = "image/webp"
 
 REGION_NAME = "auto"
@@ -102,8 +108,8 @@ def delete_client(settings: Settings) -> Any:
 # ---------------------------------------------------------------- 读写与删除
 
 
-def _key(file_name: str) -> str:
-    return f"{KEY_PREFIX}{file_name}.webp"
+def _key(prefix: str, file_name: str) -> str:
+    return f"{prefix}{file_name}.webp"
 
 
 def _log_failure(operation: str, file_name: str, exc: BaseException) -> None:
@@ -124,15 +130,15 @@ def _is_not_found(exc: ClientError) -> bool:
 
 
 # 下面三个函数取 client 也放在 try 里：端点写错时 boto3 创建 client 即抛出，异常文本里带着端点。
-def put_image(settings: Settings, file_name: str, data: bytes) -> None:
-    """把 data 写成键为 product-images/<file_name>.webp、Content-Type 为 image/webp 的对象。"""
+def put_image(settings: Settings, file_name: str, data: bytes, *, prefix: str = KEY_PREFIX) -> None:
+    """把 data 写成键为 <prefix><file_name>.webp、Content-Type 为 image/webp 的对象。"""
     if not image_store_configured(settings):
         raise ImageStoreUnavailable from None
     try:
         client = read_write_client(settings)
         client.put_object(
             Bucket=settings.r2_bucket,
-            Key=_key(file_name),
+            Key=_key(prefix, file_name),
             Body=data,
             ContentType=CONTENT_TYPE,
         )
@@ -141,13 +147,13 @@ def put_image(settings: Settings, file_name: str, data: bytes) -> None:
         raise ImageStoreUnavailable from None
 
 
-def get_image(settings: Settings, file_name: str) -> bytes:
-    """返回键为 product-images/<file_name>.webp 的对象的字节。"""
+def get_image(settings: Settings, file_name: str, *, prefix: str = KEY_PREFIX) -> bytes:
+    """返回键为 <prefix><file_name>.webp 的对象的字节。"""
     if not image_store_configured(settings):
         raise ImageStoreUnavailable from None
     try:
         client = read_write_client(settings)
-        response = client.get_object(Bucket=settings.r2_bucket, Key=_key(file_name))
+        response = client.get_object(Bucket=settings.r2_bucket, Key=_key(prefix, file_name))
         return response["Body"].read()
     except ClientError as exc:
         if _is_not_found(exc):
@@ -159,13 +165,13 @@ def get_image(settings: Settings, file_name: str) -> bytes:
         raise ImageStoreUnavailable from None
 
 
-def delete_image(settings: Settings, file_name: str) -> None:
-    """删除键为 product-images/<file_name>.webp 的对象；未配置或失败都只记日志，不抛出。"""
+def delete_image(settings: Settings, file_name: str, *, prefix: str = KEY_PREFIX) -> None:
+    """删除键为 <prefix><file_name>.webp 的对象；未配置或失败都只记日志，不抛出。"""
     if not image_store_configured(settings):
         logger.info("image_store_unconfigured operation=delete file=%s", file_name)
         return
     try:
         client = delete_client(settings)
-        client.delete_object(Bucket=settings.r2_bucket, Key=_key(file_name))
+        client.delete_object(Bucket=settings.r2_bucket, Key=_key(prefix, file_name))
     except Exception as exc:
         _log_failure("delete", file_name, exc)

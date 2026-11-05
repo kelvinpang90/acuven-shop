@@ -1,4 +1,6 @@
-"""商品图片的校验与处理：按内容判断格式、帧数与尺寸，转正、去元数据、缩放并编码为 WebP 展示图。
+"""图片的校验与处理：按内容判断格式、帧数与尺寸，转正、去元数据、缩放并编码为 WebP 展示图。
+
+商品图片与店铺标志图共用本模块（同一把处理锁），两者只有尺寸下限不同。
 
 依据 docs/DESIGN.md 1.19（提交 6e8f655）「计价、优惠、积分与库存」第 13 条「上传」一段里按文件
 内容的判断（格式须为 JPEG（含 MPO，只取主图）、PNG 或 WebP；只收单帧静态图；宽与高都在 200 到
@@ -9,8 +11,13 @@
 模块导入时设定；16 位灰度按除以 256 换算成 8 位；ICC 配置文件无法解析时按图片不合格处理；处理中
 抛出的任何异常都转成图片不合格。
 
+店铺标志图依据 docs/DESIGN.md 1.20（提交 a870f78）同一节第 15 条：像素尺寸为宽与高都在 40 到
+4,000 像素之间、且长边至少 200 像素，其余判断与处理同第 13 条（同一个「同一进程同时只处理一张」
+的排队）。按 docs/HANDOFF.md 0.84 的落实写法，尺寸下限是 process_image 只限关键字的参数，默认值
+即商品图片的取值；标志的调用方传 LOGO_MIN_SIDE 与 LOGO_MIN_LONG_SIDE。
+
 process_image 是同步函数，由调用方放进线程；本模块不写磁盘，不碰存储、数据库与接口
-（SHOP-TASK-189、190）。
+（SHOP-TASK-189、190、211 至 213）。
 """
 
 from __future__ import annotations
@@ -29,6 +36,9 @@ _ACCEPTED_FORMATS = {"JPEG": "jpeg", "MPO": "jpeg", "PNG": "png", "WEBP": "webp"
 
 MIN_SIDE = 200
 MAX_SIDE = 4000
+# 店铺标志图：宽与高各至少 40，长边至少 200（横条标志的高度常不足 200）。
+LOGO_MIN_SIDE = 40
+LOGO_MIN_LONG_SIDE = 200
 DISPLAY_MAX_SIDE = 1600
 WEBP_QUALITY = 85
 
@@ -57,17 +67,22 @@ class ProcessedImage:
 _process_lock = threading.Lock()
 
 
-def process_image(data: bytes) -> ProcessedImage:
-    """校验并处理上传的图片字节，返回展示图；不合格抛 ImageRejected。"""
+def process_image(
+    data: bytes, *, min_side: int = MIN_SIDE, min_long_side: int = MIN_SIDE
+) -> ProcessedImage:
+    """校验并处理上传的图片字节，返回展示图；不合格抛 ImageRejected。
+
+    宽与高都须在 min_side 到 MAX_SIDE 之间、且长边不小于 min_long_side；默认值即商品图片的取值。
+    """
     with _process_lock:
         try:
-            return _process(data)
+            return _process(data, min_side, min_long_side)
         except Exception:
             # 含本模块自己抛的 ImageRejected：一律换成不带文本、不带来源的新异常。
             raise ImageRejected from None
 
 
-def _process(data: bytes) -> ProcessedImage:
+def _process(data: bytes, min_side: int, min_long_side: int) -> ProcessedImage:
     with Image.open(io.BytesIO(data)) as opened:
         source_format = _ACCEPTED_FORMATS.get(opened.format or "")
         if source_format is None:
@@ -75,7 +90,9 @@ def _process(data: bytes) -> ProcessedImage:
         if opened.format != "MPO" and getattr(opened, "n_frames", 1) > 1:
             raise ImageRejected
         width, height = opened.size
-        if not (MIN_SIDE <= width <= MAX_SIDE and MIN_SIDE <= height <= MAX_SIDE):
+        if not (min_side <= width <= MAX_SIDE and min_side <= height <= MAX_SIDE):
+            raise ImageRejected
+        if max(width, height) < min_long_side:
             raise ImageRejected
         rawmode = _tile_rawmode(opened)
         if opened.format in ("JPEG", "MPO") and max(width, height) > DISPLAY_MAX_SIDE:

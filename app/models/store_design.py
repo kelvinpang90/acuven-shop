@@ -2,8 +2,9 @@
 
 依据 docs/REQUIREMENTS.md「店铺装修」（10 款预设主题选一款；主色只能从该主题预先校过对比度的
 选项中选；首页由主视觉、演示怎么玩、按分类浏览、精选商品四个区块组成，管理员调整顺序与显隐；
-精选商品最多 4 件已上架商品并排定顺序）、docs/UX.md 0.8 的 A08 与 P01，以及 docs/HANDOFF.md
-0.34 记录的 Kelvin 2026-10-06 决定（存储首版不含标志图）。主题与主色的取值以
+精选商品最多 4 件已上架商品并排定顺序）、docs/UX.md 0.8 的 A08 与 P01；店铺标志图的五列依据
+docs/DESIGN.md 1.20「计价、优惠、积分与库存」第 15 条「记录」一段与 docs/HANDOFF.md 0.84 记录的
+落实写法（照 ProductImage 的五列加 logo_ 前缀）。主题与主色的取值以
 docs/design/tokens/themes.json 为准（主题 id 与各自 accentOptions 的 id），由测试守住一致。
 
 时间一律是不带时区的 UTC。外键一律 RESTRICT：被精选的商品不能物理删除。
@@ -84,10 +85,14 @@ def _utcnow() -> datetime:
 
 
 class StoreDesignSetting(Base):
-    """店铺的主题与主色，全表只有一行（迁移 0016 写入）。
+    """店铺的主题与主色及标志图，全表只有一行（迁移 0016 写入）。
 
     主色为空即该主题的默认主色（themes.json 里该主题 accentOptions 的第一项）。主色是否属于
     所选主题的可选主色由写入方按 THEME_ACCENTS 校验，库里只检查长度 1 到 20。
+
+    标志图（DESIGN 1.20 第 15 条「记录」，迁移 0025 加列）：服务端生成的文件名、上传时的格式与
+    展示图的宽、高与字节数五项，同为空（没有标志）或同不为空。单例行只有一行，文件名不另加
+    唯一约束。文件名的十六进制格式由之后的服务层保证，数据库不查。
     """
 
     __tablename__ = "store_design_settings"
@@ -99,6 +104,23 @@ class StoreDesignSetting(Base):
             f"accent IS NULL OR (LENGTH(accent) >= 1 AND LENGTH(accent) <= {ACCENT_MAX_LENGTH})",
             name="accent_length",
         ),
+        CheckConstraint(
+            "(logo_file_name IS NULL AND logo_source_format IS NULL AND logo_width IS NULL"
+            " AND logo_height IS NULL AND logo_byte_size IS NULL)"
+            " OR (logo_file_name IS NOT NULL AND logo_source_format IS NOT NULL"
+            " AND logo_width IS NOT NULL AND logo_height IS NOT NULL"
+            " AND logo_byte_size IS NOT NULL)",
+            name="logo_all_or_none",
+        ),
+        CheckConstraint(
+            "logo_source_format IS NULL OR logo_source_format IN ('jpeg', 'png', 'webp')",
+            name="logo_source_format_valid",
+        ),
+        CheckConstraint(
+            "logo_width IS NULL OR (logo_width >= 1 AND logo_width <= 1600"
+            " AND logo_height >= 1 AND logo_height <= 1600 AND logo_byte_size >= 1)",
+            name="logo_display_size_range",
+        ),
         MYSQL_TABLE_OPTIONS,
     )
 
@@ -107,6 +129,13 @@ class StoreDesignSetting(Base):
     theme: Mapped[str] = mapped_column(String(THEME_MAX_LENGTH))
     accent: Mapped[str | None] = mapped_column(String(ACCENT_MAX_LENGTH))
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
+    # 标志图：服务端生成的文件名（32 位小写十六进制）、上传时的格式（jpeg、png、webp）与
+    # 展示图（WebP）的宽、高与字节数。
+    logo_file_name: Mapped[str | None] = mapped_column(String(32))
+    logo_source_format: Mapped[str | None] = mapped_column(String(4))
+    logo_width: Mapped[int | None] = mapped_column(Integer)
+    logo_height: Mapped[int | None] = mapped_column(Integer)
+    logo_byte_size: Mapped[int | None] = mapped_column(Integer)
 
 
 class StoreHomeBlock(Base):

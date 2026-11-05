@@ -176,6 +176,7 @@ def test_read_orders_blocks_and_featured_by_position(db: Session) -> None:
             HomeBlock(block="categories", visible=True),
         ],
         featured_slugs=["p-3", "p-2", "p-4", "p-1"],
+        logo=None,
     )
 
 
@@ -258,6 +259,7 @@ def test_read_with_empty_tables_returns_the_full_default(db: Session) -> None:
         accent=DEFAULT_ACCENT,
         home_blocks=_all_visible(),
         featured_slugs=[],
+        logo=None,
     )
 
 

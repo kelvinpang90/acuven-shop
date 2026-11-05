@@ -5688,7 +5688,7 @@ tasks:
       迁移照 alembic/versions/20261030_0024_admin_catalog_schema.py 的写法（不 import app、自带常量，约束名用 op.f，只在 MySQL 上执行、不要求能在 SQLite 上执行）；downgrade 先读出 logo_file_name 不为空的行数，不为零即抛 RuntimeError、库保持原样（删掉文件名会让存储桶里的标志成为孤立对象、前台失去标志）。
       设计闸门：DESIGN 1.20（提交 a870f78）第 15 条与 HANDOFF 0.84，店铺标志图的数据结构。
       拆分：数据库层（5 个允许路径）；图片处理与存储的参数化、服务层、接口与前端另行登记（SHOP-TASK-210 至 216）。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 模型——app/models/store_design.py 的 StoreDesignSetting 在 updated_at 之后依次加五个可空列 logo_file_name（String(32)）、logo_source_format（String(4)）、logo_width、logo_height、logo_byte_size（整数）；检查约束 logo_all_or_none（文本为 (logo_file_name IS NULL AND logo_source_format IS NULL AND logo_width IS NULL AND logo_height IS NULL AND logo_byte_size IS NULL) OR (logo_file_name IS NOT NULL AND logo_source_format IS NOT NULL AND logo_width IS NOT NULL AND logo_height IS NOT NULL AND logo_byte_size IS NOT NULL)）、logo_source_format_valid（文本为 logo_source_format IS NULL OR logo_source_format IN ('jpeg', 'png', 'webp')）、logo_display_size_range（文本为 logo_width IS NULL OR (logo_width >= 1 AND logo_width <= 1600 AND logo_height >= 1 AND logo_height <= 1600 AND logo_byte_size >= 1)）；其余列与约束不变；模块与类的说明里「首版不含标志图」改为引用 DESIGN 1.20 第 15 条，文件名的十六进制格式由之后的服务层保证、数据库不查
@@ -5717,7 +5717,7 @@ tasks:
       不做服务层、数据库、接口与前端，不改设计。
       设计闸门：DESIGN 1.20（提交 a870f78）第 13、15 条与 HANDOFF 0.84，图片按内容判断与处理（去掉拍摄地点等照片资料）的尺寸参数与存放位置。
       拆分：共用的图片处理与存储一层（5 个允许路径）。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 图片处理——process_image(data, *, min_side=MIN_SIDE, min_long_side=MIN_SIDE)；尺寸判断改为宽与高都在 min_side 到 MAX_SIDE（4,000）之间、且 max(宽, 高) 不小于 min_long_side，仍在解码之前判断；新增模块常量 LOGO_MIN_SIDE = 40 与 LOGO_MIN_LONG_SIDE = 200；其余判断与处理（格式、单帧、PNG 文本块上限、方向、颜色、透明、去元数据、长边 1,600、WebP 质量 85、模块级处理锁、异常一律转成 ImageRejected）不变；模块说明引用 DESIGN 1.20 第 15 条
@@ -5745,7 +5745,7 @@ tasks:
       不做接口与前端，不改模型与迁移，不改设计。
       设计闸门：DESIGN 1.20（提交 a870f78）第 15 条与 HANDOFF 0.84，店铺标志图的存放、替换、移除与审计。
       拆分：服务层（5 个允许路径），接口为 SHOP-TASK-212、213。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-209
       - SHOP-TASK-210
