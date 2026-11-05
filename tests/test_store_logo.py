@@ -137,6 +137,8 @@ def _with_logo(db: Session) -> None:
             logo_width=width,
             logo_height=height,
             logo_byte_size=byte_size,
+            # 模型的 updated_at 带 onupdate，不写明会被盖成当前时间
+            updated_at=OLD,
         )
     )
     db.commit()
