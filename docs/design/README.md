@@ -11,6 +11,8 @@
 
 > 2026-10-30 补充 DESIGN 1.18 的画板（落实 `docs/UX.md` 0.17 与 `docs/UX-COPY.md` 0.18，审阅稿）：重画 A04 桌面与手机稿（未上架状态、图片缩略图与封面、前后移动与移除、规格值与 SKU 的新增与启用、上架条件、每单限购 1–1000），新增 A04 新建商品、保存状态、图片与当日库存调整状态，A10 后台分类的桌面、手机与状态稿，A09 每日恢复库存一段，P03 / P04 整单上限状态；A07 两张加开关关闭说明。后台导航新增「Categories」，排在「Products」之后：新画与本次改动的画板已带上，其余后台画板未重画，以本条为准。画法同 2026-10-29 的 A06。
 
+> 2026-11-05 补充店铺标志图的画板（落实 `docs/DESIGN.md` 1.20 候批稿第 15 条、`docs/UX.md` 0.18 与 `docs/UX-COPY.md` 0.19，审阅稿）：A08 标志的没有标志、有标志、上传中、被拒与移除确认框 `A08-logo-states`，前台页头与页脚显示标志的桌面与手机稿 `P-logo-header-footer`（示例标志为虚构店名）。A08 桌面与手机稿未重画，其中标志一段的说明以 `A08-logo-states` 为准。画法同 2026-10-29 的 A06。
+
 页面的内容、流程、去向与文案以 [UX.md](../UX.md) 与 [UX-COPY.md](../UX-COPY.md) 为准；本目录只规定样式。二者冲突时以 UX 文档为准，并把冲突报给运营者。
 
 ## 目录
@@ -175,6 +177,8 @@
 | A07 库存重置结果 · 手机 | [A07-phone.html](pages/A07-phone.html) | [A07-phone.png](reference/A07-phone.png) | 390 × 1060 |
 | A08 店铺装修 · 桌面 | [A08-desktop.html](pages/A08-desktop.html) | [A08-desktop.png](reference/A08-desktop.png) | 1440 × 1250 |
 | A08 店铺装修 · 手机 | [A08-phone.html](pages/A08-phone.html) | [A08-phone.png](reference/A08-phone.png) | 390 × 1640 |
+| A08 店铺标志的状态与移除确认框（2026-11-05） | [A08-logo-states.html](pages/A08-logo-states.html) | [A08-logo-states.png](reference/A08-logo-states.png) | 520 × 1500 |
+| 前台页头与页脚显示店铺标志 · 桌面与手机（2026-11-05） | [P-logo-header-footer.html](pages/P-logo-header-footer.html) | [P-logo-header-footer.png](reference/P-logo-header-footer.png) | 1440 × 1050 |
 | A09 站点设置 · 桌面（含已保存提示） | [A09-desktop.html](pages/A09-desktop.html) | [A09-desktop.png](reference/A09-desktop.png) | 1440 × 640 |
 | A09 站点设置 · 手机 | [A09-phone.html](pages/A09-phone.html) | [A09-phone.png](reference/A09-phone.png) | 390 × 844 |
 | A09 支付方式 · 桌面（Stripe 测试，已保存） | [A09-stripe-desktop.html](pages/A09-stripe-desktop.html) | [A09-stripe-desktop.png](reference/A09-stripe-desktop.png) | 1440 × 900 |
