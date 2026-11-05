@@ -419,6 +419,69 @@ def test_smallest_size_is_accepted() -> None:
     assert (result.width, result.height) == (200, 200)
 
 
+# ---------------------------------------------------------------- 店铺标志图的尺寸（SHOP-TASK-210）
+
+LOGO_SIZES = {
+    "min_side": image_processing.LOGO_MIN_SIDE,
+    "min_long_side": image_processing.LOGO_MIN_LONG_SIDE,
+}
+
+
+def test_logo_constants() -> None:
+    """守住 DESIGN 1.20 第 15 条「像素尺寸为宽与高都在 40 到 4,000 像素之间、且长边至少 200 像素」
+    的取值。"""
+    assert image_processing.LOGO_MIN_SIDE == 40
+    assert image_processing.LOGO_MIN_LONG_SIDE == 200
+    assert image_processing.MAX_SIDE == 4000
+
+
+@pytest.mark.parametrize(
+    ("size", "display"),
+    [
+        ((40, 200), (40, 200)),
+        ((200, 40), (200, 40)),
+        ((40, 4000), (16, 1600)),
+        ((4000, 40), (1600, 16)),
+    ],
+)
+def test_logo_sizes_are_accepted(size: tuple[int, int], display: tuple[int, int]) -> None:
+    """守住 DESIGN 1.20 第 15 条「像素尺寸为宽与高都在 40 到 4,000 像素之间、且长边至少 200 像素」
+    与「处理：同第 13 条（……长边超过 1,600 像素等比缩到 1,600……）」：两端的尺寸合格，
+    长边超过 1,600 的等比缩到 1,600。"""
+    data = _encode(Image.new("RGB", size, (10, 20, 30)), "PNG")
+
+    result = process_image(data, **LOGO_SIZES)
+
+    assert (result.width, result.height) == display
+    assert _result_image(result).size == display
+
+
+@pytest.mark.parametrize("size", [(39, 200), (100, 199), (40, 4001)])
+def test_logo_out_of_range_sizes_are_rejected(size: tuple[int, int]) -> None:
+    """守住 DESIGN 1.20 第 15 条「像素尺寸为宽与高都在 40 到 4,000 像素之间、且长边至少 200 像素
+    ……不合格即回答「图片不合格」」：短边不足 40、长边不足 200、边长超过 4,000 都被拒。"""
+    data = _encode(Image.new("RGB", size, (10, 20, 30)), "PNG")
+
+    with pytest.raises(ImageRejected) as exc_info:
+        process_image(data, **LOGO_SIZES)
+
+    assert exc_info.value.args == ()
+    assert exc_info.value.__cause__ is None
+
+
+@pytest.mark.parametrize(
+    "size", [(40, 200), (200, 40), (40, 4000), (4000, 40), (39, 200), (100, 199), (40, 4001)]
+)
+def test_logo_sizes_without_parameters_follow_product_range(size: tuple[int, int]) -> None:
+    """守住 DESIGN 1.20 第 15 条「除下面写明的不同之处外……请求体的格式、检查与处理，都照第 13 条」
+    的另一面：只有标志放宽尺寸，不传参数时仍按商品图片的「宽与高都在 200 到 4,000 像素之间」
+    判断，标志合格的尺寸也被拒。"""
+    data = _encode(Image.new("RGB", size, (10, 20, 30)), "PNG")
+
+    with pytest.raises(ImageRejected):
+        process_image(data)
+
+
 def test_png_text_memory_limit_is_1_mb() -> None:
     """「PNG 文本块解压后的总量上限设为 1 MB（单块上限沿用默认）」。"""
     assert PngImagePlugin.MAX_TEXT_MEMORY == 1_048_576
