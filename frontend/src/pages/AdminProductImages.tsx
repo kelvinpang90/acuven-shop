@@ -115,9 +115,10 @@ export function finished(state: ImagesState, notice: ImageNotice | null): Images
 }
 
 // 请求结果对图片区的作用：images 为要换上的图片列表（不换为 null）、notice 为提示；login 为回到 A01，reread 为 403 后由页面重新读取。
-export type ImagesStep = { images: AdminProductImage[] | null; notice: ImageNotice | null } | "login" | "reread";
+export type ImagesChange = { images: AdminProductImage[] | null; notice: ImageNotice | null };
+export type ImagesStep = ImagesChange | "login" | "reread";
 
-function notice(value: ImageNotice): ImagesStep {
+function notice(value: ImageNotice): ImagesChange {
   return { images: null, notice: value };
 }
 
