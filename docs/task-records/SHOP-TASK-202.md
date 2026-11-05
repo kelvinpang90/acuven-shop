@@ -25,3 +25,18 @@
   - 新增：两个读取结果的全部 16 种组合；分类 401 回到 A01，列表网络中断与 500 只显示提示、不显示列表；离开页面（signal 中止）后结果不更新页面；名称回退（界面语言有译名时用它、null 与空串回退英文、都缺时为 —）；桌面表格按接口顺序的各行（名称、分类、状态、`common.edit`）与状态标签的类；手机卡片（type=button、`aria-label` 为 `common.edit`、名称与状态）；编辑区默认不显示；点 `common.edit` 换成读取中、点已打开或正在读取的同一件不做任何事、读取失败的那一件再点重新读取、读取中只有 `common.back` 且标 `aria-busy`；单件取到后显示 `admin.product_edit`；单件 401 回到 A01、网络中断与 404 在编辑区显示提示；后发的读取覆盖先发的（先发的被中止、它的回答先到也不更新页面，`settleEditing` 不让旧结果换掉别的编辑区）；三种编辑区里根元素都有 `--editing`、第一个按钮为 `common.back`，返回后被中止的读取不更新页面；页面文字全部来自字典或商品与分类数据（三种语言）。
   - 没有测试覆盖的：`AdminProductsContent` 里的接线（effect 中的读取、单件读取的 AbortController 与各处理函数改状态）——react-dom/server 不执行 effect，也没有加测试依赖；site.css 的显隐与布局。
 - 验证到什么程度：人工逐条对照 UX A04、UX-COPY 0.18 的三条新文案、HANDOFF 0.82 第（2）点与两张视觉稿；上面列出的是实际存在的测试代码，前端的 lint、类型检查、测试、构建与镜像构建由 PR 的必需 CI `frontend` 执行（Worker 沙箱不跑前端检查）。未做浏览器验收（包括桌面两栏与手机一栏的布局、卡片按钮的字体与颜色、深色模式）。
+
+## 登记时的验收标准（原文）
+
+2026-11-05 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.17 的 A04、docs/UX-COPY.md 0.18 与 docs/HANDOFF.md 0.82 为准，样式以 docs/design/pages/ 的 A04-desktop 与 A04-phone-edit 为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（手机的差异写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性（链接的 color 可取 inherit，不写颜色值与变量），视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改），不借用其他组件的类来取颜色；frontend/src/i18n/copy.ts 按 UX-COPY 0.18 逐字加入本任务用到而字典里还没有的键（admin.active、admin.unpublished、admin.product_edit、common.edit 若尚无等），写法与相邻条目相同（每种语言一行）
+      - 读取——打开页面时并行读取商品列表（SHOP-TASK-200）与分类（SHOP-TASK-198），两者都为 ok 才显示列表；任一为 none 时照 frontend/src/pages/AdminShippingPage.tsx 现有写法回到 A01；否则任一为 network 时显示 common.network_check，其他失败显示 common.error_retry；页面卸载时以 AbortSignal 中止
+      - 列表——标题 admin.nav_products；桌面为表格（每行商品名称、分类名称、状态 admin.active 或 admin.unpublished 与 common.edit），手机为卡片（商品名称与状态，整张卡片为带读屏标签 common.edit 的按钮），两套都渲染、由 site.css 按宽度显隐；顺序照接口；名称的显示规则照 purpose 的落实写法
+      - 打开编辑区——打开页面时编辑区不显示；点某行 common.edit 照 purpose 收起当前编辑区并读取该商品，ok 时显示编辑区（标题 admin.product_edit），none 回到 A01，network 与其他失败在编辑区的位置显示 common.network_check 或 common.error_retry；读取期间再点另一行时以最后一次为准（前一次以 AbortSignal 中止，它的结果不显示）；点编辑区已打开（或正在读取）的那一件商品的 common.edit 不做任何事；手机上点 common.edit 之后（读取期间、读取失败与打开后）都隐藏列表、上方为 common.back，点它中止尚未完成的读取、回到列表
+      - 代码结构——沿用 frontend/src/pages/AdminShippingPage.tsx 与 AdminCouponsPage.tsx 的写法（导出把读取结果变成页面状态的纯函数、接收 AbortSignal 与回调的异步函数、只依赖 props 的 View；名称回退写成导出的纯函数）；页面状态里保留读取到的单件商品、分类读取结果与列表给的 CSRF 令牌，供 203 至 208 接入；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 测试——用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替；以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）在 frontend/src/pages/AdminProductsPage.test.tsx 验证意图：列表两套与名称回退（界面语言有译名时用它、缺译回退英文、都为 null 显示 —）、状态文字、两个读取的组合结果（任一 none 回到 A01、network 与其他失败的提示）、编辑区默认不显示、读取单件成功后显示标题、读取失败的提示、后发的读取覆盖先发的；SHOP-TASK-196 写的只有标题的断言改为新内容；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-202.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；含手机返回改在页内的偏离、页面状态与导出函数的写法供 203 至 208 接入、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
+```

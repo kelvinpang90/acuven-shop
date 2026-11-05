@@ -48,3 +48,18 @@
     - 409 `stock_changed` 带回当前值（含 0，多出的字段不带进结果）；缺当前值、当前值为负数、小数、字符串或 null，detail 不同、大小写不同、缺少或不是 JSON 都为 `failed`。
     - 各状态码与 detail 的归类：401、403、422 `stock_invalid`；422 的大小写不同、错误列表、空对象、不是 JSON，404 `variant_not_found`、413、415 与其他状态为 `failed`；网络中断与中止为 `network`。
   - 除四条中止测试（见偏离一节）外，每条测试的注释写明它守住的接口记录（`app/api/admin_product_images.py`、`app/api/admin_stock_adjust.py`）、DESIGN、UX 0.17 A04 或 HANDOFF 0.82 的原句。前端检查交由 PR 的必需 CI 检查 frontend 执行（lint、类型检查、测试、构建与镜像构建；Worker 沙箱不跑前端检查）。本任务不做浏览器验收。检查命令结果由 Worker 另行记录。
+
+## 登记时的验收标准（原文）
+
+2026-11-05 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 写法照 frontend/src/api/adminShippingRates.ts（同源 cookie、cache no-store、Accept、写操作带调用方传入的 CSRF 令牌于 pay.ts 的 CSRF_HEADER、接收 AbortSignal、只取接口记录列出的字段且多出的字段不带进结果、响应体不合格算失败、页面只按状态码与 detail 区分，不显示错误体）；路径段为 ID 的十进制；三个图片请求成功时的合格响应体为 images 数组，每项 id 为正整数、storage_ref 为非空字符串，任一项不合格算失败
+      - 上传——POST /api/admin/products/{product_id}/images，请求体为调用方给的 Blob 本身（不用 FormData），Content-Type 为调用方给的类型字符串；201 且响应体合格为 ok 并带回 images；415 且 detail 为 image_type_unsupported 为 type_unsupported；413 为 too_large（不看响应体）；409 且 detail 为 images_full 为 full；422 且 detail 为 image_invalid 为 invalid；401 为 none，403 为 csrf；其他状态（含 404 与 503）、其他 409、415 与 422、响应体不合格为 failed；网络中断与调用方中止为 network
+      - 调序——PUT /api/admin/products/{product_id}/images，Content-Type 为 JSON，请求体只有 image_ids（整数数组，按调用方给的顺序）；200 且响应体合格为 ok 并带回 images；409 且 detail 为 images_changed 为 changed；401 为 none，403 为 csrf；其他为 failed；网络中断与中止为 network
+      - 移除——DELETE /api/admin/products/{product_id}/images/{image_id}，不带请求体；200 且响应体合格为 ok 并带回 images；409 且 detail 为 images_changed 为 changed；401 为 none，403 为 csrf；其他为 failed；网络中断与中止为 network
+      - 当日库存调整——frontend/src/api/adminStockAdjust.ts 的 POST /api/admin/variants/{variant_id}/available-stock，Content-Type 为 JSON，请求体只有 expected 与 available_stock（整数）；200 且响应体 variant_id 为正整数、sku 为非空字符串、available_stock 为不小于 0 的整数时为 ok 并带回 available_stock；409 且 detail 为 stock_changed、available_stock 为不小于 0 的整数时为 changed 并带回该当前值（缺这一项或不合格为 failed）；422 且 detail 为 stock_invalid 为 invalid；401 为 none，403 为 csrf；其他状态（含 404 variant_not_found）为 failed；网络中断与中止为 network
+      - 测试验证意图（不加测试依赖，fetch 以替身代替）——frontend/src/api/adminProductImages.test.ts 与 frontend/src/api/adminStockAdjust.test.ts：每个请求的方法、地址、请求头、no-store 与请求体（上传为原样的 Blob 与给定的 Content-Type，不是 FormData；调序与调整只有规定的字段；移除没有请求体）；响应体的合格判定（缺字段、类型不对、负数、多出字段不带进结果）；各种状态与 detail 的归类（含 413 的响应体不是 JSON 时仍为 too_large、409 stock_changed 缺当前值为 failed）；中止为 network；每条测试写明它守住的是接口记录（app/api/admin_product_images.py、app/api/admin_stock_adjust.py）、DESIGN 或 UX 0.17 A04 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-201.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；导出的类型与函数签名，供 A04 页面的任务使用；验证到什么程度，只写实际存在的测试）；改动只落在 allowed_change_paths；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：DESIGN 1.18 第 12 条，同上），不合并、不直推
+```
