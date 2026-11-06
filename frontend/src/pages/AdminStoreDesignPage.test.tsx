@@ -1549,7 +1549,8 @@ describe("logo", () => {
       expect(head).toContain(text);
       expect(tags(head, "img")).toEqual([]);
     }
-    for (const copy of renderPreview("light", language, formOf(WITH_LOGO), DETAIL.choices, LOGO, true)) {
+    const props = { form: formOf(WITH_LOGO), choices: DETAIL.choices, mode: "light" as const, onMode: noop, logo: LOGO, broken: true, onBroken: noop };
+    for (const copy of [renderToStaticMarkup(wrap(<PreviewAside {...props} />, language)), renderToStaticMarkup(wrap(<PreviewDetails {...props} />, language))]) {
       const head = element(copy, "div", "site-admin-store-design__shop-head");
       expect(head).toContain(text);
       expect(tags(head, "img")).toEqual([]);
