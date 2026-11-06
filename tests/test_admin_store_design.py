@@ -604,13 +604,22 @@ def test_get_returns_the_settings_choices_and_csrf_token(
             {"product_id": lamp.id, "slug": "lamp", "name": "Name lamp", "published": True},
             {"product_id": hidden.id, "slug": "hidden", "name": "Name hidden", "published": False},
         ],
+        "logo": None,
         "choices": [
             {"product_id": lamp.id, "slug": "lamp", "name": "Name lamp"},
             {"product_id": mug.id, "slug": "mug", "name": "Name mug"},
         ],
         "csrf_token": _csrf_for(token),
     }
-    assert list(body) == ["theme", "accent", "home_blocks", "featured", "choices", "csrf_token"]
+    assert list(body) == [
+        "theme",
+        "accent",
+        "home_blocks",
+        "featured",
+        "logo",
+        "choices",
+        "csrf_token",
+    ]
     assert _snapshot(engine) == before
 
 
@@ -641,6 +650,7 @@ def test_get_without_a_setting_row_returns_the_defaults(
         "accent": None,
         "home_blocks": DEFAULT_BLOCKS_JSON,
         "featured": [],
+        "logo": None,
         "choices": [],
         "csrf_token": _csrf_for(token),
     }
@@ -704,6 +714,7 @@ def test_save_writes_everything_and_another_session_reads_it(
         "accent": "sogan",
         "home_blocks": body["home_blocks"],
         "featured_slugs": ["mug", "lamp"],
+        "logo": None,
     }
     assert _ok(_get(client, token))["featured"] == body["featured"]
 
@@ -1136,9 +1147,10 @@ def test_all_responses_are_no_store_and_nothing_is_logged(
     assert [record for record in caplog.records if record.name.startswith("app")] == []
 
 
-def test_routes_are_only_get_and_put(app: FastAPI) -> None:
-    """SHOP-TASK-051 验收「两个接口」；Kelvin 2026-10-06 首版不含标志图：该路径下只有 GET
-    与 PUT，没有标志图上传的接口。"""
+def test_routes_are_get_and_put_and_the_logo_endpoints(app: FastAPI) -> None:
+    """SHOP-TASK-051 验收「两个接口」；DESIGN 1.20 第 15 条「上传：PUT
+    /api/admin/store-design/logo」「移除：DELETE /api/admin/store-design/logo」
+    （SHOP-TASK-212）：该前缀下只有装修的 GET 与 PUT，以及标志的 PUT 与 DELETE。"""
     routes = {
         (method.upper(), path)
         for path, operations in app.openapi()["paths"].items()
@@ -1146,4 +1158,9 @@ def test_routes_are_only_get_and_put(app: FastAPI) -> None:
         for method in operations
     }
 
-    assert routes == {("GET", URL), ("PUT", URL)}
+    assert routes == {
+        ("GET", URL),
+        ("PUT", URL),
+        ("PUT", f"{URL}/logo"),
+        ("DELETE", f"{URL}/logo"),
+    }

@@ -1,14 +1,15 @@
-"""后台店铺装修 A08 的接口（不含标志图）：GET /api/admin/store-design、
-PUT /api/admin/store-design。
+"""后台店铺装修 A08 的接口：GET /api/admin/store-design、PUT /api/admin/store-design。
 
 依据 docs/REQUIREMENTS.md「店铺装修」、docs/UX.md 0.10 的 A08 与 docs/HANDOFF.md 0.34 记录的
-Kelvin 2026-10-06 决定（首版不含标志图），读取与保存规则见 app/services/store_design.py。主题与
-主色以 app/models/store_design.py 的 THEMES 与 THEME_ACCENTS 为准。
+Kelvin 2026-10-06 决定，读取与保存规则见 app/services/store_design.py。主题与主色以
+app/models/store_design.py 的 THEMES 与 THEME_ACCENTS 为准。标志图依据 docs/DESIGN.md 1.20
+（提交 a870f78）「计价、优惠、积分与库存」第 15 条：读取带 logo；A08 的保存不读写标志，保存的
+响应不含 logo；标志的上传与移除见 app/api/admin_store_logo.py。
 
 两个接口都经 SHOP-TASK-036 的 require_admin：没有有效后台会话时 401 admin_session_required。
 
-读取（GET）：require_admin（401）→ 语言参数（422）→ 返回当前设置、可挑选的商品与由 cookie
-算出的 CSRF 令牌。设置行不存在时按默认值返回。不写审计。
+读取（GET）：require_admin（401）→ 语言参数（422）→ 返回当前设置、标志（有标志时为提供路径，
+没有时为 null）、可挑选的商品与由 cookie 算出的 CSRF 令牌。设置行不存在时按默认值返回。不写审计。
 保存（PUT），每一步不通过即停止：
 1. 请求体按实际读到的字节逐块判断，超过 8 KB 即 413，先于一切校验；不是 JSON 415；
 2. require_admin（401）；
@@ -122,6 +123,8 @@ class StoreDesignOut(BaseModel):
 
 
 class AdminStoreDesignOut(StoreDesignOut):
+    # 标志的提供路径 /api/store-logos/<文件名>.webp；没有标志时为空。
+    logo: str | None
     # 全部满足 published() 的商品，按商品 ID 升序。
     choices: list[ChoiceOut]
     # 由 cookie 重新算出的 CSRF 令牌，供页面提交保存。
@@ -160,7 +163,7 @@ def _out(design: AdminStoreDesign) -> dict[str, Any]:
 
 @router.get("", response_model=AdminStoreDesignOut)
 def read(admin: AdminDep, lang: LanguageDep, session: SessionDep) -> AdminStoreDesignOut:
-    """当前设置、可挑选的商品与 CSRF 令牌；不写审计。"""
+    """当前设置、标志、可挑选的商品与 CSRF 令牌；不写审计。"""
     csrf_token = csrf_token_for_cookie(admin.cookie_value)
     if csrf_token is None:
         # require_admin 通过时 cookie 格式必然合法；这里只为类型收窄。
@@ -171,7 +174,7 @@ def read(admin: AdminDep, lang: LanguageDep, session: SessionDep) -> AdminStoreD
         for choice in product_choices(session, lang)
     ]
     return AdminStoreDesignOut.model_validate(
-        {**_out(design), "choices": choices, "csrf_token": csrf_token}
+        {**_out(design), "logo": design.logo, "choices": choices, "csrf_token": csrf_token}
     )
 
 
