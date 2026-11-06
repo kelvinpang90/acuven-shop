@@ -5838,7 +5838,7 @@ tasks:
       运营者落实写法（HANDOFF 0.84）：上传的请求体为文件本身（不用多部分表单），Content-Type 为调用方给的类型；413 一律归为文件过大，不看响应体（反向代理回答的 413 不是 JSON）；logo 只认 /api/store-logos/ 加 32 位小写十六进制加 .webp 的字符串或 null；A08 保存的响应不含 logo，保存结果的类型不变。
       设计闸门：DESIGN 1.20（提交 a870f78）第 15 条与 HANDOFF 0.84，标志的规则在服务端，请求模块只传递与校验字段，不碰金额与个人资料。
       拆分：A08 标志的请求层（8 个允许路径），照 SHOP-TASK-201 的写法。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-212
       - SHOP-TASK-213
