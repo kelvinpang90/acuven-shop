@@ -247,7 +247,8 @@ describe("remembering the store design in this browser", () => {
   // 读回的也没有 logo。
   it("does not remember the logo", () => {
     const storage = memoryStorage();
-    rememberDesign(storage, { ...responseDesign, featuredSlugs: ["mug"], logo: LOGO });
+    const withLogo: StoreDesignValue = { ...responseDesign, featuredSlugs: ["mug"], logo: LOGO };
+    rememberDesign(storage, withLogo);
     const stored = JSON.parse(storage.data[STORE_DESIGN_STORAGE_KEY] ?? "") as Record<string, unknown>;
     expect(stored).toEqual({ theme: "pasar", accent: "tomato", home_blocks: response.home_blocks });
     expect(storage.data[STORE_DESIGN_STORAGE_KEY]).not.toContain("store-logos");
