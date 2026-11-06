@@ -47,3 +47,19 @@
   - `frontend/src/api/adminStoreDesign.test.ts`：后台读取的 logo 为 null 与合格路径时原样带进结果；缺少、大写、31 位、其他前缀与扩展名、空串、数字与对象时为 `failed`；保存时调用方对象上的 logo 不进请求体，响应里多出的 logo（合格或不合格）不带进结果、不致失败。现有测试只为 logo 字段补上合格的值。
   - `frontend/src/pages/AdminStoreDesignPage.test.tsx`：只改上面列出的两处。
   - 除两条中止测试（见偏离一节）外，每条新增测试的注释写明它守住的接口记录（`app/api/admin_store_logo.py`、`app/api/admin_store_design.py`）、DESIGN 1.20 第 15 条、UX 0.18 A08 或 HANDOFF 0.84 的原句。前端检查交由 PR 的必需 CI 检查 frontend 执行（lint、类型检查、测试、构建与镜像构建；Worker 沙箱不跑前端检查）。本任务不做浏览器验收。检查命令结果由 Worker 另行记录。
+
+## 登记时的验收标准（原文）
+
+2026-11-06 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 写法照 frontend/src/api/adminProductImages.ts（同源 cookie、cache no-store、Accept、写操作带调用方传入的 CSRF 令牌于 pay.ts 的 CSRF_HEADER、接收 AbortSignal、只取接口记录列出的字段且多出的字段不带进结果、响应体不合格算失败、页面只按状态码与 detail 区分，不显示错误体）
+      - 格式判断——frontend/src/storeDesign.ts 新增导出的 isStoreLogoPath(value)，只在 value 恰好是 /api/store-logos/ 加 32 位小写十六进制加 .webp 的字符串时为真；storeDesign.ts 其余内容不变
+      - 上传——uploadStoreLogo(file, contentType, csrfToken, signal) 发 PUT /api/admin/store-design/logo，请求体为调用方给的 Blob 本身（不用 FormData），Content-Type 为调用方给的类型字符串；200 且 logo 合格为 ok 并带回 logo；415 且 detail 为 image_type_unsupported 为 type_unsupported；413 为 too_large（不看响应体）；422 且 detail 为 logo_invalid 为 invalid；401 为 none，403 为 csrf；其他状态（含 503）、其他 415 与 422、响应体不合格为 failed；网络中断与调用方中止为 network
+      - 移除——removeStoreLogo(csrfToken, signal) 发 DELETE /api/admin/store-design/logo，不带请求体；200 且 logo 为 null 为 ok；401 为 none，403 为 csrf；其他为 failed；网络中断与中止为 network
+      - 后台读取——frontend/src/api/adminStoreDesign.ts 的 AdminStoreDesignDetail 加 logo（string 或 null），读取时 logo 为 null 或 isStoreLogoPath 为真的字符串才合格，缺这一项或不合格算 failed；保存的请求与结果（AdminStoreDesign、StoreDesignSave）不变
+      - 测试验证意图（不加测试依赖，fetch 以替身代替）——frontend/src/api/adminStoreLogo.test.ts、frontend/src/api/adminStoreDesign.test.ts 与 frontend/src/storeDesign.test.ts：两个请求的方法、地址、请求头、no-store 与请求体（上传为原样的 Blob 与给定的 Content-Type，不是 FormData；移除没有请求体）；logo 的合格判定（大写、31 位、其他前缀与扩展名、非字符串都不合格）；各种状态与 detail 的归类（含 413 的响应体不是 JSON 时仍为 too_large、移除的 200 带非 null 的 logo 为 failed）；中止为 network；后台读取的 logo 为 null、合格路径、缺少与不合格四种情形；每条测试写明它守住的是接口记录（app/api/admin_store_logo.py、app/api/admin_store_design.py）、DESIGN 1.20 第 15 条或 UX 0.18 A08 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；现有测试只为 logo 字段补上合格的值；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - frontend/src/pages/AdminStoreDesignPage.test.tsx 只为后台读取新增的 logo 而改——常量 DETAIL 补 logo 为 null（PICKING 与各处 fresh 由它展开，随之带上）；测试 updates the form from the saved design 里期望的 base 补 logo，取 DETAIL.logo（saveStep 以读到的设置展开保存结果，保存后仍保留读到的 logo）；该文件其他测试与断言不增不删不改，frontend/src/pages/AdminStoreDesignPage.tsx 不改；这是本任务接入后该文件仅有的两处失效（运营者在 main 的导出上实测，类型检查只报 DETAIL 缺 logo，测试只有这条保存测试的三种语言失败）
+      - docs/task-records/SHOP-TASK-214.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；导出的类型与函数签名，供 SHOP-TASK-215、216 使用；验证到什么程度，只写实际存在的测试）；改动只落在 allowed_change_paths；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：DESIGN 1.20 第 15 条，同上），不合并、不直推
+```

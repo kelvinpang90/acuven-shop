@@ -22,3 +22,18 @@
   - 增加了「移除提交失败时标志与审计不变、不删除对象」一条测试。
   - 运营者接手（Worker run 49857fcd 在修复第 1 轮推送、CI 通过后因主机断网以 worker_lease_expired 结束，第二轮评审没有跑成）：独立审查指出锁定顺序测试看不出 `put_image` 是否在事务之外（假函数不发 SQL），补了一条测试，在写入对象那一刻断言会话没有活动事务（调用前会话已有事务）。
 - 验证范围：上面列出的是本次新增与调整的测试代码；存储以假函数替代，不访问 R2，SQLite 不生成行锁，锁定查询以 MySQL 方言编译核对。结果由 PR 的必需 CI 检查 backend 执行。
+
+## 登记时的验收标准（原文）
+
+2026-11-06 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 读取——store_logo 模块提供 logo_path(file_name)（返回 /api/store-logos/<文件名>.webp）与 current_logo_file_name(db)（单例行当前的 logo_file_name，没有行或没有标志时为 None；只发 SELECT，不写库）；store_design 模块的 StoreDesign 与 AdminStoreDesign 各加 logo 字段（有标志时为提供路径，没有时为 None），read_store_design 与 read_admin_store_design 按单例行填好，设置行不存在时为 None；save_store_design 返回的设置同样带 logo，但不改写标志五列，与当前完全相同的判断与审计值不含标志
+      - 替换——replace_logo(db, settings, admin_account_id, image, now) 返回新的提供路径，image 为 ProcessedImage。依次为——文件名用 secrets.token_hex(16)；先 db.rollback()，在任何事务之外调用 image_store.put_image（prefix 为 LOGO_KEY_PREFIX；失败即抛出 ImageStoreUnavailable，不改记录）；再以 _lock_setting 锁定单例行，读出原有文件名，改写五列（文件名、处理结果的格式、宽、高，字节数为展示图的字节数）与更新时间，写一条 admin_store_logo_uploaded 审计，提交；锁定、改写、审计或提交途中出现任何异常即回滚、以 image_store.delete_image 删除新对象（只尝试 1 次，失败只记日志）后重新抛出；提交成功后，原来有标志的再以 delete_image 删除原有对象（失败只记日志，不影响返回）
+      - 移除——remove_logo(db, settings, admin_account_id, now)。先回滚、以 _lock_setting 锁定单例行；没有标志时回滚、不写审计、不调用存储，照样正常返回；有标志时五列清空、改更新时间、写一条 admin_store_logo_removed 审计并提交，提交之后以 delete_image 删除该对象（存储未配置时 delete_image 只记日志，记录照常清空）；写入途中出现任何异常都先回滚再抛出
+      - 两个改动函数的审计 occurred_at 取传入的 now，admin_account_id 取传入值（须在调用前取出，这里先回滚）；两个函数都是同步函数，由调用方放进线程；不写日志（存储模块自己的日志除外）
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_store_logo.py（SQLite 内存库按模型建表并写入单例行，ProcessedImage 直接构造、不经 Pillow；用 monkeypatch 替换 app.services.image_store 的 put_image 与 delete_image 并记录调用与 prefix），每条测试的文档字符串写明它守住的 DESIGN 1.20 第 15 条原句——没有标志时替换写入五列与审计（旧值为空）、不删任何对象；已有标志时替换，提交后才删除原有对象（替换的 delete_image 里查库，单例行已是新文件名）；写入失败不改记录、不写审计；提交失败时删除了新对象、记录与审计都不变；移除清空五列、写审计、提交后才删除对象；没有标志时移除不写审计、不调用存储、不改更新时间；读取在有、无标志时的 logo；替换与移除之后 A08 的保存不改标志五列、保存之后标志仍在；锁定查询按 MySQL 方言编译带 FOR UPDATE，两个改动函数回滚之后的第一条语句都是它。tests/test_store_design.py 只为 StoreDesign 新增的 logo 字段补上 logo=None
+      - docs/task-records/SHOP-TASK-211.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明函数签名、审计写法与偏离取舍，供 SHOP-TASK-212、213 使用）
+      - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/image_store.py、app/services/image_processing.py、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.20 提交 a870f78 与 HANDOFF 0.84），不合并、不直推
+```
