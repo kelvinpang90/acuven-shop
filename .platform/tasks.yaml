@@ -5895,3 +5895,184 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+  - id: SHOP-TASK-217
+    title: 运营告警邮件的发送机制（配置、队列与发信线程、限频、测试告警命令）
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 1 至 5 条与第 9 条，新增 app/services/ops_alert.py：读取七项告警配置、在本进程内存里合并与排队、由发信线程经通用 SMTP（只用标准库 smtplib、ssl 与 email，不加依赖）发出、按 Redis 限频；另加一次性命令 python -m app.jobs send-test-alert，补跑命令退出前等队列发完；docker-compose.yml 把七项配置传进 shop_api 与 shop_jobs。
+      本任务只接入测试告警 ops_alert_test，不接业务告警点（第 6、7 条的接线是 SHOP-TASK-218 至 222）。不改数据库、接口与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：调用方以 from app.services import ops_alert 引入、以 ops_alert.alert(category, target=None, *, error_class=None) 调用（测试替换模块属性 alert），target 为（对象类别, 内部 ID）二元组或 None；类别表 CATEGORIES 写在本模块，本任务只放 ops_alert_test，各接线任务把自己的类别加进来；七项配置在 Settings 里都是字符串、默认空串（端口与加密方式不合格不能让设置加载失败，由本模块判断）；shop_jobs 现在没有 SHOP_REDIS_URL，本任务另加上（第 4 条，API 与定时任务共用限频）；.env.example 的七个变量名由登记 PR 写好（控制面把 .env 开头的文件列为敏感文件名，Worker 改不了）。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」一节与 HANDOFF 0.88，告警邮件的配置、发送、限频与内容约束（邮件不得带个人资料与凭据）。
+      拆分：发送机制一层（8 个允许路径），各处接线为 SHOP-TASK-218 至 222，都只依赖本任务。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 配置——app/core/config.py 的 Settings 加 alert_smtp_host、alert_smtp_port、alert_smtp_security、alert_smtp_username、alert_smtp_password、alert_from、alert_to 七个字符串字段（对应 SHOP_ALERT_ 开头的七个变量，默认都是空串）；ops_alert 按第 1 条判断是否已配置（端口为空即 587、给了须为 1 到 65535 的整数；加密方式为空即 starttls、给了须为 starttls 或 ssl；主机、账号、密码非空；发件人一个地址、收件人逗号分隔 1 到 5 个地址，每个地址恰含一个 @ 且两侧非空，去掉两侧空白）；未配置时告警不入队，进程第一次遇到告警时记一条 warning ops_alert_not_configured（可带不合格的变量名，不带任何配置值），之后不再记
+      - 入队——alert 只在调用方的线程里做内存操作，不访问数据库与网络，任何情况下都不抛异常、不阻塞；类别不在 CATEGORIES 里时记一条 warning ops_alert_unknown_category category=<类别> 后丢弃；限频键（第 4 条）已有一封在队列里、正在发送或等待重试时不再入队，记 info ops_alert_suppressed category=<类别>；队列容量 100，满时丢弃并记 warning ops_alert_dropped category=<类别>；发信线程为守护线程，第一次有告警入队时才启动，每个进程一个；对象与发生时刻（入队时的 UTC 时刻）随告警入队
+      - 发信——每封新建一次连接，连接、TLS 握手与每条 SMTP 命令的超时都是 10 秒；starttls 用 smtplib.SMTP，连上后必须完成 STARTTLS 才登录与发信（服务器不支持即失败，不以明文发送），ssl 用 smtplib.SMTP_SSL；TLS 一律用 ssl.create_default_context()，不提供关闭校验的配置；一律以账号与密码登录；邮件为纯文本 UTF-8，主题、正文四项与末尾限频说明照第 5 条（发生时间写 UTC 与马来西亚时间 UTC+8 各一行、精确到秒；对象写为对象类别加空格加内部 ID，没有对象写「无」；ops_alert_test 不受限频，末尾不写限频说明）；From 为配置的发件人，收件人只放在 SMTP 信封里，邮件头 To 固定为第 5 条原文所写的空收件人组、不设 Cc 与 Bcc，Message-ID 用 email.utils.make_msgid 以发件人地址的域名生成
+      - 失败与重试——照第 3 条：临时失败（连不上、超时、连接中断、服务器回 4xx）60 秒后重试一次，每封最多尝试 2 次，等待重试的那封放回待发列表、到期才发，等待期间照常发其他告警，按到期先后取下一封；永久失败（登录被拒、5xx、不支持 STARTTLS、TLS 握手或证书校验失败）不重试，ssl.SSLError 是 OSError 的子类，须先于连接类错误判断为永久失败；部分收件人被拒（send_message 返回被拒的收件人）与全部被拒（SMTPRecipientsRefused）都按各收件人的状态码处理，4xx 的只对这些收件人重试一次、5xx 的即最终失败，已接受的不重发；最终失败只记一条 error ops_alert_send_failed category=<类别> error=<异常类名>，有状态码时另带 code=<三位状态码>，部分收件人被拒时另带 refused=<被拒人数>；发出时记 info ops_alert_sent category=<类别>；发信线程的日志只记类别、对象 ID 与异常类名，不带服务器回复原文、主机、账号或地址
+      - 限频——照第 4 条：发信线程发送前以 SET <键> 1 NX EX <窗口秒数> 占用，键为前缀 ops_alert 加冒号再加类别、类别以对象作去重键时再加冒号与对象的内部 ID（照第 4 条），窗口为该类别在 CATEGORIES 里写的秒数（3600，去重键为日期的 86400）；占不到就记 info ops_alert_suppressed category=<类别> 后丢弃；发送失败也不删键；Redis 客户端按 Settings.redis_url 由本模块自建（每次操作超时 2 秒、不重试，写法照 app/services/rate_limit.py 的 _client_for），未配置、连不上、超时或出错时改用本进程内存里同样的键与窗口；不访问 MySQL
+      - 命令与部署——app/jobs.py 加子命令 send-test-alert，在本进程同步发一封 ops_alert_test（对象为无），不经队列、不受限频，照第 3 条超时与重试，服务器接受即退出码 0，未配置时记 warning ops_alert_not_configured 并以 EXIT_NOT_CONFIGURED 退出，最终失败以 EXIT_FAILED 退出；其余一次性子命令（run 与 send-test-alert 以外）执行完后等队列发完（含一次重试）最多 180 秒，到时仍有未发完的记一条 warning ops_alert_unsent count=<封数>，退出码只反映补跑本身的结果；run 的常驻循环退出时不等队列；docker-compose.yml 给 shop_api 与 shop_jobs 都加上七个 SHOP_ALERT_ 变量（写法为变量名加冒号减号的空默认值，照现有 Stripe 变量），shop_jobs 另加 SHOP_REDIS_URL（同 shop_api 的写法）；CATEGORIES 的每一项写明中文说明、处理指引（不含链接、主机与地址）、是否以对象作去重键与窗口秒数，本任务只有 ops_alert_test（说明为测试告警，指引为收到即说明告警邮件配置可用、无需处理）
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_ops_alert.py，以替身代替 smtplib 的 SMTP 与 SMTP_SSL、Redis 照现有测试的 FakeRedis 写法、时钟可注入（不靠真实等待，发送循环写成可在测试里同步推进的形式），覆盖第 9 条所列各项（未配置与配置不合格只记日志、入队不阻塞且不访问数据库、同一限频键入队前合并与队列满即丢弃、限频占用且发送失败也不释放、Redis 不可用改用进程内存、临时失败重试一次且等待重试时其他告警照发、永久失败不重试且 TLS 错误不重试、部分与全部收件人被拒的 4xx 与 5xx 处理且日志不带地址、starttls 不能以明文发送、邮件头不含收件人地址、正文只含四项且不含任何配置值与地址、CATEGORIES 每一项的说明与指引都不含链接与地址）；tests/test_jobs.py 补 send-test-alert 的三种退出码与不受限频、一次性命令退出前等队列与到时记下未发封数、run 不等队列；tests/test_compose_env.py 补两个服务的七个变量与 shop_jobs 的 SHOP_REDIS_URL；每条测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第几条哪一句
+      - docs/task-records/SHOP-TASK-217.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明 alert 的签名、CATEGORIES 每一项的字段、对象类别码的写法与测试替换方式，供 SHOP-TASK-218 至 222 使用）；改动只落在 allowed_change_paths；不改数据库、接口、前端、.platform/、CI 与部署脚本，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
+    allowed_change_paths:
+      - app/services/ops_alert.py
+      - app/core/config.py
+      - app/jobs.py
+      - docker-compose.yml
+      - tests/test_ops_alert.py
+      - tests/test_jobs.py
+      - tests/test_compose_env.py
+      - docs/task-records/SHOP-TASK-217.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-218
+    title: 定时任务失败的告警邮件（job_failing 与 stock_reset_failed）
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 6 条表中 job_failing 与 stock_reset_failed 两行和第 7 条，在 app/jobs.py 的常驻循环里接入这两类告警，并把两类加进 app/services/ops_alert.py 的 CATEGORIES。心跳与容器不健康的规则不变。不改发送机制，不改数据库、接口与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：两类都以对象作去重键；job_failing 的对象为（job, 任务名），窗口 3600 秒，error_class 为最后一次失败的异常类名，数据库未配置时为 database_not_configured；stock_reset_failed 的对象为（date, 马来西亚营业日期的 ISO 写法），窗口 86400 秒，error_class 为异常类名；reset_stock_job 加只限关键字的参数决定失败时是否告警，常驻循环告警、reset-stock 补跑命令不告警（第 7 条：补跑命令本身失败不发告警）。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6、7 条与 HANDOFF 0.88。
+      拆分：定时任务接线一层（4 个允许路径），依赖 SHOP-TASK-217。
+    status: ready
+    depends_on:
+      - SHOP-TASK-217
+    acceptance_criteria:
+      - job_failing——Runner 为每个任务记下最后一次失败的异常类名；某任务连续失败（距它最近一次成功，从未成功过则距进程启动，与 healthy 同一算法与 UNHEALTHY_AFTER_SECONDS）满 10 分钟时调用一次 ops_alert.alert("job_failing", ("job", 任务名), error_class=异常类名)；同一段连续失败只调用一次，该任务再次成功后清零，之后再连续失败满 10 分钟才再调用；数据库未配置时一轮里全部任务都算失败，各按此告警（每个任务名一次，error_class 为 database_not_configured）；不发「已恢复」告警；计时只在进程内存里
+      - stock_reset_failed——reset_stock_job 的重置失败在现有 error 日志之后、重新抛出之前调用一次 ops_alert.alert("stock_reset_failed", ("date", 营业日期的 ISO 写法), error_class=异常类名)，只在常驻循环里调用；reset-stock 子命令经同一任务执行时不调用；开关关闭与已完成的跳过不调用
+      - CATEGORIES 加上这两类（中文说明、处理指引、以对象作去重键、窗口秒数照上），处理指引不含链接与主机，stock_reset_failed 的指引写明执行补跑命令 python -m app.jobs reset-stock；心跳、不健康判断与现有日志不变
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_jobs.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，补连续失败满 10 分钟告警一次、未满不告警、同一段失败不重复、成功后清零再满 10 分钟再告警、数据库未配置时每个任务名各一次且 error_class 为 database_not_configured、库存重置失败在常驻循环告警一次而 reset-stock 子命令不告警、跳过时不告警；每条测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6、7 条哪一句
+      - docs/task-records/SHOP-TASK-218.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改发送机制、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
+    allowed_change_paths:
+      - app/jobs.py
+      - app/services/ops_alert.py
+      - tests/test_jobs.py
+      - docs/task-records/SHOP-TASK-218.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-219
+    title: Stripe 结账创建与对账的告警邮件（密钥、创建与超时未定）
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 6 条表中 stripe_key_not_test、stripe_checkout_needs_review、stripe_create_rejected、stripe_unreachable、stripe_payment_needs_review 五行，在 app/services/stripe_gateway.py、stripe_checkout.py 与 stripe_overdue.py 的现有 error 日志之后接入告警，并把五类加进 app/services/ops_alert.py 的 CATEGORIES。不改支付与对账规则，不改发送机制，不改数据库、接口与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：每条现有的告警日志之后紧接着调用 ops_alert.alert(类别, 对象)，类别取日志里的同一个常量；日志里为 checkout=<ID> 的，对象为（stripe_checkout, 结账记录 ID）；stripe_key_not_test 的对象为 None，只在现有的「每个进程第一次判定」那条日志之后调用；Stripe 适配器里不带记录 ID 的 stripe_livemode 日志不入队（第 6 条表）；五类都不以对象作去重键，窗口 3600 秒。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6 条与 HANDOFF 0.88；告警不带 Stripe 的任何 ID、金额与个人资料。
+      拆分：Stripe 一组按文件分三个任务（219 结账创建与对账、220 确认付款与 webhook、221 退款），每个不超过 12 个允许路径；本任务 8 个，依赖 SHOP-TASK-217。
+    status: ready
+    depends_on:
+      - SHOP-TASK-217
+    acceptance_criteria:
+      - 接线——app/services/stripe_gateway.py 的 stripe_key_not_test 日志之后调用 ops_alert.alert(LOG_KEY_NOT_TEST)（同一进程只调用一次，与日志同在现有的首次判断之内）；不带记录 ID 的 stripe_livemode 日志不调用；app/services/stripe_checkout.py 的 stripe_create_rejected 与 stripe_checkout_needs_review 日志、app/services/stripe_overdue.py 的告警日志（stripe_unreachable 与 stripe_payment_needs_review）之后各调用一次 ops_alert.alert(该日志的类别, ("stripe_checkout", 结账记录 ID))；调用位置与现有日志相同（在提交之后的就在提交之后），不改日志、返回值与事务
+      - CATEGORIES 加上这五类（中文说明、处理指引、不以对象作去重键、窗口 3600 秒），处理指引不含链接与主机，写成到 Stripe 测试后台核对、按类别码查日志这类文字
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_stripe_gateway.py、tests/test_stripe_checkout.py、tests/test_stripe_overdue.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，在现有覆盖这些日志的情形里补断言（每个告警点在所写时机以所写类别与对象调用一次；不带记录 ID 的 stripe_livemode 不调用；已有告警时间的记录再次对账不再调用）；现有测试只为替换 alert 而改；每条新断言所在测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行
+      - docs/task-records/SHOP-TASK-219.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改支付与对账规则、发送机制、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
+    allowed_change_paths:
+      - app/services/stripe_gateway.py
+      - app/services/stripe_checkout.py
+      - app/services/stripe_overdue.py
+      - app/services/ops_alert.py
+      - tests/test_stripe_gateway.py
+      - tests/test_stripe_checkout.py
+      - tests/test_stripe_overdue.py
+      - docs/task-records/SHOP-TASK-219.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-220
+    title: Stripe 确认付款与 webhook 的告警邮件（正式环境、查询被拒、会话不符与迟到付款）
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 6 条表中 stripe_livemode、stripe_confirm_rejected、stripe_session_mismatch、stripe_late_payment、stripe_late_payment_unrefundable 五行与 stripe_refund_cap 一行的第 6 条部分，在 app/services/stripe_confirm.py、app/services/stripe_webhook.py（结账记录的两条日志）与 app/api/stripe_webhook.py（webhook 入口的正式环境拒绝）的现有 error 日志之后接入告警，并把六类加进 app/services/ops_alert.py 的 CATEGORIES。不改付款确认与 webhook 规则，不改发送机制，不改数据库与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：每条现有的告警日志之后紧接着调用 ops_alert.alert(类别, 对象)，类别取日志里的同一个常量或变量；日志里为 checkout=<ID> 的，对象为（stripe_checkout, 结账记录 ID）；webhook 入口的 stripe_livemode 对象为 None；六类都不以对象作去重键，窗口 3600 秒；stripe_refund_cap 一类由本任务加进 CATEGORIES，SHOP-TASK-221 的退款申请告警点沿用。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6 条与 HANDOFF 0.88；告警不带 Stripe 的任何 ID、金额与个人资料。
+      拆分：Stripe 一组的第二个任务（9 个允许路径），依赖 SHOP-TASK-217。
+    status: ready
+    depends_on:
+      - SHOP-TASK-217
+    acceptance_criteria:
+      - 接线——app/services/stripe_confirm.py 每条 checkout=<ID> 的告警日志（stripe_livemode、stripe_confirm_rejected，以及按确认结果记的 stripe_session_mismatch、stripe_late_payment、stripe_late_payment_unrefundable、stripe_refund_cap）、app/services/stripe_webhook.py 结账记录的 stripe_livemode 与 stripe_confirm_rejected 两条日志之后，各调用一次 ops_alert.alert(该日志的类别, ("stripe_checkout", 结账记录 ID))；app/api/stripe_webhook.py 入口的 stripe_livemode 日志之后调用 ops_alert.alert(LOG_LIVEMODE)；app/services/stripe_webhook.py 里退款尝试的两条日志不在本任务（SHOP-TASK-221）；调用位置与现有日志相同，不改日志、返回值、状态码与事务
+      - CATEGORIES 加上这六类（中文说明、处理指引、不以对象作去重键、窗口 3600 秒），处理指引不含链接与主机，写成到 Stripe 测试后台核对、按类别码查日志这类文字；stripe_refund_cap 的说明同时适用于迟到付款与退款申请两处
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_stripe_confirm.py、tests/test_stripe_late_payment.py、tests/test_stripe_webhook.py、tests/test_stripe_webhook_api.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，在现有覆盖这些日志的情形里补断言（每个告警点以所写类别与对象调用一次；没有告警日志的结果不调用；webhook 入口的对象为 None）；现有测试只为替换 alert 而改；每条新断言所在测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行
+      - docs/task-records/SHOP-TASK-220.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改付款确认与 webhook 规则、发送机制、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
+    allowed_change_paths:
+      - app/services/stripe_confirm.py
+      - app/services/stripe_webhook.py
+      - app/api/stripe_webhook.py
+      - app/services/ops_alert.py
+      - tests/test_stripe_confirm.py
+      - tests/test_stripe_late_payment.py
+      - tests/test_stripe_webhook.py
+      - tests/test_stripe_webhook_api.py
+      - docs/task-records/SHOP-TASK-220.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-221
+    title: Stripe 退款的告警邮件（被拒、不符、成功后失败、长期未定与无法退款）
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 6 条表中 stripe_refund_unrefundable、stripe_refund_rejected、stripe_refund_failed_after_success、stripe_refund_mismatch、stripe_refund_unresolved、stripe_webhook_refund_rejected 六行与 stripe_refund_cap 一行的第 8 条部分，在 app/services/stripe_refund.py、stripe_refund_overdue.py、stripe_webhook.py（退款尝试的两条日志）与 refund_review.py 的现有 error 日志之后接入告警，并把六类加进 app/services/ops_alert.py 的 CATEGORIES（stripe_refund_cap 已由 SHOP-TASK-220 加入）。不改退款规则，不改发送机制，不改数据库、接口与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：每条现有的告警日志之后紧接着调用 ops_alert.alert(类别, 对象)，类别取日志里的同一个常量或变量；日志里为 attempt=<ID> 的，对象为（stripe_refund, 退款尝试 ID），为 refund_request=<ID> 的，对象为（refund_request, 退款申请 ID）；refund_review.py 的告警在调用方提交之前记日志，告警照此入队（第 2 条接受外层提交失败时多出一封）；app/api/admin_refunds.py 的 stripe_refund_submit_failed 不接（第 8 条）；六类都不以对象作去重键，窗口 3600 秒。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6 条与 HANDOFF 0.88；告警不带 Stripe 的任何 ID、金额与个人资料。
+      拆分：Stripe 一组的第三个任务（10 个允许路径），依赖 SHOP-TASK-217 与 220（沿用 220 加入的 stripe_refund_cap，app/services/stripe_webhook.py 两个任务都改）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-217
+      - SHOP-TASK-220
+    acceptance_criteria:
+      - 接线——app/services/stripe_refund.py 每条 attempt=<ID> 的告警日志与 refund_request=<ID> 的 stripe_refund_cap 日志、app/services/stripe_refund_overdue.py 的两条告警日志、app/services/stripe_webhook.py 退款尝试的两条日志（stripe_webhook_refund_rejected 与按退款结果记的类别）、app/services/refund_review.py 的告警日志之后，各调用一次 ops_alert.alert(该日志的类别, 对象)，对象照 purpose 的写法；app/api/admin_refunds.py 不改；调用位置与现有日志相同，不改日志、返回值与事务
+      - CATEGORIES 加上这六类（中文说明、处理指引、不以对象作去重键、窗口 3600 秒），处理指引不含链接与主机，写成到 Stripe 测试后台核对、按类别码查日志这类文字
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_stripe_refund.py、tests/test_stripe_refund_overdue.py、tests/test_stripe_webhook_refund.py、tests/test_stripe_refund_approval.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，在现有覆盖这些日志的情形里补断言（每个告警点以所写类别与对象调用一次；没有告警日志的结果不调用；退款申请两处的对象类别为 refund_request）；现有测试只为替换 alert 而改；每条新断言所在测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行
+      - docs/task-records/SHOP-TASK-221.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改退款规则、发送机制、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
+    allowed_change_paths:
+      - app/services/stripe_refund.py
+      - app/services/stripe_refund_overdue.py
+      - app/services/stripe_webhook.py
+      - app/services/refund_review.py
+      - app/services/ops_alert.py
+      - tests/test_stripe_refund.py
+      - tests/test_stripe_refund_overdue.py
+      - tests/test_stripe_webhook_refund.py
+      - tests/test_stripe_refund_approval.py
+      - docs/task-records/SHOP-TASK-221.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-222
+    title: 短信预算用尽、管理员登录锁定与会员注销失败的告警邮件
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 6 条表中 sms_budget_exhausted、admin_login_locked、member_deletion_failed 三行，在 app/services/sms_verification.py、app/api/admin_auth.py 与 app/api/member_deletion.py 接入告警，并把三类加进 app/services/ops_alert.py 的 CATEGORIES。这三处现在没有 error 日志，本任务在告警点先记一条 error 日志（类别与对象 ID，日志仍是告警的权威记录），再调用 ops_alert.alert。不改短信、登录与注销规则，不改发送机制，不改数据库与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：sms_budget_exhausted 的对象为（date, 马来西亚日期的 ISO 写法），以对象作去重键、窗口 86400 秒，只在预占结果为 over_budget、停发的事务提交之后调用（unknown_cost 不调用，第 8 条）；admin_login_locked 的对象为（audit_event, admin_login_locked 审计记录 ID），在审计提交之后调用；member_deletion_failed 的对象为（member, 会员 ID），在确认注销的删除或提交抛数据库异常、回滚之后调用；后两类不以对象作去重键、窗口 3600 秒；日志写法为类别码加空格加对象类别等号 ID（如 member_deletion_failed member=<ID>），不带用户名、电话、来源地址与异常消息。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6 条与 HANDOFF 0.88；告警不带个人资料、用户名与来源地址。
+      拆分：其余三处接线一层（8 个允许路径），依赖 SHOP-TASK-217。
+    status: ready
+    depends_on:
+      - SHOP-TASK-217
+    acceptance_criteria:
+      - sms_budget_exhausted——app/services/sms_verification.py 在 reserve_sms 的结果为 over_budget、停发（_suspend）提交之后记一条 error 日志并调用一次 ops_alert.alert("sms_budget_exhausted", ("date", 马来西亚日期的 ISO 写法))，日期取 app/services/sms_budget.py 的 malaysia_date；unknown_cost、Redis 不可用、超出限流与服务商失败的停发都不调用；返回值与事务不变
+      - admin_login_locked——app/api/admin_auth.py 在登录刚被锁定、写了 admin_login_locked 审计并提交之后记一条 error 日志并调用一次 ops_alert.alert("admin_login_locked", ("audit_event", 该审计记录的 ID))；用户名不存在的锁定不写审计、也不调用；响应、状态码与审计不变
+      - member_deletion_failed——app/api/member_deletion.py 的确认注销在 delete_member 或提交抛数据库异常、回滚之后记一条 error 日志并调用一次 ops_alert.alert("member_deletion_failed", ("member", 会员 ID))，然后照现有写法回答暂不可用；读取开关失败、会员已不是有效时不调用
+      - CATEGORIES 加上这三类（中文说明、处理指引、去重键与窗口秒数照上），处理指引不含链接与主机；三条新日志不带用户名、电话、来源地址与异常消息
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_sms_verification.py、tests/test_admin_auth_api.py、tests/test_member_delete_confirm_api.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，补每个告警点在所写时机以所写类别与对象调用一次、所列不告警的情形不调用、新日志不含电话与用户名；现有测试只为替换 alert 而改；每条测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行
+      - docs/task-records/SHOP-TASK-222.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改短信、登录与注销规则、发送机制、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
+    allowed_change_paths:
+      - app/services/sms_verification.py
+      - app/api/admin_auth.py
+      - app/api/member_deletion.py
+      - app/services/ops_alert.py
+      - tests/test_sms_verification.py
+      - tests/test_admin_auth_api.py
+      - tests/test_member_delete_confirm_api.py
+      - docs/task-records/SHOP-TASK-222.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
