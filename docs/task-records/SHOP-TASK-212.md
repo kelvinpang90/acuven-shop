@@ -18,3 +18,17 @@
   - 移除不检查存储是否配置（第 15 条：存储未配置时照常清空），由服务层调用 `delete_image`、存储模块只记日志。
   - `logo` 在后台读取里放在 `featured` 之后、`choices` 之前（`AdminStoreDesignOut` 新增的第一个字段），保存的响应模型不变。
 - 验证范围：上面列出的是本次新增与修改的测试代码，存储函数全部替换、不访问 R2；结果以 PR 的必需 CI 检查 backend 为准。
+
+## 登记时的验收标准（原文）
+
+2026-11-06 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 上传（PUT /api/admin/store-design/logo），每一步不通过即回答、不再往下（检查用依赖按声明顺序完成）——require_admin（401 admin_session_required）；X-CSRF-Token（403 csrf_failed，沿用 app/api/admin_products.py 的 CsrfDep）；存储未配置即 503 image_store_unavailable、不读请求体；Content-Type 去掉参数与首尾空白、转小写后不是 image/jpeg、image/png、image/webp 之一即 415 image_type_unsupported；请求头声明的长度超过 5,242,880 字节即 413 image_too_large、不读请求体，未声明或声明不超过时最后声明的异步依赖逐块读取、读到超过即停止并 413；process_image 以 LOGO_MIN_SIDE 与 LOGO_MIN_LONG_SIDE 处理，抛 ImageRejected 即 422 logo_invalid；replace_logo 抛 ImageStoreUnavailable 即 503；成功 200 与 logo（新的提供路径）。没有张数上限这一项
+      - 移除（DELETE /api/admin/store-design/logo）——require_admin（401）、CSRF（403）；不读请求体；remove_logo（没有标志时照样成功；存储未配置时照常清空，服务层只记日志）；成功 200 与 logo 为 null
+      - 后台读取——GET /api/admin/store-design 的响应加 logo（有标志时为提供路径，没有时为 null），其余字段不变；PUT /api/admin/store-design 的响应不变；两个新接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control no-store（用 SHOP-TASK-027 的路由类）；路径存在但方法不匹配的 405 由框架回答，不在此列；不写日志（服务层与存储模块自己的日志除外）；在 app/main.py 注册路由；模块说明里「不含标志图」的句子改为引用 DESIGN 1.20 第 15 条
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_store_logo_api.py（夹具照 tests/test_admin_product_images_api.py：SQLite 内存库、TestClient、经 SHOP-TASK-036 的登录取得会话与 CSRF 令牌；用 monkeypatch 替换 app.services.image_store 的 put_image、delete_image 并记录调用；用 Pillow 现场生成小图），每条测试的文档字符串写明它守住的 DESIGN 1.20 第 15 条或 UX 0.18 A08 的原句——检查顺序（没有会话 401 先于一切；CSRF 不对 403；未配置 503 且不读请求体；415；声明过长 413 且不读请求体；逐块读到超过 413）；40×200 与 300×60 的标志合格、39×200 与 150×150（长边不足 200）为 422 logo_invalid 且不调用 put_image；成功后 GET 后台读取的 logo 等于返回的路径；再次上传替换并删除原有对象；移除后 logo 为 null、没有标志时移除照样 200 且不写审计；所有响应带 no-store。tests/test_admin_store_design.py 只为后台读取新增的 logo 字段与新增的两条路由改现有断言（路由测试改为该前缀下只有 GET、PUT 与 logo 的 PUT、DELETE）
+      - docs/task-records/SHOP-TASK-212.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明请求与响应的形状，供 SHOP-TASK-214 使用；偏离取舍）
+      - 改动只落在 allowed_change_paths；不改服务层、模型与迁移、app/api/admin_product_images.py、前端、.platform/、CI 与部署配置（反向代理的放宽不在仓库里），不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.20 提交 a870f78 与 HANDOFF 0.84），不合并、不直推
+```

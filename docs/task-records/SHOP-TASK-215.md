@@ -45,3 +45,18 @@
   - 新增 `logo` 一组：标志段在表单里并显示当前 logo；标志操作进行中 `common.save` 禁用、保存进行中标志按钮禁用（`saveDisabled` 与 onSave 的判断）；有标志时保存，请求体没有 logo、保存成功后 logo 沿用当前值；两份预览页头在有标志时为 img、没有或加载失败时为文字品牌；`changeLogo` 与 `hideSaved` 只改该改的部分。
   - 因接入而改的现有测试（各自注释写明「SHOP-TASK-215 改动」）：测试辅助 `render` 补标志段的 props；`keeps the demo banner and the demo note` 的按钮列表最前加标志段两个按钮；`has the theme, accent, home block and featured groups` 去掉「没有标志的文字」，改为标志段在主色之后、首页区块之前；`makes no request for the preview` 的读取与保存调用改为三处；保存失败时的 fieldset 数由 4 改为 5；预览的测试辅助与 `shows only dictionary text` 补 logo、broken、onBroken，并加有标志、加载失败与标志操作进行中的状态。
   - 每条新增测试的注释写明它守住的 UX 0.18、DESIGN 1.20 第 15 条或 HANDOFF 0.84 的原句。前端检查交由 PR 的必需 CI 检查 frontend 执行（lint、类型检查、测试、构建与镜像构建；Worker 沙箱不跑前端检查）。
+
+## 登记时的验收标准（原文）
+
+2026-11-06 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 页面内容与文案以 docs/UX.md 0.18 的 A08、docs/UX-COPY.md 0.19 与 docs/HANDOFF.md 0.84 为准，样式以 docs/design/pages/ 的 A08-logo-states 与 A08 的桌面、手机稿为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（不声明颜色、字体、圆角属性，视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重、边框色与底色不搬，记入任务记录的偏离（评审不以此要求修改）；frontend/src/i18n/copy.ts 按 UX-COPY 0.19 逐字加入 admin.logo、admin.logo_hint、admin.logo_remove、admin.logo_rules、admin.logo_immediate、admin.logo_invalid、admin.logo_remove_confirm 中字典里还没有的键，写法与相邻条目相同
+      - 显示——标志段标题 admin.logo；当前标志（照视觉稿高 36 像素、宽按比例且至多 180 像素，按比例显示、不拉伸变形，把 object-fit 设为 contain）或文字品牌；没有标志时 admin.logo_remove 禁用；上传中旁边显示 admin.image_uploading；admin.logo_hint、admin.image_rules、admin.logo_rules 与 admin.logo_immediate 常显（顺序照视觉稿）；A08 预览缩样的页头在有标志时显示同一张图（图片加载失败时为文字品牌），没有时为文字品牌
+      - 操作——上传与移除照 purpose 的落实写法；上传 ok 时改显示返回的 logo，移除 ok 时改显示文字品牌；上传的 type_unsupported、too_large 与 invalid 依次显示 admin.image_type_unsupported、admin.image_too_large 与 admin.logo_invalid，其他失败（含图片存储不可用）显示 common.error_retry，当前标志不变；none 照现有写法回到 A01；csrf 与 network 照 purpose；下一次标志操作开始时收起上一次的提示；标志操作不改表单、不收起 admin.design_saved 以外的表单提示
+      - 接入——frontend/src/pages/AdminStoreDesignPage.tsx 只为把标志段放进表单、把当前 logo 与 CSRF 令牌传入、在标志变化或 403 重新读取后更新页面状态里的 logo 与 CSRF 令牌、两者互斥的禁用、预览缩样显示标志而改；表单的选择、保存请求与保存结果的处理不变
+      - 代码结构——组件写法沿用 frontend/src/pages/AdminProductImages.tsx（导出把请求结果变成标志段状态的纯函数、接收 AbortSignal 与回调的异步函数、只依赖 props 的 View；上传前的先查与各按钮是否禁用写成导出的纯函数；图片加载失败与否作为 View 的 props，便于静态渲染测试；当前标志与预览缩样共用一个加载失败状态，logo 换成另一个路径（上传成功、403 后重新读取）或变为 null 时重置）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
+      - 测试——用 vitest 与 react-dom/server（不加测试依赖，fetch 以替身代替；以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）在 frontend/src/pages/AdminStoreLogo.test.tsx 验证意图——没有标志时显示文字品牌且 admin.logo_remove 禁用；有标志时 img 的 src 与 alt；加载失败时显示文字品牌；上传前的类型与大小先查（5,242,880 字节合格、多一字节不合格）；移除确认框的文字与按钮顺序；各种结果的提示与显示的标志；操作进行中与 A08 保存进行中按钮禁用；403 只更新 CSRF 令牌与 logo。frontend/src/pages/AdminStoreDesignPage.test.tsx 只为接入补测试（表单里出现标志段、标志操作进行中 common.save 禁用、保存成功后标志沿用当前值、预览显示标志）；页面文字全部来自字典；每条测试写明它守住的是 UX 0.18、DESIGN 1.20 第 15 条或 HANDOFF 0.84 的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
+      - docs/task-records/SHOP-TASK-215.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收、没有用真实图片与存储试过上传）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
+```
