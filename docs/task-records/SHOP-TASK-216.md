@@ -31,7 +31,7 @@
   - 记住的值里没有 logo，读回的设置也没有 logo。
   - 现有测试只为 `parseStoreDesignResponse`、`initialStoreDesign`、`settledStoreDesign` 与 `loadStoreDesign` 的期望值补 `logo: null`，`StoreDesignValue` 的字面量补 `logo`。
 - `frontend/src/components/SiteFrame.test.tsx`（`renderToStaticMarkup` 渲染，不模拟点击）：
-  - `StoreBrand` 三种情形：有标志时为 img（class、src 与 alt）；没有标志与加载失败时为文字 `BRAND`；img 的 onError 把路径交给 onBroken。
+  - `StoreBrand` 三种情形：有标志时为 img（class、src 与 alt；服务端渲染会在 img 前加图片预载提示 `link rel="preload"`，测试只比对 img 本身，并确认没有文字品牌）；没有标志与加载失败时为文字 `BRAND`；img 的 onError 把路径交给 onBroken。
   - `storeLogoBroken`：只有失败的正是当前路径才为真，换成另一个路径或 null 时为假。
   - 以 `StoreDesignContext` 给出 logo 渲染全站框架：页头链到首页的品牌链接与页脚品牌都是同一个 img，页面没有文字品牌与行内样式；logo 为 null 时两处都是文字品牌、没有 img。
   - 每条新增测试的注释写明它守住的 UX 0.18「店铺装修」或 HANDOFF 0.84 的原句。前端检查交由 PR 的必需 CI 检查 frontend 执行（lint、类型检查、测试、构建与镜像构建；Worker 沙箱不跑前端检查）。

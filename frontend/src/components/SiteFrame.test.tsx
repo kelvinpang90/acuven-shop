@@ -483,8 +483,14 @@ describe("store logo", () => {
 
   // UX 0.18「店铺装修」「管理员上传标志图后，页头与页脚的品牌 ACUVEN SHOP 显示为该图（读屏文字仍为 ACUVEN SHOP）」与 HANDOFF 0.84「标志以 img 显示，alt 为 BRAND」：
   // 有标志且未加载失败时为 img，src 为 logo、alt 为 BRAND，没有文字品牌。
+  // 服务端渲染会在 img 前放一个图片预载提示（link rel="preload"），故只比对 img 本身，并确认没有文字品牌。
   it("shows the logo image with the brand as alt text", () => {
-    expect(renderToStaticMarkup(<StoreBrand logo={LOGO} broken={false} onBroken={noop} />)).toBe(IMG);
+    const markup = renderToStaticMarkup(<StoreBrand logo={LOGO} broken={false} onBroken={noop} />);
+    expect(markup).toContain(IMG);
+    expect(markup.match(/<img/g)).toHaveLength(1);
+    expect(markup.endsWith(IMG)).toBe(true);
+    expect(markup).not.toContain(`>${BRAND}<`);
+    expect(markup.startsWith(BRAND)).toBe(false);
   });
 
   // UX 0.18「店铺装修」「未上传时显示文字」：logo 为 null 时为文字 BRAND，没有 img。
