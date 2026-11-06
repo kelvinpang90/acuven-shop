@@ -5807,7 +5807,7 @@ tasks:
       运营者落实写法（HANDOFF 0.84）：文件名格式、错误 detail、no-store 与成功时的响应头照 app/api/product_images.py（沿用它的 _IMAGE_NAME、IMAGE_HEADERS 与两个错误，detail 为 image_not_found 与 image_store_unavailable）；文件名不是单例行当前记录的标志（含已被替换或移除的）即 404、不访问 R2；成功的响应长期缓存，所以不用 no-store 路由类，错误响应自行加 no-store；存储经 image_store 模块属性调用；处理函数为同步函数，R2 读取在线程池里执行。
       不做前端，不改服务层与模型，不改设计。
       设计闸门：DESIGN 1.20（提交 a870f78）第 15 条与 HANDOFF 0.84。拆分：提供接口与公开读取（7 个允许路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-211
     acceptance_criteria:
