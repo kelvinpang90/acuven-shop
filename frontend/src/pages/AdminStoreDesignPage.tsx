@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ChangeEvent, Dispatch, FormEvent, SetStateAction } from "react";
 
 import { readAdminStoreDesign, saveAdminStoreDesign } from "../api/adminStoreDesign";
@@ -15,7 +15,6 @@ import { FEATURED_COUNT } from "../api/catalog";
 import AdminFrame, { AdminAlert } from "../components/AdminFrame";
 import { PlaceholderShape } from "../components/ProductCard";
 import { DemoHint } from "../components/SiteFrame";
-import { BRAND } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { useCopy, useLanguage } from "../i18n/language";
 import { ADMIN_LOGIN_PATH, useRouter } from "../router";
@@ -23,14 +22,17 @@ import type { RoutePath } from "../router";
 import { SHOP_THEMES, THEME_ACCENTS } from "../storeDesign";
 import type { HomeBlock, HomeBlockSetting, ShopTheme } from "../storeDesign";
 import { startDeferred } from "./AdminOrderDetail";
+import AdminStoreLogo, { LogoMark, logoBroken } from "./AdminStoreLogo";
+import type { RereadOutcome } from "./AdminStoreLogo";
 
 // 后台店铺装修 A08（docs/UX.md 0.10 A08，视觉稿 A08-desktop 与 A08-phone）：用后台框架渲染，当前导航项为店铺装修。
 // 内容区为标题 admin.nav_store_design（h1）与其下的 admin.design_demo_note；手机线框与 A08-phone 不画标题（顶栏已是
 // admin.nav_store_design），h1 仍在页面里，由 site.css 在 767px 及以下只留给读屏。
 // 其下为表单（SHOP-TASK-064）：主题（10 款，按 THEME_ACCENTS 的顺序）、所选主题的主色、首页四个区块的顺序与显隐、
 // 精选商品的挑选（SHOP-TASK-065：最多 FEATURED_COUNT 件，可排序、移出，原已在精选里、之后下架的照列）与 common.save。
-// 不含标志图（Kelvin 2026-10-06 决定）。预览（SHOP-TASK-066）：桌面为表单右侧的预览栏，手机为精选之后、保存之前收起的 details，
-// 按表单当前（未保存）的主题与主色显示首页缩样，可切换浅色与深色。
+// 标志段（SHOP-TASK-215，UX 0.18 A08，AdminStoreLogo.tsx）在主色之后、首页区块之前：上传与移除各自立即生效，不算在表单里，保存不提交它；
+// 标志操作与保存互斥。预览（SHOP-TASK-066）：桌面为表单右侧的预览栏，手机为精选之后、保存之前收起的 details，
+// 按表单当前（未保存）的主题与主色显示首页缩样，可切换浅色与深色；缩样的页头显示已生效的标志。
 // 打开页面与切换界面语言时以界面语言调用 GET /api/admin/store-design?lang=，保存为 PUT（经 api/adminStoreDesign.ts）。
 // 401 换成登录页 A01；离开页面或切换语言时中止读取与进行中的保存，旧请求的结果不再更新页面。
 
@@ -257,6 +259,46 @@ export async function submitDesign(
   } else {
     moves.update(step);
   }
+}
+
+// 标志变化（上传或移除成功，或 403 后重新读取）：只换 base 里的 logo（与给出时的 CSRF 令牌）；表单的选择、保存进行中与各提示都不变，
+// 之后的保存照旧不提交标志（HANDOFF 0.84 第（7）点）。
+export function changeLogo(logo: string | null, csrfToken?: string): DesignChange {
+  return (current) =>
+    current.status === "ready" ? { ...current, base: { ...current.base, logo, csrf_token: csrfToken ?? current.base.csrf_token } } : current;
+}
+
+// 标志操作开始：只收起 admin.design_saved，表单与其他提示不变。
+export function hideSaved(state: DesignState): DesignState {
+  return state.status === "ready" ? { ...state, saved: false } : state;
+}
+
+// 标志操作 403 之后重新读取的结果：取到时只取新的 CSRF 令牌与当前 logo（changeLogo），其余设置与表单未保存的选择保留；401 为 login，
+// 网络中断为 network，其他失败为 failed（页面不变）。
+export function logoRereadStep(read: StoreDesignRead): DesignChange | Exclude<RereadOutcome, "ok"> {
+  switch (read.kind) {
+    case "ok":
+      return changeLogo(read.design.logo, read.design.csrf_token);
+    case "none":
+      return "login";
+    case "network":
+      return "network";
+    case "failed":
+      return "failed";
+  }
+}
+
+// 标志操作 403 之后由页面以界面语言重新读取装修设置；signal 中止之后不再更新。
+export async function rereadForLogo(language: Language, signal: AbortSignal, update: (change: DesignChange) => void): Promise<RereadOutcome> {
+  const read = await readAdminStoreDesign(language, signal);
+  const step = logoRereadStep(read);
+  if (typeof step === "string") {
+    return step;
+  }
+  if (!signal.aborted) {
+    update(step);
+  }
+  return "ok";
 }
 
 // 页面状态与它所属的界面语言：语言换了而新结果还没到时按读取中显示。
@@ -580,9 +622,10 @@ function PreviewModes({ mode, onMode }: { mode: PreviewMode; onMode: (mode: Prev
 
 // 首页缩样（UX A08「所选主题与主色的首页缩样」，视觉稿的预览框）：acs-admin__preview 内为设了表单当前主题、主色（第一项不设，同前台）
 // 与所选深浅色的 .acs 元素；内容固定、不随首页区块的顺序与显隐变化，依次为演示横幅、页头一行（品牌文字与 common.nav_cart，{count} 为 0）、
-// ★ home.demo_hint、主视觉（home.hero_title 与按钮样式的 home.hero_cta）、home.how_title 与商品卡。只用 span、div 与 p，
-// 没有链接、按钮或其他可交互元素。
-function ShopSample({ form, choices, mode }: { form: DesignForm; choices: readonly ProductChoice[]; mode: PreviewMode }) {
+// ★ home.demo_hint、主视觉（home.hero_title 与按钮样式的 home.hero_cta）、home.how_title 与商品卡。只用 span、div、p 与 img，
+// 没有链接、按钮或其他可交互元素。页头的品牌为已生效的标志（SHOP-TASK-215，UX 0.18 A08「预览与当前标志都显示已生效的标志」），
+// 没有标志或加载失败时为文字品牌，与标志段共用加载失败状态。
+function ShopSample({ form, choices, mode, logo, broken, onBroken }: Omit<PreviewProps, "onMode">) {
   const t = useCopy();
   const products = previewProducts(form.featured, choices);
   return (
@@ -598,7 +641,7 @@ function ShopSample({ form, choices, mode }: { form: DesignForm; choices: readon
           <span>{t("common.demo_banner_short")}</span>
         </div>
         <div className="site-admin-store-design__shop-head">
-          <span className="acs-brand">{BRAND}</span>
+          <LogoMark logo={logo} broken={broken} onBroken={onBroken} className="acs-brand" />
           <span>{t("common.nav_cart", { count: 0 })}</span>
         </div>
         <div className="site-admin-store-design__shop-body">
@@ -631,32 +674,36 @@ export interface PreviewProps {
   choices: readonly ProductChoice[];
   mode: PreviewMode;
   onMode: (mode: PreviewMode) => void;
+  // 已生效的标志（base.logo）、它是否加载失败与加载失败时的记录（SHOP-TASK-215）。
+  logo: string | null;
+  broken: boolean;
+  onBroken: (logo: string) => void;
 }
 
 // 桌面的预览栏（视觉稿右侧 460px 的 aside）：顶部为 admin.preview 与切换按钮，其下为缩样；767px 及以下由 site.css 隐藏。
-export function PreviewAside({ form, choices, mode, onMode }: PreviewProps) {
+export function PreviewAside({ onMode, ...sample }: PreviewProps) {
   const t = useCopy();
   return (
     <aside className="acs-admin__panel site-admin-store-design__aside">
       <div className="site-admin-store-design__preview-head">
         <span>{t("admin.preview")}</span>
-        <PreviewModes mode={mode} onMode={onMode} />
+        <PreviewModes mode={sample.mode} onMode={onMode} />
       </div>
-      <ShopSample form={form} choices={choices} mode={mode} />
+      <ShopSample {...sample} />
     </aside>
   );
 }
 
 // 手机的预览（UX A08 手机线框「▸ [admin.preview]」，A08-phone）：精选之后、保存之前，默认收起的 details，展开后为与桌面相同的
 // 切换按钮与缩样；768px 及以上由 site.css 隐藏。
-export function PreviewDetails({ form, choices, mode, onMode }: PreviewProps) {
+export function PreviewDetails({ onMode, ...sample }: PreviewProps) {
   const t = useCopy();
   return (
     <details className="acs-admin__panel site-admin-store-design__details">
       <summary>{t("admin.preview")}</summary>
       <div className="site-admin-store-design__preview-body">
-        <PreviewModes mode={mode} onMode={onMode} />
-        <ShopSample form={form} choices={choices} mode={mode} />
+        <PreviewModes mode={sample.mode} onMode={onMode} />
+        <ShopSample {...sample} />
       </div>
     </details>
   );
@@ -676,7 +723,17 @@ function DesignFormView({
   onFeaturedRemove,
   onFeaturedAdd,
   onSave,
-}: { state: ReadyState; mode: PreviewMode; onMode: (mode: PreviewMode) => void } & FormHandlers) {
+  links,
+  broken,
+  onBroken,
+}: {
+  state: ReadyState;
+  mode: PreviewMode;
+  onMode: (mode: PreviewMode) => void;
+  links: LogoLinks;
+  broken: boolean;
+  onBroken: (logo: string) => void;
+} & FormHandlers) {
   const t = useCopy();
   const { form } = state;
   return (
@@ -690,6 +747,17 @@ function DesignFormView({
       {state.alert !== null && <AdminAlert error={state.alert} />}
       <ThemeGroup form={form} onTheme={onTheme} />
       <AccentGroup form={form} onAccent={onAccent} />
+      <AdminStoreLogo
+        logo={state.base.logo}
+        broken={broken}
+        csrfToken={state.base.csrf_token}
+        locked={state.saving}
+        onLogo={links.onLogo}
+        onBroken={onBroken}
+        onReread={links.onLogoReread}
+        onLogin={links.onLogin}
+        onBusy={links.onLogoBusy}
+      />
       <BlocksGroup form={form} onShow={onShow} onMove={onMove} />
       <FeaturedGroup
         form={form}
@@ -698,9 +766,17 @@ function DesignFormView({
         onFeaturedRemove={onFeaturedRemove}
         onFeaturedAdd={onFeaturedAdd}
       />
-      <PreviewDetails form={form} choices={state.base.choices} mode={mode} onMode={onMode} />
+      <PreviewDetails
+        form={form}
+        choices={state.base.choices}
+        mode={mode}
+        onMode={onMode}
+        logo={state.base.logo}
+        broken={broken}
+        onBroken={onBroken}
+      />
       <div className="site-admin-store-design__save">
-        <button className="acs-admin__btn" type="submit" disabled={state.saving} aria-busy={state.saving}>
+        <button className="acs-admin__btn" type="submit" disabled={saveDisabled(state, links.logoBusy)} aria-busy={state.saving}>
           {t("common.save")}
         </button>
         {state.saved && <span role="status">{t("admin.design_saved")}</span>}
@@ -710,24 +786,54 @@ function DesignFormView({
   );
 }
 
-export interface AdminStoreDesignViewProps extends FormHandlers {
+// common.save 禁用：保存进行中，或标志操作进行中（两者互斥，HANDOFF 0.84 第（7）点）。
+export function saveDisabled(state: ReadyState, logoBusy: boolean): boolean {
+  return state.saving || logoBusy;
+}
+
+// 标志段由页面接上的部分（SHOP-TASK-215）：logoBusy 为标志操作进行中；onLogo 换上新的 logo，onLogoReread 为标志操作 403 后的重新读取，
+// onLogin 回到 A01，onLogoBusy 为标志操作开始与结束（须为不变的函数）。
+export interface LogoLinks {
+  logoBusy: boolean;
+  onLogo: (logo: string | null) => void;
+  onLogoReread: (signal: AbortSignal) => Promise<RereadOutcome>;
+  onLogin: () => void;
+  onLogoBusy: (busy: boolean) => void;
+}
+
+export interface AdminStoreDesignViewProps extends FormHandlers, LogoLinks {
   state: DesignState;
 }
 
 // 页头之下为表单区：读取中标 aria-busy、不显示表单；读取失败时只有提示。取得设置后另有预览：桌面为表单区右侧的预览栏，
 // 手机为表单里的 details（两份按 site.css 的媒体查询显隐，共用同一个深浅色选择，默认浅色）。
-export function AdminStoreDesignView({ state, ...handlers }: AdminStoreDesignViewProps) {
+// 标志的加载失败按提供路径记在这里，标志段与两份预览共用（logoBroken）。
+export function AdminStoreDesignView({ state, logoBusy, onLogo, onLogoReread, onLogin, onLogoBusy, ...handlers }: AdminStoreDesignViewProps) {
   const t = useCopy();
   const [mode, setMode] = useState<PreviewMode>("light");
+  const [brokenLogo, setBrokenLogo] = useState<string | null>(null);
+  const links: LogoLinks = { logoBusy, onLogo, onLogoReread, onLogin, onLogoBusy };
+  const broken = state.status === "ready" && logoBroken(state.base.logo, brokenLogo);
   return (
     <div className="site-admin-store-design">
       <h1 className="acs-admin__h site-admin-store-design__title">{t("admin.nav_store_design")}</h1>
       <p className="site-admin-store-design__note">{t("admin.design_demo_note")}</p>
       <div className="site-admin-store-design__body" aria-busy={state.status === "loading"}>
         {state.status === "failed" && <AdminAlert error={state.error} />}
-        {state.status === "ready" && <DesignFormView state={state} mode={mode} onMode={setMode} {...handlers} />}
+        {state.status === "ready" && (
+          <DesignFormView state={state} mode={mode} onMode={setMode} {...handlers} links={links} broken={broken} onBroken={setBrokenLogo} />
+        )}
       </div>
-      {state.status === "ready" && <PreviewAside form={state.form} choices={state.base.choices} mode={mode} onMode={setMode} />}
+      {state.status === "ready" && (
+        <PreviewAside
+          form={state.form}
+          choices={state.base.choices}
+          mode={mode} onMode={setMode}
+          logo={state.base.logo}
+          broken={broken}
+          onBroken={setBrokenLogo}
+        />
+      )}
     </div>
   );
 }
@@ -752,14 +858,36 @@ export function AdminStoreDesignContent() {
     });
   }, [language, replace]);
 
+  // 标志操作进行中（由标志段告诉页面，common.save 因此禁用）；开始时收起 admin.design_saved。
+  const [logoBusy, setLogoBusy] = useState(false);
+  const onLogoBusy = useCallback((busy: boolean) => {
+    setLogoBusy(busy);
+    if (busy) {
+      setEntry((current) => ({ language: current.language, state: hideSaved(current.state) }));
+    }
+  }, []);
+
   const state = shownState(entry, language);
   const edit = (change: (form: DesignForm) => DesignForm) => {
     setEntry((current) => (current.language === language ? { language, state: editForm(current.state, change) } : current));
+  };
+  // 标志变化与 403 后重新读取：只改当前语言下的状态。
+  const updateLogo = (change: DesignChange) => {
+    setEntry((current) => (current.language === language ? { language, state: change(current.state) } : current));
   };
 
   return (
     <AdminStoreDesignView
       state={state}
+      logoBusy={logoBusy}
+      onLogo={(logo) => {
+        updateLogo(changeLogo(logo));
+      }}
+      onLogoReread={(signal) => rereadForLogo(language, signal, updateLogo)}
+      onLogin={() => {
+        replace(ADMIN_LOGIN_PATH);
+      }}
+      onLogoBusy={onLogoBusy}
       onTheme={(theme) => {
         edit((form) => chooseTheme(form, theme));
       }}
@@ -783,7 +911,7 @@ export function AdminStoreDesignContent() {
       }}
       onSave={() => {
         const controller = lifetime.current;
-        if (state.status !== "ready" || state.saving || controller === null) {
+        if (state.status !== "ready" || saveDisabled(state, logoBusy) || controller === null) {
           return;
         }
         setEntry({ language, state: startSaving(state) });
