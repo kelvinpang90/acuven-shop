@@ -335,8 +335,9 @@ def test_read_does_not_flush_pending_or_dirty_changes(db: Session) -> None:
 
 
 def test_endpoint_returns_the_fields(db: Session, client: TestClient) -> None:
-    """「装修保存后对所有访客生效」；Kelvin 2026-10-06「公开读取首版不含标志图」：接口返回主题、
-    主色、按位置排序的区块（区块名与是否显示）与精选 slug，字段只有这四个。"""
+    """「装修保存后对所有访客生效」；DESIGN 1.20 第 15 条「公开的 GET /api/store-design 与后台的
+    装修读取都新增 logo 字段：有标志时为上面的提供路径，没有时为 null」：接口返回主题、主色、
+    按位置排序的区块（区块名与是否显示）、精选 slug 与 logo，字段只有这五个。"""
     _setting(db, "malam", "lime")
     _blocks(
         db,
@@ -361,8 +362,9 @@ def test_endpoint_returns_the_fields(db: Session, client: TestClient) -> None:
             {"block": "categories", "visible": True},
         ],
         "featured_slugs": ["mug", "lamp"],
+        "logo": None,
     }
-    assert list(response.json()) == ["theme", "accent", "home_blocks", "featured_slugs"]
+    assert list(response.json()) == ["theme", "accent", "home_blocks", "featured_slugs", "logo"]
 
 
 def test_endpoint_returns_null_accent(db: Session, client: TestClient) -> None:
@@ -373,6 +375,7 @@ def test_endpoint_returns_null_accent(db: Session, client: TestClient) -> None:
         "accent": None,
         "home_blocks": [{"block": block, "visible": True} for block in HOME_BLOCKS],
         "featured_slugs": [],
+        "logo": None,
     }
 
     _setting(db, "galeri", None)

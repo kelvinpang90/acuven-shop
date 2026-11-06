@@ -2,8 +2,10 @@
 
 依据 docs/REQUIREMENTS.md「店铺装修」、docs/UX.md 0.8 的 A08 与 P01 以及 docs/HANDOFF.md 0.34
 记录的 Kelvin 2026-10-06 决定，读取规则见 app/services/store_design.py。返回主题、主色（为空时
-null，即该主题的默认主色）、按位置排序的四个首页区块与按位置排序且前台目录可见的精选商品 slug；
-不含标志图（Kelvin 2026-10-06：存储与公开读取首版不含标志图）。
+null，即该主题的默认主色）、按位置排序的四个首页区块、按位置排序且前台目录可见的精选商品 slug
+与标志（logo），依据 docs/DESIGN.md 1.20（提交 a870f78）「计价、优惠、积分与库存」第 15 条「读取
+与显示」：有标志时为提供路径 /api/store-logos/<文件名>.webp（app/api/store_logos.py），没有时为
+null。
 
 处理函数与依赖产生的全部响应（含未配置数据库时 get_session 的 503）都带 Cache-Control: no-store，
 由 app/api/order_lookup.py 的路由类统一加上，装修保存后访客的下一次请求即读到新设置；路径存在
@@ -42,6 +44,8 @@ class StoreDesignOut(BaseModel):
     accent: str | None
     home_blocks: list[HomeBlockOut]
     featured_slugs: list[str]
+    # 标志的提供路径 /api/store-logos/<文件名>.webp；没有标志时为空。
+    logo: str | None
 
 
 @router.get("", response_model=StoreDesignOut)
@@ -54,4 +58,5 @@ def store_design(session: SessionDep) -> StoreDesignOut:
             HomeBlockOut(block=block.block, visible=block.visible) for block in design.home_blocks
         ],
         featured_slugs=design.featured_slugs,
+        logo=design.logo,
     )
