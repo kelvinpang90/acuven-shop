@@ -15,6 +15,7 @@ import {
   StoreDesignProvider,
   THEME_ACCENTS,
   initialStoreDesign,
+  isStoreLogoPath,
   loadStoreDesign,
   parseStoreDesignResponse,
   readRememberedDesign,
@@ -160,6 +161,39 @@ describe("reading the store design response", () => {
     ["more than four", ["a", "b", "c", "d", "e"]],
   ])("rejects featured slugs that are %s", (_label, featured) => {
     expect(parseStoreDesignResponse({ ...response, featured_slugs: featured })).toBeNull();
+  });
+});
+
+describe("store logo paths", () => {
+  // 接口记录 app/api/admin_store_logo.py 的 LogoOut「标志的提供路径 /api/store-logos/<文件名>.webp」与 HANDOFF 0.84「logo 只认
+  // /api/store-logos/ 加 32 位小写十六进制加 .webp 的字符串」：恰为这一形状的路径合格。
+  it.each(["/api/store-logos/0123456789abcdef0123456789abcdef.webp", "/api/store-logos/ffffffffffffffffffffffffffffffff.webp"])(
+    "accepts %s",
+    (path) => {
+      expect(isStoreLogoPath(path)).toBe(true);
+    },
+  );
+
+  // 同一句：大写、31 或 33 位、非十六进制、其他前缀与扩展名、前后多出字符、空串与非字符串（null 也不是路径，读取另行允许 null）都不合格。
+  it.each<[string, unknown]>([
+    ["upper case", "/api/store-logos/0123456789ABCDEF0123456789ABCDEF.webp"],
+    ["one upper-case digit", "/api/store-logos/0123456789abcdeF0123456789abcdef.webp"],
+    ["31 digits", "/api/store-logos/0123456789abcdef0123456789abcde.webp"],
+    ["33 digits", "/api/store-logos/0123456789abcdef0123456789abcdef0.webp"],
+    ["a non-hex letter", "/api/store-logos/0123456789abcdeg0123456789abcdef.webp"],
+    ["another prefix", "/api/product-images/0123456789abcdef0123456789abcdef.webp"],
+    ["no leading slash", "api/store-logos/0123456789abcdef0123456789abcdef.webp"],
+    ["an absolute URL", "https://shop.example/api/store-logos/0123456789abcdef0123456789abcdef.webp"],
+    ["another extension", "/api/store-logos/0123456789abcdef0123456789abcdef.png"],
+    ["upper-case extension", "/api/store-logos/0123456789abcdef0123456789abcdef.WEBP"],
+    ["a query string", "/api/store-logos/0123456789abcdef0123456789abcdef.webp?v=1"],
+    ["a trailing newline", "/api/store-logos/0123456789abcdef0123456789abcdef.webp\n"],
+    ["empty", ""],
+    ["null", null],
+    ["a number", 1],
+    ["an object", { logo: "/api/store-logos/0123456789abcdef0123456789abcdef.webp" }],
+  ])("rejects %s", (_label, value) => {
+    expect(isStoreLogoPath(value)).toBe(false);
   });
 });
 

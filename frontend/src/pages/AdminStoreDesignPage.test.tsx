@@ -75,6 +75,7 @@ const DETAIL: AdminStoreDesignDetail = {
     { product_id: 3, slug: "ceramic-mug", name: "Ceramic Mug" },
     { product_id: 7, slug: "crew-neck-tee", name: "Crew Neck Tee" },
   ],
+  logo: null,
   csrf_token: "design-csrf-1",
 };
 
@@ -1335,7 +1336,7 @@ describe("saving", () => {
     const moves = fakeMoves(startSaving(readyState({ form })));
     await submitDesign(DETAIL, form, language, new AbortController().signal, moves.target);
     expect(moves.events).toEqual(["update ready"]);
-    const base = { ...ZH_SAVED, choices: DETAIL.choices, csrf_token: DETAIL.csrf_token };
+    const base = { ...ZH_SAVED, choices: DETAIL.choices, logo: DETAIL.logo, csrf_token: DETAIL.csrf_token };
     expect(moves.current).toEqual({ status: "ready", base, form: formOf(ZH_SAVED), saving: false, saved: true, alert: null, saveError: null });
     expect(saveInput(base, formOf(ZH_SAVED)).accent).toBeNull();
     const save = element(render(moves.current, language), "div", "site-admin-store-design__save");
