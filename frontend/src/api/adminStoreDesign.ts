@@ -1,12 +1,13 @@
 import type { Language } from "../i18n/copy";
-import { parseStoreDesign } from "../storeDesign";
+import { isStoreLogoPath, parseStoreDesign } from "../storeDesign";
 import type { HomeBlockSetting, ShopTheme } from "../storeDesign";
 import { FEATURED_COUNT } from "./catalog";
 import { CSRF_HEADER } from "./pay";
 
 // 后台店铺装修 A08 的接口（app/api/admin_store_design.py，SHOP-TASK-051 与 SHOP-TASK-061）：读取 GET /api/admin/store-design?lang=
 // 与保存 PUT /api/admin/store-design?lang=。后台会话凭服务端发的 HttpOnly cookie；读取不要求 CSRF，保存带读取返回的 CSRF 令牌。
-// 唯一的查询参数是语言 lang，只决定商品名称的语言。只取 SHOP-TASK-051 记录段列出的字段，多出的字段不带进结果；响应体不合格算失败。
+// 唯一的查询参数是语言 lang，只决定商品名称的语言。只取 SHOP-TASK-051 记录段列出的字段（读取另有 SHOP-TASK-212 加的 logo），
+// 多出的字段不带进结果；响应体不合格算失败。标志的上传与移除见 adminStoreLogo.ts。
 // 主题与主色以 storeDesign.ts 的 THEME_ACCENTS 为准，区块以 HOME_BLOCKS 为准（与前台读取公开接口用同一校验）。
 // 页面只按状态码区分，不显示错误体。
 
@@ -35,9 +36,11 @@ export interface AdminStoreDesign {
   featured: FeaturedProduct[];
 }
 
-// 读取的结果：保存后的四个字段，加上可挑选的商品（按商品 ID 升序）与只用于保存请求头的 CSRF 令牌。
+// 读取的结果：保存后的四个字段，加上可挑选的商品（按商品 ID 升序）、标志的提供路径（没有标志时为 null；SHOP-TASK-212，
+// DESIGN 1.20 第 15 条，A08 的保存不读写标志、保存的响应不含 logo）与只用于保存请求头的 CSRF 令牌。
 export interface AdminStoreDesignDetail extends AdminStoreDesign {
   choices: ProductChoice[];
+  logo: string | null;
   csrf_token: string;
 }
 
@@ -130,18 +133,18 @@ function readDesign(value: unknown): AdminStoreDesign | null {
   };
 }
 
-// 读取的响应体：保存的那四个字段，加上商品 ID 不重复的 choices 与非空的 csrf_token。
+// 读取的响应体：保存的那四个字段，加上商品 ID 不重复的 choices、为 null 或合格提供路径的 logo（isStoreLogoPath）与非空的 csrf_token。
 function readDetail(value: unknown): AdminStoreDesignDetail | null {
   const design = readDesign(value);
   if (design === null) {
     return null;
   }
-  const { choices, csrf_token } = value as Record<string, unknown>;
+  const { choices, logo, csrf_token } = value as Record<string, unknown>;
   const items = readProducts(choices, readChoice);
-  if (items === null || !isFilled(csrf_token)) {
+  if (items === null || !(logo === null || isStoreLogoPath(logo)) || !isFilled(csrf_token)) {
     return null;
   }
-  return { ...design, choices: items, csrf_token };
+  return { ...design, choices: items, logo, csrf_token };
 }
 
 export function adminStoreDesignUrl(language: Language): string {
