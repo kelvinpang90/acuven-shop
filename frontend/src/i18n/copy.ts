@@ -2616,9 +2616,9 @@ export const COPY = {
     ms: "Selesai",
   },
   "admin.stock_reset_failed": {
-    en: "Failed — the operator has been alerted",
-    zh: "失败——已告警运营者",
-    ms: "Gagal — pengendali telah dimaklumkan",
+    en: "Failed — an operator alert has been logged",
+    zh: "失败——已记录运营告警",
+    ms: "Gagal — amaran pengendali telah direkodkan",
   },
   "admin.stock_reset_note": {
     en: "Resets restore today's stock only. Past orders, refunds and points are not changed.",
@@ -2991,14 +2991,14 @@ export const COPY = {
     ms: "Tiada apa untuk dikembalikan di Stripe: item yang diluluskan dibayar sepenuhnya dengan kupon atau mata.",
   },
   "admin.stripe_refund_not_sent": {
-    en: "This refund couldn't be sent to Stripe. The operator has been alerted; check this payment in the Stripe dashboard.",
-    zh: "这笔退款未能发送到 Stripe，已告警运营者；请到 Stripe 后台核对这笔付款。",
-    ms: "Bayaran balik ini tidak dapat dihantar ke Stripe. Pengendali telah dimaklumkan; semak pembayaran ini di papan pemuka Stripe.",
+    en: "This refund couldn't be sent to Stripe. An operator alert has been logged; check this payment in the Stripe dashboard.",
+    zh: "这笔退款未能发送到 Stripe，已记录运营告警；请到 Stripe 后台核对这笔付款。",
+    ms: "Bayaran balik ini tidak dapat dihantar ke Stripe. Amaran pengendali telah direkodkan; semak pembayaran ini di papan pemuka Stripe.",
   },
   "admin.stripe_refund_blocked": {
-    en: "This refund can't be sent to Stripe because it would exceed the amount paid. The operator has been alerted.",
-    zh: "这笔退款会超过付款金额，无法发送到 Stripe，已告警运营者。",
-    ms: "Bayaran balik ini tidak boleh dihantar ke Stripe kerana ia akan melebihi amaun yang dibayar. Pengendali telah dimaklumkan.",
+    en: "This refund can't be sent to Stripe because it would exceed the amount paid. An operator alert has been logged.",
+    zh: "这笔退款会超过付款金额，无法发送到 Stripe，已记录运营告警。",
+    ms: "Bayaran balik ini tidak boleh dihantar ke Stripe kerana ia akan melebihi amaun yang dibayar. Amaran pengendali telah direkodkan.",
   },
 } as const satisfies Record<string, CopyEntry>;
 
