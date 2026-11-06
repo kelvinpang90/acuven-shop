@@ -17,6 +17,10 @@ body { margin: 0; }
 /* 请求失败的提示占据所在区块的位置 */
 .site-notice { margin: 0; }
 
+/* 店铺标志（P-logo-header-footer）：页头与页脚同一尺寸，高 40px、宽按比例且至多 240px，按比例显示不拉伸。
+   品牌链接与页脚品牌分别是页头行（flex）与页脚主体（grid）的子项，img 以块显示即可 */
+.site-brand-logo { display: block; height: 40px; width: auto; max-width: 240px; object-fit: contain; }
+
 /* 页头 */
 .site-header__end { margin-left: auto; }
 .site-header__stack { flex-direction: column; align-items: flex-start; gap: 16px; }
@@ -793,6 +797,8 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-header__lang-button { gap: 4px; padding: 0 6px; }
   .site-header__search { order: 1; flex: 1 1 100%; max-width: none; }
   .site-header__cart { display: inline-flex; align-items: center; min-height: 44px; }
+  /* 店铺标志：高 28px、宽按比例且至多 160px（页脚同） */
+  .site-brand-logo { height: 28px; max-width: 160px; }
 
   .site-footer { grid-template-columns: minmax(0, 1fr); }
   /* WhatsApp 按钮（P01-phone、P14-phone）：占满宽度；页脚的按钮文字靠左，内边距 12px 16px */
