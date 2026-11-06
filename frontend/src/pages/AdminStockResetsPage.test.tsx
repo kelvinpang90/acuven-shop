@@ -413,7 +413,7 @@ describe("desktop table", () => {
       expect(classes(tags(cells[2] ?? "", "td")[0] ?? "")).toContain("site-admin-stock-resets__num");
       expect(classes(tags(rows[index * 2 + 1] ?? "", "tr")[0] ?? "")).toContain("site-admin-stock-resets__detail-row");
     });
-    expect(COPY["admin.stock_reset_failed"].en).toBe("Failed — the operator has been alerted");
+    expect(COPY["admin.stock_reset_failed"].en).toBe("Failed — an operator alert has been logged");
   });
 
   // SHOP-TASK-060 验收第 3 条「每天的明细用原生 details 与 summary 展开（summary 文字为 admin.col_sku_count，照视觉稿；
