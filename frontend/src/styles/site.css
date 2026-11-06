@@ -606,6 +606,17 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-store-design__cards .acs-pcard__img { aspect-ratio: 1 / 1; }
 .site-admin-store-design__cards .acs-pcard__name { overflow-wrap: anywhere; }
 .site-admin-store-design__details { display: none; }
+/* A08 的标志段（SHOP-TASK-215，A08-logo-states 与 A08-desktop）：面板写法同表单各组（去掉 fieldset 的外边距，内边距 18px，组内间距 12px，
+   legend 左右内边距 4px）；当前标志、admin.upload、admin.logo_remove 与 admin.image_uploading 一行（间距 12px，垂直居中，可换行）；文字品牌的框内边距
+   10px 14px，有标志时 6px 10px；标志高 36px、宽按比例至多 180px，按比例完整显示（object-fit: contain）。预览缩样页头里的标志用同一尺寸（视觉稿未画）。
+   说明在 legend 之下各自成段，admin.logo_hint、admin.image_rules 与 admin.logo_rules 同一段。框的虚线边框、圆角、白底、文字品牌的字体与说明的字号
+   site.css 写不了，记在任务记录的偏离里。确认框沿用 .site-admin__confirm */
+.site-admin-logo { display: grid; gap: 12px; min-width: 0; margin: 0; padding: 18px; }
+.site-admin-logo > legend { padding: 0 4px; }
+.site-admin-logo__row, .site-admin-logo__actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.site-admin-logo__current { display: inline-flex; align-items: center; padding: 10px 14px; }
+.site-admin-logo__current:has(> img) { padding: 6px 10px; }
+.site-admin-logo__img { display: block; height: 36px; width: auto; max-width: 180px; object-fit: contain; }
 
 /* 后台站点设置 A09 的页头（A09-stripe-desktop）：内容最宽 720px，标题与之后各块上下排列（间距 16px）。
    支付方式表单由 SHOP-TASK-139 接上，短信验证一组由 SHOP-TASK-169 接上 */
@@ -1236,6 +1247,13 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-store-design__details { display: block; padding: 12px 14px; }
   .site-admin-store-design__details > summary { min-height: 32px; padding: 6px 0; cursor: pointer; }
   .site-admin-store-design__preview-body { display: grid; gap: 12px; padding-top: 12px; }
+  /* 标志段（A08-phone）：内边距 14px、组内间距 8px（同表单各组）；当前标志单独一行、靠左（文字品牌的框内边距 8px 12px），其下 admin.upload 与
+     admin.logo_remove 一行（间距 8px，各至少 44px 高，照本页其他手机按钮），admin.image_uploading 接在其后 */
+  .site-admin-logo { gap: 8px; padding: 14px; }
+  .site-admin-logo__row { display: grid; gap: 8px; justify-items: start; }
+  .site-admin-logo__actions { gap: 8px; }
+  .site-admin-logo__current { padding: 8px 12px; }
+  .site-admin-logo__actions > .acs-admin__btn { justify-content: center; min-height: 44px; }
 
   /* 后台站点设置的页头（A09-stripe-phone）：顶栏已是 admin.nav_settings，页面里不显示标题，h1 只留给读屏；各块间距 14px */
   .site-admin-settings { gap: 14px; }

@@ -5877,7 +5877,7 @@ tasks:
       标志操作的 403 由页面重新读取装修设置，只取新的 CSRF 令牌与当前 logo，表单未保存的选择保留，显示 common.error_retry（该次读取为 none 时回到 A01，network 显示 common.network_check，其他失败显示 common.error_retry，标志保留当前显示）；网络中断显示 common.network_check，与 A04 图片和 A08 保存相同。
       设计闸门：不适用（标志的格式、大小、像素、元数据与存放规则在 SHOP-TASK-209 至 213 的服务端，依据 DESIGN 1.20 第 15 条；页面只做格式与大小的初步检查，不碰金额与个人资料）。
       拆分：A08 的标志一层（9 个允许路径：新组件与测试，页面与页面测试只为接入，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-214
     acceptance_criteria:

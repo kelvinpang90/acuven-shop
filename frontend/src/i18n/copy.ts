@@ -2790,6 +2790,41 @@ export const COPY = {
     zh: "已保存，前台已改用这些设置。",
     ms: "Disimpan. Kedai kini menggunakan tetapan ini.",
   },
+  "admin.logo": {
+    en: "Logo",
+    zh: "店铺标志",
+    ms: "Logo",
+  },
+  "admin.logo_hint": {
+    en: "Shown instead of the ACUVEN SHOP text in the storefront header and footer.",
+    zh: "在前台页头与页脚代替文字 ACUVEN SHOP 显示。",
+    ms: "Dipaparkan menggantikan teks ACUVEN SHOP pada pengepala dan pengaki kedai.",
+  },
+  "admin.logo_remove": {
+    en: "Remove logo",
+    zh: "移除标志",
+    ms: "Buang logo",
+  },
+  "admin.logo_rules": {
+    en: "40–4,000 pixels on each side, with the longer side at least 200. Location and other photo data are removed, and the original file isn't kept.",
+    zh: "宽与高 40 到 4,000 像素，长边至少 200 像素。拍摄地点等照片资料会被去掉，不保留原文件。",
+    ms: "Setiap sisi 40–4,000 piksel, dengan sisi lebih panjang sekurang-kurangnya 200. Lokasi dan data foto lain dibuang, dan fail asal tidak disimpan.",
+  },
+  "admin.logo_immediate": {
+    en: "Logo changes are saved straight away and don't need Save.",
+    zh: "标志的上传与移除立即生效，不需要点保存。",
+    ms: "Perubahan logo disimpan serta-merta dan tidak memerlukan Simpan.",
+  },
+  "admin.logo_invalid": {
+    en: "This image can't be used. It must be a single still image, 40–4,000 pixels on each side, with the longer side at least 200.",
+    zh: "这张图片不能使用：须为单张静态图，宽与高都在 40 到 4,000 像素之间，长边至少 200 像素。",
+    ms: "Imej ini tidak boleh digunakan. Ia mesti satu imej pegun, 40–4,000 piksel pada setiap sisi, dengan sisi lebih panjang sekurang-kurangnya 200.",
+  },
+  "admin.logo_remove_confirm": {
+    en: "Remove the logo? It can't be restored; upload it again if you need it.",
+    zh: "移除店铺标志？移除后无法恢复，需要时请重新上传。",
+    ms: "Buang logo? Ia tidak boleh dipulihkan; muat naik semula jika perlu.",
+  },
   "admin.logout": {
     en: "Log out",
     zh: "退出登录",
