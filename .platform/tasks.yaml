@@ -5912,7 +5912,7 @@ tasks:
       标志以 img 显示，alt 为 BRAND（ACUVEN SHOP），页头仍在链到首页的链接里；加载失败（含 503）时页头与页脚都退回文字品牌，logo 换成另一个路径时重新尝试显示；尺寸照画板 P-logo-header-footer（桌面高 40 像素、宽按比例且至多 240 像素，手机高 28 像素、宽按比例且至多 160 像素，页脚同页头），按比例显示、不拉伸变形（object-fit 设为 contain）；标志按原图显示，不随主题与深浅色改色（Kelvin 2026-11-05 决定）。
       设计闸门：不适用（只显示公开接口给的图片，不碰金额与个人资料；标志的规则在服务端）。
       拆分：前台全局框架一层（9 个允许路径：读取模块与测试、框架与测试，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-213
       - SHOP-TASK-214
