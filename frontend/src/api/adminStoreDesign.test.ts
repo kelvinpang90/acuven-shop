@@ -24,7 +24,9 @@ const CHOICES = [
   { product_id: 7, slug: "soy-wax-candle", name: "Soy wax candle" },
 ];
 const SAVED = { theme: "batik", accent: "sogan", home_blocks: BLOCKS, featured: FEATURED };
-const DETAIL = { ...SAVED, choices: CHOICES, csrf_token: "csrf-abc" };
+const DETAIL = { ...SAVED, choices: CHOICES, logo: null, csrf_token: "csrf-abc" };
+// 标志的提供路径（app/api/admin_store_design.py 的 AdminStoreDesignOut：「标志的提供路径 /api/store-logos/<文件名>.webp」）。
+const LOGO = "/api/store-logos/0123456789abcdef0123456789abcdef.webp";
 const INPUT: StoreDesignInput = {
   theme: "batik",
   accent: "sogan",
@@ -140,7 +142,7 @@ describe("reading the store design", () => {
     stubFetch(
       json(200, {
         ...DETAIL,
-        logo: "ignored",
+        logo: null,
         home_blocks: BLOCKS.map((setting) => ({ ...setting, position: 1 })),
         featured: FEATURED.map((item) => ({ ...item, price_sen: 1000 })),
         choices: CHOICES.map((item) => ({ ...item, published: true })),
@@ -220,6 +222,32 @@ describe("reading the store design", () => {
     stubFetch(new Response("<html>", { status: 200 }));
     await expect(readAdminStoreDesign("en")).resolves.toEqual({ kind: "failed" });
   });
+
+  // 接口记录 app/api/admin_store_design.py「读取带 logo」与 AdminStoreDesignOut 的「logo: str | None……没有标志时为空」：logo 为 null
+  // 与合格的提供路径都原样带进结果。
+  it.each<[string, string | null]>([
+    ["no logo", null],
+    ["a logo path", LOGO],
+  ])("keeps the logo: %s", async (_name, logo) => {
+    stubFetch(json(200, { ...DETAIL, logo }));
+    await expect(readAdminStoreDesign("en")).resolves.toEqual({ kind: "ok", design: { ...DETAIL, logo } });
+  });
+
+  // DESIGN 1.20 第 15 条与 HANDOFF 0.84「logo 只认 /api/store-logos/ 加 32 位小写十六进制加 .webp 的字符串或 null」：logo 缺少，
+  // 或为大写、31 位、其他前缀与扩展名、空串、非字符串时，整个读取为 failed。
+  it.each<[string, unknown]>([
+    ["logo missing", { ...DETAIL, logo: undefined }],
+    ["logo in upper case", { ...DETAIL, logo: "/api/store-logos/0123456789ABCDEF0123456789ABCDEF.webp" }],
+    ["logo with 31 digits", { ...DETAIL, logo: "/api/store-logos/0123456789abcdef0123456789abcde.webp" }],
+    ["logo with another prefix", { ...DETAIL, logo: "/api/product-images/0123456789abcdef0123456789abcdef.webp" }],
+    ["logo with another extension", { ...DETAIL, logo: "/api/store-logos/0123456789abcdef0123456789abcdef.png" }],
+    ["logo empty", { ...DETAIL, logo: "" }],
+    ["logo a number", { ...DETAIL, logo: 1 }],
+    ["logo an object", { ...DETAIL, logo: { path: LOGO } }],
+  ])("treats a malformed logo as a failure: %s", async (_name, body) => {
+    stubFetch(json(200, body));
+    await expect(readAdminStoreDesign("en")).resolves.toEqual({ kind: "failed" });
+  });
 });
 
 describe("saving the store design", () => {
@@ -266,6 +294,18 @@ describe("saving the store design", () => {
     stubFetch(json(200, { ...SAVED, choices: CHOICES, csrf_token: "csrf-abc", extra: 1 }), json(200, SAVED));
     await expect(saveAdminStoreDesign(INPUT, "csrf-abc", "en")).resolves.toEqual({ kind: "ok", design: SAVED });
     await expect(saveAdminStoreDesign(INPUT, "csrf-abc", "en")).resolves.toEqual({ kind: "ok", design: SAVED });
+  });
+
+  // 接口记录 app/api/admin_store_design.py「A08 的保存不读写标志，保存的响应不含 logo」：保存的请求体不带 logo，保存的结果也不带 logo
+  // （响应里多出 logo 时不带进结果，也不因它不合格而失败）。
+  it.each<[string, unknown]>([
+    ["a logo path", LOGO],
+    ["a malformed logo", "ignored"],
+  ])("neither sends nor keeps a logo when saving: %s", async (_name, logo) => {
+    const calls = stubFetch(json(200, { ...SAVED, logo }));
+    const withLogo = { ...INPUT, logo: LOGO };
+    await expect(saveAdminStoreDesign(withLogo, "csrf-abc", "en")).resolves.toEqual({ kind: "ok", design: SAVED });
+    expect(Object.keys(JSON.parse(calls[0]?.init.body as string) as object)).not.toContain("logo");
   });
 
   // SHOP-TASK-063 验收第 3 条「保存结果归为 ok、none（401）、csrf（403）、failed（含 422 与其他状态）与 network」。

@@ -141,6 +141,14 @@ export function parseStoreDesignResponse(value: unknown): StoreDesignResponse | 
   return design === null || featuredSlugs === null ? null : { design, featuredSlugs };
 }
 
+// 店铺标志的提供路径（DESIGN 1.20 第 15 条，HANDOFF 0.84）：恰为 /api/store-logos/ 加 32 位小写十六进制加 .webp。
+// 后台读取（api/adminStoreDesign.ts）、标志的上传（api/adminStoreLogo.ts）与页头页脚共用这一判断。
+const STORE_LOGO_PATH = /^\/api\/store-logos\/[0-9a-f]{32}\.webp$/;
+
+export function isStoreLogoPath(value: unknown): value is string {
+  return typeof value === "string" && STORE_LOGO_PATH.test(value);
+}
+
 // 本浏览器记住的设置；没有、不合格或读取失败时为 null。
 export function readRememberedDesign(storage: StoreDesignStorage | null): StoreDesign | null {
   if (!storage) {
