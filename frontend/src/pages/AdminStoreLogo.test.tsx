@@ -136,6 +136,11 @@ function buttons(html: string): string[] {
   return tags(element(html, "span", "site-admin-logo__actions"), "button");
 }
 
+// 同上两个按钮，各自的开始标签与按钮里的文字。
+function buttonElements(html: string): { tag: string; text: string[] }[] {
+  return [...element(html, "span", "site-admin-logo__actions").matchAll(/(<button\b[^>]*>)([\s\S]*?)<\/button>/g)].map((m) => ({ tag: m[1] ?? "", text: textNodes(m[2] ?? "") }));
+}
+
 type AnyElement = ReactElement<Record<string, unknown>>;
 
 // 元素树：展开子组件（直接调用，仍在语言的上下文里），用来取按钮与图片的处理函数（不模拟点击）。
@@ -231,7 +236,7 @@ describe("showing the logo", () => {
     expect(tags(html, "img")).toEqual([]);
     expect(element(html, "span", "site-admin-logo__current")).toBe(`<span class="site-admin-logo__current"><span>${BRAND}</span></span>`);
     expect(BRAND).toBe("ACUVEN SHOP");
-    expect(buttons(html).map((tag) => [textNodes(tag), disabled(tag)])).toEqual([
+    expect(buttonElements(html).map(({ tag, text }) => [text, disabled(tag)])).toEqual([
       [[COPY["admin.upload"][language]], false],
       [[COPY["admin.logo_remove"][language]], true],
     ]);
