@@ -714,6 +714,7 @@ def test_save_writes_everything_and_another_session_reads_it(
         "accent": "sogan",
         "home_blocks": body["home_blocks"],
         "featured_slugs": ["mug", "lamp"],
+        "logo": None,
     }
     assert _ok(_get(client, token))["featured"] == body["featured"]
 

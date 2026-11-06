@@ -37,6 +37,7 @@ from app.api.regions import router as regions_router
 from app.api.site_settings import router as site_settings_router
 from app.api.sms import router as sms_router
 from app.api.store_design import router as store_design_router
+from app.api.store_logos import router as store_logos_router
 from app.api.stripe_pay import router as stripe_pay_router
 from app.api.stripe_webhook import router as stripe_webhook_router
 from app.core.config import Settings, get_settings
@@ -54,6 +55,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(regions_router)
     app.include_router(site_settings_router)
     app.include_router(store_design_router)
+    app.include_router(store_logos_router)
     app.include_router(orders_router)
     app.include_router(pay_router)
     app.include_router(stripe_pay_router)
