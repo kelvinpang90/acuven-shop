@@ -20,11 +20,13 @@ import {
   AdminStoreDesignContent,
   AdminStoreDesignView,
   BLOCK_NAME,
+  changeLogo,
   chooseAccent,
   chooseTheme,
   editForm,
   featuredOptions,
   formOf,
+  hideSaved,
   LOADING,
   moveBlock,
   moveFeatured,
@@ -35,6 +37,7 @@ import {
   previewProducts,
   readStep,
   removeFeatured,
+  saveDisabled,
   saveInput,
   shownState,
   showBlock,
@@ -78,6 +81,9 @@ const DETAIL: AdminStoreDesignDetail = {
   logo: null,
   csrf_token: "design-csrf-1",
 };
+
+// 已生效的标志（合格的提供路径，SHOP-TASK-215）。
+const LOGO = "/api/store-logos/0123456789abcdef0123456789abcdef.webp";
 
 // 挑选精选用的设置（SHOP-TASK-065）：精选三件——上架的 T 恤、之后下架的马克杯与名称为 null 的徽章；可挑选的四件按商品 ID 升序，
 // 其中托特包、亚麻衬衫与羊毛帽尚未在精选里。
@@ -136,9 +142,15 @@ function renderSignedIn(language: Language = "en", overrides: Partial<AdminFrame
   return renderToStaticMarkup(wrap(<AdminFrameView {...props} />, language));
 }
 
-function render(state: DesignState = readyState(), language: Language = "en"): string {
+// SHOP-TASK-215 改动：本页多了标志段的接入（logoBusy 与四个回调），这里给出不进行中、不做事的值；logoBusy 可由参数给出。
+function render(state: DesignState = readyState(), language: Language = "en", logoBusy = false): string {
   const props: AdminStoreDesignViewProps = {
     state,
+    logoBusy,
+    onLogo: noop,
+    onLogoReread: () => Promise.resolve("failed" as const),
+    onLogin: noop,
+    onLogoBusy: noop,
     onTheme: noop,
     onAccent: noop,
     onShow: noop,
@@ -389,6 +401,8 @@ describe("content", () => {
   // 按钮改记 type，以区分添加与保存）；仍没有关闭横幅或说明的按钮。
   // SHOP-TASK-066 改动：预览加了浅色、深色两个切换按钮（没有 aria-label，记 type），手机的 details 里一份在保存之前，桌面的预览栏里
   // 一份在表单之后，所以列表多了这四个；仍没有关闭横幅或说明的按钮。
+  // SHOP-TASK-215 改动：主色之后、首页区块之前加了标志段的 admin.upload 与 admin.logo_remove（没有 aria-label，记 type），所以列表最前面多了这两个；
+  // 仍没有关闭横幅或说明的按钮。
   it.each(LANGUAGES)("keeps the demo banner and the demo note in %s", (language) => {
     const html = renderSignedIn(language);
     expect(element(html, "div", "acs-admin__banner")).toContain(escapeHtml(COPY["admin.demo_banner"][language]));
@@ -400,6 +414,8 @@ describe("content", () => {
     expect(element(ready, "p", "site-admin-store-design__note")).toContain(escapeHtml(COPY["admin.design_demo_note"][language]));
     const buttons = tags(ready, "button").map((tag) => attributes(tag).get("aria-label") ?? attributes(tag).get("type"));
     expect(buttons).toEqual([
+      "button",
+      "button",
       ...DETAIL.home_blocks.flatMap(() => [COPY["admin.block_move_up"][language], COPY["admin.block_move_down"][language]]),
       ...DETAIL.featured.flatMap(() => [COPY["admin.block_move_up"][language], COPY["admin.block_move_down"][language], COPY["admin.featured_remove"][language]]),
       "button",
@@ -431,6 +447,8 @@ describe("content", () => {
   // 改为四组，因为本任务就是显示精选商品；标志与预览的断言不变。
   // SHOP-TASK-066 改动：去掉「没有 admin.preview」（守的是「预览由 SHOP-TASK-066 接上」），因为本任务就是接上预览；预览的位置与内容
   // 由下面「preview」各条验证。标志的断言不变。
+  // SHOP-TASK-215 改动：去掉「没有标志的文字」（守的是 Kelvin 2026-10-06「首版先不含标志图」），因为 UX 0.18 A08 与 HANDOFF 0.84 第（7）点加了标志段、
+  // 本任务就是接上它；改为标志段（legend admin.logo，class 不含 site-admin-store-design__group，四组的下标不变）在主色之后、首页区块之前。
   it.each(LANGUAGES)("has the theme, accent, home block and featured groups in %s", (language) => {
     const html = render(readyState(), language);
     const groups = allOf(html, "fieldset", "site-admin-store-design__group");
@@ -443,16 +461,10 @@ describe("content", () => {
     const save = element(html, "div", "site-admin-store-design__save");
     expect(html.indexOf(groups[3] ?? "")).toBeGreaterThan(html.indexOf(groups[2] ?? "") + (groups[2] ?? "").length - 1);
     expect(html.indexOf(save)).toBeGreaterThan(html.indexOf(groups[3] ?? "") + (groups[3] ?? "").length - 1);
-    const texts = visibleTexts(html);
-    // 这些键可能尚未抄入字典（只收录页面实际用到的键），所以按字符串查找：页面源码不引用它们，字典里有时页面也不显示其文字。
-    const dictionary: Readonly<Record<string, Readonly<Record<Language, string>> | undefined>> = COPY;
-    for (const key of ["admin.logo", "admin.logo_hint", "admin.logo_remove"]) {
-      expect(pageSource).not.toContain(`"${key}"`);
-      const entry = dictionary[key];
-      if (entry !== undefined) {
-        expect(texts).not.toContain(entry[language]);
-      }
-    }
+    const logo = element(html, "fieldset", "site-admin-logo");
+    expect(legend(logo)).toBe(COPY["admin.logo"][language]);
+    expect(html.indexOf(logo)).toBe(html.indexOf(groups[1] ?? "") + (groups[1] ?? "").length);
+    expect(html.indexOf(groups[2] ?? "")).toBe(html.indexOf(logo) + logo.length);
   });
 });
 
@@ -926,8 +938,16 @@ describe("preview", () => {
   }
 
   // 只渲染两份预览，深浅色由参数给出（页面里由 AdminStoreDesignView 的状态给出，点击在服务端渲染里无法模拟）。
-  function renderPreview(mode: PreviewMode, language: Language = "en", form: DesignForm = formOf(DETAIL), choices: readonly ProductChoice[] = DETAIL.choices): string[] {
-    const props = { form, choices, mode, onMode: noop };
+  // SHOP-TASK-215 改动：预览多了已生效的标志与加载失败（logo、broken、onBroken），这里默认没有标志。
+  function renderPreview(
+    mode: PreviewMode,
+    language: Language = "en",
+    form: DesignForm = formOf(DETAIL),
+    choices: readonly ProductChoice[] = DETAIL.choices,
+    logo: string | null = null,
+    broken = false,
+  ): string[] {
+    const props = { form, choices, mode, onMode: noop, logo, broken, onBroken: noop };
     return [renderToStaticMarkup(wrap(<PreviewAside {...props} />, language)), renderToStaticMarkup(wrap(<PreviewDetails {...props} />, language))];
   }
 
@@ -1163,12 +1183,19 @@ describe("preview", () => {
 
   // SHOP-TASK-066 验收第 4 条「不发起新的请求」与 Kelvin 2026-10-08「不为预览另发请求」：渲染带预览的页面不调用 fetch；页面源码里的请求仍只有
   // 店铺装修模块的一次读取与一次保存调用（「reads and saves only through the store design API module」未改）。
+  // SHOP-TASK-215 改动：HANDOFF 0.84 第（7）点「标志操作的 403 重新读取装修设置」由页面做（rereadForLogo），所以页面源码在保存之后多了一次读取调用；
+  // 预览仍不发请求。
   it("makes no request for the preview", () => {
     const calls = stubFetch();
     render(readyState({ base: PICKING, form: formOf(PICKING) }));
+    render(readyState({ base: { ...PICKING, logo: LOGO }, form: formOf(PICKING) }));
     renderPreview("dark");
     expect(calls).toEqual([]);
-    expect([...pageSource.matchAll(/\b(readAdminStoreDesign|saveAdminStoreDesign)\(/g)].map((m) => m[1])).toEqual(["readAdminStoreDesign", "saveAdminStoreDesign"]);
+    expect([...pageSource.matchAll(/\b(readAdminStoreDesign|saveAdminStoreDesign)\(/g)].map((m) => m[1])).toEqual([
+      "readAdminStoreDesign",
+      "saveAdminStoreDesign",
+      "readAdminStoreDesign",
+    ]);
   });
 });
 
@@ -1429,7 +1456,8 @@ describe("saving", () => {
       expect(save).toContain(`<div class="acs-admin__alert" role="alert"><span>${escapeHtml(COPY[key][language])}</span></div>`);
       expect(attributes(tags(save, "button")[0] ?? "").has("disabled")).toBe(false);
       expect(html).not.toContain(escapeHtml(COPY["admin.design_saved"][language]));
-      expect(tags(html, "fieldset")).toHaveLength(4);
+      // SHOP-TASK-215 改动：表单多了标志段（也是 fieldset），保留的 fieldset 由 4 个改为 5 个。
+      expect(tags(html, "fieldset")).toHaveLength(5);
     }
   });
 
@@ -1448,6 +1476,104 @@ describe("saving", () => {
       expect(calls).toHaveLength(1);
     },
   );
+});
+
+describe("logo", () => {
+  const WITH_LOGO: AdminStoreDesignDetail = { ...DETAIL, logo: LOGO };
+
+  // 两份预览缩样（桌面预览栏与手机 details）页头里的品牌部分。
+  function previewHeads(html: string): string[] {
+    return [element(html, "aside", "site-admin-store-design__aside"), element(html, "details", "site-admin-store-design__details")].map((copy) =>
+      element(copy, "div", "site-admin-store-design__shop-head"),
+    );
+  }
+
+  // UX 0.18 A08 桌面线框「[admin.accent_hint] / [admin.logo] / <当前标志或文字品牌> …」与本任务验收「接入——把标志段放进表单、把当前 logo 与 CSRF 令牌传入」：
+  // 标志段在表单里（不在预览栏里），显示读取到的 logo（img 的 src 与 alt）；没有标志时为文字品牌、admin.logo_remove 禁用。
+  it.each(LANGUAGES)("puts the logo section in the form with the current logo in %s", (language) => {
+    const html = render(readyState({ base: WITH_LOGO, form: formOf(WITH_LOGO) }), language);
+    const form = element(html, "form", "site-admin-store-design__form");
+    const section = element(form, "fieldset", "site-admin-logo");
+    expect(tags(section, "img").map((tag) => [attributes(tag).get("src"), attributes(tag).get("alt")])).toEqual([[LOGO, BRAND]]);
+    expect(element(html, "aside", "site-admin-store-design__aside")).not.toContain("site-admin-logo\"");
+    const none = element(render(readyState(), language), "fieldset", "site-admin-logo");
+    expect(tags(none, "img")).toEqual([]);
+    expect(textNodes(element(none, "span", "site-admin-logo__current"))).toEqual([BRAND]);
+    expect(textNodes(none)).toContain(COPY["admin.logo_immediate"][language]);
+  });
+
+  // HANDOFF 0.84 第（7）点「标志操作与 A08 保存互斥」与本任务 purpose「A08 保存进行中标志按钮也都禁用，标志操作进行中 common.save 禁用（两者互斥）」：
+  // 标志操作进行中 common.save 禁用（aria-busy 仍只标保存进行中）；保存进行中标志段的两个按钮都禁用；两者都不进行时都可点（有标志时）。
+  it("keeps the save and the logo operations apart", () => {
+    const saveButton = (html: string) => attributes(tags(element(html, "div", "site-admin-store-design__save"), "button")[0] ?? "");
+    const logoButtons = (html: string) => tags(element(html, "span", "site-admin-logo__actions"), "button").map((tag) => attributes(tag).has("disabled"));
+    const idle = readyState({ base: WITH_LOGO, form: formOf(WITH_LOGO) });
+    const busy = render(idle, "en", true);
+    expect([saveButton(busy).has("disabled"), saveButton(busy).get("aria-busy")]).toEqual([true, "false"]);
+    const saving = render(startSaving(idle));
+    expect(logoButtons(saving)).toEqual([true, true]);
+    expect(saveButton(saving).has("disabled")).toBe(true);
+    const free = render(idle);
+    expect([saveButton(free).has("disabled"), ...logoButtons(free)]).toEqual([false, false, false]);
+    if (idle.status === "ready") {
+      expect([saveDisabled(idle, false), saveDisabled(idle, true), saveDisabled({ ...idle, saving: true }, false)]).toEqual([false, true, true]);
+    }
+    // 点保存（含回车提交）时同样不在标志操作进行中提交。
+    expect(pageSource).toMatch(/if \(state\.status !== "ready" \|\| saveDisabled\(state, logoBusy\) \|\| controller === null\) \{\s*return;/);
+  });
+
+  // 本任务 purpose「标志不算在表单里，A08 的保存不提交它，保存成功后标志沿用当前值（保存的响应不含 logo）」与 DESIGN 1.20 第 15 条（A08 保存不读写标志）：
+  // 有标志时保存，请求体没有 logo；200 后 base 的 logo 仍是当前标志，页面的标志段与预览照旧显示它。
+  it("keeps the current logo after a successful save", async () => {
+    const calls = stubFetch(json(200, savedBody(WITH_LOGO)));
+    const moves = fakeMoves(startSaving(readyState({ base: WITH_LOGO, form: formOf(WITH_LOGO) })));
+    await submitDesign(WITH_LOGO, formOf(WITH_LOGO), "en", new AbortController().signal, moves.target);
+    expect(Object.keys(bodyOf(calls[0]) as object)).toEqual(["theme", "accent", "home_blocks", "featured_product_ids"]);
+    const current = moves.current;
+    expect(current.status === "ready" && [current.base.logo, current.saved]).toEqual([LOGO, true]);
+    const html = render(current);
+    expect(tags(element(html, "fieldset", "site-admin-logo"), "img").map((tag) => attributes(tag).get("src"))).toEqual([LOGO]);
+    expect(previewHeads(html).map((head) => tags(head, "img").map((tag) => attributes(tag).get("src")))).toEqual([[LOGO], [LOGO]]);
+  });
+
+  // UX 0.18 A08「预览与「当前标志」都显示已生效的标志」与本任务验收「A08 预览缩样的页头在有标志时显示同一张图（图片加载失败时为文字品牌），没有时为文字品牌」：
+  // 两份缩样的页头在有标志时为 img（src 为 logo、alt 为 BRAND），没有标志或加载失败时为原来的文字品牌 span；标志随 changeLogo 换上，表单未保存的主题不影响它。
+  it.each(LANGUAGES)("shows the logo in the preview in %s", (language) => {
+    const html = render(readyState({ base: WITH_LOGO, form: chooseTheme(formOf(WITH_LOGO), "batik") }), language);
+    for (const head of previewHeads(html)) {
+      expect(tags(head, "img").map((tag) => [classes(tag), attributes(tag).get("src"), attributes(tag).get("alt")])).toEqual([[["site-admin-logo__img"], LOGO, BRAND]]);
+      expect(textNodes(head)).toEqual([translate(language, "common.nav_cart", { count: 0 })]);
+    }
+    const text = `<span class="acs-brand">${BRAND}</span>`;
+    for (const head of previewHeads(render(readyState(), language))) {
+      expect(head).toContain(text);
+      expect(tags(head, "img")).toEqual([]);
+    }
+    const props = { form: formOf(WITH_LOGO), choices: DETAIL.choices, mode: "light" as const, onMode: noop, logo: LOGO, broken: true, onBroken: noop };
+    for (const copy of [renderToStaticMarkup(wrap(<PreviewAside {...props} />, language)), renderToStaticMarkup(wrap(<PreviewDetails {...props} />, language))]) {
+      const head = element(copy, "div", "site-admin-store-design__shop-head");
+      expect(head).toContain(text);
+      expect(tags(head, "img")).toEqual([]);
+    }
+    const uploaded = changeLogo(LOGO)(readyState());
+    expect(previewHeads(render(uploaded, language)).map((head) => tags(head, "img").length)).toEqual([1, 1]);
+    const removed = changeLogo(null)(uploaded);
+    expect(previewHeads(render(removed, language)).every((head) => head.includes(text))).toBe(true);
+  });
+
+  // 本任务验收「标志操作不改表单、不收起 admin.design_saved 以外的表单提示」与 HANDOFF 0.84 第（7）点「表单未保存的选择保留」：标志变化只换 base 的 logo
+  // （令牌在给出时才换），表单、保存进行中与 alert、saveError 不变；标志操作开始只收起 admin.design_saved。
+  it("changes only the logo and hides only the saved message", () => {
+    const form = chooseTheme(formOf(DETAIL), "gula");
+    const before = readyState({ form, saved: true, alert: "common.error_retry", saveError: "common.network_check" });
+    expect(changeLogo(LOGO)(before)).toEqual(readyState({ base: { ...DETAIL, logo: LOGO }, form, saved: true, alert: "common.error_retry", saveError: "common.network_check" }));
+    expect(changeLogo(null, "design-csrf-9")(before)).toEqual(
+      readyState({ base: { ...DETAIL, logo: null, csrf_token: "design-csrf-9" }, form, saved: true, alert: "common.error_retry", saveError: "common.network_check" }),
+    );
+    expect(hideSaved(before)).toEqual(readyState({ form, saved: false, alert: "common.error_retry", saveError: "common.network_check" }));
+    expect(changeLogo(LOGO)(LOADING)).toBe(LOADING);
+    expect(hideSaved(LOADING)).toBe(LOADING);
+  });
 });
 
 describe("dictionary", () => {
@@ -1488,10 +1614,14 @@ describe("dictionary", () => {
       readyState({ base: { ...DETAIL, featured: [], choices: [] }, form: { ...formOf(DETAIL), featured: [] } }),
     ];
     const pages = [renderApp(STORE_DESIGN_PATH, language), renderSignedIn(language), renderSignedIn(language, { menuOpen: true })];
+    // SHOP-TASK-215 改动：预览多了 logo、broken 与 onBroken；另加有标志（img 的 alt 为 BRAND）与加载失败的预览、有标志与标志操作进行中的页面。
     for (const mode of PREVIEW_MODES) {
-      const props = { form: chooseAccent(formOf(PICKING), "tile"), choices: CHOICES, mode, onMode: noop };
-      pages.push(renderToStaticMarkup(wrap(<PreviewAside {...props} />, language)), renderToStaticMarkup(wrap(<PreviewDetails {...props} />, language)));
+      for (const [logo, broken] of [[null, false], [LOGO, false], [LOGO, true]] as const) {
+        const props = { form: chooseAccent(formOf(PICKING), "tile"), choices: CHOICES, mode, onMode: noop, logo, broken, onBroken: noop };
+        pages.push(renderToStaticMarkup(wrap(<PreviewAside {...props} />, language)), renderToStaticMarkup(wrap(<PreviewDetails {...props} />, language)));
+      }
     }
+    pages.push(render(readyState({ base: { ...DETAIL, logo: LOGO } }), language), render(readyState(), language, true));
     for (const state of states) {
       pages.push(render(state, language));
     }
