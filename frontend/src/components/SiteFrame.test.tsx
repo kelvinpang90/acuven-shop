@@ -1,3 +1,4 @@
+import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
@@ -8,8 +9,10 @@ import type { WhatsAppContactReader } from "../api/siteSettings";
 import App from "../App";
 import { BRAND, COPY, LANGUAGES, formatCopy } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
-import { LANGUAGE_STORAGE_KEY } from "../i18n/language";
-import { isRoutePath, ROUTE_PATHS } from "../router";
+import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
+import { isRoutePath, ROUTE_PATHS, RouterProvider } from "../router";
+import { DEFAULT_STORE_DESIGN, StoreDesignContext } from "../storeDesign";
+import SiteFrame, { StoreBrand, storeLogoBroken } from "./SiteFrame";
 
 // SHOP-TASK-074 起可传入 WhatsApp 联系链接的读取（替身）；不传时为新建、尚未请求的读取，即取得前的首次渲染，现有测试不受影响。
 // SHOP-TASK-153 起另可传入会员会话的读取（替身）；不传时为 App 的默认读取，服务端渲染时为 unknown，现有测试不受影响。
@@ -453,5 +456,81 @@ describe("footer", () => {
       expect(html, path).not.toContain("{{");
       expect(html, path).not.toContain("style=");
     }
+  });
+});
+
+describe("store logo", () => {
+  // 两个合格的标志提供路径（storeDesign.ts 的 isStoreLogoPath）。
+  const LOGO = "/api/store-logos/0123456789abcdef0123456789abcdef.webp";
+  const OTHER_LOGO = "/api/store-logos/ffffffffffffffffffffffffffffffff.webp";
+  const IMG = `<img class="site-brand-logo" src="${LOGO}" alt="${BRAND}"/>`;
+  const noop = () => undefined;
+
+  // 以给定的店铺装修设置（logo）渲染全站框架，不经 GET /api/store-design（服务端渲染时读取不会返回）。
+  function renderWithLogo(logo: string | null): string {
+    return renderToStaticMarkup(
+      <LanguageProvider storage={null}>
+        <RouterProvider initialPath="/">
+          <StoreDesignContext.Provider value={{ ...DEFAULT_STORE_DESIGN, featuredSlugs: [], logo }}>
+            <SiteFrame>
+              <main />
+            </SiteFrame>
+          </StoreDesignContext.Provider>
+        </RouterProvider>
+      </LanguageProvider>,
+    );
+  }
+
+  // UX 0.18「店铺装修」「管理员上传标志图后，页头与页脚的品牌 ACUVEN SHOP 显示为该图（读屏文字仍为 ACUVEN SHOP）」与 HANDOFF 0.84「标志以 img 显示，alt 为 BRAND」：
+  // 有标志且未加载失败时为 img，src 为 logo、alt 为 BRAND，没有文字品牌。
+  it("shows the logo image with the brand as alt text", () => {
+    expect(renderToStaticMarkup(<StoreBrand logo={LOGO} broken={false} onBroken={noop} />)).toBe(IMG);
+  });
+
+  // UX 0.18「店铺装修」「未上传时显示文字」：logo 为 null 时为文字 BRAND，没有 img。
+  it("shows the brand text without a logo", () => {
+    expect(renderToStaticMarkup(<StoreBrand logo={null} broken={false} onBroken={noop} />)).toBe(BRAND);
+  });
+
+  // UX 0.18「店铺装修」「标志图加载失败时同样显示文字」与 HANDOFF 0.84「加载失败（含 503）时页头与页脚都退回文字品牌」：加载失败时为文字 BRAND。
+  it("shows the brand text when the logo failed to load", () => {
+    expect(renderToStaticMarkup(<StoreBrand logo={LOGO} broken={true} onBroken={noop} />)).toBe(BRAND);
+  });
+
+  // HANDOFF 0.84「加载失败（含 503）时…退回文字品牌」：img 的 onError 把加载失败的路径交给 onBroken。
+  it("reports the failed path from the image error handler", () => {
+    const onBroken = vi.fn();
+    const element = StoreBrand({ logo: LOGO, broken: false, onBroken }) as ReactElement<{ onError: () => void }>;
+    element.props.onError();
+    expect(onBroken).toHaveBeenCalledWith(LOGO);
+  });
+
+  // HANDOFF 0.84「logo 换成另一个路径时重新尝试显示」：只有失败的正是当前路径才算加载失败；换成另一个路径或 null、尚未失败时都不算。
+  it("resets the failure when the logo path changes", () => {
+    expect(storeLogoBroken(LOGO, LOGO)).toBe(true);
+    expect(storeLogoBroken(OTHER_LOGO, LOGO)).toBe(false);
+    expect(storeLogoBroken(LOGO, null)).toBe(false);
+    expect(storeLogoBroken(null, LOGO)).toBe(false);
+    expect(storeLogoBroken(null, null)).toBe(false);
+  });
+
+  // UX 0.18「店铺装修」页头与页脚的品牌显示为该图，HANDOFF 0.84「页头仍在链到首页的链接里」：页头的品牌链接与页脚的品牌都是同一个 img，
+  // 页头链接的 class 与去向不变；页面里没有行内样式（尺寸写在 site.css）。
+  it("uses the logo in both the header link and the footer", () => {
+    const html = renderWithLogo(LOGO);
+    expect(header(html)).toContain(`<a class="acs-brand" href="/">${IMG}</a>`);
+    expect(footer(html)).toContain(`<div class="site-footer__main"><span class="acs-brand">${IMG}</span>`);
+    expect(html.match(/<img\b/g)).toHaveLength(2);
+    expect(html).not.toContain(`>${BRAND}<`);
+    expect(html).not.toContain("style=");
+  });
+
+  // UX 0.18「店铺装修」「未上传时显示文字」与 HANDOFF 0.84「打开页面时先显示文字品牌」：没有标志时页头链接与页脚都是文字品牌，与改动前相同。
+  it("uses the brand text in both the header link and the footer without a logo", () => {
+    const html = renderWithLogo(null);
+    expect(header(html)).toContain(`<a class="acs-brand" href="/">${BRAND}</a>`);
+    expect(footer(html)).toContain(`<div class="site-footer__main"><span class="acs-brand">${BRAND}</span>`);
+    expect(html).not.toContain("<img");
+    expect(footer(render("/"))).toContain(`<span class="acs-brand">${BRAND}</span>`);
   });
 });
