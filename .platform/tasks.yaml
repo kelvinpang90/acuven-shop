@@ -6052,7 +6052,7 @@ tasks:
       运营者落实写法（HANDOFF 0.88）：sms_budget_exhausted 的对象为（date, 马来西亚日期的 ISO 写法），以对象作去重键、窗口 86400 秒，只在预占结果为 over_budget、停发的事务提交之后调用（unknown_cost 不调用，第 8 条）；admin_login_locked 的对象为（audit_event, admin_login_locked 审计记录 ID），在审计提交之后调用；member_deletion_failed 的对象为（member, 会员 ID），在确认注销的删除或提交抛数据库异常、回滚之后调用；后两类不以对象作去重键、窗口 3600 秒；日志写法为类别码加空格加对象类别等号 ID（如 member_deletion_failed member=<ID>），不带用户名、电话、来源地址与异常消息。
       设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6 条与 HANDOFF 0.88；告警不带个人资料、用户名与来源地址。
       拆分：其余三处接线一层（8 个允许路径），依赖 SHOP-TASK-217。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-217
     acceptance_criteria:
