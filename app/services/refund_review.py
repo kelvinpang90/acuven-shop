@@ -77,7 +77,10 @@ Stripe 退款尝试（SHOP-TASK-125）依据 docs/DESIGN.md 1.12（提交 acf576
   订单行 → 会员行 → Stripe 会话记录 → 退款尝试。
 - 没建成尝试的告警（stripe_refund_cap、stripe_refund_unrefundable）不影响批准：
   批准照常成功，在保存点成功之后记一条 error 级日志，只含类别与申请 ID。
-  日志在调用方提交之前记，外层提交失败时可能多一条告警，只供人工核对。
+  日志在调用方提交之前记，外层提交失败时可能多一条告警，只供人工核对。按 docs/DESIGN.md
+  1.21（提交 5be346e）「运营告警邮件」第 2、6 条与 docs/HANDOFF.md 0.88（SHOP-TASK-221），
+  日志之后紧接着以同一类别与 ("refund_request", 申请 ID) 调用 ops_alert.alert，同样在提交
+  之前入队，外层提交失败时可能多出一封。
 - 本模块不调用 Stripe：调用由之后的后台退款详情与重试接口在提交之后发起，
   在那之前由定时任务发起。
 
@@ -107,9 +110,10 @@ from app.models.refund import (
     REVIEW_REASON_MAX_LENGTH,
     UNIT_OCCUPIED,
 )
+from app.services import ops_alert
 from app.services.admin_auth import record_audit
 from app.services.points_refund import apply_refund_points
-from app.services.stripe_refund import add_request_attempt
+from app.services.stripe_refund import ALERT_TARGET_REQUEST, add_request_attempt
 
 logger = logging.getLogger(__name__)
 
@@ -243,7 +247,7 @@ def _review(
     4. 读取该申请各件的占用；在保存点里写申请的审核各列、
        拒绝时置空各件的占用标记；批准且订单 member_id 非空时返还与追回积分；
        批准时按 add_request_attempt 新建 Stripe 退款尝试；写一条审计。
-    5. 保存点成功之后，没建成尝试的告警记一条 error 日志。
+    5. 保存点成功之后，没建成尝试的告警记一条 error 日志，紧接着调用一次 ops_alert.alert。
     写入遇唯一约束冲突时只回滚保存点（锁保持），按键重新查询：
     查到时按第 2 步返回，查不到原样抛出。积分函数抛 ValueError 时原样抛出。
     """
@@ -314,6 +318,7 @@ def _review(
     if alert is not None:
         # 调用方提交之前记：外层提交失败时可能多一条告警，只供人工核对。
         logger.error("%s refund_request=%d", alert, refund_request_id)
+        ops_alert.alert(alert, (ALERT_TARGET_REQUEST, refund_request_id))
     return _outcome(request), True
 
 

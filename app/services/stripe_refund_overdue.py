@@ -28,9 +28,11 @@
 各以带条件的 UPDATE 写入并立即提交。SQLite 不支持行锁，SQLAlchemy 在
 SQLite 上不生成 FOR UPDATE。
 
-运营告警邮件尚未接入：设计写「告警」之处先记一条 error 级日志，只含类别与
-本站尝试 ID。stripe_refund_unresolved（对账找不到或列不完）以告警时间去重，
-每条尝试至多一次（告警时间已因不符写过的也不再记）；改为 failed 等状态改动
+设计写「告警」之处记一条 error 级日志，只含类别与本站尝试 ID；按 docs/DESIGN.md
+1.21（提交 5be346e）「运营告警邮件」第 6 条与 docs/HANDOFF.md 0.88（SHOP-TASK-221），
+每条这样的日志之后紧接着以同一类别与 ("stripe_refund", 尝试 ID) 调用 ops_alert.alert，
+不带 Stripe 的任何 ID、金额与个人资料。stripe_refund_unresolved（对账找不到或
+列不完）以告警时间去重，每条尝试至多一次（告警时间已因不符写过的也不再记）；改为 failed 等状态改动
 的告警照 SHOP-TASK-124 的规则。本模块不提供把尝试改为 failed 的手段。库里的
 时间一律是不带时区的 UTC。
 """
@@ -46,8 +48,10 @@ from sqlalchemy.orm import Session
 
 from app.models import StripeRefund
 from app.models.stripe import STRIPE_REFUND_PENDING, STRIPE_REFUND_SUCCEEDED
+from app.services import ops_alert
 from app.services.stripe_gateway import Refund, StripeGateway, StripeOutcome
 from app.services.stripe_refund import (
+    ALERT_TARGET_ATTEMPT,
     RETRY_WINDOW,
     alert_category,
     apply_refund_object,
@@ -57,7 +61,7 @@ from app.services.stripe_refund import (
 
 logger = logging.getLogger(__name__)
 
-# 告警邮件接入前的 error 级日志类别（只含类别与尝试 ID）。
+# 告警的 error 级日志类别（只含类别与尝试 ID），也是 ops_alert.alert 的类别码。
 # 会反复出现的告警：创建满 24 小时的尝试对账找不到或列不完；每条尝试至多一次。
 LOG_REFUND_UNRESOLVED = "stripe_refund_unresolved"
 
@@ -251,6 +255,8 @@ def _reconcile(db: Session, gateway: StripeGateway, view: _View, now: datetime) 
       却是空页、超过 MAX_LIST_PAGES 页）：保持 pending；仍为 pending、仍没有
       Stripe 退款 ID 且告警时间为空时写告警时间并提交，再记一条
       stripe_refund_unresolved。上次复查时间已在处理前写好。
+    两种告警日志之后都紧接着以同一类别与 ("stripe_refund", 尝试 ID) 调用一次
+    ops_alert.alert。
     """
     refund = _find_refund(gateway, view.payment_intent_id, str(view.attempt_id))
     if refund is not None:
@@ -259,6 +265,7 @@ def _reconcile(db: Session, gateway: StripeGateway, view: _View, now: datetime) 
         category = alert_category(result)
         if category is not None:
             logger.error("%s attempt=%d", category, view.attempt_id)
+            ops_alert.alert(category, (ALERT_TARGET_ATTEMPT, view.attempt_id))
         return
     stmt = (
         update(StripeRefund)
@@ -276,6 +283,7 @@ def _reconcile(db: Session, gateway: StripeGateway, view: _View, now: datetime) 
         return
     db.commit()
     logger.error("%s attempt=%d", LOG_REFUND_UNRESOLVED, view.attempt_id)
+    ops_alert.alert(LOG_REFUND_UNRESOLVED, (ALERT_TARGET_ATTEMPT, view.attempt_id))
 
 
 def _find_refund(gateway: StripeGateway, intent_id: str, attempt_ref: str) -> Refund | None:

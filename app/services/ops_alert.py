@@ -8,7 +8,10 @@ job_failing 与 stock_reset_failed 由 SHOP-TASK-218 在 app/jobs.py 接入；St
 stripe_unreachable、stripe_payment_needs_review）由 SHOP-TASK-219 接入；Stripe 确认付款与
 webhook 的六类（stripe_livemode、stripe_confirm_rejected、stripe_session_mismatch、
 stripe_late_payment、stripe_late_payment_unrefundable、stripe_refund_cap）由 SHOP-TASK-220
-接入，stripe_refund_cap 的退款申请告警点由 SHOP-TASK-221 沿用。
+接入，stripe_refund_cap 的退款申请告警点由 SHOP-TASK-221 沿用；Stripe 退款的六类
+（stripe_refund_unrefundable、stripe_refund_rejected、stripe_refund_failed_after_success、
+stripe_refund_mismatch、stripe_refund_unresolved、stripe_webhook_refund_rejected）由
+SHOP-TASK-221 接入。
 
 调用方的写法（HANDOFF 0.88）：
 
@@ -250,6 +253,63 @@ CATEGORIES: dict[str, AlertCategory] = {
             "按类别码与对象 ID（结账记录或退款申请）查日志，到 Stripe 测试后台核对这笔付款"
             "已有的退款与金额；本站没有为此发起退款，需要时在后台退款申请页或 Stripe 测试"
             "后台人工处理。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    # SHOP-TASK-221：Stripe 退款（第 6 条表），都按类别限频。
+    "stripe_refund_unrefundable": AlertCategory(
+        description="批准退款时付款的结账记录缺 PaymentIntent，未建退款尝试",
+        guidance=(
+            "按类别码与退款申请 ID 查日志，到 Stripe 测试后台核对这笔付款，需要退款时在 "
+            "Stripe 测试后台人工处理；批准照常成功，本站不为这笔申请自动退款。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    "stripe_refund_rejected": AlertCategory(
+        description="Stripe 以请求错误明确拒绝创建退款，退款尝试已记为失败",
+        guidance=(
+            "按类别码与退款尝试 ID 查日志，到 Stripe 测试后台核对这笔付款与被拒的原因；"
+            "本站不自动重试，排除原因后来源为退款申请的可在后台退款申请页手动重试，"
+            "其余在 Stripe 测试后台人工处理。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    "stripe_refund_failed_after_success": AlertCategory(
+        description="已成功的 Stripe 退款之后变为失败，退款尝试已改为失败",
+        guidance=(
+            "按类别码与退款尝试 ID 查日志，到 Stripe 测试后台核对这笔退款失败的原因；"
+            "这笔退款的额度已释放，需要时来源为退款申请的可在后台退款申请页手动重试，"
+            "其余在 Stripe 测试后台人工处理。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    "stripe_refund_mismatch": AlertCategory(
+        description="查询到的 Stripe 退款与本站退款尝试不符，未改尝试",
+        guidance=(
+            "按类别码与退款尝试 ID 查日志，到 Stripe 测试后台核对这笔付款的退款各属于哪条"
+            "尝试；尝试的状态未改、继续占用额度，这条尝试不再为不符告警。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    "stripe_refund_unresolved": AlertCategory(
+        description="退款尝试满 24 小时仍无 Stripe 退款结果，对账找不到或列不完",
+        guidance=(
+            "按类别码与退款尝试 ID 查日志，到 Stripe 测试后台核对这笔付款是否已有对应的"
+            "退款；尝试保持待定、继续占用额度，定时任务每小时仍会对账，本站不再调用退款接口。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    "stripe_webhook_refund_rejected": AlertCategory(
+        description="收到退款事件后向 Stripe 查询该退款被以请求错误拒绝",
+        guidance=(
+            "按类别码与退款尝试 ID 查日志，核对私有配置里的 Stripe 密钥属于当前的测试账户，"
+            "到 Stripe 测试后台核对这笔退款；尝试未改，Stripe 重发事件或定时任务会再次查询。"
         ),
         dedupe_by_target=False,
         window_seconds=HOUR_SECONDS,

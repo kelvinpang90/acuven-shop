@@ -12,6 +12,10 @@ tests/test_refund_review.py 关掉 pysqlite 的事务处理、由引擎发 BEGIN
 （tests/test_stripe_late_payment.py）直接按模型写入，退款申请经 SHOP-TASK-029 的
 submit_refund 提交。本任务不调用 Stripe。SQLite 不执行 FOR UPDATE：锁定与锁顺序以
 SQLAlchemy 的连接事件记录语句、按 MySQL 方言编译检查，并发下的排队按代码审阅。
+
+运营告警邮件（SHOP-TASK-221）：ops_alert.alert 一律以 monkeypatch 替换为记录调用的替身
+（不入队、不连 SMTP 与 Redis）；补了告警断言的测试在文档字符串里写明它守住的
+docs/DESIGN.md 1.21「运营告警邮件」第 6 条哪一行。
 """
 
 from __future__ import annotations
@@ -52,7 +56,7 @@ from app.models.stripe import (
     STRIPE_REFUND_PENDING,
     STRIPE_REFUND_SUCCEEDED,
 )
-from app.services import refund_review, stripe_refund
+from app.services import ops_alert, refund_review, stripe_refund
 from app.services.order_rules import generate_order_number
 from app.services.refunds import RefundLineRequest, submit_refund
 from app.services.stripe_refund import (
@@ -79,6 +83,9 @@ UNIT_CASH = 3000
 
 REVIEW_LOGGER = "app.services.refund_review"
 REFUND_LOGGER = "app.services.stripe_refund"
+
+# ops_alert.alert 的（类别, 对象）。
+Alert = tuple[str, object]
 
 _SEQUENCE = itertools.count(1)
 
@@ -113,6 +120,18 @@ def engine() -> Iterator[Engine]:
         assert session.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
     yield engine
     engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def alerts(monkeypatch: pytest.MonkeyPatch) -> list[Alert]:
+    """以 monkeypatch 替换 ops_alert.alert，按调用顺序记下（类别, 对象）。"""
+    calls: list[Alert] = []
+
+    def record(category: str, target: object = None, **_: object) -> None:
+        calls.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
+    return calls
 
 
 @pytest.fixture
@@ -439,13 +458,15 @@ def _reads(log: list[str], table: str) -> list[int]:
 
 
 def test_approve_stripe_order_writes_one_pending_attempt(
-    engine: Engine, admin_id: int, caplog: pytest.LogCaptureFixture
+    engine: Engine, admin_id: int, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 8 条「管理员批准退款的事务不变；订单经 Stripe 付款且本次批准的现金退款额
     （不含运费）大于 0 时，同一事务另写一条 pending 的 `StripeRefund` 尝试，来源为该退款
     申请，金额为该现金退款额」：一条 pending 尝试，金额等于申请的 amount_sen（第 0 行
     一件 3000 仙；用券抵掉的第 1 行与运费不计），PaymentIntent 取该付款，活动来源列为
-    该申请；批准结果照旧，不记日志。"""
+    该申请；批准结果照旧，不记日志。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_cap 与 stripe_refund_unrefundable 两行
+    （「没建尝试」才告警）：建成了尝试，没有告警日志，不调用 ops_alert.alert。"""
     order_id = _make_order(engine)
     _, intent_id = _stripe_paid(engine, order_id)
     request_id = _submit(engine, order_id, [(0, 1), (1, 1)])
@@ -487,6 +508,7 @@ def test_approve_stripe_order_writes_one_pending_attempt(
             now,
         )
     assert _messages(caplog, REVIEW_LOGGER) == []
+    assert alerts == []
 
 
 def test_approve_lock_order(engine: Engine, admin_id: int) -> None:
@@ -586,6 +608,7 @@ def test_approve_checks_refunded_total_against_payment(
     engine: Engine,
     admin_id: int,
     caplog: pytest.LogCaptureFixture,
+    alerts: list[Alert],
     status: str,
     amount: int,
     created: bool,
@@ -593,7 +616,10 @@ def test_approve_checks_refunded_total_against_payment(
     """第 8 条「同一 PaymentIntent 的 pending 与 succeeded 退款合计不得超过付款金额
     （failed 不计），新建前在锁住该付款的事务里核对，超出即不建并告警」：已有的 pending
     或 succeeded 加本次超过付款金额时不建、告警一次（stripe_refund_cap，只含申请 ID），
-    批准照常成功；failed 不计入；合计正好等于付款金额不算超过。"""
+    批准照常成功；failed 不计入；合计正好等于付款金额不算超过。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_cap 一行（「退款合计会超过付款金额、
+    没建尝试」，第 8 条的对象为退款申请 ID）：没建时以 ("refund_request", 申请 ID) 调用一次
+    ops_alert.alert（第 2 条：在调用方提交之前入队），建成时不调用。"""
     order_id = _make_order(engine)
     checkout_id, intent_id = _stripe_paid(engine, order_id)
     assert intent_id is not None
@@ -610,16 +636,21 @@ def test_approve_checks_refunded_total_against_payment(
             (intent_id, UNIT_CASH, STRIPE_REFUND_PENDING, request_id)
         ]
         assert _messages(caplog, REVIEW_LOGGER) == []
+        assert alerts == []
     else:
         assert attempts == []
         assert _messages(caplog, REVIEW_LOGGER) == [f"{LOG_REFUND_CAP} refund_request={request_id}"]
+        assert alerts == [(LOG_REFUND_CAP, ("refund_request", request_id))]
 
 
 def test_missing_payment_intent_does_not_create_and_alerts(
-    engine: Engine, admin_id: int, caplog: pytest.LogCaptureFixture
+    engine: Engine, admin_id: int, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """「数据模型」的 StripeRefund 一行：尝试有「所属 PaymentIntent」；验收：该记录缺
-    PaymentIntent ID 时不建并告警（stripe_refund_unrefundable，只含申请 ID），批准照常成功。"""
+    PaymentIntent ID 时不建并告警（stripe_refund_unrefundable，只含申请 ID），批准照常成功。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_unrefundable 一行（「付款的结账记录缺
+    PaymentIntent ID、没建尝试」，对象为退款申请 ID）：以 ("refund_request", 申请 ID) 调用
+    一次 ops_alert.alert（第 2 条：在调用方提交之前入队）。"""
     order_id = _make_order(engine)
     _stripe_paid(engine, order_id, intent=False)
     request_id = _submit(engine, order_id, [(0, 1)])
@@ -631,6 +662,7 @@ def test_missing_payment_intent_does_not_create_and_alerts(
     assert _messages(caplog, REVIEW_LOGGER) == [
         f"{LOG_REFUND_UNREFUNDABLE} refund_request={request_id}"
     ]
+    assert alerts == [(LOG_REFUND_UNREFUNDABLE, ("refund_request", request_id))]
 
 
 # ---------------------------------------------------------------------------
@@ -731,12 +763,15 @@ def test_retry_requires_approved_request(engine: Engine, admin_id: int) -> None:
 
 
 def test_retry_over_cap_raises_without_writing(
-    engine: Engine, admin_id: int, caplog: pytest.LogCaptureFixture
+    engine: Engine, admin_id: int, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 8 条「同一 PaymentIntent 的 pending 与 succeeded 退款合计不得超过付款金额
     （failed 不计），新建前在锁住该付款的事务里核对，超出即不建并告警」：重试时合计超过
     付款金额，抛 RefundCapExceeded、不写库，并在抛出前记一条 stripe_refund_cap 日志
-    （只含申请 ID）。"""
+    （只含申请 ID）。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_cap 一行（第 8 条的对象为退款申请
+    ID）：日志之后、抛出之前以 ("refund_request", 申请 ID) 调用一次 ops_alert.alert；之前
+    的批准建成了尝试，不调用。"""
     request_id, checkout_id, intent_id = _approved_stripe_request(engine, admin_id)
     (first,) = _request_attempts(engine, request_id)
     _set_status(engine, first[0], STRIPE_REFUND_FAILED)
@@ -749,6 +784,7 @@ def test_retry_over_cap_raises_without_writing(
 
     assert _attempts(engine) == before
     assert _messages(caplog, REFUND_LOGGER) == [f"{LOG_REFUND_CAP} refund_request={request_id}"]
+    assert alerts == [(LOG_REFUND_CAP, ("refund_request", request_id))]
 
 
 def test_concurrent_retry_rejected_by_unique_constraint(
