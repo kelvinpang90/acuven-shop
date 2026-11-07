@@ -5906,14 +5906,7 @@ tasks:
     status: done
     depends_on: []
     acceptance_criteria:
-      - 配置——app/core/config.py 的 Settings 加 alert_smtp_host、alert_smtp_port、alert_smtp_security、alert_smtp_username、alert_smtp_password、alert_from、alert_to 七个字符串字段（对应 SHOP_ALERT_ 开头的七个变量，默认都是空串）；ops_alert 按第 1 条判断是否已配置（端口为空即 587、给了须为 1 到 65535 的整数；加密方式为空即 starttls、给了须为 starttls 或 ssl；主机、账号、密码非空；发件人一个地址、收件人逗号分隔 1 到 5 个地址，每个地址恰含一个 @ 且两侧非空，去掉两侧空白）；未配置时告警不入队，进程第一次遇到告警时记一条 warning ops_alert_not_configured（可带不合格的变量名，不带任何配置值），之后不再记
-      - 入队——alert 只在调用方的线程里做内存操作，不访问数据库与网络，任何情况下都不抛异常、不阻塞；类别不在 CATEGORIES 里时记一条 warning ops_alert_unknown_category category=<类别> 后丢弃；限频键（第 4 条）已有一封在队列里、正在发送或等待重试时不再入队，记 info ops_alert_suppressed category=<类别>；队列容量 100（等待重试的告警放在发信线程的待发列表，不占队列容量），满时丢弃并记 warning ops_alert_dropped category=<类别>；alert 不接受 ops_alert_test（只由 send-test-alert 发出），按未登记的类别处理；发信线程为守护线程，第一次有告警入队时才启动，每个进程一个；对象与发生时刻（入队时的 UTC 时刻）随告警入队
-      - 发信——每封新建一次连接，连接、TLS 握手与每条 SMTP 命令的超时都是 10 秒；starttls 用 smtplib.SMTP，连上后必须完成 STARTTLS 才登录与发信（服务器不支持即失败，不以明文发送），ssl 用 smtplib.SMTP_SSL；TLS 一律用 ssl.create_default_context()，不提供关闭校验的配置；一律以账号与密码登录；邮件为纯文本 UTF-8，主题、正文四项与末尾限频说明照第 5 条（发生时间写 UTC 与马来西亚时间 UTC+8 各一行、精确到秒；对象写为对象类别加空格加内部 ID，没有对象写「无」；末尾限频说明——不以对象作去重键的类别照第 5 条原句，以对象作去重键的类别写明限的是本封所写的对象（同一对象在本封之后 60 分钟内、去重键为日期的为当天不再发信，期间只记在日志里；第 4 条按类别加去重键计，其他对象照常发信）；ops_alert_test 不受限频，末尾不写限频说明）；From 为配置的发件人，收件人只放在 SMTP 信封里，邮件头 To 固定为第 5 条原文所写的空收件人组、不设 Cc 与 Bcc，Message-ID 用 email.utils.make_msgid 以发件人地址的域名生成
-      - 失败与重试——照第 3 条：临时失败（连不上、超时、连接中断、服务器回 4xx）60 秒后重试一次，每封最多尝试 2 次，等待重试的那封放回待发列表、到期才发，等待期间照常发其他告警，按到期先后取下一封；永久失败（登录被拒、5xx、不支持 STARTTLS、TLS 握手或证书校验失败）不重试，ssl.SSLError 是 OSError 的子类，须先于连接类错误判断为永久失败；服务器回了状态码的（含登录时）一律按状态码分类，登录回 4xx（如 454）为临时失败、回 5xx（如 535）为永久失败；握手时超时与连接被对方中断（含 ssl.SSLEOFError）算连接中断、为临时失败，其余 ssl.SSLError（含证书校验失败）为永久失败；部分收件人被拒（send_message 返回被拒的收件人）与全部被拒（SMTPRecipientsRefused）都按各收件人的状态码处理，4xx 的只对这些收件人重试一次、5xx 的即最终失败，已接受的不重发；一封只记一条最终失败日志 error ops_alert_send_failed category=<类别> error=<异常类名>（部分收件人被拒时 send_message 不抛异常，error 写 SMTPRecipientsRefused），有状态码时另带 code=<三位状态码>，收件人被拒时另带 refused=<最终仍未被接受的人数>，code 取这些人里按配置顺序第一个人最后一次的状态码；error 与 code 都取最后一次尝试的结果（重试在连接阶段失败时 error 为该连接异常的类名、没有状态码就不带 code）；发出时记 info ops_alert_sent category=<类别>；发信线程的日志只记类别、对象 ID 与异常类名，不带服务器回复原文、主机、账号或地址
-      - 限频——照第 4 条：发信线程在每封第一次尝试之前以 SET <键> 1 NX EX <窗口秒数> 占用一次（重试，含只对部分收件人的重试，不再占用、不再判断），键为前缀 ops_alert 加冒号再加类别、类别以对象作去重键时再加冒号与对象的内部 ID（照第 4 条），窗口为该类别在 CATEGORIES 里写的秒数（3600，去重键为日期的 86400）；占不到就记 info ops_alert_suppressed category=<类别> 后丢弃；发送失败也不删键；Redis 客户端按 Settings.redis_url 由本模块自建（每次操作超时 2 秒、不重试，写法照 app/services/rate_limit.py 的 _client_for），未配置、连不上、超时或出错时改用本进程内存里同样的键与窗口；进程内存里占到的键在窗口内一直有效，Redis 恢复后仍先查进程内存、再以 Redis 占用；不访问 MySQL
-      - 命令与部署——app/jobs.py 加子命令 send-test-alert，在本进程同步发一封 ops_alert_test（对象为无），不经队列、不受限频，照第 3 条超时与重试，服务器接受即退出码 0，未配置时记 warning ops_alert_not_configured 并以 EXIT_NOT_CONFIGURED 退出，最终失败以 EXIT_FAILED 退出；其余一次性子命令（run 与 send-test-alert 以外）执行完后等队列发完（含一次重试）最多 180 秒，到时仍有未发完的记一条 warning ops_alert_unsent count=<封数>，退出码只反映补跑本身的结果；run 的常驻循环退出时不等队列；docker-compose.yml 给 shop_api 与 shop_jobs 都加上七个 SHOP_ALERT_ 变量（写法为变量名加冒号减号的空默认值，照现有 Stripe 变量），shop_jobs 另加 SHOP_REDIS_URL（同 shop_api 的写法）；CATEGORIES 的每一项写明中文说明、处理指引（不含链接、主机与地址）、是否以对象作去重键与窗口秒数，本任务只有 ops_alert_test（说明为测试告警，指引为收到即说明告警邮件配置可用、无需处理）
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_ops_alert.py，以替身代替 smtplib 的 SMTP 与 SMTP_SSL、Redis 照现有测试的 FakeRedis 写法、时钟可注入（不靠真实等待，发送循环写成可在测试里同步推进的形式），覆盖第 9 条所列各项（未配置与配置不合格只记日志、入队不阻塞且不访问数据库、同一限频键入队前合并与队列满即丢弃、限频占用且发送失败也不释放、Redis 不可用改用进程内存、临时失败重试一次且等待重试时其他告警照发、永久失败不重试且 TLS 错误不重试、部分与全部收件人被拒的 4xx 与 5xx 处理且日志不带地址、starttls 不能以明文发送、邮件头不含收件人地址、正文只含四项且不含任何配置值与地址、CATEGORIES 每一项的说明与指引都不含链接与地址）；tests/test_jobs.py 补 send-test-alert 的三种退出码与不受限频、一次性命令退出前等队列与到时记下未发封数、run 不等队列；tests/test_compose_env.py 补两个服务的七个变量与 shop_jobs 的 SHOP_REDIS_URL；每条测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第几条哪一句
-      - docs/task-records/SHOP-TASK-217.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明 alert 的签名、CATEGORIES 每一项的字段、对象类别码的写法与测试替换方式，供 SHOP-TASK-218 至 222 使用）；改动只落在 allowed_change_paths；不改数据库、接口、前端、.platform/、CI 与部署脚本，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-217.md
     allowed_change_paths:
       - app/services/ops_alert.py
       - app/core/config.py
@@ -5939,11 +5932,7 @@ tasks:
     depends_on:
       - SHOP-TASK-217
     acceptance_criteria:
-      - job_failing——Runner 为每个任务记下最后一次失败的异常类名；某任务连续失败（距它最近一次成功，从未成功过则距进程启动，与 healthy 同一算法与 UNHEALTHY_AFTER_SECONDS）满 10 分钟时调用一次 ops_alert.alert("job_failing", ("job", 任务名), error_class=异常类名)；同一段连续失败只调用一次，该任务再次成功后清零，之后再连续失败满 10 分钟才再调用；数据库未配置时一轮里全部任务都算失败，各按此告警（每个任务名一次，error_class 为 database_not_configured）；不发「已恢复」告警；计时只在进程内存里
-      - stock_reset_failed——reset_stock_job 的重置失败在现有 error 日志之后、重新抛出之前调用一次 ops_alert.alert("stock_reset_failed", ("date", 营业日期的 ISO 写法), error_class=异常类名)，只在常驻循环里调用；reset-stock 子命令经同一任务执行时不调用；开关关闭与已完成的跳过不调用
-      - CATEGORIES 加上这两类（中文说明、处理指引、以对象作去重键、窗口秒数照上），处理指引不含链接与主机，stock_reset_failed 的指引写明执行补跑命令 python -m app.jobs reset-stock；心跳、不健康判断与现有日志不变
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_jobs.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，补连续失败满 10 分钟告警一次、未满不告警、同一段失败不重复、成功后清零再满 10 分钟再告警、数据库未配置时每个任务名各一次且 error_class 为 database_not_configured、库存重置失败在常驻循环告警一次而 reset-stock 子命令不告警、跳过时不告警；每条测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6、7 条哪一句
-      - docs/task-records/SHOP-TASK-218.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改发送机制、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-218.md
     allowed_change_paths:
       - app/jobs.py
       - app/services/ops_alert.py
@@ -5965,10 +5954,7 @@ tasks:
     depends_on:
       - SHOP-TASK-217
     acceptance_criteria:
-      - 接线——app/services/stripe_gateway.py 的 stripe_key_not_test 日志之后调用 ops_alert.alert(LOG_KEY_NOT_TEST)（同一进程只调用一次，与日志同在现有的首次判断之内）；不带记录 ID 的 stripe_livemode 日志不调用；app/services/stripe_checkout.py 的 stripe_create_rejected 日志（创建调用，即首次或到期前的重试，被以 invalid_request_error 拒绝、记录改为 expired 之后；到期后对账以 expires_at 被拒是第 3 条的正常路径，现在没有日志，不调用）与 stripe_checkout_needs_review 日志、app/services/stripe_overdue.py 的告警日志（stripe_unreachable 与 stripe_payment_needs_review）之后各调用一次 ops_alert.alert(该日志的类别, ("stripe_checkout", 结账记录 ID))；调用位置与现有日志相同（在提交之后的就在提交之后），不改日志、返回值与事务
-      - CATEGORIES 加上这五类（中文说明、处理指引、不以对象作去重键、窗口 3600 秒），处理指引不含链接与主机，写成到 Stripe 测试后台核对、按类别码查日志这类文字
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_stripe_gateway.py、tests/test_stripe_checkout.py、tests/test_stripe_overdue.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，在现有覆盖这些日志的情形里补断言（每个告警点在所写时机以所写类别与对象调用一次；不带记录 ID 的 stripe_livemode 不调用；已有告警时间的记录再次对账不再调用）；现有测试只为替换 alert 而改；每条新断言所在测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行
-      - docs/task-records/SHOP-TASK-219.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改支付与对账规则、发送机制、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-219.md
     allowed_change_paths:
       - app/services/stripe_gateway.py
       - app/services/stripe_checkout.py
@@ -5994,10 +5980,7 @@ tasks:
     depends_on:
       - SHOP-TASK-217
     acceptance_criteria:
-      - 接线——app/services/stripe_confirm.py 每条 checkout=<ID> 的告警日志（stripe_livemode、stripe_confirm_rejected，以及按确认结果记的 stripe_session_mismatch、stripe_late_payment、stripe_late_payment_unrefundable、stripe_refund_cap）、app/services/stripe_webhook.py 结账记录的 stripe_livemode 与 stripe_confirm_rejected 两条日志之后，各调用一次 ops_alert.alert(该日志的类别, ("stripe_checkout", 结账记录 ID))；app/api/stripe_webhook.py 入口的 stripe_livemode 日志之后调用 ops_alert.alert(LOG_LIVEMODE)；app/services/stripe_webhook.py 里退款尝试的两条日志不在本任务（SHOP-TASK-221）；调用位置与现有日志相同，不改日志、返回值、状态码与事务
-      - CATEGORIES 加上这六类（中文说明、处理指引、不以对象作去重键、窗口 3600 秒），处理指引不含链接与主机，写成到 Stripe 测试后台核对、按类别码查日志这类文字；stripe_refund_cap 的说明同时适用于迟到付款与退款申请两处
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_stripe_confirm.py、tests/test_stripe_late_payment.py、tests/test_stripe_webhook.py、tests/test_stripe_webhook_api.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，在现有覆盖这些日志的情形里补断言（每个告警点以所写类别与对象调用一次；没有告警日志的结果不调用；webhook 入口的对象为 None）；现有测试只为替换 alert 而改；每条新断言所在测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行
-      - docs/task-records/SHOP-TASK-220.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改付款确认与 webhook 规则、发送机制、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-220.md
     allowed_change_paths:
       - app/services/stripe_confirm.py
       - app/services/stripe_webhook.py
@@ -6025,10 +6008,7 @@ tasks:
       - SHOP-TASK-217
       - SHOP-TASK-220
     acceptance_criteria:
-      - 接线——app/services/stripe_refund.py 每条 attempt=<ID> 的告警日志与 refund_request=<ID> 的 stripe_refund_cap 日志、app/services/stripe_refund_overdue.py 的两条告警日志、app/services/stripe_webhook.py 退款尝试的两条日志（stripe_webhook_refund_rejected 与按退款结果记的类别）、app/services/refund_review.py 的告警日志之后，各调用一次 ops_alert.alert(该日志的类别, 对象)，对象照 purpose 的写法；app/api/admin_refunds.py 不改；调用位置与现有日志相同，不改日志、返回值与事务
-      - CATEGORIES 加上这六类（中文说明、处理指引、不以对象作去重键、窗口 3600 秒），处理指引不含链接与主机，写成到 Stripe 测试后台核对、按类别码查日志这类文字
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_stripe_refund.py、tests/test_stripe_refund_overdue.py、tests/test_stripe_webhook_refund.py、tests/test_stripe_refund_approval.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，在现有覆盖这些日志的情形里补断言（每个告警点以所写类别与对象调用一次；没有告警日志的结果不调用；退款申请两处的对象类别为 refund_request）；现有测试只为替换 alert 而改；每条新断言所在测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行
-      - docs/task-records/SHOP-TASK-221.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改退款规则、发送机制、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-221.md
     allowed_change_paths:
       - app/services/stripe_refund.py
       - app/services/stripe_refund_overdue.py
@@ -6056,12 +6036,7 @@ tasks:
     depends_on:
       - SHOP-TASK-217
     acceptance_criteria:
-      - sms_budget_exhausted——app/services/sms_verification.py 在 reserve_sms 的结果为 over_budget、停发（_suspend）提交之后记一条 error 日志并调用一次 ops_alert.alert("sms_budget_exhausted", ("date", 马来西亚日期的 ISO 写法))，日期取 app/services/sms_budget.py 的 malaysia_date；unknown_cost、Redis 不可用、超出限流与服务商失败的停发都不调用；返回值与事务不变
-      - admin_login_locked——app/api/admin_auth.py 在登录刚被锁定、写了 admin_login_locked 审计并提交之后记一条 error 日志并调用一次 ops_alert.alert("admin_login_locked", ("audit_event", 该审计记录的 ID))；用户名不存在的锁定不写审计、也不调用；响应、状态码与审计不变
-      - member_deletion_failed——app/api/member_deletion.py 的确认注销在 delete_member 或提交抛数据库异常、回滚之后记一条 error 日志并调用一次 ops_alert.alert("member_deletion_failed", ("member", 会员 ID))，然后照现有写法回答暂不可用；读取开关失败、会员已不是有效时不调用
-      - CATEGORIES 加上这三类（中文说明、处理指引、去重键与窗口秒数照上），处理指引不含链接与主机；三条新日志不带用户名、电话、来源地址与异常消息
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_sms_verification.py、tests/test_admin_auth_api.py、tests/test_member_delete_confirm_api.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，补每个告警点在所写时机以所写类别与对象调用一次、所列不告警的情形不调用、新日志不含电话与用户名；现有测试只为替换 alert 而改；每条测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行
-      - docs/task-records/SHOP-TASK-222.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改短信、登录与注销规则、发送机制、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-222.md
     allowed_change_paths:
       - app/services/sms_verification.py
       - app/api/admin_auth.py
@@ -6071,6 +6046,92 @@ tasks:
       - tests/test_admin_auth_api.py
       - tests/test_member_delete_confirm_api.py
       - docs/task-records/SHOP-TASK-222.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-223
+    title: 作废已告警的 Stripe 结账记录并取消订单（服务层）
+    purpose: >-
+      按 docs/DESIGN.md 1.22「Stripe 测试环境支付」第 11 条第（1）项与「订单与退款状态」第 3 条，在 app/services/payment.py 新增公开函数 void_alerted_checkout(db, gateway, checkout_id, now)，供之后的后台接口处置已写告警时间、不是 expired、所属订单仍待支付的结账记录：先按第 4、5 条向 Stripe 查询一次，查得确定结果照现有规则处理；查不出结果、会话 complete 而付款未定、Stripe 答复已付款而照第 6 条写不成退款尝试，或记录为 creating 时，才把记录记为 expired 并以操作者 admin 取消订单（人工作废）。只做服务层；管理员的核实勾选、审计与响应由 SHOP-TASK-225 的接口处理。不改接口、前端、数据库与设计，不加依赖。
+      运营者落实写法：返回值为新的 StrEnum VoidResult（confirmed、cancelled、voided、changed、unavailable 五个值），记录不存在抛新异常 CheckoutNotFound。查得确定结果时沿用现有处理：open 记录照 _end_open 请求作废与查询，作废成功或查询到 expired 时给记录 ID 以操作者 system 调用 cancel_after_stripe_end；complete（含 open 查询到 complete）调用 confirm_checkout，paid 为 confirmed，refunded 时不给记录 ID 以 system 调用 cancel_after_stripe_end；这些自动处理的订单事件操作者照现有规则为 system，只有人工作废的为 admin。cancel_after_stripe_end 与 cancel_order 的操作者范围不变（tests/test_stripe_cancel.py 断言 cancel_after_stripe_end 拒绝 admin，保持通过）。本函数不写审计、不记日志、不发告警、不清空告警时间。
+      设计闸门：DESIGN 1.22（提交 ffb043e）「Stripe 测试环境支付」第 11 条第（1）项与「订单与退款状态」第 3 条。
+      拆分：人工处置的服务层第一个任务（5 个允许路径）；迟到付款退款重试与两类列表的查询见 SHOP-TASK-224，接口见 SHOP-TASK-225，后台页面待 UX 与视觉稿审阅后登记。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 入口——app/services/payment.py 新增 void_alerted_checkout(db, gateway, checkout_id, now) 返回 VoidResult；now 带时区抛 ValueError（先于访问数据库）；调用方不得持有锁或未提交的改动，函数先结束当前事务，调用 Stripe 时不持有任何数据库锁、不留着读事务；记录不存在抛 CheckoutNotFound
+      - 前置条件——以普通读取取记录与订单后结束读事务；告警时间为空、记录为 expired 或订单不是 awaiting_demo_payment 时不调用 Stripe、不写库，返回 changed
+      - 查得确定结果——open 记录请求 Stripe 作废，作废成功或查询到 expired 时取消订单并返回 cancelled；complete 记录（含 open 查询到 complete，用这次查询到的会话）调用 confirm_checkout，paid 返回 confirmed，refunded（金额或币种不符、已写成全额退款尝试）时接着取消订单并返回 cancelled；cancel_after_stripe_end 返回 changed 时返回 changed，返回 kept 时按订单当前状态（demo_paid 为 confirmed，其他为 changed）
+      - 人工作废的条件——只在以下情形进入人工作废：creating（不调用 Stripe）；confirm_checkout 返回 needs_review 或 pending；open 作废与查询都给不出确定结果，或 Stripe 不可用、confirm_checkout 返回 unavailable，且读取时记录的付款状态不是 paid。读取时付款状态已是 paid 而 Stripe 给不出结果时不作废、不写库，返回 unavailable
+      - 人工作废的事务——进入前重新以普通读取取记录（Stripe 处理可能已改动它）；在一个事务里按会员、订单、记录的顺序加锁重查，记录仍属该订单、状态与这次读到的相同、不是 expired、告警时间非空、订单仍待支付且没有其他不是 expired 的记录，付款状态为 paid 时只在 needs_review 情形允许；不满足即回滚返回 changed。满足则记录记为 expired、活动列置空，订单以带条件的 UPDATE 改为 demo_cancelled（不看本地支付到期时间），加回库存、释放券与积分预占、写一条操作者为 admin 的订单事件，提交后返回 voided
+      - 订单规则——app/services/order_rules.py 的 (awaiting_demo_payment, demo_cancelled) 允许的操作者加上 admin，注释写明只经 DESIGN 1.22 第 11 条的人工作废；tests/test_order_rules.py 只为这一处的期望表与断言改动；其他迁移不变
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_stripe_void.py 用 app/services/stripe_gateway.py 的 FakeStripeGateway 与 SQLite，覆盖上面每一个分支的返回值与库里的结果（记录状态与活动列、订单状态、库存加回、券与积分预占释放、事件操作者），creating 不调用 Stripe，读取时已付款而 Stripe 不可用时不作废，Stripe 处理之后记录被并发改动时返回 changed，以及人工作废之后同一会话的付款经 confirm_checkout 按第 6 条写成全额退款尝试、订单保持已取消；每条测试的文档字符串写明它守住的 DESIGN 1.22 第 11 条哪一句
+      - docs/task-records/SHOP-TASK-223.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改接口、前端、数据库与迁移、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
+    allowed_change_paths:
+      - app/services/payment.py
+      - app/services/order_rules.py
+      - tests/test_order_rules.py
+      - tests/test_stripe_void.py
+      - docs/task-records/SHOP-TASK-223.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-224
+    title: 迟到付款退款的手动重试与 Stripe 待处理列表的查询（服务层）
+    purpose: >-
+      按 docs/DESIGN.md 1.22「Stripe 测试环境支付」第 11 条第（2）项，在 app/services/stripe_refund.py 新增 retry_checkout_attempt(db, checkout_id, now)：来源为会话（第 6 条迟到与不符的付款）、最新一次尝试为 failed 时新建一条 pending 尝试；并按第 11 条的两类列表与各自的退出条件，新增 app/services/admin_stripe_pending.py 提供只读查询。只做服务层，不改接口、前端、数据库与设计，不加依赖。
+      运营者落实写法：retry_checkout_attempt 照 retry_request_attempt 的写法只 flush、不提交，由之后的接口写审计、提交并调用 submit_refund_attempt；付款金额取该来源原尝试的金额（第 6 条写入时等于会话的 amount_total）；stripe_refund_cap 的日志写法为 stripe_refund_cap checkout=<结账记录 ID>，告警对象为（stripe_checkout, 结账记录 ID），对象类别取 app/services/stripe_checkout.py 的 ALERT_TARGET_KIND。第 11 条写的「失败时间」在数据模型里没有对应字段（StripeRefund 只有创建、成功与上次复查时间），列表给出最新一次尝试的创建时间（字段名 attempted_at），不加字段、不改设计（偏离记入任务记录）。
+      设计闸门：DESIGN 1.22（提交 ffb043e）「Stripe 测试环境支付」第 11 条第（2）项与第 8 条；列表只给对账字段与订单号，不给收货资料、Stripe 的任何 ID 与客户资料。
+      拆分：人工处置的服务层第二个任务（5 个允许路径），与 SHOP-TASK-223 互不依赖；接口见 SHOP-TASK-225。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 重试——app/services/stripe_refund.py 新增 retry_checkout_attempt(db, checkout_id, now) 返回新尝试的 ID；now 带时区抛 ValueError（先于访问数据库）；先结束此前的事务，再按订单、该结账记录的顺序加锁（订单行是新事务的第一条加锁语句），结账记录不存在抛新异常 RetryCheckoutNotFound
+      - 重试的检查——取来源为该结账记录（source_type 为 checkout）的尝试中 ID 最大的一条，没有抛 NoRefundAttempt，不是 failed 抛 RetryNotAllowed；以 refunded_total 锁住同一 PaymentIntent 的尝试，已有合计加原尝试金额超过原尝试金额时记一条 error 日志 stripe_refund_cap checkout=<ID>，紧接着以（stripe_checkout, 结账记录 ID）调用一次 ops_alert.alert，再抛 RefundCapExceeded；否则在保存点里写一条 pending 尝试（PaymentIntent 与金额同原尝试、来源为该结账记录、活动来源列为该记录 ID），撞上活动来源列的唯一约束时只回滚保存点并抛 RetryNotAllowed；抛出时都没有写库
+      - 列表——新文件 app/services/admin_stripe_pending.py 提供只读查询，返回两类，各按所写顺序、不分页：待处理的结账记录（告警时间非空、状态不是 expired、订单为 awaiting_demo_payment，按告警时间从早到晚、同时刻按 ID），每条给 checkout_id、status、order_number、created_at、alerted_at；失败的迟到付款退款（来源为会话、该来源 ID 最大的尝试为 failed，不论订单状态与结账记录是否已为 expired；按该尝试的 ID 从小到大），每条给 checkout_id、attempt_id、order_number、amount_sen、attempted_at（该尝试的创建时间）、error_type（last_error_type，可空）
+      - 列表不给收货资料、会员资料、Stripe 的任何 ID、付款页地址与创建参数快照；查询只读、结束读事务；以 Pydantic 模型给出，字段名照上
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_stripe_late_refund_retry.py 覆盖重试的每一步（不存在、没有尝试、最新不是 failed、合计超额的日志与告警调用、唯一约束冲突、成功时新尝试的字段）并以 monkeypatch 替换 app.services.ops_alert.alert 记录调用；新文件 tests/test_admin_stripe_pending.py 覆盖两类列表的进入与退出条件（结账记录告警时间为空、已 expired、订单已不是待支付时不列出；退款最新一次已不是 failed 时不列出，记录已 expired 或订单已取消时仍列出）、排序与不含收货资料和 Stripe ID；每条测试的文档字符串写明它守住的 DESIGN 1.22 第 11 条哪一句
+      - docs/task-records/SHOP-TASK-224.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，偏离里写明 attempted_at 代替设计的失败时间）；改动只落在 allowed_change_paths；不改接口、前端、数据库与迁移、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
+    allowed_change_paths:
+      - app/services/stripe_refund.py
+      - app/services/admin_stripe_pending.py
+      - tests/test_stripe_late_refund_retry.py
+      - tests/test_admin_stripe_pending.py
+      - docs/task-records/SHOP-TASK-224.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-225
+    title: 后台 Stripe 待处理的列表、作废与退款重试接口
+    purpose: >-
+      按 docs/DESIGN.md 1.22「Stripe 测试环境支付」第 11 条，新增 app/api/admin_stripe_pending.py 的三个后台接口，并在 app/main.py 注册路由：GET /api/admin/stripe-pending 给出两类列表（SHOP-TASK-224 的查询）；POST /api/admin/stripe-pending/checkouts/{checkout_id}/void 在管理员勾选核实后调用 SHOP-TASK-223 的 void_alerted_checkout；POST /api/admin/stripe-pending/checkouts/{checkout_id}/refund-retry 调用 SHOP-TASK-224 的 retry_checkout_attempt，提交后以新尝试调用 Stripe。不改服务层规则、前端、数据库与设计，不加依赖。
+      运营者落实写法：照 app/api/admin_refunds.py 的 stripe-retry 写法。作废的请求体恰好是 {"verified":true}（多余字段、缺少或不为 true 都是 422），返回 200 {"result":结果}，结果为 confirmed、cancelled 或 voided；changed 回 409 stripe_pending_changed，unavailable 回 503 stripe_unavailable（同 app/api/pay.py 的 _stripe_unavailable）。重试不读请求体、不要幂等键：没有尝试或不能重试 409 stripe_refund_not_retryable，超额 409 stripe_refund_cap，成功 200 {"result":"retried"}。审计在接口层写：作废得到 confirmed、cancelled 或 voided 后另开事务写 stripe_checkout_voided（对象 stripe_checkout 与记录 ID，新值为结果）并提交；重试在服务层 flush 之后、同一事务里写 stripe_late_refund_retried（对象 stripe_refund 与新尝试 ID）后提交，再调用 submit_refund_attempt，它抛异常时回滚并记 stripe_refund_submit_failed attempt=<ID>，仍回 200。
+      设计闸门：DESIGN 1.22（提交 ffb043e）「Stripe 测试环境支付」第 11 条；只认管理员会话，写操作校验 CSRF，响应不含收货资料、Stripe 的任何 ID 与客户资料。
+      拆分：人工处置的接口层（4 个允许路径），依赖 SHOP-TASK-223 与 224。
+    status: ready
+    depends_on:
+      - SHOP-TASK-223
+      - SHOP-TASK-224
+    acceptance_criteria:
+      - 路由——app/api/admin_stripe_pending.py 的路由前缀为 /api/admin/stripe-pending，用 app/api/order_lookup.py 的 _NoStoreRoute，在 app/main.py 注册；这些接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control 为 no-store，路径存在但方法不匹配时由框架返回的 405 不在此列
+      - 列表——GET 经 require_admin（401 admin_session_required），不要求 CSRF、不写审计，200 返回 SHOP-TASK-224 两类列表的全部字段，时间照现有后台接口的写法序列化
+      - 作废——POST …/checkouts/{checkout_id}/void 依次 require_admin（401）、require_admin_csrf（403）、路径里的记录 ID（不带符号与前导零的十进制整数，否则 422）、请求体（422，错误写法沿用 app/api/pay.py 的 _body_errors，不回显请求内容），之后才调用 void_alerted_checkout；记录不存在 404 not_found，changed 409 stripe_pending_changed，unavailable 503 stripe_unavailable，其余 200 与结果；Stripe 适配器经 app/api/pay.py 的 GatewayDep 取得
+      - 作废的审计——结果为 confirmed、cancelled 或 voided 时写一条审计 stripe_checkout_voided（target_type 为 stripe_checkout、target_id 为记录 ID、新值为结果，旧值为空）并提交；changed 与 unavailable 不写审计
+      - 重试——POST …/checkouts/{checkout_id}/refund-retry 依次 require_admin（401）、require_admin_csrf（403）、路径（422），不读请求体；RetryCheckoutNotFound 为 404 not_found，NoRefundAttempt 与 RetryNotAllowed 为 409 stripe_refund_not_retryable，RefundCapExceeded 为 409 stripe_refund_cap（告警已由服务层报），每种错误先回滚；成功时同一事务写审计 stripe_late_refund_retried（target_type 为 stripe_refund、target_id 为新尝试 ID）并提交，再以 submit_refund_attempt 调用 Stripe，它的结果不改变响应，抛异常时回滚并记一条 error 日志 stripe_refund_submit_failed attempt=<ID>（不记异常内容），200 {"result":"retried"}
+      - 资料——响应与日志不含收货资料、会员资料、Stripe 的任何 ID、付款页地址与 Stripe 错误原文；除上述 stripe_refund_submit_failed 外不写日志
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_stripe_pending_api.py 用 TestClient 与 FakeStripeGateway，覆盖三个接口的每个状态码与 detail、校验顺序（CSRF 或路径不通过时不调用服务层）、no-store、作废的审计只在三种结果时写、重试的审计与提交后调用 Stripe、submit 抛异常仍回 200，以及响应不含收货资料与 Stripe ID；每条测试的文档字符串写明它守住的 DESIGN 1.22 第 11 条哪一句
+      - docs/task-records/SHOP-TASK-225.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改服务层规则、前端、数据库与迁移、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
+    allowed_change_paths:
+      - app/api/admin_stripe_pending.py
+      - app/main.py
+      - tests/test_admin_stripe_pending_api.py
+      - docs/task-records/SHOP-TASK-225.md
     allowed_commands:
       - lint.check
       - format.check

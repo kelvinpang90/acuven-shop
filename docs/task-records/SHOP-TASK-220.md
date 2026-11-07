@@ -24,3 +24,15 @@
 - `tests/test_stripe_webhook_api.py`：livemode 事件在日志之后以 `("stripe_livemode", None)` 调用一次，仍回 400；测试环境的已付款事件不调用。
 - 每条新断言所在测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行。
 - 后端测试由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑后端测试。
+
+## 登记时的验收标准（原文）
+
+2026-11-08 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 接线——app/services/stripe_confirm.py 每条 checkout=<ID> 的告警日志（stripe_livemode、stripe_confirm_rejected，以及按确认结果记的 stripe_session_mismatch、stripe_late_payment、stripe_late_payment_unrefundable、stripe_refund_cap）、app/services/stripe_webhook.py 结账记录的 stripe_livemode 与 stripe_confirm_rejected 两条日志之后，各调用一次 ops_alert.alert(该日志的类别, ("stripe_checkout", 结账记录 ID))；app/api/stripe_webhook.py 入口的 stripe_livemode 日志之后调用 ops_alert.alert(LOG_LIVEMODE)；app/services/stripe_webhook.py 里退款尝试的两条日志不在本任务（SHOP-TASK-221）；调用位置与现有日志相同，不改日志、返回值、状态码与事务
+      - CATEGORIES 加上这六类（中文说明、处理指引、不以对象作去重键、窗口 3600 秒），处理指引不含链接与主机，写成到 Stripe 测试后台核对、按类别码查日志这类文字；stripe_refund_cap 的说明同时适用于迟到付款与退款申请两处
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_stripe_confirm.py、tests/test_stripe_late_payment.py、tests/test_stripe_webhook.py、tests/test_stripe_webhook_api.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，在现有覆盖这些日志的情形里补断言（每个告警点以所写类别与对象调用一次；没有告警日志的结果不调用；webhook 入口的对象为 None）；现有测试只为替换 alert 而改；每条新断言所在测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行
+      - docs/task-records/SHOP-TASK-220.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改付款确认与 webhook 规则、发送机制、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
+```
