@@ -42,8 +42,11 @@ system；给了记录 ID 时记录的 expired 与订单的取消在它的同一�
 各以只改这一列的 UPDATE 写入并立即提交，期间不再加别的锁。SQLite
 不支持行锁，SQLAlchemy 在 SQLite 上不生成 FOR UPDATE。
 
-运营告警邮件尚未接入：设计写「告警」之处先记一条 error 级日志，
-只含类别与本站记录 ID。每条记录至多告警一次：告警时间已非空（含
+设计写「告警」之处记一条 error 级日志，只含类别与本站记录 ID；按
+docs/DESIGN.md 1.21「运营告警邮件」第 6 条与 docs/HANDOFF.md 0.88
+（SHOP-TASK-219），紧接着以同一类别、对象（stripe_checkout, 记录 ID）
+调用 ops_alert.alert，不带 Stripe 的任何 ID、金额与个人资料。每条记录
+至多告警一次：告警时间已非空（含
 SHOP-TASK-112 的 stripe_checkout_needs_review 与 SHOP-TASK-117 在
 确认返回 needs_review 时写的）就不再记任何告警，告警时间也不清空。
 本模块不提供人工处置的入口。库里的时间一律是不带时区的 UTC。
@@ -67,8 +70,13 @@ from app.models.stripe import (
     CHECKOUT_OPEN,
     PAYMENT_PAID,
 )
+from app.services import ops_alert
 from app.services.payment import cancel_after_stripe_end
-from app.services.stripe_checkout import ReconcileOutcome, reconcile_creating_checkout
+from app.services.stripe_checkout import (
+    ALERT_TARGET_KIND,
+    ReconcileOutcome,
+    reconcile_creating_checkout,
+)
 from app.services.stripe_confirm import ConfirmResult, confirm_checkout, fill_payment_method_type
 from app.services.stripe_gateway import CheckoutSession, StripeGateway, StripeOutcome
 
@@ -77,7 +85,7 @@ logger = logging.getLogger(__name__)
 # 第 3、5 条的「24 小时」。
 ALERT_AFTER = timedelta(hours=24)
 
-# 告警邮件接入前的 error 级日志类别（只含类别与记录 ID）。
+# error 级日志类别（只含类别与记录 ID），同时是运营告警的类别码。
 # creating 与 open 记录 24 小时仍无法确定（creating 自记录创建、
 # open 自 Stripe 到期时间起算）。
 LOG_UNREACHABLE = "stripe_unreachable"
@@ -376,7 +384,8 @@ def _unresolved(db: Session, view: _View, since: datetime, category: str, now: d
     """仍无法确定：订单不取消、库存继续预留，留到下一轮。
 
     自 since 满 24 小时、告警时间仍为空时写告警时间并提交，再记一条
-    error 日志（类别与记录 ID）；带条件的 UPDATE 保证至多一次。
+    error 日志（类别与记录 ID）并报同类别的运营告警；带条件的 UPDATE
+    保证至多一次。
     """
     if view.alerted or now < since + ALERT_AFTER:
         return
@@ -395,3 +404,4 @@ def _unresolved(db: Session, view: _View, since: datetime, category: str, now: d
         return
     db.commit()
     logger.error("%s checkout=%d", category, view.checkout_id)
+    ops_alert.alert(category, (ALERT_TARGET_KIND, view.checkout_id))

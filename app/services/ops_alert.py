@@ -3,7 +3,9 @@
 依据 docs/DESIGN.md 1.21（提交 5be346e）「运营告警邮件」第 1 至 5 条与第 9 条，
 以及 docs/HANDOFF.md 0.88 记录的落实写法（SHOP-TASK-217）。各业务告警点的接线
 （第 6、7 条）由 SHOP-TASK-218 至 222 完成，各自把类别加进 CATEGORIES；定时任务失败的
-job_failing 与 stock_reset_failed 由 SHOP-TASK-218 在 app/jobs.py 接入。
+job_failing 与 stock_reset_failed 由 SHOP-TASK-218 在 app/jobs.py 接入；Stripe 结账创建与
+对账的五类（stripe_key_not_test、stripe_checkout_needs_review、stripe_create_rejected、
+stripe_unreachable、stripe_payment_needs_review）由 SHOP-TASK-219 接入。
 
 调用方的写法（HANDOFF 0.88）：
 
@@ -141,6 +143,54 @@ CATEGORIES: dict[str, AlertCategory] = {
         ),
         dedupe_by_target=True,
         window_seconds=DAY_SECONDS,
+    ),
+    # SHOP-TASK-219：Stripe 结账创建与对账（第 6 条表），都按类别限频。
+    "stripe_key_not_test": AlertCategory(
+        description="配置的 Stripe 密钥不是测试密钥，Stripe 支付未启用",
+        guidance=(
+            "核对私有配置里的 Stripe 密钥，只能配置 Stripe 测试环境的 sk_test_ 或 rk_test_ "
+            "密钥，不得配置正式环境的任何密钥；改好后重启 API 与定时任务容器，"
+            "按类别码查日志确认不再出现。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    "stripe_checkout_needs_review": AlertCategory(
+        description="Stripe 结账会话的创建结果 24 小时仍无法确定，已转人工核对",
+        guidance=(
+            "按类别码与结账记录 ID 查日志，到 Stripe 测试后台核对这笔会话是否建成及其"
+            "付款状态；订单在此期间不取消、库存继续预留，本站不再自动处理这条记录。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    "stripe_create_rejected": AlertCategory(
+        description="Stripe 以参数不合格拒绝创建结账会话，结账记录已记为过期",
+        guidance=(
+            "按类别码与结账记录 ID 查日志，到 Stripe 测试后台核对被拒的原因（如付款方式"
+            "或账户设置）；访客可重新发起支付，反复出现时排查创建参数与 Stripe 测试后台的设置。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    "stripe_unreachable": AlertCategory(
+        description="Stripe 结账会话 24 小时仍无法查询",
+        guidance=(
+            "按类别码与结账记录 ID 查日志，核对 Stripe 配置与 Stripe 测试后台的服务状态，"
+            "并到 Stripe 测试后台核对这笔会话；订单不自动取消、库存继续预留，"
+            "Stripe 恢复后定时任务按会话的实际状态处理。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    "stripe_payment_needs_review": AlertCategory(
+        description="Stripe 结账会话完成 24 小时后付款仍无结果",
+        guidance=(
+            "按类别码与结账记录 ID 查日志，到 Stripe 测试后台核对这笔付款的状态；"
+            "订单照旧待支付、库存继续预留，定时任务仍会查询并以 Stripe 给出的结果为准。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
     ),
 }
 
