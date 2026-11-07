@@ -61,7 +61,7 @@ from app.models.stripe import (
     PAYMENT_PAID,
     PAYMENT_UNPAID,
 )
-from app.services import stripe_overdue
+from app.services import ops_alert, stripe_overdue
 from app.services.coupons import reserve_coupon
 from app.services.points import earn_points, reserve_points
 from app.services.stripe_checkout import deserialize_form
@@ -123,10 +123,24 @@ PAID_BY_SYSTEM = (STATUS_AWAITING_PAYMENT, STATUS_PAID, ACTOR_SYSTEM)
 
 _SEQUENCE = itertools.count(1)
 
+Alert = tuple[str, object]
+
 
 # ---------------------------------------------------------------------------
 # 夹具与数据
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def alerts(monkeypatch: pytest.MonkeyPatch) -> list[Alert]:
+    """以 monkeypatch 替换 ops_alert.alert，按调用顺序记下（类别, 对象）。"""
+    calls: list[Alert] = []
+
+    def record(category: str, target: object = None, **_: object) -> None:
+        calls.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
+    return calls
 
 
 @pytest.fixture
@@ -505,12 +519,14 @@ def test_creating_is_retried_before_stripe_expiry_with_the_same_key(
 
 
 def test_creating_reconciled_as_never_created_cancels_and_releases(
-    db: Session, variant: int
+    db: Session, variant: int, alerts: list[Alert]
 ) -> None:
     """第 5 条「会话为 creating 时先按第 3 条取得会话或对账，只有对账确认
     没有建成会话（记为 expired）才取消」与核验结论（过去的 expires_at 被 400
     拒绝即原请求没有建成）；验收：订单已过本地支付到期时间时以 system 按现有
-    规则取消，释放库存、券与积分。"""
+    规则取消，释放库存、券与积分。DESIGN 1.21「运营告警邮件」第 6 条
+    stripe_create_rejected 一行按 HANDOFF 0.88 第 9 项落在创建调用被拒处：到期后
+    对账以 expires_at 被拒不调用 ops_alert.alert。"""
     placed = _member_order(db, variant)
     checkout_id = _checkout(db, placed.order_id, CHECKOUT_CREATING)
     gateway = FakeStripeGateway(CREATE_REJECTED_EXPIRES_AT)
@@ -524,14 +540,17 @@ def test_creating_reconciled_as_never_created_cancels_and_releases(
     assert _stock(db, variant) == INITIAL_STOCK
     assert _coupon_uses(db, placed.order_id) == [USE_RELEASED]
     assert _entry_kinds(db, placed.order_id) == [KIND_REDEEM, KIND_RELEASE]
+    assert alerts == []
 
 
 def test_creating_reconciled_as_never_created_before_local_expiry_keeps_the_order(
-    db: Session, variant: int
+    db: Session, variant: int, alerts: list[Alert]
 ) -> None:
     """第 3 条「Stripe 以参数不合格……拒绝……记为 expired」；验收：只有对账
     记为 expired 且订单已过本地支付到期时间时才取消——到期前的重试被 400 参数
-    错误拒绝时只记 expired，订单仍待支付。"""
+    错误拒绝时只记 expired，订单仍待支付。DESIGN 1.21「运营告警邮件」第 6 条
+    stripe_create_rejected 一行：定时任务的重试被拒、记录改为 expired 之后以
+    （stripe_checkout, 记录 ID）调用一次 ops_alert.alert。"""
     placed = _member_order(db, variant)
     checkout_id = _checkout(db, placed.order_id, CHECKOUT_CREATING)
     before = _state(db, placed)
@@ -545,6 +564,7 @@ def test_creating_reconciled_as_never_created_before_local_expiry_keeps_the_orde
     assert _record(db, checkout_id).status == CHECKOUT_EXPIRED
     assert _state(db, placed) == before
     assert _coupon_uses(db, placed.order_id) == [USE_RESERVED]
+    assert alerts == [("stripe_create_rejected", ("stripe_checkout", checkout_id))]
 
 
 def test_creating_with_an_unknown_result_keeps_the_order(db: Session, variant: int) -> None:
@@ -591,12 +611,15 @@ def test_creating_reconciled_to_a_paid_session_continues_to_confirmation(
 
 
 def test_creating_alerts_once_24_hours_after_creation(
-    db: Session, variant: int, caplog: pytest.LogCaptureFixture
+    db: Session, variant: int, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 3 条「24 小时内仍无法确定就不再自动处理、告警由人工核对，订单在此
     期间不取消、库存继续预留」；验收：creating 记录自创建满 24 小时只告警一次
     （SHOP-TASK-112 的 stripe_checkout_needs_review），不等到 Stripe 到期后
-    24 小时，之后不再调用 Stripe。"""
+    24 小时，之后不再调用 Stripe。DESIGN 1.21「运营告警邮件」第 6 条
+    stripe_checkout_needs_review 一行：满 24 小时那一轮以（stripe_checkout, 记录 ID）
+    调用一次 ops_alert.alert，未满时与已有告警时间的下一轮都不调用（也不另报
+    stripe_unreachable）。"""
     placed = _member_order(db, variant)
     checkout_id = _checkout(db, placed.order_id, CHECKOUT_CREATING)
     before = _state(db, placed)
@@ -605,14 +628,18 @@ def test_creating_alerts_once_24_hours_after_creation(
     assert _run(db, almost, STARTED + DAY - SECOND) == 1
     assert _paths(almost) == [("POST", SESSIONS_PATH)]
     assert _alerts(caplog) == []
+    assert alerts == []
 
     due = FakeStripeGateway()
     assert _run(db, due, STARTED + DAY) == 1
+    expected = [("stripe_checkout_needs_review", ("stripe_checkout", checkout_id))]
+    assert alerts == expected
     later = FakeStripeGateway()
     assert _run(db, later, STRIPE_EXPIRES + DAY) == 1
 
     assert due.calls == [] and later.calls == []
     assert _alerts(caplog) == [f"stripe_checkout_needs_review checkout={checkout_id}"]
+    assert alerts == expected
     record = _record(db, checkout_id)
     assert (record.status, record.alerted_at) == (CHECKOUT_CREATING, STARTED + DAY)
     assert _state(db, placed) == before
@@ -784,11 +811,14 @@ def test_complete_with_an_unsettled_payment_keeps_waiting(
 
 
 def test_complete_without_a_result_alerts_once_after_24_hours(
-    db: Session, variant: int, caplog: pytest.LogCaptureFixture
+    db: Session, variant: int, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 5 条「会话完成 24 小时后仍无结果就告警，由运营者在 Stripe 后台跟进，
     订单照旧等待」；验收：完成时间满 24 小时写告警时间并记一条
-    stripe_payment_needs_review，只告警一次。"""
+    stripe_payment_needs_review，只告警一次。DESIGN 1.21「运营告警邮件」第 6 条
+    stripe_payment_needs_review 一行（「complete 记录完成 24 小时后付款仍无结果、
+    写告警时间并提交之后」，对象为结账记录 ID）：满 24 小时那一轮调用一次
+    ops_alert.alert，未满时与已有告警时间的下一轮都不调用。"""
     placed = _member_order(db, variant)
     checkout_id = _checkout(db, placed.order_id, CHECKOUT_COMPLETE)
     pending = _ok(
@@ -798,26 +828,33 @@ def test_complete_without_a_result_alerts_once_after_24_hours(
 
     assert _run(db, FakeStripeGateway(pending), STARTED + DAY - SECOND) == 1
     assert _alerts(caplog) == []
+    assert alerts == []
     assert _run(db, FakeStripeGateway(pending), STARTED + DAY) == 1
+    expected = [("stripe_payment_needs_review", ("stripe_checkout", checkout_id))]
+    assert alerts == expected
     assert _run(db, FakeStripeGateway(pending), STARTED + DAY + timedelta(hours=1)) == 1
 
     assert _alerts(caplog) == [f"stripe_payment_needs_review checkout={checkout_id}"]
+    assert alerts == expected
     assert _record(db, checkout_id).alerted_at == STARTED + DAY
     assert _state(db, placed) == before
 
 
 def test_complete_unreachable_alerts_as_payment_needs_review(
-    db: Session, variant: int, caplog: pytest.LogCaptureFixture
+    db: Session, variant: int, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 5 条「会话完成 24 小时后仍无结果就告警」；验收：complete 记录查询
     不可用时不用 stripe_unreachable，按完成时间满 24 小时记
-    stripe_payment_needs_review。"""
+    stripe_payment_needs_review。DESIGN 1.21「运营告警邮件」第 6 条
+    stripe_payment_needs_review 一行：以同一类别与（stripe_checkout, 记录 ID）
+    调用一次 ops_alert.alert。"""
     placed = _guest_order(db, variant)
     checkout_id = _checkout(db, placed.order_id, CHECKOUT_COMPLETE)
 
     assert _run(db, FakeStripeGateway(UNAVAILABLE), STARTED + DAY) == 1
 
     assert _alerts(caplog) == [f"stripe_payment_needs_review checkout={checkout_id}"]
+    assert alerts == [("stripe_payment_needs_review", ("stripe_checkout", checkout_id))]
     assert _status(db, placed.order_id) == STATUS_AWAITING_PAYMENT
 
 
@@ -847,34 +884,57 @@ def test_refunded_mismatched_payment_cancels_an_overdue_order(db: Session, varia
 
 
 def test_open_unreachable_alerts_once_24_hours_after_stripe_expiry(
-    db: Session, variant: int, caplog: pytest.LogCaptureFixture
+    db: Session,
+    engine: Engine,
+    variant: int,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+    alerts: list[Alert],
 ) -> None:
     """第 5 条「Stripe 不可用时……定时任务跳过该单留到下一轮；订单保持待支付、
     库存继续预留」「24 小时仍无法查询就告警由人工核对，订单不自动取消」；验收：
     open 记录自 Stripe 到期时间满 24 小时写告警时间并记一条
-    stripe_unreachable，只告警一次。"""
+    stripe_unreachable，只告警一次。DESIGN 1.21「运营告警邮件」第 6 条
+    stripe_unreachable 一行（「creating 或 open 记录 24 小时仍无法查询、写告警
+    时间并提交之后」，对象为结账记录 ID）：满 24 小时那一轮在日志之后、告警时间
+    已提交时调用一次 ops_alert.alert，未满时与已有告警时间的下一轮都不调用。"""
     placed = _member_order(db, variant)
     checkout_id = _checkout(db, placed.order_id, CHECKOUT_OPEN)
     before = _state(db, placed)
+    seen: list[tuple[list[str], datetime | None]] = []
+
+    def record(category: str, target: object = None, **_: object) -> None:
+        # 调用时已有的告警日志，与另一个会话读到的已提交告警时间。
+        with Session(engine) as other:
+            stmt = select(StripeCheckout.alerted_at).where(StripeCheckout.id == checkout_id)
+            seen.append((_alerts(caplog), other.scalars(stmt).one()))
+        alerts.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
 
     assert _run(db, FakeStripeGateway(UNAVAILABLE), STRIPE_EXPIRES + DAY - SECOND) == 1
     assert _alerts(caplog) == []
+    assert alerts == []
     assert _record(db, checkout_id).last_polled_at == STRIPE_EXPIRES + DAY - SECOND
     assert _run(db, FakeStripeGateway(UNAVAILABLE), STRIPE_EXPIRES + DAY) == 1
     assert _run(db, FakeStripeGateway(UNAVAILABLE), STRIPE_EXPIRES + DAY + SECOND) == 1
 
     assert _alerts(caplog) == [f"stripe_unreachable checkout={checkout_id}"]
+    assert alerts == [("stripe_unreachable", ("stripe_checkout", checkout_id))]
+    assert seen == [([f"stripe_unreachable checkout={checkout_id}"], STRIPE_EXPIRES + DAY)]
     record = _record(db, checkout_id)
     assert (record.status, record.alerted_at) == (CHECKOUT_OPEN, STRIPE_EXPIRES + DAY)
     assert _state(db, placed) == before
 
 
 def test_open_paid_session_that_confirm_cannot_verify_is_skipped(
-    db: Session, variant: int, caplog: pytest.LogCaptureFixture
+    db: Session, variant: int, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 5 条「Stripe 不可用时……定时任务跳过该单留到下一轮」；验收：确认返回
     unavailable（会话为 open 而已付款，取不到可核对的对象）按 Stripe 不可用
-    处理：跳过，自 Stripe 到期满 24 小时告警 stripe_unreachable。"""
+    处理：跳过，自 Stripe 到期满 24 小时告警 stripe_unreachable。DESIGN 1.21
+    「运营告警邮件」第 6 条 stripe_unreachable 一行：满 24 小时时以
+    （stripe_checkout, 记录 ID）调用一次 ops_alert.alert，之前不调用。"""
     placed = _guest_order(db, variant)
     checkout_id = _checkout(db, placed.order_id, CHECKOUT_OPEN)
     odd = _ok(_session(db, checkout_id, "open", payment_status=PAYMENT_PAID))
@@ -882,20 +942,24 @@ def test_open_paid_session_that_confirm_cannot_verify_is_skipped(
 
     assert _run(db, FakeStripeGateway(odd), AFTER_STRIPE_EXPIRY) == 1
     assert _alerts(caplog) == []
+    assert alerts == []
     assert _run(db, FakeStripeGateway(odd), STRIPE_EXPIRES + DAY) == 1
 
     assert _alerts(caplog) == [f"stripe_unreachable checkout={checkout_id}"]
+    assert alerts == [("stripe_unreachable", ("stripe_checkout", checkout_id))]
     record = _record(db, checkout_id)
     assert (record.status, record.confirmed_at) == (CHECKOUT_OPEN, None)
     assert _state(db, placed) == before
 
 
 def test_unconfigured_stripe_is_handled_as_unavailable(
-    db: Session, variant: int, caplog: pytest.LogCaptureFixture
+    db: Session, variant: int, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 5 条「24 小时仍无法查询就告警由人工核对」；验收：Stripe 不可用含
     配置被清空后未配置——未配置的适配器不发请求，记录照样按不可用计时并告警，
-    订单不取消。"""
+    订单不取消。DESIGN 1.21「运营告警邮件」第 6 条 stripe_unreachable 一行：
+    以（stripe_checkout, 记录 ID）调用一次 ops_alert.alert；密钥为空不是
+    stripe_key_not_test。"""
 
     def transport(request: HttpRequest) -> HttpResponse:
         raise AssertionError("an unconfigured gateway must not send requests")
@@ -908,6 +972,7 @@ def test_unconfigured_stripe_is_handled_as_unavailable(
     assert _run(db, gateway, STRIPE_EXPIRES + DAY) == 1
 
     assert _alerts(caplog) == [f"stripe_unreachable checkout={checkout_id}"]
+    assert alerts == [("stripe_unreachable", ("stripe_checkout", checkout_id))]
     assert _status(db, placed.order_id) == STATUS_AWAITING_PAYMENT
 
 
@@ -916,17 +981,26 @@ def test_unconfigured_stripe_is_handled_as_unavailable(
     [(CHECKOUT_OPEN, STRIPE_EXPIRES + DAY), (CHECKOUT_COMPLETE, STARTED + DAY)],
 )
 def test_records_with_an_alert_time_are_not_alerted_again(
-    db: Session, variant: int, caplog: pytest.LogCaptureFixture, status: str, now: datetime
+    db: Session,
+    variant: int,
+    caplog: pytest.LogCaptureFixture,
+    status: str,
+    now: datetime,
+    alerts: list[Alert],
 ) -> None:
     """第 5 条「24 小时仍无法查询就告警」；验收：每条记录至多告警一次——告警
     时间已非空的记录（如 SHOP-TASK-117 在确认返回 needs_review 时写的）不再记
-    任何告警，告警时间也不清空。"""
+    任何告警，告警时间也不清空。DESIGN 1.21「运营告警邮件」第 6 条
+    stripe_unreachable 与 stripe_payment_needs_review 两行「写告警时间并提交之后」
+    及表后「已有告警时间（alerted_at）的记录本来就每条只告警一次」：不调用
+    ops_alert.alert。"""
     placed = _guest_order(db, variant)
     checkout_id = _checkout(db, placed.order_id, status, alerted_at=STARTED)
 
     assert _run(db, FakeStripeGateway(UNAVAILABLE), now) == 1
 
     assert _alerts(caplog) == []
+    assert alerts == []
     assert _record(db, checkout_id).alerted_at == STARTED
     assert _status(db, placed.order_id) == STATUS_AWAITING_PAYMENT
 
