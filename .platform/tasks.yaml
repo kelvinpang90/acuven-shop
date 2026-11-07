@@ -5935,7 +5935,7 @@ tasks:
       运营者落实写法（HANDOFF 0.88）：两类都以对象作去重键；job_failing 的对象为（job, 任务名），窗口 3600 秒，error_class 为最后一次失败的异常类名，数据库未配置时为 database_not_configured；stock_reset_failed 的对象为（date, 马来西亚营业日期的 ISO 写法），窗口 86400 秒，error_class 为异常类名；reset_stock_job 加只限关键字的参数决定失败时是否告警，常驻循环告警、reset-stock 补跑命令不告警（第 7 条：补跑命令本身失败不发告警）。
       设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6、7 条与 HANDOFF 0.88。
       拆分：定时任务接线一层（4 个允许路径），依赖 SHOP-TASK-217。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-217
     acceptance_criteria:
