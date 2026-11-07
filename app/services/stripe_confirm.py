@@ -37,9 +37,11 @@ latest_charge.payment_method_details.type（查询时 expand 为 payment_intent.
 这时记录已有确认时间（订单由这个会话付款的持久证据），返回 paid。SQLite 不支持行锁，
 SQLAlchemy 在 SQLite 上不生成 FOR UPDATE。
 
-调用方不得持有数据库锁、不得有未提交的改动：本函数会提交或回滚当前事务。运营告警邮件
-尚未接入：设计写「告警」之处与核对不通过时先记一条 error 级日志，只含类别与本站记录 ID。
-不记录会话对象与 Stripe 响应原文。库里的时间一律是不带时区的 UTC。本模块只做业务规则：
+调用方不得持有数据库锁、不得有未提交的改动：本函数会提交或回滚当前事务。设计写「告警」之处
+与核对不通过时记一条 error 级日志，只含类别与本站记录 ID；按 docs/DESIGN.md 1.21「运营告警
+邮件」第 6 条与 docs/HANDOFF.md 0.88（SHOP-TASK-220），每条这样的日志之后紧接着调用
+ops_alert.alert(该日志的类别, ("stripe_checkout", 记录 ID))，不带 Stripe 的任何 ID、金额与
+个人资料。不记录会话对象与 Stripe 响应原文。库里的时间一律是不带时区的 UTC。本模块只做业务规则：
 webhook、支付页与结果页接口以及定时任务之后调用它。
 
 按订单确认（confirm_order_payment）供之后的支付页发起与结果页确认接口调用，依据第 4 条
@@ -82,12 +84,14 @@ from app.models.stripe import (
     STRIPE_REFUND_FAILED,
     STRIPE_REFUND_PENDING,
 )
+from app.services import ops_alert
 from app.services.payment import mark_paid
+from app.services.stripe_checkout import ALERT_TARGET_KIND
 from app.services.stripe_gateway import CheckoutSession, StripeGateway, StripeOutcome
 
 logger = logging.getLogger(__name__)
 
-# 告警邮件接入前的 error 级日志类别（只含类别与记录 ID）。
+# 告警的 error 级日志类别（只含类别与记录 ID），也是 ops_alert.alert 的类别码。
 LOG_SESSION_MISMATCH = "stripe_session_mismatch"
 LOG_LIVEMODE = "stripe_livemode"
 LOG_CONFIRM_REJECTED = "stripe_confirm_rejected"
@@ -233,7 +237,8 @@ def confirm_checkout(
     核对身份不符记 stripe_session_mismatch、会话或 PaymentIntent 的 livemode 为真记
     stripe_livemode；迟到或不符的付款本次写了退款尝试记 stripe_late_payment，因合计上限或
     缺字段没写成时按 _settle_late 记 stripe_refund_cap 或 stripe_late_payment_unrefundable。
-    各一条 error 日志，只含记录 ID，在提交之后记。
+    各一条 error 日志，只含记录 ID，在提交之后记；每条日志之后紧接着以同一类别与
+    ("stripe_checkout", 记录 ID) 调用一次 ops_alert.alert。
     """
     now = _resolve_now(now)
     record, order = _read(db, checkout_id)
@@ -248,9 +253,11 @@ def confirm_checkout(
         result = gateway.retrieve_checkout_session(session_id)
         if result.outcome is StripeOutcome.LIVE:
             logger.error("%s checkout=%d", LOG_LIVEMODE, checkout_id)
+            ops_alert.alert(LOG_LIVEMODE, (ALERT_TARGET_KIND, checkout_id))
             return ConfirmResult.UNAVAILABLE
         if result.outcome is StripeOutcome.REJECTED:
             logger.error("%s checkout=%d", LOG_CONFIRM_REJECTED, checkout_id)
+            ops_alert.alert(LOG_CONFIRM_REJECTED, (ALERT_TARGET_KIND, checkout_id))
             return ConfirmResult.UNAVAILABLE
         if result.outcome is not StripeOutcome.OK or result.value is None:
             return ConfirmResult.UNAVAILABLE
@@ -262,6 +269,7 @@ def confirm_checkout(
         step, log = _write(db, checkout_id, record.order_id, session, now, record_event)
     if log is not None:
         logger.error("%s checkout=%d", log, checkout_id)
+        ops_alert.alert(log, (ALERT_TARGET_KIND, checkout_id))
     return _RESULTS[step]
 
 

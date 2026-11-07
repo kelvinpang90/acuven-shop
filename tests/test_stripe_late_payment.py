@@ -45,7 +45,7 @@ from app.models.stripe import (
     STRIPE_REFUND_FAILED,
     STRIPE_REFUND_PENDING,
 )
-from app.services import payment
+from app.services import ops_alert, payment
 from app.services.stripe_confirm import (
     LOG_LATE_PAYMENT,
     LOG_LATE_UNREFUNDABLE,
@@ -81,10 +81,24 @@ LOGGER = "app.services.stripe_confirm"
 
 _SEQUENCE = itertools.count(1)
 
+Alert = tuple[str, object]
+
 
 # ---------------------------------------------------------------------------
 # 夹具与数据
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def alerts(monkeypatch: pytest.MonkeyPatch) -> list[Alert]:
+    """以 monkeypatch 替换 ops_alert.alert，按调用顺序记下（类别, 对象）。"""
+    calls: list[Alert] = []
+
+    def record(category: str, target: object = None, **_: object) -> None:
+        calls.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
+    return calls
 
 
 @pytest.fixture
@@ -319,16 +333,32 @@ def _late_case(db: Session, case: str) -> tuple[int, int, CheckoutSession]:
     "case", ["amount", "currency", "metadata-order", "client-reference", "order-cancelled"]
 )
 def test_late_or_mismatched_payment_writes_one_pending_refund(
-    db: Session, case: str, caplog: pytest.LogCaptureFixture
+    db: Session,
+    case: str,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+    alerts: list[Alert],
 ) -> None:
     """第 6 条「确认时订单已不是待支付且不是由这个会话付款（已取消……），或金额、币种不符，订单
     状态不变，服务端对这笔付款在 Stripe 测试环境全额退款，记为来源为该会话的 `StripeRefund`
     尝试，并向运营告警邮件报告」；验收：「写一条来源为该会话、金额为 amount_total、状态 pending
     的退款尝试」「记一条 error 日志（类别 stripe_late_payment，只含记录 ID）」「返回 refunded」：
-    订单状态与事件不变，只有一条 pending 尝试（金额为会话的 amount_total），只记一条日志。"""
+    订单状态与事件不变，只有一条 pending 尝试（金额为会话的 amount_total），只记一条日志。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_late_payment 一行（「为迟到或不符的付款写了全额
+    退款尝试并提交之后」，对象为结账记录 ID）：日志之后、尝试已提交时以 ("stripe_checkout",
+    记录 ID) 调用一次 ops_alert.alert。"""
     order_id, checkout_id, stripe_session = _late_case(db, case)
     order_before = _order(db, order_id)
+    seen: list[tuple[list[str], int]] = []
 
+    def record(category: str, target: object = None, **_: object) -> None:
+        # 调用时日志已记；另一个数据库会话读到的是已提交的尝试。
+        with Session(db.get_bind()) as other:
+            stmt = select(StripeRefund.id).where(StripeRefund.checkout_id == checkout_id)
+            seen.append((_messages(caplog), len(other.scalars(stmt).all())))
+        alerts.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
     with caplog.at_level(logging.DEBUG, logger=LOGGER):
         result = _confirm(db, checkout_id, stripe_session)
 
@@ -338,15 +368,20 @@ def test_late_or_mismatched_payment_writes_one_pending_refund(
     assert amount is not None
     assert _refunds(db, checkout_id) == [_pending_refund(checkout_id, amount)]
     assert _messages(caplog) == [f"{LOG_LATE_PAYMENT} checkout={checkout_id}"]
+    assert alerts == [(LOG_LATE_PAYMENT, ("stripe_checkout", checkout_id))]
+    assert seen == [([f"{LOG_LATE_PAYMENT} checkout={checkout_id}"], 1)]
 
 
 def test_repeated_confirmation_of_a_late_payment_writes_nothing_more(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 7 条「不同事件指向同一动作时只生效一次」；验收：「已有则不再写新尝试、不核对上限、
     不再记日志（重复确认与 webhook 重发都只生效一次）」：同一不符的会话再确认两次（webhook
     重发、结果页查询）都返回 refunded，仍只有一条尝试，第二、三次不记任何日志（含
-    stripe_refund_cap），记录不再改。"""
+    stripe_refund_cap），记录不再改。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_late_payment 一行（「写了全额退款尝试并提交之后」）
+    与 stripe_refund_cap 一行：第一次写成尝试时调用一次，之后没写新尝试、没有告警日志，不再调用
+    ops_alert.alert。"""
     order_id = _guest_order(db)
     checkout_id = _checkout(db, order_id)
     stripe_session = _object(db, checkout_id, currency="sgd")
@@ -362,15 +397,18 @@ def test_repeated_confirmation_of_a_late_payment_writes_nothing_more(
     assert _refunds(db, checkout_id) == [_pending_refund(checkout_id)]
     assert _record_state(db, checkout_id) == record_before
     assert _messages(caplog) == []
+    assert alerts == [(LOG_LATE_PAYMENT, ("stripe_checkout", checkout_id))]
 
 
 def test_session_paid_after_simulated_payment_of_the_same_order_is_refunded(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 6 条「订单已不是待支付且不是由这个会话付款（……已由另一途径付款）……订单状态不变」；
     验收：「订单已不是待支付而该记录没有确认时间（不是由这个会话付款，含旧会话已 expired、订单
     随后经模拟支付……的情形）」：旧会话记为 expired 后订单经模拟支付进入 demo_paid，这个会话
-    才迟到付款；订单的支付时间与事件不变，写一条 pending 尝试，记录保持 expired。"""
+    才迟到付款；订单的支付时间与事件不变，写一条 pending 尝试，记录保持 expired。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_late_payment 一行（对象为结账记录 ID）：以
+    ("stripe_checkout", 记录 ID) 调用一次 ops_alert.alert。"""
     order_id = _guest_order(db)
     checkout_id = _checkout(db, order_id, CHECKOUT_EXPIRED)
     outcome, _ = payment.submit_payment(db, order_id, "card", "success", "pay-key-1", NOW)
@@ -391,14 +429,17 @@ def test_session_paid_after_simulated_payment_of_the_same_order_is_refunded(
         None,
     )
     assert _messages(caplog) == [f"{LOG_LATE_PAYMENT} checkout={checkout_id}"]
+    assert alerts == [(LOG_LATE_PAYMENT, ("stripe_checkout", checkout_id))]
 
 
 def test_existing_failed_attempt_is_not_replaced(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 8 条「Stripe 以请求错误明确拒绝创建……后一种不自动重试」；验收：「已有尝试为 failed 时
     也不自动另建」：这个会话已有一条 failed 尝试时不写新尝试、不记日志，返回 refunded，仍占着
-    活动位的不符记录照样释放。"""
+    活动位的不符记录照样释放。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_late_payment 一行（「写了全额退款尝试并提交
+    之后」）：本次没写尝试、没有告警日志，不调用 ops_alert.alert。"""
     order_id = _guest_order(db)
     checkout_id = _checkout(db, order_id)
     _add_refund(db, checkout_id, f"pi_test_{checkout_id}", TOTAL - 1, STRIPE_REFUND_FAILED)
@@ -414,6 +455,7 @@ def test_existing_failed_attempt_is_not_replaced(
     assert (record.status, record.active_order_id) == (CHECKOUT_EXPIRED, None)
     assert _order(db, order_id) == (STATUS_AWAITING_PAYMENT, None, 0)
     assert _messages(caplog) == []
+    assert alerts == []
 
 
 # ---------------------------------------------------------------------------
@@ -458,14 +500,17 @@ def _refund_of_another_checkout(db: Session, payment_intent_id: str, status: str
 
 
 def test_refund_cap_holds_the_record_and_alerts_once(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 8 条「同一 PaymentIntent 的 pending 与 succeeded 退款合计不得超过付款金额……超出即不建
     并告警；这同时约束第 6 条的全额退款」；验收：「因合计上限……而没写成退款尝试时保留活动位、
     订单不变」「在同一事务里把记录的付款状态写为 paid 并写告警时间」「返回 needs_review」「重复
     确认……只告警一次」：同一 PaymentIntent 已有 1 仙 pending 时不写尝试，记录仍占活动位、
     付款状态 paid、告警时间为本次时间，只记一条 stripe_refund_cap；再确认返回 needs_review、
-    不记日志、告警时间不变。"""
+    不记日志、告警时间不变。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_cap 一行（「退款合计会超过付款金额、没建
+    尝试」，第 6 条的对象为结账记录 ID）：第一次以 ("stripe_checkout", 记录 ID) 调用一次
+    ops_alert.alert，再确认没有告警日志，不再调用。"""
     order_id = _guest_order(db)
     checkout_id = _checkout(db, order_id)
     _refund_of_another_checkout(db, "pi_test_shared", STRIPE_REFUND_PENDING)
@@ -486,6 +531,7 @@ def test_refund_cap_holds_the_record_and_alerts_once(
     assert record.alerted_at == NOW
     assert _order(db, order_id) == (STATUS_AWAITING_PAYMENT, None, 0)
     assert _messages(caplog) == [f"{LOG_REFUND_CAP} checkout={checkout_id}"]
+    assert alerts == [(LOG_REFUND_CAP, ("stripe_checkout", checkout_id))]
 
 
 def test_failed_attempts_do_not_count_toward_the_cap(db: Session) -> None:
@@ -505,12 +551,15 @@ def test_failed_attempts_do_not_count_toward_the_cap(db: Session) -> None:
 
 
 def test_session_without_amount_total_is_unrefundable_and_alerts_once(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """验收：「会话缺少 amount_total 或 PaymentIntent ID 而无法写退款尝试时不写，记一条 error
     日志（类别 stripe_late_payment_unrefundable）交人工处理」「没写成而保留活动位时返回
     needs_review」；第 6 条「订单状态不变」：缺 amount_total 的已付款会话不写尝试，记录保留
-    活动位并写告警时间，只记一次日志。"""
+    活动位并写告警时间，只记一次日志。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_late_payment_unrefundable 一行（「因会话缺金额或
+    PaymentIntent ID 写不了退款尝试」，对象为结账记录 ID）：第一次以 ("stripe_checkout", 记录
+    ID) 调用一次 ops_alert.alert，再确认没有告警日志，不再调用。"""
     order_id = _guest_order(db)
     checkout_id = _checkout(db, order_id)
     stripe_session = _object(db, checkout_id, amount_total=None)
@@ -529,14 +578,17 @@ def test_session_without_amount_total_is_unrefundable_and_alerts_once(
     )
     assert _order(db, order_id) == (STATUS_AWAITING_PAYMENT, None, 0)
     assert _messages(caplog) == [f"{LOG_LATE_UNREFUNDABLE} checkout={checkout_id}"]
+    assert alerts == [(LOG_LATE_UNREFUNDABLE, ("stripe_checkout", checkout_id))]
 
 
 def test_first_sighting_alerts_even_when_already_alerted_for_another_reason(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """验收：「告警时间先因别的原因（SHOP-TASK-112、116）写过时，首次看到付款仍会记一次」
     「告警时间已非空则不改」：记录已有告警时间而付款状态为 unpaid，超出合计上限时记一条
-    stripe_refund_cap、告警时间不变；再确认不再记。"""
+    stripe_refund_cap、告警时间不变；再确认不再记。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_cap 一行（第 6 条的对象为结账记录 ID）：
+    首次看到付款时以 ("stripe_checkout", 记录 ID) 调用一次 ops_alert.alert，再确认不再调用。"""
     order_id = _guest_order(db)
     checkout_id = _checkout(db, order_id, alerted_at=EARLIER_ALERT)
     _refund_of_another_checkout(db, "pi_test_shared", STRIPE_REFUND_PENDING)
@@ -551,6 +603,7 @@ def test_first_sighting_alerts_even_when_already_alerted_for_another_reason(
     assert [first, again] == [ConfirmResult.NEEDS_REVIEW] * 2
     assert _record(db, checkout_id).alerted_at == EARLIER_ALERT
     assert _messages(caplog) == [f"{LOG_REFUND_CAP} checkout={checkout_id}"]
+    assert alerts == [(LOG_REFUND_CAP, ("stripe_checkout", checkout_id))]
 
 
 # ---------------------------------------------------------------------------
@@ -560,7 +613,7 @@ def test_first_sighting_alerts_even_when_already_alerted_for_another_reason(
 
 @pytest.mark.parametrize("session_id", [True, False], ids=["known-session", "lost-session-id"])
 def test_expired_record_paid_with_the_order_still_awaiting_is_confirmed(
-    db: Session, session_id: bool, caplog: pytest.LogCaptureFixture
+    db: Session, session_id: bool, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 3 条末句「万一有本站没记下会话 ID 的会话被付款，其 webhook 按元数据里的创建幂等键与
     订单 ID 对上这条记录，照第 4、6 条处理」；第 4 条「全部相符且订单仍为
@@ -568,7 +621,9 @@ def test_expired_record_paid_with_the_order_still_awaiting_is_confirmed(
     会话 ID、付款地址与 PaymentIntent ID，完成时间为空则写本次处理的当前时间」：
     已为 expired 的记录（含对账记为 expired、没有会话 ID 的）收到相符的已付款会话，
     订单仍待支付、没有别的活动记录，改回 complete、重新占用活动位并确认；不写退款
-    尝试、不记日志。"""
+    尝试、不记日志。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_late_payment 一行（「为迟到或不符的付款写了全额
+    退款尝试……」）：改回并确认不是迟到的付款，没有告警日志，不调用 ops_alert.alert。"""
     order_id = _guest_order(db)
     checkout_id = _checkout(db, order_id, CHECKOUT_EXPIRED, session_id=session_id)
     url = "https://checkout.stripe.example.com/c/pay/cs_test_found"
@@ -590,6 +645,7 @@ def test_expired_record_paid_with_the_order_still_awaiting_is_confirmed(
     assert (record.completed_at, record.confirmed_at) == (NOW, NOW)
     assert _refunds(db, checkout_id) == []
     assert _messages(caplog) == []
+    assert alerts == []
 
 
 def test_expired_record_with_mismatched_amount_is_not_revived(
@@ -671,14 +727,17 @@ def test_expired_record_complete_and_unpaid_otherwise_keeps_expired(db: Session,
 
 
 def test_expired_record_paid_while_another_session_is_active(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """验收：「该记录已为 expired 而订单另有不是 expired 的记录」为迟到的付款（先于正常确认）
     「保留 expired 与空的活动列……不碰唯一约束」；之后「这个会话没有任何退款尝试（不论状态；已有
     尝试说明它曾按迟到付款处理，第 6、8 条：不再确认订单……返回 refunded）」：订单另有 open
     记录时旧记录的相符付款写一条尝试、保持 expired，订单与另一条记录不变；那条会话随后
     expired、订单仍待支付且再无活动记录，旧会话再确认也只返回 refunded，不确认订单、不新增
-    尝试、不记日志。"""
+    尝试、不记日志。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_late_payment 一行（「写了全额退款尝试并提交
+    之后」，对象为结账记录 ID）：写成尝试时以 ("stripe_checkout", 记录 ID) 调用一次
+    ops_alert.alert，再确认没有告警日志，不再调用。"""
     order_id = _guest_order(db)
     checkout_id = _checkout(db, order_id, CHECKOUT_EXPIRED)
     other = _checkout(db, order_id)
@@ -697,6 +756,7 @@ def test_expired_record_paid_while_another_session_is_active(
     assert _record_state(db, other) == other_before
     assert _order(db, order_id) == (STATUS_AWAITING_PAYMENT, None, 0)
     assert _messages(caplog) == [f"{LOG_LATE_PAYMENT} checkout={checkout_id}"]
+    assert alerts == [(LOG_LATE_PAYMENT, ("stripe_checkout", checkout_id))]
 
     expired = _record(db, other)
     expired.status = CHECKOUT_EXPIRED
@@ -713,15 +773,19 @@ def test_expired_record_paid_while_another_session_is_active(
     assert _record_state(db, checkout_id) == record_before
     assert _refunds(db, checkout_id) == [_pending_refund(checkout_id)]
     assert _messages(caplog) == []
+    assert alerts == [(LOG_LATE_PAYMENT, ("stripe_checkout", checkout_id))]
 
 
 def test_old_session_object_given_to_the_new_record_changes_nothing(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 3 条「webhook 按元数据里的创建幂等键与订单 ID 对上这条记录」；验收：「旧会话已
     expired、同单已有新的活动会话时，把旧会话的付款对象交给新记录确认时不迁移订单、不改写
     记录」：旧会话的对象（创建幂等键是旧记录的）交给新记录确认返回 unavailable、记
-    stripe_session_mismatch，两条记录、订单与退款尝试都不变。"""
+    stripe_session_mismatch，两条记录、订单与退款尝试都不变。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_session_mismatch 一行（「Stripe 返回的会话与本站
+    记录的创建幂等键不符」，对象为结账记录 ID）：以 ("stripe_checkout", 新记录 ID) 调用一次
+    ops_alert.alert。"""
     order_id = _guest_order(db)
     old = _checkout(db, order_id, CHECKOUT_EXPIRED)
     new = _checkout(db, order_id)
@@ -735,14 +799,17 @@ def test_old_session_object_given_to_the_new_record_changes_nothing(
     assert (_record_state(db, old), _record_state(db, new), _order(db, order_id)) == before
     assert _refunds(db, old) == [] and _refunds(db, new) == []
     assert _messages(caplog) == [f"{LOG_SESSION_MISMATCH} checkout={new}"]
+    assert alerts == [(LOG_SESSION_MISMATCH, ("stripe_checkout", new))]
 
 
 @pytest.mark.parametrize("status", ["expired", "open"])
 def test_expired_record_with_an_unpaid_session_changes_nothing(
-    db: Session, status: str, caplog: pytest.LogCaptureFixture
+    db: Session, status: str, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """验收：「记录已为 expired 而会话为 expired 或 open 且未付款时（正常的会话过期通知）不改任何
-    东西、返回 pending、不记日志」：记录、订单与退款尝试都不变。"""
+    东西、返回 pending、不记日志」：记录、订单与退款尝试都不变。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_late_payment 一行（「为迟到或不符的付款……」）：
+    没有付款、没有告警日志，不调用 ops_alert.alert。"""
     order_id = _guest_order(db)
     checkout_id = _checkout(db, order_id, CHECKOUT_EXPIRED)
     unpaid = _object(
@@ -757,6 +824,7 @@ def test_expired_record_with_an_unpaid_session_changes_nothing(
     assert (_record_state(db, checkout_id), _order(db, order_id)) == before
     assert _refunds(db, checkout_id) == []
     assert _messages(caplog) == []
+    assert alerts == []
 
 
 def test_mismatched_unpaid_active_record_is_pending_without_refund(db: Session) -> None:
