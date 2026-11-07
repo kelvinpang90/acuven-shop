@@ -93,6 +93,19 @@ class Settings(BaseSettings):
     r2_access_key_id: str = Field(default="", validation_alias="R2_ACCESS_KEY_ID")
     r2_secret_access_key: str = Field(default="", validation_alias="R2_SECRET_ACCESS_KEY")
 
+    # 运营告警邮件的 SMTP（DESIGN 1.21「运营告警邮件」第 1 条）。七项都是字符串、默认空串，
+    # 端口与加密方式不合格也不让设置加载失败：是否已配置由 app/services/ops_alert.py 的
+    # parse_config 判断（端口为空即 587，加密方式为空即 starttls）。未配置时告警只记日志。
+    alert_smtp_host: str = ""
+    alert_smtp_port: str = ""
+    alert_smtp_security: str = ""
+    alert_smtp_username: str = ""
+    alert_smtp_password: str = ""
+    # 发件人，一个地址。
+    alert_from: str = ""
+    # 收件人，逗号分隔的 1 到 5 个地址。
+    alert_to: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:

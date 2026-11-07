@@ -19,12 +19,17 @@ tests/test_stripe_overdue.py，这里只测任务顺序、未配置时的跳过�
 
 SHOP-TASK-126 在积分到期之后追加了 Stripe 退款尝试的定时处理（stripe_refunds）；它的各情形
 见 tests/test_stripe_refund_overdue.py，这里同样只测任务顺序、未配置时的跳过与手动补跑命令。
+
+SHOP-TASK-217 加了 send-test-alert 子命令，并让其余一次性子命令退出前等运营告警队列；这里测
+退出码、不受限频、等队列与到时记下未发封数、run 不等队列（依据 DESIGN 1.21「运营告警邮件」
+第 1、2 条）。发信本身的各情形见 tests/test_ops_alert.py；smtplib.SMTP 以替身代替，不连服务器。
 """
 
 from __future__ import annotations
 
 import logging
 import signal
+import smtplib
 import threading
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
@@ -71,7 +76,7 @@ from app.models.stripe import (
     STRIPE_REFUND_PENDING,
     STRIPE_REFUND_SUCCEEDED,
 )
-from app.services import payment
+from app.services import ops_alert, payment
 from app.services.order_rules import generate_order_number
 from app.services.points import earn_points
 
@@ -1408,6 +1413,178 @@ def test_process_stripe_refunds_command(
     assert jobs.process_stripe_refunds_once(broken) == jobs.EXIT_FAILED
     assert _job_messages(caplog) == ["job stripe_refunds failed: OperationalError"]
     assert all(SECRET not in message for message in caplog.messages)
+
+
+# ---------------------------------------------------------------------------
+# 运营告警邮件（SHOP-TASK-217）
+# ---------------------------------------------------------------------------
+
+ALERT_CONFIG = {
+    "alert_smtp_host": "smtp.sentinel-host.invalid",
+    "alert_smtp_username": "sentinel-smtp-user",
+    "alert_smtp_password": "sentinel-smtp-password",
+    "alert_from": "sentinel-sender@sentinel-mail.invalid",
+    "alert_to": "sentinel-first@sentinel-rcpt.invalid",
+}
+ONE_SHOT_COMMANDS = [
+    "cancel-expired",
+    "process-stripe",
+    "reset-stock",
+    "complete-shipped",
+    "delete-verifications",
+    "expire-points",
+    "process-stripe-refunds",
+]
+
+
+class FakeSmtpConnection:
+    """smtplib.SMTP 的替身：login 抛 login_error（为空即成功），记下每次发信。"""
+
+    sent: list[str] = []
+    login_error: BaseException | None = None
+
+    def __init__(self, host: str, port: int, *, timeout: float) -> None:
+        pass
+
+    def starttls(self, *, context: Any = None) -> tuple[int, bytes]:
+        return 220, b"ready"
+
+    def login(self, user: str, password: str) -> None:
+        if FakeSmtpConnection.login_error is not None:
+            raise FakeSmtpConnection.login_error
+
+    def send_message(self, msg: Any, from_addr: str, to_addrs: list[str]) -> dict:
+        FakeSmtpConnection.sent.append(msg["Subject"])
+        return {}
+
+    def quit(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+@pytest.fixture
+def fake_smtp(monkeypatch: pytest.MonkeyPatch) -> type[FakeSmtpConnection]:
+    monkeypatch.setattr(smtplib, "SMTP", FakeSmtpConnection)
+    monkeypatch.setattr(FakeSmtpConnection, "sent", [])
+    monkeypatch.setattr(FakeSmtpConnection, "login_error", None)
+    return FakeSmtpConnection
+
+
+def _alert_messages(caplog: pytest.LogCaptureFixture) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.name == "app.services.ops_alert"]
+
+
+def test_send_test_alert_exit_codes(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    fake_smtp: type[FakeSmtpConnection],
+) -> None:
+    """DESIGN 1.21「运营告警邮件」第 1 条「最终由服务器接受即以 0 退出；未配置时记上面的
+    warning 并以非零退出码退出，最终失败也以非零退出码退出」与 HANDOFF 0.88「send-test-alert
+    未配置以 EXIT_NOT_CONFIGURED、最终失败以 EXIT_FAILED 退出」；「不受第 4 条限频」：
+    连发两次都发出，且不碰 Redis。"""
+    caplog.set_level(logging.INFO, logger="app.services.ops_alert")
+
+    def no_redis(redis_url: str) -> None:
+        raise AssertionError("send-test-alert must not touch Redis")
+
+    monkeypatch.setattr(ops_alert, "_client_for", no_redis)
+    configured = Settings(_env_file=None, redis_url="redis://sentinel.invalid/7", **ALERT_CONFIG)
+    monkeypatch.setattr(jobs, "get_settings", lambda: configured)
+
+    assert jobs.main(["send-test-alert"]) == jobs.EXIT_OK
+    assert jobs.main(["send-test-alert"]) == jobs.EXIT_OK
+    assert fake_smtp.sent == ["[Acuven Shop] ops_alert_test"] * 2
+
+    fake_smtp.login_error = smtplib.SMTPAuthenticationError(535, b"sentinel-reply")
+    assert jobs.main(["send-test-alert"]) == jobs.EXIT_FAILED
+    assert _alert_messages(caplog)[-1] == (
+        "ops_alert_send_failed category=ops_alert_test error=SMTPAuthenticationError code=535"
+    )
+
+    monkeypatch.setattr(jobs, "get_settings", lambda: Settings(_env_file=None))
+    assert jobs.main(["send-test-alert"]) == jobs.EXIT_NOT_CONFIGURED
+    assert _alert_messages(caplog)[-1].startswith("ops_alert_not_configured missing=")
+    assert all("sentinel" not in message for message in caplog.messages)
+
+
+@pytest.mark.parametrize("command", ONE_SHOT_COMMANDS)
+def test_one_shot_commands_wait_for_the_alert_queue(
+    monkeypatch: pytest.MonkeyPatch, command: str
+) -> None:
+    """DESIGN 1.21「运营告警邮件」第 2 条「补跑命令退出前等队列发完……最多等 180 秒」
+    「退出码仍只反映补跑本身的结果」与 HANDOFF 0.88「补跑命令指 run 与 send-test-alert
+    以外的一次性子命令」：每个补跑命令执行完后等一次队列，有未发完的也不改退出码。"""
+    waits: list[float] = []
+
+    def wait_until_sent(timeout: float = ops_alert.DRAIN_TIMEOUT_SECONDS) -> int:
+        waits.append(timeout)
+        return 3
+
+    monkeypatch.setattr(ops_alert, "wait_until_sent", wait_until_sent)
+    monkeypatch.setattr(jobs, "get_settings", lambda: Settings(_env_file=None, database_url=""))
+    assert jobs.main([command]) == jobs.EXIT_NOT_CONFIGURED
+    assert waits == [180]
+
+
+def test_one_shot_command_logs_unsent_alerts(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, clock: FakeClock
+) -> None:
+    """DESIGN 1.21「运营告警邮件」第 2 条「到时仍有未发完的，记一条 warning
+    ops_alert_unsent count=<封数> 后照常退出，退出码仍只反映补跑本身的结果」：队列里有一封
+    发不出去的告警时，等满 180 秒（替身时钟，不真实等待）后记下封数。"""
+    caplog.set_level(logging.INFO, logger="app.services.ops_alert")
+    monkeypatch.setitem(
+        ops_alert.CATEGORIES,
+        "demo_failure",
+        ops_alert.AlertCategory("演示告警", "按类别码查日志。", False, ops_alert.HOUR_SECONDS),
+    )
+    waited: list[float] = []
+
+    def wait(condition: threading.Condition, timeout: float) -> None:
+        waited.append(timeout)
+        clock.advance(timeout)
+
+    configured = Settings(_env_file=None, **ALERT_CONFIG)
+    dispatcher = ops_alert.Dispatcher(
+        lambda: configured,
+        redis_client=lambda: None,
+        monotonic=clock.monotonic,
+        start_thread=lambda target: None,
+        wait=wait,
+    )
+    monkeypatch.setattr(ops_alert, "_dispatcher", dispatcher)
+    ops_alert.alert("demo_failure")
+
+    monkeypatch.setattr(jobs, "get_settings", lambda: Settings(_env_file=None, database_url=""))
+    assert jobs.main(["cancel-expired"]) == jobs.EXIT_NOT_CONFIGURED
+    assert waited == [180]
+    assert _alert_messages(caplog) == ["ops_alert_unsent count=1"]
+
+
+def test_run_does_not_wait_for_the_alert_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DESIGN 1.21「运营告警邮件」第 2 条「常驻进程（API、定时任务的常驻循环）退出时不等
+    队列，未发出的告警只留在日志里」：run 的循环返回后直接退出，不调用 wait_until_sent；
+    send-test-alert 不经队列，同样不等。"""
+    calls: list[str] = []
+
+    class StubRunner:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def run_forever(self) -> None:
+            calls.append("run_forever")
+
+    monkeypatch.setattr(jobs, "Runner", StubRunner)
+    monkeypatch.setattr(jobs, "install_signal_handlers", lambda runner: None)
+    monkeypatch.setattr(ops_alert, "wait_until_sent", lambda *a, **k: calls.append("wait"))
+    monkeypatch.setattr(jobs, "get_settings", lambda: Settings(_env_file=None))
+
+    assert jobs.main(["run"]) == jobs.EXIT_OK
+    assert jobs.main(["send-test-alert"]) == jobs.EXIT_NOT_CONFIGURED
+    assert calls == ["run_forever"]
 
 
 def test_main_requires_a_subcommand() -> None:
