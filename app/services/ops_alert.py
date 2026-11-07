@@ -5,7 +5,10 @@
 （第 6、7 条）由 SHOP-TASK-218 至 222 完成，各自把类别加进 CATEGORIES；定时任务失败的
 job_failing 与 stock_reset_failed 由 SHOP-TASK-218 在 app/jobs.py 接入；Stripe 结账创建与
 对账的五类（stripe_key_not_test、stripe_checkout_needs_review、stripe_create_rejected、
-stripe_unreachable、stripe_payment_needs_review）由 SHOP-TASK-219 接入。
+stripe_unreachable、stripe_payment_needs_review）由 SHOP-TASK-219 接入；Stripe 确认付款与
+webhook 的六类（stripe_livemode、stripe_confirm_rejected、stripe_session_mismatch、
+stripe_late_payment、stripe_late_payment_unrefundable、stripe_refund_cap）由 SHOP-TASK-220
+接入，stripe_refund_cap 的退款申请告警点由 SHOP-TASK-221 沿用。
 
 调用方的写法（HANDOFF 0.88）：
 
@@ -188,6 +191,65 @@ CATEGORIES: dict[str, AlertCategory] = {
         guidance=(
             "按类别码与结账记录 ID 查日志，到 Stripe 测试后台核对这笔付款的状态；"
             "订单照旧待支付、库存继续预留，定时任务仍会查询并以 Stripe 给出的结果为准。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    # SHOP-TASK-220：Stripe 确认付款与 webhook（第 6 条表），都按类别限频。
+    "stripe_livemode": AlertCategory(
+        description="Stripe 会话、付款或 webhook 事件为正式环境，已拒绝",
+        guidance=(
+            "按类别码查日志（有结账记录 ID 时一并核对），核对私有配置里的 Stripe 密钥与 "
+            "webhook 签名密钥都只属于 Stripe 测试环境，到 Stripe 测试后台核对 webhook 端点"
+            "的设置；本站不处理正式环境的会话、付款与事件，订单与记录都未改。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    "stripe_confirm_rejected": AlertCategory(
+        description="确认付款时向 Stripe 查询结账会话被以请求错误拒绝",
+        guidance=(
+            "按类别码与结账记录 ID 查日志，到 Stripe 测试后台核对这笔会话是否存在、"
+            "是否属于当前配置的测试账户；订单与记录都未改，访客返回、webhook 重发或"
+            "定时任务会再次查询。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    "stripe_session_mismatch": AlertCategory(
+        description="Stripe 返回的结账会话与本站记录的创建幂等键或会话不符，未确认付款",
+        guidance=(
+            "按类别码与结账记录 ID 查日志，到 Stripe 测试后台核对这笔会话属于哪条记录与"
+            "哪张订单；订单与记录都未改，反复出现时排查 webhook 端点与 Stripe 测试账户的设置。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    "stripe_late_payment": AlertCategory(
+        description="迟到或不符的 Stripe 付款，已写全额退款尝试",
+        guidance=(
+            "按类别码与结账记录 ID 查日志，订单状态未改；退款由定时任务向 Stripe 发起，"
+            "到 Stripe 测试后台核对这笔付款的退款结果，退款出问题时另有退款类告警。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    "stripe_late_payment_unrefundable": AlertCategory(
+        description="迟到或不符的 Stripe 付款缺金额或 PaymentIntent，写不了退款尝试",
+        guidance=(
+            "按类别码与结账记录 ID 查日志，到 Stripe 测试后台核对这笔付款，需要退款时在 "
+            "Stripe 测试后台人工处理；订单状态未改，本站不再为这笔付款自动退款。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    # 第 6 条（迟到付款，对象为结账记录）与第 8 条（退款申请，SHOP-TASK-221 接入）共用。
+    "stripe_refund_cap": AlertCategory(
+        description="Stripe 退款合计会超过付款金额，未建退款尝试（迟到付款或退款申请）",
+        guidance=(
+            "按类别码与对象 ID（结账记录或退款申请）查日志，到 Stripe 测试后台核对这笔付款"
+            "已有的退款与金额；本站没有为此发起退款，需要时在后台退款申请页或 Stripe 测试"
+            "后台人工处理。"
         ),
         dedupe_by_target=False,
         window_seconds=HOUR_SECONDS,

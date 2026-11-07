@@ -72,7 +72,7 @@ from app.models.stripe import (
     STRIPE_REFUND_PENDING,
     STRIPE_REFUND_SUCCEEDED,
 )
-from app.services import payment
+from app.services import ops_alert, payment
 from app.services.stripe_gateway import (
     CheckoutSession,
     FakeStripeGateway,
@@ -115,6 +115,8 @@ REFUND_AMOUNT = 2500
 UNAVAILABLE = StripeResult(StripeOutcome.UNAVAILABLE)
 
 _SEQUENCE = itertools.count(1)
+
+Alert = tuple[str, object]
 
 
 def make_settings(**overrides: str) -> Settings:
@@ -191,6 +193,18 @@ def _settings(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture(autouse=True)
 def _clock(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(webhook_api, "_utcnow", lambda: NOW)
+
+
+@pytest.fixture(autouse=True)
+def alerts(monkeypatch: pytest.MonkeyPatch) -> list[Alert]:
+    """以 monkeypatch 替换 ops_alert.alert，按调用顺序记下（类别, 对象）。"""
+    calls: list[Alert] = []
+
+    def record(category: str, target: object = None, **_: object) -> None:
+        calls.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
+    return calls
 
 
 def _add[T](db: Session, row: T) -> T:
@@ -450,12 +464,18 @@ def _record_ids(record: _Record) -> tuple[str, ...]:
 
 
 def test_completed_paid_event_marks_order_paid(
-    app: FastAPI, db: Session, client: TestClient, caplog: pytest.LogCaptureFixture
+    app: FastAPI,
+    db: Session,
+    client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+    alerts: list[Alert],
 ) -> None:
     """第 7 条「用原始请求体与 webhook 签名密钥校验 Stripe-Signature」「不需要会话与 CSRF」与第 4 条
     确认（经 handle_webhook_event）：签名正确的 checkout.session.completed 已付款事件不带 cookie 与
     CSRF 也被处理，回 200 {"received":true}，订单进入 demo_paid，事件记为 processed；验收：接口
-    不写日志，响应不回显输入、不带任何 Stripe ID，带 no-store。"""
+    不写日志，响应不回显输入、不带任何 Stripe ID，带 no-store。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_livemode 一行（「webhook 事件为正式环境、拒绝
+    之后」）：测试环境的事件照常处理，没有告警日志，不调用 ops_alert.alert。"""
     placed = _order(db)
     record = _checkout(db, placed)
     gateway = _inject(app, StripeResult(StripeOutcome.OK, _paid_session(record)))
@@ -473,6 +493,7 @@ def test_completed_paid_event_marks_order_paid(
     assert _status(db, placed) == STATUS_PAID
     assert _stripe_events(db) == [("evt_test_paid", COMPLETED, EVENT_PROCESSED, NOW)]
     assert _api_logs(caplog) == []
+    assert alerts == []
 
 
 def test_same_event_again_is_200_without_calling_stripe(
@@ -732,11 +753,18 @@ def test_signed_but_malformed_event_is_400(
 
 
 def test_livemode_event_is_400_without_event_record(
-    app: FastAPI, db: Session, client: TestClient, caplog: pytest.LogCaptureFixture
+    app: FastAPI,
+    db: Session,
+    client: TestClient,
+    caplog: pytest.LogCaptureFixture,
+    alerts: list[Alert],
 ) -> None:
     """第 1 条「webhook 事件……的 livemode 为真即拒绝」与 HANDOFF 0.55「livemode 为真回 400 且不记
     事件并记 error 日志」：签名正确的 livemode 事件回 400 livemode_rejected，没有事件记录、不调用
-    Stripe、订单不变；接口记一条只含类别的 error 日志 stripe_livemode。"""
+    Stripe、订单不变；接口记一条只含类别的 error 日志 stripe_livemode。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_livemode 一行（「webhook 事件为正式环境、拒绝之后」
+    「在……webhook 入口入队」，对象为「无」）：日志之后以对象 None 调用一次 ops_alert.alert，
+    响应仍为 400。"""
     placed = _order(db)
     record = _checkout(db, placed)
     gateway = _inject(app, StripeResult(StripeOutcome.OK, _paid_session(record)))
@@ -754,3 +782,4 @@ def test_livemode_event_is_400_without_event_record(
     assert [(r.levelno, r.getMessage()) for r in _api_logs(caplog)] == [
         (logging.ERROR, "stripe_livemode")
     ]
+    assert alerts == [("stripe_livemode", None)]
