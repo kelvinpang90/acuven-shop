@@ -5990,7 +5990,7 @@ tasks:
       运营者落实写法（HANDOFF 0.88）：每条现有的告警日志之后紧接着调用 ops_alert.alert(类别, 对象)，类别取日志里的同一个常量或变量；日志里为 checkout=<ID> 的，对象为（stripe_checkout, 结账记录 ID）；webhook 入口的 stripe_livemode 对象为 None；六类都不以对象作去重键，窗口 3600 秒；stripe_refund_cap 一类由本任务加进 CATEGORIES，SHOP-TASK-221 的退款申请告警点沿用。
       设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6 条与 HANDOFF 0.88；告警不带 Stripe 的任何 ID、金额与个人资料。
       拆分：Stripe 一组的第二个任务（9 个允许路径），依赖 SHOP-TASK-217。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-217
     acceptance_criteria:
