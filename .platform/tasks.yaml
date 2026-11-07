@@ -5903,7 +5903,7 @@ tasks:
       运营者落实写法（HANDOFF 0.88）：调用方以 from app.services import ops_alert 引入、以 ops_alert.alert(category, target=None, *, error_class=None) 调用（测试替换模块属性 alert），target 为（对象类别, 内部 ID）二元组或 None；类别表 CATEGORIES 写在本模块，本任务只放 ops_alert_test，各接线任务把自己的类别加进来；七项配置在 Settings 里都是字符串、默认空串（端口与加密方式不合格不能让设置加载失败，由本模块判断）；shop_jobs 现在没有 SHOP_REDIS_URL，本任务另加上（第 4 条，API 与定时任务共用限频）；.env.example 的七个变量名由登记 PR 写好（控制面把 .env 开头的文件列为敏感文件名，Worker 改不了）。
       设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」一节与 HANDOFF 0.88，告警邮件的配置、发送、限频与内容约束（邮件不得带个人资料与凭据）。
       拆分：发送机制一层（8 个允许路径），各处接线为 SHOP-TASK-218 至 222，都只依赖本任务。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 配置——app/core/config.py 的 Settings 加 alert_smtp_host、alert_smtp_port、alert_smtp_security、alert_smtp_username、alert_smtp_password、alert_from、alert_to 七个字符串字段（对应 SHOP_ALERT_ 开头的七个变量，默认都是空串）；ops_alert 按第 1 条判断是否已配置（端口为空即 587、给了须为 1 到 65535 的整数；加密方式为空即 starttls、给了须为 starttls 或 ssl；主机、账号、密码非空；发件人一个地址、收件人逗号分隔 1 到 5 个地址，每个地址恰含一个 @ 且两侧非空，去掉两侧空白）；未配置时告警不入队，进程第一次遇到告警时记一条 warning ops_alert_not_configured（可带不合格的变量名，不带任何配置值），之后不再记
