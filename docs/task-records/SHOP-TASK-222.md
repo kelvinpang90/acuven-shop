@@ -22,3 +22,17 @@
 - `tests/test_member_delete_confirm_api.py`：提交抛数据库异常与 `delete_member` 抛数据库异常时以 `("member", 会员 ID)` 调用一次 `member_deletion_failed`，照旧 503 `service_unavailable`、会员仍为 active；app 日志只有 `member_deletion_failed member=<ID>` 一条，不含号码、密码、会话 cookie、来源与异常消息。读取开关出错、会员已不是有效、注销成功与密码错误都不调用。
 - 每条新测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行。
 - 后端测试由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑后端测试。
+
+## 登记时的验收标准（原文）
+
+2026-11-08 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - sms_budget_exhausted——app/services/sms_verification.py 在 reserve_sms 的结果为 over_budget、停发（_suspend）提交之后记一条 error 日志并调用一次 ops_alert.alert("sms_budget_exhausted", ("date", 马来西亚日期的 ISO 写法))，日期取 app/services/sms_budget.py 的 malaysia_date；unknown_cost、Redis 不可用、超出限流与服务商失败的停发都不调用；返回值与事务不变
+      - admin_login_locked——app/api/admin_auth.py 在登录刚被锁定、写了 admin_login_locked 审计并提交之后记一条 error 日志并调用一次 ops_alert.alert("admin_login_locked", ("audit_event", 该审计记录的 ID))；用户名不存在的锁定不写审计、也不调用；响应、状态码与审计不变
+      - member_deletion_failed——app/api/member_deletion.py 的确认注销在 delete_member 或提交抛数据库异常、回滚之后记一条 error 日志并调用一次 ops_alert.alert("member_deletion_failed", ("member", 会员 ID))，然后照现有写法回答暂不可用；读取开关失败、会员已不是有效时不调用
+      - CATEGORIES 加上这三类（中文说明、处理指引、去重键与窗口秒数照上），处理指引不含链接与主机；三条新日志不带用户名、电话、来源地址与异常消息
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_sms_verification.py、tests/test_admin_auth_api.py、tests/test_member_delete_confirm_api.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，补每个告警点在所写时机以所写类别与对象调用一次、所列不告警的情形不调用、新日志不含电话与用户名；现有测试只为替换 alert 而改；每条测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行
+      - docs/task-records/SHOP-TASK-222.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改短信、登录与注销规则、发送机制、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
+```

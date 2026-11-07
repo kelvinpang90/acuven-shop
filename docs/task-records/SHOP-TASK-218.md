@@ -23,3 +23,16 @@
 - 人工逐条对照验收标准、DESIGN 1.21「运营告警邮件」第 6、7 条与 HANDOFF 0.88 自查。
 - `tests/test_jobs.py` 新增（以 monkeypatch 替换 `ops_alert.alert` 记下调用）：连续失败未满 10 分钟不告警、满 10 分钟与心跳停写同一轮告警一次且异常类名取最后一次失败的、同一段失败不重复、一直成功的任务不告警；成功那一轮不告警、成功后清零、再失败从这次成功起算满 10 分钟再告警一次；数据库未配置时满 10 分钟那一轮每个任务名各一次、`error_class` 为 `database_not_configured`、之后不重复；库存重置失败在常驻循环里于 error 日志之后、任务失败日志之前告警一次，对象为营业日期、异常类名为 `OperationalError`，`reset_stock` 与 `main(["reset-stock"])` 失败时不告警、退出码为 `EXIT_FAILED`、日志不含异常消息原文；开关关闭与当天已完成而跳过时常驻循环与 `reset_stock` 都不告警、跳过算成功。每条测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6、7 条（及第 2 条）哪一句。
 - 后端测试由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑后端测试。
+
+## 登记时的验收标准（原文）
+
+2026-11-08 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - job_failing——Runner 为每个任务记下最后一次失败的异常类名；某任务连续失败（距它最近一次成功，从未成功过则距进程启动，与 healthy 同一算法与 UNHEALTHY_AFTER_SECONDS）满 10 分钟时调用一次 ops_alert.alert("job_failing", ("job", 任务名), error_class=异常类名)；同一段连续失败只调用一次，该任务再次成功后清零，之后再连续失败满 10 分钟才再调用；数据库未配置时一轮里全部任务都算失败，各按此告警（每个任务名一次，error_class 为 database_not_configured）；不发「已恢复」告警；计时只在进程内存里
+      - stock_reset_failed——reset_stock_job 的重置失败在现有 error 日志之后、重新抛出之前调用一次 ops_alert.alert("stock_reset_failed", ("date", 营业日期的 ISO 写法), error_class=异常类名)，只在常驻循环里调用；reset-stock 子命令经同一任务执行时不调用；开关关闭与已完成的跳过不调用
+      - CATEGORIES 加上这两类（中文说明、处理指引、以对象作去重键、窗口秒数照上），处理指引不含链接与主机，stock_reset_failed 的指引写明执行补跑命令 python -m app.jobs reset-stock；心跳、不健康判断与现有日志不变
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_jobs.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，补连续失败满 10 分钟告警一次、未满不告警、同一段失败不重复、成功后清零再满 10 分钟再告警、数据库未配置时每个任务名各一次且 error_class 为 database_not_configured、库存重置失败在常驻循环告警一次而 reset-stock 子命令不告警、跳过时不告警；每条测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6、7 条哪一句
+      - docs/task-records/SHOP-TASK-218.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改发送机制、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
+```

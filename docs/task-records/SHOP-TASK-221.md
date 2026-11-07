@@ -26,3 +26,15 @@
 - `tests/test_stripe_refund_approval.py`：批准时合计超过付款金额以 `("refund_request", 申请 ID)` 调用一次 `stripe_refund_cap`，建成尝试时不调用；缺 PaymentIntent ID 调用一次 `stripe_refund_unrefundable`；手动重试超过合计在抛出之前调用一次 `stripe_refund_cap`（对象为退款申请）。
 - 每条新断言所在测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行。
 - 后端测试由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑后端测试。
+
+## 登记时的验收标准（原文）
+
+2026-11-08 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 接线——app/services/stripe_refund.py 每条 attempt=<ID> 的告警日志与 refund_request=<ID> 的 stripe_refund_cap 日志、app/services/stripe_refund_overdue.py 的两条告警日志、app/services/stripe_webhook.py 退款尝试的两条日志（stripe_webhook_refund_rejected 与按退款结果记的类别）、app/services/refund_review.py 的告警日志之后，各调用一次 ops_alert.alert(该日志的类别, 对象)，对象照 purpose 的写法；app/api/admin_refunds.py 不改；调用位置与现有日志相同，不改日志、返回值与事务
+      - CATEGORIES 加上这六类（中文说明、处理指引、不以对象作去重键、窗口 3600 秒），处理指引不含链接与主机，写成到 Stripe 测试后台核对、按类别码查日志这类文字
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_stripe_refund.py、tests/test_stripe_refund_overdue.py、tests/test_stripe_webhook_refund.py、tests/test_stripe_refund_approval.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，在现有覆盖这些日志的情形里补断言（每个告警点以所写类别与对象调用一次；没有告警日志的结果不调用；退款申请两处的对象类别为 refund_request）；现有测试只为替换 alert 而改；每条新断言所在测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行
+      - docs/task-records/SHOP-TASK-221.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改退款规则、发送机制、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
+```
