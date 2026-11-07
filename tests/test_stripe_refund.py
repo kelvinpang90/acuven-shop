@@ -14,6 +14,10 @@ expired 会话记录（第 6 条的迟到付款），写入规则不看来源类
 FakeStripeGateway（第 9 条：CI 与本地测试不调用 Stripe）。被测函数会提交与
 回滚，测试数据都先提交。SQLite 不支持行锁，锁定语句只以 MySQL 方言编译检查
 含 FOR UPDATE，并发下的排队按代码与 MySQL 行为审阅。
+
+运营告警邮件（SHOP-TASK-221）：ops_alert.alert 一律以 monkeypatch 替换为记录调用的
+替身（不入队、不连 SMTP 与 Redis）；补了告警断言的测试在文档字符串里写明它守住的
+docs/DESIGN.md 1.21「运营告警邮件」第 6 条哪一行。
 """
 
 from __future__ import annotations
@@ -41,6 +45,7 @@ from app.models.stripe import (
     STRIPE_REFUND_PENDING,
     STRIPE_REFUND_SUCCEEDED,
 )
+from app.services import ops_alert
 from app.services.stripe_gateway import (
     FakeStripeGateway,
     Form,
@@ -89,6 +94,9 @@ QUERY_REJECTED: StripeResult[Any] = StripeResult(
 FINGERPRINT = "0f" * 32
 LOGGER = "app.services.stripe_refund"
 
+# ops_alert.alert 的（类别, 对象）。
+Alert = tuple[str, object]
+
 _SEQUENCE = itertools.count(1)
 
 
@@ -127,6 +135,18 @@ def db(engine: Engine) -> Iterator[Session]:
 def alerts(caplog: pytest.LogCaptureFixture) -> pytest.LogCaptureFixture:
     caplog.set_level(logging.INFO, logger=LOGGER)
     return caplog
+
+
+@pytest.fixture(autouse=True)
+def ops_alerts(monkeypatch: pytest.MonkeyPatch) -> list[Alert]:
+    """以 monkeypatch 替换 ops_alert.alert，按调用顺序记下（类别, 对象）。"""
+    calls: list[Alert] = []
+
+    def record(category: str, target: object = None, **_: object) -> None:
+        calls.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
+    return calls
 
 
 def _checkout(db: Session) -> int:
@@ -420,12 +440,17 @@ def test_apply_only_flushes(db: Session) -> None:
     assert attempt.stripe_refund_id is None
 
 
-def test_apply_does_not_log(db: Session, alerts: pytest.LogCaptureFixture) -> None:
+def test_apply_does_not_log(
+    db: Session, alerts: pytest.LogCaptureFixture, ops_alerts: list[Alert]
+) -> None:
     """DESIGN 1.12 第 7 条：「处理失败整个事务回滚、回 5xx，由 Stripe
     重发」——写入规则里记下的告警会随回滚失效而日志不会，所以告警不能在
     写入规则里记；第 8 条：「发现变为 failed 就照上面改并告警」；验收：
     apply_refund_object「不自己记日志，而是返回枚举结果……由调用方在提交
-    之后按结果记告警」。"""
+    之后按结果记告警」。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_failed_after_success 与
+    stripe_refund_mismatch 两行（第 2 条：入队位置跟现有 error 日志一致）：写入规则
+    不记日志，也不调用 ops_alert.alert。"""
     attempt_id = _attempt(db, STRIPE_REFUND_SUCCEEDED, stripe_refund_id=REFUND_ID)
     other = _refund(attempt_id, "failed", refund_id="re_test_other")
 
@@ -434,16 +459,20 @@ def test_apply_does_not_log(db: Session, alerts: pytest.LogCaptureFixture) -> No
     db.commit()
 
     assert _alerts(alerts) == []
+    assert ops_alerts == []
 
 
 def test_failed_after_success_frees_source_and_alerts(
-    db: Session, alerts: pytest.LogCaptureFixture
+    db: Session, alerts: pytest.LogCaptureFixture, ops_alerts: list[Alert]
 ) -> None:
     """DESIGN 1.12 第 8 条：「发现变为 failed 就照上面改并告警」；
     HANDOFF 0.54：「状态改动引起的告警（请求被明确拒绝、成功后又失败）
     随改动只发生一次，不受它限制」——先因不符告警过的尝试也照记；释放
     来源后同一来源可再建一条尝试（第 8 条：同一来源至多一条不是 failed
-    的尝试）。"""
+    的尝试）。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_failed_after_success 一行（「已成功
+    的退款查询到变为失败、改为 failed 之后」，对象为退款尝试 ID）：以
+    ("stripe_refund", 尝试 ID) 调用一次 ops_alert.alert。"""
     checkout_id = _checkout(db)
     attempt_id = _attempt(
         db,
@@ -458,6 +487,7 @@ def test_failed_after_success_frees_source_and_alerts(
 
     assert result is RefreshResult.FAILED_AFTER_SUCCESS
     assert _alerts(alerts) == [f"{LOG_REFUND_FAILED_AFTER_SUCCESS} attempt={attempt_id}"]
+    assert ops_alerts == [(LOG_REFUND_FAILED_AFTER_SUCCESS, ("stripe_refund", attempt_id))]
     attempt = _state(db, attempt_id)
     assert attempt.status == STRIPE_REFUND_FAILED
     assert attempt.active_checkout_id is None
@@ -535,10 +565,15 @@ def test_known_refund_id_matches_without_metadata(db: Session) -> None:
     assert _state(db, attempt_id).status == STRIPE_REFUND_SUCCEEDED
 
 
-def test_mismatch_alerted_once(db: Session, alerts: pytest.LogCaptureFixture) -> None:
+def test_mismatch_alerted_once(
+    db: Session, alerts: pytest.LogCaptureFixture, ops_alerts: list[Alert]
+) -> None:
     """HANDOFF 0.54：告警时间列「只给会反复出现的告警（……Stripe 退款对象
     与尝试不符）去重，这类告警每条尝试至多一次」：两次查到不符的对象只
-    告警一次，告警时间是第一次的时间。"""
+    告警一次，告警时间是第一次的时间。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_mismatch 一行（「查询到的 Stripe
+    退款与尝试不符」，对象为退款尝试 ID）：第一次以 ("stripe_refund", 尝试 ID) 调用一次
+    ops_alert.alert，第二次没有告警日志，不再调用。"""
     attempt_id = _attempt(db, stripe_refund_id=REFUND_ID)
     wrong = _refund(attempt_id, "succeeded", payment_intent=OTHER_PI)
     gateway = FakeStripeGateway(_ok(wrong), _ok(wrong))
@@ -548,6 +583,7 @@ def test_mismatch_alerted_once(db: Session, alerts: pytest.LogCaptureFixture) ->
 
     assert (first, second) == (RefreshResult.MISMATCH, RefreshResult.MISMATCH)
     assert _alerts(alerts) == [f"{LOG_REFUND_MISMATCH} attempt={attempt_id}"]
+    assert ops_alerts == [(LOG_REFUND_MISMATCH, ("stripe_refund", attempt_id))]
     attempt = _state(db, attempt_id)
     assert attempt.alerted_at == NOW
     assert attempt.status == STRIPE_REFUND_PENDING
@@ -588,11 +624,15 @@ def test_aware_now_is_rejected(db: Session) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_submit_form_and_idempotency_key(db: Session, alerts: pytest.LogCaptureFixture) -> None:
+def test_submit_form_and_idempotency_key(
+    db: Session, alerts: pytest.LogCaptureFixture, ops_alerts: list[Alert]
+) -> None:
     """DESIGN 1.12 第 8 条：「以该记录的本站 ID 为幂等键，并写进退款
     元数据」；验收：表单为 payment_intent、amount（尝试金额）与
     metadata[attempt_id]，幂等键为尝试 ID 的十进制字符串；之后调用次数
-    加一、写上次复查时间，按写入规则写入。"""
+    加一、写上次复查时间，按写入规则写入。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_rejected 至 stripe_refund_mismatch
+    各行：相符的 pending 响应没有告警日志，不调用 ops_alert.alert。"""
     attempt_id = _attempt(db)
     gateway = FakeStripeGateway(_ok(_refund(attempt_id, "pending")))
 
@@ -613,6 +653,7 @@ def test_submit_form_and_idempotency_key(db: Session, alerts: pytest.LogCaptureF
     assert attempt.call_count == 1
     assert attempt.last_checked_at == NOW
     assert _alerts(alerts) == []
+    assert ops_alerts == []
 
 
 def test_submit_succeeded_response(db: Session) -> None:
@@ -629,13 +670,17 @@ def test_submit_succeeded_response(db: Session) -> None:
     assert attempt.succeeded_at == NOW
 
 
-def test_submit_mismatch_not_written(db: Session, alerts: pytest.LogCaptureFixture) -> None:
+def test_submit_mismatch_not_written(
+    db: Session, alerts: pytest.LogCaptureFixture, ops_alerts: list[Alert]
+) -> None:
     """DESIGN 1.12 第 8 条：「退款接口的响应、webhook 与定时查询共用同一
     写入规则」；HANDOFF 0.54：告警时间列「只给会反复出现的告警（……Stripe
     退款对象与尝试不符）去重，这类告警每条尝试至多一次」；验收：ok 时按
     apply_refund_object 写入：PaymentIntent 不符时不写
     Stripe 退款 ID 与状态，首次不符记 stripe_refund_mismatch；调用次数
-    照加。"""
+    照加。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_mismatch 一行（对象为退款尝试
+    ID）：日志之后以 ("stripe_refund", 尝试 ID) 调用一次 ops_alert.alert。"""
     attempt_id = _attempt(db)
     wrong = _refund(attempt_id, "succeeded", payment_intent=OTHER_PI)
     gateway = FakeStripeGateway(_ok(wrong))
@@ -649,6 +694,7 @@ def test_submit_mismatch_not_written(db: Session, alerts: pytest.LogCaptureFixtu
     assert attempt.call_count == 1
     assert attempt.alerted_at == NOW
     assert _alerts(alerts) == [f"{LOG_REFUND_MISMATCH} attempt={attempt_id}"]
+    assert ops_alerts == [(LOG_REFUND_MISMATCH, ("stripe_refund", attempt_id))]
 
 
 @pytest.mark.parametrize(
@@ -663,6 +709,7 @@ def test_submit_mismatch_not_written(db: Session, alerts: pytest.LogCaptureFixtu
 def test_submit_rejected_records_failed_without_retry(
     db: Session,
     alerts: pytest.LogCaptureFixture,
+    ops_alerts: list[Alert],
     error_type: str | None,
     code: str | None,
     expected: str | None,
@@ -670,7 +717,10 @@ def test_submit_rejected_records_failed_without_retry(
     """DESIGN 1.12 第 8 条：「Stripe 以请求错误明确拒绝创建……才记为
     failed；后一种不自动重试，记下错误类别并告警」；HANDOFF 0.54：
     「以适配器归为 rejected 为准……记为 failed 并记下错误类别（Stripe
-    错误的 type），不自动重试」；验收：type 为空时取 code，截到 64 字符。"""
+    错误的 type），不自动重试」；验收：type 为空时取 code，截到 64 字符。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_rejected 一行（「尝试记为 failed
+    之后」，对象为退款尝试 ID）：以 ("stripe_refund", 尝试 ID) 调用一次 ops_alert.alert，
+    之后跳过的那次不再调用。"""
     attempt_id = _attempt(db)
     gateway = FakeStripeGateway(_rejected(error_type, code))
 
@@ -689,6 +739,7 @@ def test_submit_rejected_records_failed_without_retry(
     # HANDOFF 0.54：状态改动引起的告警不看也不写告警时间。
     assert attempt.alerted_at is None
     assert _alerts(alerts) == [f"{LOG_REFUND_REJECTED} attempt={attempt_id}"]
+    assert ops_alerts == [(LOG_REFUND_REJECTED, ("stripe_refund", attempt_id))]
 
 
 class _ConcurrentWriteGateway(FakeStripeGateway):
@@ -712,12 +763,14 @@ class _ConcurrentWriteGateway(FakeStripeGateway):
 
 
 def test_submit_rejected_after_concurrent_write_is_ignored(
-    db: Session, engine: Engine, alerts: pytest.LogCaptureFixture
+    db: Session, engine: Engine, alerts: pytest.LogCaptureFixture, ops_alerts: list[Alert]
 ) -> None:
     """DESIGN 1.12 第 8 条：「有 Stripe 退款对象的尝试，状态一律以向
     Stripe 查询到的该退款当前对象为准（上面 4xx 明确拒绝创建的情形没有
     退款对象，是唯一例外）」；验收：rejected 而尝试已不是 pending 或已有
-    Stripe 退款 ID 时只加调用次数与写上次复查时间、不改状态、不告警。"""
+    Stripe 退款 ID 时只加调用次数与写上次复查时间、不改状态、不告警。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_rejected 一行（「尝试记为 failed
+    之后」）：没记为 failed、没有告警日志，不调用 ops_alert.alert。"""
     attempt_id = _attempt(db)
     rejected = _rejected("invalid_request_error")
     gateway = _ConcurrentWriteGateway(engine, attempt_id, rejected)
@@ -733,16 +786,22 @@ def test_submit_rejected_after_concurrent_write_is_ignored(
     assert attempt.call_count == 1
     assert attempt.last_checked_at == LATER
     assert _alerts(alerts) == []
+    assert ops_alerts == []
 
 
 @pytest.mark.parametrize("outcome", [StripeOutcome.UNAVAILABLE, StripeOutcome.LIVE])
 def test_submit_unavailable_keeps_pending(
-    db: Session, alerts: pytest.LogCaptureFixture, outcome: StripeOutcome
+    db: Session,
+    alerts: pytest.LogCaptureFixture,
+    ops_alerts: list[Alert],
+    outcome: StripeOutcome,
 ) -> None:
     """DESIGN 1.12 第 8 条：「其余一律保持 pending、占用额度」「还没有
     Stripe 退款 ID（调用结果未知或可重试的错误）的，由定时任务……以同一
     幂等键自动重试」；验收：unavailable 与 live 保持 pending、调用次数
-    加一。"""
+    加一。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_rejected 一行（只有 Stripe 以请求
+    错误明确拒绝才告警）：不可用与 live 没有告警日志，不调用 ops_alert.alert。"""
     attempt_id = _attempt(db)
     gateway = FakeStripeGateway(StripeResult(outcome))
 
@@ -758,6 +817,7 @@ def test_submit_unavailable_keeps_pending(
     assert attempt.call_count == 2
     assert attempt.last_checked_at == LATER
     assert _alerts(alerts) == []
+    assert ops_alerts == []
 
 
 def test_submit_replay_retrieves_before_writing(db: Session) -> None:
@@ -900,12 +960,17 @@ def test_refresh_writes_queried_object(db: Session) -> None:
     ],
 )
 def test_refresh_unavailable_only_writes_checked_time(
-    db: Session, alerts: pytest.LogCaptureFixture, query: StripeResult[Any]
+    db: Session,
+    alerts: pytest.LogCaptureFixture,
+    ops_alerts: list[Alert],
+    query: StripeResult[Any],
 ) -> None:
     """DESIGN 1.12 第 9 条：「创建会话或查询时 Stripe 不可用」；第 8 条：
     「有 Stripe 退款对象的尝试，状态一律以向 Stripe 查询到的该退款当前
     对象为准」——没查到当前对象就不改状态；验收：Stripe
-    不可用或查询被拒时只写上次复查时间，不改状态、不告警。"""
+    不可用或查询被拒时只写上次复查时间，不改状态、不告警。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_failed_after_success 与
+    stripe_refund_mismatch 两行：没查到对象、没有告警日志，不调用 ops_alert.alert。"""
     attempt_id = _attempt(db, STRIPE_REFUND_SUCCEEDED, stripe_refund_id=REFUND_ID)
     before = _snapshot(db, attempt_id)
 
@@ -917,6 +982,7 @@ def test_refresh_unavailable_only_writes_checked_time(
     before.pop("last_checked_at")
     assert after == before
     assert _alerts(alerts) == []
+    assert ops_alerts == []
 
 
 def test_refresh_skips_attempt_without_refund_id(db: Session) -> None:

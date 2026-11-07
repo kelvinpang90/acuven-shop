@@ -14,6 +14,10 @@ FakeStripeGateway（第 9 条：CI 与本地测试不调用 Stripe）。被测�
 回滚，测试数据都先提交。SQLite 不支持行锁；「调用 Stripe 时不持有任何数据库
 锁」以调用 Stripe 时会话不在事务中检查。边界取验收标准的字面：「早于 5 分钟
 前」等为严格早于，所以测试取边界两侧各差 1 秒的时刻。
+
+运营告警邮件（SHOP-TASK-221）：ops_alert.alert 一律以 monkeypatch 替换为记录调用的
+替身（不入队、不连 SMTP 与 Redis）；补了告警断言的测试在文档字符串里写明它守住的
+docs/DESIGN.md 1.21「运营告警邮件」第 6 条哪一行。
 """
 
 from __future__ import annotations
@@ -40,6 +44,7 @@ from app.models.stripe import (
     STRIPE_REFUND_PENDING,
     STRIPE_REFUND_SUCCEEDED,
 )
+from app.services import ops_alert
 from app.services.stripe_gateway import (
     FakeStripeGateway,
     Form,
@@ -48,7 +53,7 @@ from app.services.stripe_gateway import (
     StripeOutcome,
     StripeResult,
 )
-from app.services.stripe_refund import LOG_REFUND_FAILED_AFTER_SUCCESS
+from app.services.stripe_refund import LOG_REFUND_FAILED_AFTER_SUCCESS, LOG_REFUND_MISMATCH
 from app.services.stripe_refund_overdue import (
     LOG_REFUND_UNRESOLVED,
     has_due_refunds,
@@ -72,6 +77,9 @@ UNAVAILABLE: StripeResult[Any] = StripeResult(StripeOutcome.UNAVAILABLE)
 
 FINGERPRINT = "0f" * 32
 LOGGERS = ("app.services.stripe_refund_overdue", "app.services.stripe_refund")
+
+# ops_alert.alert 的（类别, 对象）。
+Alert = tuple[str, object]
 
 _SEQUENCE = itertools.count(1)
 
@@ -112,6 +120,18 @@ def alerts(caplog: pytest.LogCaptureFixture) -> pytest.LogCaptureFixture:
     for name in LOGGERS:
         caplog.set_level(logging.INFO, logger=name)
     return caplog
+
+
+@pytest.fixture(autouse=True)
+def ops_alerts(monkeypatch: pytest.MonkeyPatch) -> list[Alert]:
+    """以 monkeypatch 替换 ops_alert.alert，按调用顺序记下（类别, 对象）。"""
+    calls: list[Alert] = []
+
+    def record(category: str, target: object = None, **_: object) -> None:
+        calls.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
+    return calls
 
 
 def _checkout(db: Session) -> int:
@@ -332,11 +352,13 @@ def _overdue(db: Session, **kwargs: Any) -> int:
 
 
 def test_reconcile_adopts_refund_found_by_metadata(
-    db: Session, alerts: pytest.LogCaptureFixture
+    db: Session, alerts: pytest.LogCaptureFixture, ops_alerts: list[Alert]
 ) -> None:
     """DESIGN 1.12 第 8 条：「改为列出该 PaymentIntent 退款的全部分页、按
     元数据里的尝试 ID 对账，找到就采用」；「退款接口的响应、webhook 与定时
-    查询共用同一写入规则」。"""
+    查询共用同一写入规则」。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_unresolved 一行（「对账找不到或
+    列不完」才告警）：找到且相符，没有告警日志，不调用 ops_alert.alert。"""
     attempt_id = _overdue(db)
     gateway = FakeStripeGateway(_page(_other("re_test_a"), _refund(attempt_id, "succeeded")))
 
@@ -350,6 +372,36 @@ def test_reconcile_adopts_refund_found_by_metadata(
     assert attempt.call_count == 1
     assert attempt.alerted_at is None
     assert _alerts(alerts) == []
+    assert ops_alerts == []
+
+
+def test_reconcile_found_but_mismatched_alerts_once(
+    db: Session, alerts: pytest.LogCaptureFixture, ops_alerts: list[Alert]
+) -> None:
+    """DESIGN 1.12 第 8 条：「按元数据里的尝试 ID 对账，找到就采用」「退款接口的响应、
+    webhook 与定时查询共用同一写入规则」——采用前照写入规则核对 PaymentIntent，不符即
+    不采用，提交后按 alert_category 记 stripe_refund_mismatch。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_mismatch 一行（「查询到的 Stripe
+    退款与尝试不符」，对象为退款尝试 ID）：对账找到的退款不符时，日志之后以
+    ("stripe_refund", 尝试 ID) 调用一次 ops_alert.alert。"""
+    attempt_id = _overdue(db)
+    wrong = Refund(
+        id=REFUND_ID,
+        status="succeeded",
+        amount=AMOUNT,
+        payment_intent="pi_test_other",
+        attempt_id=str(attempt_id),
+    )
+    gateway = FakeStripeGateway(_page(wrong))
+
+    assert _run(db, gateway, NOW) == 1
+
+    attempt = _state(db, attempt_id)
+    assert attempt.status == STRIPE_REFUND_PENDING
+    assert attempt.stripe_refund_id is None
+    assert attempt.alerted_at == NOW
+    assert _alerts(alerts) == [f"{LOG_REFUND_MISMATCH} attempt={attempt_id}"]
+    assert ops_alerts == [(LOG_REFUND_MISMATCH, ("stripe_refund", attempt_id))]
 
 
 def test_reconcile_adopts_refund_on_second_page(db: Session) -> None:
@@ -376,12 +428,15 @@ def test_reconcile_adopts_refund_on_second_page(db: Session) -> None:
 
 
 def test_reconcile_not_found_stays_pending_and_alerts_once(
-    db: Session, alerts: pytest.LogCaptureFixture
+    db: Session, alerts: pytest.LogCaptureFixture, ops_alerts: list[Alert]
 ) -> None:
     """DESIGN 1.12 第 8 条：「找不到或无法列完都保持 pending、占用额度，告警
     由运营者在 Stripe 后台跟进；本站不提供把这类尝试改为 failed 的手段」；
     HANDOFF 0.54：「满 24 小时转对账的每小时列一次全部分页、直到找到（告警
-    只记一次）」。"""
+    只记一次）」。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_unresolved 一行（「对账找不到……
+    写告警时间并提交之后」，对象为退款尝试 ID）：第一轮以 ("stripe_refund", 尝试 ID)
+    调用一次 ops_alert.alert，第二轮没有告警日志，不再调用。"""
     attempt_id = _overdue(db)
     gateway = FakeStripeGateway(_page(_other("re_test_a")), _page(_other("re_test_a")))
 
@@ -397,6 +452,7 @@ def test_reconcile_not_found_stays_pending_and_alerts_once(
     assert attempt.alerted_at == NOW
     assert attempt.last_checked_at == later
     assert _alerts(alerts) == [f"{LOG_REFUND_UNRESOLVED} attempt={attempt_id}"]
+    assert ops_alerts == [(LOG_REFUND_UNRESOLVED, ("stripe_refund", attempt_id))]
 
 
 @pytest.mark.parametrize(
@@ -412,11 +468,17 @@ def test_reconcile_not_found_stays_pending_and_alerts_once(
     ],
 )
 def test_reconcile_incomplete_listing_stays_pending_and_alerts_once(
-    db: Session, alerts: pytest.LogCaptureFixture, pages: tuple[StripeResult[Any], ...]
+    db: Session,
+    alerts: pytest.LogCaptureFixture,
+    ops_alerts: list[Alert],
+    pages: tuple[StripeResult[Any], ...],
 ) -> None:
     """DESIGN 1.12 第 8 条：「找不到或无法列完都保持 pending、占用额度，告警
     由运营者在 Stripe 后台跟进」；HANDOFF 0.54：告警时间列只给「24 小时后对账
-    找不到或列不完」等会反复出现的告警去重，这类告警每条尝试至多一次。"""
+    找不到或列不完」等会反复出现的告警去重，这类告警每条尝试至多一次。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_unresolved 一行（「……列不完、
+    写告警时间并提交之后」，对象为退款尝试 ID）：以 ("stripe_refund", 尝试 ID) 调用一次
+    ops_alert.alert。"""
     attempt_id = _overdue(db)
     gateway = FakeStripeGateway(*pages)
 
@@ -429,14 +491,17 @@ def test_reconcile_incomplete_listing_stays_pending_and_alerts_once(
     assert attempt.alerted_at == NOW
     assert ("POST", "/v1/refunds") not in _paths(gateway)
     assert _alerts(alerts) == [f"{LOG_REFUND_UNRESOLVED} attempt={attempt_id}"]
+    assert ops_alerts == [(LOG_REFUND_UNRESOLVED, ("stripe_refund", attempt_id))]
 
 
 def test_reconcile_skips_alert_when_already_alerted(
-    db: Session, alerts: pytest.LogCaptureFixture
+    db: Session, alerts: pytest.LogCaptureFixture, ops_alerts: list[Alert]
 ) -> None:
     """HANDOFF 0.54：告警时间列「只给会反复出现的告警（24 小时后对账找不到或
     列不完、Stripe 退款对象与尝试不符）去重，这类告警每条尝试至多一次」：
-    已因不符告警过的尝试对账找不到时不再告警。"""
+    已因不符告警过的尝试对账找不到时不再告警。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_unresolved 一行（「写告警时间并
+    提交之后」）：没写告警时间、没有告警日志，不调用 ops_alert.alert。"""
     earlier = NOW - DAY
     attempt_id = _overdue(db, alerted_at=earlier)
     gateway = FakeStripeGateway(_page())
@@ -445,6 +510,7 @@ def test_reconcile_skips_alert_when_already_alerted(
 
     assert _state(db, attempt_id).alerted_at == earlier
     assert _alerts(alerts) == []
+    assert ops_alerts == []
 
 
 def test_reconcile_not_repeated_within_an_hour(db: Session) -> None:
@@ -544,11 +610,14 @@ def test_succeeded_never_checked_is_queried(db: Session) -> None:
 
 
 def test_succeeded_turning_failed_releases_source_and_alerts(
-    db: Session, alerts: pytest.LogCaptureFixture
+    db: Session, alerts: pytest.LogCaptureFixture, ops_alerts: list[Alert]
 ) -> None:
     """DESIGN 1.12 第 8 条：「Stripe 允许已成功的退款之后变为失败，这时照
     查询结果改为 failed、释放额度」「发现变为 failed 就照上面改并告警，防退款
-    失败的 webhook 漏收」。"""
+    失败的 webhook 漏收」。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_failed_after_success 一行（「改为
+    failed 之后」，对象为退款尝试 ID）：定时查询时以 ("stripe_refund", 尝试 ID) 调用一次
+    ops_alert.alert，failed 之后不再到期、不再调用。"""
     attempt_id = _attempt(
         db,
         STRIPE_REFUND_SUCCEEDED,
@@ -568,6 +637,7 @@ def test_succeeded_turning_failed_releases_source_and_alerts(
     # failed 不再到期。
     assert _run(db, gateway, NOW + timedelta(days=30)) == 0
     assert len(gateway.calls) == 1
+    assert ops_alerts == [(LOG_REFUND_FAILED_AFTER_SUCCESS, ("stripe_refund", attempt_id))]
 
 
 def test_failed_attempts_are_never_due(db: Session) -> None:

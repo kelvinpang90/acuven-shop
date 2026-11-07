@@ -30,8 +30,11 @@ apply_refund_object 是共用的写入规则：只 flush、不提交（webhook �
 记日志。调用方不得持有数据库锁、不得有未提交的改动：这两个函数会提交或回滚
 当前事务。SQLite 不支持行锁，SQLAlchemy 在 SQLite 上不生成 FOR UPDATE。
 
-运营告警邮件尚未接入：设计写「告警」之处先记一条 error 级日志，只含类别与本站
-尝试 ID（没建成尝试时为退款申请 ID），不记录 Stripe 请求、响应与退款原文。库里的
+设计写「告警」之处记一条 error 级日志，只含类别与本站尝试 ID（没建成尝试时为退款
+申请 ID），不记录 Stripe 请求、响应与退款原文；按 docs/DESIGN.md 1.21（提交 5be346e）
+「运营告警邮件」第 6 条与 docs/HANDOFF.md 0.88（SHOP-TASK-221），每条这样的日志之后
+紧接着调用 ops_alert.alert(该日志的类别, 对象)，对象为 ("stripe_refund", 尝试 ID) 或
+("refund_request", 退款申请 ID)，不带 Stripe 的任何 ID、金额与个人资料。库里的
 时间一律是不带时区的 UTC。本模块只做业务规则：定时任务、webhook 与后台接口由之后
 的任务调用它（SHOP-TASK-117 写的来源为会话的尝试也走这里）。
 
@@ -70,11 +73,16 @@ from app.models.stripe import (
     STRIPE_REFUND_PENDING,
     STRIPE_REFUND_SUCCEEDED,
 )
+from app.services import ops_alert
 from app.services.stripe_gateway import Refund, StripeError, StripeGateway, StripeOutcome
 
 logger = logging.getLogger(__name__)
 
-# 告警邮件接入前的 error 级日志类别（只含类别与尝试 ID）。
+# 运营告警的对象类别：退款尝试 ID，没建成尝试时为退款申请 ID。
+ALERT_TARGET_ATTEMPT = "stripe_refund"
+ALERT_TARGET_REQUEST = "refund_request"
+
+# 告警的 error 级日志类别（只含类别与尝试 ID），也是 ops_alert.alert 的类别码。
 # 会反复出现的告警：Stripe 退款对象与尝试不符；每条尝试至多一次。
 LOG_REFUND_MISMATCH = "stripe_refund_mismatch"
 # 状态改动引起的告警，随改动只记一次，不看也不写告警时间。
@@ -326,7 +334,8 @@ def submit_refund_attempt(
          （为空取 code，都为空留空，截到 64 字符），告警
          stripe_refund_rejected；否则（期间被别处写入）不改状态、不告警。
        - unavailable 与 live：保持 pending。
-    4. 提交后才记日志（每类一条 error 日志，只含尝试 ID）。
+    4. 提交后才记日志（每类一条 error 日志，只含尝试 ID），日志之后紧接着以同一类别与
+       ("stripe_refund", 尝试 ID) 调用一次 ops_alert.alert。
     """
     _check_now(now)
     attempt = _load_attempt(db, attempt_id)
@@ -374,6 +383,7 @@ def submit_refund_attempt(
     db.commit()
     if log is not None:
         logger.error("%s attempt=%d", log, attempt_id)
+        ops_alert.alert(log, (ALERT_TARGET_ATTEMPT, attempt_id))
     return outcome
 
 
@@ -404,7 +414,8 @@ def refresh_refund_attempt(
     调用方不得持有数据库锁、不得有未提交的改动。还没有 Stripe 退款 ID
     为 skipped、不调用。不持锁调用 retrieve_refund，再在自己的事务里
     锁住该尝试：ok 时按 apply_refund_object 写入；查询不可用或被拒时
-    不改状态、不告警；两种情形都写上次复查时间。提交后按结果记日志。
+    不改状态、不告警；两种情形都写上次复查时间。提交后按结果记日志，日志之后紧接着以
+    同一类别与 ("stripe_refund", 尝试 ID) 调用一次 ops_alert.alert。
     """
     _check_now(now)
     attempt = _load_attempt(db, attempt_id)
@@ -428,6 +439,7 @@ def refresh_refund_attempt(
     db.commit()
     if log is not None:
         logger.error("%s attempt=%d", log, attempt_id)
+        ops_alert.alert(log, (ALERT_TARGET_ATTEMPT, attempt_id))
     return outcome
 
 
@@ -501,7 +513,8 @@ def retry_request_attempt(db: Session, refund_request_id: int, now: datetime) ->
     4. 锁住该订单确认时间非空的会话记录；查不到或其 PaymentIntent ID 与这条尝试
        不同即数据有误，抛 RuntimeError。
     5. 以 refunded_total 锁住同一 PaymentIntent 的尝试，已有合计加申请的 amount_sen
-       超过该记录的 amount_sen：记一条 stripe_refund_cap 日志后抛 RefundCapExceeded。
+       超过该记录的 amount_sen：记一条 stripe_refund_cap 日志，紧接着以
+       ("refund_request", 申请 ID) 调用一次 ops_alert.alert，再抛 RefundCapExceeded。
     6. 在保存点里写一条 pending 尝试（金额为申请的 amount_sen）。并发的另一次重试先
        提交了同一来源的尝试时撞上活动来源列的唯一约束：只回滚保存点，抛 RetryNotAllowed。
     """
@@ -527,6 +540,7 @@ def retry_request_attempt(db: Session, refund_request_id: int, now: datetime) ->
     intent_id = latest.payment_intent_id
     if refunded_total(db, intent_id) + request.amount_sen > checkout.amount_sen:
         logger.error("%s refund_request=%d", LOG_REFUND_CAP, refund_request_id)
+        ops_alert.alert(LOG_REFUND_CAP, (ALERT_TARGET_REQUEST, refund_request_id))
         raise RefundCapExceeded
 
     try:
