@@ -6020,7 +6020,7 @@ tasks:
       运营者落实写法（HANDOFF 0.88）：每条现有的告警日志之后紧接着调用 ops_alert.alert(类别, 对象)，类别取日志里的同一个常量或变量；日志里为 attempt=<ID> 的，对象为（stripe_refund, 退款尝试 ID），为 refund_request=<ID> 的，对象为（refund_request, 退款申请 ID）；refund_review.py 的告警在调用方提交之前记日志，告警照此入队（第 2 条接受外层提交失败时多出一封）；app/api/admin_refunds.py 的 stripe_refund_submit_failed 不接（第 8 条）；六类都不以对象作去重键，窗口 3600 秒。
       设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6 条与 HANDOFF 0.88；告警不带 Stripe 的任何 ID、金额与个人资料。
       拆分：Stripe 一组的第三个任务（10 个允许路径），依赖 SHOP-TASK-217 与 220（沿用 220 加入的 stripe_refund_cap，app/services/stripe_webhook.py 两个任务都改）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-217
       - SHOP-TASK-220
