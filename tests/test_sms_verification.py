@@ -23,8 +23,12 @@
   已结束的记录或另一个号码时“原记录一律不改……按服务商不可用停发处理：写停发记录、
   释放本次预占、不计入每日条数与费用上限”；核验窗口为“当前时间减 10 分钟到当前时间，
   创建时间晚于当前时间的记录不算”。
+- docs/DESIGN.md 1.21（提交 5be346e）「运营告警邮件」第 6 条表 sms_budget_exhausted 一行（下称
+  「告警表 sms_budget_exhausted 行」）：“发送前预占因超过全站每日条数或费用上限被拒、停发的事务
+  结束之后（单次最高费用未配置的停发不在此列，见第 8 条）”，对象为马来西亚日期，去重键为日期；
+  docs/HANDOFF.md 0.88 的落实写法（SHOP-TASK-222）。
 每条测试的文档字符串写明它守住的是哪一句；没有直接原句的，写明是 SHOP-TASK-069
-验收标准里的约定。
+验收标准里的约定。ops_alert.alert 一律以替身 alerts 代替（autouse），不入真实队列。
 
 用 SQLite 内存库按模型建表（引擎设置与 tests/test_sms_budget.py 相同，由引擎发 BEGIN，
 预占在保存点里插入当日行）。服务商与人机挑战用 SHOP-TASK-067 的测试替身；Redis 用照
@@ -50,7 +54,7 @@ from app.core.config import Settings
 from app.db.base import Base
 from app.models import SiteSetting, SmsDailyUsage, VerificationAttempt
 from app.models.site import SITE_SETTING_ID
-from app.services import sms_verification
+from app.services import ops_alert, sms_verification
 from app.services.captcha import CaptchaResult, FakeCaptchaVerifier
 from app.services.ordering import SmsVerificationRequired, _require_guest_allowed
 from app.services.phone import InvalidPhoneNumber
@@ -134,6 +138,18 @@ def db(engine: Engine) -> Iterator[Session]:
 @pytest.fixture
 def enabled(db: Session) -> None:
     set_switch(db, True)
+
+
+@pytest.fixture(autouse=True)
+def alerts(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, object]]:
+    """以 monkeypatch 替换 ops_alert.alert，按调用顺序记下（类别, 对象）。"""
+    calls: list[tuple[str, object]] = []
+
+    def record(category: str, target: object = None, **_: object) -> None:
+        calls.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
+    return calls
 
 
 class FakeRedis:
@@ -700,6 +716,100 @@ def test_provider_unavailable_suspends_and_releases(
     assert len(releases) == 1
     assert usage(db) == (0, 0, 0)
     assert attempts(db) == [(PHONE_MY, "checkout", "suspended", None, NOW, NOW)]
+
+
+# ---------------------------------------------------------------------------
+# 预算用尽的告警（DESIGN 1.21「运营告警邮件」第 6 条）
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("limit", ["cost", "count"])
+def test_over_budget_alerts_once_after_suspend_commit(
+    db: Session,
+    enabled: None,
+    alerts: list[tuple[str, object]],
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+    limit: str,
+) -> None:
+    """告警表 sms_budget_exhausted 行：“发送前预占因超过全站每日条数或费用上限被拒、停发的事务
+    结束之后”入队，对象为马来西亚日期。超过费用上限与超过条数上限都在停发提交之后记一条
+    error 日志 sms_budget_exhausted date=<日期>，紧接着以 ("date", ISO 日期) 调用一次
+    ops_alert.alert；返回值与停发记录不变；日志不含号码与来源。
+    """
+    caplog.set_level(logging.DEBUG, logger=sms_verification.__name__)
+    if limit == "cost":
+        settings = make_settings(sms_daily_cost_limit_micro_usd=COST_MY - 1)
+    else:
+        add_usage(db, sent=3, settled=3 * COST_MY)
+        settings = make_settings(sms_daily_count_limit=3)
+    in_transaction: list[bool] = []
+    original = ops_alert.alert
+
+    def _check_committed(category: str, target: object = None, **kwargs: object) -> None:
+        in_transaction.append(db.in_transaction())
+        original(category, target, **kwargs)
+
+    monkeypatch.setattr(ops_alert, "alert", _check_committed)
+    outcome = send(db, settings=settings)
+    assert outcome is SendOutcome.SUSPENDED
+    assert alerts == [("sms_budget_exhausted", ("date", TODAY.isoformat()))]
+    assert in_transaction == [False]
+    assert attempts(db) == [(PHONE_MY, "checkout", "suspended", None, NOW, NOW)]
+    messages = [r.getMessage() for r in caplog.records if r.levelno == logging.ERROR]
+    assert messages == [f"sms_budget_exhausted date={TODAY.isoformat()}"]
+    for record in caplog.records:
+        for text_value in (PHONE_MY, PHONE_MY[1:], SOURCE, TOKEN):
+            assert text_value not in record.getMessage()
+
+
+def test_over_budget_alert_uses_malaysia_date(
+    db: Session, enabled: None, alerts: list[tuple[str, object]]
+) -> None:
+    """告警表 sms_budget_exhausted 行：对象为“马来西亚日期”（去重键为日期）。UTC 16:30 已是
+    马来西亚的次日，对象取 app/services/sms_budget.py 的 malaysia_date，不取 UTC 日期。
+    """
+    late = datetime(2026, 10, 9, 16, 30, 0)
+    settings = make_settings(sms_daily_cost_limit_micro_usd=COST_MY - 1)
+    assert send(db, settings=settings, now=late) is SendOutcome.SUSPENDED
+    assert alerts == [("sms_budget_exhausted", ("date", "2026-10-10"))]
+
+
+@pytest.mark.parametrize(
+    "case",
+    ["unknown_cost", "redis_none", "redis_down", "rate_limited", "provider", "captcha", "sent"],
+)
+def test_other_suspensions_do_not_alert(
+    db: Session,
+    enabled: None,
+    alerts: list[tuple[str, object]],
+    caplog: pytest.LogCaptureFixture,
+    case: str,
+) -> None:
+    """告警表 sms_budget_exhausted 行“单次最高费用未配置的停发不在此列，见第 8 条”；第 8 条
+    第（2）项：短信服务商不可用、Redis 不可用等其他停发不接。单次最高费用未配置、Redis 未配置
+    或不可用、超出限流、服务商不可用、人机挑战服务不可用与正常发出都不调用 ops_alert.alert，
+    也不记日志。
+    """
+    caplog.set_level(logging.DEBUG, logger=sms_verification.__name__)
+    settings = make_settings(sms_max_cost_micro_usd_my=0) if case == "unknown_cost" else None
+    client: object = "fake"
+    if case == "redis_none":
+        client = None
+    elif case == "redis_down":
+        down = FakeRedis()
+        down.fail_on = "execute"
+        client = down
+    elif case == "rate_limited":
+        client = FakeRedis()
+        assert send(db, redis_client=client) is SendOutcome.SENT
+    provider = Provider(SendResult(SendStatus.UNAVAILABLE)) if case == "provider" else None
+    captcha = FakeCaptchaVerifier(CaptchaResult.UNAVAILABLE) if case == "captcha" else None
+    outcome = send(db, settings=settings, redis_client=client, provider=provider, captcha=captcha)
+    expected = {"rate_limited": SendOutcome.RATE_LIMITED, "sent": SendOutcome.SENT}
+    assert outcome is expected.get(case, SendOutcome.SUSPENDED)
+    assert alerts == []
+    assert caplog.records == []
 
 
 # ---------------------------------------------------------------------------

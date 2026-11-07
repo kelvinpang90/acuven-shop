@@ -11,7 +11,8 @@ stripe_late_payment、stripe_late_payment_unrefundable、stripe_refund_cap）由
 接入，stripe_refund_cap 的退款申请告警点由 SHOP-TASK-221 沿用；Stripe 退款的六类
 （stripe_refund_unrefundable、stripe_refund_rejected、stripe_refund_failed_after_success、
 stripe_refund_mismatch、stripe_refund_unresolved、stripe_webhook_refund_rejected）由
-SHOP-TASK-221 接入。
+SHOP-TASK-221 接入；短信预算用尽、管理员登录锁定与会员注销失败的三类
+（sms_budget_exhausted、admin_login_locked、member_deletion_failed）由 SHOP-TASK-222 接入。
 
 调用方的写法（HANDOFF 0.88）：
 
@@ -310,6 +311,35 @@ CATEGORIES: dict[str, AlertCategory] = {
         guidance=(
             "按类别码与退款尝试 ID 查日志，核对私有配置里的 Stripe 密钥属于当前的测试账户，"
             "到 Stripe 测试后台核对这笔退款；尝试未改，Stripe 重发事件或定时任务会再次查询。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    # SHOP-TASK-222：短信预算、管理员登录锁定与会员注销（第 6 条表）。
+    "sms_budget_exhausted": AlertCategory(
+        description="短信发送前预占超过全站每日条数或费用上限，已停发",
+        guidance=(
+            "按类别码与马来西亚日期查 API 容器的日志，到短信服务商后台核对当日的发送量与费用，"
+            "核对配置的每日条数与费用上限是否合适；停发期间访客照降级规则改为游客下单，"
+            "下一个马来西亚日期按新的一天重新计数。"
+        ),
+        dedupe_by_target=True,
+        window_seconds=DAY_SECONDS,
+    ),
+    "admin_login_locked": AlertCategory(
+        description="管理员登录连续失败，已被短时锁定",
+        guidance=(
+            "按类别码与审计记录 ID 查日志与审计记录，核对这次锁定之前的登录失败是否为本人操作；"
+            "锁定到期自动解除，解除后仍须校验密码；不是本人操作时尽快更换管理员密码。"
+        ),
+        dedupe_by_target=False,
+        window_seconds=HOUR_SECONDS,
+    ),
+    "member_deletion_failed": AlertCategory(
+        description="会员确认注销时删除或提交出现数据库异常，已回滚",
+        guidance=(
+            "按类别码与会员 ID 查 API 容器的日志，排查数据库是否可用；该会员仍为有效，"
+            "前台已回答暂不可用，会员须重新确认注销（短信验证开启时须重新验证）。"
         ),
         dedupe_by_target=False,
         window_seconds=HOUR_SECONDS,
