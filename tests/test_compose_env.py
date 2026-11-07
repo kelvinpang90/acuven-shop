@@ -1,5 +1,6 @@
 """docker-compose.yml 把短信、人机挑战与联系链接的配置传进 shop_api（SHOP-TASK-143），以及商品图片的
-R2 配置与 API 内存上限（DESIGN 1.19）。
+R2 配置与 API 内存上限（DESIGN 1.19），以及运营告警邮件的七项配置与 shop_jobs 的 SHOP_REDIS_URL
+（DESIGN 1.21「运营告警邮件」第 1、4 条，SHOP-TASK-217）。
 
 写法照 tests/test_stripe_gateway.py 的 test_compose_passes_all_six_variables_to_api_and_jobs：
 读取 docker-compose.yml，逐字比较 environment 里的写法。每条测试的文档字符串写明它守住的是什么。
@@ -102,6 +103,50 @@ def test_compose_passes_r2_variables_only_to_api() -> None:
         assert environment.get(name) == value, name
     jobs = _environment("shop_jobs")
     assert not any(name.startswith("R2_") for name in jobs)
+
+
+ALERT_EXPECTED = {
+    "SHOP_ALERT_SMTP_HOST": "${SHOP_ALERT_SMTP_HOST:-}",
+    "SHOP_ALERT_SMTP_PORT": "${SHOP_ALERT_SMTP_PORT:-}",
+    "SHOP_ALERT_SMTP_SECURITY": "${SHOP_ALERT_SMTP_SECURITY:-}",
+    "SHOP_ALERT_SMTP_USERNAME": "${SHOP_ALERT_SMTP_USERNAME:-}",
+    "SHOP_ALERT_SMTP_PASSWORD": "${SHOP_ALERT_SMTP_PASSWORD:-}",
+    "SHOP_ALERT_FROM": "${SHOP_ALERT_FROM:-}",
+    "SHOP_ALERT_TO": "${SHOP_ALERT_TO:-}",
+}
+
+
+def test_compose_passes_alert_variables_to_api_and_jobs() -> None:
+    """DESIGN 1.21「运营告警邮件」第 1 条「配置项经私有配置注入 API 与定时任务两个容器，仓库只记
+    变量名」：七个 SHOP_ALERT_ 变量在 shop_api 与 shop_jobs 里都在，写法为 ${变量名:-}（照 Stripe
+    变量），未设置时为空串（未配置，告警只记日志）、照常部署。"""
+    for service in ("shop_api", "shop_jobs"):
+        environment = _environment(service)
+        for name, value in ALERT_EXPECTED.items():
+            assert environment.get(name) == value, (service, name)
+
+
+def test_alert_settings_default_to_empty_strings() -> None:
+    """DESIGN 1.21「运营告警邮件」第 1 条与 HANDOFF 0.88「七项配置在 Settings 里都是字符串、默认
+    空串」：compose 里的空默认值与 Settings 的默认值一致，端口与加密方式也是字符串，不合格时由
+    ops_alert 判断、不让设置加载失败。"""
+    fields = Settings.model_fields
+    for name in ALERT_EXPECTED:
+        field = name.removeprefix("SHOP_").lower()
+        assert fields[field].annotation is str, name
+        assert fields[field].default == "", name
+    settings = Settings(_env_file=None, alert_smtp_port="not-a-port", alert_smtp_security="tls")
+    assert settings.alert_smtp_port == "not-a-port"
+    assert settings.alert_smtp_security == "tls"
+
+
+def test_compose_passes_redis_url_to_jobs() -> None:
+    """DESIGN 1.21「运营告警邮件」第 4 条「计数放共享 Redis 本项目的库编号，API 与定时任务共用」：
+    shop_jobs 也传 SHOP_REDIS_URL，写法与 shop_api 相同（未设置时为空串，改用进程内存限频）。"""
+    api = _environment("shop_api")
+    jobs = _environment("shop_jobs")
+    assert jobs.get("SHOP_REDIS_URL") == "${SHOP_REDIS_URL:-}"
+    assert jobs["SHOP_REDIS_URL"] == api["SHOP_REDIS_URL"]
 
 
 def test_api_memory_limit_is_512m() -> None:

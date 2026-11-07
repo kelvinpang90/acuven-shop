@@ -47,6 +47,15 @@ creating 记录由定时任务以同一幂等键重试、到期后对账；付�
                                         执行一次 Stripe 退款尝试的定时处理后退出（运营者
                                         手动补跑用；每次最多 STRIPE_REFUND_BATCH_LIMIT
                                         条，只处理已到期的尝试；不能把尝试改为 failed）
+    python -m app.jobs send-test-alert  同步发一封测试告警 ops_alert_test 后退出（运营者配置
+                                        告警邮件后核对用；不经队列、不受限频；服务器接受
+                                        以 0 退出，未配置以 EXIT_NOT_CONFIGURED、最终失败
+                                        以 EXIT_FAILED 退出）
+
+运营告警邮件（DESIGN 1.21「运营告警邮件」第 2 条，SHOP-TASK-217，见 app/services/ops_alert.py）：
+run 与 send-test-alert 以外的一次性子命令执行完后，等本进程的告警队列发完（含一次重试），最多
+ops_alert.DRAIN_TIMEOUT_SECONDS 秒，到时仍有未发完的记一条 warning ops_alert_unsent；退出码只
+反映补跑本身的结果。run 的常驻循环退出时不等队列，未发出的告警只留在日志里。
 
 数据库连接沿用 SHOP_DATABASE_URL 与 app/db/session.py 的会话工厂。
 
@@ -124,6 +133,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.db.session import _session_factory
+from app.services import ops_alert
 from app.services.auto_complete import auto_complete_shipped_orders
 from app.services.payment import expire_overdue_orders
 from app.services.points import expire_points
@@ -157,7 +167,8 @@ HEARTBEAT_PATH = Path("/tmp/acuven_shop_jobs_heartbeat")
 # 收到停止信号时一轮仍在执行，最多再等这么久；须短于验收的 10 秒。
 SHUTDOWN_GRACE_SECONDS = 8.0
 
-# 退出码：成功 0，任务失败（或停止时被强制退出）1，未配置数据库 2。
+# 退出码：成功 0，任务失败（或停止时被强制退出、测试告警最终失败）1，
+# 未配置数据库（或 send-test-alert 未配置告警邮件）2。
 EXIT_OK = 0
 EXIT_FAILED = 1
 EXIT_NOT_CONFIGURED = 2
@@ -623,6 +634,18 @@ def process_stripe_refunds_once(
     return EXIT_OK
 
 
+def send_test_alert(settings: Settings) -> int:
+    """同步发一封测试告警 ops_alert_test（DESIGN 1.21「运营告警邮件」第 1 条），返回退出码：
+    服务器接受为 0，告警邮件未配置为 EXIT_NOT_CONFIGURED，最终失败为 EXIT_FAILED。
+    日志由 ops_alert 记（只有类别、异常类名与状态码）。"""
+    result = ops_alert.send_test_alert(settings)
+    if result == ops_alert.SENT:
+        return EXIT_OK
+    if result == ops_alert.NOT_CONFIGURED:
+        return EXIT_NOT_CONFIGURED
+    return EXIT_FAILED
+
+
 def configured_session_factory() -> SessionFactory | None:
     """按 SHOP_DATABASE_URL 取会话工厂；未配置为空。引擎在第一次开会话时才建。"""
     database_url = get_settings().database_url
@@ -646,24 +669,28 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands.add_parser(
         "process-stripe-refunds", help="process due Stripe refund attempts once and exit"
     )
+    commands.add_parser("send-test-alert", help="send one test operator alert email and exit")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    if args.command == "send-test-alert":
+        return send_test_alert(get_settings())
     session_factory = configured_session_factory()
-    if args.command == "cancel-expired":
-        return cancel_expired(session_factory)
-    if args.command == "process-stripe":
-        return process_stripe(session_factory)
-    if args.command == "reset-stock":
-        return reset_stock(session_factory)
-    if args.command == "complete-shipped":
-        return complete_shipped(session_factory)
-    if args.command == "delete-verifications":
-        return delete_verifications(session_factory)
-    if args.command == "expire-points":
-        return expire_points_once(session_factory)
-    if args.command == "process-stripe-refunds":
-        return process_stripe_refunds_once(session_factory)
+    one_shot: dict[str, Callable[[SessionFactory | None], int]] = {
+        "cancel-expired": cancel_expired,
+        "process-stripe": process_stripe,
+        "reset-stock": reset_stock,
+        "complete-shipped": complete_shipped,
+        "delete-verifications": delete_verifications,
+        "expire-points": expire_points_once,
+        "process-stripe-refunds": process_stripe_refunds_once,
+    }
+    if args.command in one_shot:
+        # 补跑命令执行中业务代码发出的告警照常入队，退出前等它们发完（第 2 条）。
+        try:
+            return one_shot[args.command](session_factory)
+        finally:
+            ops_alert.wait_until_sent()
 
     runner = Runner(default_jobs(), session_factory, force_exit=force_exit)
     install_signal_handlers(runner)

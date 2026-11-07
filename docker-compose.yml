@@ -62,6 +62,15 @@ services:
       R2_BUCKET: ${R2_BUCKET:-}
       R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID:-}
       R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY:-}
+      # 运营告警邮件的 SMTP（DESIGN 1.21「运营告警邮件」第 1 条）：可以不设，未设置时为空串（未配置，
+      # 告警只记日志），照常部署。shop_jobs 同样传这七项。
+      SHOP_ALERT_SMTP_HOST: ${SHOP_ALERT_SMTP_HOST:-}
+      SHOP_ALERT_SMTP_PORT: ${SHOP_ALERT_SMTP_PORT:-}
+      SHOP_ALERT_SMTP_SECURITY: ${SHOP_ALERT_SMTP_SECURITY:-}
+      SHOP_ALERT_SMTP_USERNAME: ${SHOP_ALERT_SMTP_USERNAME:-}
+      SHOP_ALERT_SMTP_PASSWORD: ${SHOP_ALERT_SMTP_PASSWORD:-}
+      SHOP_ALERT_FROM: ${SHOP_ALERT_FROM:-}
+      SHOP_ALERT_TO: ${SHOP_ALERT_TO:-}
     networks: [proxy_net, data_net]
     healthcheck:
       test:
@@ -83,6 +92,9 @@ services:
     mem_limit: 128m
     environment:
       SHOP_DATABASE_URL: ${SHOP_DATABASE_URL:?set SHOP_DATABASE_URL in .env (see .env.example)}
+      # 告警限频计数与 API 共用（DESIGN 1.21「运营告警邮件」第 4 条）：写法与 shop_api 相同，可以不设，
+      # 未设置时改用本进程内存限频，照常部署。
+      SHOP_REDIS_URL: ${SHOP_REDIS_URL:-}
       # Stripe 测试环境支付：写法与 shop_api 相同，可以不设，照常部署。
       SHOP_STRIPE_API_BASE_URL: ${SHOP_STRIPE_API_BASE_URL:-}
       SHOP_STRIPE_SECRET_KEY: ${SHOP_STRIPE_SECRET_KEY:-}
@@ -90,6 +102,14 @@ services:
       SHOP_STRIPE_DEMO_EMAIL: ${SHOP_STRIPE_DEMO_EMAIL:-}
       SHOP_PUBLIC_SITE_URL: ${SHOP_PUBLIC_SITE_URL:-}
       SHOP_STRIPE_MIN_AMOUNT_SEN: ${SHOP_STRIPE_MIN_AMOUNT_SEN:-200}
+      # 运营告警邮件的 SMTP：写法与 shop_api 相同，可以不设，照常部署。
+      SHOP_ALERT_SMTP_HOST: ${SHOP_ALERT_SMTP_HOST:-}
+      SHOP_ALERT_SMTP_PORT: ${SHOP_ALERT_SMTP_PORT:-}
+      SHOP_ALERT_SMTP_SECURITY: ${SHOP_ALERT_SMTP_SECURITY:-}
+      SHOP_ALERT_SMTP_USERNAME: ${SHOP_ALERT_SMTP_USERNAME:-}
+      SHOP_ALERT_SMTP_PASSWORD: ${SHOP_ALERT_SMTP_PASSWORD:-}
+      SHOP_ALERT_FROM: ${SHOP_ALERT_FROM:-}
+      SHOP_ALERT_TO: ${SHOP_ALERT_TO:-}
     networks: [data_net]
     # 心跳文件路径与 app/jobs.py 的 HEARTBEAT_PATH 相同；任一任务连续失败满 10 分钟即不再写，
     # 心跳超过 180 秒未更新即不健康（运营告警邮件接入前以此代替告警）。
