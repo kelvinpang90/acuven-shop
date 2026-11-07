@@ -23,7 +23,9 @@ creating 记录由定时任务以同一幂等键重试、到期后对账；付�
 - 「计价、优惠、积分与库存」第 3 条：积分批次在取得后 12 个月到期（SHOP-TASK-096，见
   app/services/points.py）。
 - 「失败、并发与重试」第 6 条：定时任务可重复运行、只生效一次；失败有告警与人工补跑办法。
-  运营告警邮件接入之前，以容器不健康代替告警（见下文心跳）。
+  告警按 DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6、7 条与 docs/HANDOFF.md 0.88 发
+  job_failing 与 stock_reset_failed（SHOP-TASK-218，见下文每一轮第 2 条与 reset_stock_job）；
+  容器不健康（见下文心跳）的规则不变，仍作兜底。
 - 「资料保留」第 4 条：短信验证请求及发送记录短期保留用于防滥用；保留期按 docs/HANDOFF.md 0.41
   记录的 Kelvin 2026-10-08 决定为 30 天（SHOP-TASK-072，见 app/services/sms_retention.py）。
 
@@ -66,9 +68,11 @@ ops_alert.DRAIN_TIMEOUT_SECONDS 秒，到时仍有未发完的记一条 warning 
    时区）。
    任务抛异常（含数据库不可用）时回滚未提交的部分，只记一条含任务名与异常类名的日志，不退出，
    也不影响同一轮的其他任务与下一轮。
-2. 写心跳文件 HEARTBEAT_PATH（容器的健康检查看它的修改时间）。任一任务已连续失败、且距它
-   最近一次成功（从未成功过则距进程启动）满 UNHEALTHY_AFTER_SECONDS 时不写，容器因此变为
-   不健康；该任务再次成功后恢复写心跳。
+2. 某任务已连续失败、且距它最近一次成功（从未成功过则距进程启动）满 UNHEALTHY_AFTER_SECONDS
+   时，为它报一条 job_failing（对象为任务名，另带最后一次失败的异常类名；数据库未配置时为
+   database_not_configured）；同一段连续失败只报一次，该任务再次成功后清零，不报「已恢复」。
+   计时只在进程内存里。然后写心跳文件 HEARTBEAT_PATH（容器的健康检查看它的修改时间）。有上述
+   任务时不写，容器因此变为不健康；该任务再次成功后恢复写心跳。
 3. 睡到距本轮开始满 ROUND_SECONDS；收到停止信号即醒来，不再开始新一轮。信号到来时若一轮
    正在执行，最多再等 SHUTDOWN_GRACE_SECONDS 让它做完，到时仍未退出即强制退出（未提交的
    事务随连接断开由数据库回滚），所以收到信号后 10 秒内一定退出。
@@ -77,8 +81,8 @@ ops_alert.DRAIN_TIMEOUT_SECONDS 秒，到时仍有未发完的记一条 warning 
 再 Stripe 会话的定时处理（会话处理与付款方式类型补齐两种扫描每轮各最多
 STRIPE_CHECKOUT_BATCH_LIMIT 条，合计至多两倍；Stripe 未配置时没有待处理的记录
 才跳过，见 stripe_checkouts_job），再每日库存重置
-（每日恢复库存开关关闭或当前马来西亚营业日期已有 succeeded 记录时跳过，否则执行；失败只记日志、
-下一轮重试；开关依据 DESIGN 1.18 第 6 条，见 reset_stock_job），再发货
+（每日恢复库存开关关闭或当前马来西亚营业日期已有 succeeded 记录时跳过，否则执行；失败记日志并
+报 stock_reset_failed、下一轮重试；开关依据 DESIGN 1.18 第 6 条，见 reset_stock_job），再发货
 满 7 天自动确认收货（每轮最多完成 AUTO_COMPLETE_BATCH_LIMIT 张，与超时取消相同），再删除满
 30 天的短信验证记录（每轮最多 VERIFICATION_DELETE_BATCH_LIMIT 条，与超时取消相同），再处理
 积分到期（每轮最多 POINTS_EXPIRE_BATCH_LIMIT 个批次，与超时取消相同），最后做 Stripe 退款
@@ -173,6 +177,9 @@ EXIT_OK = 0
 EXIT_FAILED = 1
 EXIT_NOT_CONFIGURED = 2
 
+# 数据库未配置、没有异常时 job_failing 写的固定异常类名（DESIGN 1.21「运营告警邮件」第 6 条）。
+DATABASE_NOT_CONFIGURED = "database_not_configured"
+
 SessionFactory = Callable[[], Session]
 
 
@@ -187,8 +194,9 @@ TimerStarter = Callable[[float, Callable[[], None]], Cancellable]
 class Job:
     """一个定时任务。
 
-    name 只用于日志与失败计时。run 拿到本次的会话与当前时间（不带时区的 UTC），返回本次
-    生效的条数。会话处在运行器的事务里：run 里的 commit 与 rollback 只作用于一个保存点，
+    name 只用于日志、失败计时与 job_failing 告警的对象。run 拿到本次的会话与当前时间
+    （不带时区的 UTC），返回本次生效的条数。会话处在运行器的事务里：
+    run 里的 commit 与 rollback 只作用于一个保存点，
     run 返回后运行器提交整个事务，抛异常时整个事务回滚（含 run 里已经“提交”的部分）。
     own_transactions 为真时例外：run 拿到的是不在事务中的新会话，自己提交与回滚，运行器
     只在它返回或抛异常后关闭会话（未提交的部分随之回滚）。
@@ -234,7 +242,7 @@ def stripe_checkouts_job(
     return Job(name="stripe_checkouts", run=run, own_transactions=True)
 
 
-def reset_stock_job() -> Job:
+def reset_stock_job(*, alert_on_failure: bool = False) -> Job:
     """每日库存重置：SHOP-TASK-032 的 reset_daily_stock，只重置当前马来西亚营业日期。
 
     每次运行先读每日恢复库存开关（SHOP-TASK-179，DESIGN 1.18「计价、优惠、积分与库存」第 6 条：
@@ -245,6 +253,10 @@ def reset_stock_job() -> Job:
 
     该日期已有 succeeded 记录时不调用、返回 0（跳过算成功）。返回本次重置的 SKU 数；并发的
     另一个执行者先完成时也返回 0。日志只含营业日期、SKU 数、结果与异常类名。
+
+    alert_on_failure 为真时（default_jobs，即常驻循环），重置失败在 error 日志之后、重新抛出
+    之前报一条 stock_reset_failed（对象为营业日期，另带异常类名；DESIGN 1.21「运营告警邮件」
+    第 6、7 条）。reset-stock 子命令不设它：补跑命令本身失败不发告警（第 7 条）。跳过时不报。
     """
 
     def run(db: Session, now: datetime) -> int:
@@ -259,7 +271,12 @@ def reset_stock_job() -> Job:
         try:
             outcome = reset_daily_stock(db, now)
         except Exception as exc:
-            logger.error("stock reset %s failed: %s", day.isoformat(), type(exc).__name__)
+            error_class = type(exc).__name__
+            logger.error("stock reset %s failed: %s", day.isoformat(), error_class)
+            if alert_on_failure:
+                ops_alert.alert(
+                    "stock_reset_failed", ("date", day.isoformat()), error_class=error_class
+                )
             raise
         if outcome.performed:
             logger.info("stock reset %s succeeded: %d skus", day.isoformat(), outcome.sku_count)
@@ -321,11 +338,11 @@ def stripe_refunds_job(
 def default_jobs() -> list[Job]:
     """run 每轮按顺序执行的任务：先超时取消，再 Stripe 会话的定时处理，再每日库存重置，
     再发货满 7 天自动确认收货，再删除满 30 天的短信验证记录，再处理积分到期，最后做
-    Stripe 退款尝试的定时处理。"""
+    Stripe 退款尝试的定时处理。库存重置失败时报 stock_reset_failed。"""
     return [
         cancel_expired_job(),
         stripe_checkouts_job(),
-        reset_stock_job(),
+        reset_stock_job(alert_on_failure=True),
         auto_complete_job(),
         delete_verifications_job(),
         expire_points_job(),
@@ -380,7 +397,10 @@ def force_exit() -> None:
 class Runner:
     """常驻循环。时间、计时与睡眠都可注入，测试不真实等待。
 
-    session_factory 为空表示未配置数据库：每轮记一条警告，所有任务按失败计时。
+    session_factory 为空表示未配置数据库：每轮记一条警告，所有任务按失败计时（最后一次失败的
+    异常类名记为 DATABASE_NOT_CONFIGURED）。
+    某任务连续失败满 UNHEALTHY_AFTER_SECONDS 时报一条 job_failing（DESIGN 1.21「运营告警邮件」
+    第 6、7 条）：同一段连续失败只报一次，该任务再次成功后清零。
     sleep 默认是停止事件的 wait：收到停止信号时立即醒来。
     force_exit 不为空时，请求停止即用 timer 起一个 SHUTDOWN_GRACE_SECONDS 的看门狗，
     到时 run_forever 仍未返回就调用 force_exit；run_forever 返回时取消看门狗。
@@ -409,6 +429,9 @@ class Runner:
         # 每个任务最近一次成功的时刻（monotonic）；没有成功过的不在里面。
         self.last_success: dict[str, float] = {}
         self._failing: set[str] = set()
+        # 每个任务最后一次失败的异常类名；本段连续失败已报过 job_failing 的任务名。
+        self.last_error: dict[str, str] = {}
+        self._alerted: set[str] = set()
         self._beating = True
         self._force_exit = force_exit
         self._timer = timer
@@ -441,29 +464,49 @@ class Runner:
     def run_round(self) -> None:
         if self._session_factory is None:
             logger.warning("database is not configured; jobs skipped")
-            self._failing.update(job.name for job in self._jobs)
+            for job in self._jobs:
+                self._failing.add(job.name)
+                self.last_error[job.name] = DATABASE_NOT_CONFIGURED
         else:
             for job in self._jobs:
                 self._run_one(job, self._session_factory)
+        self._alert_failing()
         self._beat()
 
     def healthy(self) -> bool:
         """没有任何任务已连续失败满 UNHEALTHY_AFTER_SECONDS。"""
+        return not self._failing_too_long()
+
+    def _failing_too_long(self) -> list[str]:
+        """已连续失败、且距最近一次成功（从未成功过则距进程启动）满 UNHEALTHY_AFTER_SECONDS
+        的任务名，按任务列表的顺序。"""
         current = self._monotonic()
-        for name in self._failing:
-            since = self.last_success.get(name, self._started)
-            if current - since >= UNHEALTHY_AFTER_SECONDS:
-                return False
-        return True
+        names = [job.name for job in self._jobs if job.name in self._failing]
+        return [
+            name
+            for name in names
+            if current - self.last_success.get(name, self._started) >= UNHEALTHY_AFTER_SECONDS
+        ]
+
+    def _alert_failing(self) -> None:
+        """为本段连续失败刚满 UNHEALTHY_AFTER_SECONDS 的任务各报一条 job_failing。"""
+        for name in self._failing_too_long():
+            if name in self._alerted:
+                continue
+            self._alerted.add(name)
+            error_class = self.last_error.get(name, DATABASE_NOT_CONFIGURED)
+            ops_alert.alert("job_failing", ("job", name), error_class=error_class)
 
     def _run_one(self, job: Job, session_factory: SessionFactory) -> None:
         try:
             count = run_job(job, session_factory, self._now())
         except Exception as exc:
             self._failing.add(job.name)
+            self.last_error[job.name] = type(exc).__name__
             logger.error("job %s failed: %s", job.name, type(exc).__name__)
             return
         self._failing.discard(job.name)
+        self._alerted.discard(job.name)
         self.last_success[job.name] = self._monotonic()
         if count:
             logger.info("job %s done: %d changed", job.name, count)
@@ -536,11 +579,12 @@ def reset_stock(
     now: Callable[[], datetime] = utc_now,
 ) -> int:
     """执行一次当前马来西亚营业日期的库存重置，返回退出码：完成（含此前已完成与开关关闭而跳过）
-    为 0，失败非零。"""
+    为 0，失败非零。补跑命令本身失败不发告警（DESIGN 1.21「运营告警邮件」第 7 条），所以不报
+    stock_reset_failed。"""
     if session_factory is None:
         logger.error("database is not configured")
         return EXIT_NOT_CONFIGURED
-    job = reset_stock_job()
+    job = reset_stock_job(alert_on_failure=False)
     try:
         count = run_job(job, session_factory, now())
     except Exception as exc:

@@ -2,7 +2,8 @@
 
 依据 docs/DESIGN.md 1.21（提交 5be346e）「运营告警邮件」第 1 至 5 条与第 9 条，
 以及 docs/HANDOFF.md 0.88 记录的落实写法（SHOP-TASK-217）。各业务告警点的接线
-（第 6、7 条）由 SHOP-TASK-218 至 222 完成，各自把类别加进 CATEGORIES。
+（第 6、7 条）由 SHOP-TASK-218 至 222 完成，各自把类别加进 CATEGORIES；定时任务失败的
+job_failing 与 stock_reset_failed 由 SHOP-TASK-218 在 app/jobs.py 接入。
 
 调用方的写法（HANDOFF 0.88）：
 
@@ -119,6 +120,27 @@ CATEGORIES: dict[str, AlertCategory] = {
         guidance="收到即说明告警邮件配置可用，无须处理。",
         dedupe_by_target=False,
         window_seconds=None,
+    ),
+    # SHOP-TASK-218：定时任务失败（第 6 条表与第 7 条）。
+    "job_failing": AlertCategory(
+        description="定时任务连续失败满 10 分钟",
+        guidance=(
+            "按类别码与任务名查定时任务容器的日志，按异常类名排查原因；修复后该任务"
+            "在下一轮成功即恢复，也可执行该任务的补跑命令（python -m app.jobs --help "
+            "列出各子命令）核对。"
+        ),
+        dedupe_by_target=True,
+        window_seconds=HOUR_SECONDS,
+    ),
+    "stock_reset_failed": AlertCategory(
+        description="当日库存重置失败",
+        guidance=(
+            "按类别码与营业日期查定时任务容器的日志，按异常类名排查原因；常驻循环下一轮"
+            "会重试，修复后也可执行补跑命令 python -m app.jobs reset-stock，"
+            "再到后台库存重置页核对当日的结果。"
+        ),
+        dedupe_by_target=True,
+        window_seconds=DAY_SECONDS,
     ),
 }
 
