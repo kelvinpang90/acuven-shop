@@ -5961,7 +5961,7 @@ tasks:
       运营者落实写法（HANDOFF 0.88）：每条现有的告警日志之后紧接着调用 ops_alert.alert(类别, 对象)，类别取日志里的同一个常量；日志里为 checkout=<ID> 的，对象为（stripe_checkout, 结账记录 ID）；stripe_key_not_test 的对象为 None，只在现有的「每个进程第一次判定」那条日志之后调用；Stripe 适配器里不带记录 ID 的 stripe_livemode 日志不入队（第 6 条表）；五类都不以对象作去重键，窗口 3600 秒。第 6 条表里 stripe_create_rejected 的触发时机写作「对账时」，按第 2 条「入队位置跟现有 error 日志一致」落实为现有日志所在的创建调用被拒（登记预审指出两者不符，HANDOFF 0.88 第 9 项）。
       设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6 条与 HANDOFF 0.88；告警不带 Stripe 的任何 ID、金额与个人资料。
       拆分：Stripe 一组按文件分三个任务（219 结账创建与对账、220 确认付款与 webhook、221 退款），每个不超过 12 个允许路径；本任务 8 个，依赖 SHOP-TASK-217。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-217
     acceptance_criteria:
