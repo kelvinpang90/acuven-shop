@@ -52,19 +52,26 @@ SmsBudgetError 时回滚，503 sms_suspended。
 - 开关关闭且会员未设密码：凭当前会话与 CSRF 即确认（二次确认由前台确认框完成），password 给出
   也不使用，不取 Redis 客户端：Redis 故障时照样可以注销。
 确认通过后调用 delete_member；返回假（会员已不是 active）时回滚，401 member_session_required。
-提交后清除会员会话 cookie，204 且响应体为空。注销或提交时数据库出错回滚，503
-service_unavailable；开关开启时批准此时已被取用、不随回滚恢复，须重新验证。
+提交后清除会员会话 cookie，204 且响应体为空。注销或提交时数据库出错回滚，记日志并告警
+member_deletion_failed（见下），503 service_unavailable；开关开启时批准此时已被取用、不随回滚
+恢复，须重新验证。
 Redis 客户端在处理函数里按确认方式直接取（不声明为依赖）：声明为依赖时每个请求都会解析它，
 未设密码的会员在 Redis 未配置时就无法注销。
 
 三个接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control: no-store，由
 SHOP-TASK-027 的路由类统一加上；路径存在但方法不匹配的 405 由框架在路由之外回答，不在此列。
-422 沿用 app/api/pay.py 的 _body_errors，不回显请求内容。本模块不写日志；响应体与错误不含
-号码原文、验证码、令牌、密码、会话 ID 或会员 ID。
+422 沿用 app/api/pay.py 的 _body_errors，不回显请求内容。本模块只写一条日志：确认注销时
+delete_member 或提交抛数据库异常、回滚之后记一条 error 日志 member_deletion_failed
+member=<会员 ID>，按 docs/DESIGN.md 1.21（提交 5be346e）「运营告警邮件」第 6 条与
+docs/HANDOFF.md 0.88（SHOP-TASK-222），紧接着调用
+ops_alert.alert("member_deletion_failed", ("member", 会员 ID))，再回答 503；读取开关失败与会员
+已不是 active 时不记、不告警。日志不含号码、来源地址与异常消息；响应体与错误不含号码原文、
+验证码、令牌、密码、会话 ID 或会员 ID。
 """
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Annotated, Literal
 
@@ -93,6 +100,7 @@ from app.api.orders import _is_json
 from app.api.pay import _body_errors, _utcnow
 from app.db.session import get_session
 from app.models.member import PURPOSE_DELETE_ACCOUNT
+from app.services import ops_alert
 from app.services.captcha import MAX_TOKEN_LENGTH, CaptchaVerifier, get_captcha_verifier
 from app.services.member_auth import authenticate_member, login_locked, record_login_failure
 from app.services.member_deletion import (
@@ -113,6 +121,12 @@ from app.services.sms_verification import (
 )
 
 router = APIRouter(prefix="/api/member/delete", tags=["member"], route_class=_NoStoreRoute)
+
+logger = logging.getLogger(__name__)
+
+# 告警的 error 级日志类别（只含会员 ID），也是 ops_alert.alert 的类别码。
+LOG_DELETION_FAILED = "member_deletion_failed"
+ALERT_TARGET_MEMBER = "member"
 
 # 字段都很短，4 KB 与 POST /api/sms/send 相同。
 MAX_BODY_BYTES = 4 * 1024
@@ -402,6 +416,7 @@ def confirm(body: ConfirmInputDep, session: SessionDep, request: Request) -> Res
         _check_password(request, session, body)
     # 开关关闭且未设密码：会话与 CSRF 即确认，不取 Redis 客户端。
 
+    deleted: bool | None = None
     try:
         deleted = delete_member(session, body.member_id, _utcnow())
         if deleted:
@@ -410,6 +425,10 @@ def confirm(body: ConfirmInputDep, session: SessionDep, request: Request) -> Res
             session.rollback()
     except SQLAlchemyError:
         _rollback(session)
+        # 只有删除或提交出错才告警；会员已不是 active、回滚本身出错不算注销失败。
+        if deleted is not False:
+            logger.error("%s member=%d", LOG_DELETION_FAILED, body.member_id)
+            ops_alert.alert(LOG_DELETION_FAILED, (ALERT_TARGET_MEMBER, body.member_id))
         raise _service_unavailable() from None
     if not deleted:
         raise HTTPException(status_code=401, detail="member_session_required")

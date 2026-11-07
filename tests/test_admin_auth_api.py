@@ -5,9 +5,13 @@ GET /api/admin/session 与会话依赖 require_admin（app/api/admin_auth.py）�
 组合限流，连续失败后短时锁定并告警；锁定解除不绕过密码校验。单一管理员也须服务端授权与会话
 到期」，第 5 条「后台单一管理员也须认证，不把权限检查留给前端」，第 6 条「应用日志……不记录
 ……密码」，以及 docs/HANDOFF.md 记录的 Kelvin 2026-10-04 管理员登录决定
-（下称「Kelvin 2026-10-04」，含 2026-10-05 补充）。每条测试（参数化的测试是每个用例）的
-文档字符串写明它守住的设计原句或 Kelvin 的哪一项决定；没有直接原句的，写明是 SHOP-TASK-036
-验收里的约定。
+（下称「Kelvin 2026-10-04」，含 2026-10-05 补充），以及 docs/DESIGN.md 1.21（提交 5be346e）
+「运营告警邮件」第 6 条表 admin_login_locked 一行（下称「告警表 admin_login_locked 行」）：
+“管理员登录刚被锁定、admin_login_locked 审计记录提交之后；用户名不存在的锁定只计入锁定计数、
+不写审计，也不告警”，对象为审计记录 ID，与 docs/HANDOFF.md 0.88 的落实写法（SHOP-TASK-222）。
+每条测试（参数化的测试是每个用例）的文档字符串写明它守住的设计原句或 Kelvin 的哪一项决定；
+没有直接原句的，写明是 SHOP-TASK-036 验收里的约定。ops_alert.alert 一律以替身 alerts 代替
+（autouse），不入真实队列。
 
 用 SQLite 内存库按模型建表（StaticPool，每个连接打开外键检查并断言已打开）。接口的会话依赖
 换成每个请求一个绑定同一内存库的会话，请求结束关闭时回滚未提交的改动；检查结果一律在另一个
@@ -41,6 +45,7 @@ from app.db.base import Base
 from app.db.session import get_session
 from app.main import create_app
 from app.models import AdminAccount, AdminSession, AuditEvent
+from app.services import ops_alert
 from app.services.admin_auth import issue_admin_session, revoke_admin_session
 from app.services.pw_hash import hash_password
 from app.services.rate_limit import get_redis_client
@@ -305,6 +310,18 @@ def verify_calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return calls
 
 
+@pytest.fixture(autouse=True)
+def alerts(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, object]]:
+    """以 monkeypatch 替换 ops_alert.alert，按调用顺序记下（类别, 对象）。"""
+    calls: list[tuple[str, object]] = []
+
+    def record(category: str, target: object = None, **_: object) -> None:
+        calls.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
+    return calls
+
+
 def _assert_no_store(response: Any) -> None:
     assert response.headers["cache-control"] == "no-store"
 
@@ -422,6 +439,76 @@ def test_tenth_failure_writes_exactly_one_locked_audit(
     assert _actions(engine) == [FAILED] * 10 + [LOCKED]
     assert fake.count(FAILURE_BUCKET, SOURCE, USERNAME) == 10
     assert fake.count(LOCK_BUCKET, SOURCE, USERNAME) == 1
+
+
+def test_lock_alerts_once_after_locked_audit_commit(
+    engine: Engine,
+    account_id: int,
+    client: TestClient,
+    alerts: list[tuple[str, object]],
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """告警表 admin_login_locked 行：“管理员登录刚被锁定、admin_login_locked 审计记录提交之后”
+    入队，对象为审计记录 ID。前 9 次失败不调用；第 10 次失败的 admin_login_locked 审计提交之后
+    记一条 error 日志 admin_login_locked audit_event=<ID>，紧接着以 ("audit_event", 该审计记录 ID)
+    调用一次 ops_alert.alert；响应仍是 401 login_failed，审计不变；之后被锁定的 429 不再调用。
+    日志不含用户名、密码与来源地址。
+    """
+    committed: list[list[str]] = []
+    original = ops_alert.alert
+
+    def _check_committed(category: str, target: object = None, **kwargs: object) -> None:
+        committed.append(_actions(engine))
+        original(category, target, **kwargs)
+
+    monkeypatch.setattr(ops_alert, "alert", _check_committed)
+    with caplog.at_level(logging.DEBUG):
+        responses = [_login(client, USERNAME, WRONG_PASSWORD) for _ in range(9)]
+        assert alerts == []
+        responses.append(_login(client, USERNAME, WRONG_PASSWORD))
+        blocked = _login(client, USERNAME, WRONG_PASSWORD)
+
+    assert [r.status_code for r in responses] == [401] * 10
+    assert responses[-1].json() == LOGIN_FAILED
+    assert blocked.status_code == 429, blocked.text
+    locked_id = _read(
+        engine,
+        lambda s: s.scalars(select(AuditEvent.id).where(AuditEvent.action == LOCKED)).one(),
+    )
+    assert alerts == [(LOCKED, ("audit_event", locked_id))]
+    assert committed == [[FAILED] * 10 + [LOCKED]]
+    assert _actions(engine) == [FAILED] * 10 + [LOCKED]
+    app_records = [r for r in caplog.records if r.name == "app" or r.name.startswith("app.")]
+    assert [(r.levelno, r.getMessage()) for r in app_records] == [
+        (logging.ERROR, f"admin_login_locked audit_event={locked_id}")
+    ]
+    for text_value in (USERNAME, WRONG_PASSWORD, SOURCE):
+        assert all(text_value not in r.getMessage() for r in app_records)
+
+
+def test_unknown_username_lock_does_not_alert(
+    engine: Engine,
+    account_id: int,
+    client: TestClient,
+    fake: FakeRedis,
+    alerts: list[tuple[str, object]],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """告警表 admin_login_locked 行：“用户名不存在的锁定只计入锁定计数、不写审计，也不告警”。
+    用户名不存在时失败满 10 次照样锁定（锁定计数为 1、之后 429），不写审计、不调用
+    ops_alert.alert，也不记日志。
+    """
+    with caplog.at_level(logging.DEBUG):
+        responses = [_login(client, UNKNOWN_USERNAME, WRONG_PASSWORD) for _ in range(10)]
+        blocked = _login(client, UNKNOWN_USERNAME, WRONG_PASSWORD)
+
+    assert [r.status_code for r in responses] == [401] * 10
+    assert blocked.status_code == 429, blocked.text
+    assert fake.count(LOCK_BUCKET, SOURCE, UNKNOWN_USERNAME) == 1
+    assert _actions(engine) == []
+    assert alerts == []
+    assert [r for r in caplog.records if r.name == "app" or r.name.startswith("app.")] == []
 
 
 def test_lock_rejects_correct_password_but_not_other_source(

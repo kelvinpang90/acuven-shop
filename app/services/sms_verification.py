@@ -18,7 +18,12 @@ Kelvin 2026-10-08 决定（标准档限流；人机挑战服务本身不可用�
 核验 verify_code 只 flush、不提交，由调用方（登录、注册与重设）与之后的步骤一起提交。
 
 时间一律是不带时区的 UTC。接口、登录、注册与认领不在这里。
-本模块不写日志；手机号、验证码、令牌与来源不出现在异常消息与返回值里。数据库异常（如请求 ID
+本模块只写一条日志：预占因超过全站每日条数或费用上限被拒（over_budget）、停发提交之后记一条
+error 日志 sms_budget_exhausted date=<马来西亚日期>，按 docs/DESIGN.md 1.21（提交 5be346e）
+「运营告警邮件」第 6 条与 docs/HANDOFF.md 0.88（SHOP-TASK-222），紧接着调用
+ops_alert.alert("sms_budget_exhausted", ("date", 马来西亚日期的 ISO 写法))；单次最高费用未配置
+（unknown_cost）与其他停发不记、不告警（第 8 条）。手机号、验证码、令牌与来源不出现在日志、
+异常消息与返回值里。数据库异常（如请求 ID
 撞上唯一约束时的 IntegrityError，消息里带 INSERT 参数中的完整号码）与服务商调用抛出的异常
 都换成消息固定的 SmsVerificationError 交给调用方，且不挂原异常（__cause__ 与 __context__
 都为空）；会话须由调用方回滚。
@@ -26,6 +31,7 @@ Kelvin 2026-10-08 决定（标准档限流；人机挑战服务本身不可用�
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -46,12 +52,27 @@ from app.models.member import (
     VERIFICATION_SUSPENDED,
     VERIFICATION_UNDELIVERABLE,
 )
+from app.services import ops_alert
 from app.services.captcha import CaptchaResult, CaptchaVerifier
 from app.services.phone import is_sms_whitelisted, normalize_phone
 from app.services.rate_limit import RateLimitUnavailable, hit
 from app.services.site_settings import is_sms_verification_enabled
-from app.services.sms_budget import RESERVED, Reservation, release_sms, reserve_sms, settle_sms
+from app.services.sms_budget import (
+    OVER_BUDGET,
+    RESERVED,
+    Reservation,
+    malaysia_date,
+    release_sms,
+    reserve_sms,
+    settle_sms,
+)
 from app.services.sms_provider import CheckStatus, SendResult, SendStatus, SmsProvider
+
+logger = logging.getLogger(__name__)
+
+# 告警的 error 级日志类别（只含马来西亚日期），也是 ops_alert.alert 的类别码。
+LOG_BUDGET_EXHAUSTED = "sms_budget_exhausted"
+ALERT_TARGET_DATE = "date"
 
 # Twilio Verify 验证码的默认有效期，从首次发起算；沿用请求 ID 的重发不延长（Kelvin 2026-10-08）。
 CODE_WINDOW = timedelta(minutes=10)
@@ -125,7 +146,8 @@ def send_verification(
     2. 号码不属于短信白名单：not_whitelisted，不写记录。
     3. 人机挑战：failed 为 captcha_failed，不写记录；unavailable 停发。
     4. Redis 限流：超限为 rate_limited，不写记录；客户端为 None 或不可用停发。
-    5. 每日预算预占：拒绝即停发；成功即提交。
+    5. 每日预算预占：拒绝即停发；成功即提交。拒绝为 over_budget 时停发提交之后记一条
+       sms_budget_exhausted 日志，紧接着以 ("date", 马来西亚日期) 调用一次 ops_alert.alert。
     6. 调用服务商，按结果写记录并结算或释放，一起提交。
 
     停发写 suspended 记录（不带请求 ID，已预占的释放）并提交，返回 suspended。
@@ -188,7 +210,13 @@ def _send(
 
     reserved = reserve_sms(db, settings, phone_e164, now)
     if reserved.status != RESERVED or reserved.reservation is None:
-        return _suspend(db, phone_e164, purpose, None, now)
+        outcome = _suspend(db, phone_e164, purpose, None, now)
+        if reserved.status == OVER_BUDGET:
+            # 停发的事务提交之后才记；unknown_cost 不告警（DESIGN 1.21 第 8 条）。
+            day = malaysia_date(now).isoformat()
+            logger.error("%s date=%s", LOG_BUDGET_EXHAUSTED, day)
+            ops_alert.alert(LOG_BUDGET_EXHAUSTED, (ALERT_TARGET_DATE, day))
+        return outcome
     # 先提交预占：之后的步骤（含第二个事务的提交）抛出异常时，每日上限仍然计入。
     db.commit()
     reservation = reserved.reservation
