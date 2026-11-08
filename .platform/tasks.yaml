@@ -6184,7 +6184,7 @@ tasks:
       运营者落实写法：照 frontend/src/api/adminRefunds.ts 的 retryStripeRefund 与 frontend/src/api/adminStockResets.ts 的写法（同源 cookie、不缓存、Accept 为 application/json，写操作带框架的 CSRF 请求头，路径 ID 不合法时不发请求）；记录不存在（404）与 changed 一样回给页面已变化（UX 0.19 A11）。
       设计闸门：不适用（作废与重试的规则、核对与审计在 SHOP-TASK-223 至 225 的服务端，依据 DESIGN 1.22 第 11 条；请求模块只传递与校验字段）。
       拆分：A11 页面的请求层（3 个允许路径），照 A06 的 SHOP-TASK-174。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 读取——新文件 frontend/src/api/adminStripePending.ts 导出 readStripePending(signal)，GET /api/admin/stripe-pending；200 时逐项校验字段后返回 ok 与数据（csrf_token 为非空字符串；checkouts 每项 checkout_id 为正整数、status 为 creating、open、complete 之一、order_number 为字符串、created_at 与 alerted_at 为字符串；refunds 每项 checkout_id 与 attempt_id 为正整数、order_number 为字符串、amount_sen 为非负整数、attempted_at 为字符串、error_type 为字符串或 null），任一不合格算 failed；401 为 none，其他状态为 failed，网络中断为 network
