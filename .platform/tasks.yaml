@@ -6144,7 +6144,7 @@ tasks:
       请求模块留给 SHOP-TASK-227，列表、作废与重试留给 SHOP-TASK-228。不调用接口，不装依赖，不改后端，不改设计。
       设计闸门：不适用（只加路由、导航与标题，不碰金额与个人资料）。
       拆分：A11 页面的框架层，照 A06 的 SHOP-TASK-173。18 个允许路径，超过拆分规则的 12 个：导航多一项后，10 个现有测试文件里按顺序列出导航项或路由表的断言必然失效（运营者在登记时对 main 的导出做骨架实测，列出 31 条失败，全部在 router.test.tsx、AdminFrame.test.tsx 与 8 个后台页面测试里，都是导航顺序或路由表的断言），只许改这些断言，与加导航的改动拆不开；路由、页面表与导航项的类型互相依赖，也拆不开。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 路由——frontend/src/router.tsx 的路由表在 /admin/refunds/:id 之后加 /admin/stripe-pending，导出 ADMIN_STRIPE_PENDING_PATH；frontend/src/App.tsx 的页面表加 AdminStripePendingPage；文件头注释补上该路径不带段值
