@@ -191,4 +191,4 @@
 | A10 保存状态、已满、停用与未保存确认框（2026-10-30） | [A10-states.html](pages/A10-states.html) | [A10-states.png](reference/A10-states.png) | 520 × 1630 |
 | A11 Stripe 待处理 · 桌面（2026-11-08） | [A11-desktop.html](pages/A11-desktop.html) | [A11-desktop.png](reference/A11-desktop.png) | 1440 × 900 |
 | A11 Stripe 待处理 · 手机（2026-11-08） | [A11-phone.html](pages/A11-phone.html) | [A11-phone.png](reference/A11-phone.png) | 390 × 1480 |
-| A11 作废确认框、作废与重试结果、空列表与读取失败（2026-11-08） | [A11-states.html](pages/A11-states.html) | [A11-states.png](reference/A11-states.png) | 520 × 2080 |
+| A11 作废确认框、作废与重试结果、空列表与读取失败（2026-11-08） | [A11-states.html](pages/A11-states.html) | [A11-states.png](reference/A11-states.png) | 520 × 2140 |

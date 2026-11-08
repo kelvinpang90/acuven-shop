@@ -7,7 +7,7 @@
 
 依据已批准的 `docs/DESIGN.md` 1.22「Stripe 测试环境支付」第 11 条（Kelvin 2026-11-07 批准，记录见 `docs/HANDOFF.md` 0.89）与 HANDOFF 0.90 记录的两项决定：
 
-- **A11 后台 Stripe 待处理**（新增，页面位置由 UX 定）：独立一页 `/admin/stripe-pending`，导航项 `[admin.nav_stripe_pending]` 排在 `[admin.nav_refunds]` 之后。两个列表：已告警而订单仍待支付的结账记录（`[admin.stripe_void]` 打开确认框，须勾选 `[admin.stripe_void_verified]`），与失败的迟到付款退款（`[admin.stripe_refund_retry]`）。每行的记录 ID 与告警邮件里的对象 ID 相同，供对照；不显示 Stripe ID、收货资料与客户资料。
+- **A11 后台 Stripe 待处理**（新增，页面位置由 UX 定）：独立一页 `/admin/stripe-pending`，导航项 `[admin.nav_stripe_pending]` 排在 `[admin.nav_refunds]` 之后。两个列表：已告警而订单仍待支付的结账记录（`[admin.stripe_void]` 打开确认框，须勾选 `[admin.stripe_void_verified]`），与失败的迟到付款退款（`[admin.stripe_refund_retry]`）。结账记录的告警邮件写结账记录 ID、退款的告警邮件写退款尝试 ID，与两个列表里的 ID 对照；不显示 Stripe ID、收货资料与客户资料。
 - 列表里退款的时间是最新一次尝试的创建时间（`[admin.col_attempted]`），不是失败时间（Kelvin 2026-11-08 认可，HANDOFF 0.90）。
 - 管理员作废的订单，访客在 P06、P07 照超时取消显示（Kelvin 2026-11-08 决定，HANDOFF 0.90），P06、P07 的线框与文案不变。
 
@@ -2508,7 +2508,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 ## A11 后台 Stripe 待处理（0.19）
 
 - **目的**：处置 Stripe 测试环境里需要人工决定的两类记录：已告警而订单仍待支付的结账记录（作废并取消订单），与失败的迟到付款退款（重试）（DESIGN 1.22「Stripe 测试环境支付」第 11 条；REQUIREMENTS 1.18「管理后台」）。
-- **入口**：后台导航 `[admin.nav_stripe_pending]`（排在 `[admin.nav_refunds]` 之后）；运营告警邮件里的类别码与记录 ID（邮件不带链接，管理员自行打开本页对照 ID）。
+- **入口**：后台导航 `[admin.nav_stripe_pending]`（排在 `[admin.nav_refunds]` 之后）；运营告警邮件里的类别码与对象 ID（结账记录 ID 或退款尝试 ID；邮件不带链接，管理员自行打开本页对照）。
 - **去向**：—（订单号只作文字显示，不链到 A02）。
 - **演示提示**：★ `[admin.demo_banner]`；`[admin.stripe_pending_note]`。
 
