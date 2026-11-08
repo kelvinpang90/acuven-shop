@@ -6114,7 +6114,7 @@ tasks:
       运营者落实写法：照 app/api/admin_refunds.py 的 stripe-retry 写法。作废的请求体恰好是 {"verified":true}（多余字段、缺少或不为 true 都是 422），返回 200 {"result":结果}，结果为 confirmed、cancelled 或 voided；changed 回 409 stripe_pending_changed，unavailable 回 503 stripe_unavailable（同 app/api/pay.py 的 _stripe_unavailable）。重试不读请求体、不要幂等键：没有尝试或不能重试 409 stripe_refund_not_retryable，超额 409 stripe_refund_cap，成功 200 {"result":"retried"}。审计在接口层写：voided 的审计由传给 void_alerted_checkout 的 on_void 在作废的同一事务里写；confirmed 与 cancelled 由现有函数各自提交，之后另开事务写审计并提交；审计都是 stripe_checkout_voided（对象 stripe_checkout 与记录 ID，新值为结果）；重试在服务层 flush 之后、同一事务里写 stripe_late_refund_retried（对象 stripe_refund 与新尝试 ID）后提交，再调用 submit_refund_attempt，它抛异常时回滚并记 stripe_refund_submit_failed attempt=<ID>，仍回 200。
       设计闸门：DESIGN 1.22（提交 ffb043e）「Stripe 测试环境支付」第 11 条；只认管理员会话，写操作校验 CSRF，响应不含收货资料、Stripe 的任何 ID 与客户资料。
       拆分：人工处置的接口层（4 个允许路径），依赖 SHOP-TASK-223 与 224。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-223
       - SHOP-TASK-224
