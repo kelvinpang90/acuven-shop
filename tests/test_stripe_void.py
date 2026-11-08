@@ -739,9 +739,12 @@ def test_end_result_after_stripe_is_mapped(
             .where(StripeCheckout.id == checkout_id)
             .values(payment_status=PAYMENT_PAID)
         )
+    elif change == "order-paid":
+        stmt = (
+            update(Order).where(Order.id == placed.order_id).values(status=STATUS_PAID, paid_at=NOW)
+        )
     else:
-        status = STATUS_PAID if change == "order-paid" else STATUS_CANCELLED
-        stmt = update(Order).where(Order.id == placed.order_id).values(status=status)
+        stmt = update(Order).where(Order.id == placed.order_id).values(status=STATUS_CANCELLED)
     gateway = _ChangingGateway(_change_in_other_session(engine, stmt), _ok(expired))
 
     result = payment.void_alerted_checkout(db, gateway, checkout_id, NOW)
@@ -901,7 +904,7 @@ def test_change_during_stripe_call_is_reported(
         stmt = (
             update(StripeCheckout)
             .where(StripeCheckout.id == checkout_id)
-            .values(status=CHECKOUT_COMPLETE)
+            .values(status=CHECKOUT_COMPLETE, completed_at=NOW, checkout_url=None)
         )
     elif change == "record-paid":
         stmt = (
