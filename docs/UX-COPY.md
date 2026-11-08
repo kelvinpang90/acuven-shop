@@ -540,6 +540,7 @@
 | `admin.locked` | Too many failed attempts. This sign-in is locked for a short time. | 失败次数过多，登录已短时锁定。 | Terlalu banyak cubaan gagal. Log masuk ini dikunci untuk seketika. | — |
 | `admin.nav_orders` | Orders | 订单 | Pesanan | — |
 | `admin.nav_refunds` | Refunds | 退款审核 | Bayaran balik | — |
+| `admin.nav_stripe_pending` | Stripe follow-ups | Stripe 待处理 | Susulan Stripe | A11 导航与页标题，排在 `admin.nav_refunds` 之后（0.21） |
 | `admin.nav_products` | Products | 商品 | Produk | — |
 | `admin.nav_categories` | Categories | 分类 | Kategori | A10 导航与页标题，排在 `admin.nav_products` 之后（0.18） |
 | `admin.nav_coupons` | Coupons | 优惠券 | Kupon | — |
@@ -781,7 +782,6 @@
 | `admin.stripe_refund_none` | Nothing to refund in Stripe: the approved items were fully paid with coupons or points. | 无需在 Stripe 退款：所退商品已全部由优惠券或积分抵扣。 | Tiada apa untuk dikembalikan di Stripe: item yang diluluskan dibayar sepenuhnya dengan kupon atau mata. | A03 已批准且现金退款额为 0（0.12） |
 | `admin.stripe_refund_not_sent` | This refund couldn't be sent to Stripe. An operator alert has been logged; check this payment in the Stripe dashboard. | 这笔退款未能发送到 Stripe，已记录运营告警；请到 Stripe 后台核对这笔付款。 | Bayaran balik ini tidak dapat dihantar ke Stripe. Amaran pengendali telah direkodkan; semak pembayaran ini di papan pemuka Stripe. | A03 已批准、现金退款额大于 0 却没有 Stripe 退款尝试：合计会超过付款金额或缺 PaymentIntent ID；DESIGN 1.12 第 8 条（0.13）；0.20 改为不承诺送达（DESIGN 1.21「运营告警邮件」第 7 条） |
 | `admin.stripe_refund_blocked` | This refund can't be sent to Stripe because it would exceed the amount paid. An operator alert has been logged. | 这笔退款会超过付款金额，无法发送到 Stripe，已记录运营告警。 | Bayaran balik ini tidak boleh dihantar ke Stripe kerana ia akan melebihi amaun yang dibayar. Amaran pengendali telah direkodkan. | A03 重试被拒：同一付款的退款合计会超过付款金额；DESIGN 1.12 第 8 条（0.12）；0.20 改为不承诺送达（DESIGN 1.21「运营告警邮件」第 7 条） |
-| `admin.nav_stripe_pending` | Stripe follow-ups | Stripe 待处理 | Susulan Stripe | A11 导航与页标题，排在 `admin.nav_refunds` 之后（0.21） |
 | `admin.stripe_pending_note` | Stripe test-mode records that need your decision. Alert emails name the checkout record ID for the first list and, for failed refunds, the refund attempt ID for the second list. Nothing here moves real money. | 需要你决定的 Stripe 测试环境记录。第一个列表对照告警邮件里的结账记录 ID；第二个列表对照退款失败告警邮件里的退款尝试 ID。这里的操作不涉及真实资金。 | Rekod mod ujian Stripe yang memerlukan keputusan anda. E-mel amaran menyebut ID rekod pembayaran untuk senarai pertama dan, bagi bayaran balik yang gagal, ID cubaan bayaran balik untuk senarai kedua. Tiada wang sebenar terlibat di sini. | A11 ★（0.21） |
 | `admin.stripe_pending_checkouts_title` | Checkout records without a result | 没有结果的结账记录 | Rekod pembayaran tanpa keputusan | A11 第一个列表的标题（0.21） |
 | `admin.stripe_pending_refunds_title` | Failed refunds of late payments | 失败的迟到付款退款 | Bayaran balik gagal bagi bayaran lewat | A11 第二个列表的标题（0.21） |
