@@ -18,6 +18,7 @@ from app.api.admin_stock_adjust import router as admin_stock_adjust_router
 from app.api.admin_stock_resets import router as admin_stock_resets_router
 from app.api.admin_store_design import router as admin_store_design_router
 from app.api.admin_store_logo import router as admin_store_logo_router
+from app.api.admin_stripe_pending import router as admin_stripe_pending_router
 from app.api.catalog import router as catalog_router
 from app.api.checkout import router as checkout_router
 from app.api.health import router as health_router
@@ -75,6 +76,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(admin_coupons_router)
     app.include_router(admin_orders_router)
     app.include_router(admin_refunds_router)
+    app.include_router(admin_stripe_pending_router)
     app.include_router(admin_store_design_router)
     app.include_router(admin_store_logo_router)
     app.include_router(admin_stock_resets_router)
