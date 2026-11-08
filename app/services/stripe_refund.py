@@ -51,6 +51,20 @@ apply_refund_object 是共用的写入规则：只 flush、不提交（webhook �
   订单「由 Stripe 付款」以会话记录的确认时间非空为准（至多一条）；先普通读取找到它，
   再按主键锁住，经模拟支付的订单查不到这样的记录，不锁也不写。付款金额取该记录的
   amount_sen，PaymentIntent 取该记录的 PaymentIntent ID。
+
+迟到付款退款的手动重试（SHOP-TASK-224），依据 docs/DESIGN.md 1.22（提交 ffb043e）「Stripe
+测试环境支付」第 11 条第（2）项：「规则与第 8 条退款申请的手动重试相同：新建一条尝试，金额
+等于原尝试金额（该付款的全额）；受同一来源至多一条不是 failed 的唯一约束，重复点击与并发只有
+一个成功；新建前在同一事务里按『订单 → 来源结账记录』加锁，重查该来源最新一次尝试仍为
+failed」；「核对该 PaymentIntent 的 pending 与 succeeded 合计加上新尝试金额不超过付款金额，
+超出即不建、回滚，之后照常记日志并告警（`stripe_refund_cap`，对象为结账记录；告警不随事务
+回滚）」。
+- retry_checkout_attempt 照 retry_request_attempt 只 flush、不提交，由之后的后台接口
+  （SHOP-TASK-225）写审计、提交并调用 submit_refund_attempt。
+- 付款金额取该来源原尝试的金额（第 6 条写入时等于会话的 amount_total），PaymentIntent 取
+  原尝试的；stripe_refund_cap 的日志为 checkout=<结账记录 ID>，告警对象为
+  ("stripe_checkout", 结账记录 ID)，对象类别取 app/services/stripe_checkout.py 的
+  ALERT_TARGET_KIND（那个模块不导入本模块）。
 """
 
 from __future__ import annotations
@@ -68,12 +82,14 @@ from app.models.refund import REFUND_APPROVED
 from app.models.stripe import (
     ACTIVE_STRIPE_REFUND_STATUSES,
     ERROR_TYPE_MAX_LENGTH,
+    SOURCE_CHECKOUT,
     SOURCE_REFUND_REQUEST,
     STRIPE_REFUND_FAILED,
     STRIPE_REFUND_PENDING,
     STRIPE_REFUND_SUCCEEDED,
 )
 from app.services import ops_alert
+from app.services.stripe_checkout import ALERT_TARGET_KIND
 from app.services.stripe_gateway import Refund, StripeError, StripeGateway, StripeOutcome
 
 logger = logging.getLogger(__name__)
@@ -90,6 +106,7 @@ LOG_REFUND_REJECTED = "stripe_refund_rejected"
 LOG_REFUND_FAILED_AFTER_SUCCESS = "stripe_refund_failed_after_success"
 # 新建来源为退款申请的尝试时没建成，日志只含退款申请 ID：
 # 合计会超过付款金额（第 8 条）；付款的会话记录缺 PaymentIntent ID。
+# 迟到付款退款的手动重试合计超额时也记 stripe_refund_cap，日志只含结账记录 ID（第 11 条）。
 LOG_REFUND_CAP = "stripe_refund_cap"
 LOG_REFUND_UNREFUNDABLE = "stripe_refund_unrefundable"
 
@@ -177,12 +194,17 @@ class RefundRequestNotApproved(Exception):
     """手动重试：退款申请不是 approved。"""
 
 
+class RetryCheckoutNotFound(Exception):
+    """迟到付款退款的手动重试：结账记录 ID 不存在。"""
+
+
 class NoRefundAttempt(Exception):
-    """手动重试：该申请没有任何退款尝试（如现金退款额为 0，或不是经 Stripe 付款的订单）。"""
+    """手动重试：该申请没有任何退款尝试（如现金退款额为 0，或不是经 Stripe 付款的订单），
+    或该结账记录没有来源为它的尝试。"""
 
 
 class RetryNotAllowed(Exception):
-    """不能重试：该申请最新一条尝试不是 failed，或并发的另一次重试先建了尝试。"""
+    """不能重试：该来源最新一条尝试不是 failed，或并发的另一次重试先建了尝试。"""
 
 
 class RefundCapExceeded(Exception):
@@ -552,6 +574,55 @@ def retry_request_attempt(db: Session, refund_request_id: int, now: datetime) ->
     return attempt.id
 
 
+def retry_checkout_attempt(db: Session, checkout_id: int, now: datetime) -> int:
+    """管理员手动重试迟到与不符付款的退款（第 11 条第（2）项）：为该结账记录新建一条
+    pending 尝试，返回新尝试的 ID。
+
+    now 为不带时区的 UTC（带时区抛 ValueError，先于访问数据库）。只 flush、不提交，
+    由调用方（之后的后台接口）写审计、提交并调用 submit_refund_attempt。按以下顺序，每一步
+    不通过即停止，抛出时都没有写库，由调用方回滚并释放锁：
+    1. 结束此前的事务，锁定该记录所属订单行（新事务的第一条语句），再按主键锁住该记录；
+       查不到抛 RetryCheckoutNotFound。
+    2. 取来源为该记录（source_type 为 checkout）的尝试中 ID 最大的一条：没有抛
+       NoRefundAttempt，不是 failed 抛 RetryNotAllowed。
+    3. 以 refunded_total 锁住这条尝试的 PaymentIntent 的尝试，已有合计加原尝试金额超过
+       原尝试金额（付款金额，第 6 条写入时等于会话的 amount_total）：记一条
+       stripe_refund_cap 日志（只含结账记录 ID），紧接着以 ("stripe_checkout", 结账记录 ID)
+       调用一次 ops_alert.alert，再抛 RefundCapExceeded。
+    4. 在保存点里写一条 pending 尝试（PaymentIntent 与金额同原尝试、来源与活动来源列为
+       该记录）。并发的另一次重试先提交了同一来源的尝试时撞上活动来源列的唯一约束：只回滚
+       保存点，抛 RetryNotAllowed。
+    """
+    _check_now(now)
+
+    db.rollback()
+    order = db.scalars(_lock_order_for_checkout_statement(checkout_id)).one_or_none()
+    if order is None:
+        raise RetryCheckoutNotFound
+    _lock_checkout(db, checkout_id)
+
+    latest = _latest_checkout_attempt(db, checkout_id)
+    if latest is None:
+        raise NoRefundAttempt
+    if latest.status != STRIPE_REFUND_FAILED:
+        raise RetryNotAllowed
+
+    intent_id = latest.payment_intent_id
+    amount_sen = latest.amount_sen
+    if refunded_total(db, intent_id) + amount_sen > amount_sen:
+        logger.error("%s checkout=%d", LOG_REFUND_CAP, checkout_id)
+        ops_alert.alert(LOG_REFUND_CAP, (ALERT_TARGET_KIND, checkout_id))
+        raise RefundCapExceeded
+
+    try:
+        with db.begin_nested():
+            attempt = _add_checkout_attempt(db, intent_id, checkout_id, amount_sen, now)
+    except IntegrityError:
+        # 保存点已回滚，订单行与记录的锁仍在。
+        raise RetryNotAllowed from None
+    return attempt.id
+
+
 def active_request_attempt_id(db: Session, refund_request_id: int) -> int | None:
     """活动来源列等于该申请的尝试 ID（受唯一约束，至多一条），没有为 None。
 
@@ -580,7 +651,63 @@ def _add_attempt(
     return attempt
 
 
+def _add_checkout_attempt(
+    db: Session, payment_intent_id: str, checkout_id: int, amount_sen: int, now: datetime
+) -> StripeRefund:
+    attempt = StripeRefund(
+        payment_intent_id=payment_intent_id,
+        source_type=SOURCE_CHECKOUT,
+        checkout_id=checkout_id,
+        amount_sen=amount_sen,
+        status=STRIPE_REFUND_PENDING,
+        call_count=0,
+        created_at=now,
+        active_checkout_id=checkout_id,
+    )
+    db.add(attempt)
+    db.flush()
+    return attempt
+
+
 # ---------------------------------------------------------------- 读取与加锁
+
+
+def _lock_order_for_checkout_statement(checkout_id: int) -> Select[tuple[Order]]:
+    # 锁住结账记录所属订单行的语句，与 _lock_order_for_request_statement 同样写法。
+    order_id = (
+        select(StripeCheckout.order_id).where(StripeCheckout.id == checkout_id).scalar_subquery()
+    )
+    return (
+        select(Order)
+        .where(Order.id == order_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+
+
+def _lock_checkout(db: Session, checkout_id: int) -> StripeCheckout:
+    stmt = (
+        select(StripeCheckout)
+        .where(StripeCheckout.id == checkout_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    return db.scalars(stmt).one()
+
+
+def _latest_checkout_attempt(db: Session, checkout_id: int) -> StripeRefund | None:
+    """来源为该结账记录的尝试中 ID 最大的一条。"""
+    stmt = (
+        select(StripeRefund)
+        .where(
+            StripeRefund.source_type == SOURCE_CHECKOUT,
+            StripeRefund.checkout_id == checkout_id,
+        )
+        .order_by(StripeRefund.id.desc())
+        .limit(1)
+        .execution_options(populate_existing=True)
+    )
+    return db.scalars(stmt).first()
 
 
 def _lock_order_for_request_statement(refund_request_id: int) -> Select[tuple[Order]]:
