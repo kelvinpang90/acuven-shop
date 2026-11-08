@@ -938,6 +938,7 @@ def test_void_unknown_checkout_is_404(
         pytest.param({"verified": False}, id="false"),
         pytest.param({"verified": "true"}, id="string"),
         pytest.param({"verified": 1}, id="one"),
+        pytest.param({"verified": 1.0}, id="float"),
         pytest.param({"verified": None}, id="null"),
         pytest.param({"verified": True, "note": "SECRETVALUE"}, id="extra"),
         pytest.param(["SECRETVALUE"], id="not-object"),
@@ -964,8 +965,9 @@ def test_void_requires_exactly_verified_true(
 def test_void_invalid_checkout_id_is_plain_422(
     client: TestClient, token: str, spies: dict[str, _Spy], raw: str
 ) -> None:
-    """验收：路径里的记录 ID 须是不带符号与前导零的十进制整数，否则 422，只含位置、类型与固定
-    消息，不回显所给的值，不调用服务层。"""
+    """第 11 条「页面与接口只认管理员会话，写操作校验 CSRF」（校验不通过即停，不碰记录）与「只显示
+    对账字段（本站记录 ID……）」；验收：路径里的记录 ID 须是不带符号与前导零的十进制整数，否则
+    422，只含位置、类型与固定消息，不回显所给的值，不调用服务层。"""
     response = _void(client, token, raw)
 
     _assert_error(response, 422, {"detail": [CHECKOUT_ID_ERROR]})
@@ -976,8 +978,9 @@ def test_void_invalid_checkout_id_is_plain_422(
 def test_void_path_and_body_errors_are_reported_together(
     client: TestClient, token: str, spies: dict[str, _Spy]
 ) -> None:
-    """验收：路径与请求体的结构一并校验（照 admin_refunds.py 的审核接口），两者都不合法时 422
-    同时列出，不调用服务层。"""
+    """第 11 条（1）「须同时勾选『已在 Stripe 测试后台核对过这笔订单的会话与付款』，未勾选服务端
+    拒绝」；验收：路径与请求体的结构一并校验（照 admin_refunds.py 的审核接口），两者都不合法时
+    422 同时列出，不调用服务层。"""
     response = _void(client, token, "abc", {})
 
     assert response.status_code == 422
@@ -1261,8 +1264,9 @@ def test_retry_requires_csrf(
 def test_retry_invalid_checkout_id_is_plain_422(
     client: TestClient, token: str, spies: dict[str, _Spy], raw: str
 ) -> None:
-    """验收：路径里的记录 ID 不合法时 422，只含位置、类型与固定消息，不回显所给的值，不调用
-    服务层。"""
+    """第 11 条「页面与接口只认管理员会话，写操作校验 CSRF」（校验不通过即停，不碰记录）与「只显示
+    对账字段（本站记录 ID……）」；验收：路径里的记录 ID 不合法时 422，只含位置、类型与固定消息，
+    不回显所给的值，不调用服务层。"""
     response = _retry(client, token, raw)
 
     _assert_error(response, 422, {"detail": [CHECKOUT_ID_ERROR]})

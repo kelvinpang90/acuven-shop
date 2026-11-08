@@ -49,7 +49,7 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, StrictBool, ValidationError, field_validator
 from sqlalchemy.orm import Session
 
 from app.api.admin_auth import AdminDep, require_admin_csrf
@@ -103,7 +103,15 @@ class VoidIn(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    verified: Literal[True]
+    # 严格布尔再要求为 True：Literal[True] 按相等比较，会放过 1。
+    verified: StrictBool
+
+    @field_validator("verified")
+    @classmethod
+    def _must_be_true(cls, value: bool) -> bool:
+        if value is not True:
+            raise ValueError("verified must be true")
+        return value
 
 
 class StripePendingPageOut(StripePendingOut):
