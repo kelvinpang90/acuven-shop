@@ -27,7 +27,8 @@ EXPECTED_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
 ALLOWED = {
     # system 只用于服务端确认 Stripe 付款（DESIGN 1.12 第 4 条）。
     ("awaiting_demo_payment", "demo_paid"): {"guest", "member", "system"},
-    ("awaiting_demo_payment", "demo_cancelled"): {"guest", "member", "system"},
+    # admin 只经 DESIGN 1.22「Stripe 测试环境支付」第 11 条的人工作废。
+    ("awaiting_demo_payment", "demo_cancelled"): {"guest", "member", "admin", "system"},
     ("demo_paid", "demo_packed"): {"admin"},
     ("demo_packed", "demo_shipped"): {"admin"},
     ("demo_shipped", "demo_completed"): {"guest", "member", "system"},
@@ -133,9 +134,10 @@ def test_invalid_order_number_is_rejected(number: object) -> None:
 def test_designed_transitions_are_allowed(current: str, target: str, actor: str) -> None:
     """「下单：awaiting_demo_payment……成功进入 demo_paid」「待支付订单可由下单者在支付页
     取消……或超时为 demo_cancelled」「管理员依次推进 demo_paid → demo_packed → demo_shipped」
-    「访客……会员……确认收货后进入 demo_completed……模拟发货满 7 天自动确认收货」，以及
-    DESIGN 1.12 第 4 条「订单只在服务端确认 Stripe 付款成功后才进入 demo_paid」：
-    五条迁移各自允许设计列出的操作者。
+    「访客……会员……确认收货后进入 demo_completed……模拟发货满 7 天自动确认收货」，
+    DESIGN 1.12 第 4 条「订单只在服务端确认 Stripe 付款成功后才进入 demo_paid」，以及
+    DESIGN 1.22「订单与退款状态」第 3 条「或由管理员按『Stripe 测试环境支付』第 11 条作废已告警
+    的结账记录后取消（1.22，操作者为 admin……）」：五条迁移各自允许设计列出的操作者。
     """
     assert is_transition_allowed(current, target, actor)
 
