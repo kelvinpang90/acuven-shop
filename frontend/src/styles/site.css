@@ -558,6 +558,24 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-stock-resets__cards { display: none; margin: 0; padding: 0; list-style: none; }
 .site-admin-stock-resets__pager { display: flex; gap: 8px; justify-content: flex-end; }
 
+/* 后台 Stripe 待处理 A11（A11-desktop 与 A11-states，SHOP-TASK-228）：内容最宽 1120px，标题、说明、读取失败的提示与 admin.reload、两个列表上下排列
+   （间距 16px）；说明内边距 10px 12px；admin.reload 靠左。每个列表的标题、说明、结果提示与列表上下排列（间距 16px），第二个列表上方多 8px。
+   表格在可横向滚动的面板里，金额列与按钮列靠右；手机卡片在桌面不显示。结果的状态提示内边距 10px 12px。
+   作废确认框沿用 .site-admin__confirm，按 A11-states 改为间距 14px、至多 460px 宽；勾选框与文字间距 8px、顶端对齐。
+   说明与状态提示的底色、文字颜色、圆角与字号，h2 与说明的字号，确认框的阴影与标题字重 site.css 写不了，记在任务记录的偏离里 */
+.site-admin-stripe-pending { display: grid; gap: 16px; max-width: 1120px; }
+.site-admin-stripe-pending p { margin: 0; }
+.site-admin-stripe-pending__note { padding: 10px 12px; }
+.site-admin-stripe-pending__reload { justify-self: start; }
+.site-admin-stripe-pending__section { display: grid; gap: 16px; min-width: 0; }
+.site-admin-stripe-pending__refunds { margin-top: 8px; }
+.site-admin-stripe-pending__table { overflow-x: auto; }
+.site-admin-stripe-pending__end { text-align: right; }
+.site-admin-stripe-pending__cards { display: none; margin: 0; padding: 0; list-style: none; }
+.site-admin-stripe-pending__status { padding: 10px 12px; }
+.site-admin-stripe-pending__confirm { gap: 14px; max-width: 460px; }
+.site-admin-stripe-pending__verified { gap: 8px; align-items: flex-start; }
+
 /* 后台店铺装修 A08 的页头（A08-desktop）：标题与演示说明上下排列（间距 16px）；说明内边距 10px 12px。
    说明的底色、文字颜色、字号、圆角与 ★ 图形 site.css 写不了，记在 docs/TODO.md 的偏离里 */
 .site-admin-store-design { display: grid; gap: 16px; }
@@ -1218,6 +1236,14 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-stock-resets__line { display: grid; gap: 2px; padding: 6px 0; }
   .site-admin-stock-resets__pager { justify-content: center; }
   .site-admin-stock-resets__pager .acs-admin__btn { justify-content: center; min-width: 44px; min-height: 44px; }
+
+  /* 后台 Stripe 待处理 A11（A11-phone）：各块与每个列表里的各项间距 10px；表格不显示，每条记录一张卡片（卡片之间 10px，内边距 12px，各项间距 8px），
+     第一行两项分列两端（间距 8px，垂直居中，可换行）。记录 ID 与金额的字重、各行的字号 site.css 写不了，记在任务记录的偏离里 */
+  .site-admin-stripe-pending, .site-admin-stripe-pending__section { gap: 10px; }
+  .site-admin-stripe-pending__table { display: none; }
+  .site-admin-stripe-pending__cards { display: grid; gap: 10px; }
+  .site-admin-stripe-pending__card { display: grid; gap: 8px; padding: 12px; }
+  .site-admin-stripe-pending__card-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; }
 
   /* 后台店铺装修的页头（A08-phone 与 UX A08 手机线框）：顶栏已是 admin.nav_store_design，页面里不显示标题，h1 只留给读屏；
      演示说明在内容区最上方，与之后各块间距 14px */
