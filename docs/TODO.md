@@ -27,7 +27,6 @@
 
 <!-- openclaw:planning-v1:begin -->
 ### 当前计划
-1. `SHOP-TASK-228` 后台 Stripe 待处理 A11 的列表、作废确认框与退款重试
 
 ### 已阻塞
 
