@@ -6209,7 +6209,7 @@ tasks:
       运营者落实写法：桌面表格与手机卡片两套都渲染，由 site.css 按宽度显隐（照 A07）；时间照 A03 尝试表用 TrackOrderPage 的 formatDateTime，金额照 A03 用 usePrice；确认框照 A10 的 site-admin__confirm 写法；401 回到 A01，网络中断显示 common.network_check、其他失败显示 common.error_retry（照 A07 现有写法）；写操作的 403 关闭确认框、显示 common.error_retry 并重新读取（取得新的 CSRF 令牌，照 A03 重试的 csrf）。视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离，不借用其他组件的类来取颜色，评审不以此要求修改。
       设计闸门：DESIGN 1.22（提交 ffb043e）「Stripe 测试环境支付」第 11 条与 HANDOFF 0.90、0.91，作废与重试的页面呈现（只显示对账字段与订单号，不显示 Stripe ID、收货资料与客户资料；规则、核对与审计在服务端）。
       拆分：A11 页面的内容层（7 个允许路径，router.tsx、App.tsx 与 site.css 按页面任务的惯例列入），依赖 SHOP-TASK-225（接口）、226（页面）与 227（请求模块）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-225
       - SHOP-TASK-226
