@@ -1,0 +1,30 @@
+# SHOP-TASK-227 后台 Stripe 待处理的请求模块 A11
+
+- [x] 新增 `frontend/src/api/adminStripePending.ts` 与 `frontend/src/api/adminStripePending.test.ts`：为 A11 页面（SHOP-TASK-228）调用 SHOP-TASK-225 的 `GET /api/admin/stripe-pending`、`POST /api/admin/stripe-pending/checkouts/{结账记录 ID}/void` 与 `POST …/checkouts/{结账记录 ID}/refund-retry`。写法照 `frontend/src/api/adminRefunds.ts` 的 `retryStripeRefund` 与 `frontend/src/api/adminStockResets.ts`；CSRF 请求头名取 `frontend/src/api/pay.ts` 的 `CSRF_HEADER`。改动只在这两个文件与本文件；不做页面，不改路由与导航、后端、设计、`.platform/`、CI 与部署配置，未装依赖。设计闸门：不适用（作废与重试的规则、核对与审计在 SHOP-TASK-223 至 225 的服务端，依据 DESIGN 1.22「Stripe 测试环境支付」第 11 条；请求模块只传递与校验字段）。
+- 请求：三个请求都不带查询参数，凭同源 cookie，`cache: "no-store"`，`Accept: application/json`。
+  - `readStripePending(signal?)`：GET，没有请求体与 CSRF 头，带上调用方的 `AbortSignal`。
+  - `voidCheckout(checkoutId, csrfToken)`：POST `…/checkouts/{ID}/void`，`Content-Type: application/json`，`X-CSRF-Token` 为列表给的令牌，JSON 请求体恰为 `{"verified": true}`。
+  - `retryLateRefund(checkoutId, csrfToken)`：POST `…/checkouts/{ID}/refund-retry`，没有请求体，请求头只有 `Accept` 与 `X-CSRF-Token`（接口不要幂等键）。
+  - 两个写操作的 ID 不是不超过 2147483647（`MAX_CHECKOUT_ID`，与服务端路径 ID 的上限相同）的正整数时不发请求，返回 `failed`。
+- 字段与合格条件：读取 200 的响应体只取 `checkouts`、`refunds` 与 `csrf_token`，各项只取列出的字段，多出的字段不带进结果；两个列表按接口顺序原样保留。
+  - `csrf_token` 为非空字符串；`checkouts`、`refunds` 为数组。
+  - `checkouts` 每项：`checkout_id` 为正整数，`status` 为 `creating`、`open`、`complete` 之一，`order_number`、`created_at`、`alerted_at` 为字符串。
+  - `refunds` 每项：`checkout_id`、`attempt_id` 为正整数，`order_number` 为字符串，`amount_sen` 为非负整数，`attempted_at` 为字符串，`error_type` 为字符串或 null。
+  - 任一项不合格整个响应体不合格，归为 `failed`；不是 JSON 也归为 `failed`。
+- 归类：
+  - 读取：`ok`（带 `pending`）、`none`（401）、`failed`（其他状态与不合格的响应体）、`network`（fetch 抛错，含调用方中止）。
+  - 作废：200 按响应体 `result` 为 `confirmed`、`cancelled`、`voided`（其他值、读不出为 `failed`）；`changed`（409 `stripe_pending_changed` 与 404）；`unavailable`（503 `stripe_unavailable`）；`csrf`（403）；`none`（401）；`failed`（其他，含别的 409、别的 503、422、413、415）；`network`。
+  - 重试：`done`（200，响应体不读）；`changed`（409 `stripe_refund_not_retryable` 与 404）；`cap`（409 `stripe_refund_cap`）；`csrf`（403）；`none`（401）；`failed`（其他，含别的 409 与 422）；`network`。
+  - 三个函数都不写日志、不抛出；写操作的结果只是归类字符串，不带令牌与响应内容。
+- 偏离与取舍，请审阅（未改设计，未发现须停下的设计问题）：
+  - 时间字段只校验为字符串，不像 `adminRefunds.ts` 那样另要求能解析成日期：验收标准对 `created_at`、`alerted_at`、`attempted_at` 只写了「为字符串」，按原文。
+  - 404 不读错误体，不论错误码都归为 `changed`（UX 0.19 A11「记录不存在（404）」与已变化同样处理）。
+  - ID 的上限 2³¹−1 是验收标准「正整数」之外另加的：照 `adminStockResets.ts` 的 `readStockReset` 与 SHOP-TASK-225 的路径规则，超出时服务端也只会 422（归为 `failed`），提前不发请求结果相同。
+  - 函数签名照验收标准，写操作不接收 `AbortSignal`（同 `retryStripeRefund`）。
+- 留给之后：A11 页面（列表显示、作废确认框、重试按钮与各结果文案）交给 SHOP-TASK-228。
+- 验证到什么程度：人工逐条对照验收标准、SHOP-TASK-225 记录段、`app/services/admin_stripe_pending.py` 的字段与 UX 0.19 A11 自查。`frontend/src/api/adminStripePending.test.ts`（vitest，fetch 以参数带类型的 `vi.fn` 替身代替）覆盖：
+  - 读取的地址、方法、同源 cookie、no-store、请求头恰为 `Accept`、没有请求体与 signal；多出的字段不带进结果且按接口顺序；两个空列表合格；三种状态各自合格；状态码归类与网络中断；响应体不是对象或 JSON、令牌缺少 / 为空 / 数字 / null、两个列表缺少或不是数组、每项不是对象，以及每个字段缺少或类型不对（ID 为 0、负数、小数或字符串，状态为 expired、paid 或大写，金额为负数、小数或字符串，时间为 null 或数字，`error_type` 缺少或为数字）与一好一坏的列表都归 `failed`。
+  - 作废的地址、方法、请求头恰为三项、请求体恰为 `{"verified": true}`；非法 ID（0、负数、小数、超上限、NaN、Infinity）不发请求；200 的三种结果与其他 `result`（含 null、缺少、大写、不是对象、不是 JSON）、404（含不是 JSON）、409 与 503 的对与不对的错误码、403、401、422、413、415、500 与网络中断的归类。
+  - 重试的地址、方法、请求头恰为两项、没有请求体；非法 ID 不发请求；200 不读响应体；404、409 各错误码（含作废的错误码与 A03 的 `refund_not_approved`）、403、401、422、503、500 与网络中断的归类。
+  - 三个函数在成功、失败与网络中断时都不调用 console 的各方法，令牌不进地址，写操作只返回归类字符串。
+  - 每条测试的注释写明它守住的 UX 0.19 A11 或 SHOP-TASK-225 记录段的原句。前端检查交由 PR 的必需 CI 检查 frontend 执行（Worker 沙箱不跑前端检查），检查命令结果由 Worker 另行记录。本任务不做浏览器验收。
