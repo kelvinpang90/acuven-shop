@@ -6143,13 +6143,13 @@ tasks:
       为 A11 新建路由 /admin/stripe-pending 与页面 frontend/src/pages/AdminStripePendingPage.tsx（用后台框架渲染，当前导航项为 Stripe 待处理，内容区只有标题 admin.nav_stripe_pending），后台导航按 docs/UX.md 0.19「管理后台总体」的顺序在退款之后加入 Stripe 待处理一项；
       请求模块留给 SHOP-TASK-227，列表、作废与重试留给 SHOP-TASK-228。不调用接口，不装依赖，不改后端，不改设计。
       设计闸门：不适用（只加路由、导航与标题，不碰金额与个人资料）。
-      拆分：A11 页面的框架层，照 A06 的 SHOP-TASK-173。18 个允许路径，超过拆分规则的 12 个：导航多一项后，9 个现有测试文件里按顺序列出导航项或路由表的断言必然失效（运营者在登记时对 main 的导出做骨架实测，列出 31 条失败，全部在 router.test.tsx、AdminFrame.test.tsx 与 8 个后台页面测试里，都是导航顺序或路由表的断言），只许改这些断言，与加导航的改动拆不开；路由、页面表与导航项的类型互相依赖，也拆不开。
+      拆分：A11 页面的框架层，照 A06 的 SHOP-TASK-173。18 个允许路径，超过拆分规则的 12 个：导航多一项后，10 个现有测试文件里按顺序列出导航项或路由表的断言必然失效（运营者在登记时对 main 的导出做骨架实测，列出 31 条失败，全部在 router.test.tsx、AdminFrame.test.tsx 与 8 个后台页面测试里，都是导航顺序或路由表的断言），只许改这些断言，与加导航的改动拆不开；路由、页面表与导航项的类型互相依赖，也拆不开。
     status: ready
     depends_on: []
     acceptance_criteria:
       - 路由——frontend/src/router.tsx 的路由表在 /admin/refunds/:id 之后加 /admin/stripe-pending，导出 ADMIN_STRIPE_PENDING_PATH；frontend/src/App.tsx 的页面表加 AdminStripePendingPage；文件头注释补上该路径不带段值
       - 导航——frontend/src/components/AdminFrame.tsx 的 AdminNavItem、ADMIN_NAV 与 NAV_ENTRY 在 refunds 之后加 stripePending（指向 /admin/stripe-pending，文字 admin.nav_stripe_pending），桌面导航与手机菜单都按此顺序；frontend/src/i18n/copy.ts 加 admin.nav_stripe_pending，三语与 docs/UX-COPY.md 逐字相同
-      - 页面——AdminStripePendingPage 用后台框架渲染，current 为 stripePending，内容区只有 h1 admin.nav_stripe_pending；本任务不加其他文案键、不调用接口；布局沿用现有后台页面，site.css 只在需要时改
+      - 页面——AdminStripePendingPage 用后台框架渲染，current 为 stripePending，内容区只有 h1 admin.nav_stripe_pending；本任务不加其他文案键、不调用接口；布局沿用现有后台页面，需要时才改 frontend/src/styles/site.css（只写布局、显隐与媒体查询，固定间距与尺寸写像素值，不声明颜色、字体、圆角属性；视觉稿里 site.css 写不了的记入任务记录的偏离）
       - 现有测试——frontend/src/components/AdminFrame.test.tsx 的 LIVE_NAV_KEYS 在 admin.nav_refunds 之后加 admin.nav_stripe_pending，并把 UX-COPY 0.21 改成的「UX-COPY 的导航项多于已上线项」改回「两者相同」（DOC_NAV_KEYS 与 LIVE_NAV_KEYS 相等），导航项、href 与 aria-current 的期望改为十项；router.test.tsx 与 8 个后台页面测试（Categories、Coupons、Products、Refunds、Shipping、SiteSettings、StockResets、StoreDesign）只改按顺序列出导航项或路由表的断言与测试名，加入这一项，其余断言不动
       - 测试验证意图（前端检查与全部测试由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——新文件 frontend/src/pages/AdminStripePendingPage.test.tsx 断言三种语言下标题、当前导航项（aria-current 为 page）与它在退款之后、商品之前；每条新增或改动的测试注释写明它守住的 UX 0.19「管理后台总体」或 A11 的原句
       - docs/task-records/SHOP-TASK-226.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明不适用及理由），不合并、不直推
@@ -6221,7 +6221,7 @@ tasks:
       - 作废结果——确认框关闭后在第一个列表标题下方显示一条提示：confirmed、cancelled、voided 分别为 admin.stripe_void_confirmed、admin.stripe_void_cancelled、admin.stripe_void_voided，changed 为 admin.stripe_pending_changed，这四种都重新读取两个列表；unavailable 为 admin.stripe_void_unavailable（不重新读取）；403 与其他失败照 purpose；结果提示照视觉稿，前四种为状态提示（role 为 status），其余为警示（acs-admin__alert，role 为 alert）
       - 重试与结果——每行 admin.stripe_refund_retry 直接发出重试，不另设确认框，提交中该按钮禁用；结果在第二个列表标题下方：done 为 admin.stripe_late_refund_retried，changed 为 admin.stripe_pending_changed，这两种都重新读取；cap 为 admin.stripe_refund_blocked（警示，不重新读取）；403 与其他失败照 purpose
       - 两处提示各自只保留最新一条，下一次同类操作开始时清除；重新读取不清除刚给出的结果提示；离开页面时中止未完成的读取，旧读取的结果不再更新页面
-      - 测试验证意图（前端检查与全部测试由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——frontend/src/pages/AdminStripePendingPage.test.tsx 用 vitest 与 react-dom/server（不加测试依赖，请求模块以替身代替；以 renderToStaticMarkup 渲染、直接调用导出的纯函数），覆盖三种语言下两个列表的字段与空状态、读取失败、确认框的禁用与勾选、五种作废结果与三种重试结果的提示与是否重新读取、401 回到 A01、页面不含 csrf_token；SHOP-TASK-226 的标题与导航断言保留；每条测试的注释写明它守住的 UX 0.19 A11 原句
+      - 测试验证意图（前端检查与全部测试由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——frontend/src/pages/AdminStripePendingPage.test.tsx 用 vitest 与 react-dom/server（不加测试依赖，请求模块以替身代替；以 renderToStaticMarkup 渲染、直接调用导出的纯函数），覆盖三种语言下两个列表的字段与空状态、读取失败、确认框的禁用与勾选、五种作废结果与三种重试结果的提示与是否重新读取、写操作 403 后关闭确认框并重新读取且下一次写操作带新读到的令牌、网络中断与其他失败的提示、401 回到 A01、页面不含 csrf_token；SHOP-TASK-226 的标题与导航断言保留；每条测试的注释写明它守住的 UX 0.19 A11 原句
       - docs/task-records/SHOP-TASK-228.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，偏离与验证到什么程度只写实际情况）；改动只落在 allowed_change_paths；不改请求模块、后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
     allowed_change_paths:
       - frontend/src/pages/AdminStripePendingPage.tsx
