@@ -27,9 +27,8 @@
 
 <!-- openclaw:planning-v1:begin -->
 ### 当前计划
-1. `SHOP-TASK-223` 作废已告警的 Stripe 结账记录并取消订单（服务层）
-2. `SHOP-TASK-224` 迟到付款退款的手动重试与 Stripe 待处理列表的查询（服务层）
-3. `SHOP-TASK-225` 后台 Stripe 待处理的列表、作废与退款重试接口
+1. `SHOP-TASK-224` 迟到付款退款的手动重试与 Stripe 待处理列表的查询（服务层）
+2. `SHOP-TASK-225` 后台 Stripe 待处理的列表、作废与退款重试接口
 
 ### 已阻塞
 
