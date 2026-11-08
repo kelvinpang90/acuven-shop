@@ -2567,17 +2567,17 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 说明：
 
 - 两个列表来自同一个接口，打开页面时读取一次；不分页，各按服务端给出的顺序显示（结账记录按告警时间从早到晚，退款按尝试 ID 从小到大）。读取失败显示 `[common.error_retry]` 与 `[admin.reload]`。两类都没有记录时，各自标题下显示 `[admin.stripe_pending_none]`。
-- 记录 ID 与尝试 ID 都以 `#` 加数字显示，与告警邮件里的对象 ID 相同（结账记录的告警对象为结账记录 ID，退款失败的告警对象为退款尝试 ID）；不显示 Stripe 的任何 ID、付款页地址、收货资料与 Stripe 返回的客户资料（DESIGN 1.22 第 11 条、第 10 条）。
+- 记录 ID 与尝试 ID 都以 `#` 加数字显示：结账记录的告警邮件写的是结账记录 ID，对照第一个列表的记录 ID；退款的告警邮件写的是退款尝试 ID，对照第二个列表的尝试 ID；不显示 Stripe 的任何 ID、付款页地址、收货资料与 Stripe 返回的客户资料（DESIGN 1.22 第 11 条、第 10 条）。
 - 记录状态：creating 显示 `[admin.checkout_status_creating]`，open 显示 `[admin.checkout_status_open]`，complete 显示 `[admin.checkout_status_complete]`。错误类别是 Stripe 给出的类别码原文（如 invalid_request_error），为空时显示 —。时间的写法同 A03 的尝试时间。
 - `[admin.stripe_void]` 打开作废确认框，标题里的 `{id}` 为记录 ID、`{order}` 为订单号。`[admin.stripe_void_verified]` 未勾选时 `[admin.stripe_void_submit]` 禁用；`[common.cancel]` 关闭确认框，不发请求。提交中按钮禁用。结果在确认框关闭后显示在该列表标题下方，并重新读取两个列表：
   - 服务端查得 Stripe 已付款、订单已确认：`[admin.stripe_void_confirmed]`；
   - 服务端查得会话已结束（或付款不符、已建全额退款）、订单已取消：`[admin.stripe_void_cancelled]`；
   - 凭管理员的核对作废并取消：`[admin.stripe_void_voided]`；
-  - 记录在此期间已变化：`[admin.stripe_pending_changed]`；
+  - 记录在此期间已变化，或记录不存在（404）：`[admin.stripe_pending_changed]`；
   - 本站记录已显示付款而 Stripe 暂不可用：`[admin.stripe_void_unavailable]`（确认框关闭，行不变）；
   - 其他失败：`[common.error_retry]`。
-- `[admin.stripe_refund_retry]` 直接发出重试（与 A03 的重试相同，不另设确认框），提交中按钮禁用。成功显示 `[admin.stripe_late_refund_retried]` 并重新读取（新尝试处理中，该行从列表消失）；不能重试（最新一次已不是失败，或并发的另一次已成功）显示 `[admin.stripe_pending_changed]` 并重新读取；会超过付款金额显示 A03 已有的 `[admin.stripe_refund_blocked]`；其他失败显示 `[common.error_retry]`。
-- 处理完的记录不再列出：结账记录在作废、确认或取消之后消失；退款在最新一次尝试不再是失败之后消失（DESIGN 1.22 第 11 条，两类各按自己的条件）。重试后的结果（处理中、已退回或再次失败）只在本页的列表与告警邮件里体现，本页不显示历次尝试。
+- `[admin.stripe_refund_retry]` 直接发出重试（与 A03 的重试相同，不另设确认框），提交中按钮禁用。成功显示 `[admin.stripe_late_refund_retried]` 并重新读取（新尝试处理中，该行从列表消失）；不能重试（最新一次已不是失败，或并发的另一次已成功）或记录不存在（404）显示 `[admin.stripe_pending_changed]` 并重新读取；会超过付款金额显示 A03 已有的 `[admin.stripe_refund_blocked]`；其他失败显示 `[common.error_retry]`。
+- 处理完的记录不再列出：结账记录在作废、确认或取消之后消失；退款在最新一次尝试不再是失败之后消失（DESIGN 1.22 第 11 条，两类各按自己的条件）。本页不显示历次尝试，重试后新尝试的处理中与已退回不在本页显示，到 Stripe 后台核对；再次失败时它以新的尝试 ID 重新列出，并另有告警邮件。
 - 后台会话失效时同其他后台页面回到 A01。
 
 金额与个人资料元素：
