@@ -1800,6 +1800,11 @@ export const COPY = {
     zh: "退款审核",
     ms: "Bayaran balik",
   },
+  "admin.nav_stripe_pending": {
+    en: "Stripe follow-ups",
+    zh: "Stripe 待处理",
+    ms: "Susulan Stripe",
+  },
   "admin.nav_products": {
     en: "Products",
     zh: "商品",

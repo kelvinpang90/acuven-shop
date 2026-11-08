@@ -119,6 +119,8 @@ describe("route table", () => {
   // 运费与演示汇率进表，在优惠券之后、库存重置结果之前。
   // SHOP-TASK-196 验收「路由」一条「路由表在 /admin/refunds/:id 之后加入 /admin/products 与 /admin/categories」：路由表断言在退款详情之后、
   // 优惠券之前依次加上两条路径，并断言它们在表里。
+  // SHOP-TASK-226 改动：按 UX 0.19 A11「独立一页 /admin/stripe-pending」与验收「路由」一条「路由表在 /admin/refunds/:id 之后加 /admin/stripe-pending」，
+  // 路由表断言在退款详情之后、商品之前加上这条路径。
   it("has the home page, the product list, the product detail, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page, the member login, the password reset, the register page, the member centre, the member order detail and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
@@ -144,6 +146,7 @@ describe("route table", () => {
       "/admin/refunds",
       "/admin/refunds/order/:orderId",
       "/admin/refunds/:id",
+      "/admin/stripe-pending",
       "/admin/products",
       "/admin/categories",
       "/admin/coupons",

@@ -44,6 +44,7 @@ const LOGIN = "/admin/login";
 const NAV_PATHS = [
   "/admin/orders",
   "/admin/refunds",
+  "/admin/stripe-pending",
   "/admin/products",
   CATEGORIES_PATH,
   "/admin/coupons",
@@ -55,6 +56,7 @@ const NAV_PATHS = [
 const NAV_KEYS = [
   "admin.nav_orders",
   "admin.nav_refunds",
+  "admin.nav_stripe_pending",
   "admin.nav_products",
   "admin.nav_categories",
   "admin.nav_coupons",
@@ -282,12 +284,15 @@ describe("AdminCategoriesPage", () => {
   // UX 0.17「导航项 [admin.nav_categories] 排在 [admin.nav_products] 之后」、「管理后台总体」「导航项依次为 [admin.nav_orders]、[admin.nav_refunds]、
   // [admin.nav_products]、[admin.nav_categories]（0.17）、[admin.nav_coupons]、…」与 SHOP-TASK-196 验收「导航」一条「桌面导航与手机菜单都按这个顺序列出」：
   // 经路由打开本页，桌面导航与 ☰ 菜单都依次为这九项，分类排在商品之后并标 aria-current="page"；各项文字为字典里当前语言的文案。
+  // SHOP-TASK-226 改动：按 UX 0.19「管理后台总体」「导航项依次为 [admin.nav_orders]、[admin.nav_refunds]、[admin.nav_stripe_pending]（0.19）、…」，
+  // NAV_PATHS、NAV_KEYS、aria-current 的期望与按项数截取的 slice 在退款之后加入 Stripe 待处理，改为十项（当前项仍为分类）。
   it.each(LANGUAGES)("marks categories current, after products, in both navigation menus in %s", (language) => {
     for (const html of [renderApp(language), renderToStaticMarkup(wrap(<AdminCategoriesPage />, language))]) {
       for (const nav of [element(html, "nav", "site-admin__nav"), element(html, "nav", "site-admin__menu-nav")]) {
         const items = tags(nav, "a").filter((tag) => !attributes(tag).has("lang"));
         expect(items.map((tag) => attributes(tag).get("href"))).toEqual(NAV_PATHS);
         expect(items.map((tag) => attributes(tag).get("aria-current"))).toEqual([
+          undefined,
           undefined,
           undefined,
           undefined,
@@ -298,7 +303,7 @@ describe("AdminCategoriesPage", () => {
           undefined,
           undefined,
         ]);
-        expect(textNodes(nav).slice(0, 9)).toEqual(NAV_KEYS.map((key) => COPY[key][language]));
+        expect(textNodes(nav).slice(0, 10)).toEqual(NAV_KEYS.map((key) => COPY[key][language]));
       }
     }
   });

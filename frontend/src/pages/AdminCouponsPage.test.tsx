@@ -16,7 +16,7 @@ import type { DisableMoves, ListState, Moves } from "./AdminCouponsPage";
 const COUPONS_PATH = "/admin/coupons";
 const PATH = COUPONS_PATH;
 const LOGIN = "/admin/login";
-const NAV_PATHS = ["/admin/orders", "/admin/refunds", "/admin/products", "/admin/categories", COUPONS_PATH,"/admin/shipping", "/admin/stock-resets", "/admin/store-design", "/admin/settings"];
+const NAV_PATHS = ["/admin/orders", "/admin/refunds", "/admin/stripe-pending", "/admin/products", "/admin/categories", COUPONS_PATH,"/admin/shipping", "/admin/stock-resets", "/admin/store-design", "/admin/settings"];
 const FIXED: AdminCoupon = { id: 1, code: "WELCOME", type: "fixed", amount_off_sen: 1000, percent_off: null, min_subtotal_sen: 0, starts_on: "2026-01-01", ends_on: "2026-12-31", total_use_limit: 100, per_member_use_limit: null, used_count: 12, active: true };
 const PERCENT: AdminCoupon = { id: 2, code: "SAVE20", type: "percent", amount_off_sen: null, percent_off: 20, min_subtotal_sen: 0, starts_on: "2026-10-05", ends_on: "2026-10-05", total_use_limit: null, per_member_use_limit: null, used_count: 0, active: false };
 
@@ -57,6 +57,8 @@ describe("AdminCouponsPage", () => {
   // 当前项与手机顶栏名称不变。
   // SHOP-TASK-196 改动：按 SHOP-TASK-196 验收「导航」一条在退款之后依次加入商品（/admin/products）与分类（/admin/categories），
   // 文件顶部 NAV_PATHS 与 aria-current 的期望数组改为九项；当前项与手机顶栏名称不变。
+  // SHOP-TASK-226 改动：按 UX 0.19「管理后台总体」「导航项依次为 [admin.nav_orders]、[admin.nav_refunds]、[admin.nav_stripe_pending]（0.19）、…」，
+  // 在退款之后加入 Stripe 待处理（/admin/stripe-pending），NAV_PATHS 与 aria-current 的期望数组改为十项；当前项与手机顶栏名称不变。
   it.each(LANGUAGES)("marks coupons current in both navigation menus in UX order in %s", (language) => {
     const html = renderToStaticMarkup(
       <LanguageProvider storage={storage(language)}>
@@ -69,7 +71,7 @@ describe("AdminCouponsPage", () => {
     for (const nav of menus) {
       const items = tags(nav, "a").filter((tag) => !attributes(tag).has("lang"));
       expect(items.map((tag) => attributes(tag).get("href"))).toEqual(NAV_PATHS);
-      expect(items.map((tag) => attributes(tag).get("aria-current"))).toEqual([undefined, undefined, undefined, undefined, "page", undefined, undefined, undefined, undefined]);
+      expect(items.map((tag) => attributes(tag).get("aria-current"))).toEqual([undefined, undefined, undefined, undefined, undefined, "page", undefined, undefined, undefined, undefined]);
     }
     expect(html).toContain(`<span class="site-admin__bar-title">${COPY["admin.nav_coupons"][language]}</span>`);
   });

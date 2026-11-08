@@ -18,6 +18,7 @@ import AdminShippingPage from "./pages/AdminShippingPage";
 import AdminSiteSettingsPage from "./pages/AdminSiteSettingsPage";
 import AdminStockResetsPage from "./pages/AdminStockResetsPage";
 import AdminStoreDesignPage from "./pages/AdminStoreDesignPage";
+import AdminStripePendingPage from "./pages/AdminStripePendingPage";
 import CartPage from "./pages/CartPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
@@ -66,6 +67,7 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   "/admin/refunds/order/:orderId": AdminRefundsPage,
   // 退款详情与列表是同一页（桌面列表在左、详情在右，手机只显示详情）。
   "/admin/refunds/:id": AdminRefundsPage,
+  "/admin/stripe-pending": AdminStripePendingPage,
   "/admin/products": AdminProductsPage,
   "/admin/categories": AdminCategoriesPage,
   "/admin/coupons": AdminCouponsPage,
