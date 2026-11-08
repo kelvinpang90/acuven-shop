@@ -6087,7 +6087,7 @@ tasks:
       运营者落实写法：retry_checkout_attempt 照 retry_request_attempt 的写法只 flush、不提交，由之后的接口写审计、提交并调用 submit_refund_attempt；付款金额取该来源原尝试的金额（第 6 条写入时等于会话的 amount_total）；stripe_refund_cap 的日志写法为 stripe_refund_cap checkout=<结账记录 ID>，告警对象为（stripe_checkout, 结账记录 ID），对象类别取 app/services/stripe_checkout.py 的 ALERT_TARGET_KIND。第 11 条写的「失败时间」在数据模型里没有对应字段（StripeRefund 只有创建、成功与上次复查时间），列表给出最新一次尝试的创建时间（字段名 attempted_at），不加字段、不改设计（Kelvin 2026-11-08 认可，HANDOFF 0.90；偏离记入任务记录）。
       设计闸门：DESIGN 1.22（提交 ffb043e）「Stripe 测试环境支付」第 11 条第（2）项与第 8 条；列表只给对账字段与订单号，不给收货资料、Stripe 的任何 ID 与客户资料。
       拆分：人工处置的服务层第二个任务（5 个允许路径），与 SHOP-TASK-223 互不依赖；接口见 SHOP-TASK-225。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 重试——app/services/stripe_refund.py 新增 retry_checkout_attempt(db, checkout_id, now) 返回新尝试的 ID；now 带时区抛 ValueError（先于访问数据库）；先结束此前的事务，再按订单、该结账记录的顺序加锁（订单行是新事务的第一条加锁语句），结账记录不存在抛新异常 RetryCheckoutNotFound

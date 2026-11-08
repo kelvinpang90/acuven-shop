@@ -27,11 +27,10 @@
 
 <!-- openclaw:planning-v1:begin -->
 ### 当前计划
-1. `SHOP-TASK-224` 迟到付款退款的手动重试与 Stripe 待处理列表的查询（服务层）
-2. `SHOP-TASK-225` 后台 Stripe 待处理的列表、作废与退款重试接口
-3. `SHOP-TASK-226` 后台 Stripe 待处理页的路由与导航 A11
-4. `SHOP-TASK-227` 后台 Stripe 待处理的请求模块 A11
-5. `SHOP-TASK-228` 后台 Stripe 待处理 A11 的列表、作废确认框与退款重试
+1. `SHOP-TASK-225` 后台 Stripe 待处理的列表、作废与退款重试接口
+2. `SHOP-TASK-226` 后台 Stripe 待处理页的路由与导航 A11
+3. `SHOP-TASK-227` 后台 Stripe 待处理的请求模块 A11
+4. `SHOP-TASK-228` 后台 Stripe 待处理 A11 的列表、作废确认框与退款重试
 
 ### 已阻塞
 
