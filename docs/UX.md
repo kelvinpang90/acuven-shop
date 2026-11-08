@@ -7,7 +7,7 @@
 
 依据已批准的 `docs/DESIGN.md` 1.22「Stripe 测试环境支付」第 11 条（Kelvin 2026-11-07 批准，记录见 `docs/HANDOFF.md` 0.89）与 HANDOFF 0.90 记录的两项决定：
 
-- **A11 后台 Stripe 待处理**（新增，页面位置由 UX 定）：独立一页 `/admin/stripe-pending`，导航项 `[admin.nav_stripe_pending]` 排在 `[admin.nav_refunds]` 之后。两个列表：已告警而订单仍待支付的结账记录（`[admin.stripe_void]` 打开确认框，须勾选 `[admin.stripe_void_verified]`），与失败的迟到付款退款（`[admin.stripe_refund_retry]`）。结账记录的告警邮件写结账记录 ID、退款的告警邮件写退款尝试 ID，与两个列表里的 ID 对照；不显示 Stripe ID、收货资料与客户资料。
+- **A11 后台 Stripe 待处理**（新增，页面位置由 UX 定）：独立一页 `/admin/stripe-pending`，导航项 `[admin.nav_stripe_pending]` 排在 `[admin.nav_refunds]` 之后。两个列表：已告警而订单仍待支付的结账记录（`[admin.stripe_void]` 打开确认框，须勾选 `[admin.stripe_void_verified]`），与失败的迟到付款退款（`[admin.stripe_refund_retry]`）。第一个列表对照告警邮件里的结账记录 ID，第二个列表对照退款失败告警邮件里的退款尝试 ID；不显示 Stripe ID、收货资料与客户资料。
 - 列表里退款的时间是最新一次尝试的创建时间（`[admin.col_attempted]`），不是失败时间（Kelvin 2026-11-08 认可，HANDOFF 0.90）。
 - 管理员作废的订单，访客在 P06、P07 照超时取消显示（Kelvin 2026-11-08 决定，HANDOFF 0.90），P06、P07 的线框与文案不变。
 
@@ -2508,7 +2508,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 ## A11 后台 Stripe 待处理（0.19）
 
 - **目的**：处置 Stripe 测试环境里需要人工决定的两类记录：已告警而订单仍待支付的结账记录（作废并取消订单），与失败的迟到付款退款（重试）（DESIGN 1.22「Stripe 测试环境支付」第 11 条；REQUIREMENTS 1.18「管理后台」）。
-- **入口**：后台导航 `[admin.nav_stripe_pending]`（排在 `[admin.nav_refunds]` 之后）；运营告警邮件里的类别码与对象 ID（结账记录 ID 或退款尝试 ID；邮件不带链接，管理员自行打开本页对照）。
+- **入口**：后台导航 `[admin.nav_stripe_pending]`（排在 `[admin.nav_refunds]` 之后）；运营告警邮件里的类别码与对象 ID（第一个列表对照结账记录 ID，第二个列表对照退款失败告警的退款尝试 ID；邮件不带链接，管理员自行打开本页对照）。
 - **去向**：—（订单号只作文字显示，不链到 A02）。
 - **演示提示**：★ `[admin.demo_banner]`；`[admin.stripe_pending_note]`。
 
@@ -2567,7 +2567,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 说明：
 
 - 两个列表来自同一个接口，打开页面时读取一次；不分页，各按服务端给出的顺序显示（结账记录按告警时间从早到晚，退款按尝试 ID 从小到大）。读取失败显示 `[common.error_retry]` 与 `[admin.reload]`。两类都没有记录时，各自标题下显示 `[admin.stripe_pending_none]`。
-- 记录 ID 与尝试 ID 都以 `#` 加数字显示：结账记录的告警邮件写的是结账记录 ID，对照第一个列表的记录 ID；退款的告警邮件写的是退款尝试 ID，对照第二个列表的尝试 ID；不显示 Stripe 的任何 ID、付款页地址、收货资料与 Stripe 返回的客户资料（DESIGN 1.22 第 11 条、第 10 条）。
+- 记录 ID 与尝试 ID 都以 `#` 加数字显示：第一个列表的记录 ID 对照结账记录告警邮件里的结账记录 ID；第二个列表的尝试 ID 对照退款失败告警邮件（`stripe_refund_rejected`、`stripe_refund_failed_after_success` 等以退款尝试为对象的类别）里的退款尝试 ID。以结账记录为对象的退款告警（`stripe_late_payment_unrefundable`、迟到付款的 `stripe_refund_cap`）没有可对照的尝试，不在第二个列表，订单仍待支付时它的结账记录出现在第一个列表；不显示 Stripe 的任何 ID、付款页地址、收货资料与 Stripe 返回的客户资料（DESIGN 1.22 第 11 条、第 10 条）。
 - 记录状态：creating 显示 `[admin.checkout_status_creating]`，open 显示 `[admin.checkout_status_open]`，complete 显示 `[admin.checkout_status_complete]`。错误类别是 Stripe 给出的类别码原文（如 invalid_request_error），为空时显示 —。时间的写法同 A03 的尝试时间。
 - `[admin.stripe_void]` 打开作废确认框，标题里的 `{id}` 为记录 ID、`{order}` 为订单号。`[admin.stripe_void_verified]` 未勾选时 `[admin.stripe_void_submit]` 禁用；`[common.cancel]` 关闭确认框，不发请求。提交中按钮禁用。结果在确认框关闭后显示在该列表标题下方，并重新读取两个列表：
   - 服务端查得 Stripe 已付款、订单已确认：`[admin.stripe_void_confirmed]`；
