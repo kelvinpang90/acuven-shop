@@ -6110,7 +6110,7 @@ tasks:
   - id: SHOP-TASK-225
     title: 后台 Stripe 待处理的列表、作废与退款重试接口
     purpose: >-
-      按 docs/DESIGN.md 1.22「Stripe 测试环境支付」第 11 条，新增 app/api/admin_stripe_pending.py 的三个后台接口，并在 app/main.py 注册路由：GET /api/admin/stripe-pending 给出两类列表（SHOP-TASK-224 的查询）；POST /api/admin/stripe-pending/checkouts/{checkout_id}/void 在管理员勾选核实后调用 SHOP-TASK-223 的 void_alerted_checkout；POST /api/admin/stripe-pending/checkouts/{checkout_id}/refund-retry 调用 SHOP-TASK-224 的 retry_checkout_attempt，提交后以新尝试调用 Stripe。不改服务层规则、前端、数据库与设计，不加依赖。
+      按 docs/DESIGN.md 1.22「Stripe 测试环境支付」第 11 条，新增 app/api/admin_stripe_pending.py 的三个后台接口，并在 app/main.py 注册路由：GET /api/admin/stripe-pending 给出两类列表（SHOP-TASK-224 的查询）与后台写操作用的 CSRF 令牌（照 admin_coupons.py 的列表接口）；POST /api/admin/stripe-pending/checkouts/{checkout_id}/void 在管理员勾选核实后调用 SHOP-TASK-223 的 void_alerted_checkout；POST /api/admin/stripe-pending/checkouts/{checkout_id}/refund-retry 调用 SHOP-TASK-224 的 retry_checkout_attempt，提交后以新尝试调用 Stripe。不改服务层规则、前端、数据库与设计，不加依赖。
       运营者落实写法：照 app/api/admin_refunds.py 的 stripe-retry 写法。作废的请求体恰好是 {"verified":true}（多余字段、缺少或不为 true 都是 422），返回 200 {"result":结果}，结果为 confirmed、cancelled 或 voided；changed 回 409 stripe_pending_changed，unavailable 回 503 stripe_unavailable（同 app/api/pay.py 的 _stripe_unavailable）。重试不读请求体、不要幂等键：没有尝试或不能重试 409 stripe_refund_not_retryable，超额 409 stripe_refund_cap，成功 200 {"result":"retried"}。审计在接口层写：voided 的审计由传给 void_alerted_checkout 的 on_void 在作废的同一事务里写；confirmed 与 cancelled 由现有函数各自提交，之后另开事务写审计并提交；审计都是 stripe_checkout_voided（对象 stripe_checkout 与记录 ID，新值为结果）；重试在服务层 flush 之后、同一事务里写 stripe_late_refund_retried（对象 stripe_refund 与新尝试 ID）后提交，再调用 submit_refund_attempt，它抛异常时回滚并记 stripe_refund_submit_failed attempt=<ID>，仍回 200。
       设计闸门：DESIGN 1.22（提交 ffb043e）「Stripe 测试环境支付」第 11 条；只认管理员会话，写操作校验 CSRF，响应不含收货资料、Stripe 的任何 ID 与客户资料。
       拆分：人工处置的接口层（4 个允许路径），依赖 SHOP-TASK-223 与 224。
@@ -6120,10 +6120,10 @@ tasks:
       - SHOP-TASK-224
     acceptance_criteria:
       - 路由——app/api/admin_stripe_pending.py 的路由前缀为 /api/admin/stripe-pending，用 app/api/order_lookup.py 的 _NoStoreRoute，在 app/main.py 注册；这些接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control 为 no-store，路径存在但方法不匹配时由框架返回的 405 不在此列
-      - 列表——GET 经 require_admin（401 admin_session_required），不要求 CSRF、不写审计，200 原样返回 SHOP-TASK-224 的 stripe_pending(db)（StripePendingOut），时间照现有后台接口的写法序列化
+      - 列表——GET 经 require_admin（401 admin_session_required），不要求 CSRF、不写审计；200 返回 checkouts、refunds 与 csrf_token 三个字段：前两个原样取自 SHOP-TASK-224 的 stripe_pending(db)（StripePendingOut 的两个列表），csrf_token 照 app/api/admin_coupons.py 列表接口的写法由 csrf_token_for_cookie 算出（算不出时 401 admin_session_required），供页面的作废与重试请求使用；时间照现有后台接口的写法序列化
       - 作废——POST …/checkouts/{checkout_id}/void 依次 require_admin（401）、require_admin_csrf（403）、路径里的记录 ID（不带符号与前导零的十进制整数，否则 422）、请求体的结构（422，错误写法沿用 app/api/pay.py 的 _body_errors，不回显请求内容），之后才调用 void_alerted_checkout；原始请求体照 app/api/admin_refunds.py 审核接口的写法以依赖经 app/api/pay.py 的 _json_body 读取（超过上限 413、不是 JSON 415，这一步作为依赖先于 require_admin 执行，与审核接口相同）；记录不存在 404 not_found，changed 409 stripe_pending_changed，unavailable 503 stripe_unavailable，其余 200 与结果；Stripe 适配器经 app/api/pay.py 的 GatewayDep 取得
       - 作废的审计——审计 stripe_checkout_voided（target_type 为 stripe_checkout、target_id 为记录 ID、旧值为空、新值为结果）：voided 经 on_void 在作废的同一事务里写入（接口传入写审计的函数）；confirmed 与 cancelled 在服务返回之后另开事务写入并提交；changed 与 unavailable 不写审计
-      - 重试——POST …/checkouts/{checkout_id}/refund-retry 依次 require_admin（401）、require_admin_csrf（403）、路径（422），不读请求体；RetryCheckoutNotFound 为 404 not_found，NoRefundAttempt 与 RetryNotAllowed 为 409 stripe_refund_not_retryable，RefundCapExceeded 为 409 stripe_refund_cap（告警已由服务层报），每种错误先回滚；成功时同一事务写审计 stripe_late_refund_retried（target_type 为 stripe_refund、target_id 为新尝试 ID）并提交，再以 submit_refund_attempt 调用 Stripe，它的结果不改变响应，抛异常时回滚并记一条 error 日志 stripe_refund_submit_failed attempt=<ID>（不记异常内容），200 {"result":"retried"}
+      - 重试——POST …/checkouts/{checkout_id}/refund-retry 依次 require_admin（401）、require_admin_csrf（403）、路径（422），不读请求体；RetryCheckoutNotFound 为 404 not_found，NoRefundAttempt 与 RetryNotAllowed 为 409 stripe_refund_not_retryable，RefundCapExceeded 为 409 stripe_refund_cap（告警已由服务层报），每种错误先回滚；成功时同一事务写审计 stripe_late_refund_retried（target_type 为 stripe_refund、target_id 为新尝试 ID、旧值为空、新值为结账记录 ID 的十进制写法）并提交，再以 submit_refund_attempt 调用 Stripe，它的结果不改变响应，抛异常时回滚并记一条 error 日志 stripe_refund_submit_failed attempt=<ID>（不记异常内容），200 {"result":"retried"}
       - 资料——响应与日志不含收货资料、会员资料、Stripe 的任何 ID、付款页地址与 Stripe 错误原文；除上述 stripe_refund_submit_failed 外不写日志
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_stripe_pending_api.py 用 TestClient 与 FakeStripeGateway，覆盖三个接口的每个状态码与 detail、校验顺序（CSRF 或路径不通过时不调用服务层）、no-store、作废的审计只在三种结果时写且 voided 的审计与作废同一事务、重试的审计与提交后调用 Stripe、submit 抛异常仍回 200，以及响应不含收货资料与 Stripe ID；每条测试的文档字符串写明它守住的 DESIGN 1.22 第 11 条哪一句
       - docs/task-records/SHOP-TASK-225.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改服务层规则、前端、数据库与迁移、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
@@ -6132,6 +6132,105 @@ tasks:
       - app/main.py
       - tests/test_admin_stripe_pending_api.py
       - docs/task-records/SHOP-TASK-225.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-226
+    title: 后台 Stripe 待处理页的路由与导航 A11
+    purpose: >-
+      为 A11 新建路由 /admin/stripe-pending 与页面 frontend/src/pages/AdminStripePendingPage.tsx（用后台框架渲染，当前导航项为 Stripe 待处理，内容区只有标题 admin.nav_stripe_pending），后台导航按 docs/UX.md 0.19「管理后台总体」的顺序在退款之后加入 Stripe 待处理一项；
+      请求模块留给 SHOP-TASK-227，列表、作废与重试留给 SHOP-TASK-228。不调用接口，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只加路由、导航与标题，不碰金额与个人资料）。
+      拆分：A11 页面的框架层，照 A06 的 SHOP-TASK-173。18 个允许路径，超过拆分规则的 12 个：导航多一项后，10 个现有测试文件里按顺序列出导航项或路由表的断言必然失效（运营者在登记时对 main 的导出做骨架实测，列出 31 条失败，全部在 router.test.tsx、AdminFrame.test.tsx 与 8 个后台页面测试里，都是导航顺序或路由表的断言），只许改这些断言，与加导航的改动拆不开；路由、页面表与导航项的类型互相依赖，也拆不开。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 路由——frontend/src/router.tsx 的路由表在 /admin/refunds/:id 之后加 /admin/stripe-pending，导出 ADMIN_STRIPE_PENDING_PATH；frontend/src/App.tsx 的页面表加 AdminStripePendingPage；文件头注释补上该路径不带段值
+      - 导航——frontend/src/components/AdminFrame.tsx 的 AdminNavItem、ADMIN_NAV 与 NAV_ENTRY 在 refunds 之后加 stripePending（指向 /admin/stripe-pending，文字 admin.nav_stripe_pending），桌面导航与手机菜单都按此顺序；frontend/src/i18n/copy.ts 加 admin.nav_stripe_pending，三语与 docs/UX-COPY.md 逐字相同
+      - 页面——AdminStripePendingPage 用后台框架渲染，current 为 stripePending，内容区只有 h1 admin.nav_stripe_pending；本任务不加其他文案键、不调用接口；布局沿用现有后台页面，需要时才改 frontend/src/styles/site.css（只写布局、显隐与媒体查询，固定间距与尺寸写像素值，不声明颜色、字体、圆角属性；视觉稿里 site.css 写不了的记入任务记录的偏离）
+      - 现有测试——frontend/src/components/AdminFrame.test.tsx 的 LIVE_NAV_KEYS 在 admin.nav_refunds 之后加 admin.nav_stripe_pending，并把 UX-COPY 0.21 改成的「UX-COPY 的导航项多于已上线项」改回「两者相同」（DOC_NAV_KEYS 与 LIVE_NAV_KEYS 相等），导航项、href 与 aria-current 的期望改为十项；router.test.tsx 与 8 个后台页面测试（Categories、Coupons、Products、Refunds、Shipping、SiteSettings、StockResets、StoreDesign）只改按顺序列出导航项或路由表的断言与测试名，加入这一项，其余断言不动
+      - 测试验证意图（前端检查与全部测试由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——新文件 frontend/src/pages/AdminStripePendingPage.test.tsx 断言三种语言下标题、当前导航项（aria-current 为 page）与它在退款之后、商品之前；每条新增或改动的测试注释写明它守住的 UX 0.19「管理后台总体」或 A11 的原句
+      - docs/task-records/SHOP-TASK-226.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明不适用及理由），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/AdminStripePendingPage.tsx
+      - frontend/src/pages/AdminStripePendingPage.test.tsx
+      - frontend/src/components/AdminFrame.tsx
+      - frontend/src/components/AdminFrame.test.tsx
+      - frontend/src/pages/AdminCategoriesPage.test.tsx
+      - frontend/src/pages/AdminCouponsPage.test.tsx
+      - frontend/src/pages/AdminProductsPage.test.tsx
+      - frontend/src/pages/AdminRefundsPage.test.tsx
+      - frontend/src/pages/AdminShippingPage.test.tsx
+      - frontend/src/pages/AdminSiteSettingsPage.test.tsx
+      - frontend/src/pages/AdminStockResetsPage.test.tsx
+      - frontend/src/pages/AdminStoreDesignPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-226.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-227
+    title: 后台 Stripe 待处理的请求模块 A11
+    purpose: >-
+      为 A11 页面新建调用 SHOP-TASK-225 三个接口（GET /api/admin/stripe-pending、POST /api/admin/stripe-pending/checkouts/{结账记录 ID}/void 与 …/refund-retry）的请求模块与测试，供 SHOP-TASK-228 使用；不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
+      运营者落实写法：照 frontend/src/api/adminRefunds.ts 的 retryStripeRefund 与 frontend/src/api/adminStockResets.ts 的写法（同源 cookie、不缓存、Accept 为 application/json，写操作带框架的 CSRF 请求头，路径 ID 不合法时不发请求）；记录不存在（404）与 changed 一样回给页面已变化（UX 0.19 A11）。
+      设计闸门：不适用（作废与重试的规则、核对与审计在 SHOP-TASK-223 至 225 的服务端，依据 DESIGN 1.22 第 11 条；请求模块只传递与校验字段）。
+      拆分：A11 页面的请求层（3 个允许路径），照 A06 的 SHOP-TASK-174。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 读取——新文件 frontend/src/api/adminStripePending.ts 导出 readStripePending(signal)，GET /api/admin/stripe-pending；200 时逐项校验字段后返回 ok 与数据（csrf_token 为非空字符串；checkouts 每项 checkout_id 为正整数、status 为 creating、open、complete 之一、order_number 为字符串、created_at 与 alerted_at 为字符串；refunds 每项 checkout_id 与 attempt_id 为正整数、order_number 为字符串、amount_sen 为非负整数、attempted_at 为字符串、error_type 为字符串或 null），任一不合格算 failed；401 为 none，其他状态为 failed，网络中断为 network
+      - 作废——导出 voidCheckout(checkoutId, csrfToken)，POST …/checkouts/{ID}/void，请求体为 JSON 对象，只有 verified 为 true，Content-Type 为 application/json；回答 200 时按响应体 result 返回 confirmed、cancelled 或 voided（其他值算 failed）；409 stripe_pending_changed 与 404 为 changed；503 stripe_unavailable 为 unavailable；403 为 csrf；401 为 none；其他（含别的 409、503 与 422）为 failed；网络中断为 network
+      - 重试——导出 retryLateRefund(checkoutId, csrfToken)，POST …/checkouts/{ID}/refund-retry，没有请求体；200 为 done（响应体不读）；409 stripe_refund_not_retryable 与 404 为 changed；409 stripe_refund_cap 为 cap；403 为 csrf；401 为 none；其他为 failed；网络中断为 network
+      - 两个写操作的 ID 不是正整数时不发请求、返回 failed；三个函数都不在日志或错误里带出 CSRF 令牌与响应内容
+      - 测试验证意图（由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——新文件 frontend/src/api/adminStripePending.test.ts 以 fetch 替身覆盖每个函数的请求（方法、路径、请求头、请求体）、每种回答到返回值的映射与字段校验的每一种不合格；每条测试的注释写明它守住的 UX 0.19 A11 或 SHOP-TASK-225 契约的哪一句
+      - docs/task-records/SHOP-TASK-227.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改页面、路由、后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明不适用及理由），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/adminStripePending.ts
+      - frontend/src/api/adminStripePending.test.ts
+      - docs/task-records/SHOP-TASK-227.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-228
+    title: 后台 Stripe 待处理 A11 的列表、作废确认框与退款重试
+    purpose: >-
+      在 SHOP-TASK-226 的 A11 页面上接 SHOP-TASK-227 的请求模块：读取并显示两个列表，作废确认框与五种作废结果，迟到付款退款的重试与它的结果，依据 docs/UX.md 0.19 的 A11、docs/UX-COPY.md 0.21 与视觉稿 docs/design/pages/A11-desktop、A11-phone、A11-states。不装依赖，不改后端，不改设计。
+      运营者落实写法：桌面表格与手机卡片两套都渲染，由 site.css 按宽度显隐（照 A07）；时间照 A03 尝试表用 TrackOrderPage 的 formatDateTime，金额照 A03 用 usePrice；确认框照 A10 的 site-admin__confirm 写法；401 回到 A01，网络中断显示 common.network_check、其他失败显示 common.error_retry（照 A07 现有写法）；写操作的 403 关闭确认框、显示 common.error_retry 并重新读取（取得新的 CSRF 令牌，照 A03 重试的 csrf）。视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离，不借用其他组件的类来取颜色，评审不以此要求修改。
+      设计闸门：DESIGN 1.22（提交 ffb043e）「Stripe 测试环境支付」第 11 条与 HANDOFF 0.90、0.91，作废与重试的页面呈现（只显示对账字段与订单号，不显示 Stripe ID、收货资料与客户资料；规则、核对与审计在服务端）。
+      拆分：A11 页面的内容层（7 个允许路径，router.tsx、App.tsx 与 site.css 按页面任务的惯例列入），依赖 SHOP-TASK-225（接口）、226（页面）与 227（请求模块）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-225
+      - SHOP-TASK-226
+      - SHOP-TASK-227
+    acceptance_criteria:
+      - 页面内容以 docs/UX.md 0.19 的 A11 为准，样式以 docs/design/pages/A11-desktop、A11-phone、A11-states 为准；frontend/src/i18n/copy.ts 加上 A11 其余 25 个新键（UX-COPY 0.21 新增、SHOP-TASK-226 未加的），三语与 UX-COPY 逐字相同；框架和页面的布局、显隐与媒体查询写在 frontend/src/styles/site.css，视觉稿的固定间距与尺寸直接写像素值，不声明颜色、字体、圆角属性
+      - 读取与列表——进入页面读取一次，标题下为 admin.stripe_pending_note；两个列表依次为 admin.stripe_pending_checkouts_title 与 admin.stripe_pending_refunds_title（其下 admin.stripe_pending_refunds_note），照接口给的顺序显示，列与卡片字段照 UX 0.19 A11（记录 ID 与尝试 ID 显示为「#」加数字，状态 creating、open、complete 分别为 admin.checkout_status_creating、_open、_complete，错误类别为原文、为空时显示 —），各自为空时显示 admin.stripe_pending_none；读取失败显示提示与 admin.reload，点它重新读取；不显示 csrf_token 与接口没给的字段
+      - 作废确认框——每行 admin.stripe_void 打开确认框（role 为 dialog、aria-modal 为 true），标题为 admin.stripe_void_confirm_title（{id} 为结账记录 ID，{order} 为订单号），正文 admin.stripe_void_confirm_body，勾选框 admin.stripe_void_verified，按钮 common.cancel 与 admin.stripe_void_submit；未勾选时提交禁用，common.cancel 关闭且不发请求，提交中两个按钮都禁用；每次打开时勾选框为未勾选
+      - 作废结果——确认框关闭后在第一个列表标题下方显示一条提示：confirmed、cancelled、voided 分别为 admin.stripe_void_confirmed、admin.stripe_void_cancelled、admin.stripe_void_voided，changed 为 admin.stripe_pending_changed，这四种都重新读取两个列表；unavailable 为 admin.stripe_void_unavailable（不重新读取）；403 与其他失败照 purpose；结果提示照视觉稿，前四种为状态提示（role 为 status），其余为警示（acs-admin__alert，role 为 alert）
+      - 重试与结果——每行 admin.stripe_refund_retry 直接发出重试，不另设确认框，提交中该按钮禁用；结果在第二个列表标题下方：done 为 admin.stripe_late_refund_retried，changed 为 admin.stripe_pending_changed，这两种都重新读取；cap 为 admin.stripe_refund_blocked（警示，不重新读取）；403 与其他失败照 purpose
+      - 两处提示各自只保留最新一条，下一次同类操作开始时清除；重新读取不清除刚给出的结果提示；离开页面时中止未完成的读取，旧读取的结果不再更新页面
+      - 测试验证意图（前端检查与全部测试由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——frontend/src/pages/AdminStripePendingPage.test.tsx 用 vitest 与 react-dom/server（不加测试依赖，请求模块以替身代替；以 renderToStaticMarkup 渲染、直接调用导出的纯函数），覆盖三种语言下两个列表的字段与空状态、读取失败、确认框的禁用与勾选、五种作废结果与三种重试结果的提示与是否重新读取、写操作 403 后关闭确认框并重新读取且下一次写操作带新读到的令牌、网络中断与其他失败的提示、401 回到 A01、页面不含 csrf_token；SHOP-TASK-226 的标题与导航断言保留；每条测试的注释写明它守住的 UX 0.19 A11 原句
+      - docs/task-records/SHOP-TASK-228.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，偏离与验证到什么程度只写实际情况）；改动只落在 allowed_change_paths；不改请求模块、后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/AdminStripePendingPage.tsx
+      - frontend/src/pages/AdminStripePendingPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-228.md
     allowed_commands:
       - lint.check
       - format.check
