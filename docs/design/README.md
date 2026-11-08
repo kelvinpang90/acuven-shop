@@ -12,6 +12,8 @@
 > 2026-10-30 补充 DESIGN 1.18 的画板（落实 `docs/UX.md` 0.17 与 `docs/UX-COPY.md` 0.18，审阅稿）：重画 A04 桌面与手机稿（未上架状态、图片缩略图与封面、前后移动与移除、规格值与 SKU 的新增与启用、上架条件、每单限购 1–1000），新增 A04 新建商品、保存状态、图片与当日库存调整状态，A10 后台分类的桌面、手机与状态稿，A09 每日恢复库存一段，P03 / P04 整单上限状态；A07 两张加开关关闭说明。后台导航新增「Categories」，排在「Products」之后：新画与本次改动的画板已带上，其余后台画板未重画，以本条为准。画法同 2026-10-29 的 A06。
 
 > 2026-11-05 补充店铺标志图的画板（落实 `docs/DESIGN.md` 1.20 候批稿第 15 条、`docs/UX.md` 0.18 与 `docs/UX-COPY.md` 0.19，审阅稿）：A08 标志的没有标志、有标志、上传中、被拒与移除确认框 `A08-logo-states`，前台页头与页脚显示标志的桌面与手机稿 `P-logo-header-footer`（示例标志为虚构店名）。A08 桌面与手机稿未重画，其中标志一段的说明以 `A08-logo-states` 为准。画法同 2026-10-29 的 A06。
+>
+> 2026-11-08 补充后台 A11 Stripe 待处理的画板（落实 `docs/DESIGN.md` 1.22 第 11 条、`docs/UX.md` 0.19 与 `docs/UX-COPY.md` 0.21，审阅稿）：桌面与手机稿 `A11-desktop`、`A11-phone`，作废确认框、作废与重试的结果、空列表与读取失败 `A11-states`。后台导航在 Refunds 之后多了 Stripe follow-ups；其他后台画板未重画，导航顺序以 UX 0.19 为准。画法同 2026-10-29 的 A06。
 
 页面的内容、流程、去向与文案以 [UX.md](../UX.md) 与 [UX-COPY.md](../UX-COPY.md) 为准；本目录只规定样式。二者冲突时以 UX 文档为准，并把冲突报给运营者。
 
@@ -187,3 +189,6 @@
 | A10 分类 · 桌面（2026-10-30） | [A10-desktop.html](pages/A10-desktop.html) | [A10-desktop.png](reference/A10-desktop.png) | 1440 × 760 |
 | A10 分类列表与编辑 · 手机（2026-10-30） | [A10-phone.html](pages/A10-phone.html) | [A10-phone.png](reference/A10-phone.png) | 390 × 1400 |
 | A10 保存状态、已满、停用与未保存确认框（2026-10-30） | [A10-states.html](pages/A10-states.html) | [A10-states.png](reference/A10-states.png) | 520 × 1630 |
+| A11 Stripe 待处理 · 桌面（2026-11-08） | [A11-desktop.html](pages/A11-desktop.html) | [A11-desktop.png](reference/A11-desktop.png) | 1440 × 900 |
+| A11 Stripe 待处理 · 手机（2026-11-08） | [A11-phone.html](pages/A11-phone.html) | [A11-phone.png](reference/A11-phone.png) | 390 × 1480 |
+| A11 作废确认框、作废与重试结果、空列表与读取失败（2026-11-08） | [A11-states.html](pages/A11-states.html) | [A11-states.png](reference/A11-states.png) | 520 × 2140 |
