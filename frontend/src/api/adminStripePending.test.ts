@@ -201,8 +201,11 @@ describe("voiding a checkout record", () => {
     expect(calls[0]?.init).toMatchObject({ method: "POST", credentials: "same-origin", cache: "no-store" });
     expect(CSRF_HEADER).toBe("X-CSRF-Token");
     expect(headers(calls[0])).toEqual({ Accept: "application/json", "Content-Type": "application/json", [CSRF_HEADER]: TOKEN });
-    expect(typeof calls[0]?.init.body).toBe("string");
-    expect(JSON.parse(String(calls[0]?.init.body))).toStrictEqual({ verified: true });
+    const body = calls[0]?.init.body;
+    if (typeof body !== "string") {
+      throw new Error("expected a string body");
+    }
+    expect(JSON.parse(body)).toStrictEqual({ verified: true });
   });
 
   // SHOP-TASK-225 记录段「路径里的记录 ID（[1-9][0-9]{0,9} 且不超过 2³¹−1）」：ID 不是不超过上限的正整数时不发请求，归为失败。
