@@ -335,13 +335,17 @@ describe("navigation", () => {
   // SHOP-TASK-196 改动：按 SHOP-TASK-196 验收「导航」一条在退款之后依次加入商品（/admin/products）与分类（/admin/categories），
   // href/aria-current 与导航文字的期望改为九项（按项数截取的文字随之取前九个），测试标题的「after …」随新顺序改写；
   // 当前项仍为店铺装修，手机顶栏名称不变（下一条）。
-  it.each(LANGUAGES)("marks the store design item as current, after the other seven before it, in %s", (language) => {
+  // SHOP-TASK-226 改动：按 UX 0.19「管理后台总体」「导航项依次为 [admin.nav_orders]、[admin.nav_refunds]、[admin.nav_stripe_pending]（0.19）、…」，
+  // 在退款之后加入 Stripe 待处理（/admin/stripe-pending），href/aria-current 与导航文字的期望改为十项（按项数截取的文字随之取前十个），
+  // 测试标题的「after …」随之改为前面的八项；当前项仍为店铺装修，手机顶栏名称不变（下一条）。
+  it.each(LANGUAGES)("marks the store design item as current, after the other eight before it, in %s", (language) => {
     const html = renderApp(STORE_DESIGN_PATH, language);
     for (const nav of [element(html, "nav", "site-admin__nav"), element(html, "nav", "site-admin__menu-nav")]) {
       const items = tags(nav, "a").filter((tag) => !attributes(tag).has("lang"));
       expect(items.map((tag) => [attributes(tag).get("href"), attributes(tag).get("aria-current")])).toEqual([
           [ORDERS_PATH, undefined],
           [REFUNDS_PATH, undefined],
+          ["/admin/stripe-pending", undefined],
           ["/admin/products", undefined],
           ["/admin/categories", undefined],
           ["/admin/coupons", undefined],
@@ -350,9 +354,10 @@ describe("navigation", () => {
         [STORE_DESIGN_PATH, "page"],
         ["/admin/settings", undefined],
       ]);
-        expect(textNodes(nav).slice(0, 9)).toEqual([
+        expect(textNodes(nav).slice(0, 10)).toEqual([
           COPY["admin.nav_orders"][language],
           COPY["admin.nav_refunds"][language],
+          COPY["admin.nav_stripe_pending"][language],
           COPY["admin.nav_products"][language],
           COPY["admin.nav_categories"][language],
           COPY["admin.nav_coupons"][language],

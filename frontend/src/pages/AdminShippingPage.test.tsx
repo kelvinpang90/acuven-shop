@@ -48,6 +48,7 @@ const SHIPPING_PATH = "/admin/shipping";
 const NAV_PATHS = [
   "/admin/orders",
   "/admin/refunds",
+  "/admin/stripe-pending",
   "/admin/products",
   "/admin/categories",
   "/admin/coupons",
@@ -59,6 +60,7 @@ const NAV_PATHS = [
 const NAV_KEYS = [
   "admin.nav_orders",
   "admin.nav_refunds",
+  "admin.nav_stripe_pending",
   "admin.nav_products",
   "admin.nav_categories",
   "admin.nav_coupons",
@@ -185,6 +187,8 @@ describe("AdminShippingPage", () => {
   // SHOP-TASK-196 改动：按 SHOP-TASK-196 验收「导航」一条与 UX「管理后台总体」（0.17 起 [admin.nav_categories] 排在 [admin.nav_products] 之后），
   // 在退款之后依次加入商品（/admin/products）与分类（/admin/categories）：文件顶部 NAV_PATHS 与 NAV_KEYS、aria-current 的期望数组
   // 与按项数截取的 slice 改为九项；当前项与手机顶栏名称不变，运费与演示汇率仍排在优惠券之后。
+  // SHOP-TASK-226 改动：按 UX 0.19「管理后台总体」「导航项依次为 [admin.nav_orders]、[admin.nav_refunds]、[admin.nav_stripe_pending]（0.19）、…」，
+  // NAV_PATHS、NAV_KEYS、aria-current 的期望与按项数截取的 slice 在退款之后加入 Stripe 待处理，改为十项；当前项与手机顶栏名称不变。
   it.each(LANGUAGES)("marks shipping current, after coupons, in both navigation menus in %s", (language) => {
     for (const html of [renderApp(language), renderToStaticMarkup(wrap(<AdminShippingPage />, language))]) {
       for (const nav of [element(html, "nav", "site-admin__nav"), element(html, "nav", "site-admin__menu-nav")]) {
@@ -196,12 +200,13 @@ describe("AdminShippingPage", () => {
           undefined,
           undefined,
           undefined,
+          undefined,
           "page",
           undefined,
           undefined,
           undefined,
         ]);
-        expect(textNodes(nav).slice(0, 9)).toEqual(NAV_KEYS.map((key) => COPY[key][language]));
+        expect(textNodes(nav).slice(0, 10)).toEqual(NAV_KEYS.map((key) => COPY[key][language]));
       }
     }
   });
