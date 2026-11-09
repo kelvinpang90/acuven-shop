@@ -57,6 +57,12 @@ body { margin: 0; }
 
 .site-home .acs-pcard__img { aspect-ratio: 3 / 4; }
 
+/* 商品卡（首页精选与 P02）：桌面为横排，图片占卡片左半（长宽约为竖排时的一半），名称、价格与售罄标签依次在右半；
+   最后一行吃掉多出的高度，名称与价格不被图片高度拉开。手机仍为竖排（见媒体查询）。 */
+.site-home .acs-pgrid .acs-pcard, .site-list__grid .acs-pcard { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto auto auto 1fr; gap: 8px 14px; align-items: start; }
+.site-home .acs-pgrid .acs-pcard > *, .site-list__grid .acs-pcard > * { grid-column: 2; }
+.site-home .acs-pgrid .acs-pcard__img, .site-list__grid .acs-pcard__img { grid-column: 1; grid-row: 1 / span 4; }
+
 /* 商品列表 P02 */
 .site-list__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 56px var(--gutter) 32px; }
 .site-list__body { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 48px; padding: 0 var(--gutter) 96px; }
@@ -77,19 +83,19 @@ body { margin: 0; }
 .site-check { display: flex; gap: 10px; align-items: center; }
 .site-check input { flex-shrink: 0; width: 18px; height: 18px; margin: 0; }
 
-/* 商品详情 P03：左 7 列图片、右 4 列购买区，描述在下方 */
+/* 商品详情 P03：左 4 列图片（主图约为原 7 列时的一半，缩略图一排 5 张）、右 6 列购买区，描述在下方 */
 .site-detail { padding: 28px var(--gutter) 96px; }
 .site-detail p { margin: 0; }
 .site-detail__crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .site-detail__top { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 32px; padding-top: 28px; }
-.site-detail__gallery { grid-column: span 7; display: grid; gap: 16px; align-content: start; }
+.site-detail__gallery { grid-column: span 4; display: grid; gap: 12px; align-content: start; }
 .site-detail__main { overflow: hidden; }
 .site-detail__main svg { width: 60%; }
-.site-detail__thumbs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.site-detail__thumbs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
 .site-detail__thumb { padding: 0; border: 0; overflow: hidden; cursor: pointer; }
 .site-detail__thumb svg { width: 56%; }
 .site-detail__thumb[aria-pressed="false"] { opacity: 0.6; }
-.site-detail__info { grid-column: 9 / span 4; display: grid; gap: 22px; align-content: start; }
+.site-detail__info { grid-column: 6 / span 6; display: grid; gap: 22px; align-content: start; }
 .site-detail__title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .site-detail__options { display: grid; gap: 16px; }
 .site-detail__quantity { display: flex; align-items: center; gap: 16px; }
@@ -817,6 +823,8 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-list__sort .acs-select { width: 100%; }
   .site-list__count { order: 1; grid-column: 1 / -1; }
   .site-list__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 12px; }
+  /* 手机的商品卡仍为竖排：图片已只有约 165px 宽，再减半认不出商品 */
+  .site-home .acs-pgrid .acs-pcard, .site-list__grid .acs-pcard { display: flex; }
   .site-list__more { display: flex; }
   .site-list__more-error { display: block; }
 
