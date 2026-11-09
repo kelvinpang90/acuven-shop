@@ -1,7 +1,15 @@
 # Acuven Shop 前端页面结构与线框（审阅稿）
 
-> **审阅稿。0.7 已于 2026-10-01 经 Kelvin 审阅通过（记录见 `docs/HANDOFF.md`）；0.8 只在「管理后台总体」与 A09 增加后台退出按钮与视觉稿说明，P01–P14、V1 与 A01–A08 各页内容与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只在 A02、A03 增加状态与补充说明，其余各页与 0.8 相同，Kelvin 已于 2026-10-06 认可；0.10 只把 A01 的登录名改为邮箱（`[admin.email]`），其余各页与 0.9 相同，Kelvin 已于 2026-10-07 批准（记录见 `docs/HANDOFF.md`）。0.11 只在 P06、P07、P14、A03、A09 增加 Stripe 测试环境支付的状态与说明，其余各页与 0.10 相同，Kelvin 已于 2026-10-15 审阅通过（记录见 `docs/HANDOFF.md`）。0.12 只在 A03「Stripe 测试」增加已批准却没有 Stripe 退款尝试时的提示，其余各页与 0.11 相同，Kelvin 已于 2026-10-23 审阅通过（记录见 `docs/HANDOFF.md`）。0.13 只在 P06、P07 增加会员的当前订单（本标签页暂存订单号）与找不到订单时的状态，并在页面地图与 P13 入口同步新的去向，其余各页与 0.12 相同，Kelvin 已于 2026-10-24 审阅通过（记录见 `docs/HANDOFF.md`）。0.14 只在 A09 增加短信服务配置不齐全时 `[admin.sms_on]` 禁用与保存被拒的状态（DESIGN 1.15），其余各页与 0.13 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.15 只在 A06 增加国家运费与演示汇率的增删、保存结果与数据已被改动时的状态（DESIGN 1.16），其余各页与 0.14 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.16 只在 A06 把马来西亚运费由各州属改为西马、东马两档，并同步 P05 的运费口径（DESIGN 1.17），其余各页与 0.15 相同，Kelvin 已于 2026-10-28 审阅通过（记录见 `docs/HANDOFF.md`）。0.17 按 DESIGN 1.18 改 A04、A07、A09、P03、P04、P05 并新增 A10 后台分类，其余各页与 0.16 相同，Kelvin 已于 2026-10-30 审阅通过（记录见 `docs/HANDOFF.md`）。**
-> 版本 0.18（2026-11-05），运营者修订（Claude Code），在 0.17（提交 `fcb30c9`）上按 `docs/DESIGN.md` 1.20 候批稿「计价、优惠、积分与库存」第 15 条，只在 A08 写明店铺标志图的上传、替换与移除（立即生效、不随保存提交、上传中与被拒的状态、移除确认）并在「店铺装修」一条补上标志加载失败时退回文字品牌，其余各页与 0.17 相同；三语文案见 [UX-COPY.md](UX-COPY.md) 0.19。以下为 0.17 及更早版本的历史说明：版本 0.17（2026-10-30），运营者修订（Claude Code），在 0.16（提交 `80e3775`）上按已批准的 `docs/DESIGN.md` 1.18 与 `docs/REQUIREMENTS.md` 1.15（记录见 `docs/HANDOFF.md` 0.73），改 A04、A07、A09、P03、P04、P05，新增 A10 后台分类；三语文案见 [UX-COPY.md](UX-COPY.md) 0.18。以下为 0.16 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.16（2026-10-28），运营者修订（Claude Code），在 0.15（提交 `e9a1c93`）上按 Kelvin 2026-10-28 的决定与 `docs/DESIGN.md` 1.17 候批稿，把 A06 的马来西亚运费由各州属改为西马、东马两档，并在 P05 的金额元素表同步运费口径；三语文案见 [UX-COPY.md](UX-COPY.md) 0.17。以下为 0.15 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.15（2026-10-27），运营者修订（Claude Code），在 0.14（提交 `1c668e6`）上按 Kelvin 2026-10-27 的决定与 `docs/DESIGN.md` 1.16 候批稿，在 A06 增加国家运费与演示汇率的增删、保存结果与数据已被改动时的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.16；版本 0.14（2026-10-27），运营者修订（Claude Code），在 0.13（提交 `450c2fa`）上按 Kelvin 2026-10-27 的决定与 `docs/DESIGN.md` 1.15 候批稿，在 A09 增加短信服务配置不齐全时 `[admin.sms_on]` 禁用与保存被拒的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.15；版本 0.13（2026-10-23），运营者修订（Claude Code），在 0.12（提交 `5e69c3e`）上按 Kelvin 2026-10-23 的决定与 `docs/DESIGN.md` 1.13 候批稿，在 P06、P07 增加会员的当前订单与找不到订单时的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.14；版本 0.12（2026-10-23），运营者修订（Claude Code），在 0.11（提交 `e922fcf`）上按 Kelvin 2026-10-23 的决定，在 A03「Stripe 测试」增加一种状态（不改设计）；三语文案见 [UX-COPY.md](UX-COPY.md) 0.13；版本 0.11（2026-10-15），运营者修订（Claude Code），在 0.10（提交 `eb2bdc4`）上按已批准的 `docs/DESIGN.md` 1.12「Stripe 测试环境支付」与 `docs/REQUIREMENTS.md` 1.13（Kelvin 2026-10-15 批准，记录见 `docs/HANDOFF.md` 0.50）增加 Stripe 测试环境支付；新增元素的依据写 DESIGN 1.12 的小节与条号；三语文案见 [UX-COPY.md](UX-COPY.md) 0.12；版本 0.10（2026-10-07），运营者修订（Claude Code），在 0.9（提交 `1a65f6b`）上按 Kelvin 2026-10-07 的决定把 A01 的登录名改为邮箱；0.9（2026-10-06）在 0.8（提交 `61f7b8a`）上按 Kelvin 2026-10-06 的决定与认可补充 A02、A03 的状态；0.8（2026-10-05）在 0.7（提交 `2d13250`）上按 Kelvin 2026-10-05 的决定增加后台退出按钮；0.7 在 0.6（提交 `e3b3505`）上按 Kelvin 2026-10-01 的短信验证开关决定修改。依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；未特别注明时，各页「金额与个人资料元素」表引用的小节仍指 DESIGN 1.9（1.10、1.11 未改小节标题）。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。三语文案见 [UX-COPY.md](UX-COPY.md)（0.10）。视觉稿（设计系统、10 款主题、每页静态页面与参考图）见 [design/README.md](design/README.md)，只管样式，内容与流程以本稿为准；本版新增的元素沿用相邻元素的样式。本稿不改设计，冲突之处列入文末「待决问题」。
+> **审阅稿。0.7 已于 2026-10-01 经 Kelvin 审阅通过（记录见 `docs/HANDOFF.md`）；0.8 只在「管理后台总体」与 A09 增加后台退出按钮与视觉稿说明，P01–P14、V1 与 A01–A08 各页内容与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只在 A02、A03 增加状态与补充说明，其余各页与 0.8 相同，Kelvin 已于 2026-10-06 认可；0.10 只把 A01 的登录名改为邮箱（`[admin.email]`），其余各页与 0.9 相同，Kelvin 已于 2026-10-07 批准（记录见 `docs/HANDOFF.md`）。0.11 只在 P06、P07、P14、A03、A09 增加 Stripe 测试环境支付的状态与说明，其余各页与 0.10 相同，Kelvin 已于 2026-10-15 审阅通过（记录见 `docs/HANDOFF.md`）。0.12 只在 A03「Stripe 测试」增加已批准却没有 Stripe 退款尝试时的提示，其余各页与 0.11 相同，Kelvin 已于 2026-10-23 审阅通过（记录见 `docs/HANDOFF.md`）。0.13 只在 P06、P07 增加会员的当前订单（本标签页暂存订单号）与找不到订单时的状态，并在页面地图与 P13 入口同步新的去向，其余各页与 0.12 相同，Kelvin 已于 2026-10-24 审阅通过（记录见 `docs/HANDOFF.md`）。0.14 只在 A09 增加短信服务配置不齐全时 `[admin.sms_on]` 禁用与保存被拒的状态（DESIGN 1.15），其余各页与 0.13 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.15 只在 A06 增加国家运费与演示汇率的增删、保存结果与数据已被改动时的状态（DESIGN 1.16），其余各页与 0.14 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.16 只在 A06 把马来西亚运费由各州属改为西马、东马两档，并同步 P05 的运费口径（DESIGN 1.17），其余各页与 0.15 相同，Kelvin 已于 2026-10-28 审阅通过（记录见 `docs/HANDOFF.md`）。0.17 按 DESIGN 1.18 改 A04、A07、A09、P03、P04、P05 并新增 A10 后台分类，其余各页与 0.16 相同，Kelvin 已于 2026-10-30 审阅通过（记录见 `docs/HANDOFF.md`）。0.18 只在 A08 写明店铺标志图的上传、替换与移除并补上标志加载失败时退回文字品牌，其余各页与 0.17 相同，Kelvin 已于 2026-11-05 批准（记录见 `docs/HANDOFF.md`）。**
+> 版本 0.19（2026-11-08），运营者修订（Claude Code），在 0.18（提交 `a870f78`）上按已批准的 `docs/DESIGN.md` 1.22「Stripe 测试环境支付」第 11 条与 `docs/REQUIREMENTS.md` 1.18（Kelvin 2026-11-07 批准，记录见 `docs/HANDOFF.md` 0.89），新增 A11 后台 Stripe 待处理，后台导航在 `[admin.nav_refunds]` 之后加 `[admin.nav_stripe_pending]`，其余各页与 0.18 相同；三语文案见 [UX-COPY.md](UX-COPY.md) 0.21。以下为 0.18 及更早版本的历史说明：版本 0.18（2026-11-05），运营者修订（Claude Code），在 0.17（提交 `fcb30c9`）上按 `docs/DESIGN.md` 1.20 候批稿「计价、优惠、积分与库存」第 15 条，只在 A08 写明店铺标志图的上传、替换与移除（立即生效、不随保存提交、上传中与被拒的状态、移除确认）并在「店铺装修」一条补上标志加载失败时退回文字品牌，其余各页与 0.17 相同；三语文案见 [UX-COPY.md](UX-COPY.md) 0.19。以下为 0.17 及更早版本的历史说明：版本 0.17（2026-10-30），运营者修订（Claude Code），在 0.16（提交 `80e3775`）上按已批准的 `docs/DESIGN.md` 1.18 与 `docs/REQUIREMENTS.md` 1.15（记录见 `docs/HANDOFF.md` 0.73），改 A04、A07、A09、P03、P04、P05，新增 A10 后台分类；三语文案见 [UX-COPY.md](UX-COPY.md) 0.18。以下为 0.16 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.16（2026-10-28），运营者修订（Claude Code），在 0.15（提交 `e9a1c93`）上按 Kelvin 2026-10-28 的决定与 `docs/DESIGN.md` 1.17 候批稿，把 A06 的马来西亚运费由各州属改为西马、东马两档，并在 P05 的金额元素表同步运费口径；三语文案见 [UX-COPY.md](UX-COPY.md) 0.17。以下为 0.15 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.15（2026-10-27），运营者修订（Claude Code），在 0.14（提交 `1c668e6`）上按 Kelvin 2026-10-27 的决定与 `docs/DESIGN.md` 1.16 候批稿，在 A06 增加国家运费与演示汇率的增删、保存结果与数据已被改动时的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.16；版本 0.14（2026-10-27），运营者修订（Claude Code），在 0.13（提交 `450c2fa`）上按 Kelvin 2026-10-27 的决定与 `docs/DESIGN.md` 1.15 候批稿，在 A09 增加短信服务配置不齐全时 `[admin.sms_on]` 禁用与保存被拒的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.15；版本 0.13（2026-10-23），运营者修订（Claude Code），在 0.12（提交 `5e69c3e`）上按 Kelvin 2026-10-23 的决定与 `docs/DESIGN.md` 1.13 候批稿，在 P06、P07 增加会员的当前订单与找不到订单时的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.14；版本 0.12（2026-10-23），运营者修订（Claude Code），在 0.11（提交 `e922fcf`）上按 Kelvin 2026-10-23 的决定，在 A03「Stripe 测试」增加一种状态（不改设计）；三语文案见 [UX-COPY.md](UX-COPY.md) 0.13；版本 0.11（2026-10-15），运营者修订（Claude Code），在 0.10（提交 `eb2bdc4`）上按已批准的 `docs/DESIGN.md` 1.12「Stripe 测试环境支付」与 `docs/REQUIREMENTS.md` 1.13（Kelvin 2026-10-15 批准，记录见 `docs/HANDOFF.md` 0.50）增加 Stripe 测试环境支付；新增元素的依据写 DESIGN 1.12 的小节与条号；三语文案见 [UX-COPY.md](UX-COPY.md) 0.12；版本 0.10（2026-10-07），运营者修订（Claude Code），在 0.9（提交 `1a65f6b`）上按 Kelvin 2026-10-07 的决定把 A01 的登录名改为邮箱；0.9（2026-10-06）在 0.8（提交 `61f7b8a`）上按 Kelvin 2026-10-06 的决定与认可补充 A02、A03 的状态；0.8（2026-10-05）在 0.7（提交 `2d13250`）上按 Kelvin 2026-10-05 的决定增加后台退出按钮；0.7 在 0.6（提交 `e3b3505`）上按 Kelvin 2026-10-01 的短信验证开关决定修改。依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；未特别注明时，各页「金额与个人资料元素」表引用的小节仍指 DESIGN 1.9（1.10、1.11 未改小节标题）。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。三语文案见 [UX-COPY.md](UX-COPY.md)（0.10）。视觉稿（设计系统、10 款主题、每页静态页面与参考图）见 [design/README.md](design/README.md)，只管样式，内容与流程以本稿为准；本版新增的元素沿用相邻元素的样式。本稿不改设计，冲突之处列入文末「待决问题」。
+
+## 0.19 修订要点
+
+依据已批准的 `docs/DESIGN.md` 1.22「Stripe 测试环境支付」第 11 条（Kelvin 2026-11-07 批准，记录见 `docs/HANDOFF.md` 0.89）与 HANDOFF 0.90 记录的两项决定：
+
+- **A11 后台 Stripe 待处理**（新增，页面位置由 UX 定）：独立一页 `/admin/stripe-pending`，导航项 `[admin.nav_stripe_pending]` 排在 `[admin.nav_refunds]` 之后。两个列表：已告警而订单仍待支付的结账记录（`[admin.stripe_void]` 打开确认框，须勾选 `[admin.stripe_void_verified]`），与失败的迟到付款退款（`[admin.stripe_refund_retry]`）。第一个列表对照告警邮件里的结账记录 ID，第二个列表对照退款失败告警邮件里的退款尝试 ID；不显示 Stripe ID、收货资料与客户资料。
+- 列表里退款的时间是最新一次尝试的创建时间（`[admin.col_attempted]`），不是失败时间（Kelvin 2026-11-08 认可，HANDOFF 0.90）。
+- 管理员作废的订单，访客在 P06、P07 照超时取消显示（Kelvin 2026-11-08 决定，HANDOFF 0.90），P06、P07 的线框与文案不变。
 
 ## 0.18 修订要点
 
@@ -266,6 +274,7 @@ V1 金额与个人资料元素：
 | A08 | 后台店铺装修（0.4） | `/admin/store-design` | — |
 | A09 | 后台站点设置（0.7） | `/admin/settings` | — |
 | A10 | 后台分类（0.17） | `/admin/categories` | A04 |
+| A11 | 后台 Stripe 待处理（0.19） | `/admin/stripe-pending` | — |
 
 会员订单详情路径 `/account/order` 不带订单号；页面以不含订单号的内部引用在请求体中取单，服务端按会员会话校验归属。
 
@@ -1669,7 +1678,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 
 - 单一管理员；后台同样支持英文、中文、马来文，默认英文。
 - 每页顶部常驻 `[admin.demo_banner]`，作为后台每页的演示提示（★）；各页另有操作旁提示。
-- 桌面：左侧导航 + 右侧内容；手机：顶部 ☰ 导航，表格改为卡片列表。导航项依次为 `[admin.nav_orders]`、`[admin.nav_refunds]`、`[admin.nav_products]`、`[admin.nav_categories]`（0.17）、`[admin.nav_coupons]`、`[admin.nav_shipping]`、`[admin.nav_stock_resets]`、`[admin.nav_store_design]`（0.4）、`[admin.nav_settings]`（0.7），界面语言切换用 `[common.lang_*]`；A02 线框展开写出导航，A03–A10 以「☰ 导航」标注代替。手机顶栏「☰ [admin.nav_*]」显示当前页的导航项名称。
+- 桌面：左侧导航 + 右侧内容；手机：顶部 ☰ 导航，表格改为卡片列表。导航项依次为 `[admin.nav_orders]`、`[admin.nav_refunds]`、`[admin.nav_stripe_pending]`（0.19）、`[admin.nav_products]`、`[admin.nav_categories]`（0.17）、`[admin.nav_coupons]`、`[admin.nav_shipping]`、`[admin.nav_stock_resets]`、`[admin.nav_store_design]`（0.4）、`[admin.nav_settings]`（0.7），界面语言切换用 `[common.lang_*]`；A02 线框展开写出导航，A03–A11 以「☰ 导航」标注代替。手机顶栏「☰ [admin.nav_*]」显示当前页的导航项名称。
 - 除 A01 外每页右上角常驻 `[admin.logout]`：桌面在 `[admin.demo_banner]` 右侧，手机在顶栏右端；退出后撤销当前后台会话、回到 A01（0.8）。
 - 表格列头、状态值、按钮与区块标题同样都用 `[key]`；`<…>` 为运行时数据，与前台约定相同。
 - 所有权限由服务端检查，前端隐藏按钮不代替授权（DESIGN 1.9「权限与资料保护」）。
@@ -2495,6 +2504,90 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 | 标记 | 元素 | 依据 DESIGN 1.18 小节 |
 | --- | --- | --- |
 | — | 本页不涉及金额与个人资料；保存核对版本号，「分类已被改动」时不自动合并；新建与每改一项写审计 | 「计价、优惠、积分与库存」（第 14 条） |
+
+## A11 后台 Stripe 待处理（0.19）
+
+- **目的**：处置 Stripe 测试环境里需要人工决定的两类记录：已告警而订单仍待支付的结账记录（作废并取消订单），与失败的迟到付款退款（重试）（DESIGN 1.22「Stripe 测试环境支付」第 11 条；REQUIREMENTS 1.18「管理后台」）。
+- **入口**：后台导航 `[admin.nav_stripe_pending]`（排在 `[admin.nav_refunds]` 之后）；运营告警邮件里的类别码与对象 ID（第一个列表对照结账记录 ID，第二个列表对照退款失败告警的退款尝试 ID；邮件不带链接，管理员自行打开本页对照）。
+- **去向**：—（订单号只作文字显示，不链到 A02）。
+- **演示提示**：★ `[admin.demo_banner]`；`[admin.stripe_pending_note]`。
+
+桌面：
+
+```text
+| [admin.demo_banner]                                                   |
++-----------+-----------------------------------------------------------+
+| ☰ 导航     | [admin.nav_stripe_pending]                                |
+|           | [admin.stripe_pending_note]                               |
+|           |                                                           |
+|           | [admin.stripe_pending_checkouts_title]                    |
+|           |  [admin.col_checkout_record] [admin.filter_status] [pay.order_no] [admin.col_created] [admin.col_alerted] |
+|           |  #<记录 ID> [admin.checkout_status_*] [K]<订单号> <时间> <时间> ( [admin.stripe_void] ) |
+|           |  （没有时只显示 [admin.stripe_pending_none]）               |
+|           |                                                           |
+|           | [admin.stripe_pending_refunds_title]                      |
+|           |  [admin.stripe_pending_refunds_note]                      |
+|           |  [admin.col_checkout_record] [admin.col_refund_attempt] [pay.order_no] [admin.col_amount] [admin.col_attempted] [admin.col_error_type] |
+|           |  #<记录 ID> #<尝试 ID> [K]<订单号> [M1]<金额> <时间> <类别或 —> ( [admin.stripe_refund_retry] ) |
+|           |  （没有时只显示 [admin.stripe_pending_none]）               |
++-----------+-----------------------------------------------------------+
+```
+
+作废确认框（桌面与手机相同）：
+
+```text
+| [admin.stripe_void_confirm_title]                  |
+| [admin.stripe_void_confirm_body]                   |
+| [ ] [admin.stripe_void_verified]                   |
+| ( [common.cancel] )  ( [admin.stripe_void_submit] ) |
+```
+
+手机：
+
+```text
+| [admin.demo_banner]            |
+| ☰  [admin.nav_stripe_pending]  |
+| [admin.stripe_pending_note]    |
+| [admin.stripe_pending_checkouts_title] |
+| #<记录 ID> [admin.checkout_status_*] |
+|  [pay.order_no] [K]<订单号>     |
+|  [admin.col_created] <时间>     |
+|  [admin.col_alerted] <时间>     |
+|  ( [admin.stripe_void] )       |
+| [admin.stripe_pending_refunds_title] |
+| [admin.stripe_pending_refunds_note] |
+| #<记录 ID> [admin.col_refund_attempt] #<尝试 ID> |
+|  [pay.order_no] [K]<订单号>     |
+|  [M1]<金额>                     |
+|  [admin.col_attempted] <时间>   |
+|  [admin.col_error_type] <类别或 —> |
+|  ( [admin.stripe_refund_retry] ) |
+```
+
+说明：
+
+- 两个列表来自同一个接口，打开页面时读取一次；不分页，各按服务端给出的顺序显示（结账记录按告警时间从早到晚，退款按尝试 ID 从小到大）。读取失败显示 `[common.error_retry]` 与 `[admin.reload]`。两类都没有记录时，各自标题下显示 `[admin.stripe_pending_none]`。
+- 记录 ID 与尝试 ID 都以 `#` 加数字显示：第一个列表的记录 ID 对照结账记录告警邮件里的结账记录 ID；第二个列表的尝试 ID 对照退款失败告警邮件（`stripe_refund_rejected`、`stripe_refund_failed_after_success` 等以退款尝试为对象的类别）里的退款尝试 ID。以结账记录为对象的退款告警（`stripe_late_payment_unrefundable`、迟到付款的 `stripe_refund_cap`）没有可对照的尝试，不在第二个列表，订单仍待支付时它的结账记录出现在第一个列表；不显示 Stripe 的任何 ID、付款页地址、收货资料与 Stripe 返回的客户资料（DESIGN 1.22 第 11 条、第 10 条）。
+- 记录状态：creating 显示 `[admin.checkout_status_creating]`，open 显示 `[admin.checkout_status_open]`，complete 显示 `[admin.checkout_status_complete]`。错误类别是 Stripe 给出的类别码原文（如 invalid_request_error），为空时显示 —。时间的写法同 A03 的尝试时间。
+- `[admin.stripe_void]` 打开作废确认框，标题里的 `{id}` 为记录 ID、`{order}` 为订单号。`[admin.stripe_void_verified]` 未勾选时 `[admin.stripe_void_submit]` 禁用；`[common.cancel]` 关闭确认框，不发请求。提交中按钮禁用。结果在确认框关闭后显示在该列表标题下方，并重新读取两个列表：
+  - 服务端查得 Stripe 已付款、订单已确认：`[admin.stripe_void_confirmed]`；
+  - 服务端查得会话已结束（或付款不符、已建全额退款）、订单已取消：`[admin.stripe_void_cancelled]`；
+  - 凭管理员的核对作废并取消：`[admin.stripe_void_voided]`；
+  - 记录在此期间已变化，或记录不存在（404）：`[admin.stripe_pending_changed]`；
+  - 本站记录已显示付款而 Stripe 暂不可用：`[admin.stripe_void_unavailable]`（确认框关闭，行不变）；
+  - 其他失败：`[common.error_retry]`。
+- `[admin.stripe_refund_retry]` 直接发出重试（与 A03 的重试相同，不另设确认框），提交中按钮禁用。成功显示 `[admin.stripe_late_refund_retried]` 并重新读取（新尝试处理中，该行从列表消失）；不能重试（最新一次已不是失败，或并发的另一次已成功）或记录不存在（404）显示 `[admin.stripe_pending_changed]` 并重新读取；会超过付款金额显示 A03 已有的 `[admin.stripe_refund_blocked]`；其他失败显示 `[common.error_retry]`。
+- 处理完的记录不再列出：结账记录在作废、确认或取消之后消失；退款在最新一次尝试不再是失败之后消失（DESIGN 1.22 第 11 条，两类各按自己的条件）。本页不显示历次尝试，重试后新尝试的处理中与已退回不在本页显示，到 Stripe 后台核对；再次失败时它以新的尝试 ID 重新列出，并另有告警邮件。
+- 后台会话失效时同其他后台页面回到 A01。
+
+金额与个人资料元素：
+
+| 标记 | 元素 | 依据 DESIGN 1.22 小节 |
+| --- | --- | --- |
+| M1 | 迟到或不符付款的退款金额，等于该付款的全额（第 6 条）；重试金额与原尝试相同，同一付款的处理中与已退合计不超过付款金额 | 「Stripe 测试环境支付」（第 6、8、11 条） |
+| — | 作废前服务端先向 Stripe 查询一次；查得确定结果照现有规则处理，查不出结果等情形才凭管理员的核对作废并取消订单 | 「Stripe 测试环境支付」（第 11 条第（1）项） |
+| — | 作废后若该会话仍被付款，按迟到付款全额退款，订单保持已取消 | 「Stripe 测试环境支付」（第 6、11 条） |
+| — | 只显示对账字段与订单号，不显示收货资料、Stripe ID 与客户资料 | 「Stripe 测试环境支付」（第 10、11 条） |
 
 ## 演示提示汇总
 

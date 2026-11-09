@@ -25,11 +25,14 @@ apply_refund_object 之后、提交之前写入事件记录；已找到本站记
 环境或被拒时整个事务回滚、不留事件记录，由 Stripe 重发。webhook 接口（签名校验、请求体大小与
 livemode 的拒绝）由 SHOP-TASK-129 实现。
 
-调用 Stripe 时不持有任何数据库锁、不留着读事务；写入由被调用的函数按统一顺序加锁。运营告警邮件
-尚未接入：Checkout 查询结果为 live 与 rejected 时先记一条 error 级日志，只含类别与本站记录 ID
-（沿用 stripe_confirm.py 的类别）；退款查询被拒记 stripe_webhook_refund_rejected，退款写入在
-提交之后按 alert_category 的结果记一条（沿用 stripe_refund.py 的类别），都只含尝试 ID；除此之外
-本模块不写日志，日志不含事件 ID 与事件、会话或退款原文。库里的时间一律是不带时区的 UTC。
+调用 Stripe 时不持有任何数据库锁、不留着读事务；写入由被调用的函数按统一顺序加锁。Checkout
+查询结果为 live 与 rejected 时记一条 error 级日志，只含类别与本站记录 ID（沿用 stripe_confirm.py
+的类别），按 docs/DESIGN.md 1.21「运营告警邮件」第 6 条与 docs/HANDOFF.md 0.88（SHOP-TASK-220）
+在日志之后紧接着调用 ops_alert.alert(该类别, ("stripe_checkout", 记录 ID))；退款查询被拒记
+stripe_webhook_refund_rejected，退款写入在提交之后按 alert_category 的结果记一条（沿用
+stripe_refund.py 的类别），都只含尝试 ID，这两条日志之后紧接着以同一类别与 ("stripe_refund",
+尝试 ID) 调用 ops_alert.alert（SHOP-TASK-221）；除此之外本模块不写
+日志，日志不含事件 ID 与事件、会话或退款原文。库里的时间一律是不带时区的 UTC。
 """
 
 from __future__ import annotations
@@ -47,7 +50,9 @@ from sqlalchemy.orm import Session
 from app.models import StripeCheckout, StripeEvent, StripeRefund
 from app.models.order import ACTOR_SYSTEM
 from app.models.stripe import CHECKOUT_COMPLETE, EVENT_IGNORED, EVENT_PROCESSED, PAYMENT_PAID
+from app.services import ops_alert
 from app.services.payment import StripeEndResult, cancel_after_stripe_end
+from app.services.stripe_checkout import ALERT_TARGET_KIND
 from app.services.stripe_confirm import (
     LOG_CONFIRM_REJECTED,
     LOG_LIVEMODE,
@@ -64,11 +69,12 @@ from app.services.stripe_gateway import (
     WebhookEvent,
 )
 from app.services.stripe_overdue import FAILED_INTENT_STATUSES
-from app.services.stripe_refund import alert_category, apply_refund_object
+from app.services.stripe_refund import ALERT_TARGET_ATTEMPT, alert_category, apply_refund_object
 
 logger = logging.getLogger(__name__)
 
-# 告警邮件接入前的 error 级日志类别（只含尝试 ID）：已找到本站尝试而退款查询被拒。
+# 告警的 error 级日志类别（只含尝试 ID），也是 ops_alert.alert 的类别码：已找到本站尝试而
+# 退款查询被拒。
 LOG_WEBHOOK_REFUND_REJECTED = "stripe_webhook_refund_rejected"
 
 # 元数据里的订单 ID 与尝试 ID：十进制数字。位数上限只为不让超出整数列的取值进查询，超出按
@@ -161,7 +167,8 @@ def _handle_checkout(
     """Checkout 事件：找回本站记录，以事件会话 ID 向 Stripe 查询一次，按查询到的会话分派。
 
     找不到记录为 ignored，不调用 Stripe。查询 unavailable 为 unavailable；live 记
-    stripe_livemode、rejected 记 stripe_confirm_rejected（只含记录 ID），都为 unavailable。这三种
+    stripe_livemode、rejected 记 stripe_confirm_rejected（只含记录 ID），日志之后各以同一类别与
+    ("stripe_checkout", 记录 ID) 调用一次 ops_alert.alert，都为 unavailable。这三种
     都不留事件记录、订单与记录不变。分派见 _dispatch；它没有经 record_event 写事件记录而结果为
     processed 时另由 _record_only 写。捕获 EventAlreadyRecorded 时回滚并返回 duplicate。
     """
@@ -173,9 +180,11 @@ def _handle_checkout(
     result = gateway.retrieve_checkout_session(event_session.id)
     if result.outcome is StripeOutcome.LIVE:
         logger.error("%s checkout=%d", LOG_LIVEMODE, view.checkout_id)
+        ops_alert.alert(LOG_LIVEMODE, (ALERT_TARGET_KIND, view.checkout_id))
         return WebhookResult.UNAVAILABLE
     if result.outcome is StripeOutcome.REJECTED:
         logger.error("%s checkout=%d", LOG_CONFIRM_REJECTED, view.checkout_id)
+        ops_alert.alert(LOG_CONFIRM_REJECTED, (ALERT_TARGET_KIND, view.checkout_id))
         return WebhookResult.UNAVAILABLE
     if result.outcome is not StripeOutcome.OK or result.value is None:
         return WebhookResult.UNAVAILABLE
@@ -268,7 +277,8 @@ def _handle_refund(
     这两种都不留事件记录、尝试不变。查询 ok 时在同一事务里调用 apply_refund_object（它锁住
     尝试并核对 PaymentIntent 与退款 ID 或元数据），再写 processed 的事件记录并 flush：撞上
     事件 ID 的唯一约束时回滚并返回 duplicate、不记告警；否则提交，提交之后按 alert_category
-    记告警（类别与尝试 ID）。不按事件里的退款快照写状态（第 8 条：先查询再更新）；不调用
+    记告警（类别与尝试 ID）。这两种告警日志之后都紧接着以同一类别与 ("stripe_refund", 尝试 ID)
+    调用一次 ops_alert.alert。不按事件里的退款快照写状态（第 8 条：先查询再更新）；不调用
     refresh_refund_attempt 与 submit_refund_attempt（它们自己提交）。
     """
     attempt_id = _find_attempt(db, event_refund)
@@ -279,6 +289,7 @@ def _handle_refund(
     result = gateway.retrieve_refund(event_refund.id)
     if result.outcome is StripeOutcome.REJECTED:
         logger.error("%s attempt=%d", LOG_WEBHOOK_REFUND_REJECTED, attempt_id)
+        ops_alert.alert(LOG_WEBHOOK_REFUND_REJECTED, (ALERT_TARGET_ATTEMPT, attempt_id))
         return WebhookResult.UNAVAILABLE
     if result.outcome is not StripeOutcome.OK or result.value is None:
         return WebhookResult.UNAVAILABLE
@@ -294,6 +305,7 @@ def _handle_refund(
     log = alert_category(applied)
     if log is not None:
         logger.error("%s attempt=%d", log, attempt_id)
+        ops_alert.alert(log, (ALERT_TARGET_ATTEMPT, attempt_id))
     return WebhookResult.PROCESSED
 
 

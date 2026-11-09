@@ -10,6 +10,10 @@ SHOP-TASK-128 验收标准的约定注明「验收：」。Checkout 事件见 te
 已付款的 expired 会话记录。Stripe 一律用 FakeStripeGateway（第 9 条：CI 与本地测试不调用
 Stripe）。被测函数会提交与回滚，测试数据都先提交。SQLite 不支持行锁，加锁只按代码与 MySQL
 行为审阅。
+
+运营告警邮件（SHOP-TASK-221）：ops_alert.alert 一律以 monkeypatch 替换为记录调用的替身（不入队、
+不连 SMTP 与 Redis）；补了告警断言的测试在文档字符串里写明它守住的 docs/DESIGN.md 1.21「运营
+告警邮件」第 6 条哪一行。
 """
 
 from __future__ import annotations
@@ -38,7 +42,7 @@ from app.models.stripe import (
     STRIPE_REFUND_PENDING,
     STRIPE_REFUND_SUCCEEDED,
 )
-from app.services import stripe_webhook
+from app.services import ops_alert, stripe_webhook
 from app.services.stripe_gateway import (
     FakeStripeGateway,
     Refund,
@@ -77,6 +81,9 @@ QUERY_REJECTED: StripeResult[Any] = StripeResult(
 
 FINGERPRINT = "0f" * 32
 
+# ops_alert.alert 的（类别, 对象）。
+Alert = tuple[str, object]
+
 _SEQUENCE = itertools.count(1)
 
 
@@ -109,6 +116,18 @@ def db(engine: Engine) -> Iterator[Session]:
     with Session(engine) as session:
         assert session.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
         yield session
+
+
+@pytest.fixture(autouse=True)
+def alerts(monkeypatch: pytest.MonkeyPatch) -> list[Alert]:
+    """以 monkeypatch 替换 ops_alert.alert，按调用顺序记下（类别, 对象）。"""
+    calls: list[Alert] = []
+
+    def record(category: str, target: object = None, **_: object) -> None:
+        calls.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
+    return calls
 
 
 def _checkout(db: Session) -> int:
@@ -252,12 +271,14 @@ def _alerts(caplog: pytest.LogCaptureFixture) -> list[str]:
 
 
 def test_updated_event_writes_the_queried_succeeded_refund(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 8 条「Stripe 退款 ID、调用结果与之后的退款事件……更新记录状态」「退款事件只作触发，
     收到后先查询再更新」与第 7 条「事件 ID 的去重记录与它引起的……退款改动在同一个数据库
     事务里提交」：refund.updated 而查询到 succeeded 时 pending 改为 succeeded，事件记录为
-    processed。"""
+    processed。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_failed_after_success 与
+    stripe_refund_mismatch 两行：pending 改为 succeeded 没有告警日志，不调用 ops_alert.alert。"""
     attempt_id = _attempt(db, stripe_refund_id=REFUND_ID)
     gateway = FakeStripeGateway(_ok(_refund(attempt_id, "succeeded")))
     webhook = _webhook(UPDATED_EVENT, _refund(attempt_id, "pending"), event_id="evt_test_updated")
@@ -273,6 +294,7 @@ def test_updated_event_writes_the_queried_succeeded_refund(
     )
     assert _stripe_events(db) == [("evt_test_updated", UPDATED_EVENT, EVENT_PROCESSED, NOW)]
     assert _alerts(caplog) == []
+    assert alerts == []
 
 
 def test_failed_event_follows_the_queried_refund(db: Session) -> None:
@@ -306,11 +328,14 @@ def test_stale_pending_event_does_not_regress_succeeded(db: Session) -> None:
 
 
 def test_failed_after_success_is_written_and_alerted_once(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 8 条「Stripe 允许已成功的退款之后变为失败，这时照查询结果改为 failed、释放额度」
     「发现变为 failed 就照上面改并告警」：已 succeeded 的尝试查询到 failed 时改为 failed，提交
-    之后记一次 stripe_refund_failed_after_success（只含尝试 ID）。"""
+    之后记一次 stripe_refund_failed_after_success（只含尝试 ID）。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_failed_after_success 一行（「改为 failed
+    之后」，对象为退款尝试 ID）：日志之后以 ("stripe_refund", 尝试 ID) 调用一次
+    ops_alert.alert。"""
     attempt_id = _attempt(db, STRIPE_REFUND_SUCCEEDED, stripe_refund_id=REFUND_ID)
     gateway = FakeStripeGateway(_ok(_refund(attempt_id, "failed")))
     webhook = _webhook(FAILED_EVENT, _refund(attempt_id, "failed"))
@@ -321,6 +346,7 @@ def test_failed_after_success_is_written_and_alerted_once(
     assert attempt.status == STRIPE_REFUND_FAILED
     assert attempt.active_checkout_id is None
     assert _alerts(caplog) == [f"{LOG_REFUND_FAILED_AFTER_SUCCESS} attempt={attempt_id}"]
+    assert alerts == [(LOG_REFUND_FAILED_AFTER_SUCCESS, ("stripe_refund", attempt_id))]
     assert [row[2] for row in _stripe_events(db)] == [EVENT_PROCESSED]
 
 
@@ -343,11 +369,14 @@ def test_attempt_without_refund_id_is_found_by_metadata(db: Session) -> None:
 
 
 def test_queried_payment_intent_mismatch_alerts_without_writing(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 8 条「退款接口的响应、webhook 与定时查询共用同一写入规则」与 HANDOFF 0.54 告警时间列
     「只给会反复出现的告警（Stripe 退款对象与尝试不符等）去重」：查询到的 PaymentIntent 不符时
-    不改状态与退款 ID，写告警时间并在提交之后记 stripe_refund_mismatch。"""
+    不改状态与退款 ID，写告警时间并在提交之后记 stripe_refund_mismatch。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_mismatch 一行（「查询到的 Stripe 退款与
+    尝试不符」，对象为退款尝试 ID）：日志之后以 ("stripe_refund", 尝试 ID) 调用一次
+    ops_alert.alert。"""
     attempt_id = _attempt(db, stripe_refund_id=REFUND_ID)
     before = _snapshot(db, attempt_id)
     wrong = _refund(attempt_id, "succeeded", payment_intent=OTHER_PI)
@@ -360,6 +389,7 @@ def test_queried_payment_intent_mismatch_alerts_without_writing(
     before.pop("alerted_at")
     assert after == before
     assert _alerts(caplog) == [f"{LOG_REFUND_MISMATCH} attempt={attempt_id}"]
+    assert alerts == [(LOG_REFUND_MISMATCH, ("stripe_refund", attempt_id))]
     assert [row[2] for row in _stripe_events(db)] == [EVENT_PROCESSED]
 
 
@@ -388,9 +418,11 @@ def test_refund_without_a_site_attempt_is_ignored(db: Session, attempt_ref: str 
     assert _stripe_events(db) == [("evt_test_stranger", UPDATED_EVENT, EVENT_IGNORED, NOW)]
 
 
-def test_stripe_unavailable_leaves_no_event_record(db: Session) -> None:
+def test_stripe_unavailable_leaves_no_event_record(db: Session, alerts: list[Alert]) -> None:
     """第 7 条「处理失败整个事务回滚、回 5xx，由 Stripe 重发」与 HANDOFF 0.55「处理中 Stripe
-    不可用……不留事件记录、回 503」：查询不可用为 unavailable，没有事件记录、尝试不变。"""
+    不可用……不留事件记录、回 503」：查询不可用为 unavailable，没有事件记录、尝试不变。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_webhook_refund_rejected 一行（只有查询「被以请求
+    错误拒绝」才告警）：不可用没有告警日志，不调用 ops_alert.alert。"""
     attempt_id = _attempt(db, stripe_refund_id=REFUND_ID)
     before = _snapshot(db, attempt_id)
     gateway = FakeStripeGateway(UNAVAILABLE)
@@ -401,14 +433,18 @@ def test_stripe_unavailable_leaves_no_event_record(db: Session) -> None:
     assert _paths(gateway) == [("GET", f"/v1/refunds/{REFUND_ID}")]
     assert _snapshot(db, attempt_id) == before
     assert _stripe_events(db) == []
+    assert alerts == []
 
 
 def test_rejected_query_is_unavailable_and_alerts(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 7 条「处理失败整个事务回滚、回 5xx，由 Stripe 重发」与 HANDOFF 0.55「已找到本站记录、
     但向 Stripe……查询被拒……整个事务回滚、不留事件记录、回 503」：为 unavailable，没有事件
-    记录、尝试不变，记一次只含尝试 ID 的 stripe_webhook_refund_rejected。"""
+    记录、尝试不变，记一次只含尝试 ID 的 stripe_webhook_refund_rejected。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_webhook_refund_rejected 一行（「收到退款事件后向
+    Stripe 查询该退款被以请求错误拒绝」，对象为退款尝试 ID）：日志之后以 ("stripe_refund",
+    尝试 ID) 调用一次 ops_alert.alert。"""
     attempt_id = _attempt(db, stripe_refund_id=REFUND_ID)
     before = _snapshot(db, attempt_id)
     gateway = FakeStripeGateway(QUERY_REJECTED)
@@ -419,6 +455,7 @@ def test_rejected_query_is_unavailable_and_alerts(
     assert _snapshot(db, attempt_id) == before
     assert _stripe_events(db) == []
     assert _alerts(caplog) == [f"{LOG_WEBHOOK_REFUND_REJECTED} attempt={attempt_id}"]
+    assert alerts == [(LOG_WEBHOOK_REFUND_REJECTED, ("stripe_refund", attempt_id))]
 
 
 # ---------------------------------------------------------------------------
@@ -443,11 +480,16 @@ def test_same_event_again_is_duplicate_without_calling_stripe(db: Session) -> No
 
 
 def test_concurrent_same_event_is_duplicate_and_rolls_back_the_change(
-    db: Session, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+    db: Session,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+    alerts: list[Alert],
 ) -> None:
     """第 7 条「事件 ID 的去重记录与它引起的订单、积分或退款改动在同一个数据库事务里提交」：
     普通读没查到而写事件记录时撞上同一事件 ID，返回 duplicate，退款改动随之回滚、尝试未改，
-    不记告警（本会成功后又失败而告警）。"""
+    不记告警（本会成功后又失败而告警）。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_refund_failed_after_success 一行（「改为 failed
+    之后」）：改动随事务回滚、没有告警日志，不调用 ops_alert.alert。"""
     attempt_id = _attempt(db, STRIPE_REFUND_SUCCEEDED, stripe_refund_id=REFUND_ID)
     db.add(
         StripeEvent(
@@ -468,3 +510,4 @@ def test_concurrent_same_event_is_duplicate_and_rolls_back_the_change(
     assert _snapshot(db, attempt_id) == before
     assert _stripe_events(db) == [("evt_test_race", FAILED_EVENT, EVENT_PROCESSED, EARLIER)]
     assert _alerts(caplog) == []
+    assert alerts == []

@@ -12,10 +12,13 @@ webhook 事件的解析（parse_webhook_event）依据第 7 条「只处理第 4
 退款状态事件，其他类型回 200 不处理」与 docs/HANDOFF.md 0.55 的落实写法（处理的事件类型），
 只按白名单取出事件 ID、类型、livemode 与 data.object 的对账字段，不保留原文。
 
-本模块只做 HTTP 调用、结果归类与签名校验，不接业务、不读写数据库。运营告警邮件尚未接入：
-设计写「告警」之处先记一条 error 级日志，只含类别（本模块没有本站记录 ID）。除这两类日志
-（stripe_key_not_test、stripe_livemode）外不写日志；请求与响应原文、密钥、邮箱都不出现在
-异常消息、repr 或返回值里，返回值只有类别与按白名单取出的对账字段。
+本模块只做 HTTP 调用、结果归类与签名校验，不接业务、不读写数据库。设计写「告警」之处
+记一条 error 级日志，只含类别（本模块没有本站记录 ID）。除这两类日志（stripe_key_not_test、
+stripe_livemode）外不写日志；请求与响应原文、密钥、邮箱都不出现在异常消息、repr 或返回值里，
+返回值只有类别与按白名单取出的对账字段。按 docs/DESIGN.md 1.21「运营告警邮件」第 6 条与
+docs/HANDOFF.md 0.88（SHOP-TASK-219），stripe_key_not_test 在每个进程第一次判定的那条日志之后
+调用 ops_alert.alert（对象为无）；不带记录 ID 的 stripe_livemode 日志不入队，带结账记录 ID 的
+告警由调用方另报。
 
 不发送 Stripe-Version 头，沿用账户默认的 API 版本：2026-10-15 的核验即按账户默认版本完成，
 升级账户 API 版本前须先在测试环境重跑核验。
@@ -43,6 +46,7 @@ from fastapi import Request
 
 from app.core.config import Settings
 from app.models.stripe import EVENT_TYPE_MAX_LENGTH, STRIPE_ID_MAX_LENGTH
+from app.services import ops_alert
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +63,7 @@ WEBHOOK_SECRET_PREFIX = "whsec_"
 # 第 7 条的时间容差：当前时间与签名时间戳相差不超过 300 秒。
 SIGNATURE_TOLERANCE_SECONDS = 300
 
-# 告警邮件接入前的 error 级日志类别（只记类别）。
+# error 级日志类别（只记类别）；LOG_KEY_NOT_TEST 同时是运营告警的类别码。
 LOG_KEY_NOT_TEST = "stripe_key_not_test"
 LOG_LIVEMODE = "stripe_livemode"
 
@@ -88,7 +92,8 @@ def stripe_configured(settings: Settings) -> bool:
     rk_test_ 开头、webhook 签名密钥以 whsec_ 开头。
 
     密钥非空但不是测试前缀（含 sk_live_、rk_live_）时另记一条 error 级日志，同一进程只记一次，
-    内容只有类别 stripe_key_not_test。供适配器与之后的站点设置接口共用。
+    内容只有类别 stripe_key_not_test，记完报一条同类别的运营告警（对象为无）。
+    供适配器与之后的站点设置接口共用。
     """
     key = settings.stripe_secret_key
     test_key = key.startswith(TEST_KEY_PREFIXES)
@@ -110,6 +115,7 @@ def _warn_key_not_test() -> None:
             return
         _key_warning_logged = True
     logger.error(LOG_KEY_NOT_TEST)
+    ops_alert.alert(LOG_KEY_NOT_TEST)
 
 
 # ---------------------------------------------------------------- 传输

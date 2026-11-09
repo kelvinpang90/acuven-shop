@@ -15,6 +15,7 @@ import {
   StoreDesignProvider,
   THEME_ACCENTS,
   initialStoreDesign,
+  isStoreLogoPath,
   loadStoreDesign,
   parseStoreDesignResponse,
   readRememberedDesign,
@@ -80,6 +81,10 @@ const response = {
   featured_slugs: ["mug", "tote-bag"],
 };
 
+// 两个合格的标志提供路径（isStoreLogoPath）。
+const LOGO = "/api/store-logos/0123456789abcdef0123456789abcdef.webp";
+const OTHER_LOGO = "/api/store-logos/ffffffffffffffffffffffffffffffff.webp";
+
 function remembered(value: unknown): StoreDesignStorage & { data: Record<string, string> } {
   return memoryStorage({ [STORE_DESIGN_STORAGE_KEY]: JSON.stringify(value) });
 }
@@ -122,10 +127,39 @@ describe("store design constants", () => {
 describe("reading the store design response", () => {
   // SHOP-TASK-045 的响应字段 {theme, accent, home_blocks, featured_slugs}：合格的响应原样取出，区块与精选保持给出的顺序。
   it("accepts a valid response", () => {
-    expect(parseStoreDesignResponse(response)).toEqual({ design: responseDesign, featuredSlugs: ["mug", "tote-bag"] });
+    expect(parseStoreDesignResponse(response)).toEqual({ design: responseDesign, featuredSlugs: ["mug", "tote-bag"], logo: null });
     expect(parseStoreDesignResponse({ ...response, accent: null, featured_slugs: [] })).toEqual({
       design: { ...responseDesign, accent: null },
       featuredSlugs: [],
+      logo: null,
+    });
+  });
+
+  // HANDOFF 0.84「logo 为 SHOP-TASK-214 的 isStoreLogoPath 为真的字符串时取用」与 DESIGN 1.20 第 15 条「读取与显示」：
+  // 合格的提供路径原样取出，主题、主色、区块与精选照常。
+  it("takes a valid logo path", () => {
+    expect(parseStoreDesignResponse({ ...response, logo: LOGO })).toEqual({
+      design: responseDesign,
+      featuredSlugs: ["mug", "tote-bag"],
+      logo: LOGO,
+    });
+  });
+
+  // HANDOFF 0.84「否则（null、缺少、其他值）按没有标志处理，不影响主题等其余设置」：logo 为 null、缺少或不合格时为 null，整份响应仍然有效。
+  it.each<[string, unknown]>([
+    ["null", null],
+    ["missing", undefined],
+    ["another prefix", "/api/product-images/0123456789abcdef0123456789abcdef.webp"],
+    ["an absolute URL", `https://shop.example${LOGO}`],
+    ["upper case", LOGO.toUpperCase()],
+    ["empty", ""],
+    ["a number", 1],
+    ["an object", { path: LOGO }],
+  ])("treats a logo that is %s as no logo and keeps the other settings", (_label, logo) => {
+    expect(parseStoreDesignResponse({ ...response, logo })).toEqual({
+      design: responseDesign,
+      featuredSlugs: ["mug", "tote-bag"],
+      logo: null,
     });
   });
 
@@ -163,17 +197,63 @@ describe("reading the store design response", () => {
   });
 });
 
+describe("store logo paths", () => {
+  // 接口记录 app/api/admin_store_logo.py 的 LogoOut「标志的提供路径 /api/store-logos/<文件名>.webp」与 HANDOFF 0.84「logo 只认
+  // /api/store-logos/ 加 32 位小写十六进制加 .webp 的字符串」：恰为这一形状的路径合格。
+  it.each(["/api/store-logos/0123456789abcdef0123456789abcdef.webp", "/api/store-logos/ffffffffffffffffffffffffffffffff.webp"])(
+    "accepts %s",
+    (path) => {
+      expect(isStoreLogoPath(path)).toBe(true);
+    },
+  );
+
+  // 同一句：大写、31 或 33 位、非十六进制、其他前缀与扩展名、前后多出字符、空串与非字符串（null 也不是路径，读取另行允许 null）都不合格。
+  it.each<[string, unknown]>([
+    ["upper case", "/api/store-logos/0123456789ABCDEF0123456789ABCDEF.webp"],
+    ["one upper-case digit", "/api/store-logos/0123456789abcdeF0123456789abcdef.webp"],
+    ["31 digits", "/api/store-logos/0123456789abcdef0123456789abcde.webp"],
+    ["33 digits", "/api/store-logos/0123456789abcdef0123456789abcdef0.webp"],
+    ["a non-hex letter", "/api/store-logos/0123456789abcdeg0123456789abcdef.webp"],
+    ["another prefix", "/api/product-images/0123456789abcdef0123456789abcdef.webp"],
+    ["no leading slash", "api/store-logos/0123456789abcdef0123456789abcdef.webp"],
+    ["an absolute URL", "https://shop.example/api/store-logos/0123456789abcdef0123456789abcdef.webp"],
+    ["another extension", "/api/store-logos/0123456789abcdef0123456789abcdef.png"],
+    ["upper-case extension", "/api/store-logos/0123456789abcdef0123456789abcdef.WEBP"],
+    ["a query string", "/api/store-logos/0123456789abcdef0123456789abcdef.webp?v=1"],
+    ["a trailing newline", "/api/store-logos/0123456789abcdef0123456789abcdef.webp\n"],
+    ["empty", ""],
+    ["null", null],
+    ["a number", 1],
+    ["an object", { logo: "/api/store-logos/0123456789abcdef0123456789abcdef.webp" }],
+  ])("rejects %s", (_label, value) => {
+    expect(isStoreLogoPath(value)).toBe(false);
+  });
+});
+
 describe("remembering the store design in this browser", () => {
   // Kelvin 2026-10-07 决定（HANDOFF 0.38）「本浏览器在 localStorage 记住上次取到的主题、主色与首页区块（不记精选商品）」：
   // 写在 acuven-shop.store-design 一个键下，读回同一份设置。
   it("stores theme, accent and blocks under one key without the featured products", () => {
     const storage = memoryStorage();
-    const withFeatured: StoreDesignValue = { ...responseDesign, featuredSlugs: ["mug"] };
+    const withFeatured: StoreDesignValue = { ...responseDesign, featuredSlugs: ["mug"], logo: null };
     rememberDesign(storage, withFeatured);
     expect(Object.keys(storage.data)).toEqual([STORE_DESIGN_STORAGE_KEY]);
     const stored = JSON.parse(storage.data[STORE_DESIGN_STORAGE_KEY] ?? "") as Record<string, unknown>;
     expect(stored).toEqual({ theme: "pasar", accent: "tomato", home_blocks: response.home_blocks });
     expect(readRememberedDesign(storage)).toEqual(responseDesign);
+  });
+
+  // HANDOFF 0.84「不放进 StoreDesign、不记在本浏览器（记住的形状与 parseStoreDesign 不变）」：有标志时记住的值仍只有主题、主色与区块，
+  // 读回的也没有 logo。
+  it("does not remember the logo", () => {
+    const storage = memoryStorage();
+    const withLogo: StoreDesignValue = { ...responseDesign, featuredSlugs: ["mug"], logo: LOGO };
+    rememberDesign(storage, withLogo);
+    const stored = JSON.parse(storage.data[STORE_DESIGN_STORAGE_KEY] ?? "") as Record<string, unknown>;
+    expect(stored).toEqual({ theme: "pasar", accent: "tomato", home_blocks: response.home_blocks });
+    expect(storage.data[STORE_DESIGN_STORAGE_KEY]).not.toContain("store-logos");
+    expect(readRememberedDesign(storage)).toEqual(responseDesign);
+    expect(readRememberedDesign(storage)).not.toHaveProperty("logo");
   });
 
   // SHOP-TASK-054 验收「读取时校验，不合格即忽略」。
@@ -204,7 +284,12 @@ describe("remembering the store design in this browser", () => {
 describe("first render", () => {
   // Kelvin 2026-10-07 决定「打开页面时先用它」与验收「请求返回前用本浏览器记住的设置」：精选商品等设置返回（null）。
   it("starts from the remembered design", () => {
-    expect(initialStoreDesign(remembered(response))).toEqual({ ...responseDesign, featuredSlugs: null });
+    expect(initialStoreDesign(remembered(response))).toEqual({ ...responseDesign, featuredSlugs: null, logo: null });
+  });
+
+  // HANDOFF 0.84「打开页面时先显示文字品牌，读取返回后才换成标志」：即使记住的值里混进了 logo，初始值的 logo 仍为 null。
+  it("starts without a logo even if one sits in the remembered value", () => {
+    expect(initialStoreDesign(remembered({ ...response, logo: LOGO })).logo).toBeNull();
   });
 
   // Kelvin 2026-10-07 决定「没有记住的值时先用默认主题」与验收「没有或不合格时用现有默认值」。
@@ -214,7 +299,7 @@ describe("first render", () => {
     ["no storage", null],
     ["failing storage", brokenStorage],
   ])("starts from the defaults with %s", (_label, storage) => {
-    expect(initialStoreDesign(storage)).toEqual({ ...DEFAULT_STORE_DESIGN, featuredSlugs: null });
+    expect(initialStoreDesign(storage)).toEqual({ ...DEFAULT_STORE_DESIGN, featuredSlugs: null, logo: null });
   });
 });
 
@@ -239,7 +324,7 @@ describe("loading the store design", () => {
     stubFetch(jsonResponse(response));
     const storage = remembered({ theme: "galeri", accent: null, home_blocks: response.home_blocks });
     const result = await loadStoreDesign(storage);
-    expect(result).toEqual({ design: responseDesign, featuredSlugs: ["mug", "tote-bag"] });
+    expect(result).toEqual({ design: responseDesign, featuredSlugs: ["mug", "tote-bag"], logo: null });
     // home_blocks 本身含 { block: "featured" }，所以按属性检查：不记 featured_slugs，也不留下挑选的 slug。
     const stored = JSON.parse(storage.data[STORE_DESIGN_STORAGE_KEY] ?? "") as Record<string, unknown>;
     expect(stored).not.toHaveProperty("featured_slugs");
@@ -249,7 +334,30 @@ describe("loading the store design", () => {
     expect(settledStoreDesign(initialStoreDesign(memoryStorage()), result)).toEqual({
       ...responseDesign,
       featuredSlugs: ["mug", "tote-bag"],
+      logo: null,
     });
+  });
+
+  // HANDOFF 0.84「读取返回后才换成标志」与验收「settledStoreDesign 成功时换成返回的 logo」：返回标志时换上，换成另一个路径或 null 时随之更换；
+  // 标志不记在本浏览器。
+  it("switches to the returned logo on success", async () => {
+    stubFetch(jsonResponse({ ...response, logo: LOGO }));
+    const storage = memoryStorage();
+    const result = await loadStoreDesign(storage);
+    expect(result).toEqual({ design: responseDesign, featuredSlugs: ["mug", "tote-bag"], logo: LOGO });
+    expect(storage.data[STORE_DESIGN_STORAGE_KEY]).not.toContain("store-logos");
+    const first = settledStoreDesign(initialStoreDesign(storage), result);
+    expect(first).toEqual({ ...responseDesign, featuredSlugs: ["mug", "tote-bag"], logo: LOGO });
+    const other = { design: responseDesign, featuredSlugs: [], logo: OTHER_LOGO };
+    expect(settledStoreDesign(first, other).logo).toBe(OTHER_LOGO);
+    expect(settledStoreDesign(first, { ...other, logo: null }).logo).toBeNull();
+  });
+
+  // HANDOFF 0.84「读取失败时保持当前显示」：已显示标志时读取失败，标志与主题等都不变。
+  it("keeps the current logo when the request fails", async () => {
+    stubFetch(jsonResponse(response, 503));
+    const current: StoreDesignValue = { ...responseDesign, featuredSlugs: ["mug"], logo: LOGO };
+    expect(settledStoreDesign(current, await loadStoreDesign(memoryStorage()))).toEqual({ ...current, featuredSlugs: [] });
   });
 
   // SHOP-TASK-054 验收「请求失败时保持当前显示，不清除已记住的设置」与「响应体不合格算失败」：非 2xx、网络中断、不是 JSON、字段不合格都一样。
@@ -275,6 +383,7 @@ describe("loading the store design", () => {
     await expect(loadStoreDesign(brokenStorage)).resolves.toEqual({
       design: responseDesign,
       featuredSlugs: ["mug", "tote-bag"],
+      logo: null,
     });
   });
 });

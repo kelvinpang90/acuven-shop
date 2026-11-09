@@ -22,3 +22,16 @@
   - 不对 `min_side`、`min_long_side`、`prefix` 的取值做校验，取值由调用方用模块常量传入。
   - 存储测试另加了标志前缀写入失败时的日志核对与两个前缀常量的取值核对。
 - 验证范围：上面列出的是本次新增的测试代码，样本都在内存里生成、R2 用 Stubber 替代，不访问网络；结果由 PR 的必需 CI 检查 backend 执行。
+
+## 登记时的验收标准（原文）
+
+2026-11-06 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 图片处理——process_image(data, *, min_side=MIN_SIDE, min_long_side=MIN_SIDE)；尺寸判断改为宽与高都在 min_side 到 MAX_SIDE（4,000）之间、且 max(宽, 高) 不小于 min_long_side，仍在解码之前判断；新增模块常量 LOGO_MIN_SIDE = 40 与 LOGO_MIN_LONG_SIDE = 200；其余判断与处理（格式、单帧、PNG 文本块上限、方向、颜色、透明、去元数据、长边 1,600、WebP 质量 85、模块级处理锁、异常一律转成 ImageRejected）不变；模块说明引用 DESIGN 1.20 第 15 条
+      - 存储——put_image、get_image、delete_image 各加只限关键字的 prefix 参数，默认值为 KEY_PREFIX（product-images/），对象键为 prefix 加文件名加 .webp；新增模块常量 LOGO_KEY_PREFIX = store-logos/（写成 Python 字符串）；两个共用 client、超时与尝试次数、未配置时的行为、日志内容不变；函数与模块说明里写死 product-images/ 的句子改为按前缀说明
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_image_processing.py 新增——用标志的参数时 40×200、200×40、40×4000、4000×40 合格（并核对缩放后的展示图尺寸，长边超过 1,600 等比缩到 1,600）；39×200、100×199（长边不足 200）、40×4001 不合格；同样这些图不传参数时按商品图片的 200 到 4,000 判断（40×200 不合格）；现有测试不改。tests/test_image_store.py 新增——传 prefix=LOGO_KEY_PREFIX 时写入、读取、删除用的键都以 store-logos/ 开头，不传时仍为 product-images/；现有测试不改。每条新测试写明守住的 DESIGN 1.20 第 15 条的句子
+      - docs/task-records/SHOP-TASK-210.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明两个函数的新签名与常量，供 SHOP-TASK-211 至 213 使用；验证到什么程度，只写实际存在的测试）
+      - 改动只落在 allowed_change_paths；不改调用方（app/services/admin_product_images.py、app/api/admin_product_images.py、app/api/product_images.py）、模型与迁移、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.20 提交 a870f78 与 HANDOFF 0.84），不合并、不直推
+```

@@ -33,7 +33,7 @@ from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
 from app.core.config import Settings
-from app.services import stripe_gateway
+from app.services import ops_alert, stripe_gateway
 from app.services.stripe_gateway import (
     MAX_RESPONSE_BYTES,
     CheckoutSession,
@@ -116,6 +116,18 @@ REFUND_FORM = (
 def reset_key_warning(monkeypatch: pytest.MonkeyPatch) -> None:
     # 「同一进程只记一次」的标记是模块全局的；每条测试从未记过开始。
     monkeypatch.setattr(stripe_gateway, "_key_warning_logged", False)
+
+
+@pytest.fixture(autouse=True)
+def alerts(monkeypatch: pytest.MonkeyPatch) -> list[tuple[object, ...]]:
+    """以 monkeypatch 替换 ops_alert.alert，记下（类别, 对象）；每条测试都不入真实队列。"""
+    calls: list[tuple[object, ...]] = []
+
+    def record(category: str, target: object = None, **kwargs: object) -> None:
+        calls.append((category, target, *kwargs.values()))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
+    return calls
 
 
 class RecordingTransport:
@@ -368,16 +380,31 @@ def test_unconfigured_calls_are_unavailable_without_requests(overrides: dict[str
     "key", [LIVE_KEY, "rk_live_" + "99Zq" * 6, "pk_test_" + "99Zq" * 6, "unknown_" + "99Zq" * 6]
 )
 def test_non_test_key_logs_category_once_without_key(
-    key: str, caplog: pytest.LogCaptureFixture
+    key: str,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+    alerts: list[tuple[object, ...]],
 ) -> None:
     """守住第 1 条「其他前缀（含 sk_live_、rk_live_）一律不启用 Stripe 支付并向运营告警邮件
     报告」与验收第 2 条「另记一条 error 级日志（同一进程只记一次），内容只有类别
-    stripe_key_not_test，不含密钥的任何部分」（告警邮件接入前先记日志）。
+    stripe_key_not_test，不含密钥的任何部分」；以及 DESIGN 1.21「运营告警邮件」第 6 条
+    stripe_key_not_test 一行「配置的密钥不是测试密钥，每个进程第一次判定时」、对象「无」：
+    日志之后调用一次 ops_alert.alert(stripe_key_not_test)，之后的判定不再调用。
     """
+    logged_at_alert: list[int] = []
+
+    def record(category: str, target: object = None, **kwargs: object) -> None:
+        logged_at_alert.append(len(module_logs(caplog)))
+        alerts.append((category, target, *kwargs.values()))
+
+    # 在 alerts 夹具的替身之上再记下调用时本模块已有几条日志（告警须在日志之后）。
+    monkeypatch.setattr(ops_alert, "alert", record)
     with caplog.at_level(logging.DEBUG):
         assert stripe_configured(make_settings(stripe_secret_key=key)) is False
         assert stripe_configured(make_settings(stripe_secret_key=key)) is False
         StripeHttpGateway(make_settings(stripe_secret_key=LIVE_KEY), RecordingTransport())
+    assert alerts == [("stripe_key_not_test", None)]
+    assert logged_at_alert == [1]
     records = module_logs(caplog)
     assert len(records) == 1
     assert records[0].levelno == logging.ERROR
@@ -389,11 +416,16 @@ def test_non_test_key_logs_category_once_without_key(
 
 
 @pytest.mark.parametrize("key", [SECRET_KEY, RESTRICTED_KEY, ""])
-def test_test_or_empty_key_logs_nothing(key: str, caplog: pytest.LogCaptureFixture) -> None:
-    """守住验收第 2 条「密钥非空但不以这两种测试前缀开头时另记一条」：测试密钥与空密钥不记。"""
+def test_test_or_empty_key_logs_nothing(
+    key: str, caplog: pytest.LogCaptureFixture, alerts: list[tuple[object, ...]]
+) -> None:
+    """守住验收第 2 条「密钥非空但不以这两种测试前缀开头时另记一条」：测试密钥与空密钥不记；
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_key_not_test 一行「配置的密钥不是测试密钥」：
+    这时也不调用 ops_alert.alert。"""
     with caplog.at_level(logging.DEBUG):
         stripe_configured(make_settings(stripe_secret_key=key))
     assert module_logs(caplog) == []
+    assert alerts == []
 
 
 # ---------------------------------------------------------------- 六个调用：请求
@@ -679,11 +711,12 @@ def test_refund_list_with_any_bad_item_is_unavailable(body: dict[str, object]) -
     ],
 )
 def test_livemode_session_or_payment_is_live_and_logged(
-    body: dict[str, object], caplog: pytest.LogCaptureFixture
+    body: dict[str, object], caplog: pytest.LogCaptureFixture, alerts: list[tuple[object, ...]]
 ) -> None:
     """守住第 1 条「会话或付款的 livemode 为真即拒绝」与验收第 4 条「改归单独的 live 类别
     （不是 rejected：会话可能已经建成）并记一条 error 日志（类别 stripe_livemode）
-    ……日志只含类别」。
+    ……日志只含类别」；以及 DESIGN 1.21「运营告警邮件」第 6 条 stripe_livemode 一行
+    「Stripe 适配器里不带记录 ID 的那条日志不入队」：不调用 ops_alert.alert。
     """
     transport = RecordingTransport(respond(200, body), respond(200, body), respond(200, body))
     target = gateway(transport)
@@ -699,6 +732,7 @@ def test_livemode_session_or_payment_is_live_and_logged(
     records = module_logs(caplog)
     assert [r.getMessage() for r in records] == ["stripe_livemode"] * 3
     assert all(r.levelno == logging.ERROR and r.args in ((), None) for r in records)
+    assert alerts == []
 
 
 def test_livemode_false_or_missing_stays_ok(caplog: pytest.LogCaptureFixture) -> None:

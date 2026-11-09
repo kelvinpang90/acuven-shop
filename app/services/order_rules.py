@@ -8,6 +8,11 @@
 确认 Stripe 付款成功后才进入 demo_paid」，迁移表另允许 system 把 awaiting_demo_payment
 改为 demo_paid：只用于服务端确认 Stripe 付款（app/services/stripe_confirm.py），模拟支付
 仍只由下单者（guest、member）完成。
+
+依据 docs/DESIGN.md 1.22（提交 ffb043e）「订单与退款状态」第 3 条「或由管理员按『Stripe 测试环境
+支付』第 11 条作废已告警的结账记录后取消（1.22，操作者为 admin；管理员不能取消别的待支付订单）」，
+迁移表另允许 admin 把 awaiting_demo_payment 改为 demo_cancelled：只用于第 11 条第（1）项的人工
+作废（app/services/payment.py 的 void_alerted_checkout），其他取消入口不接受 admin。
 """
 
 from __future__ import annotations
@@ -39,9 +44,10 @@ ORDER_NUMBER_BITS = 80
 _ALLOWED_TRANSITIONS: dict[tuple[str, str], frozenset[str]] = {
     # 下单者模拟支付成功；system 只用于服务端确认 Stripe 付款（DESIGN 1.12 第 4 条）。
     (STATUS_AWAITING_PAYMENT, STATUS_PAID): frozenset({ACTOR_GUEST, ACTOR_MEMBER, ACTOR_SYSTEM}),
-    # 下单者在支付页取消，或超时由系统取消。
+    # 下单者在支付页取消，或超时由系统取消；admin 只经 DESIGN 1.22「Stripe 测试环境支付」
+    # 第 11 条的人工作废（作废已告警的结账记录后取消），其他取消入口不接受 admin。
     (STATUS_AWAITING_PAYMENT, STATUS_CANCELLED): frozenset(
-        {ACTOR_GUEST, ACTOR_MEMBER, ACTOR_SYSTEM}
+        {ACTOR_GUEST, ACTOR_MEMBER, ACTOR_ADMIN, ACTOR_SYSTEM}
     ),
     # 管理员依次推进打包、发货。
     (STATUS_PAID, STATUS_PACKED): frozenset({ACTOR_ADMIN}),

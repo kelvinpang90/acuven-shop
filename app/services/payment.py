@@ -90,6 +90,18 @@ P06、P07「服务端读取订单时一并给出本单的支付途径与 Stripe 
 - stripe_refunded：本单任一会话记录有来源为 checkout 的退款尝试（不论状态）。
 pay_orders 按订单批量读取，只读、不加锁、不调用 Stripe。
 
+人工作废（void_alerted_checkout）依据 docs/DESIGN.md 1.22（提交 ffb043e）「Stripe 测试环境支付」
+第 11 条第（1）项与「订单与退款状态」第 3 条，供 SHOP-TASK-225 的后台接口处置已写告警时间、不是
+expired、所属订单仍待支付的结账记录：有会话 ID 时先向 Stripe 查询一次，查得确定结果照第 4、5 条
+经 confirm_checkout 或 cancel_after_stripe_end 处理（操作者 system）；只有给不出确定结果、会话
+complete 而付款未定、已付款而照第 6 条写不成退款尝试，或记录为 creating 时，才在自己的事务里把
+记录记为 expired 并以操作者 admin 取消订单。cancel_after_stripe_end 与 cancel_order 的操作者
+范围不变（第 11 条「为本项另写服务层操作……不放宽现有入口」）。管理员的核实勾选、审计与响应由
+接口处理；本函数自己
+不写审计、不记日志、不发告警、不清空告警时间，人工作废的审计由调用方以 on_void 放进同一事务。
+访客看到的取消原因：操作者 admin 的取消也归为 timeout（docs/HANDOFF.md 0.90 记录的 Kelvin
+2026-11-08 决定：这些订单都是 Stripe 24 小时以上没有结果才被作废，对访客就是超时未付）。
+
 本模块不写日志；异常消息不含个人资料、订单号、幂等键或令牌。库里的时间一律是不带时区的
 UTC，返回的视图里换成带 UTC 时区的时间。
 """
@@ -123,6 +135,7 @@ from app.models import (
 )
 from app.models.member import MEMBER_ACTIVE
 from app.models.order import (
+    ACTOR_ADMIN,
     ACTOR_GUEST,
     ACTOR_MEMBER,
     ACTOR_SYSTEM,
@@ -224,6 +237,25 @@ class StripeEndResult(StrEnum):
     KEPT = "kept"
     # 记录在调用方查询 Stripe 之后被改动过：不改记录与订单，由调用方重新处理。
     CHANGED = "changed"
+
+
+class CheckoutNotFound(Exception):
+    """void_alerted_checkout：没有这个 ID 的 Stripe 会话记录。"""
+
+
+class VoidResult(StrEnum):
+    """void_alerted_checkout 的结果。"""
+
+    # Stripe 答复已付款且相符：订单为 demo_paid（本次确认，或之前已由它付款）。
+    CONFIRMED = "confirmed"
+    # Stripe 给出确定结果（会话已过期、作废成功，或不符的付款已写成退款尝试）：订单以 system 取消。
+    CANCELLED = "cancelled"
+    # 凭管理员的核实把记录记为 expired，订单以 admin 取消。
+    VOIDED = "voided"
+    # 记录或订单已不满足条件，或在查询 Stripe 之后被改动过：不改，由调用方重新读取。
+    CHANGED = "changed"
+    # 本站记录的付款状态已是 paid 而 Stripe 给不出结果：不作废，稍后再试。
+    UNAVAILABLE = "unavailable"
 
 
 class PayLine(BaseModel):
@@ -714,6 +746,238 @@ def _record_event(db: Session, record_event: Callable[[Session], None] | None) -
     record_event(db)
 
 
+class _Unsettled(StrEnum):
+    """void_alerted_checkout 向 Stripe 处理之后仍要凭核实作废的情形。"""
+
+    # Stripe 不可用、答复冲突（核对不符、仍 open 而作废不成等），或确认返回 unavailable。
+    UNRESOLVED = "unresolved"
+    # confirm_checkout 返回 pending：会话 complete 而付款未定。
+    PENDING = "pending"
+    # confirm_checkout 返回 needs_review：已付款而照第 6 条写不成退款尝试。
+    NEEDS_REVIEW = "needs_review"
+
+
+def void_alerted_checkout(
+    db: Session,
+    gateway: StripeGateway,
+    checkout_id: int,
+    now: datetime,
+    *,
+    on_void: Callable[[Session], None] | None = None,
+) -> VoidResult:
+    """DESIGN 1.22「Stripe 测试环境支付」第 11 条第（1）项：处置一条已告警的结账记录。
+
+    now 为不带时区的 UTC（带时区抛 ValueError，先于访问数据库）。调用方不得持有数据库锁、不得有
+    未提交的改动：本函数先结束当前事务，调用 Stripe 时不持有任何数据库锁、不留着读事务。
+    1. 以普通读取得记录与订单后结束读事务；记录不存在抛 CheckoutNotFound。告警时间为空、记录为
+       expired 或订单不是 awaiting_demo_payment 时不调用 Stripe、不写库，返回 changed。
+    2. creating：不调用 Stripe，凭核实作废（_void）。
+    3. 有会话 ID：先查询一次会话，按 _settle_with_stripe 处理；给出确定结果时照它返回
+       （confirmed、cancelled 或 changed）。
+    4. 其余（给不出确定结果、confirm_checkout 返回 unavailable，以及没有会话 ID 的 open、
+       complete）：读取时记录的付款状态已是 paid 时不作废、不写库，返回 unavailable；否则凭核实
+       作废。confirm_checkout 返回 pending 或 needs_review 时也凭核实作废（付款状态为 paid 只在
+       needs_review 时允许，由 _void 加锁重查）。
+    凭核实作废的事务见 _void：返回 voided 或 changed；on_void 在它提交之前调用，抛出时回滚、
+    异常原样传出。confirmed 与 cancelled 由 confirm_checkout 与 cancel_after_stripe_end
+    各自提交，事件操作者为 system。本函数不写审计、不记日志、不发告警、不清空告警时间。
+    """
+    if now.tzinfo is not None:
+        raise ValueError("now must be a naive UTC datetime")
+    db.rollback()
+    stmt = (
+        select(StripeCheckout)
+        .where(StripeCheckout.id == checkout_id)
+        .execution_options(populate_existing=True)
+    )
+    record = db.scalars(stmt).one_or_none()
+    if record is None:
+        db.rollback()
+        raise CheckoutNotFound
+    order_id = record.order_id
+    seen_status = record.status
+    session_id = record.checkout_session_id
+    create_key = record.idempotency_key
+    paid = record.payment_status == PAYMENT_PAID
+    alerted = record.alerted_at is not None
+    order_status = _load_order(db, order_id).status
+    db.rollback()
+    if not alerted or seen_status == CHECKOUT_EXPIRED or order_status != STATUS_AWAITING_PAYMENT:
+        return VoidResult.CHANGED
+
+    if seen_status == CHECKOUT_CREATING:
+        return _void(db, checkout_id, order_id, now, on_void, seen_status=seen_status)
+    unsettled = _Unsettled.UNRESOLVED
+    if session_id is not None:
+        settled = _settle_with_stripe(
+            db, gateway, checkout_id, order_id, seen_status, session_id, create_key, now
+        )
+        if isinstance(settled, VoidResult):
+            return settled
+        unsettled = settled
+    if unsettled is _Unsettled.UNRESOLVED:
+        if paid:
+            # 本地已有付款证据：须等 Stripe 能给出结果。
+            return VoidResult.UNAVAILABLE
+        return _void(db, checkout_id, order_id, now, on_void, seen_status=seen_status)
+    # confirm_checkout 可能已按会话改动记录（如 open 改为 complete）：由 _void 重新读取。
+    allow_paid = unsettled is _Unsettled.NEEDS_REVIEW
+    return _void(db, checkout_id, order_id, now, on_void, allow_paid=allow_paid)
+
+
+def _settle_with_stripe(
+    db: Session,
+    gateway: StripeGateway,
+    checkout_id: int,
+    order_id: int,
+    seen_status: str,
+    session_id: str,
+    create_key: str,
+    now: datetime,
+) -> VoidResult | _Unsettled:
+    """有会话 ID 的记录：先查询一次会话（第 11 条「先按第 5 条向 Stripe 查询一次该会话」），照第
+    4、5 条处理；调用方已结束事务。
+
+    查询不成、或会话 ID、元数据里的创建幂等键与记录不同、不是 livemode 为假（同
+    app/services/stripe_overdue.py 的 _belongs）：unresolved。
+    - 已付款或 complete：confirm_checkout（用这次查询到的会话）。paid 为 confirmed；refunded
+      （不符的付款已写成退款尝试，记录已为 expired）时不给记录 ID 以 system 调用
+      cancel_after_stripe_end；needs_review 与 pending 照传；unavailable 为 unresolved。
+    - expired：给记录 ID 以 system 调用 cancel_after_stripe_end。
+    - open：请求作废一次；返回的会话为 expired（同样核对）时同上，否则 unresolved，不再查询。
+    - 其余状态：unresolved。
+    cancel_after_stripe_end 的结果按 _ended 归类。
+    """
+    from app.services.stripe_confirm import ConfirmResult, confirm_checkout
+
+    result = gateway.retrieve_checkout_session(session_id)
+    stripe_session = result.value
+    if (
+        result.outcome is not StripeOutcome.OK
+        or stripe_session is None
+        or not _session_belongs(stripe_session, session_id, create_key)
+    ):
+        return _Unsettled.UNRESOLVED
+
+    if stripe_session.status == CHECKOUT_COMPLETE or stripe_session.payment_status == PAYMENT_PAID:
+        confirmed = confirm_checkout(db, gateway, checkout_id, stripe_session, now)
+        if confirmed is ConfirmResult.PAID:
+            return VoidResult.CONFIRMED
+        if confirmed is ConfirmResult.REFUNDED:
+            return _ended(db, order_id, cancel_after_stripe_end(db, order_id, ACTOR_SYSTEM, now))
+        if confirmed is ConfirmResult.NEEDS_REVIEW:
+            return _Unsettled.NEEDS_REVIEW
+        if confirmed is ConfirmResult.PENDING:
+            return _Unsettled.PENDING
+        return _Unsettled.UNRESOLVED
+
+    if stripe_session.status == CHECKOUT_OPEN:
+        expired = gateway.expire_checkout_session(session_id)
+        if (
+            expired.outcome is not StripeOutcome.OK
+            or expired.value is None
+            or expired.value.status != CHECKOUT_EXPIRED
+            or not _session_belongs(expired.value, session_id, create_key)
+        ):
+            return _Unsettled.UNRESOLVED
+    elif stripe_session.status != CHECKOUT_EXPIRED:
+        return _Unsettled.UNRESOLVED
+    ended = cancel_after_stripe_end(
+        db, order_id, ACTOR_SYSTEM, now, checkout_id=checkout_id, seen_status=seen_status
+    )
+    return _ended(db, order_id, ended)
+
+
+def _session_belongs(stripe_session: CheckoutSession, session_id: str, create_key: str) -> bool:
+    """会话 ID、元数据里的创建幂等键与记录相同，且处于测试环境（第 1 条）。"""
+    return (
+        stripe_session.id == session_id
+        and stripe_session.create_key == create_key
+        and stripe_session.livemode is False
+    )
+
+
+def _ended(db: Session, order_id: int, ended: StripeEndResult) -> VoidResult:
+    """cancel_after_stripe_end 的结果 → VoidResult：cancelled、changed 照传；kept 时按订单
+    当前状态，demo_paid 为 confirmed，其他为 changed。"""
+    if ended is StripeEndResult.CANCELLED:
+        return VoidResult.CANCELLED
+    if ended is StripeEndResult.CHANGED:
+        return VoidResult.CHANGED
+    status = _load_order(db, order_id).status
+    db.rollback()
+    return VoidResult.CONFIRMED if status == STATUS_PAID else VoidResult.CHANGED
+
+
+def _void(
+    db: Session,
+    checkout_id: int,
+    order_id: int,
+    now: datetime,
+    on_void: Callable[[Session], None] | None,
+    *,
+    seen_status: str | None = None,
+    allow_paid: bool = False,
+) -> VoidResult:
+    """凭管理员的核实把记录记为 expired 并以操作者 admin 取消订单（第 11 条第（1）项）。
+
+    先以普通读取重新取得记录（Stripe 处理可能已改动它）后结束读事务；给了 seen_status（调用方
+    没经 Stripe 改动记录的情形）时，重新读到的状态与它不同即返回 changed。之后在一个事务里按
+    「会员 → 订单 → Stripe 会话记录」加锁重查：记录仍属该订单、状态与重新读到的相同、不是
+    expired、告警时间非空，订单仍为 awaiting_demo_payment，订单没有其他不是 expired 的记录，
+    付款状态为 paid 时只在 allow_paid（needs_review）时允许；不满足即回滚返回 changed。满足则
+    记录记为 expired、活动列置空，订单以带条件的 UPDATE 改为 demo_cancelled（不看本地支付到期
+    时间），加回库存、释放券与积分预占、写一条操作者为 admin 的事件（_cancel），flush 后调用
+    on_void(db)（给出时），再提交并返回 voided。on_void 抛出时回滚，异常原样传出。会员 ID 在
+    普通读与加锁之间被改（认领或注销）或 UPDATE 未命中（SQLite 没有行锁时）再走一轮，轮数用完
+    返回 changed。
+    """
+    record = _load_checkout(db, checkout_id)
+    status = record.status
+    db.rollback()
+    if seen_status is not None and status != seen_status:
+        return VoidResult.CHANGED
+    for _ in range(_MAX_ROUNDS):
+        db.rollback()
+        member_id = db.scalar(select(Order.member_id).where(Order.id == order_id))
+        if member_id is not None:
+            db.execute(select(Member.id).where(Member.id == member_id).with_for_update())
+        order = _lock_order(db, order_id)
+        if order.member_id != member_id:
+            continue
+        record = _lock_checkout(db, checkout_id)
+        other = select(StripeCheckout.id).where(
+            StripeCheckout.active_order_id == order_id, StripeCheckout.id != checkout_id
+        )
+        if (
+            record.order_id != order_id
+            or record.status != status
+            or record.status == CHECKOUT_EXPIRED
+            or record.alerted_at is None
+            or order.status != STATUS_AWAITING_PAYMENT
+            or db.scalar(other.with_for_update()) is not None
+            or (record.payment_status == PAYMENT_PAID and not allow_paid)
+        ):
+            db.rollback()
+            return VoidResult.CHANGED
+        record.status = CHECKOUT_EXPIRED
+        record.active_order_id = None
+        db.flush()
+        if not _cancel(db, order_id, ACTOR_ADMIN, now, true()):
+            continue
+        if on_void is not None:
+            db.flush()
+            try:
+                on_void(db)
+            except BaseException:
+                db.rollback()
+                raise
+        db.commit()
+        return VoidResult.VOIDED
+    db.rollback()
+    return VoidResult.CHANGED
+
+
 def expire_overdue_orders(
     db: Session,
     now: datetime,
@@ -1096,7 +1360,11 @@ def _event(order_id: int, to_status: str, actor: str, now: datetime) -> OrderEve
 
 
 def _cancelled_by(db: Session, order_ids: list[int]) -> dict[int, CancelledBy | None]:
-    """按取消事件的操作者：system 为超时，其余（guest、member）为本人。"""
+    """按取消事件的操作者：system 与 admin 为超时，guest 与 member 为本人。
+
+    admin 只来自第 11 条的人工作废（void_alerted_checkout）：这些订单都是 Stripe 24 小时以上没有
+    结果才被作废，对访客就是超时未付（docs/HANDOFF.md 0.90，Kelvin 2026-11-08 决定）。
+    """
     found: dict[int, CancelledBy | None] = dict.fromkeys(order_ids)
     stmt = (
         select(OrderEvent.order_id, OrderEvent.actor_type)
@@ -1104,7 +1372,7 @@ def _cancelled_by(db: Session, order_ids: list[int]) -> dict[int, CancelledBy | 
         .where(OrderEvent.to_status == STATUS_CANCELLED)
     )
     for order_id, actor in db.execute(stmt).tuples():
-        found[order_id] = "timeout" if actor == ACTOR_SYSTEM else "self"
+        found[order_id] = "timeout" if actor in (ACTOR_SYSTEM, ACTOR_ADMIN) else "self"
     return found
 
 

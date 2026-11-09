@@ -27,11 +27,16 @@ Redis 不可用时 503 service_unavailable：发生在查锁定时不查账号�
 429 login_locked，503 service_unavailable；413、415、422 与现有接口相同（422 每条错误只给
 位置、类型与固定消息，不回显请求内容）。三个接口的处理函数与依赖产生的全部响应（含错误）
 都带 Cache-Control: no-store，由 SHOP-TASK-027 的路由类统一加上。
-本模块不写日志；错误响应不含用户名、密码、令牌、来源地址或内部细节。
+本模块只写一条日志：第 5 步刚锁定、admin_login_locked 审计提交之后记一条 error 日志
+admin_login_locked audit_event=<审计记录 ID>，按 docs/DESIGN.md 1.21（提交 5be346e）「运营告警
+邮件」第 6 条与 docs/HANDOFF.md 0.88（SHOP-TASK-222），紧接着调用
+ops_alert.alert("admin_login_locked", ("audit_event", 审计记录 ID))；用户名不存在的锁定不写审计，
+也不记、不告警。日志与错误响应不含用户名、密码、令牌、来源地址或内部细节。
 """
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Annotated
@@ -47,6 +52,7 @@ from app.api.order_lookup import _NoStoreRoute
 from app.api.pay import _body_errors, _json_body, _utcnow
 from app.db.session import get_session
 from app.models import AdminAccount, AdminSession
+from app.services import ops_alert
 from app.services.admin_auth import (
     ADMIN_LOGIN_FAILED,
     ADMIN_LOGIN_LOCKED,
@@ -67,6 +73,11 @@ from app.services.pw_hash import DUMMY_PASSWORD_HASH, verify_password
 from app.services.rate_limit import client_source, get_redis_client
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], route_class=_NoStoreRoute)
+
+logger = logging.getLogger(__name__)
+
+# 告警的对象类别（审计记录 ID）；类别码沿用审计操作名 ADMIN_LOGIN_LOCKED。
+ALERT_TARGET_AUDIT = "audit_event"
 
 # __Host- 前缀要求 Secure、Path=/ 且没有 Domain，同一上级域名下的其他站点无法写入它。
 COOKIE_NAME = "__Host-shop_admin_session"
@@ -199,10 +210,15 @@ def login(
         just_locked = record_login_failure(client, source, body.username)
         if account is not None:
             record_audit(session, ADMIN_LOGIN_FAILED, account.id, now)
+            locked_event_id: int | None = None
             if just_locked:
-                record_audit(session, ADMIN_LOGIN_LOCKED, account.id, now)
+                # record_audit 已 flush，ID 在提交之前取出：提交后 ORM 对象随之过期。
+                locked_event_id = record_audit(session, ADMIN_LOGIN_LOCKED, account.id, now).id
             # 会话依赖在请求结束时回滚未提交的改动，审计必须在返回前提交。
             session.commit()
+            if locked_event_id is not None:
+                logger.error("%s audit_event=%d", ADMIN_LOGIN_LOCKED, locked_event_id)
+                ops_alert.alert(ADMIN_LOGIN_LOCKED, (ALERT_TARGET_AUDIT, locked_event_id))
         raise HTTPException(status_code=401, detail="login_failed")
 
     issued = issue_admin_session(session, account.id, now)

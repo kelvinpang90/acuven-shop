@@ -57,7 +57,7 @@ from app.models.stripe import (
     PAYMENT_UNPAID,
     STRIPE_ID_MAX_LENGTH,
 )
-from app.services import stripe_webhook
+from app.services import ops_alert, stripe_webhook
 from app.services.payment import StripeEndResult, cancel_after_stripe_end
 from app.services.stripe_confirm import ConfirmResult, confirm_checkout
 from app.services.stripe_gateway import (
@@ -104,10 +104,24 @@ UNAVAILABLE = StripeResult(StripeOutcome.UNAVAILABLE)
 
 _SEQUENCE = itertools.count(1)
 
+Alert = tuple[str, object]
+
 
 # ---------------------------------------------------------------------------
 # 夹具与数据
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def alerts(monkeypatch: pytest.MonkeyPatch) -> list[Alert]:
+    """以 monkeypatch 替换 ops_alert.alert，按调用顺序记下（类别, 对象）。"""
+    calls: list[Alert] = []
+
+    def record(category: str, target: object = None, **_: object) -> None:
+        calls.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
+    return calls
 
 
 @pytest.fixture
@@ -868,9 +882,13 @@ def test_succeeded_event_but_failed_payment_cancels(db: Session, variant: int) -
 # ---------------------------------------------------------------------------
 
 
-def test_stripe_unavailable_leaves_no_event_record(db: Session, variant: int) -> None:
+def test_stripe_unavailable_leaves_no_event_record(
+    db: Session, variant: int, alerts: list[Alert]
+) -> None:
     """第 7 条「处理失败整个事务回滚、回 5xx」与 HANDOFF 0.55「处理中 Stripe 不可用……不留事件
-    记录、回 503，由 Stripe 重发」：查询不可用为 unavailable，订单与记录不变。"""
+    记录、回 503，由 Stripe 重发」：查询不可用为 unavailable，订单与记录不变。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_livemode 与 stripe_confirm_rejected 两行（正式
+    环境与查询被拒）：查询不可用不是这两种，没有告警日志，不调用 ops_alert.alert。"""
     placed = _guest_order(db, variant)
     checkout_id = _checkout(db, placed.order_id)
     paid = _paid(db, checkout_id)
@@ -882,6 +900,7 @@ def test_stripe_unavailable_leaves_no_event_record(db: Session, variant: int) ->
     assert _paths(gateway) == [_retrieve_path(paid.id)]
     assert (_order_state(db, placed), _record_state(db, checkout_id)) == before
     assert _stripe_events(db) == []
+    assert alerts == []
 
 
 def test_unavailable_event_is_handled_when_resent(db: Session, variant: int) -> None:
@@ -907,10 +926,15 @@ def test_live_or_rejected_query_is_unavailable_and_alerts(
     caplog: pytest.LogCaptureFixture,
     result_name: str,
     category: str,
+    alerts: list[Alert],
 ) -> None:
     """第 1 条「会话或付款的 `livemode` 为真即拒绝」与第 7 条「处理失败整个事务回滚、回 5xx」，
     HANDOFF 0.55「已找到本站记录、但向 Stripe 查询到的会话为正式环境或查询被拒……不留
-    事件记录、回 503」：为 unavailable，订单与记录不变，记一条只含记录 ID 的 error 日志。"""
+    事件记录、回 503」：为 unavailable，订单与记录不变，记一条只含记录 ID 的 error 日志。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_livemode 一行（「会话、付款或 webhook 事件为正式
+    环境、拒绝之后」，带结账记录 ID 的告警点）与 stripe_confirm_rejected 一行（「确认付款时（访客
+    返回或 webhook）向 Stripe 查询会话被以请求错误拒绝」），对象都为结账记录 ID：日志之后以同一
+    类别与 ("stripe_checkout", 记录 ID) 调用一次 ops_alert.alert。"""
     placed = _guest_order(db, variant)
     checkout_id = _checkout(db, placed.order_id)
     paid = _paid(db, checkout_id)
@@ -927,11 +951,17 @@ def test_live_or_rejected_query_is_unavailable_and_alerts(
     assert (_order_state(db, placed), _record_state(db, checkout_id)) == before
     assert _stripe_events(db) == []
     assert _alerts(caplog) == [f"{category} checkout={checkout_id}"]
+    assert alerts == [(category, ("stripe_checkout", checkout_id))]
 
 
-def test_confirmation_unavailable_leaves_no_event_record(db: Session, variant: int) -> None:
+def test_confirmation_unavailable_leaves_no_event_record(
+    db: Session, variant: int, alerts: list[Alert]
+) -> None:
     """第 7 条「处理失败整个事务回滚」；验收：confirm_checkout 返回 unavailable（核对
-    不符）时为 unavailable，不留事件记录，订单不变。"""
+    不符）时为 unavailable，不留事件记录，订单不变。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_session_mismatch 一行（「Stripe 返回的会话与本站
+    记录……不符」，对象为结账记录 ID）：webhook 经确认函数核对不符时以 ("stripe_checkout",
+    记录 ID) 调用一次 ops_alert.alert。"""
     placed = _guest_order(db, variant)
     checkout_id = _checkout(db, placed.order_id)
     # 查询到的会话 ID 与记录不同：确认核对身份不符。
@@ -943,6 +973,7 @@ def test_confirmation_unavailable_leaves_no_event_record(db: Session, variant: i
 
     assert _status(db, placed.order_id) == STATUS_AWAITING_PAYMENT
     assert _stripe_events(db) == []
+    assert alerts == [("stripe_session_mismatch", ("stripe_checkout", checkout_id))]
 
 
 # ---------------------------------------------------------------------------

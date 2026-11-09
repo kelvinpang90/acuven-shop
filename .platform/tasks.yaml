@@ -5691,12 +5691,7 @@ tasks:
     status: done
     depends_on: []
     acceptance_criteria:
-      - 模型——app/models/store_design.py 的 StoreDesignSetting 在 updated_at 之后依次加五个可空列 logo_file_name（String(32)）、logo_source_format（String(4)）、logo_width、logo_height、logo_byte_size（整数）；检查约束 logo_all_or_none（文本为 (logo_file_name IS NULL AND logo_source_format IS NULL AND logo_width IS NULL AND logo_height IS NULL AND logo_byte_size IS NULL) OR (logo_file_name IS NOT NULL AND logo_source_format IS NOT NULL AND logo_width IS NOT NULL AND logo_height IS NOT NULL AND logo_byte_size IS NOT NULL)）、logo_source_format_valid（文本为 logo_source_format IS NULL OR logo_source_format IN ('jpeg', 'png', 'webp')）、logo_display_size_range（文本为 logo_width IS NULL OR (logo_width >= 1 AND logo_width <= 1600 AND logo_height >= 1 AND logo_height <= 1600 AND logo_byte_size >= 1)）；其余列与约束不变；模块与类的说明里「首版不含标志图」改为引用 DESIGN 1.20 第 15 条，文件名的十六进制格式由之后的服务层保证、数据库不查
-      - 迁移——新增 alembic/versions/20261105_0025_store_logo.py（revision 为 0025，down_revision 为 0024）；upgrade 先加五列（已有的那一行五列全为空，约束建立时即可通过），再建三个检查约束；downgrade 依次——读出 logo_file_name 不为空的行数，大于 0 即抛 RuntimeError（此时还没有改动）；删去三个检查约束（MySQL 8.0 不许删除被检查约束引用的列）；删去五列；三个约束文本写成模块常量，与模型逐字一致；模块说明写明执行顺序的原因与只在 MySQL 上执行
-      - 现有测试只为加列而改——tests/test_store_design_models.py 的 test_columns_nullability_and_lengths 改为列出新增的五列、可空列为 accent 与这五列，并核对 logo_file_name 长度 32、logo_source_format 长度 4，文档字符串里「设置表没有标志图的列」改为引用 DESIGN 1.20 第 15 条；_setting_values 的默认值加上五个 logo_ 列为 None（检查约束按整行求值，缺列会让新约束的求值出错）；test_migration_schema_matches_models 只比较迁移 0016 建出的部分——从按模型建出的结构里去掉这五列与三个新约束（列名与约束名在测试里逐个写出）再比较；其余测试不改
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_store_logo_schema.py（SQLite 内存库按模型建表，写法照 tests/test_admin_catalog_schema.py），每条测试写明守住的 DESIGN 1.20 第 15 条或 HANDOFF 0.84 的句子——五列全空与全有值（jpeg、png、webp）的设置行能写入并读回；只填部分列（只有文件名、各缺一列）被 logo_all_or_none 拒绝；格式 gif 被 logo_source_format_valid 拒绝（不用大小写变体，MySQL 默认排序规则比较时不分大小写）；宽或高为 0 或 1601、字节数为 0 被 logo_display_size_range 拒绝，宽高 1 与 1600、字节数 1 能写入；经 importlib 载入迁移 0025，核对 revision、down_revision 与三个约束常量和模型逐字一致
-      - docs/task-records/SHOP-TASK-209.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；各列与约束、迁移的执行顺序、偏离、验证到什么程度——pytest 不在 SQLite 上执行 0025，CI 的必需检查 backend 在 MySQL 8 上做 upgrade、downgrade 再 upgrade 的往返与 alembic check，写明这一点）
-      - 改动只落在 allowed_change_paths；不改服务层、接口、前端与已有迁移；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.20 提交 a870f78 与 HANDOFF 0.84），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-209.md
     allowed_change_paths:
       - app/models/store_design.py
       - alembic/versions/20261105_0025_store_logo.py
@@ -5720,11 +5715,7 @@ tasks:
     status: done
     depends_on: []
     acceptance_criteria:
-      - 图片处理——process_image(data, *, min_side=MIN_SIDE, min_long_side=MIN_SIDE)；尺寸判断改为宽与高都在 min_side 到 MAX_SIDE（4,000）之间、且 max(宽, 高) 不小于 min_long_side，仍在解码之前判断；新增模块常量 LOGO_MIN_SIDE = 40 与 LOGO_MIN_LONG_SIDE = 200；其余判断与处理（格式、单帧、PNG 文本块上限、方向、颜色、透明、去元数据、长边 1,600、WebP 质量 85、模块级处理锁、异常一律转成 ImageRejected）不变；模块说明引用 DESIGN 1.20 第 15 条
-      - 存储——put_image、get_image、delete_image 各加只限关键字的 prefix 参数，默认值为 KEY_PREFIX（product-images/），对象键为 prefix 加文件名加 .webp；新增模块常量 LOGO_KEY_PREFIX = store-logos/（写成 Python 字符串）；两个共用 client、超时与尝试次数、未配置时的行为、日志内容不变；函数与模块说明里写死 product-images/ 的句子改为按前缀说明
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_image_processing.py 新增——用标志的参数时 40×200、200×40、40×4000、4000×40 合格（并核对缩放后的展示图尺寸，长边超过 1,600 等比缩到 1,600）；39×200、100×199（长边不足 200）、40×4001 不合格；同样这些图不传参数时按商品图片的 200 到 4,000 判断（40×200 不合格）；现有测试不改。tests/test_image_store.py 新增——传 prefix=LOGO_KEY_PREFIX 时写入、读取、删除用的键都以 store-logos/ 开头，不传时仍为 product-images/；现有测试不改。每条新测试写明守住的 DESIGN 1.20 第 15 条的句子
-      - docs/task-records/SHOP-TASK-210.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明两个函数的新签名与常量，供 SHOP-TASK-211 至 213 使用；验证到什么程度，只写实际存在的测试）
-      - 改动只落在 allowed_change_paths；不改调用方（app/services/admin_product_images.py、app/api/admin_product_images.py、app/api/product_images.py）、模型与迁移、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.20 提交 a870f78 与 HANDOFF 0.84），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-210.md
     allowed_change_paths:
       - app/services/image_processing.py
       - app/services/image_store.py
@@ -5750,13 +5741,7 @@ tasks:
       - SHOP-TASK-209
       - SHOP-TASK-210
     acceptance_criteria:
-      - 读取——store_logo 模块提供 logo_path(file_name)（返回 /api/store-logos/<文件名>.webp）与 current_logo_file_name(db)（单例行当前的 logo_file_name，没有行或没有标志时为 None；只发 SELECT，不写库）；store_design 模块的 StoreDesign 与 AdminStoreDesign 各加 logo 字段（有标志时为提供路径，没有时为 None），read_store_design 与 read_admin_store_design 按单例行填好，设置行不存在时为 None；save_store_design 返回的设置同样带 logo，但不改写标志五列，与当前完全相同的判断与审计值不含标志
-      - 替换——replace_logo(db, settings, admin_account_id, image, now) 返回新的提供路径，image 为 ProcessedImage。依次为——文件名用 secrets.token_hex(16)；先 db.rollback()，在任何事务之外调用 image_store.put_image（prefix 为 LOGO_KEY_PREFIX；失败即抛出 ImageStoreUnavailable，不改记录）；再以 _lock_setting 锁定单例行，读出原有文件名，改写五列（文件名、处理结果的格式、宽、高，字节数为展示图的字节数）与更新时间，写一条 admin_store_logo_uploaded 审计，提交；锁定、改写、审计或提交途中出现任何异常即回滚、以 image_store.delete_image 删除新对象（只尝试 1 次，失败只记日志）后重新抛出；提交成功后，原来有标志的再以 delete_image 删除原有对象（失败只记日志，不影响返回）
-      - 移除——remove_logo(db, settings, admin_account_id, now)。先回滚、以 _lock_setting 锁定单例行；没有标志时回滚、不写审计、不调用存储，照样正常返回；有标志时五列清空、改更新时间、写一条 admin_store_logo_removed 审计并提交，提交之后以 delete_image 删除该对象（存储未配置时 delete_image 只记日志，记录照常清空）；写入途中出现任何异常都先回滚再抛出
-      - 两个改动函数的审计 occurred_at 取传入的 now，admin_account_id 取传入值（须在调用前取出，这里先回滚）；两个函数都是同步函数，由调用方放进线程；不写日志（存储模块自己的日志除外）
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_store_logo.py（SQLite 内存库按模型建表并写入单例行，ProcessedImage 直接构造、不经 Pillow；用 monkeypatch 替换 app.services.image_store 的 put_image 与 delete_image 并记录调用与 prefix），每条测试的文档字符串写明它守住的 DESIGN 1.20 第 15 条原句——没有标志时替换写入五列与审计（旧值为空）、不删任何对象；已有标志时替换，提交后才删除原有对象（替换的 delete_image 里查库，单例行已是新文件名）；写入失败不改记录、不写审计；提交失败时删除了新对象、记录与审计都不变；移除清空五列、写审计、提交后才删除对象；没有标志时移除不写审计、不调用存储、不改更新时间；读取在有、无标志时的 logo；替换与移除之后 A08 的保存不改标志五列、保存之后标志仍在；锁定查询按 MySQL 方言编译带 FOR UPDATE，两个改动函数回滚之后的第一条语句都是它。tests/test_store_design.py 只为 StoreDesign 新增的 logo 字段补上 logo=None
-      - docs/task-records/SHOP-TASK-211.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明函数签名、审计写法与偏离取舍，供 SHOP-TASK-212、213 使用）
-      - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/image_store.py、app/services/image_processing.py、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.20 提交 a870f78 与 HANDOFF 0.84），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-211.md
     allowed_change_paths:
       - app/services/store_logo.py
       - app/services/store_design.py
@@ -5781,12 +5766,7 @@ tasks:
     depends_on:
       - SHOP-TASK-211
     acceptance_criteria:
-      - 上传（PUT /api/admin/store-design/logo），每一步不通过即回答、不再往下（检查用依赖按声明顺序完成）——require_admin（401 admin_session_required）；X-CSRF-Token（403 csrf_failed，沿用 app/api/admin_products.py 的 CsrfDep）；存储未配置即 503 image_store_unavailable、不读请求体；Content-Type 去掉参数与首尾空白、转小写后不是 image/jpeg、image/png、image/webp 之一即 415 image_type_unsupported；请求头声明的长度超过 5,242,880 字节即 413 image_too_large、不读请求体，未声明或声明不超过时最后声明的异步依赖逐块读取、读到超过即停止并 413；process_image 以 LOGO_MIN_SIDE 与 LOGO_MIN_LONG_SIDE 处理，抛 ImageRejected 即 422 logo_invalid；replace_logo 抛 ImageStoreUnavailable 即 503；成功 200 与 logo（新的提供路径）。没有张数上限这一项
-      - 移除（DELETE /api/admin/store-design/logo）——require_admin（401）、CSRF（403）；不读请求体；remove_logo（没有标志时照样成功；存储未配置时照常清空，服务层只记日志）；成功 200 与 logo 为 null
-      - 后台读取——GET /api/admin/store-design 的响应加 logo（有标志时为提供路径，没有时为 null），其余字段不变；PUT /api/admin/store-design 的响应不变；两个新接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control no-store（用 SHOP-TASK-027 的路由类）；路径存在但方法不匹配的 405 由框架回答，不在此列；不写日志（服务层与存储模块自己的日志除外）；在 app/main.py 注册路由；模块说明里「不含标志图」的句子改为引用 DESIGN 1.20 第 15 条
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_store_logo_api.py（夹具照 tests/test_admin_product_images_api.py：SQLite 内存库、TestClient、经 SHOP-TASK-036 的登录取得会话与 CSRF 令牌；用 monkeypatch 替换 app.services.image_store 的 put_image、delete_image 并记录调用；用 Pillow 现场生成小图），每条测试的文档字符串写明它守住的 DESIGN 1.20 第 15 条或 UX 0.18 A08 的原句——检查顺序（没有会话 401 先于一切；CSRF 不对 403；未配置 503 且不读请求体；415；声明过长 413 且不读请求体；逐块读到超过 413）；40×200 与 300×60 的标志合格、39×200 与 150×150（长边不足 200）为 422 logo_invalid 且不调用 put_image；成功后 GET 后台读取的 logo 等于返回的路径；再次上传替换并删除原有对象；移除后 logo 为 null、没有标志时移除照样 200 且不写审计；所有响应带 no-store。tests/test_admin_store_design.py 只为后台读取新增的 logo 字段与新增的两条路由改现有断言（路由测试改为该前缀下只有 GET、PUT 与 logo 的 PUT、DELETE）
-      - docs/task-records/SHOP-TASK-212.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明请求与响应的形状，供 SHOP-TASK-214 使用；偏离取舍）
-      - 改动只落在 allowed_change_paths；不改服务层、模型与迁移、app/api/admin_product_images.py、前端、.platform/、CI 与部署配置（反向代理的放宽不在仓库里），不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.20 提交 a870f78 与 HANDOFF 0.84），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-212.md
     allowed_change_paths:
       - app/api/admin_store_logo.py
       - app/api/admin_store_design.py
@@ -5811,12 +5791,7 @@ tasks:
     depends_on:
       - SHOP-TASK-211
     acceptance_criteria:
-      - 提供，判断依次为（前一项不通过即回答、不再往下）——路径最后一段 name 不恰好是 32 位小写十六进制加 .webp（含大写字母、长度不对、其他扩展名，都由处理函数回答）即 404 image_not_found；image_store_configured 为 False 即 503 image_store_unavailable；以去掉 .webp 的 32 位与 SHOP-TASK-211 的 current_logo_file_name 比较，不相同（含没有标志）即 404，不访问 R2；结束只读事务后以 image_store.get_image（prefix 为 LOGO_KEY_PREFIX）读取，抛 ImageNotFound 即 404，抛 ImageStoreUnavailable 即 503；错误响应都带 Cache-Control no-store，不含 R2 的错误内容
-      - 成功——200，响应体为 get_image 返回的字节，Content-Type 为 image/webp，X-Content-Type-Options 为 nosniff，Content-Security-Policy 为 default-src 'none'; sandbox，Cache-Control 为 public, max-age=31536000, immutable；不写日志（存储模块自己的日志除外）；在 app/main.py 注册路由
-      - 公开读取——GET /api/store-design 的响应加 logo（有标志时为提供路径，没有时为 null），其余字段、no-store 与只发 SELECT 不变；模块说明里「不含标志图」的句子改为引用 DESIGN 1.20 第 15 条
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_store_logos_api.py（夹具照 tests/test_product_images_api.py，不登录；用 monkeypatch 替换 app.services.image_store 的 put_image、get_image 与 delete_image 并记录调用与 prefix，测试不触及真实的 R2 调用），每条测试的文档字符串写明它守住的 DESIGN 1.20 第 15 条原句——经 SHOP-TASK-211 的 replace_logo 设好标志后，GET 公开读取得到的 logo 路径能取到 200、字节与四个响应头，读取用的前缀为 store-logos/；大写、31 位、.png 的文件名 404 且不查库不调用 get_image；未配置 503；替换之后旧文件名 404 且不调用 get_image；移除之后 404；ImageNotFound 404、ImageStoreUnavailable 503；所有错误响应带 no-store；没有标志时公开读取的 logo 为 null。tests/test_store_design.py 与 tests/test_admin_store_design.py 只为公开读取新增的 logo 字段改现有断言
-      - docs/task-records/SHOP-TASK-213.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明公开读取的响应形状，供 SHOP-TASK-216 使用；偏离取舍）
-      - 改动只落在 allowed_change_paths；不改服务层、模型与迁移、app/api/product_images.py、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.20 提交 a870f78 与 HANDOFF 0.84），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-213.md
     allowed_change_paths:
       - app/api/store_logos.py
       - app/api/store_design.py
@@ -5838,19 +5813,12 @@ tasks:
       运营者落实写法（HANDOFF 0.84）：上传的请求体为文件本身（不用多部分表单），Content-Type 为调用方给的类型；413 一律归为文件过大，不看响应体（反向代理回答的 413 不是 JSON）；logo 只认 /api/store-logos/ 加 32 位小写十六进制加 .webp 的字符串或 null；A08 保存的响应不含 logo，保存结果的类型不变。
       设计闸门：DESIGN 1.20（提交 a870f78）第 15 条与 HANDOFF 0.84，标志的规则在服务端，请求模块只传递与校验字段，不碰金额与个人资料。
       拆分：A08 标志的请求层（8 个允许路径），照 SHOP-TASK-201 的写法。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-212
       - SHOP-TASK-213
     acceptance_criteria:
-      - 写法照 frontend/src/api/adminProductImages.ts（同源 cookie、cache no-store、Accept、写操作带调用方传入的 CSRF 令牌于 pay.ts 的 CSRF_HEADER、接收 AbortSignal、只取接口记录列出的字段且多出的字段不带进结果、响应体不合格算失败、页面只按状态码与 detail 区分，不显示错误体）
-      - 格式判断——frontend/src/storeDesign.ts 新增导出的 isStoreLogoPath(value)，只在 value 恰好是 /api/store-logos/ 加 32 位小写十六进制加 .webp 的字符串时为真；storeDesign.ts 其余内容不变
-      - 上传——uploadStoreLogo(file, contentType, csrfToken, signal) 发 PUT /api/admin/store-design/logo，请求体为调用方给的 Blob 本身（不用 FormData），Content-Type 为调用方给的类型字符串；200 且 logo 合格为 ok 并带回 logo；415 且 detail 为 image_type_unsupported 为 type_unsupported；413 为 too_large（不看响应体）；422 且 detail 为 logo_invalid 为 invalid；401 为 none，403 为 csrf；其他状态（含 503）、其他 415 与 422、响应体不合格为 failed；网络中断与调用方中止为 network
-      - 移除——removeStoreLogo(csrfToken, signal) 发 DELETE /api/admin/store-design/logo，不带请求体；200 且 logo 为 null 为 ok；401 为 none，403 为 csrf；其他为 failed；网络中断与中止为 network
-      - 后台读取——frontend/src/api/adminStoreDesign.ts 的 AdminStoreDesignDetail 加 logo（string 或 null），读取时 logo 为 null 或 isStoreLogoPath 为真的字符串才合格，缺这一项或不合格算 failed；保存的请求与结果（AdminStoreDesign、StoreDesignSave）不变
-      - 测试验证意图（不加测试依赖，fetch 以替身代替）——frontend/src/api/adminStoreLogo.test.ts、frontend/src/api/adminStoreDesign.test.ts 与 frontend/src/storeDesign.test.ts：两个请求的方法、地址、请求头、no-store 与请求体（上传为原样的 Blob 与给定的 Content-Type，不是 FormData；移除没有请求体）；logo 的合格判定（大写、31 位、其他前缀与扩展名、非字符串都不合格）；各种状态与 detail 的归类（含 413 的响应体不是 JSON 时仍为 too_large、移除的 200 带非 null 的 logo 为 failed）；中止为 network；后台读取的 logo 为 null、合格路径、缺少与不合格四种情形；每条测试写明它守住的是接口记录（app/api/admin_store_logo.py、app/api/admin_store_design.py）、DESIGN 1.20 第 15 条或 UX 0.18 A08 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；现有测试只为 logo 字段补上合格的值；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - frontend/src/pages/AdminStoreDesignPage.test.tsx 只为后台读取新增的 logo 而改——常量 DETAIL 补 logo 为 null（PICKING 与各处 fresh 由它展开，随之带上）；测试 updates the form from the saved design 里期望的 base 补 logo，取 DETAIL.logo（saveStep 以读到的设置展开保存结果，保存后仍保留读到的 logo）；该文件其他测试与断言不增不删不改，frontend/src/pages/AdminStoreDesignPage.tsx 不改；这是本任务接入后该文件仅有的两处失效（运营者在 main 的导出上实测，类型检查只报 DETAIL 缺 logo，测试只有这条保存测试的三种语言失败）
-      - docs/task-records/SHOP-TASK-214.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；导出的类型与函数签名，供 SHOP-TASK-215、216 使用；验证到什么程度，只写实际存在的测试）；改动只落在 allowed_change_paths；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：DESIGN 1.20 第 15 条，同上），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-214.md
     allowed_change_paths:
       - frontend/src/api/adminStoreLogo.ts
       - frontend/src/api/adminStoreLogo.test.ts
@@ -5877,17 +5845,11 @@ tasks:
       标志操作的 403 由页面重新读取装修设置，只取新的 CSRF 令牌与当前 logo，表单未保存的选择保留，显示 common.error_retry（该次读取为 none 时回到 A01，network 显示 common.network_check，其他失败显示 common.error_retry，标志保留当前显示）；网络中断显示 common.network_check，与 A04 图片和 A08 保存相同。
       设计闸门：不适用（标志的格式、大小、像素、元数据与存放规则在 SHOP-TASK-209 至 213 的服务端，依据 DESIGN 1.20 第 15 条；页面只做格式与大小的初步检查，不碰金额与个人资料）。
       拆分：A08 的标志一层（9 个允许路径：新组件与测试，页面与页面测试只为接入，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-214
     acceptance_criteria:
-      - 页面内容与文案以 docs/UX.md 0.18 的 A08、docs/UX-COPY.md 0.19 与 docs/HANDOFF.md 0.84 为准，样式以 docs/design/pages/ 的 A08-logo-states 与 A08 的桌面、手机稿为准，二者冲突时以 UX 文档为准并在 PR 里说明；需要 UX-COPY 里没有的界面文字时停下并在 PR 里说明，不自行编写文案、不改设计；布局与显隐写在 frontend/src/styles/site.css（不声明颜色、字体、圆角属性，视觉稿给出的固定间距与尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重、边框色与底色不搬，记入任务记录的偏离（评审不以此要求修改）；frontend/src/i18n/copy.ts 按 UX-COPY 0.19 逐字加入 admin.logo、admin.logo_hint、admin.logo_remove、admin.logo_rules、admin.logo_immediate、admin.logo_invalid、admin.logo_remove_confirm 中字典里还没有的键，写法与相邻条目相同
-      - 显示——标志段标题 admin.logo；当前标志（照视觉稿高 36 像素、宽按比例且至多 180 像素，按比例显示、不拉伸变形，把 object-fit 设为 contain）或文字品牌；没有标志时 admin.logo_remove 禁用；上传中旁边显示 admin.image_uploading；admin.logo_hint、admin.image_rules、admin.logo_rules 与 admin.logo_immediate 常显（顺序照视觉稿）；A08 预览缩样的页头在有标志时显示同一张图（图片加载失败时为文字品牌），没有时为文字品牌
-      - 操作——上传与移除照 purpose 的落实写法；上传 ok 时改显示返回的 logo，移除 ok 时改显示文字品牌；上传的 type_unsupported、too_large 与 invalid 依次显示 admin.image_type_unsupported、admin.image_too_large 与 admin.logo_invalid，其他失败（含图片存储不可用）显示 common.error_retry，当前标志不变；none 照现有写法回到 A01；csrf 与 network 照 purpose；下一次标志操作开始时收起上一次的提示；标志操作不改表单、不收起 admin.design_saved 以外的表单提示
-      - 接入——frontend/src/pages/AdminStoreDesignPage.tsx 只为把标志段放进表单、把当前 logo 与 CSRF 令牌传入、在标志变化或 403 重新读取后更新页面状态里的 logo 与 CSRF 令牌、两者互斥的禁用、预览缩样显示标志而改；表单的选择、保存请求与保存结果的处理不变
-      - 代码结构——组件写法沿用 frontend/src/pages/AdminProductImages.tsx（导出把请求结果变成标志段状态的纯函数、接收 AbortSignal 与回调的异步函数、只依赖 props 的 View；上传前的先查与各按钮是否禁用写成导出的纯函数；图片加载失败与否作为 View 的 props，便于静态渲染测试；当前标志与预览缩样共用一个加载失败状态，logo 换成另一个路径（上传成功、403 后重新读取）或变为 null 时重置）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
-      - 测试——用 vitest 与 react-dom/server（不加测试依赖，fetch 以替身代替；以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）在 frontend/src/pages/AdminStoreLogo.test.tsx 验证意图——没有标志时显示文字品牌且 admin.logo_remove 禁用；有标志时 img 的 src 与 alt；加载失败时显示文字品牌；上传前的类型与大小先查（5,242,880 字节合格、多一字节不合格）；移除确认框的文字与按钮顺序；各种结果的提示与显示的标志；操作进行中与 A08 保存进行中按钮禁用；403 只更新 CSRF 令牌与 logo。frontend/src/pages/AdminStoreDesignPage.test.tsx 只为接入补测试（表单里出现标志段、标志操作进行中 common.save 禁用、保存成功后标志沿用当前值、预览显示标志）；页面文字全部来自字典；每条测试写明它守住的是 UX 0.18、DESIGN 1.20 第 15 条或 HANDOFF 0.84 的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - docs/task-records/SHOP-TASK-215.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收、没有用真实图片与存储试过上传）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-215.md
     allowed_change_paths:
       - frontend/src/pages/AdminStoreLogo.tsx
       - frontend/src/pages/AdminStoreLogo.test.tsx
@@ -5912,17 +5874,12 @@ tasks:
       标志以 img 显示，alt 为 BRAND（ACUVEN SHOP），页头仍在链到首页的链接里；加载失败（含 503）时页头与页脚都退回文字品牌，logo 换成另一个路径时重新尝试显示；尺寸照画板 P-logo-header-footer（桌面高 40 像素、宽按比例且至多 240 像素，手机高 28 像素、宽按比例且至多 160 像素，页脚同页头），按比例显示、不拉伸变形（object-fit 设为 contain）；标志按原图显示，不随主题与深浅色改色（Kelvin 2026-11-05 决定）。
       设计闸门：不适用（只显示公开接口给的图片，不碰金额与个人资料；标志的规则在服务端）。
       拆分：前台全局框架一层（9 个允许路径：读取模块与测试、框架与测试，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-213
       - SHOP-TASK-214
     acceptance_criteria:
-      - 页面内容以 docs/UX.md 0.18「店铺装修」与 docs/HANDOFF.md 0.84 为准，样式以 docs/design/pages/P-logo-header-footer 为准，二者冲突时以 UX 文档为准并在 PR 里说明；不新增界面文字（品牌沿用 copy.ts 的 BRAND）；布局与尺寸写在 frontend/src/styles/site.css（手机写在 767px 及以下的媒体查询里；不声明颜色、字体、圆角属性，视觉稿给出的固定尺寸直接写像素值；不改生成的 frontend/src/styles/acuven-shop.css）；视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离（评审不以此要求修改）
-      - 读取——frontend/src/storeDesign.ts 的 StoreDesignResponse 与 StoreDesignValue 加 logo（string 或 null）；parseStoreDesignResponse 按 purpose 取 logo，logo 不合格不让整份响应作废；initialStoreDesign 与没有提供者时的默认值 logo 为 null；settledStoreDesign 成功时换成返回的 logo，失败时保持当前值；rememberDesign 与 readRememberedDesign 的形状不变
-      - 显示——frontend/src/components/SiteFrame.tsx 的页头品牌链接与页脚品牌在 logo 不为 null 且未加载失败时显示 img（src 为 logo，alt 为 BRAND），否则显示文字 BRAND；加载失败的状态随 logo 路径重置；页头链接的去向、点击收起菜单与其余页头页脚内容不变
-      - 代码结构——品牌的显示写成导出的、只依赖 props 的组件（logo 与是否加载失败为 props），页头与页脚共用；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改
-      - 测试——用 vitest 与 react-dom/server（不加测试依赖，fetch 以替身代替；以 renderToStaticMarkup 渲染、直接调用导出的函数，不模拟点击）验证意图——frontend/src/storeDesign.test.ts 补 logo 的解析（null、合格路径、缺少、不合格时按没有标志处理且主题等照常取用）、初始值与读取失败时保持当前值、记住的值里没有 logo；frontend/src/components/SiteFrame.test.tsx 补品牌组件在有标志、没有标志与加载失败三种情形下的输出（img 的 src 与 alt、文字品牌），以及页头与页脚都用它；现有测试只为 logo 字段补值；每条测试写明它守住的是 UX 0.18「店铺装修」、DESIGN 1.20 第 15 条或 HANDOFF 0.84 的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
-      - docs/task-records/SHOP-TASK-216.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收、没有用真实标志在各主题与深色模式下看过）；改动只落在 allowed_change_paths（不新增路由；router.tsx、App.tsx 与 copy.ts 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-216.md
     allowed_change_paths:
       - frontend/src/storeDesign.ts
       - frontend/src/storeDesign.test.ts
@@ -5933,6 +5890,347 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/styles/site.css
       - docs/task-records/SHOP-TASK-216.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-217
+    title: 运营告警邮件的发送机制（配置、队列与发信线程、限频、测试告警命令）
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 1 至 5 条与第 9 条，新增 app/services/ops_alert.py：读取七项告警配置、在本进程内存里合并与排队、由发信线程经通用 SMTP（只用标准库 smtplib、ssl 与 email，不加依赖）发出、按 Redis 限频；另加一次性命令 python -m app.jobs send-test-alert，补跑命令退出前等队列发完；docker-compose.yml 把七项配置传进 shop_api 与 shop_jobs。
+      本任务只接入测试告警 ops_alert_test，不接业务告警点（第 6、7 条的接线是 SHOP-TASK-218 至 222）。不改数据库、接口与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：调用方以 from app.services import ops_alert 引入、以 ops_alert.alert(category, target=None, *, error_class=None) 调用（测试替换模块属性 alert），target 为（对象类别, 内部 ID）二元组或 None；类别表 CATEGORIES 写在本模块，本任务只放 ops_alert_test，各接线任务把自己的类别加进来；七项配置在 Settings 里都是字符串、默认空串（端口与加密方式不合格不能让设置加载失败，由本模块判断）；shop_jobs 现在没有 SHOP_REDIS_URL，本任务另加上（第 4 条，API 与定时任务共用限频）；.env.example 的七个变量名由登记 PR 写好（控制面把 .env 开头的文件列为敏感文件名，Worker 改不了）。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」一节与 HANDOFF 0.88，告警邮件的配置、发送、限频与内容约束（邮件不得带个人资料与凭据）。
+      拆分：发送机制一层（8 个允许路径），各处接线为 SHOP-TASK-218 至 222，都只依赖本任务。
+    status: done
+    depends_on: []
+    acceptance_criteria:
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-217.md
+    allowed_change_paths:
+      - app/services/ops_alert.py
+      - app/core/config.py
+      - app/jobs.py
+      - docker-compose.yml
+      - tests/test_ops_alert.py
+      - tests/test_jobs.py
+      - tests/test_compose_env.py
+      - docs/task-records/SHOP-TASK-217.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-218
+    title: 定时任务失败的告警邮件（job_failing 与 stock_reset_failed）
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 6 条表中 job_failing 与 stock_reset_failed 两行和第 7 条，在 app/jobs.py 的常驻循环里接入这两类告警，并把两类加进 app/services/ops_alert.py 的 CATEGORIES。心跳与容器不健康的规则不变。不改发送机制，不改数据库、接口与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：两类都以对象作去重键；job_failing 的对象为（job, 任务名），窗口 3600 秒，error_class 为最后一次失败的异常类名，数据库未配置时为 database_not_configured；stock_reset_failed 的对象为（date, 马来西亚营业日期的 ISO 写法），窗口 86400 秒，error_class 为异常类名；reset_stock_job 加只限关键字的参数决定失败时是否告警，常驻循环告警、reset-stock 补跑命令不告警（第 7 条：补跑命令本身失败不发告警）。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6、7 条与 HANDOFF 0.88。
+      拆分：定时任务接线一层（4 个允许路径），依赖 SHOP-TASK-217。
+    status: done
+    depends_on:
+      - SHOP-TASK-217
+    acceptance_criteria:
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-218.md
+    allowed_change_paths:
+      - app/jobs.py
+      - app/services/ops_alert.py
+      - tests/test_jobs.py
+      - docs/task-records/SHOP-TASK-218.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-219
+    title: Stripe 结账创建与对账的告警邮件（密钥、创建与超时未定）
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 6 条表中 stripe_key_not_test、stripe_checkout_needs_review、stripe_create_rejected、stripe_unreachable、stripe_payment_needs_review 五行，在 app/services/stripe_gateway.py、stripe_checkout.py 与 stripe_overdue.py 的现有 error 日志之后接入告警，并把五类加进 app/services/ops_alert.py 的 CATEGORIES。不改支付与对账规则，不改发送机制，不改数据库、接口与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：每条现有的告警日志之后紧接着调用 ops_alert.alert(类别, 对象)，类别取日志里的同一个常量；日志里为 checkout=<ID> 的，对象为（stripe_checkout, 结账记录 ID）；stripe_key_not_test 的对象为 None，只在现有的「每个进程第一次判定」那条日志之后调用；Stripe 适配器里不带记录 ID 的 stripe_livemode 日志不入队（第 6 条表）；五类都不以对象作去重键，窗口 3600 秒。第 6 条表里 stripe_create_rejected 的触发时机写作「对账时」，按第 2 条「入队位置跟现有 error 日志一致」落实为现有日志所在的创建调用被拒（登记预审指出两者不符，HANDOFF 0.88 第 9 项）。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6 条与 HANDOFF 0.88；告警不带 Stripe 的任何 ID、金额与个人资料。
+      拆分：Stripe 一组按文件分三个任务（219 结账创建与对账、220 确认付款与 webhook、221 退款），每个不超过 12 个允许路径；本任务 8 个，依赖 SHOP-TASK-217。
+    status: done
+    depends_on:
+      - SHOP-TASK-217
+    acceptance_criteria:
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-219.md
+    allowed_change_paths:
+      - app/services/stripe_gateway.py
+      - app/services/stripe_checkout.py
+      - app/services/stripe_overdue.py
+      - app/services/ops_alert.py
+      - tests/test_stripe_gateway.py
+      - tests/test_stripe_checkout.py
+      - tests/test_stripe_overdue.py
+      - docs/task-records/SHOP-TASK-219.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-220
+    title: Stripe 确认付款与 webhook 的告警邮件（正式环境、查询被拒、会话不符与迟到付款）
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 6 条表中 stripe_livemode、stripe_confirm_rejected、stripe_session_mismatch、stripe_late_payment、stripe_late_payment_unrefundable 五行与 stripe_refund_cap 一行的第 6 条部分，在 app/services/stripe_confirm.py、app/services/stripe_webhook.py（结账记录的两条日志）与 app/api/stripe_webhook.py（webhook 入口的正式环境拒绝）的现有 error 日志之后接入告警，并把六类加进 app/services/ops_alert.py 的 CATEGORIES。不改付款确认与 webhook 规则，不改发送机制，不改数据库与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：每条现有的告警日志之后紧接着调用 ops_alert.alert(类别, 对象)，类别取日志里的同一个常量或变量；日志里为 checkout=<ID> 的，对象为（stripe_checkout, 结账记录 ID）；webhook 入口的 stripe_livemode 对象为 None；六类都不以对象作去重键，窗口 3600 秒；stripe_refund_cap 一类由本任务加进 CATEGORIES，SHOP-TASK-221 的退款申请告警点沿用。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6 条与 HANDOFF 0.88；告警不带 Stripe 的任何 ID、金额与个人资料。
+      拆分：Stripe 一组的第二个任务（9 个允许路径），依赖 SHOP-TASK-217。
+    status: done
+    depends_on:
+      - SHOP-TASK-217
+    acceptance_criteria:
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-220.md
+    allowed_change_paths:
+      - app/services/stripe_confirm.py
+      - app/services/stripe_webhook.py
+      - app/api/stripe_webhook.py
+      - app/services/ops_alert.py
+      - tests/test_stripe_confirm.py
+      - tests/test_stripe_late_payment.py
+      - tests/test_stripe_webhook.py
+      - tests/test_stripe_webhook_api.py
+      - docs/task-records/SHOP-TASK-220.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-221
+    title: Stripe 退款的告警邮件（被拒、不符、成功后失败、长期未定与无法退款）
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 6 条表中 stripe_refund_unrefundable、stripe_refund_rejected、stripe_refund_failed_after_success、stripe_refund_mismatch、stripe_refund_unresolved、stripe_webhook_refund_rejected 六行与 stripe_refund_cap 一行的第 8 条部分，在 app/services/stripe_refund.py、stripe_refund_overdue.py、stripe_webhook.py（退款尝试的两条日志）与 refund_review.py 的现有 error 日志之后接入告警，并把六类加进 app/services/ops_alert.py 的 CATEGORIES（stripe_refund_cap 已由 SHOP-TASK-220 加入）。不改退款规则，不改发送机制，不改数据库、接口与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：每条现有的告警日志之后紧接着调用 ops_alert.alert(类别, 对象)，类别取日志里的同一个常量或变量；日志里为 attempt=<ID> 的，对象为（stripe_refund, 退款尝试 ID），为 refund_request=<ID> 的，对象为（refund_request, 退款申请 ID）；refund_review.py 的告警在调用方提交之前记日志，告警照此入队（第 2 条接受外层提交失败时多出一封）；app/api/admin_refunds.py 的 stripe_refund_submit_failed 不接（第 8 条）；六类都不以对象作去重键，窗口 3600 秒。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6 条与 HANDOFF 0.88；告警不带 Stripe 的任何 ID、金额与个人资料。
+      拆分：Stripe 一组的第三个任务（10 个允许路径），依赖 SHOP-TASK-217 与 220（沿用 220 加入的 stripe_refund_cap，app/services/stripe_webhook.py 两个任务都改）。
+    status: done
+    depends_on:
+      - SHOP-TASK-217
+      - SHOP-TASK-220
+    acceptance_criteria:
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-221.md
+    allowed_change_paths:
+      - app/services/stripe_refund.py
+      - app/services/stripe_refund_overdue.py
+      - app/services/stripe_webhook.py
+      - app/services/refund_review.py
+      - app/services/ops_alert.py
+      - tests/test_stripe_refund.py
+      - tests/test_stripe_refund_overdue.py
+      - tests/test_stripe_webhook_refund.py
+      - tests/test_stripe_refund_approval.py
+      - docs/task-records/SHOP-TASK-221.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-222
+    title: 短信预算用尽、管理员登录锁定与会员注销失败的告警邮件
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 6 条表中 sms_budget_exhausted、admin_login_locked、member_deletion_failed 三行，在 app/services/sms_verification.py、app/api/admin_auth.py 与 app/api/member_deletion.py 接入告警，并把三类加进 app/services/ops_alert.py 的 CATEGORIES。这三处现在没有 error 日志，本任务在告警点先记一条 error 日志（类别与对象 ID，日志仍是告警的权威记录），再调用 ops_alert.alert。不改短信、登录与注销规则，不改发送机制，不改数据库与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：sms_budget_exhausted 的对象为（date, 马来西亚日期的 ISO 写法），以对象作去重键、窗口 86400 秒，只在预占结果为 over_budget、停发的事务提交之后调用（unknown_cost 不调用，第 8 条）；admin_login_locked 的对象为（audit_event, admin_login_locked 审计记录 ID），在审计提交之后调用；member_deletion_failed 的对象为（member, 会员 ID），在确认注销的删除或提交抛数据库异常、回滚之后调用；后两类不以对象作去重键、窗口 3600 秒；日志写法为类别码加空格加对象类别等号 ID（如 member_deletion_failed member=<ID>），不带用户名、电话、来源地址与异常消息。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6 条与 HANDOFF 0.88；告警不带个人资料、用户名与来源地址。
+      拆分：其余三处接线一层（8 个允许路径），依赖 SHOP-TASK-217。
+    status: done
+    depends_on:
+      - SHOP-TASK-217
+    acceptance_criteria:
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-222.md
+    allowed_change_paths:
+      - app/services/sms_verification.py
+      - app/api/admin_auth.py
+      - app/api/member_deletion.py
+      - app/services/ops_alert.py
+      - tests/test_sms_verification.py
+      - tests/test_admin_auth_api.py
+      - tests/test_member_delete_confirm_api.py
+      - docs/task-records/SHOP-TASK-222.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-223
+    title: 作废已告警的 Stripe 结账记录并取消订单（服务层）
+    purpose: >-
+      按 docs/DESIGN.md 1.22「Stripe 测试环境支付」第 11 条第（1）项与「订单与退款状态」第 3 条，在 app/services/payment.py 新增公开函数 void_alerted_checkout(db, gateway, checkout_id, now)，供之后的后台接口处置已写告警时间、不是 expired、所属订单仍待支付的结账记录：先按第 4、5 条向 Stripe 查询一次，查得确定结果照现有规则处理；查不出结果、会话 complete 而付款未定、Stripe 答复已付款而照第 6 条写不成退款尝试，或记录为 creating 时，才把记录记为 expired 并以操作者 admin 取消订单（人工作废）。只做服务层；管理员的核实勾选、审计与响应由 SHOP-TASK-225 的接口处理。不改接口、前端、数据库与设计，不加依赖。
+      运营者落实写法：返回值为新的 StrEnum VoidResult（confirmed、cancelled、voided、changed、unavailable 五个值），记录不存在抛新异常 CheckoutNotFound。有会话 ID 时先查询一次会话（第 11 条「先按第 5 条向 Stripe 查询一次该会话」），再按查到的状态分流，不复用 _end_open（它先请求作废、只在部分结果下查询）；分流里的取消与确认沿用现有函数：给记录 ID 以操作者 system 调用 cancel_after_stripe_end，或调用 confirm_checkout；这些自动处理的订单事件操作者照现有规则为 system，只有人工作废的为 admin。审计：函数带只限关键字的参数 on_void（Callable[[Session], None] 或 None），人工作废的事务在提交之前调用它（由 SHOP-TASK-225 传入写审计的函数，审计与作废同一事务提交；它抛出的异常原样传出，作废随之不生效）；confirmed 与 cancelled 由现有函数各自提交，审计由接口在之后写。cancel_after_stripe_end 与 cancel_order 的操作者范围不变（tests/test_stripe_cancel.py 断言 cancel_after_stripe_end 拒绝 admin，保持通过）。本函数自己不写审计、不记日志、不发告警、不清空告警时间。访客看到的取消原因：同文件 _cancelled_by 把操作者 admin 的取消也归为 timeout（Kelvin 2026-11-08 决定，HANDOFF 0.90：这些订单都是 Stripe 24 小时以上没有结果才被作废，对访客就是超时未付；不改 UX 与文案），guest 与 member 仍为 self。
+      设计闸门：DESIGN 1.22（提交 ffb043e）「Stripe 测试环境支付」第 11 条第（1）项与「订单与退款状态」第 3 条。
+      拆分：人工处置的服务层第一个任务（5 个允许路径）；迟到付款退款重试与两类列表的查询见 SHOP-TASK-224，接口见 SHOP-TASK-225，后台页面待 UX 与视觉稿审阅后登记。
+    status: done
+    depends_on: []
+    acceptance_criteria:
+      - 入口——app/services/payment.py 新增 void_alerted_checkout(db, gateway, checkout_id, now, *, on_void=None) 返回 VoidResult；now 带时区抛 ValueError（先于访问数据库）；调用方不得持有锁或未提交的改动，函数先结束当前事务，调用 Stripe 时不持有任何数据库锁、不留着读事务；记录不存在抛 CheckoutNotFound
+      - 前置条件——以普通读取取记录与订单后结束读事务；告警时间为空、记录为 expired 或订单不是 awaiting_demo_payment 时不调用 Stripe、不写库，返回 changed
+      - 查得确定结果——有会话 ID（open、complete）时先 retrieve_checkout_session 查询一次，核对会话 ID、元数据里的创建幂等键与记录相同且不是 livemode（同 app/services/stripe_overdue.py 的 _belongs）；查询不成或核对不符为给不出确定结果。查到已付款或 complete 时调用 confirm_checkout（用这次查询到的会话），paid 返回 confirmed，refunded（金额或币种不符、已写成全额退款尝试）时不给记录 ID 以 system 调用 cancel_after_stripe_end 并返回 cancelled；查到 expired 时给记录 ID 以 system 调用 cancel_after_stripe_end 并返回 cancelled；查到 open 时请求 expire_checkout_session 一次，返回的会话为 expired 则同上取消并返回 cancelled，否则为给不出确定结果（不再查询第二次）。cancel_after_stripe_end 返回 changed 时返回 changed，返回 kept 时按订单当前状态（demo_paid 为 confirmed，其他为 changed）
+      - 人工作废的条件——只在以下情形进入人工作废：creating（不调用 Stripe）；confirm_checkout 返回 needs_review 或 pending；给不出确定结果，或 confirm_checkout 返回 unavailable，且读取时记录的付款状态不是 paid。读取时付款状态已是 paid 而 Stripe 给不出结果时不作废、不写库，返回 unavailable
+      - 人工作废的事务——进入前重新以普通读取取记录（Stripe 处理可能已改动它）；在一个事务里按会员、订单、记录的顺序加锁重查，记录仍属该订单、状态与这次读到的相同、不是 expired、告警时间非空、订单仍待支付且没有其他不是 expired 的记录，付款状态为 paid 时只在 needs_review 情形允许；不满足即回滚返回 changed。满足则记录记为 expired、活动列置空，订单以带条件的 UPDATE 改为 demo_cancelled（不看本地支付到期时间），加回库存、释放券与积分预占、写一条操作者为 admin 的订单事件，flush 后调用 on_void(db)（给出时），再提交并返回 voided；on_void 抛出时回滚、异常原样传出
+      - 订单规则——app/services/order_rules.py 的 (awaiting_demo_payment, demo_cancelled) 允许的操作者加上 admin，注释写明只经 DESIGN 1.22 第 11 条的人工作废；tests/test_order_rules.py 只为这一处的期望表与断言改动；其他迁移不变。app/services/payment.py 的 _cancelled_by 对操作者为 system 或 admin 的取消事件都给 timeout，guest 与 member 给 self，文档字符串随之更新；tests/test_stripe_void.py 断言人工作废后支付页数据（pay_orders）的取消原因为 timeout
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_stripe_void.py 用 app/services/stripe_gateway.py 的 FakeStripeGateway 与 SQLite，覆盖上面每一个分支的返回值与库里的结果（记录状态与活动列、订单状态、库存加回、券与积分预占释放、事件操作者），creating 不调用 Stripe，读取时已付款而 Stripe 不可用时不作废，Stripe 处理之后记录被并发改动时返回 changed，有会话 ID 时先查询会话（查到 open 才请求作废，查到已付款不请求作废），on_void 与作废同一事务（它抛出时记录与订单都不变），以及人工作废之后同一会话的付款经 confirm_checkout 按第 6 条写成全额退款尝试、订单保持已取消；每条测试的文档字符串写明它守住的 DESIGN 1.22 第 11 条哪一句
+      - docs/task-records/SHOP-TASK-223.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改接口、前端、数据库与迁移、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
+    allowed_change_paths:
+      - app/services/payment.py
+      - app/services/order_rules.py
+      - tests/test_order_rules.py
+      - tests/test_stripe_void.py
+      - docs/task-records/SHOP-TASK-223.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-224
+    title: 迟到付款退款的手动重试与 Stripe 待处理列表的查询（服务层）
+    purpose: >-
+      按 docs/DESIGN.md 1.22「Stripe 测试环境支付」第 11 条第（2）项，在 app/services/stripe_refund.py 新增 retry_checkout_attempt(db, checkout_id, now)：来源为会话（第 6 条迟到与不符的付款）、最新一次尝试为 failed 时新建一条 pending 尝试；并按第 11 条的两类列表与各自的退出条件，新增 app/services/admin_stripe_pending.py 提供只读查询 stripe_pending(db)。只做服务层，不改接口、前端、数据库与设计，不加依赖。
+      运营者落实写法：retry_checkout_attempt 照 retry_request_attempt 的写法只 flush、不提交，由之后的接口写审计、提交并调用 submit_refund_attempt；付款金额取该来源原尝试的金额（第 6 条写入时等于会话的 amount_total）；stripe_refund_cap 的日志写法为 stripe_refund_cap checkout=<结账记录 ID>，告警对象为（stripe_checkout, 结账记录 ID），对象类别取 app/services/stripe_checkout.py 的 ALERT_TARGET_KIND。第 11 条写的「失败时间」在数据模型里没有对应字段（StripeRefund 只有创建、成功与上次复查时间），列表给出最新一次尝试的创建时间（字段名 attempted_at），不加字段、不改设计（Kelvin 2026-11-08 认可，HANDOFF 0.90；偏离记入任务记录）。
+      设计闸门：DESIGN 1.22（提交 ffb043e）「Stripe 测试环境支付」第 11 条第（2）项与第 8 条；列表只给对账字段与订单号，不给收货资料、Stripe 的任何 ID 与客户资料。
+      拆分：人工处置的服务层第二个任务（5 个允许路径），与 SHOP-TASK-223 互不依赖；接口见 SHOP-TASK-225。
+    status: done
+    depends_on: []
+    acceptance_criteria:
+      - 重试——app/services/stripe_refund.py 新增 retry_checkout_attempt(db, checkout_id, now) 返回新尝试的 ID；now 带时区抛 ValueError（先于访问数据库）；先结束此前的事务，再按订单、该结账记录的顺序加锁（订单行是新事务的第一条加锁语句），结账记录不存在抛新异常 RetryCheckoutNotFound
+      - 重试的检查——取来源为该结账记录（source_type 为 checkout）的尝试中 ID 最大的一条，没有抛 NoRefundAttempt，不是 failed 抛 RetryNotAllowed；以 refunded_total 锁住同一 PaymentIntent 的尝试，已有合计加原尝试金额超过原尝试金额时记一条 error 日志 stripe_refund_cap checkout=<ID>，紧接着以（stripe_checkout, 结账记录 ID）调用一次 ops_alert.alert，再抛 RefundCapExceeded；否则在保存点里写一条 pending 尝试（PaymentIntent 与金额同原尝试、来源为该结账记录、活动来源列为该记录 ID），撞上活动来源列的唯一约束时只回滚保存点并抛 RetryNotAllowed；抛出时都没有写库
+      - 列表——新文件 app/services/admin_stripe_pending.py 提供只读查询 stripe_pending(db)，返回 Pydantic 模型 StripePendingOut，两个字段 checkouts（PendingCheckout 的列表）与 refunds（FailedLateRefund 的列表），各按所写顺序、不分页：待处理的结账记录（告警时间非空、状态不是 expired、订单为 awaiting_demo_payment，按告警时间从早到晚、同时刻按 ID），每条给 checkout_id、status、order_number、created_at、alerted_at；失败的迟到付款退款（来源为会话、该来源 ID 最大的尝试为 failed，不论订单状态与结账记录是否已为 expired；按该尝试的 ID 从小到大），每条给 checkout_id、attempt_id、order_number、amount_sen、attempted_at（该尝试的创建时间）、error_type（last_error_type，可空）
+      - 列表不给收货资料、会员资料、Stripe 的任何 ID、付款页地址与创建参数快照；查询只读、结束读事务；三个模型名与字段名照上，之后的接口原样返回
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_stripe_late_refund_retry.py 覆盖重试的每一步（不存在、没有尝试、最新不是 failed、合计超额的日志与告警调用、唯一约束冲突、成功时新尝试的字段）并以 monkeypatch 替换 app.services.ops_alert.alert 记录调用；新文件 tests/test_admin_stripe_pending.py 覆盖两类列表的进入与退出条件（结账记录告警时间为空、已 expired、订单已不是待支付时不列出；退款最新一次已不是 failed 时不列出，记录已 expired 或订单已取消时仍列出）、排序与不含收货资料和 Stripe ID；每条测试的文档字符串写明它守住的 DESIGN 1.22 第 11 条哪一句
+      - docs/task-records/SHOP-TASK-224.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，偏离里写明 attempted_at 代替设计的失败时间）；改动只落在 allowed_change_paths；不改接口、前端、数据库与迁移、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
+    allowed_change_paths:
+      - app/services/stripe_refund.py
+      - app/services/admin_stripe_pending.py
+      - tests/test_stripe_late_refund_retry.py
+      - tests/test_admin_stripe_pending.py
+      - docs/task-records/SHOP-TASK-224.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-225
+    title: 后台 Stripe 待处理的列表、作废与退款重试接口
+    purpose: >-
+      按 docs/DESIGN.md 1.22「Stripe 测试环境支付」第 11 条，新增 app/api/admin_stripe_pending.py 的三个后台接口，并在 app/main.py 注册路由：GET /api/admin/stripe-pending 给出两类列表（SHOP-TASK-224 的查询）与后台写操作用的 CSRF 令牌（照 admin_coupons.py 的列表接口）；POST /api/admin/stripe-pending/checkouts/{checkout_id}/void 在管理员勾选核实后调用 SHOP-TASK-223 的 void_alerted_checkout；POST /api/admin/stripe-pending/checkouts/{checkout_id}/refund-retry 调用 SHOP-TASK-224 的 retry_checkout_attempt，提交后以新尝试调用 Stripe。不改服务层规则、前端、数据库与设计，不加依赖。
+      运营者落实写法：照 app/api/admin_refunds.py 的 stripe-retry 写法。作废的请求体恰好是 {"verified":true}（多余字段、缺少或不为 true 都是 422），返回 200 {"result":结果}，结果为 confirmed、cancelled 或 voided；changed 回 409 stripe_pending_changed，unavailable 回 503 stripe_unavailable（同 app/api/pay.py 的 _stripe_unavailable）。重试不读请求体、不要幂等键：没有尝试或不能重试 409 stripe_refund_not_retryable，超额 409 stripe_refund_cap，成功 200 {"result":"retried"}。审计在接口层写：voided 的审计由传给 void_alerted_checkout 的 on_void 在作废的同一事务里写；confirmed 与 cancelled 由现有函数各自提交，之后另开事务写审计并提交；审计都是 stripe_checkout_voided（对象 stripe_checkout 与记录 ID，新值为结果）；重试在服务层 flush 之后、同一事务里写 stripe_late_refund_retried（对象 stripe_refund 与新尝试 ID）后提交，再调用 submit_refund_attempt，它抛异常时回滚并记 stripe_refund_submit_failed attempt=<ID>，仍回 200。
+      设计闸门：DESIGN 1.22（提交 ffb043e）「Stripe 测试环境支付」第 11 条；只认管理员会话，写操作校验 CSRF，响应不含收货资料、Stripe 的任何 ID 与客户资料。
+      拆分：人工处置的接口层（4 个允许路径），依赖 SHOP-TASK-223 与 224。
+    status: done
+    depends_on:
+      - SHOP-TASK-223
+      - SHOP-TASK-224
+    acceptance_criteria:
+      - 路由——app/api/admin_stripe_pending.py 的路由前缀为 /api/admin/stripe-pending，用 app/api/order_lookup.py 的 _NoStoreRoute，在 app/main.py 注册；这些接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control 为 no-store，路径存在但方法不匹配时由框架返回的 405 不在此列
+      - 列表——GET 经 require_admin（401 admin_session_required），不要求 CSRF、不写审计；200 返回 checkouts、refunds 与 csrf_token 三个字段：前两个原样取自 SHOP-TASK-224 的 stripe_pending(db)（StripePendingOut 的两个列表），csrf_token 照 app/api/admin_coupons.py 列表接口的写法由 csrf_token_for_cookie 算出（算不出时 401 admin_session_required），供页面的作废与重试请求使用；时间照现有后台接口的写法序列化
+      - 作废——POST …/checkouts/{checkout_id}/void 依次 require_admin（401）、require_admin_csrf（403）、路径里的记录 ID（不带符号与前导零的十进制整数，否则 422）、请求体的结构（422，错误写法沿用 app/api/pay.py 的 _body_errors，不回显请求内容），之后才调用 void_alerted_checkout；原始请求体照 app/api/admin_refunds.py 审核接口的写法以依赖经 app/api/pay.py 的 _json_body 读取（超过上限 413、不是 JSON 415，这一步作为依赖先于 require_admin 执行，与审核接口相同）；记录不存在 404 not_found，changed 409 stripe_pending_changed，unavailable 503 stripe_unavailable，其余 200 与结果；Stripe 适配器经 app/api/pay.py 的 GatewayDep 取得
+      - 作废的审计——审计 stripe_checkout_voided（target_type 为 stripe_checkout、target_id 为记录 ID、旧值为空、新值为结果）：voided 经 on_void 在作废的同一事务里写入（接口传入写审计的函数）；confirmed 与 cancelled 在服务返回之后另开事务写入并提交；changed 与 unavailable 不写审计
+      - 重试——POST …/checkouts/{checkout_id}/refund-retry 依次 require_admin（401）、require_admin_csrf（403）、路径（422），不读请求体；RetryCheckoutNotFound 为 404 not_found，NoRefundAttempt 与 RetryNotAllowed 为 409 stripe_refund_not_retryable，RefundCapExceeded 为 409 stripe_refund_cap（告警已由服务层报），每种错误先回滚；成功时同一事务写审计 stripe_late_refund_retried（target_type 为 stripe_refund、target_id 为新尝试 ID、旧值为空、新值为结账记录 ID 的十进制写法）并提交，再以 submit_refund_attempt 调用 Stripe，它的结果不改变响应，抛异常时回滚并记一条 error 日志 stripe_refund_submit_failed attempt=<ID>（不记异常内容），200 {"result":"retried"}
+      - 资料——响应与日志不含收货资料、会员资料、Stripe 的任何 ID、付款页地址与 Stripe 错误原文；除上述 stripe_refund_submit_failed 外不写日志
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_stripe_pending_api.py 用 TestClient 与 FakeStripeGateway，覆盖三个接口的每个状态码与 detail、校验顺序（CSRF 或路径不通过时不调用服务层）、no-store、作废的审计只在三种结果时写且 voided 的审计与作废同一事务、重试的审计与提交后调用 Stripe、submit 抛异常仍回 200，以及响应不含收货资料与 Stripe ID；每条测试的文档字符串写明它守住的 DESIGN 1.22 第 11 条哪一句
+      - docs/task-records/SHOP-TASK-225.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改服务层规则、前端、数据库与迁移、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
+    allowed_change_paths:
+      - app/api/admin_stripe_pending.py
+      - app/main.py
+      - tests/test_admin_stripe_pending_api.py
+      - docs/task-records/SHOP-TASK-225.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-226
+    title: 后台 Stripe 待处理页的路由与导航 A11
+    purpose: >-
+      为 A11 新建路由 /admin/stripe-pending 与页面 frontend/src/pages/AdminStripePendingPage.tsx（用后台框架渲染，当前导航项为 Stripe 待处理，内容区只有标题 admin.nav_stripe_pending），后台导航按 docs/UX.md 0.19「管理后台总体」的顺序在退款之后加入 Stripe 待处理一项；
+      请求模块留给 SHOP-TASK-227，列表、作废与重试留给 SHOP-TASK-228。不调用接口，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只加路由、导航与标题，不碰金额与个人资料）。
+      拆分：A11 页面的框架层，照 A06 的 SHOP-TASK-173。18 个允许路径，超过拆分规则的 12 个：导航多一项后，10 个现有测试文件里按顺序列出导航项或路由表的断言必然失效（运营者在登记时对 main 的导出做骨架实测，列出 31 条失败，全部在 router.test.tsx、AdminFrame.test.tsx 与 8 个后台页面测试里，都是导航顺序或路由表的断言），只许改这些断言，与加导航的改动拆不开；路由、页面表与导航项的类型互相依赖，也拆不开。
+    status: done
+    depends_on: []
+    acceptance_criteria:
+      - 路由——frontend/src/router.tsx 的路由表在 /admin/refunds/:id 之后加 /admin/stripe-pending，导出 ADMIN_STRIPE_PENDING_PATH；frontend/src/App.tsx 的页面表加 AdminStripePendingPage；文件头注释补上该路径不带段值
+      - 导航——frontend/src/components/AdminFrame.tsx 的 AdminNavItem、ADMIN_NAV 与 NAV_ENTRY 在 refunds 之后加 stripePending（指向 /admin/stripe-pending，文字 admin.nav_stripe_pending），桌面导航与手机菜单都按此顺序；frontend/src/i18n/copy.ts 加 admin.nav_stripe_pending，三语与 docs/UX-COPY.md 逐字相同
+      - 页面——AdminStripePendingPage 用后台框架渲染，current 为 stripePending，内容区只有 h1 admin.nav_stripe_pending；本任务不加其他文案键、不调用接口；布局沿用现有后台页面，需要时才改 frontend/src/styles/site.css（只写布局、显隐与媒体查询，固定间距与尺寸写像素值，不声明颜色、字体、圆角属性；视觉稿里 site.css 写不了的记入任务记录的偏离）
+      - 现有测试——frontend/src/components/AdminFrame.test.tsx 的 LIVE_NAV_KEYS 在 admin.nav_refunds 之后加 admin.nav_stripe_pending，并把 UX-COPY 0.21 改成的「UX-COPY 的导航项多于已上线项」改回「两者相同」（DOC_NAV_KEYS 与 LIVE_NAV_KEYS 相等），导航项、href 与 aria-current 的期望改为十项；router.test.tsx 与 8 个后台页面测试（Categories、Coupons、Products、Refunds、Shipping、SiteSettings、StockResets、StoreDesign）只改按顺序列出导航项或路由表的断言与测试名，加入这一项，其余断言不动
+      - 测试验证意图（前端检查与全部测试由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——新文件 frontend/src/pages/AdminStripePendingPage.test.tsx 断言三种语言下标题、当前导航项（aria-current 为 page）与它在退款之后、商品之前；每条新增或改动的测试注释写明它守住的 UX 0.19「管理后台总体」或 A11 的原句
+      - docs/task-records/SHOP-TASK-226.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明不适用及理由），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/AdminStripePendingPage.tsx
+      - frontend/src/pages/AdminStripePendingPage.test.tsx
+      - frontend/src/components/AdminFrame.tsx
+      - frontend/src/components/AdminFrame.test.tsx
+      - frontend/src/pages/AdminCategoriesPage.test.tsx
+      - frontend/src/pages/AdminCouponsPage.test.tsx
+      - frontend/src/pages/AdminProductsPage.test.tsx
+      - frontend/src/pages/AdminRefundsPage.test.tsx
+      - frontend/src/pages/AdminShippingPage.test.tsx
+      - frontend/src/pages/AdminSiteSettingsPage.test.tsx
+      - frontend/src/pages/AdminStockResetsPage.test.tsx
+      - frontend/src/pages/AdminStoreDesignPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/router.test.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-226.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-227
+    title: 后台 Stripe 待处理的请求模块 A11
+    purpose: >-
+      为 A11 页面新建调用 SHOP-TASK-225 三个接口（GET /api/admin/stripe-pending、POST /api/admin/stripe-pending/checkouts/{结账记录 ID}/void 与 …/refund-retry）的请求模块与测试，供 SHOP-TASK-228 使用；不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
+      运营者落实写法：照 frontend/src/api/adminRefunds.ts 的 retryStripeRefund 与 frontend/src/api/adminStockResets.ts 的写法（同源 cookie、不缓存、Accept 为 application/json，写操作带框架的 CSRF 请求头，路径 ID 不合法时不发请求）；记录不存在（404）与 changed 一样回给页面已变化（UX 0.19 A11）。
+      设计闸门：不适用（作废与重试的规则、核对与审计在 SHOP-TASK-223 至 225 的服务端，依据 DESIGN 1.22 第 11 条；请求模块只传递与校验字段）。
+      拆分：A11 页面的请求层（3 个允许路径），照 A06 的 SHOP-TASK-174。
+    status: done
+    depends_on: []
+    acceptance_criteria:
+      - 读取——新文件 frontend/src/api/adminStripePending.ts 导出 readStripePending(signal)，GET /api/admin/stripe-pending；200 时逐项校验字段后返回 ok 与数据（csrf_token 为非空字符串；checkouts 每项 checkout_id 为正整数、status 为 creating、open、complete 之一、order_number 为字符串、created_at 与 alerted_at 为字符串；refunds 每项 checkout_id 与 attempt_id 为正整数、order_number 为字符串、amount_sen 为非负整数、attempted_at 为字符串、error_type 为字符串或 null），任一不合格算 failed；401 为 none，其他状态为 failed，网络中断为 network
+      - 作废——导出 voidCheckout(checkoutId, csrfToken)，POST …/checkouts/{ID}/void，请求体为 JSON 对象，只有 verified 为 true，Content-Type 为 application/json；回答 200 时按响应体 result 返回 confirmed、cancelled 或 voided（其他值算 failed）；409 stripe_pending_changed 与 404 为 changed；503 stripe_unavailable 为 unavailable；403 为 csrf；401 为 none；其他（含别的 409、503 与 422）为 failed；网络中断为 network
+      - 重试——导出 retryLateRefund(checkoutId, csrfToken)，POST …/checkouts/{ID}/refund-retry，没有请求体；200 为 done（响应体不读）；409 stripe_refund_not_retryable 与 404 为 changed；409 stripe_refund_cap 为 cap；403 为 csrf；401 为 none；其他为 failed；网络中断为 network
+      - 两个写操作的 ID 不是正整数时不发请求、返回 failed；三个函数都不在日志或错误里带出 CSRF 令牌与响应内容
+      - 测试验证意图（由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——新文件 frontend/src/api/adminStripePending.test.ts 以 fetch 替身覆盖每个函数的请求（方法、路径、请求头、请求体）、每种回答到返回值的映射与字段校验的每一种不合格；每条测试的注释写明它守住的 UX 0.19 A11 或 SHOP-TASK-225 契约的哪一句
+      - docs/task-records/SHOP-TASK-227.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改页面、路由、后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明不适用及理由），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/api/adminStripePending.ts
+      - frontend/src/api/adminStripePending.test.ts
+      - docs/task-records/SHOP-TASK-227.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-228
+    title: 后台 Stripe 待处理 A11 的列表、作废确认框与退款重试
+    purpose: >-
+      在 SHOP-TASK-226 的 A11 页面上接 SHOP-TASK-227 的请求模块：读取并显示两个列表，作废确认框与五种作废结果，迟到付款退款的重试与它的结果，依据 docs/UX.md 0.19 的 A11、docs/UX-COPY.md 0.21 与视觉稿 docs/design/pages/A11-desktop、A11-phone、A11-states。不装依赖，不改后端，不改设计。
+      运营者落实写法：桌面表格与手机卡片两套都渲染，由 site.css 按宽度显隐（照 A07）；时间照 A03 尝试表用 TrackOrderPage 的 formatDateTime，金额照 A03 用 usePrice；确认框照 A10 的 site-admin__confirm 写法；401 回到 A01，网络中断显示 common.network_check、其他失败显示 common.error_retry（照 A07 现有写法）；写操作的 403 关闭确认框、显示 common.error_retry 并重新读取（取得新的 CSRF 令牌，照 A03 重试的 csrf）。视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离，不借用其他组件的类来取颜色，评审不以此要求修改。
+      设计闸门：DESIGN 1.22（提交 ffb043e）「Stripe 测试环境支付」第 11 条与 HANDOFF 0.90、0.91，作废与重试的页面呈现（只显示对账字段与订单号，不显示 Stripe ID、收货资料与客户资料；规则、核对与审计在服务端）。
+      拆分：A11 页面的内容层（7 个允许路径，router.tsx、App.tsx 与 site.css 按页面任务的惯例列入），依赖 SHOP-TASK-225（接口）、226（页面）与 227（请求模块）。
+    status: done
+    depends_on:
+      - SHOP-TASK-225
+      - SHOP-TASK-226
+      - SHOP-TASK-227
+    acceptance_criteria:
+      - 页面内容以 docs/UX.md 0.19 的 A11 为准，样式以 docs/design/pages/A11-desktop、A11-phone、A11-states 为准；frontend/src/i18n/copy.ts 加上 A11 其余 25 个新键（UX-COPY 0.21 新增、SHOP-TASK-226 未加的），三语与 UX-COPY 逐字相同；框架和页面的布局、显隐与媒体查询写在 frontend/src/styles/site.css，视觉稿的固定间距与尺寸直接写像素值，不声明颜色、字体、圆角属性
+      - 读取与列表——进入页面读取一次，标题下为 admin.stripe_pending_note；两个列表依次为 admin.stripe_pending_checkouts_title 与 admin.stripe_pending_refunds_title（其下 admin.stripe_pending_refunds_note），照接口给的顺序显示，列与卡片字段照 UX 0.19 A11（记录 ID 与尝试 ID 显示为「#」加数字，状态 creating、open、complete 分别为 admin.checkout_status_creating、_open、_complete，错误类别为原文、为空时显示 —），各自为空时显示 admin.stripe_pending_none；读取失败显示提示与 admin.reload，点它重新读取；不显示 csrf_token 与接口没给的字段
+      - 作废确认框——每行 admin.stripe_void 打开确认框（role 为 dialog、aria-modal 为 true），标题为 admin.stripe_void_confirm_title（{id} 为结账记录 ID，{order} 为订单号），正文 admin.stripe_void_confirm_body，勾选框 admin.stripe_void_verified，按钮 common.cancel 与 admin.stripe_void_submit；未勾选时提交禁用，common.cancel 关闭且不发请求，提交中两个按钮都禁用；每次打开时勾选框为未勾选
+      - 作废结果——确认框关闭后在第一个列表标题下方显示一条提示：confirmed、cancelled、voided 分别为 admin.stripe_void_confirmed、admin.stripe_void_cancelled、admin.stripe_void_voided，changed 为 admin.stripe_pending_changed，这四种都重新读取两个列表；unavailable 为 admin.stripe_void_unavailable（不重新读取）；403 与其他失败照 purpose；结果提示照视觉稿，前四种为状态提示（role 为 status），其余为警示（acs-admin__alert，role 为 alert）
+      - 重试与结果——每行 admin.stripe_refund_retry 直接发出重试，不另设确认框，提交中该按钮禁用；结果在第二个列表标题下方：done 为 admin.stripe_late_refund_retried，changed 为 admin.stripe_pending_changed，这两种都重新读取；cap 为 admin.stripe_refund_blocked（警示，不重新读取）；403 与其他失败照 purpose
+      - 两处提示各自只保留最新一条，下一次同类操作开始时清除；重新读取不清除刚给出的结果提示；离开页面时中止未完成的读取，旧读取的结果不再更新页面
+      - 测试验证意图（前端检查与全部测试由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——frontend/src/pages/AdminStripePendingPage.test.tsx 用 vitest 与 react-dom/server（不加测试依赖，请求模块以替身代替；以 renderToStaticMarkup 渲染、直接调用导出的纯函数），覆盖三种语言下两个列表的字段与空状态、读取失败、确认框的禁用与勾选、五种作废结果与三种重试结果的提示与是否重新读取、写操作 403 后关闭确认框并重新读取且下一次写操作带新读到的令牌、网络中断与其他失败的提示、401 回到 A01、页面不含 csrf_token；SHOP-TASK-226 的标题与导航断言保留；每条测试的注释写明它守住的 UX 0.19 A11 原句
+      - docs/task-records/SHOP-TASK-228.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，偏离与验证到什么程度只写实际情况）；改动只落在 allowed_change_paths；不改请求模块、后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
+    allowed_change_paths:
+      - frontend/src/pages/AdminStripePendingPage.tsx
+      - frontend/src/pages/AdminStripePendingPage.test.tsx
+      - frontend/src/router.tsx
+      - frontend/src/App.tsx
+      - frontend/src/i18n/copy.ts
+      - frontend/src/styles/site.css
+      - docs/task-records/SHOP-TASK-228.md
     allowed_commands:
       - lint.check
       - format.check

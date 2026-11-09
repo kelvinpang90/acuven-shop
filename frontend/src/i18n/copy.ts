@@ -1800,6 +1800,11 @@ export const COPY = {
     zh: "退款审核",
     ms: "Bayaran balik",
   },
+  "admin.nav_stripe_pending": {
+    en: "Stripe follow-ups",
+    zh: "Stripe 待处理",
+    ms: "Susulan Stripe",
+  },
   "admin.nav_products": {
     en: "Products",
     zh: "商品",
@@ -2616,9 +2621,9 @@ export const COPY = {
     ms: "Selesai",
   },
   "admin.stock_reset_failed": {
-    en: "Failed — the operator has been alerted",
-    zh: "失败——已告警运营者",
-    ms: "Gagal — pengendali telah dimaklumkan",
+    en: "Failed — an operator alert has been logged",
+    zh: "失败——已记录运营告警",
+    ms: "Gagal — amaran pengendali telah direkodkan",
   },
   "admin.stock_reset_note": {
     en: "Resets restore today's stock only. Past orders, refunds and points are not changed.",
@@ -2790,6 +2795,41 @@ export const COPY = {
     zh: "已保存，前台已改用这些设置。",
     ms: "Disimpan. Kedai kini menggunakan tetapan ini.",
   },
+  "admin.logo": {
+    en: "Logo",
+    zh: "店铺标志",
+    ms: "Logo",
+  },
+  "admin.logo_hint": {
+    en: "Shown instead of the ACUVEN SHOP text in the storefront header and footer.",
+    zh: "在前台页头与页脚代替文字 ACUVEN SHOP 显示。",
+    ms: "Dipaparkan menggantikan teks ACUVEN SHOP pada pengepala dan pengaki kedai.",
+  },
+  "admin.logo_remove": {
+    en: "Remove logo",
+    zh: "移除标志",
+    ms: "Buang logo",
+  },
+  "admin.logo_rules": {
+    en: "40–4,000 pixels on each side, with the longer side at least 200. Location and other photo data are removed, and the original file isn't kept.",
+    zh: "宽与高 40 到 4,000 像素，长边至少 200 像素。拍摄地点等照片资料会被去掉，不保留原文件。",
+    ms: "Setiap sisi 40–4,000 piksel, dengan sisi lebih panjang sekurang-kurangnya 200. Lokasi dan data foto lain dibuang, dan fail asal tidak disimpan.",
+  },
+  "admin.logo_immediate": {
+    en: "Logo changes are saved straight away and don't need Save.",
+    zh: "标志的上传与移除立即生效，不需要点保存。",
+    ms: "Perubahan logo disimpan serta-merta dan tidak memerlukan Simpan.",
+  },
+  "admin.logo_invalid": {
+    en: "This image can't be used. It must be a single still image, 40–4,000 pixels on each side, with the longer side at least 200.",
+    zh: "这张图片不能使用：须为单张静态图，宽与高都在 40 到 4,000 像素之间，长边至少 200 像素。",
+    ms: "Imej ini tidak boleh digunakan. Ia mesti satu imej pegun, 40–4,000 piksel pada setiap sisi, dengan sisi lebih panjang sekurang-kurangnya 200.",
+  },
+  "admin.logo_remove_confirm": {
+    en: "Remove the logo? It can't be restored; upload it again if you need it.",
+    zh: "移除店铺标志？移除后无法恢复，需要时请重新上传。",
+    ms: "Buang logo? Ia tidak boleh dipulihkan; muat naik semula jika perlu.",
+  },
   "admin.logout": {
     en: "Log out",
     zh: "退出登录",
@@ -2956,14 +2996,139 @@ export const COPY = {
     ms: "Tiada apa untuk dikembalikan di Stripe: item yang diluluskan dibayar sepenuhnya dengan kupon atau mata.",
   },
   "admin.stripe_refund_not_sent": {
-    en: "This refund couldn't be sent to Stripe. The operator has been alerted; check this payment in the Stripe dashboard.",
-    zh: "这笔退款未能发送到 Stripe，已告警运营者；请到 Stripe 后台核对这笔付款。",
-    ms: "Bayaran balik ini tidak dapat dihantar ke Stripe. Pengendali telah dimaklumkan; semak pembayaran ini di papan pemuka Stripe.",
+    en: "This refund couldn't be sent to Stripe. An operator alert has been logged; check this payment in the Stripe dashboard.",
+    zh: "这笔退款未能发送到 Stripe，已记录运营告警；请到 Stripe 后台核对这笔付款。",
+    ms: "Bayaran balik ini tidak dapat dihantar ke Stripe. Amaran pengendali telah direkodkan; semak pembayaran ini di papan pemuka Stripe.",
   },
   "admin.stripe_refund_blocked": {
-    en: "This refund can't be sent to Stripe because it would exceed the amount paid. The operator has been alerted.",
-    zh: "这笔退款会超过付款金额，无法发送到 Stripe，已告警运营者。",
-    ms: "Bayaran balik ini tidak boleh dihantar ke Stripe kerana ia akan melebihi amaun yang dibayar. Pengendali telah dimaklumkan.",
+    en: "This refund can't be sent to Stripe because it would exceed the amount paid. An operator alert has been logged.",
+    zh: "这笔退款会超过付款金额，无法发送到 Stripe，已记录运营告警。",
+    ms: "Bayaran balik ini tidak boleh dihantar ke Stripe kerana ia akan melebihi amaun yang dibayar. Amaran pengendali telah direkodkan.",
+  },
+  "admin.stripe_pending_note": {
+    en: "Stripe test-mode records that need your decision. Alert emails name the checkout record ID for the first list and, for failed refunds, the refund attempt ID for the second list. Nothing here moves real money.",
+    zh: "需要你决定的 Stripe 测试环境记录。第一个列表对照告警邮件里的结账记录 ID；第二个列表对照退款失败告警邮件里的退款尝试 ID。这里的操作不涉及真实资金。",
+    ms: "Rekod mod ujian Stripe yang memerlukan keputusan anda. E-mel amaran menyebut ID rekod pembayaran untuk senarai pertama dan, bagi bayaran balik yang gagal, ID cubaan bayaran balik untuk senarai kedua. Tiada wang sebenar terlibat di sini.",
+  },
+  "admin.stripe_pending_checkouts_title": {
+    en: "Checkout records without a result",
+    zh: "没有结果的结账记录",
+    ms: "Rekod pembayaran tanpa keputusan",
+  },
+  "admin.stripe_pending_refunds_title": {
+    en: "Failed refunds of late payments",
+    zh: "失败的迟到付款退款",
+    ms: "Bayaran balik gagal bagi bayaran lewat",
+  },
+  "admin.stripe_pending_refunds_note": {
+    en: "Payments that arrived after an order was cancelled or paid another way, or that didn't match the order, need a full refund. The refunds below failed in Stripe. Check them in the Stripe dashboard, then retry. Retrying sends a new refund request.",
+    zh: "订单已取消或已由其他途径付款之后才到的付款，以及与订单不符的付款，需要全额退回。下面列出在 Stripe 失败的退款；请先在 Stripe 后台核对，再重试，重试会发出一笔新的退款请求。",
+    ms: "Bayaran yang tiba selepas pesanan dibatalkan atau dibayar dengan cara lain, atau yang tidak sepadan dengan pesanan, perlu dikembalikan sepenuhnya. Bayaran balik di bawah gagal di Stripe. Semak di papan pemuka Stripe, kemudian cuba semula. Cubaan semula menghantar permintaan bayaran balik baharu.",
+  },
+  "admin.stripe_pending_none": {
+    en: "Nothing to handle.",
+    zh: "没有待处理的记录。",
+    ms: "Tiada apa-apa untuk diuruskan.",
+  },
+  "admin.col_checkout_record": {
+    en: "Checkout record",
+    zh: "结账记录",
+    ms: "Rekod pembayaran",
+  },
+  "admin.col_refund_attempt": {
+    en: "Refund attempt",
+    zh: "退款尝试",
+    ms: "Cubaan bayaran balik",
+  },
+  "admin.col_created": {
+    en: "Created",
+    zh: "创建时间",
+    ms: "Dicipta",
+  },
+  "admin.col_alerted": {
+    en: "Alerted",
+    zh: "告警时间",
+    ms: "Diberi amaran",
+  },
+  "admin.col_attempted": {
+    en: "Attempted",
+    zh: "尝试时间",
+    ms: "Dicuba",
+  },
+  "admin.col_error_type": {
+    en: "Error type",
+    zh: "错误类别",
+    ms: "Jenis ralat",
+  },
+  "admin.checkout_status_creating": {
+    en: "Creating — result unknown",
+    zh: "创建中（结果不明）",
+    ms: "Sedang dicipta — keputusan tidak diketahui",
+  },
+  "admin.checkout_status_open": {
+    en: "Open",
+    zh: "进行中",
+    ms: "Terbuka",
+  },
+  "admin.checkout_status_complete": {
+    en: "Completed",
+    zh: "已完成",
+    ms: "Selesai",
+  },
+  "admin.stripe_void": {
+    en: "Void and cancel order",
+    zh: "作废并取消订单",
+    ms: "Batalkan rekod dan pesanan",
+  },
+  "admin.stripe_void_confirm_title": {
+    en: "Void checkout record #{id} and cancel order {order}?",
+    zh: "作废结账记录 #{id} 并取消订单 {order}？",
+    ms: "Batalkan rekod pembayaran #{id} dan pesanan {order}?",
+  },
+  "admin.stripe_void_confirm_body": {
+    en: "Stripe is asked first, and a clear answer is followed: a paid order is confirmed, not cancelled. The record is voided and the order cancelled on your check only when Stripe can't give a result, when a payment doesn't match the order and can't be refunded automatically, or when the checkout was never confirmed as created. Stock, coupons and points are then released. If the customer still pays later, the store tries to refund it in full: if a refund can't be started, an operator alert is logged; refunds that fail in Stripe are listed on this page.",
+    zh: "会先向 Stripe 查询，给出明确结果就照它处理：已付款的订单会被确认，不会取消。只有 Stripe 给不出结果、付款与订单不符而无法自动退款，或结账从未确认建成时，才凭你的核对作废记录并取消订单，并释放库存、优惠券与积分。之后若顾客仍付了款，系统会尝试全额退款：无法发起时会记下运营告警；在 Stripe 失败的退款会列在本页。",
+    ms: "Stripe ditanya dahulu dan jawapan yang jelas diikut: pesanan yang sudah dibayar disahkan, bukan dibatalkan. Rekod dan pesanan dibatalkan berdasarkan semakan anda hanya apabila Stripe tidak dapat memberi keputusan, bayaran tidak sepadan dengan pesanan dan tidak boleh dikembalikan secara automatik, atau pembayaran tidak pernah disahkan telah dicipta. Stok, kupon dan mata kemudian dilepaskan. Jika pelanggan masih membayar kemudian, kedai akan cuba membayar balik sepenuhnya: jika bayaran balik tidak dapat dimulakan, amaran operator direkodkan; bayaran balik yang gagal di Stripe disenaraikan di halaman ini.",
+  },
+  "admin.stripe_void_verified": {
+    en: "I've checked this order's session and payment in the Stripe test dashboard.",
+    zh: "我已在 Stripe 测试后台核对过这笔订单的会话与付款。",
+    ms: "Saya telah menyemak sesi dan bayaran pesanan ini dalam papan pemuka ujian Stripe.",
+  },
+  "admin.stripe_void_submit": {
+    en: "Void and cancel",
+    zh: "作废并取消",
+    ms: "Batalkan",
+  },
+  "admin.stripe_void_confirmed": {
+    en: "Stripe shows this order as paid. It has been confirmed and was not cancelled.",
+    zh: "Stripe 显示这笔订单已付款，订单已确认，未取消。",
+    ms: "Stripe menunjukkan pesanan ini telah dibayar. Ia telah disahkan dan tidak dibatalkan.",
+  },
+  "admin.stripe_void_cancelled": {
+    en: "The order has been cancelled based on Stripe's answer. If a payment that didn't match the order was found, a full refund has been requested for it.",
+    zh: "已按 Stripe 的结果取消订单。若查到与订单不符的付款，已为它发起全额退款。",
+    ms: "Pesanan telah dibatalkan berdasarkan jawapan Stripe. Jika bayaran yang tidak sepadan dengan pesanan ditemui, bayaran balik penuh telah diminta untuknya.",
+  },
+  "admin.stripe_void_voided": {
+    en: "The record has been voided and the order cancelled.",
+    zh: "记录已作废，订单已取消。",
+    ms: "Rekod dan pesanan telah dibatalkan.",
+  },
+  "admin.stripe_void_unavailable": {
+    en: "Stripe isn't available right now, and this record already shows a payment, so it can't be voided. Try again later.",
+    zh: "Stripe 暂不可用，而这条记录已显示付款，不能作废。请稍后再试。",
+    ms: "Stripe tidak tersedia buat masa ini dan rekod ini sudah menunjukkan bayaran, jadi ia tidak boleh dibatalkan. Cuba lagi kemudian.",
+  },
+  "admin.stripe_pending_changed": {
+    en: "This record has changed or no longer needs handling. The list has been reloaded.",
+    zh: "这条记录已有变化或已无需处理，列表已重新读取。",
+    ms: "Rekod ini telah berubah atau tidak lagi perlu diuruskan. Senarai telah dimuat semula.",
+  },
+  "admin.stripe_late_refund_retried": {
+    en: "A new refund attempt has been created and will be sent to Stripe. Check its result in the Stripe dashboard.",
+    zh: "已建立新的退款尝试，会发送到 Stripe；结果请到 Stripe 后台核对。",
+    ms: "Cubaan bayaran balik baharu telah dibuat dan akan dihantar ke Stripe. Semak keputusannya di papan pemuka Stripe.",
   },
 } as const satisfies Record<string, CopyEntry>;
 

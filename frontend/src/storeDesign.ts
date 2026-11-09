@@ -6,10 +6,10 @@ import { browserStorage } from "./i18n/language";
 
 // 店铺装修设置（docs/REQUIREMENTS.md「店铺装修」、docs/UX.md P01 与 A08），由全站框架的根元素与首页读取。
 // 页面加载时向公开接口 GET /api/store-design（SHOP-TASK-045）请求一次：主题、主色、首页四个区块的顺序与显隐、
-// 精选商品的 slug。深浅色仍跟随访客设备，页面不设切换。不含标志图。
+// 精选商品的 slug 与店铺标志的提供路径（SHOP-TASK-213，页头与页脚显示）。深浅色仍跟随访客设备，页面不设切换。
 //
 // 本浏览器记住上次取到的主题、主色与区块（docs/HANDOFF.md 0.38，Kelvin 2026-10-07 决定）：打开页面时先用它，
-// 取到新设置后更新并记住；不记精选商品。没有记住的值或不合格时用默认值（班兰、默认主色、四个区块按默认顺序全部显示）。
+// 取到新设置后更新并记住；不记精选商品与标志（HANDOFF 0.84：打开页面时先显示文字品牌，读取返回后才换成标志）。没有记住的值或不合格时用默认值（班兰、默认主色、四个区块按默认顺序全部显示）。
 // 请求失败时保持当前显示，不清除已记住的值。存储不可用时照常显示，只是不记住。
 
 // 10 款主题与各自可选的主色，顺序与 docs/design/tokens/themes.json 的 themes 与 accentOptions 相同（storeDesign.test.ts 守住）。
@@ -115,6 +115,8 @@ export interface StoreDesignResponse {
   readonly design: StoreDesign;
   // 按位置排序、只含前台目录可见的精选商品；可能为空。
   readonly featuredSlugs: readonly string[];
+  // 店铺标志的提供路径；没有标志时为 null。
+  readonly logo: string | null;
 }
 
 // 精选商品的 slug：最多 FEATURED_COUNT 个非空字符串（A08 最多挑 4 件）。
@@ -132,13 +134,23 @@ function parseFeaturedSlugs(value: unknown): string[] | null {
   return slugs;
 }
 
+// 店铺标志的提供路径（DESIGN 1.20 第 15 条，HANDOFF 0.84）：恰为 /api/store-logos/ 加 32 位小写十六进制加 .webp。
+// 后台读取（api/adminStoreDesign.ts）、标志的上传（api/adminStoreLogo.ts）与页头页脚共用这一判断。
+const STORE_LOGO_PATH = /^\/api\/store-logos\/[0-9a-f]{32}\.webp$/;
+
+export function isStoreLogoPath(value: unknown): value is string {
+  return typeof value === "string" && STORE_LOGO_PATH.test(value);
+}
+
+// logo 只取合格的提供路径；null、缺少或其他值都按没有标志处理，不让整份响应作废（HANDOFF 0.84）。
 export function parseStoreDesignResponse(value: unknown): StoreDesignResponse | null {
   if (!isRecord(value)) {
     return null;
   }
   const design = parseStoreDesign(value);
   const featuredSlugs = parseFeaturedSlugs(value.featured_slugs);
-  return design === null || featuredSlugs === null ? null : { design, featuredSlugs };
+  const logo = isStoreLogoPath(value.logo) ? value.logo : null;
+  return design === null || featuredSlugs === null ? null : { design, featuredSlugs, logo };
 }
 
 // 本浏览器记住的设置；没有、不合格或读取失败时为 null。
@@ -158,7 +170,7 @@ export function readRememberedDesign(storage: StoreDesignStorage | null): StoreD
   }
 }
 
-// 只记主题、主色与区块，不记精选商品；写入失败时照常显示，只是下次不记得。
+// 只记主题、主色与区块，不记精选商品与标志；写入失败时照常显示，只是下次不记得。
 export function rememberDesign(storage: StoreDesignStorage | null, design: StoreDesign): void {
   if (!storage) {
     return;
@@ -214,20 +226,25 @@ export async function loadStoreDesign(
 export interface StoreDesignValue extends StoreDesign {
   // 精选商品的 slug；null 表示设置还没返回（首页先不取精选）。设置请求失败时为空，即显示最新 4 件。
   readonly featuredSlugs: readonly string[] | null;
+  // 店铺标志的提供路径；null 即显示文字品牌（没有标志或设置还没返回）。
+  readonly logo: string | null;
 }
 
-// 打开页面时：先用本浏览器记住的设置，没有时用默认值；精选等设置返回。
+// 打开页面时：先用本浏览器记住的设置，没有时用默认值；精选等设置返回，标志先为 null（文字品牌）。
 export function initialStoreDesign(storage: StoreDesignStorage | null): StoreDesignValue {
-  return { ...(readRememberedDesign(storage) ?? DEFAULT_STORE_DESIGN), featuredSlugs: null };
+  return { ...(readRememberedDesign(storage) ?? DEFAULT_STORE_DESIGN), featuredSlugs: null, logo: null };
 }
 
-// 请求返回后：成功时换成新设置；失败时主题、主色与区块保持当前显示，精选按取不到处理。
+// 请求返回后：成功时换成新设置与标志；失败时主题、主色、区块与标志保持当前显示，精选按取不到处理。
 export function settledStoreDesign(current: StoreDesignValue, result: StoreDesignResponse | null): StoreDesignValue {
-  return result === null ? { ...current, featuredSlugs: [] } : { ...result.design, featuredSlugs: result.featuredSlugs };
+  return result === null
+    ? { ...current, featuredSlugs: [] }
+    : { ...result.design, featuredSlugs: result.featuredSlugs, logo: result.logo };
 }
 
-// 没有提供者时（如单独渲染的组件）用默认值，精选按未挑选处理。
-const StoreDesignContext = createContext<StoreDesignValue>({ ...DEFAULT_STORE_DESIGN, featuredSlugs: [] });
+// 没有提供者时（如单独渲染的组件）用默认值，精选按未挑选处理，没有标志。
+// 导出供测试直接给出设置（服务端渲染时读取不会返回，测不到标志）；页面一律经 StoreDesignProvider。
+export const StoreDesignContext = createContext<StoreDesignValue>({ ...DEFAULT_STORE_DESIGN, featuredSlugs: [], logo: null });
 
 interface StoreDesignProviderProps {
   children: ReactNode;

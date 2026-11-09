@@ -19,12 +19,22 @@ tests/test_stripe_overdue.py，这里只测任务顺序、未配置时的跳过�
 
 SHOP-TASK-126 在积分到期之后追加了 Stripe 退款尝试的定时处理（stripe_refunds）；它的各情形
 见 tests/test_stripe_refund_overdue.py，这里同样只测任务顺序、未配置时的跳过与手动补跑命令。
+
+SHOP-TASK-217 加了 send-test-alert 子命令，并让其余一次性子命令退出前等运营告警队列；这里测
+退出码、不受限频、等队列与到时记下未发封数、run 不等队列（依据 DESIGN 1.21「运营告警邮件」
+第 1、2 条）。发信本身的各情形见 tests/test_ops_alert.py；smtplib.SMTP 以替身代替，不连服务器。
+
+SHOP-TASK-218 在常驻循环里接入 job_failing 与 stock_reset_failed（DESIGN 1.21「运营告警邮件」
+第 6、7 条与 HANDOFF 0.88）；这些用例以 monkeypatch 替换 ops_alert.alert 记下调用，不入队。
+其余用例里任务连续失败满 10 分钟时照常调用真实的 alert（它不抛异常、不阻塞，告警邮件未配置时
+只记一条 warning、不入队），断言只看 app.jobs 的日志，不受影响。
 """
 
 from __future__ import annotations
 
 import logging
 import signal
+import smtplib
 import threading
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta
@@ -71,7 +81,7 @@ from app.models.stripe import (
     STRIPE_REFUND_PENDING,
     STRIPE_REFUND_SUCCEEDED,
 )
-from app.services import payment
+from app.services import ops_alert, payment
 from app.services.order_rules import generate_order_number
 from app.services.points import earn_points
 
@@ -1408,6 +1418,380 @@ def test_process_stripe_refunds_command(
     assert jobs.process_stripe_refunds_once(broken) == jobs.EXIT_FAILED
     assert _job_messages(caplog) == ["job stripe_refunds failed: OperationalError"]
     assert all(SECRET not in message for message in caplog.messages)
+
+
+# ---------------------------------------------------------------------------
+# 运营告警邮件（SHOP-TASK-217）
+# ---------------------------------------------------------------------------
+
+ALERT_CONFIG = {
+    "alert_smtp_host": "smtp.sentinel-host.invalid",
+    "alert_smtp_username": "sentinel-smtp-user",
+    "alert_smtp_password": "sentinel-smtp-password",
+    "alert_from": "sentinel-sender@sentinel-mail.invalid",
+    "alert_to": "sentinel-first@sentinel-rcpt.invalid",
+}
+ONE_SHOT_COMMANDS = [
+    "cancel-expired",
+    "process-stripe",
+    "reset-stock",
+    "complete-shipped",
+    "delete-verifications",
+    "expire-points",
+    "process-stripe-refunds",
+]
+
+
+class FakeSmtpConnection:
+    """smtplib.SMTP 的替身：login 抛 login_error（为空即成功），记下每次发信。"""
+
+    sent: list[str] = []
+    login_error: BaseException | None = None
+
+    def __init__(self, host: str, port: int, *, timeout: float) -> None:
+        pass
+
+    def starttls(self, *, context: Any = None) -> tuple[int, bytes]:
+        return 220, b"ready"
+
+    def login(self, user: str, password: str) -> None:
+        if FakeSmtpConnection.login_error is not None:
+            raise FakeSmtpConnection.login_error
+
+    def send_message(self, msg: Any, from_addr: str, to_addrs: list[str]) -> dict:
+        FakeSmtpConnection.sent.append(msg["Subject"])
+        return {}
+
+    def quit(self) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
+
+
+@pytest.fixture
+def fake_smtp(monkeypatch: pytest.MonkeyPatch) -> type[FakeSmtpConnection]:
+    monkeypatch.setattr(smtplib, "SMTP", FakeSmtpConnection)
+    monkeypatch.setattr(FakeSmtpConnection, "sent", [])
+    monkeypatch.setattr(FakeSmtpConnection, "login_error", None)
+    return FakeSmtpConnection
+
+
+def _alert_messages(caplog: pytest.LogCaptureFixture) -> list[str]:
+    return [r.getMessage() for r in caplog.records if r.name == "app.services.ops_alert"]
+
+
+def test_send_test_alert_exit_codes(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    fake_smtp: type[FakeSmtpConnection],
+) -> None:
+    """DESIGN 1.21「运营告警邮件」第 1 条「最终由服务器接受即以 0 退出；未配置时记上面的
+    warning 并以非零退出码退出，最终失败也以非零退出码退出」与 HANDOFF 0.88「send-test-alert
+    未配置以 EXIT_NOT_CONFIGURED、最终失败以 EXIT_FAILED 退出」；「不受第 4 条限频」：
+    连发两次都发出，且不碰 Redis。"""
+    caplog.set_level(logging.INFO, logger="app.services.ops_alert")
+
+    def no_redis(redis_url: str) -> None:
+        raise AssertionError("send-test-alert must not touch Redis")
+
+    monkeypatch.setattr(ops_alert, "_client_for", no_redis)
+    configured = Settings(_env_file=None, redis_url="redis://sentinel.invalid/7", **ALERT_CONFIG)
+    monkeypatch.setattr(jobs, "get_settings", lambda: configured)
+
+    assert jobs.main(["send-test-alert"]) == jobs.EXIT_OK
+    assert jobs.main(["send-test-alert"]) == jobs.EXIT_OK
+    assert fake_smtp.sent == ["[Acuven Shop] ops_alert_test"] * 2
+
+    fake_smtp.login_error = smtplib.SMTPAuthenticationError(535, b"sentinel-reply")
+    assert jobs.main(["send-test-alert"]) == jobs.EXIT_FAILED
+    assert _alert_messages(caplog)[-1] == (
+        "ops_alert_send_failed category=ops_alert_test error=SMTPAuthenticationError code=535"
+    )
+
+    monkeypatch.setattr(jobs, "get_settings", lambda: Settings(_env_file=None))
+    assert jobs.main(["send-test-alert"]) == jobs.EXIT_NOT_CONFIGURED
+    assert _alert_messages(caplog)[-1].startswith("ops_alert_not_configured missing=")
+    assert all("sentinel" not in message for message in caplog.messages)
+
+
+@pytest.mark.parametrize("command", ONE_SHOT_COMMANDS)
+def test_one_shot_commands_wait_for_the_alert_queue(
+    monkeypatch: pytest.MonkeyPatch, command: str
+) -> None:
+    """DESIGN 1.21「运营告警邮件」第 2 条「补跑命令退出前等队列发完……最多等 180 秒」
+    「退出码仍只反映补跑本身的结果」与 HANDOFF 0.88「补跑命令指 run 与 send-test-alert
+    以外的一次性子命令」：每个补跑命令执行完后等一次队列，有未发完的也不改退出码。"""
+    waits: list[float] = []
+
+    def wait_until_sent(timeout: float = ops_alert.DRAIN_TIMEOUT_SECONDS) -> int:
+        waits.append(timeout)
+        return 3
+
+    monkeypatch.setattr(ops_alert, "wait_until_sent", wait_until_sent)
+    monkeypatch.setattr(jobs, "get_settings", lambda: Settings(_env_file=None, database_url=""))
+    assert jobs.main([command]) == jobs.EXIT_NOT_CONFIGURED
+    assert waits == [180]
+
+
+def test_one_shot_command_logs_unsent_alerts(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, clock: FakeClock
+) -> None:
+    """DESIGN 1.21「运营告警邮件」第 2 条「到时仍有未发完的，记一条 warning
+    ops_alert_unsent count=<封数> 后照常退出，退出码仍只反映补跑本身的结果」：队列里有一封
+    发不出去的告警时，等满 180 秒（替身时钟，不真实等待）后记下封数。"""
+    caplog.set_level(logging.INFO, logger="app.services.ops_alert")
+    monkeypatch.setitem(
+        ops_alert.CATEGORIES,
+        "demo_failure",
+        ops_alert.AlertCategory("演示告警", "按类别码查日志。", False, ops_alert.HOUR_SECONDS),
+    )
+    waited: list[float] = []
+
+    def wait(condition: threading.Condition, timeout: float) -> None:
+        waited.append(timeout)
+        clock.advance(timeout)
+
+    configured = Settings(_env_file=None, **ALERT_CONFIG)
+    dispatcher = ops_alert.Dispatcher(
+        lambda: configured,
+        redis_client=lambda: None,
+        monotonic=clock.monotonic,
+        start_thread=lambda target: None,
+        wait=wait,
+    )
+    monkeypatch.setattr(ops_alert, "_dispatcher", dispatcher)
+    ops_alert.alert("demo_failure")
+
+    monkeypatch.setattr(jobs, "get_settings", lambda: Settings(_env_file=None, database_url=""))
+    assert jobs.main(["cancel-expired"]) == jobs.EXIT_NOT_CONFIGURED
+    assert waited == [180]
+    assert _alert_messages(caplog) == ["ops_alert_unsent count=1"]
+
+
+def test_run_does_not_wait_for_the_alert_queue(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DESIGN 1.21「运营告警邮件」第 2 条「常驻进程（API、定时任务的常驻循环）退出时不等
+    队列，未发出的告警只留在日志里」：run 的循环返回后直接退出，不调用 wait_until_sent；
+    send-test-alert 不经队列，同样不等。"""
+    calls: list[str] = []
+
+    class StubRunner:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def run_forever(self) -> None:
+            calls.append("run_forever")
+
+    monkeypatch.setattr(jobs, "Runner", StubRunner)
+    monkeypatch.setattr(jobs, "install_signal_handlers", lambda runner: None)
+    monkeypatch.setattr(ops_alert, "wait_until_sent", lambda *a, **k: calls.append("wait"))
+    monkeypatch.setattr(jobs, "get_settings", lambda: Settings(_env_file=None))
+
+    assert jobs.main(["run"]) == jobs.EXIT_OK
+    assert jobs.main(["send-test-alert"]) == jobs.EXIT_NOT_CONFIGURED
+    assert calls == ["run_forever"]
+
+
+# ---------------------------------------------------------------------------
+# 定时任务失败的告警（SHOP-TASK-218）
+# ---------------------------------------------------------------------------
+
+AlertCall = tuple[str, Any, Any]
+
+
+@pytest.fixture
+def alerts(monkeypatch: pytest.MonkeyPatch) -> list[AlertCall]:
+    """以替身代替 ops_alert.alert，记下每次调用的（类别, 对象, 异常类名）。"""
+    calls: list[AlertCall] = []
+
+    def record(category: str, target: Any = None, *, error_class: Any = None) -> None:
+        calls.append((category, target, error_class))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
+    return calls
+
+
+class SwitchableJob:
+    """不读写库的任务：error 不为空时抛它的实例（消息含 SECRET），为空时成功。"""
+
+    def __init__(
+        self, name: str = "switchable", error: type[Exception] | None = RuntimeError
+    ) -> None:
+        self.name = name
+        self.error = error
+
+    def run(self, db: Session, now: datetime) -> int:
+        if self.error is not None:
+            raise self.error(f"boom {SECRET}")
+        return 0
+
+    def job(self) -> jobs.Job:
+        return jobs.Job(name=self.name, run=self.run, own_transactions=True)
+
+
+def _reset_only() -> list[jobs.Job]:
+    """默认任务列表里的每日库存重置任务（与常驻循环用的是同一个）。"""
+    return [job for job in jobs.default_jobs() if job.name == "reset_daily_stock"]
+
+
+def _broken_reset(monkeypatch: pytest.MonkeyPatch, *, enabled: bool, completed: bool) -> None:
+    """开关与是否已完成按参数给出；真正执行重置时抛 OperationalError。"""
+    monkeypatch.setattr(jobs, "is_daily_stock_reset_enabled", lambda db: enabled)
+    monkeypatch.setattr(jobs, "reset_completed", lambda db, now: completed)
+
+    def broken(db: Session, now: datetime) -> Any:
+        raise OperationalError("UPDATE product_variants", {}, Exception(SECRET))
+
+    monkeypatch.setattr(jobs, "reset_daily_stock", broken)
+
+
+def test_job_failing_alerts_once_after_ten_minutes_of_failure(
+    factory: jobs.SessionFactory, heartbeat: Path, clock: FakeClock, alerts: list[AlertCall]
+) -> None:
+    """DESIGN 1.21「运营告警邮件」第 7 条「常驻循环里某个任务连续失败（距它最近一次成功，从未
+    成功过则距进程启动）满 10 分钟（与心跳同一阈值 UNHEALTHY_AFTER_SECONDS）时，为它发一封
+    job_failing；同一段连续失败只发一封」与第 6 条表 job_failing 的对象「任务名，另写最后一次
+    失败的异常类名」：未满 10 分钟不告警，满 10 分钟与心跳停写同一轮告警一次、异常类名取最后
+    一次失败的，之后同一段失败不再告警；一直成功的任务不告警。"""
+    failing = SwitchableJob(error=ValueError)
+    steady = jobs.Job(name="steady", run=lambda _db, _now: 0, own_transactions=True)
+    runner = _runner([failing.job(), steady], factory, heartbeat, clock)
+
+    # 进程启动即开始失败：第 0 到第 540 秒的各轮不告警。
+    for _ in range(10):
+        runner.run_round()
+        assert alerts == []
+        assert runner.healthy()
+        clock.advance(60)
+
+    # 第 600 秒：满 10 分钟，最后一次失败换了异常类。
+    failing.error = KeyError
+    runner.run_round()
+    assert alerts == [("job_failing", ("job", "switchable"), "KeyError")]
+    assert not runner.healthy()
+
+    for _ in range(5):
+        clock.advance(60)
+        runner.run_round()
+    assert alerts == [("job_failing", ("job", "switchable"), "KeyError")]
+
+
+def test_job_failing_resets_after_success_and_alerts_again(
+    factory: jobs.SessionFactory, heartbeat: Path, clock: FakeClock, alerts: list[AlertCall]
+) -> None:
+    """DESIGN 1.21「运营告警邮件」第 7 条「该任务再次成功后清零，之后再连续失败满 10 分钟才再次
+    入队」「不发「已恢复」邮件」：成功那一轮不告警；再失败时从这次成功起算，未满 10 分钟不告警，
+    满 10 分钟再告警一次。"""
+    failing = SwitchableJob()
+    runner = _runner([failing.job()], factory, heartbeat, clock)
+
+    clock.advance(jobs.UNHEALTHY_AFTER_SECONDS)
+    runner.run_round()
+    first = ("job_failing", ("job", "switchable"), "RuntimeError")
+    assert alerts == [first]
+
+    clock.advance(60)
+    failing.error = None
+    runner.run_round()
+    last_success = clock.monotonic()
+    assert alerts == [first]
+
+    failing.error = OSError
+    clock.advance(60)
+    while clock.monotonic() - last_success < jobs.UNHEALTHY_AFTER_SECONDS:
+        runner.run_round()
+        assert alerts == [first]
+        clock.advance(60)
+    runner.run_round()
+    assert alerts == [first, ("job_failing", ("job", "switchable"), "OSError")]
+
+
+def test_job_failing_alerts_every_job_when_the_database_is_not_configured(
+    heartbeat: Path, clock: FakeClock, alerts: list[AlertCall]
+) -> None:
+    """DESIGN 1.21「运营告警邮件」第 7 条「数据库未配置时一轮里全部任务都算失败，各按此告警
+    （每个任务名一封）」与第 6 条表「数据库未配置、没有异常时写固定的
+    database_not_configured」：满 10 分钟那一轮每个任务名各告警一次，之后不再重复。"""
+    names = [job.name for job in jobs.default_jobs()]
+    runner = _runner(jobs.default_jobs(), None, heartbeat, clock)
+
+    runner.run_round()
+    assert alerts == []
+
+    clock.advance(jobs.UNHEALTHY_AFTER_SECONDS)
+    runner.run_round()
+    expected = [("job_failing", ("job", name), "database_not_configured") for name in names]
+    assert alerts == expected
+    assert len(expected) == 7
+
+    clock.advance(60)
+    runner.run_round()
+    assert alerts == expected
+
+
+def test_stock_reset_failure_alerts_in_the_loop_but_not_in_the_command(
+    factory: jobs.SessionFactory,
+    heartbeat: Path,
+    clock: FakeClock,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """DESIGN 1.21「运营告警邮件」第 7 条「每日库存重置另在失败当时就发 stock_reset_failed」
+    「补跑命令本身失败不发告警：运营者当场看到退出码与日志」、第 6 条表 stock_reset_failed 的
+    对象「马来西亚营业日期，另写异常类名」与第 2 条「照现有写法记一条 error 日志……再把告警……
+    放进队列」：常驻循环里重置失败时，在 error 日志之后、任务失败日志之前告警一次；
+    reset-stock 子命令经同一任务执行失败时不告警，退出码与日志照旧。"""
+    caplog.set_level(logging.INFO, logger="app.jobs")
+    _broken_reset(monkeypatch, enabled=True, completed=False)
+    day = jobs.business_date(START).isoformat()
+    calls: list[AlertCall] = []
+    logged_before: list[list[str]] = []
+
+    def record(category: str, target: Any = None, *, error_class: Any = None) -> None:
+        logged_before.append(_job_messages(caplog))
+        calls.append((category, target, error_class))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
+
+    runner = _runner(_reset_only(), factory, heartbeat, clock)
+    runner.run_round()
+    assert calls == [("stock_reset_failed", ("date", day), "OperationalError")]
+    assert logged_before == [[f"stock reset {day} failed: OperationalError"]]
+    assert _job_messages(caplog) == [
+        f"stock reset {day} failed: OperationalError",
+        "job reset_daily_stock failed: OperationalError",
+    ]
+
+    caplog.clear()
+    assert jobs.reset_stock(factory, now=clock.now) == jobs.EXIT_FAILED
+    monkeypatch.setattr(jobs, "configured_session_factory", lambda: factory)
+    monkeypatch.setattr(ops_alert, "wait_until_sent", lambda *a, **k: 0)
+    assert jobs.main(["reset-stock"]) == jobs.EXIT_FAILED
+    assert calls == [("stock_reset_failed", ("date", day), "OperationalError")]
+    assert f"stock reset {day} failed: OperationalError" in _job_messages(caplog)
+    assert all(SECRET not in message for message in caplog.messages)
+
+
+@pytest.mark.parametrize(("enabled", "completed"), [(False, False), (True, True)])
+def test_stock_reset_skips_do_not_alert(
+    factory: jobs.SessionFactory,
+    heartbeat: Path,
+    clock: FakeClock,
+    monkeypatch: pytest.MonkeyPatch,
+    alerts: list[AlertCall],
+    enabled: bool,
+    completed: bool,
+) -> None:
+    """DESIGN 1.21「运营告警邮件」第 7 条「每日库存重置另在失败当时就发 stock_reset_failed」只在
+    失败时告警：每日恢复库存开关关闭、或当天已完成而跳过时（跳过算成功），常驻循环与
+    reset-stock 子命令都不告警，也不调用重置。"""
+    _broken_reset(monkeypatch, enabled=enabled, completed=completed)
+
+    runner = _runner(_reset_only(), factory, heartbeat, clock)
+    runner.run_round()
+    assert runner.last_success["reset_daily_stock"] == clock.monotonic()
+    assert jobs.reset_stock(factory, now=clock.now) == jobs.EXIT_OK
+    assert alerts == []
 
 
 def test_main_requires_a_subcommand() -> None:

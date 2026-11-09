@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=1440">
+<title>A11 Stripe follow-ups — desktop</title>
+<link rel="stylesheet" href="../tokens/acuven-shop.css">
+<style>body{margin:0}.acs-admin main *{min-width:0;overflow-wrap:anywhere}.acs-admin__btn{white-space:nowrap}</style>
+</head>
+<body>
+<div class="acs-admin" data-mode="light" style="width: 1440px; height: 900px; display: flex; flex-direction: column">
+<div style="display: flex; align-items: stretch"><div class="acs-admin__banner" style="flex-grow: 1"><span class="acs-tag acs-tag--demo">DEMO</span>Admin — demo store. Actions here never move real money or goods.</div><div style="display: flex; align-items: center; padding: 0 16px; background: var(--a-nav)"><button class="acs-admin__btn acs-admin__btn--secondary" type="button" style="color: var(--a-on-nav); border-color: var(--a-nav-muted)">Log out</button></div></div>
+<div class="acs-admin__shell" style="flex-grow: 1">
+<nav class="acs-admin__nav" aria-label="Admin"><a href="#">Orders</a><a href="#">Refunds</a><a href="#" aria-current="page">Stripe follow-ups</a><a href="#">Products</a><a href="#">Categories</a><a href="#">Coupons</a><a href="#">Shipping &amp; demo rates</a><a href="#">Stock resets</a><a href="#">Store design</a><a href="#">Site settings</a>
+<span style="margin-top: auto; display: flex; gap: 10px; padding: 12px; font-size: 12px"><a href="#" style="padding: 0; color: var(--a-on-nav)">English</a><a href="#" style="padding: 0">中文</a><a href="#" style="padding: 0">Bahasa Melayu</a></span></nav>
+<main class="acs-admin__main" style="align-items: start; max-width: 1120px">
+<div style="display: grid; gap: 16px">
+<h1 class="acs-admin__h">Stripe follow-ups</h1>
+<div style="padding: 10px 12px; border-radius: 4px; background: var(--demo-soft); color: var(--on-demo-soft); font-size: 13px">Stripe test-mode records that need your decision. Alert emails name the checkout record ID for the first list and, for failed refunds, the refund attempt ID for the second list. Nothing here moves real money.</div>
+<h2 class="acs-admin__h" style="font-size: 15px">Checkout records without a result</h2>
+<div class="acs-admin__panel" style="overflow-x: auto">
+<table class="acs-admin__table"><thead><tr><th>Checkout record</th><th>Status</th><th>Order number</th><th>Created</th><th>Alerted</th><th></th></tr></thead>
+<tbody><tr><td>#41</td><td><span class="acs-tag acs-tag--neutral">Creating — result unknown</span></td><td>7KQ2-M9XR</td><td>3 Nov 2026, 14:02</td><td>4 Nov 2026, 14:05</td><td style="text-align: right"><button class="acs-admin__btn acs-admin__btn--secondary" type="button">Void and cancel order</button></td></tr><tr><td>#57</td><td><span class="acs-tag acs-tag--neutral">Completed</span></td><td>D9F4-ZP2W</td><td>5 Nov 2026, 09:31</td><td>6 Nov 2026, 09:40</td><td style="text-align: right"><button class="acs-admin__btn acs-admin__btn--secondary" type="button">Void and cancel order</button></td></tr><tr><td>#63</td><td><span class="acs-tag acs-tag--neutral">Open</span></td><td>M3H8-R5C1</td><td>6 Nov 2026, 18:12</td><td>7 Nov 2026, 19:15</td><td style="text-align: right"><button class="acs-admin__btn acs-admin__btn--secondary" type="button">Void and cancel order</button></td></tr></tbody></table>
+</div>
+<h2 class="acs-admin__h" style="font-size: 15px; margin-top: 8px">Failed refunds of late payments</h2>
+<p class="acs-admin__muted" style="margin: 0; font-size: 13px">Payments that arrived after an order was cancelled or paid another way, or that didn&#x27;t match the order, need a full refund. The refunds below failed in Stripe. Check them in the Stripe dashboard, then retry. Retrying sends a new refund request.</p>
+<div class="acs-admin__panel" style="overflow-x: auto">
+<table class="acs-admin__table"><thead><tr><th>Checkout record</th><th>Refund attempt</th><th>Order number</th><th style="text-align: right">Amount (MYR)</th><th>Attempted</th><th>Error type</th><th></th></tr></thead>
+<tbody><tr><td>#38</td><td>#102</td><td>B6T1-N9K4</td><td style="text-align: right">RM 129.00</td><td>2 Nov 2026, 11:20</td><td>invalid_request_error</td><td style="text-align: right"><button class="acs-admin__btn acs-admin__btn--secondary" type="button">Retry Stripe refund</button></td></tr><tr><td>#52</td><td>#117</td><td>H2V7-C4M9</td><td style="text-align: right">RM 58.50</td><td>6 Nov 2026, 16:48</td><td>—</td><td style="text-align: right"><button class="acs-admin__btn acs-admin__btn--secondary" type="button">Retry Stripe refund</button></td></tr></tbody></table>
+</div>
+</div>
+</main>
+</div>
+</div>
+</body>
+</html>

@@ -19,6 +19,10 @@ import { STORE_MODE, useStoreDesign } from "../storeDesign";
 // 桌面在导航行右侧、手机在第一行语言按钮之后。页脚的 WhatsApp 按钮 common.whatsapp_cta 在页脚主体之后，
 // 链接取自 GET /api/site-settings 的 whatsapp_contact_url（api/siteSettings.ts，页脚与 P14 共用一次读取），在新标签页打开；
 // 取得前、未配置或读取失败时整个按钮不渲染（UX Q10：配置缺失时隐藏，不显示占位文字）。不设站内联系表单。
+//
+// 店铺标志（UX 0.18「店铺装修」，HANDOFF 0.84）：GET /api/store-design 给出 logo 后，页头与页脚的品牌显示为该图（alt 为 BRAND），
+// 没有标志、设置还没返回或标志加载失败时显示文字品牌。加载失败按路径记在根组件，页头与页脚一起退回文字；logo 换成另一个路径时重新尝试。
+// 标志按原图显示，不随主题与深浅色改色（Kelvin 2026-11-05 决定）。
 
 interface NavItem {
   path: string;
@@ -69,6 +73,34 @@ function CartLink({ to, className, onClick }: { to: RoutePath; className?: strin
     <Link className={className} to={to} aria-current={path === to ? "page" : undefined} onClick={onClick}>
       {t("common.nav_cart", { count: cartItemCount(lines) })}
     </Link>
+  );
+}
+
+// 标志已加载失败：只在失败的正是当前路径时为真，logo 换成另一个路径或变为 null 即不算失败。
+export function storeLogoBroken(logo: string | null, brokenLogo: string | null): boolean {
+  return logo !== null && logo === brokenLogo;
+}
+
+export interface StoreBrandProps {
+  logo: string | null;
+  broken: boolean;
+  onBroken: (logo: string) => void;
+}
+
+// 页头与页脚的品牌：有标志且未加载失败时为 img（src 为 logo，alt 为 BRAND，加载失败经 onBroken 记下该路径），否则为文字 BRAND。
+export function StoreBrand({ logo, broken, onBroken }: StoreBrandProps) {
+  if (logo === null || broken) {
+    return BRAND;
+  }
+  return (
+    <img
+      className="site-brand-logo"
+      src={logo}
+      alt={BRAND}
+      onError={() => {
+        onBroken(logo);
+      }}
+    />
   );
 }
 
@@ -176,7 +208,7 @@ function HeaderSearch({ onSearched }: { onSearched: () => void }) {
 
 type OpenPanel = "menu" | "language" | null;
 
-function SiteHeader() {
+function SiteHeader({ brand }: { brand: StoreBrandProps }) {
   const t = useCopy();
   const { language } = useLanguage();
   const { path } = useRouter();
@@ -210,7 +242,7 @@ function SiteHeader() {
           <MenuIcon />
         </button>
         <Link className="acs-brand" to={HOME_PATH} onClick={close}>
-          {BRAND}
+          <StoreBrand {...brand} />
         </Link>
         <HeaderSearch onSearched={close} />
         <nav className="acs-lang site-desktop-only site-header__end">
@@ -282,13 +314,15 @@ export function WhatsAppButton({ href, className, children }: { href: string; cl
   );
 }
 
-function SiteFooter() {
+function SiteFooter({ brand }: { brand: StoreBrandProps }) {
   const t = useCopy();
   const whatsApp = useWhatsAppContactUrl();
   return (
     <footer className="acs-footer site-footer">
       <div className="site-footer__main">
-        <span className="acs-brand">{BRAND}</span>
+        <span className="acs-brand">
+          <StoreBrand {...brand} />
+        </span>
         <p className="acs-body-s site-footer__text">{t("common.footer_demo")}</p>
         <Link className="site-footer__link" to="/privacy">
           {t("common.nav_privacy")}
@@ -305,13 +339,15 @@ function SiteFooter() {
 
 // 前台根元素：class acs 与店铺装修的主题（storeDesign.ts）；主色为 null 时不设 data-accent，即该主题的默认主色。
 export default function SiteFrame({ children }: { children: ReactNode }) {
-  const { theme, accent } = useStoreDesign();
+  const { theme, accent, logo } = useStoreDesign();
+  const [brokenLogo, setBrokenLogo] = useState<string | null>(null);
+  const brand: StoreBrandProps = { logo, broken: storeLogoBroken(logo, brokenLogo), onBroken: setBrokenLogo };
   return (
     <div className="acs site" data-shop-theme={theme} data-accent={accent ?? undefined} data-mode={STORE_MODE}>
       <DemoBanner />
-      <SiteHeader />
+      <SiteHeader brand={brand} />
       {children}
-      <SiteFooter />
+      <SiteFooter brand={brand} />
     </div>
   );
 }

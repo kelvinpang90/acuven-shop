@@ -58,7 +58,7 @@ from app.models.stripe import (
     PAYMENT_PAID,
     PAYMENT_UNPAID,
 )
-from app.services import payment
+from app.services import ops_alert, payment
 from app.services.coupons import reserve_coupon
 from app.services.points import earn_points, reserve_points
 from app.services.stripe_confirm import (
@@ -108,10 +108,24 @@ UNAVAILABLE = StripeResult(StripeOutcome.UNAVAILABLE)
 
 _SEQUENCE = itertools.count(1)
 
+Alert = tuple[str, object]
+
 
 # ---------------------------------------------------------------------------
 # 夹具与数据
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def alerts(monkeypatch: pytest.MonkeyPatch) -> list[Alert]:
+    """以 monkeypatch 替换 ops_alert.alert，按调用顺序记下（类别, 对象）。"""
+    calls: list[Alert] = []
+
+    def record(category: str, target: object = None, **_: object) -> None:
+        calls.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
+    return calls
 
 
 @pytest.fixture
@@ -387,13 +401,15 @@ class _HookGateway(FakeStripeGateway):
 
 
 def test_guest_order_is_confirmed_by_a_verified_object(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 4 条「全部相符且订单仍为 `awaiting_demo_payment` 时，按模拟支付成功的同一事务进入
     `demo_paid`……并记下 PaymentIntent ID，以及……付款方式类型」；验收：「事件操作者为
     system」「不写 PaymentAttempt」「同一事务里写该记录的确认时间」：webhook 给出已展开的
     对象时不调用 Stripe；订单为 demo_paid、支付时间为 now；只有一条 system 事件、没有支付
-    尝试；记录为 complete，写完成时间、确认时间、付款状态、PaymentIntent ID 与方式 card。"""
+    尝试；记录为 complete，写完成时间、确认时间、付款状态、PaymentIntent ID 与方式 card。
+    DESIGN 1.21「运营告警邮件」第 6 条 Stripe 一组各行（触发时机都是确认不成或迟到的付款）：
+    正常确认没有告警日志，不调用 ops_alert.alert。"""
     placed = _guest_order(db)
     checkout_id = _checkout(db, placed)
     stripe_session = _object(db, checkout_id)
@@ -416,6 +432,7 @@ def test_guest_order_is_confirmed_by_a_verified_object(
     assert record.payment_method_type == "card"
     assert record.active_order_id == placed.order_id
     assert _messages(caplog) == []
+    assert alerts == []
 
 
 def test_member_order_confirmation_uses_the_coupon_and_earns_points(db: Session) -> None:
@@ -802,12 +819,20 @@ def test_webhook_object_with_unexpanded_intent_and_no_query_changes_nothing(db: 
     ],
 )
 def test_query_results_other_than_ok_change_nothing(
-    db: Session, result: Any, log: str | None, caplog: pytest.LogCaptureFixture
+    db: Session,
+    result: Any,
+    log: str | None,
+    caplog: pytest.LogCaptureFixture,
+    alerts: list[Alert],
 ) -> None:
     """第 1 条「webhook 事件、会话或付款的 `livemode` 为真即拒绝」；验收：「查询为 unavailable
     时返回 unavailable、不改任何东西；查询结果为 live 或 rejected 时同样不改任何东西、返回
     unavailable，并记一条 error 日志（类别 stripe_livemode 或 stripe_confirm_rejected，含记录
-    ID）」。"""
+    ID）」。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_livemode 一行（「会话、付款……为正式环境、拒绝
+    之后」，对象为结账记录 ID）与 stripe_confirm_rejected 一行（「确认付款时……向 Stripe 查询
+    会话被以请求错误拒绝」，对象为结账记录 ID）：日志之后以同一类别与 ("stripe_checkout",
+    记录 ID) 调用一次 ops_alert.alert；unavailable 没有告警日志，不调用。"""
     placed = _guest_order(db)
     checkout_id = _checkout(db, placed)
     if result == "live":
@@ -822,15 +847,19 @@ def test_query_results_other_than_ok_change_nothing(
     expected = [] if log is None else [f"{log} checkout={checkout_id}"]
     assert _messages(caplog) == expected
     assert all(r.levelno == logging.ERROR for r in caplog.records if r.name == LOGGER)
+    assert alerts == ([] if log is None else [(log, ("stripe_checkout", checkout_id))])
 
 
 @pytest.mark.parametrize("where", ["session", "payment-intent"])
 def test_livemode_object_changes_nothing(
-    db: Session, where: str, caplog: pytest.LogCaptureFixture
+    db: Session, where: str, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 1 条「会话或付款的 `livemode` 为真即拒绝」；第 4 条「核对会话……处于测试环境」：给出
     的对象里会话或 PaymentIntent 的 livemode 为真时不改任何东西、返回 unavailable，记一条
-    stripe_livemode 日志（含记录 ID）。"""
+    stripe_livemode 日志（含记录 ID）。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_livemode 一行（「会话、付款……为正式环境、拒绝
+    之后」，带结账记录 ID 的告警点）：日志之后以 ("stripe_checkout", 记录 ID) 调用一次
+    ops_alert.alert。"""
     placed = _guest_order(db)
     checkout_id = _checkout(db, placed)
     if where == "session":
@@ -845,16 +874,20 @@ def test_livemode_object_changes_nothing(
     assert result is ConfirmResult.UNAVAILABLE
     assert _world(db, placed, checkout_id) == before
     assert _messages(caplog) == [f"{LOG_LIVEMODE} checkout={checkout_id}"]
+    assert alerts == [(LOG_LIVEMODE, ("stripe_checkout", checkout_id))]
 
 
 @pytest.mark.parametrize("field", ["create_key", "id"])
 def test_session_of_another_record_changes_nothing(
-    db: Session, field: str, caplog: pytest.LogCaptureFixture
+    db: Session, field: str, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 3 条「webhook 按元数据里的创建幂等键与订单 ID 对上这条记录」；验收：「metadata
     [create_key] 等于这条记录的创建幂等键，记录已有会话 ID 时会话的 id 与之相同……不符时不迁移
     订单、不改写这条记录，记一条 error 日志（类别 stripe_session_mismatch，含记录 ID）并返回
-    unavailable」：同一订单另一条会话的对象不能确认这条记录。"""
+    unavailable」：同一订单另一条会话的对象不能确认这条记录。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_session_mismatch 一行（「Stripe 返回的会话与本站
+    记录的创建幂等键不符」，对象为结账记录 ID）：日志之后以 ("stripe_checkout", 记录 ID) 调用
+    一次 ops_alert.alert。"""
     placed = _guest_order(db)
     checkout_id = _checkout(db, placed)
     other = _object(db, checkout_id, **{field: "belongs-to-another-session"})
@@ -866,6 +899,7 @@ def test_session_of_another_record_changes_nothing(
     assert result is ConfirmResult.UNAVAILABLE
     assert _world(db, placed, checkout_id) == before
     assert _messages(caplog) == [f"{LOG_SESSION_MISMATCH} checkout={checkout_id}"]
+    assert alerts == [(LOG_SESSION_MISMATCH, ("stripe_checkout", checkout_id))]
 
 
 # ---------------------------------------------------------------------------
@@ -911,7 +945,7 @@ def _late_case(db: Session, case: str) -> tuple[_Placed, int, CheckoutSession]:
     ],
 )
 def test_late_or_mismatched_payment_needs_review_and_changes_nothing(
-    db: Session, case: str, caplog: pytest.LogCaptureFixture
+    db: Session, case: str, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 6 条「确认时订单已不是待支付且不是由这个会话付款（已取消，或已由另一途径付款），或
     金额、币种不符，订单状态不变」；验收：「记录已为 expired 而会话状态为 complete；
@@ -923,7 +957,10 @@ def test_late_or_mismatched_payment_needs_review_and_changes_nothing(
     的释放活动位已实现，第 3 条末句的已为 expired 的记录改回 complete 也已实现）：
     expired-record（订单仍待支付、没有别的活动记录、全部相符）改回 complete 并确认，返回
     paid、不记日志；其余情形订单状态与其他各表不变，写一条退款尝试后记录改为 expired，返回
-    refunded，只记一条 stripe_late_payment。细节见 tests/test_stripe_late_payment.py。"""
+    refunded，只记一条 stripe_late_payment。细节见 tests/test_stripe_late_payment.py。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_late_payment 一行（「为迟到或不符的付款写了全额
+    退款尝试并提交之后」，对象为结账记录 ID）：日志之后以 ("stripe_checkout", 记录 ID) 调用
+    一次 ops_alert.alert；expired-record 改回并确认，没有告警日志，不调用。"""
     placed, checkout_id, stripe_session = _late_case(db, case)
     before = _world(db, placed, checkout_id)
 
@@ -936,6 +973,7 @@ def test_late_or_mismatched_payment_needs_review_and_changes_nothing(
         assert after["order"] == (STATUS_PAID, NOW)
         assert after["record"]["status"] == CHECKOUT_COMPLETE
         assert _messages(caplog) == []
+        assert alerts == []
     else:
         assert result is ConfirmResult.REFUNDED
         assert after["record"]["status"] == CHECKOUT_EXPIRED
@@ -943,14 +981,17 @@ def test_late_or_mismatched_payment_needs_review_and_changes_nothing(
         del after["record"], before["record"]
         assert after == before
         assert _messages(caplog) == [f"{LOG_LATE_PAYMENT} checkout={checkout_id}"]
+        assert alerts == [(LOG_LATE_PAYMENT, ("stripe_checkout", checkout_id))]
 
 
 @pytest.mark.parametrize("status", ["expired", "open"])
 def test_expired_record_with_an_unpaid_session_is_pending_without_log(
-    db: Session, status: str, caplog: pytest.LogCaptureFixture
+    db: Session, status: str, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """验收：「会话为 expired 或 open 且未付款时照确认函数一条返回 pending、不记日志」：本站
-    记录已为 expired 时，未付款的会话不是迟到的付款，什么都不改。"""
+    记录已为 expired 时，未付款的会话不是迟到的付款，什么都不改。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_late_payment 一行（「为迟到或不符的付款写了全额
+    退款尝试并提交之后」）：没有付款、没有告警日志，不调用 ops_alert.alert。"""
     placed = _guest_order(db)
     checkout_id = _checkout(db, placed, CHECKOUT_EXPIRED)
     unpaid = _object(
@@ -964,6 +1005,7 @@ def test_expired_record_with_an_unpaid_session_is_pending_without_log(
     assert result is ConfirmResult.PENDING
     assert _world(db, placed, checkout_id) == before
     assert _messages(caplog) == []
+    assert alerts == []
 
 
 def test_order_paid_by_this_session_is_not_a_late_payment(db: Session) -> None:

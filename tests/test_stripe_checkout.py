@@ -44,6 +44,7 @@ from app.models.stripe import (
     PAYMENT_PAID,
     PAYMENT_UNPAID,
 )
+from app.services import ops_alert
 from app.services.stripe_checkout import (
     LOG_CREATE_REJECTED,
     LOG_NEEDS_REVIEW,
@@ -92,6 +93,20 @@ CONFIGURED = Settings(
     public_site_url=SITE_URL,
 )
 UNCONFIGURED = Settings(_env_file=None)
+
+Alert = tuple[str, object]
+
+
+@pytest.fixture(autouse=True)
+def alerts(monkeypatch: pytest.MonkeyPatch) -> list[Alert]:
+    """以 monkeypatch 替换 ops_alert.alert，按调用顺序记下（类别, 对象）。"""
+    calls: list[Alert] = []
+
+    def record(category: str, target: object = None, **_: object) -> None:
+        calls.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
+    return calls
 
 
 @pytest.fixture
@@ -774,17 +789,33 @@ def test_start_rejects_bad_arguments_before_touching_the_database(
 
 
 def test_first_call_param_error_marks_expired_and_logs(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+    alerts: list[Alert],
 ) -> None:
     """第 3 条「Stripe 以参数不合格……拒绝，按 Stripe 幂等规则说明原请求没有
     建成会话，记为 expired」；验收：「首次调用 rejected 且 HTTP 状态码为
     400、错误 type 为 invalid_request_error 并带 param 时……记录改为 expired
     （active_order_id 置空）、返回 unavailable，并记一条 error 日志（类别
-    stripe_create_rejected，只含记录 ID）」：本次调用不再另建记录。"""
+    stripe_create_rejected，只含记录 ID）」：本次调用不再另建记录。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_create_rejected 一行（「Stripe 以
+    参数不合格拒绝、记录改为 expired 之后」，对象为结账记录 ID；按第 2 条与
+    HANDOFF 0.88 第 9 项落在创建调用被拒处）：日志之后、记录已提交为 expired 时
+    调用一次 ops_alert.alert。"""
     _setting(db, PAYMENT_METHOD_STRIPE_TEST)
     order_id = _order(db)
     gateway = FakeStripeGateway(_rejected(param="line_items[0][price_data][unit_amount]"))
+    seen: list[tuple[list[str], str]] = []
 
+    def record(category: str, target: object = None, **_: object) -> None:
+        # 调用时本模块已有的日志，与另一个会话读到的已提交状态。
+        with Session(db.get_bind()) as other:
+            stmt = select(StripeCheckout.status).where(StripeCheckout.order_id == order_id)
+            seen.append((_messages(caplog), other.scalars(stmt).one()))
+        alerts.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
     with caplog.at_level(logging.DEBUG, logger=LOGGER):
         start = _start(db, gateway, order_id)
 
@@ -796,6 +827,8 @@ def test_first_call_param_error_marks_expired_and_logs(
     assert record.checkout_session_id is None
     assert _messages(caplog) == [f"{LOG_CREATE_REJECTED} checkout={record.id}"]
     assert [r.levelno for r in caplog.records if r.name == LOGGER] == [logging.ERROR]
+    assert alerts == [(LOG_CREATE_REJECTED, ("stripe_checkout", record.id))]
+    assert seen == [([f"{LOG_CREATE_REJECTED} checkout={record.id}"], CHECKOUT_EXPIRED)]
 
 
 @pytest.mark.parametrize(
@@ -812,12 +845,14 @@ def test_first_call_param_error_marks_expired_and_logs(
     ],
 )
 def test_first_call_other_failures_keep_creating(
-    db: Session, result: StripeResult, caplog: pytest.LogCaptureFixture
+    db: Session, result: StripeResult, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 3 条「调用结果未知（超时、断线）时，记录保持 `creating`」；第 9 条
     「Stripe 不可用，支付页提示稍后再试」；验收：「其他 rejected（401、402、
     403、404，如密钥被轮换，不能证明原请求没建成）、live 与 unavailable 时
-    记录保持 creating、返回 unavailable」：不记 expired，本模块不写日志。"""
+    记录保持 creating、返回 unavailable」：不记 expired，本模块不写日志。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_create_rejected 一行「以参数不合格
+    拒绝、记录改为 expired 之后」：没有改为 expired，不调用 ops_alert.alert。"""
     _setting(db, PAYMENT_METHOD_STRIPE_TEST)
     order_id = _order(db)
     gateway = FakeStripeGateway(result)
@@ -831,6 +866,7 @@ def test_first_call_other_failures_keep_creating(
     assert record.active_order_id == order_id
     assert record.checkout_session_id is None
     assert _messages(caplog) == []
+    assert alerts == []
 
 
 def test_first_call_complete_session_records_completion_time(db: Session) -> None:
@@ -907,12 +943,14 @@ def test_retry_still_unknown_stays_creating(db: Session) -> None:
 
 
 def test_retry_param_error_expires_and_creates_a_new_record_in_the_same_call(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 3 条「Stripe 以参数不合格……拒绝……记为 expired」；验收：「重试与
     对账里的 400 参数错误把记录记为 expired 后，按上一条在同一调用里继续建
     新记录，不返回 unavailable」：旧记录 expired，新记录用新的幂等键并改为
-    open，发起返回新会话的地址。"""
+    open，发起返回新会话的地址。DESIGN 1.21「运营告警邮件」第 6 条
+    stripe_create_rejected 一行（到期前的重试被拒、记录改为 expired 之后）：以旧
+    记录 ID 调用一次 ops_alert.alert，新记录取得会话不调用。"""
     _setting(db, PAYMENT_METHOD_STRIPE_TEST)
     order_id = _order(db)
     old_id = _checkout(db, order_id, CHECKOUT_CREATING)
@@ -932,6 +970,7 @@ def test_retry_param_error_expires_and_creates_a_new_record_in_the_same_call(
     assert new.idempotency_key != old_key
     assert [call.idempotency_key for call in gateway.calls] == [old_key, new.idempotency_key]
     assert _messages(caplog) == [f"{LOG_CREATE_REJECTED} checkout={old_id}"]
+    assert alerts == [(LOG_CREATE_REJECTED, ("stripe_checkout", old_id))]
 
 
 def test_reconcile_expired_then_rechecks_local_expiry_before_creating(db: Session) -> None:
@@ -1112,22 +1151,30 @@ def test_reconcile_after_expiry_replay_without_a_retrieve_waits(
     assert _record(db, checkout_id).status == CHECKOUT_CREATING
 
 
-def test_reconcile_after_expiry_expires_at_rejection_marks_expired(db: Session) -> None:
+def test_reconcile_after_expiry_expires_at_rejection_marks_expired(
+    db: Session, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
+) -> None:
     """第 3 条「Stripe 以参数不合格（到期时间已过）拒绝，按 Stripe 幂等规则
     说明原请求没有建成会话，记为 expired」；核验结论「带过去的 `expires_at`
     被 400 拒绝（param 为 expires_at），即原请求没有建成」：只请求一次、
-    不查询，记录 expired 并释放活动会话位。"""
+    不查询，记录 expired 并释放活动会话位。DESIGN 1.21「运营告警邮件」第 6 条
+    stripe_create_rejected 一行按第 2 条「入队位置跟现有 error 日志一致」与
+    HANDOFF 0.88 第 9 项落在创建调用被拒处：到期后对账以 expires_at 被拒是
+    正常结论，没有日志，也不调用 ops_alert.alert。"""
     order_id = _order(db)
     checkout_id = _checkout(db, order_id, CHECKOUT_CREATING)
     gateway = FakeStripeGateway(_rejected(param="expires_at"))
 
-    outcome = reconcile_creating_checkout(db, gateway, checkout_id, STRIPE_EXPIRES)
+    with caplog.at_level(logging.DEBUG, logger=LOGGER):
+        outcome = reconcile_creating_checkout(db, gateway, checkout_id, STRIPE_EXPIRES)
 
     assert outcome is ReconcileOutcome.EXPIRED
     assert len(gateway.calls) == 1
     record = _record(db, checkout_id)
     assert record.status == CHECKOUT_EXPIRED
     assert record.active_order_id is None
+    assert _messages(caplog) == []
+    assert alerts == []
 
 
 @pytest.mark.parametrize(
@@ -1153,12 +1200,14 @@ def test_reconcile_after_expiry_other_results_wait(db: Session, result: StripeRe
 
 
 def test_reconcile_before_expiry_param_error_marks_expired(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session, caplog: pytest.LogCaptureFixture, alerts: list[Alert]
 ) -> None:
     """第 3 条「以同一幂等键与同一快照重试」；验收：「Stripe 到期时间之前，
     以同一幂等键与同一快照重试，结果按上一条处理」：单独调用对账函数
     （SHOP-TASK-114、116 的用法）时，400 参数错误同样记 expired 并记日志，
-    返回 expired 而不另建记录。"""
+    返回 expired 而不另建记录。DESIGN 1.21「运营告警邮件」第 6 条
+    stripe_create_rejected 一行：日志之后以（stripe_checkout, 记录 ID）调用一次
+    ops_alert.alert。"""
     order_id = _order(db)
     checkout_id = _checkout(db, order_id, CHECKOUT_CREATING)
     gateway = FakeStripeGateway(_rejected(param="mode"))
@@ -1169,6 +1218,7 @@ def test_reconcile_before_expiry_param_error_marks_expired(
     assert outcome is ReconcileOutcome.EXPIRED
     assert len(_records(db, order_id)) == 1
     assert _messages(caplog) == [f"{LOG_CREATE_REJECTED} checkout={checkout_id}"]
+    assert alerts == [(LOG_CREATE_REJECTED, ("stripe_checkout", checkout_id))]
 
 
 @pytest.mark.parametrize("status", [CHECKOUT_OPEN, CHECKOUT_COMPLETE, CHECKOUT_EXPIRED])
@@ -1191,19 +1241,34 @@ def test_reconcile_of_a_record_no_longer_creating_does_not_call_stripe(
 
 
 def test_creating_for_24_hours_goes_to_review_once(
-    db: Session, caplog: pytest.LogCaptureFixture
+    db: Session,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+    alerts: list[Alert],
 ) -> None:
     """第 3 条「24 小时内仍无法确定就不再自动处理、告警由人工核对，订单在此
     期间不取消、库存继续预留」；验收：「写告警时间并记一条 error 日志（类别
     stripe_checkout_needs_review，只含记录 ID，同一记录只记一次）……发起返回
     under_review」：满 24 小时不再调用 Stripe；再次发起与对账都返回
-    under_review、不再记日志；订单已过本地支付到期时间也不取消。"""
+    under_review、不再记日志；订单已过本地支付到期时间也不取消。
+    DESIGN 1.21「运营告警邮件」第 6 条 stripe_checkout_needs_review 一行（「写告警
+    时间并提交之后」，对象为结账记录 ID）：日志之后、告警时间已提交时调用一次
+    ops_alert.alert；已有告警时间的记录再次发起与对账不再调用。"""
     _setting(db, PAYMENT_METHOD_STRIPE_TEST)
     order_id = _order(db)
     checkout_id = _checkout(db, order_id, CHECKOUT_CREATING)
     gateway = FakeStripeGateway(_ok(), _ok())
     review = NOW + timedelta(hours=24)
+    seen: list[tuple[list[str], datetime | None]] = []
 
+    def record(category: str, target: object = None, **_: object) -> None:
+        # 调用时本模块已有的日志，与另一个会话读到的已提交告警时间。
+        with Session(db.get_bind()) as other:
+            stmt = select(StripeCheckout.alerted_at).where(StripeCheckout.id == checkout_id)
+            seen.append((_messages(caplog), other.scalars(stmt).one()))
+        alerts.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
     with caplog.at_level(logging.DEBUG, logger=LOGGER):
         first = _start(db, gateway, order_id, review)
         again = _start(db, gateway, order_id, review + timedelta(hours=1))
@@ -1219,6 +1284,8 @@ def test_creating_for_24_hours_goes_to_review_once(
     assert record.active_order_id == order_id
     assert _messages(caplog) == [f"{LOG_NEEDS_REVIEW} checkout={checkout_id}"]
     assert _order_status(db, order_id) == STATUS_AWAITING_PAYMENT
+    assert alerts == [(LOG_NEEDS_REVIEW, ("stripe_checkout", checkout_id))]
+    assert seen == [([f"{LOG_NEEDS_REVIEW} checkout={checkout_id}"], review)]
 
 
 def test_creating_just_under_24_hours_still_calls_stripe(db: Session) -> None:

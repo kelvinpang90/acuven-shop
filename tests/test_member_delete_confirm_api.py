@@ -17,6 +17,10 @@
   组锁定计数……登录与注销互相计入”。
 - 「失败、并发与重试」第 4 条（下称「失败第 4 条」）：“查单和管理员登录等依赖 Redis 限流的敏感
   接口也拒绝请求”。
+- docs/DESIGN.md 1.21（提交 5be346e）「运营告警邮件」第 6 条表 member_deletion_failed 一行（下称
+  「告警表 member_deletion_failed 行」）：“确认注销时删除或提交抛数据库异常、回滚之后（会员仍为
+  有效，前台回答暂不可用，须重新确认）”，对象为会员 ID；docs/HANDOFF.md 0.88 的落实写法
+  （SHOP-TASK-222）。ops_alert.alert 一律以替身 alerts 代替（autouse），不入真实队列。
 每条测试（参数化的测试是每个用例）的文档字符串先写明它守住的设计或 Kelvin 决定的原句，再写
 SHOP-TASK-082 验收标准里落实这一句的具体约定（下称「验收」）。
 
@@ -57,6 +61,7 @@ from app.main import create_app
 from app.models import Member, MemberSession, Order, SiteSetting, VerificationAttempt
 from app.models.order import CLAIM_NOT_CLAIMABLE, STATUS_AWAITING_PAYMENT
 from app.models.site import SITE_SETTING_ID
+from app.services import ops_alert
 from app.services.member_auth import issue_member_session
 from app.services.pw_hash import hash_password
 from app.services.rate_limit import get_redis_client
@@ -284,6 +289,18 @@ def redis_getter(fake: FakeRedis, monkeypatch: pytest.MonkeyPatch) -> RedisGette
     getter = RedisGetter(fake)
     monkeypatch.setattr(deletion_api, "get_redis_client", getter)
     return getter
+
+
+@pytest.fixture(autouse=True)
+def alerts(monkeypatch: pytest.MonkeyPatch) -> list[tuple[str, object]]:
+    """以 monkeypatch 替换 ops_alert.alert，按调用顺序记下（类别, 对象）。"""
+    calls: list[tuple[str, object]] = []
+
+    def record(category: str, target: object = None, **_: object) -> None:
+        calls.append((category, target))
+
+    monkeypatch.setattr(ops_alert, "alert", record)
+    return calls
 
 
 @pytest.fixture
@@ -1012,6 +1029,91 @@ def test_delete_member_false_is_401(
 
     assert_error(delete(client, token), 401, "member_session_required")
     assert is_active(engine, member)
+
+
+# ---------------------------------------------------------------------------
+# 注销失败的告警（DESIGN 1.21「运营告警邮件」第 6 条）
+# ---------------------------------------------------------------------------
+
+
+def _app_records(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
+    return [r for r in caplog.records if r.name == "app" or r.name.startswith("app.")]
+
+
+@pytest.mark.usefixtures("disabled")
+@pytest.mark.parametrize("failure", ["commit", "delete_member"])
+def test_deletion_database_error_alerts_once_after_rollback(
+    client: TestClient,
+    engine: Engine,
+    pw_member: int,
+    session_class: list[type[Session]],
+    monkeypatch: pytest.MonkeyPatch,
+    alerts: list[tuple[str, object]],
+    caplog: pytest.LogCaptureFixture,
+    failure: str,
+) -> None:
+    """告警表 member_deletion_failed 行：“确认注销时删除或提交抛数据库异常、回滚之后（会员仍为
+    有效，前台回答暂不可用，须重新确认）”，对象为会员 ID。提交抛数据库异常与 delete_member
+    抛数据库异常时，回滚之后记一条 error 日志 member_deletion_failed member=<会员 ID>，紧接着
+    以 ("member", 会员 ID) 调用一次 ops_alert.alert，然后照旧 503 service_unavailable；会员仍为
+    active。日志不含号码、密码、会话 cookie、来源地址与异常消息。
+    """
+    token, _ = login(engine, pw_member)
+    if failure == "commit":
+        session_class[0] = CommitFailingSession
+    else:
+
+        def _raise(*_args: object) -> bool:
+            raise OperationalError("DELETE", {"phone": PHONE_MY}, Exception("gone away"))
+
+        monkeypatch.setattr(deletion_api, "delete_member", _raise)
+    caplog.set_level(logging.DEBUG)
+
+    response = delete(client, token, password=PASSWORD)
+
+    assert_error(response, 503, "service_unavailable")
+    assert is_active(engine, pw_member)
+    assert alerts == [("member_deletion_failed", ("member", pw_member))]
+    records = _app_records(caplog)
+    assert [(r.levelno, r.getMessage()) for r in records] == [
+        (logging.ERROR, f"member_deletion_failed member={pw_member}")
+    ]
+    for record in records:
+        message = record.getMessage()
+        for value in ("123456789", PASSWORD, token, SOURCE, "gone away"):
+            assert value not in message
+
+
+@pytest.mark.parametrize("case", ["switch_read", "not_active", "deleted", "password_wrong"])
+def test_other_confirm_outcomes_do_not_alert(
+    client: TestClient,
+    engine: Engine,
+    pw_member: int,
+    monkeypatch: pytest.MonkeyPatch,
+    alerts: list[tuple[str, object]],
+    case: str,
+) -> None:
+    """告警表 member_deletion_failed 行只写“删除或提交抛数据库异常”。读取开关时数据库出错（503）、
+    delete_member 返回假即会员已不是有效（401）、注销成功（204）与密码错误（403）都不调用
+    ops_alert.alert。
+    """
+    set_switch(engine, False)
+    token, _ = login(engine, pw_member)
+    if case == "switch_read":
+
+        def _raise(*_args: object) -> bool:
+            raise OperationalError("SELECT", {}, Exception("gone away"))
+
+        monkeypatch.setattr(deletion_api, "is_sms_verification_enabled", _raise)
+    elif case == "not_active":
+        monkeypatch.setattr(deletion_api, "delete_member", lambda *_args: False)
+    password = WRONG_PASSWORD if case == "password_wrong" else PASSWORD
+
+    response = delete(client, token, password=password)
+
+    expected = {"switch_read": 503, "not_active": 401, "deleted": 204, "password_wrong": 403}
+    assert response.status_code == expected[case], response.text
+    assert alerts == []
 
 
 # ---------------------------------------------------------------------------

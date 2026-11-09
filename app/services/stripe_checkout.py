@@ -36,11 +36,14 @@ Kelvin 2026-10-15 确认的行项目三语名称与「订单支付到期时间�
 app/services/payment.py 的 expire_overdue_orders（它按「会员 → 订单」
 加锁）。SQLite 不支持行锁，SQLAlchemy 在 SQLite 上不生成 FOR UPDATE。
 
-运营告警邮件尚未接入：设计写「告警」之处先记一条 error 级日志，只含类别与
-本站记录 ID。记录与订单都不写日志以外的个人资料；快照里的 customer_email
-是站点配置的固定演示邮箱。本模块只做业务规则：不加接口、不接定时任务；
-确认付款由 SHOP-TASK-113、取消与超时由 SHOP-TASK-114 实现。库里的时间一律
-是不带时区的 UTC。
+设计写「告警」之处记一条 error 级日志，只含类别与本站记录 ID；按
+docs/DESIGN.md 1.21「运营告警邮件」第 6 条与 docs/HANDOFF.md 0.88
+（SHOP-TASK-219），紧接着以同一类别、对象（stripe_checkout, 记录 ID）调用
+ops_alert.alert（stripe_create_rejected 与 stripe_checkout_needs_review）。
+告警不带 Stripe 的任何 ID、金额与个人资料。记录与订单都不写日志以外的
+个人资料；快照里的 customer_email 是站点配置的固定演示邮箱。本模块只做
+业务规则：不加接口、不接定时任务；确认付款由 SHOP-TASK-113、取消与超时由
+SHOP-TASK-114 实现。库里的时间一律是不带时区的 UTC。
 """
 
 from __future__ import annotations
@@ -68,6 +71,7 @@ from app.models.stripe import (
     CURRENCY_MYR,
     PAYMENT_STATUSES,
 )
+from app.services import ops_alert
 from app.services.catalog import Language
 from app.services.payment import expire_overdue_orders
 from app.services.site_settings import get_payment_method
@@ -93,9 +97,11 @@ REVIEW_AFTER = timedelta(hours=24)
 SUCCESS_PATH = "/pay/result"
 CANCEL_PATH = "/pay"
 
-# 告警邮件接入前的 error 级日志类别（只含类别与记录 ID）。
+# error 级日志类别（只含类别与记录 ID），同时是运营告警的类别码。
 LOG_CREATE_REJECTED = "stripe_create_rejected"
 LOG_NEEDS_REVIEW = "stripe_checkout_needs_review"
+# 运营告警的对象类别（对象为结账记录 ID）。
+ALERT_TARGET_KIND = "stripe_checkout"
 
 # 发起的轮数上限：对账记为 expired 后再走一轮建新记录；并发写入撞上唯一约束时再走一轮。
 _MAX_ROUNDS = 3
@@ -423,9 +429,9 @@ def _apply_create_result(
     ok：按会话写回（见 _apply_session）。400、invalid_request_error 且带
     param：按 Stripe 幂等规则参数校验失败不保存结果，而同一幂等键与同一快照
     的请求若原已建成会回放原响应，所以没有建成会话，记为 expired 并记一条
-    error 日志（stripe_create_rejected，只含记录 ID）。其他 rejected（如
-    401、402、403、404，不能证明原请求没建成）、live 与 unavailable：记录
-    保持 creating。
+    error 日志（stripe_create_rejected，只含记录 ID），再报同类别的运营告警。
+    其他 rejected（如 401、402、403、404，不能证明原请求没建成）、live 与
+    unavailable：记录保持 creating。
     """
     if result.outcome is StripeOutcome.OK and result.value is not None:
         return _apply_session(db, checkout_id, result.value, now)
@@ -433,6 +439,7 @@ def _apply_create_result(
         outcome, changed = _mark_expired(db, checkout_id)
         if changed:
             logger.error("%s checkout=%d", LOG_CREATE_REJECTED, checkout_id)
+            ops_alert.alert(LOG_CREATE_REJECTED, (ALERT_TARGET_KIND, checkout_id))
         return outcome
     return ReconcileOutcome.PENDING
 
@@ -514,8 +521,8 @@ def _mark_expired(db: Session, checkout_id: int) -> tuple[ReconcileOutcome, bool
 
 
 def _mark_needs_review(db: Session, checkout_id: int, now: datetime) -> ReconcileOutcome:
-    """锁住记录，仍为 creating 且未告警时写告警时间、提交并记一条 error 日志；
-    同一记录只记一次。"""
+    """锁住记录，仍为 creating 且未告警时写告警时间、提交并记一条 error 日志，
+    再报同类别的运营告警；同一记录只记一次。"""
     record = _lock_checkout(db, checkout_id)
     if record.status != CHECKOUT_CREATING:
         outcome = _OUTCOME_BY_STATUS[record.status]
@@ -527,6 +534,7 @@ def _mark_needs_review(db: Session, checkout_id: int, now: datetime) -> Reconcil
     record.alerted_at = now
     db.commit()
     logger.error("%s checkout=%d", LOG_NEEDS_REVIEW, checkout_id)
+    ops_alert.alert(LOG_NEEDS_REVIEW, (ALERT_TARGET_KIND, checkout_id))
     return ReconcileOutcome.UNDER_REVIEW
 
 

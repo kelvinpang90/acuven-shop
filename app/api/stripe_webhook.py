@@ -13,7 +13,8 @@ handle_webhook_event。
 3. Stripe-Signature 校验不通过回 400 signature_invalid。
 4. 事件内容不合格（parse_webhook_event 返回 None）回 400 event_invalid。
 5. livemode 为真回 400 livemode_rejected，记一条 error 日志 stripe_livemode（只含类别），
-   不写事件记录。
+   不写事件记录；日志之后紧接着调用 ops_alert.alert(LOG_LIVEMODE)（对象为无，docs/DESIGN.md
+   1.21「运营告警邮件」第 6 条与 docs/HANDOFF.md 0.88，SHOP-TASK-220）。
 之后交给 handle_webhook_event：processed、ignored、duplicate 都回 200 {"received": true}；
 unavailable 回 503 stripe_unavailable（服务层已回滚、不留事件记录，由 Stripe 重发）。
 
@@ -33,6 +34,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.order_lookup import _NoStoreRoute
 from app.api.pay import GatewayDep, SessionDep, _stripe_unavailable, _utcnow
+from app.services import ops_alert
 from app.services.stripe_gateway import (
     LOG_LIVEMODE,
     parse_webhook_event,
@@ -91,6 +93,7 @@ def webhook(
         return _bad_request("event_invalid")
     if event.livemode:
         logger.error(LOG_LIVEMODE)
+        ops_alert.alert(LOG_LIVEMODE)
         return _bad_request("livemode_rejected")
     result = handle_webhook_event(session, gateway, event, now)
     if result is WebhookResult.UNAVAILABLE:
