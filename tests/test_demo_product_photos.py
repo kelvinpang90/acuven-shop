@@ -126,7 +126,6 @@ def test_products_edited_in_admin_are_left_alone(conn: Connection) -> None:
     assert refs["crew-neck-tee"] == ["/replaced.webp"]
     assert refs["cotton-cap"] == ["/demo-images/apparel.svg"]
     assert refs["knit-beanie"] == PHOTOS.photo_refs("knit-beanie")
-    assert refs["cotton-cap"] == PHOTOS.photo_refs("cotton-cap")
 
 
 def test_downgrade_restores_the_placeholders(conn: Connection) -> None:
