@@ -113,12 +113,19 @@ def test_products_edited_in_admin_are_left_alone(conn: Connection) -> None:
         .where(ProductImage.product_id == tee)
         .values(storage_ref="/replaced.webp")
     )
+    # 只调过顺序号、引用没变的也算改动过
+    cap = conn.execute(select(Product.id).where(Product.slug == "cotton-cap")).scalar_one()
+    conn.execute(
+        ProductImage.__table__.update().where(ProductImage.product_id == cap).values(sort_order=1)
+    )
 
     _run(conn, PHOTOS, "upgrade")
 
     refs = _refs(conn)
     assert refs["ceramic-mug"] == ["/demo-images/kitchen.svg", "/uploaded.webp"]
     assert refs["crew-neck-tee"] == ["/replaced.webp"]
+    assert refs["cotton-cap"] == ["/demo-images/apparel.svg"]
+    assert refs["knit-beanie"] == PHOTOS.photo_refs("knit-beanie")
     assert refs["cotton-cap"] == PHOTOS.photo_refs("cotton-cap")
 
 

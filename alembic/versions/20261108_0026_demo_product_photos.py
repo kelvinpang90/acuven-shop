@@ -6,11 +6,12 @@ frontend/public/ 发布；照片来自 Pixabay（Pixabay Content License），�
 frontend/public/demo-images/products/CREDITS.md。与 0003 的占位图一样是示例数据，元数据五列
 （file_name、source_format、width、height、byte_size）全为空，不经图片存储。
 
-只改动「图片恰好是 0003 写入的那一张占位图」的商品：后台已经改过图片的商品（上传、删除或调过顺序）
-原样保留，不覆盖运营者的改动。商品按 slug 查找，找不到的跳过。
+只改动「图片恰好是 0003 写入的那一张占位图、顺序号为 0」的商品：
+后台已经改过图片的商品（上传、删除或调过顺序）原样保留，
+不覆盖运营者的改动。商品按 slug 查找，找不到的跳过。
 
 - upgrade：符合条件的商品删掉那张占位图，按顺序写入五张照片（sort_order 0..4，第一张为封面）。
-- downgrade：图片恰好是这五张照片、顺序不变的商品，删掉五张并写回 0003 的占位图；其余不动。
+- downgrade：图片恰好是这五张照片、顺序号仍为 0..4 的商品，删掉五张并写回 0003 的占位图；其余不动。
 
 数据全是迁移内的常量，不 import app：模型以后改了，这个迁移写入的内容不跟着变。
 
@@ -104,15 +105,16 @@ def _swap(
         product_id = ids.get(slug)
         if product_id is None:
             continue
+        # 顺序号也要一致：后台只调过顺序的商品同样算改动过
         current = [
-            ref
-            for (ref,) in conn.execute(
-                sa.select(product_images.c.storage_ref)
+            tuple(row)
+            for row in conn.execute(
+                sa.select(product_images.c.sort_order, product_images.c.storage_ref)
                 .where(product_images.c.product_id == product_id)
                 .order_by(product_images.c.sort_order)
             )
         ]
-        if current != from_refs(slug, category):
+        if current != list(enumerate(from_refs(slug, category))):
             continue
         conn.execute(product_images.delete().where(product_images.c.product_id == product_id))
         op.bulk_insert(
