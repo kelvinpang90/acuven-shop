@@ -74,6 +74,16 @@ def _refs(connection: Connection) -> dict[str, list[str]]:
     return refs
 
 
+def _orders(connection: Connection, product_id: int) -> list[int]:
+    return list(
+        connection.execute(
+            select(ProductImage.sort_order)
+            .where(ProductImage.product_id == product_id)
+            .order_by(ProductImage.sort_order)
+        ).scalars()
+    )
+
+
 def _seed_placeholders() -> dict[str, list[str]]:
     return {p["slug"]: [f"/demo-images/{p['category']}.svg"] for p in SEED.PRODUCTS}
 
@@ -125,6 +135,7 @@ def test_products_edited_in_admin_are_left_alone(conn: Connection) -> None:
     assert refs["ceramic-mug"] == ["/demo-images/kitchen.svg", "/uploaded.webp"]
     assert refs["crew-neck-tee"] == ["/replaced.webp"]
     assert refs["cotton-cap"] == ["/demo-images/apparel.svg"]
+    assert _orders(conn, cap) == [1]
     assert refs["knit-beanie"] == PHOTOS.photo_refs("knit-beanie")
 
 
@@ -137,12 +148,23 @@ def test_downgrade_restores_the_placeholders(conn: Connection) -> None:
             ProductImage.product_id == mouse, ProductImage.sort_order == 4
         )
     )
+    # 只调过顺序号（五张整体后移）的也不还原
+    speaker = conn.execute(
+        select(Product.id).where(Product.slug == "portable-speaker")
+    ).scalar_one()
+    conn.execute(
+        ProductImage.__table__.update()
+        .where(ProductImage.product_id == speaker)
+        .values(sort_order=ProductImage.sort_order + 10)
+    )
 
     _run(conn, PHOTOS, "downgrade")
 
     expected = _seed_placeholders()
     expected["wireless-mouse"] = PHOTOS.photo_refs("wireless-mouse")[:4]
+    expected["portable-speaker"] = PHOTOS.photo_refs("portable-speaker")
     assert _refs(conn) == expected
+    assert _orders(conn, speaker) == [10, 11, 12, 13, 14]
 
 
 @pytest.mark.parametrize("slug", [slug for slug, _ in PHOTOS.SEED_PRODUCTS])
