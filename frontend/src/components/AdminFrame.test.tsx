@@ -344,9 +344,12 @@ describe("first render", () => {
   // [admin.nav_products]、…」与 A11「导航项 [admin.nav_stripe_pending] 排在 [admin.nav_refunds] 之后」，在退款之后加入 Stripe 待处理
   // （/admin/stripe-pending），ADMIN_NAV、href 与 aria-current 的期望改为十项，加该项的文字断言与退款 < Stripe 待处理 < 商品的顺序断言；
   // 十项即 UX-COPY 的全部导航项，「UX-COPY 的导航项多于已上线项」改回两者相同（DOC_NAV_KEYS 与 LIVE_NAV_KEYS 相等）。
+  // UX-COPY 0.22 改动（运营者 PR）：UX-COPY 新增尚未上线的 A12 导航项 admin.nav_promotions（UX 0.20），恢复「UX-COPY 的导航项多于已上线项」的断言；
+  // A12 前端任务上线该项时把它加进 LIVE_NAV_KEYS，再改回两者相同。
   it.each(LANGUAGES)("lists only the orders, refunds, Stripe follow-ups, products, categories, coupons, shipping, stock resets, store design and site settings items in UX order in the navigation in %s", (language) => {
     expect(ADMIN_NAV).toEqual(["orders", "refunds", "stripePending", "products", "categories", "coupons", "shipping", "stockResets", "storeDesign", "settings"]);
-    expect(DOC_NAV_KEYS).toEqual(LIVE_NAV_KEYS);
+    expect(DOC_NAV_KEYS.filter((key) => LIVE_NAV_KEYS.includes(key))).toEqual(LIVE_NAV_KEYS);
+    expect(DOC_NAV_KEYS.length).toBeGreaterThan(LIVE_NAV_KEYS.length);
     for (const html of [renderApp(ORDERS_PATH, language), render({}, language), render({ menuOpen: true }, language)]) {
       const nav = element(html, "nav", "site-admin__nav");
       const items = tags(nav, "a").filter((tag) => !attributes(tag).has("lang"));
