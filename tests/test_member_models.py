@@ -173,6 +173,10 @@ def _order_values(**overrides: Any) -> dict[str, Any]:
         "paid_at": None,
         "member_id": None,
         "claim_status": CLAIM_OPEN,
+        "promotion_id": None,
+        "promotion_item_discount_sen": 0,
+        "promotion_order_discount_sen": 0,
+        "shipping_waived_sen": 0,
     }
     return values | overrides
 
