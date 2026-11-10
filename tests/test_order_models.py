@@ -1206,7 +1206,7 @@ def test_promotion_order_check_constraints_reject(
     （另列在 also 里的是它的推论）；守住的第 7 条原句见每个用例的 design。
     """
     assert design
-    values = _promotion_order_values(_promotion(session).id, **overrides)
+    values = _promotion_order_values(_promotion(session).id) | overrides
 
     assert set(_failing_checks(Order, values)) == {constraint, *also}
     _assert_check_rejects(session, Order, constraint, values)
