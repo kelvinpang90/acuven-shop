@@ -6207,7 +6207,7 @@ tasks:
       运营者落实写法：设计只给出各表的字段大意，表名、列名、类型与约束按验收标准写定。设计里「保存时」「发布时」才检查的条件（时长不超过 92 天、发布条件、已发布活动的时间不重叠、每个活动的规则条数与类别上限、排序从 1 连续、各档逐档递增、范围的件数上限、清单之外的组合）由之后的服务层保证，库里不查；库里只查单行就能判断的取值。内部名称新建时必填、复制为新草稿时沿用原活动的名称（第 2 条只写明不复制时间与海报图），所以 name 非空。时间列沿用现有的 DateTime（MySQL 上精确到秒）；提前结束的时刻由之后的服务层截到整秒再写入，免得四舍五入到结束时间而违反 ended_early_within。素材包与装饰位变体的 id 以 docs/design/tokens/promotions.json（视觉稿导出的清单，HANDOFF 0.94）为准，模型常量与它逐项相同。
       设计闸门：DESIGN 1.23（提交 b7f9355）「数据模型」与「节日促销活动」第 1–3、12 条；只建结构，不涉及金额计算与个人资料。
       拆分：节日促销数据库层的第一个任务（5 个允许路径）；订单的活动快照列见 SHOP-TASK-230（依赖本任务的活动与规则表）。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 活动表——promotions（模型 Promotion）：id；name String(100)；status String(16)；starts_at、ends_at 与 ended_early_at 为不带时区的可空 DateTime（docs/UX.md 0.20 的 A12「草稿可以不填时间，发布时开始与结束都须填」，复制出的新草稿不带时间）；coupon_combinable、points_combinable 为 Boolean，Python 默认 False；version Integer，Python 默认 1；created_at 与 updated_at 照 app/models/coupon.py 的写法。检查约束 name_not_empty（LENGTH(name) >= 1）、status_valid（draft、published）、published_has_times（status 不是 published，或 starts_at 与 ends_at 都不为空）、ends_after_starts（starts_at 或 ends_at 为空，或 ends_at > starts_at）、ended_early_within（ended_early_at 为空，或 status 为 published 且 ended_early_at >= starts_at 且 ended_early_at < ends_at）、version_positive（version >= 1）；按 status、starts_at 两列建一个索引
