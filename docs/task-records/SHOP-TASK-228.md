@@ -21,3 +21,19 @@
   - 确认框提交中勾选框也禁用、Escape 不关闭（视觉稿只写「提交中两个按钮都禁用」）。
 - 验证到什么程度：人工逐条对照 UX 0.19 A11 的线框与说明、UX-COPY 0.21 的 25 个键与 A11 三张视觉稿；上述测试为本次新增或修改的测试代码，前端检查与全部测试由 PR 的必需 CI 检查 `frontend` 执行。「下一次同类操作开始时清除提示」与提交中再点不重复发请求写在内容区组件的事件处理里，`renderToStaticMarkup` 不能触发点击，测试没有直接覆盖这两点。未做浏览器验收。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.22 提交 `ffb043e`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-10 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 页面内容以 docs/UX.md 0.19 的 A11 为准，样式以 docs/design/pages/A11-desktop、A11-phone、A11-states 为准；frontend/src/i18n/copy.ts 加上 A11 其余 25 个新键（UX-COPY 0.21 新增、SHOP-TASK-226 未加的），三语与 UX-COPY 逐字相同；框架和页面的布局、显隐与媒体查询写在 frontend/src/styles/site.css，视觉稿的固定间距与尺寸直接写像素值，不声明颜色、字体、圆角属性
+      - 读取与列表——进入页面读取一次，标题下为 admin.stripe_pending_note；两个列表依次为 admin.stripe_pending_checkouts_title 与 admin.stripe_pending_refunds_title（其下 admin.stripe_pending_refunds_note），照接口给的顺序显示，列与卡片字段照 UX 0.19 A11（记录 ID 与尝试 ID 显示为「#」加数字，状态 creating、open、complete 分别为 admin.checkout_status_creating、_open、_complete，错误类别为原文、为空时显示 —），各自为空时显示 admin.stripe_pending_none；读取失败显示提示与 admin.reload，点它重新读取；不显示 csrf_token 与接口没给的字段
+      - 作废确认框——每行 admin.stripe_void 打开确认框（role 为 dialog、aria-modal 为 true），标题为 admin.stripe_void_confirm_title（{id} 为结账记录 ID，{order} 为订单号），正文 admin.stripe_void_confirm_body，勾选框 admin.stripe_void_verified，按钮 common.cancel 与 admin.stripe_void_submit；未勾选时提交禁用，common.cancel 关闭且不发请求，提交中两个按钮都禁用；每次打开时勾选框为未勾选
+      - 作废结果——确认框关闭后在第一个列表标题下方显示一条提示：confirmed、cancelled、voided 分别为 admin.stripe_void_confirmed、admin.stripe_void_cancelled、admin.stripe_void_voided，changed 为 admin.stripe_pending_changed，这四种都重新读取两个列表；unavailable 为 admin.stripe_void_unavailable（不重新读取）；403 与其他失败照 purpose；结果提示照视觉稿，前四种为状态提示（role 为 status），其余为警示（acs-admin__alert，role 为 alert）
+      - 重试与结果——每行 admin.stripe_refund_retry 直接发出重试，不另设确认框，提交中该按钮禁用；结果在第二个列表标题下方：done 为 admin.stripe_late_refund_retried，changed 为 admin.stripe_pending_changed，这两种都重新读取；cap 为 admin.stripe_refund_blocked（警示，不重新读取）；403 与其他失败照 purpose
+      - 两处提示各自只保留最新一条，下一次同类操作开始时清除；重新读取不清除刚给出的结果提示；离开页面时中止未完成的读取，旧读取的结果不再更新页面
+      - 测试验证意图（前端检查与全部测试由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——frontend/src/pages/AdminStripePendingPage.test.tsx 用 vitest 与 react-dom/server（不加测试依赖，请求模块以替身代替；以 renderToStaticMarkup 渲染、直接调用导出的纯函数），覆盖三种语言下两个列表的字段与空状态、读取失败、确认框的禁用与勾选、五种作废结果与三种重试结果的提示与是否重新读取、写操作 403 后关闭确认框并重新读取且下一次写操作带新读到的令牌、网络中断与其他失败的提示、401 回到 A01、页面不含 csrf_token；SHOP-TASK-226 的标题与导航断言保留；每条测试的注释写明它守住的 UX 0.19 A11 原句
+      - docs/task-records/SHOP-TASK-228.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，偏离与验证到什么程度只写实际情况）；改动只落在 allowed_change_paths；不改请求模块、后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
+```

@@ -6061,14 +6061,7 @@ tasks:
     status: done
     depends_on: []
     acceptance_criteria:
-      - 入口——app/services/payment.py 新增 void_alerted_checkout(db, gateway, checkout_id, now, *, on_void=None) 返回 VoidResult；now 带时区抛 ValueError（先于访问数据库）；调用方不得持有锁或未提交的改动，函数先结束当前事务，调用 Stripe 时不持有任何数据库锁、不留着读事务；记录不存在抛 CheckoutNotFound
-      - 前置条件——以普通读取取记录与订单后结束读事务；告警时间为空、记录为 expired 或订单不是 awaiting_demo_payment 时不调用 Stripe、不写库，返回 changed
-      - 查得确定结果——有会话 ID（open、complete）时先 retrieve_checkout_session 查询一次，核对会话 ID、元数据里的创建幂等键与记录相同且不是 livemode（同 app/services/stripe_overdue.py 的 _belongs）；查询不成或核对不符为给不出确定结果。查到已付款或 complete 时调用 confirm_checkout（用这次查询到的会话），paid 返回 confirmed，refunded（金额或币种不符、已写成全额退款尝试）时不给记录 ID 以 system 调用 cancel_after_stripe_end 并返回 cancelled；查到 expired 时给记录 ID 以 system 调用 cancel_after_stripe_end 并返回 cancelled；查到 open 时请求 expire_checkout_session 一次，返回的会话为 expired 则同上取消并返回 cancelled，否则为给不出确定结果（不再查询第二次）。cancel_after_stripe_end 返回 changed 时返回 changed，返回 kept 时按订单当前状态（demo_paid 为 confirmed，其他为 changed）
-      - 人工作废的条件——只在以下情形进入人工作废：creating（不调用 Stripe）；confirm_checkout 返回 needs_review 或 pending；给不出确定结果，或 confirm_checkout 返回 unavailable，且读取时记录的付款状态不是 paid。读取时付款状态已是 paid 而 Stripe 给不出结果时不作废、不写库，返回 unavailable
-      - 人工作废的事务——进入前重新以普通读取取记录（Stripe 处理可能已改动它）；在一个事务里按会员、订单、记录的顺序加锁重查，记录仍属该订单、状态与这次读到的相同、不是 expired、告警时间非空、订单仍待支付且没有其他不是 expired 的记录，付款状态为 paid 时只在 needs_review 情形允许；不满足即回滚返回 changed。满足则记录记为 expired、活动列置空，订单以带条件的 UPDATE 改为 demo_cancelled（不看本地支付到期时间），加回库存、释放券与积分预占、写一条操作者为 admin 的订单事件，flush 后调用 on_void(db)（给出时），再提交并返回 voided；on_void 抛出时回滚、异常原样传出
-      - 订单规则——app/services/order_rules.py 的 (awaiting_demo_payment, demo_cancelled) 允许的操作者加上 admin，注释写明只经 DESIGN 1.22 第 11 条的人工作废；tests/test_order_rules.py 只为这一处的期望表与断言改动；其他迁移不变。app/services/payment.py 的 _cancelled_by 对操作者为 system 或 admin 的取消事件都给 timeout，guest 与 member 给 self，文档字符串随之更新；tests/test_stripe_void.py 断言人工作废后支付页数据（pay_orders）的取消原因为 timeout
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_stripe_void.py 用 app/services/stripe_gateway.py 的 FakeStripeGateway 与 SQLite，覆盖上面每一个分支的返回值与库里的结果（记录状态与活动列、订单状态、库存加回、券与积分预占释放、事件操作者），creating 不调用 Stripe，读取时已付款而 Stripe 不可用时不作废，Stripe 处理之后记录被并发改动时返回 changed，有会话 ID 时先查询会话（查到 open 才请求作废，查到已付款不请求作废），on_void 与作废同一事务（它抛出时记录与订单都不变），以及人工作废之后同一会话的付款经 confirm_checkout 按第 6 条写成全额退款尝试、订单保持已取消；每条测试的文档字符串写明它守住的 DESIGN 1.22 第 11 条哪一句
-      - docs/task-records/SHOP-TASK-223.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改接口、前端、数据库与迁移、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-223.md
     allowed_change_paths:
       - app/services/payment.py
       - app/services/order_rules.py
@@ -6090,12 +6083,7 @@ tasks:
     status: done
     depends_on: []
     acceptance_criteria:
-      - 重试——app/services/stripe_refund.py 新增 retry_checkout_attempt(db, checkout_id, now) 返回新尝试的 ID；now 带时区抛 ValueError（先于访问数据库）；先结束此前的事务，再按订单、该结账记录的顺序加锁（订单行是新事务的第一条加锁语句），结账记录不存在抛新异常 RetryCheckoutNotFound
-      - 重试的检查——取来源为该结账记录（source_type 为 checkout）的尝试中 ID 最大的一条，没有抛 NoRefundAttempt，不是 failed 抛 RetryNotAllowed；以 refunded_total 锁住同一 PaymentIntent 的尝试，已有合计加原尝试金额超过原尝试金额时记一条 error 日志 stripe_refund_cap checkout=<ID>，紧接着以（stripe_checkout, 结账记录 ID）调用一次 ops_alert.alert，再抛 RefundCapExceeded；否则在保存点里写一条 pending 尝试（PaymentIntent 与金额同原尝试、来源为该结账记录、活动来源列为该记录 ID），撞上活动来源列的唯一约束时只回滚保存点并抛 RetryNotAllowed；抛出时都没有写库
-      - 列表——新文件 app/services/admin_stripe_pending.py 提供只读查询 stripe_pending(db)，返回 Pydantic 模型 StripePendingOut，两个字段 checkouts（PendingCheckout 的列表）与 refunds（FailedLateRefund 的列表），各按所写顺序、不分页：待处理的结账记录（告警时间非空、状态不是 expired、订单为 awaiting_demo_payment，按告警时间从早到晚、同时刻按 ID），每条给 checkout_id、status、order_number、created_at、alerted_at；失败的迟到付款退款（来源为会话、该来源 ID 最大的尝试为 failed，不论订单状态与结账记录是否已为 expired；按该尝试的 ID 从小到大），每条给 checkout_id、attempt_id、order_number、amount_sen、attempted_at（该尝试的创建时间）、error_type（last_error_type，可空）
-      - 列表不给收货资料、会员资料、Stripe 的任何 ID、付款页地址与创建参数快照；查询只读、结束读事务；三个模型名与字段名照上，之后的接口原样返回
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_stripe_late_refund_retry.py 覆盖重试的每一步（不存在、没有尝试、最新不是 failed、合计超额的日志与告警调用、唯一约束冲突、成功时新尝试的字段）并以 monkeypatch 替换 app.services.ops_alert.alert 记录调用；新文件 tests/test_admin_stripe_pending.py 覆盖两类列表的进入与退出条件（结账记录告警时间为空、已 expired、订单已不是待支付时不列出；退款最新一次已不是 failed 时不列出，记录已 expired 或订单已取消时仍列出）、排序与不含收货资料和 Stripe ID；每条测试的文档字符串写明它守住的 DESIGN 1.22 第 11 条哪一句
-      - docs/task-records/SHOP-TASK-224.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，偏离里写明 attempted_at 代替设计的失败时间）；改动只落在 allowed_change_paths；不改接口、前端、数据库与迁移、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-224.md
     allowed_change_paths:
       - app/services/stripe_refund.py
       - app/services/admin_stripe_pending.py
@@ -6119,14 +6107,7 @@ tasks:
       - SHOP-TASK-223
       - SHOP-TASK-224
     acceptance_criteria:
-      - 路由——app/api/admin_stripe_pending.py 的路由前缀为 /api/admin/stripe-pending，用 app/api/order_lookup.py 的 _NoStoreRoute，在 app/main.py 注册；这些接口的处理函数与依赖产生的全部响应（含错误）都带 Cache-Control 为 no-store，路径存在但方法不匹配时由框架返回的 405 不在此列
-      - 列表——GET 经 require_admin（401 admin_session_required），不要求 CSRF、不写审计；200 返回 checkouts、refunds 与 csrf_token 三个字段：前两个原样取自 SHOP-TASK-224 的 stripe_pending(db)（StripePendingOut 的两个列表），csrf_token 照 app/api/admin_coupons.py 列表接口的写法由 csrf_token_for_cookie 算出（算不出时 401 admin_session_required），供页面的作废与重试请求使用；时间照现有后台接口的写法序列化
-      - 作废——POST …/checkouts/{checkout_id}/void 依次 require_admin（401）、require_admin_csrf（403）、路径里的记录 ID（不带符号与前导零的十进制整数，否则 422）、请求体的结构（422，错误写法沿用 app/api/pay.py 的 _body_errors，不回显请求内容），之后才调用 void_alerted_checkout；原始请求体照 app/api/admin_refunds.py 审核接口的写法以依赖经 app/api/pay.py 的 _json_body 读取（超过上限 413、不是 JSON 415，这一步作为依赖先于 require_admin 执行，与审核接口相同）；记录不存在 404 not_found，changed 409 stripe_pending_changed，unavailable 503 stripe_unavailable，其余 200 与结果；Stripe 适配器经 app/api/pay.py 的 GatewayDep 取得
-      - 作废的审计——审计 stripe_checkout_voided（target_type 为 stripe_checkout、target_id 为记录 ID、旧值为空、新值为结果）：voided 经 on_void 在作废的同一事务里写入（接口传入写审计的函数）；confirmed 与 cancelled 在服务返回之后另开事务写入并提交；changed 与 unavailable 不写审计
-      - 重试——POST …/checkouts/{checkout_id}/refund-retry 依次 require_admin（401）、require_admin_csrf（403）、路径（422），不读请求体；RetryCheckoutNotFound 为 404 not_found，NoRefundAttempt 与 RetryNotAllowed 为 409 stripe_refund_not_retryable，RefundCapExceeded 为 409 stripe_refund_cap（告警已由服务层报），每种错误先回滚；成功时同一事务写审计 stripe_late_refund_retried（target_type 为 stripe_refund、target_id 为新尝试 ID、旧值为空、新值为结账记录 ID 的十进制写法）并提交，再以 submit_refund_attempt 调用 Stripe，它的结果不改变响应，抛异常时回滚并记一条 error 日志 stripe_refund_submit_failed attempt=<ID>（不记异常内容），200 {"result":"retried"}
-      - 资料——响应与日志不含收货资料、会员资料、Stripe 的任何 ID、付款页地址与 Stripe 错误原文；除上述 stripe_refund_submit_failed 外不写日志
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_stripe_pending_api.py 用 TestClient 与 FakeStripeGateway，覆盖三个接口的每个状态码与 detail、校验顺序（CSRF 或路径不通过时不调用服务层）、no-store、作废的审计只在三种结果时写且 voided 的审计与作废同一事务、重试的审计与提交后调用 Stripe、submit 抛异常仍回 200，以及响应不含收货资料与 Stripe ID；每条测试的文档字符串写明它守住的 DESIGN 1.22 第 11 条哪一句
-      - docs/task-records/SHOP-TASK-225.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改服务层规则、前端、数据库与迁移、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-225.md
     allowed_change_paths:
       - app/api/admin_stripe_pending.py
       - app/main.py
@@ -6147,12 +6128,7 @@ tasks:
     status: done
     depends_on: []
     acceptance_criteria:
-      - 路由——frontend/src/router.tsx 的路由表在 /admin/refunds/:id 之后加 /admin/stripe-pending，导出 ADMIN_STRIPE_PENDING_PATH；frontend/src/App.tsx 的页面表加 AdminStripePendingPage；文件头注释补上该路径不带段值
-      - 导航——frontend/src/components/AdminFrame.tsx 的 AdminNavItem、ADMIN_NAV 与 NAV_ENTRY 在 refunds 之后加 stripePending（指向 /admin/stripe-pending，文字 admin.nav_stripe_pending），桌面导航与手机菜单都按此顺序；frontend/src/i18n/copy.ts 加 admin.nav_stripe_pending，三语与 docs/UX-COPY.md 逐字相同
-      - 页面——AdminStripePendingPage 用后台框架渲染，current 为 stripePending，内容区只有 h1 admin.nav_stripe_pending；本任务不加其他文案键、不调用接口；布局沿用现有后台页面，需要时才改 frontend/src/styles/site.css（只写布局、显隐与媒体查询，固定间距与尺寸写像素值，不声明颜色、字体、圆角属性；视觉稿里 site.css 写不了的记入任务记录的偏离）
-      - 现有测试——frontend/src/components/AdminFrame.test.tsx 的 LIVE_NAV_KEYS 在 admin.nav_refunds 之后加 admin.nav_stripe_pending，并把 UX-COPY 0.21 改成的「UX-COPY 的导航项多于已上线项」改回「两者相同」（DOC_NAV_KEYS 与 LIVE_NAV_KEYS 相等），导航项、href 与 aria-current 的期望改为十项；router.test.tsx 与 8 个后台页面测试（Categories、Coupons、Products、Refunds、Shipping、SiteSettings、StockResets、StoreDesign）只改按顺序列出导航项或路由表的断言与测试名，加入这一项，其余断言不动
-      - 测试验证意图（前端检查与全部测试由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——新文件 frontend/src/pages/AdminStripePendingPage.test.tsx 断言三种语言下标题、当前导航项（aria-current 为 page）与它在退款之后、商品之前；每条新增或改动的测试注释写明它守住的 UX 0.19「管理后台总体」或 A11 的原句
-      - docs/task-records/SHOP-TASK-226.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明不适用及理由），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-226.md
     allowed_change_paths:
       - frontend/src/pages/AdminStripePendingPage.tsx
       - frontend/src/pages/AdminStripePendingPage.test.tsx
@@ -6187,12 +6163,7 @@ tasks:
     status: done
     depends_on: []
     acceptance_criteria:
-      - 读取——新文件 frontend/src/api/adminStripePending.ts 导出 readStripePending(signal)，GET /api/admin/stripe-pending；200 时逐项校验字段后返回 ok 与数据（csrf_token 为非空字符串；checkouts 每项 checkout_id 为正整数、status 为 creating、open、complete 之一、order_number 为字符串、created_at 与 alerted_at 为字符串；refunds 每项 checkout_id 与 attempt_id 为正整数、order_number 为字符串、amount_sen 为非负整数、attempted_at 为字符串、error_type 为字符串或 null），任一不合格算 failed；401 为 none，其他状态为 failed，网络中断为 network
-      - 作废——导出 voidCheckout(checkoutId, csrfToken)，POST …/checkouts/{ID}/void，请求体为 JSON 对象，只有 verified 为 true，Content-Type 为 application/json；回答 200 时按响应体 result 返回 confirmed、cancelled 或 voided（其他值算 failed）；409 stripe_pending_changed 与 404 为 changed；503 stripe_unavailable 为 unavailable；403 为 csrf；401 为 none；其他（含别的 409、503 与 422）为 failed；网络中断为 network
-      - 重试——导出 retryLateRefund(checkoutId, csrfToken)，POST …/checkouts/{ID}/refund-retry，没有请求体；200 为 done（响应体不读）；409 stripe_refund_not_retryable 与 404 为 changed；409 stripe_refund_cap 为 cap；403 为 csrf；401 为 none；其他为 failed；网络中断为 network
-      - 两个写操作的 ID 不是正整数时不发请求、返回 failed；三个函数都不在日志或错误里带出 CSRF 令牌与响应内容
-      - 测试验证意图（由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——新文件 frontend/src/api/adminStripePending.test.ts 以 fetch 替身覆盖每个函数的请求（方法、路径、请求头、请求体）、每种回答到返回值的映射与字段校验的每一种不合格；每条测试的注释写明它守住的 UX 0.19 A11 或 SHOP-TASK-225 契约的哪一句
-      - docs/task-records/SHOP-TASK-227.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改页面、路由、后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明不适用及理由），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-227.md
     allowed_change_paths:
       - frontend/src/api/adminStripePending.ts
       - frontend/src/api/adminStripePending.test.ts
@@ -6215,14 +6186,7 @@ tasks:
       - SHOP-TASK-226
       - SHOP-TASK-227
     acceptance_criteria:
-      - 页面内容以 docs/UX.md 0.19 的 A11 为准，样式以 docs/design/pages/A11-desktop、A11-phone、A11-states 为准；frontend/src/i18n/copy.ts 加上 A11 其余 25 个新键（UX-COPY 0.21 新增、SHOP-TASK-226 未加的），三语与 UX-COPY 逐字相同；框架和页面的布局、显隐与媒体查询写在 frontend/src/styles/site.css，视觉稿的固定间距与尺寸直接写像素值，不声明颜色、字体、圆角属性
-      - 读取与列表——进入页面读取一次，标题下为 admin.stripe_pending_note；两个列表依次为 admin.stripe_pending_checkouts_title 与 admin.stripe_pending_refunds_title（其下 admin.stripe_pending_refunds_note），照接口给的顺序显示，列与卡片字段照 UX 0.19 A11（记录 ID 与尝试 ID 显示为「#」加数字，状态 creating、open、complete 分别为 admin.checkout_status_creating、_open、_complete，错误类别为原文、为空时显示 —），各自为空时显示 admin.stripe_pending_none；读取失败显示提示与 admin.reload，点它重新读取；不显示 csrf_token 与接口没给的字段
-      - 作废确认框——每行 admin.stripe_void 打开确认框（role 为 dialog、aria-modal 为 true），标题为 admin.stripe_void_confirm_title（{id} 为结账记录 ID，{order} 为订单号），正文 admin.stripe_void_confirm_body，勾选框 admin.stripe_void_verified，按钮 common.cancel 与 admin.stripe_void_submit；未勾选时提交禁用，common.cancel 关闭且不发请求，提交中两个按钮都禁用；每次打开时勾选框为未勾选
-      - 作废结果——确认框关闭后在第一个列表标题下方显示一条提示：confirmed、cancelled、voided 分别为 admin.stripe_void_confirmed、admin.stripe_void_cancelled、admin.stripe_void_voided，changed 为 admin.stripe_pending_changed，这四种都重新读取两个列表；unavailable 为 admin.stripe_void_unavailable（不重新读取）；403 与其他失败照 purpose；结果提示照视觉稿，前四种为状态提示（role 为 status），其余为警示（acs-admin__alert，role 为 alert）
-      - 重试与结果——每行 admin.stripe_refund_retry 直接发出重试，不另设确认框，提交中该按钮禁用；结果在第二个列表标题下方：done 为 admin.stripe_late_refund_retried，changed 为 admin.stripe_pending_changed，这两种都重新读取；cap 为 admin.stripe_refund_blocked（警示，不重新读取）；403 与其他失败照 purpose
-      - 两处提示各自只保留最新一条，下一次同类操作开始时清除；重新读取不清除刚给出的结果提示；离开页面时中止未完成的读取，旧读取的结果不再更新页面
-      - 测试验证意图（前端检查与全部测试由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——frontend/src/pages/AdminStripePendingPage.test.tsx 用 vitest 与 react-dom/server（不加测试依赖，请求模块以替身代替；以 renderToStaticMarkup 渲染、直接调用导出的纯函数），覆盖三种语言下两个列表的字段与空状态、读取失败、确认框的禁用与勾选、五种作废结果与三种重试结果的提示与是否重新读取、写操作 403 后关闭确认框并重新读取且下一次写操作带新读到的令牌、网络中断与其他失败的提示、401 回到 A01、页面不含 csrf_token；SHOP-TASK-226 的标题与导航断言保留；每条测试的注释写明它守住的 UX 0.19 A11 原句
-      - docs/task-records/SHOP-TASK-228.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，偏离与验证到什么程度只写实际情况）；改动只落在 allowed_change_paths；不改请求模块、后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
+      - 已交付；验收标准原文移到 docs/task-records/SHOP-TASK-228.md
     allowed_change_paths:
       - frontend/src/pages/AdminStripePendingPage.tsx
       - frontend/src/pages/AdminStripePendingPage.test.tsx
@@ -6231,6 +6195,116 @@ tasks:
       - frontend/src/i18n/copy.ts
       - frontend/src/styles/site.css
       - docs/task-records/SHOP-TASK-228.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-229
+    title: 节日促销活动的数据表（模型与迁移 0027）
+    purpose: >-
+      按 docs/DESIGN.md 1.23「数据模型」的 Promotion / PromotionRule / PromotionDecoration 一行与「节日促销活动」第 1–3、12 条，新建 app/models/promotion.py 与迁移 0027，建活动、规则、规则适用的商品与分类、满额档、装饰与发布锁七张表，供之后的计价、后台与展示任务使用。只建表、约束与常量；不写服务、接口与前端，不改订单表（订单的活动快照列见 SHOP-TASK-230），AI 每日计数表留给之后的 AI 任务。
+      运营者落实写法：设计只给出各表的字段大意，表名、列名、类型与约束按验收标准写定。设计里「保存时」「发布时」才检查的条件（时长不超过 92 天、发布条件、已发布活动的时间不重叠、每个活动的规则条数与类别上限、排序从 1 连续、各档逐档递增、范围的件数上限、清单之外的组合）由之后的服务层保证，库里不查；库里只查单行就能判断的取值。内部名称新建时必填、复制为新草稿时沿用原活动的名称（第 2 条只写明不复制时间与海报图），所以 name 非空。时间列沿用现有的 DateTime（MySQL 上精确到秒）；提前结束的时刻由之后的服务层截到整秒再写入，免得四舍五入到结束时间而违反 ended_early_within。素材包与装饰位变体的 id 以 docs/design/tokens/promotions.json（视觉稿导出的清单，HANDOFF 0.94）为准，模型常量与它逐项相同。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「数据模型」与「节日促销活动」第 1–3、12 条；只建结构，不涉及金额计算与个人资料。
+      拆分：节日促销数据库层的第一个任务（5 个允许路径）；订单的活动快照列见 SHOP-TASK-230（依赖本任务的活动与规则表）。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 活动表——promotions（模型 Promotion）：id；name String(100)；status String(16)；starts_at、ends_at 与 ended_early_at 为不带时区的可空 DateTime（docs/UX.md 0.20 的 A12「草稿可以不填时间，发布时开始与结束都须填」，复制出的新草稿不带时间）；coupon_combinable、points_combinable 为 Boolean，Python 默认 False；version Integer，Python 默认 1；created_at 与 updated_at 照 app/models/coupon.py 的写法。检查约束 name_not_empty（LENGTH(name) >= 1）、status_valid（draft、published）、published_has_times（status 不是 published，或 starts_at 与 ends_at 都不为空）、ends_after_starts（starts_at 或 ends_at 为空，或 ends_at > starts_at）、ended_early_within（ended_early_at 为空，或 status 为 published 且 ended_early_at >= starts_at 且 ended_early_at < ends_at）、version_positive（version >= 1）；按 status、starts_at 两列建一个索引
+      - 规则表——promotion_rules（模型 PromotionRule）：id；promotion_id 外键 promotions.id（ON DELETE CASCADE）；position Integer（>= 1，与 promotion_id 联合唯一，检查约束 position_positive）；kind String(24) 取 item_discount、buy_x_get_y、spend_discount、free_shipping（kind_valid）；discount_mode String(8) 可空；percent、amount_sen、buy_quantity、get_quantity、get_percent、threshold_sen 为可空 Integer。每类一条写成「kind 不是该类，或参数如下」的检查约束——item_discount_params（discount_mode 为 percent 时 percent 在 1–90 且 amount_sen 为空，为 amount 时 amount_sen 在 1–50000000 且 percent 为空；其余参数列为空）、buy_x_get_y_params（buy_quantity 与 get_quantity 在 1–10、get_percent 在 1–100，其余参数列与 discount_mode 为空）、spend_discount_params（discount_mode 为 percent 或 amount，其余参数列为空，各档在满额档表）、free_shipping_params（threshold_sen 在 0–99999999，其余参数列与 discount_mode 为空）
+      - 范围与满额档——promotion_rule_products（PromotionRuleProduct：id 主键；rule_id 外键 promotion_rules.id ON DELETE CASCADE，product_id 外键 products.id ON DELETE RESTRICT，两列联合唯一）；promotion_rule_categories（PromotionRuleCategory：id 主键；rule_id 同上，category_id 外键 categories.id ON DELETE RESTRICT，两列联合唯一）；promotion_spend_tiers（PromotionSpendTier：id 主键；rule_id 同上；position 在 1–5（position_range）、与 rule_id 联合唯一；threshold_sen 在 1–99999999（threshold_range）；amount_sen 与 percent 为可空 Integer，恰有一个不为空（amount_or_percent），amount_sen 不为空时 amount_sen >= 1 且 amount_sen < threshold_sen（amount_below_threshold），percent 不为空时在 1–90（percent_range））
+      - 装饰表——promotion_decorations（PromotionDecoration，每个活动至多一行）：id 主键；promotion_id 外键 ON DELETE CASCADE 且唯一；pack、palette、ambient、home_poster、list_strip、card_badge、detail_ribbon、cart_progress 为 String(16)，各有一条检查约束只允许模型常量里的取值，约束名为列名加 _known（如 pack_known、palette_known；palette 为 theme 或任一素材包 id，ambient 另可为 none），均非空、都没有默认值；poster_mode String(8) 非空，取 template 或 image（poster_mode_valid），Python 默认 template；桌面与手机海报图各五列（poster_desktop_ 与 poster_phone_ 前缀的 file_name String(32)、source_format String(4)、width、height、byte_size，均可空），照 app/models/store_design.py 标志五列的三条约束各写一组（同为空或同不为空，格式为 jpeg、png、webp，展示图宽与高在 1–1600 且字节数 >= 1），约束名把 logo_ 换成 poster_desktop_ 或 poster_phone_（如 poster_desktop_all_or_none、poster_phone_display_size_range）；poster_alt、title、subtitle、badge、strip 各有 _en、_zh、_ms 三列，分别为 String(150)、String(40)、String(80)、String(12)、String(60)，均可空（空串由写入方存为空，字符数上限由列长保证）；updated_at
+      - 发布锁与常量——promotion_publish_locks（模型 PromotionPublishLock，id 主键）照 StoreDesignSetting 的 singleton_slot 写法只有一行（singleton_slot 唯一且恒为 1），迁移插入这一行。模型文件导出 PROMOTION_PACKS（7 个素材包 id 的元组，顺序同 promotions.json 的 packs）、PROMOTION_SLOTS（装饰位 id 到变体 id 元组的映射，顺序同 promotions.json 的 slots）、PALETTE_KEEP_THEME（theme）、AMBIENT_NONE（none），以及状态、规则类别与优惠方式的常量；检查约束里的取值由这些常量生成。七个模型加进 app/models/__init__.py 的 import 与 __all__
+      - 迁移——新文件 alembic/versions/20261110_0027_promotions.py，revision 0027、down_revision 0026，照 0025 的写法：不 import app，约束表达式作为常量自带并与模型逐字相同，约束名按 app/db/base.py 的命名约定逐个写出；upgrade 建七张表并插入发布锁那一行；downgrade 先读出 promotions 的行数，大于 0 即抛 RuntimeError、库保持原样，否则按外键依赖的逆序删表
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，含 MySQL 8 上的迁移往返与 alembic check；Worker 沙箱不跑后端测试）——新文件 tests/test_promotion_models.py 照 tests/test_store_logo_schema.py 用 SQLite 内存库（打开外键检查）按模型建表：每条检查约束各有一个正例与只让该约束不成立的反例（断言报出的是该约束名）；联合唯一约束；删除活动时规则、范围、满额档与装饰随之删除，被引用的商品与分类不能删除；常量与 docs/design/tokens/promotions.json 的 packs 与 slots 逐项相同（第 12 条「任一 ID 不在清单里即回答取值不合格」以这份清单为准）；经 importlib 载入迁移，核对 revision、down_revision 与各约束常量与模型逐字相同。每条测试的文档字符串写明它守住的设计句子或本任务的落实写法
+      - docs/task-records/SHOP-TASK-229.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明七张表的表名、模型名与常量名，供之后的任务引用）；改动只落在 allowed_change_paths；不改订单模型、服务、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+    allowed_change_paths:
+      - app/models/promotion.py
+      - app/models/__init__.py
+      - alembic/versions/20261110_0027_promotions.py
+      - tests/test_promotion_models.py
+      - docs/task-records/SHOP-TASK-229.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-230
+    title: 订单记录活动优惠的列与约束（迁移 0028）
+    purpose: >-
+      按 docs/DESIGN.md 1.23「数据模型」的 Order / OrderItem 一行与「节日促销活动」第 7 条，改 app/models/order.py 并新建迁移 0028：订单加所用的活动、商品级与整单级活动优惠合计、免去的运费四列，逐件快照加该件的活动优惠与命中的商品级规则两列，并把金额约束改为含活动优惠。只改结构；下单时怎样写这些列由之后的服务层任务做。已有订单的新列取 0 或空，迁移不改写已有金额。
+      运营者落实写法：订单的实际运费仍是 shipping_fee_sen（免运费时为 0），免去的运费另记一列；四个金额列与逐件活动优惠都是非空整数、库里默认 0（模型与迁移都写 server_default 0，照 app/models/catalog.py 的 version 列），所以现有直接构造 Order 与 OrderItemUnit 的约 60 个测试文件不用改。运营者在登记前对当时 main 的导出试改模型并跑全部后端测试：只有 tests/test_order_models.py（26 项）与 tests/test_member_models.py（3 项）因为按已有各列对表级检查约束逐条求值而失败，二者列入允许路径，只为让它们的行值带上新列而改。第 4 条末句（所有规则都没带来优惠时不记活动）与第 7 条「不参加活动或取了乙方案时为空」合起来，即活动 ID 为空当且仅当三项活动金额都为 0，库里用一条约束守住。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「数据模型」与「节日促销活动」第 7 条；订单金额快照的结构与约束，不涉及个人资料。
+      拆分：节日促销数据库层的第二个任务（5 个允许路径），依赖 SHOP-TASK-229（外键指向它建的活动表与规则表）。
+    status: ready
+    depends_on:
+      - SHOP-TASK-229
+    acceptance_criteria:
+      - 订单列——Order 加 promotion_id（可空 Integer，外键 promotions.id ON DELETE RESTRICT，建索引）、promotion_item_discount_sen、promotion_order_discount_sen、shipping_waived_sen（非空 Integer，server_default 0）；新检查约束 promotion_item_discount_sen_non_negative、promotion_order_discount_sen_non_negative、shipping_waived_sen_non_negative，promotion_amounts_match（promotion_id 为空且三项都为 0，或 promotion_id 不为空且三项之和大于 0），shipping_waived_means_free（shipping_waived_sen 为 0 或 shipping_fee_sen 为 0）
+      - 订单约束改写——discounts_within_subtotal 改为 promotion_item_discount_sen + promotion_order_discount_sen + coupon_discount_sen + points_redeemed <= subtotal_sen；total_formula 改为 total_sen = subtotal_sen - promotion_item_discount_sen - promotion_order_discount_sen - coupon_discount_sen - points_redeemed + shipping_fee_sen；约束名不变，total_covers_shipping 与其余约束不变；Order 文档字符串的应付公式随之更新
+      - 逐件列——OrderItemUnit 加 promotion_discount_sen（非空 Integer，server_default 0，检查约束 promotion_discount_sen_non_negative）与 promotion_rule_id（可空 Integer，外键 promotion_rules.id ON DELETE RESTRICT）；cash_paid_formula 改为 cash_paid_sen = original_price_sen - promotion_discount_sen - coupon_discount_sen - points_discount，约束名不变；文档字符串写明 promotion_discount_sen 对应之后 UnitAllocation 的活动优惠、promotion_rule_id 为该行命中的商品级规则（不论这一件是否享受折扣，不参加活动时为空）
+      - 迁移——新文件 alembic/versions/20261110_0028_order_promotion.py，revision 0028、down_revision 0027，照 0024、0025 的写法（不 import app，约束表达式作为常量自带并与模型逐字相同，约束名按 app/db/base.py 的命名约定逐个写出）。upgrade 先加列（已有行的金额列取 0、两个外键列为空，新约束建立时即可通过），再建外键、索引与新约束，最后删掉三条旧约束、按新表达式重建同名约束。downgrade 先读出订单中 promotion_id 不为空或三项活动金额不全为 0 的行数与逐件中 promotion_discount_sen 不为 0 或 promotion_rule_id 不为空的行数，任一大于 0 即抛 RuntimeError、库保持原样（这些订单按旧公式不成立）；否则先删掉三条改写后的约束、再按旧表达式建同名约束，然后删掉其余引用新列的约束、外键与索引，最后删列（DDL 在 MySQL 上隐式提交，判断必须在第一条 DDL 之前）
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，含 MySQL 8 上的迁移往返与 alembic check；Worker 沙箱不跑后端测试）——tests/test_order_models.py 的订单与逐件行值带上新列，现有断言照旧成立；新增每条新约束与三条改写约束的正例与只让该约束不成立的反例（断言报出的是该约束名），含活动 ID 为空而有活动金额、活动 ID 不为空而三项都为 0、免去运费而实际运费不为 0；两个外键拒绝不存在的活动与规则、被订单或逐件引用的活动与规则不能删除；不写新列时插入的订单与逐件取 0 与空；经 importlib 载入迁移，核对 revision、down_revision 与约束常量与模型逐字相同。tests/test_member_models.py 只为行值带上新列而改。每条新增测试的文档字符串写明它守住的第 7 条哪一句
+      - docs/task-records/SHOP-TASK-230.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明六个新列与约束名，供之后的下单任务引用）；改动只落在 allowed_change_paths；不改下单、计价、退款与展示的服务与接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+    allowed_change_paths:
+      - app/models/order.py
+      - alembic/versions/20261110_0028_order_promotion.py
+      - tests/test_order_models.py
+      - tests/test_member_models.py
+      - docs/task-records/SHOP-TASK-230.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-231
+    title: 节日促销活动的计价纯函数（商品级、买 X 享 Y、满额与免运费）
+    purpose: >-
+      按 docs/DESIGN.md 1.23「节日促销活动」第 3–5 条与第 10 条计价接口所需的数，新建 app/services/promotion_pricing.py：只用标准库、不碰数据库，算每件的商品级折扣（打折与买 X 享 Y 的选件）、满额减或满额折的档与分摊、免运费门槛，以及凑单提示要用的差额与件数。规则怎样从数据库读出、一行属于哪条商品级规则（含商品改分类后重叠时取排序数较小的规则）、哪些行是正常行，都由之后的服务层决定后传入。不改 app/services/pricing.py（券与积分接入活动与取更优方案见 SHOP-TASK-232）。
+      运营者落实写法：舍入与分摊复用 app/services/pricing.py 现有的 percent_coupon_discount（百分比以 Decimal 传入，「四舍五入，恰好半仙进一仙」）与 allocate_largest_remainder（最大余数、稳定序），不另写一套；参数校验照该文件 _require_non_negative_int 的写法（不接受 float 与 bool）。规则里的百分比（打折、买 X 享 Y 的享受百分比、满额折的档）都是 int，传给 percent_coupon_discount 时才转成 Decimal；SpendRule 的 mode 是字符串，模块导出常量 SPEND_AMOUNT（amount）与 SPEND_PERCENT（percent）。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 3–5、8、10 条；纯函数，只算金额，不碰个人资料。
+      拆分：节日促销计价规则层的第一个任务（3 个允许路径），与 SHOP-TASK-229、230 互不依赖。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 输入——frozen 数据类 PromoLine(line_index, unit_price, quantity, rule_id)（rule_id 为该行命中的商品级规则 ID 或 None）、ItemDiscountRule(rule_id, percent, amount_sen)（percent 与 amount_sen 恰有一个不为 None）、BuyXGetYRule(rule_id, buy_quantity, get_quantity, get_percent)、SpendRule(mode, tiers)（mode 为 amount 或 percent，tiers 为 (threshold_sen, value) 的元组）、FreeShippingRule(threshold_sen)；入口 price_promotion(lines, *, item_rules, spend_rule=None, free_shipping_rule=None, shipping_fee_sen=None) 返回 PromotionPricing，item_rules 为规则 ID 到 ItemDiscountRule 或 BuyXGetYRule 的映射。lines 只含正常行（第 4 条），line_index 为非负整数且须严格递增，unit_price 为非负整数、quantity 为正整数、rule_id 为正整数或 None，shipping_fee_sen 为非负整数或 None（不另设上限，件数与金额上限由调用方按「计价、优惠、积分与库存」第 8 条先拦下）；取值超出第 3 条的范围、档的门槛或优惠不严格递增、rule_id 不在 item_rules 里都抛 ValueError，类型不对抛 TypeError
+      - 商品级（第 3 条与第 4 条（一））——按行序、件序展开；打折百分比每件折扣为单价乘百分比除以 100，按同一舍入取整仙，直降每件取直降额与单价较小者；买 X 享 Y 照第 5 条，同一规则范围内各行的件合在一起共 n 件，k = ⌊n ÷ (X + Y)⌋ × Y，按单价从低到高、同价按行序与件序取前 k 件，每件折扣为单价乘百分比除以 100 按同一舍入；S1 为原价小计 S0 减去商品级折扣合计
+      - 整单级（第 4 条（二））——按 S1 取达到（大于或等于门槛）的最高一档；固定金额取该档金额与 S1 较小者，百分比为 S1 乘百分比除以 100 按同一舍入；按每件商品级折扣后的金额用 allocate_largest_remainder 分摊到件。没有满额规则或一档也没达到时为 0
+      - 免运费与是否参加（第 4 条（三）与末段）——有免运费规则且 S1 大于或等于门槛即 free_shipping_reached 为 True。shipping_fee_sen 为 None（还没有运费报价）时，shipping_actual_sen、shipping_waived_sen 与 participates 都为 None；有报价时达到门槛则免去的运费等于报价、实际运费为 0，否则免去 0、实际等于报价，participates 为商品级合计、整单级合计与免去的运费之和大于 0
+      - 输出——frozen 的 PromotionPricing：units 为每件的 PromoUnit(line_index, unit_index, original_price, item_discount, order_discount, promotion_discount, rule_id)（promotion_discount 为前两项之和；rule_id 为该行命中的规则 ID，不论这一件是否享受折扣）；subtotal（S0）、item_discount_total、after_item_subtotal（S1）、order_discount_total；spend_tier_reached（达到的档从 1 起的序号或 None）与 spend_next_gap_sen（下一档门槛减 S1，已到最高档或没有满额规则为 None）；free_shipping_reached 与 free_shipping_gap_sen（门槛减 S1 与 0 较大者，没有免运费规则为 None）；shipping_fee_sen、shipping_actual_sen、shipping_waived_sen、participates；buy_x_get_y 为每条买 X 享 Y 规则的 BuyXGetYProgress(rule_id, units_in_scope, units_to_next)（units_to_next 为 (X + Y) − n mod (X + Y)，第 10 条），按 rule_id 升序
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_promotion_pricing.py：第 8 条算例的（一）至（三）逐仙核对（A 两件各折 500、B 两件不折、C 折 900，S1 为 6400；达到第一档、整单减 500 分摊为 156、156、94、94、0；每件活动优惠 656、656、94、94、900，合计 2400；距下一档 3600；运费报价 800 时免去 800）；每类规则的边界（百分比恰好半仙进一仙、直降大于单价、n 不足 X + Y、多组、同价按行序件序、跨行混搭、享受百分比 100）；满额取最高档、一档未达、固定金额档、百分比档（含百分比折扣恰好半仙进一仙）；免运费门槛 0 与恰好等于门槛、没有运费报价；所有规则都没带来优惠时 participates 为 False；参数校验。每条测试的文档字符串写明它守住的第几条哪一句
+      - docs/task-records/SHOP-TASK-231.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明公开的数据类与函数签名，供 SHOP-TASK-232 与之后的服务层引用）；改动只落在 allowed_change_paths；不改 app/services/pricing.py、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+    allowed_change_paths:
+      - app/services/promotion_pricing.py
+      - tests/test_promotion_pricing.py
+      - docs/task-records/SHOP-TASK-231.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
+  - id: SHOP-TASK-232
+    title: 优惠券与积分接入活动优惠、参加与不参加活动的取更优（纯函数）
+    purpose: >-
+      按 docs/DESIGN.md 1.23「计价、优惠、积分与库存」第 1、2 条（1.23 改为券在活动后的金额上计算与分摊）与「节日促销活动」第 6、7 条，改 app/services/pricing.py：price_order 接受每件的活动优惠，UnitAllocation 与 PricingResult 带上活动优惠；新增 choose_promotion_plan，比较「参加活动」（甲）与「不参加活动」（乙）两种方案的积分抵扣之前的应付并取较低者。仍只用标准库、不碰数据库：券是否在有效期、次数是否用完等查库判断仍在 app/services/coupons.py，由之后的服务层先判断，再把券的优惠与最低消费传进来。没有活动优惠时 price_order 的结果与现在逐仙相同（第 2 条末句）。
+      运营者落实写法：新参数 promotion_discounts 只限关键字、默认 None（即每件为 0），不改现有参数与调用方；UnitAllocation 的 promotion_discount 字段与 PricingResult 的 promotion_discount 字段加在各自现有字段之后（全仓库只有 pricing.py 构造这两个数据类）。CouponTerms 在 __post_init__ 里校验（percent_off 与 fixed_off 恰有一个不为 None、fixed_off 与 min_spend_sen 为非负整数、percent_off 为 0–100 的有限 Decimal，不对抛 ValueError，类型不对抛 TypeError）；choose_promotion_plan 对 promotion_discounts、两个运费参数照 price_order 的写法校验（长度、非负整数、每项不超过该件原价、免去的运费不超过未免的运费，不对抛 ValueError，类型不对抛 TypeError）。choose_promotion_plan 只在本单参加活动、且会员选了券或填了积分时由服务层调用（第 6 条）；调用时机由调用方判断，函数本身对任何输入都照下面的规则比较。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「计价、优惠、积分与库存」第 1、2 条与「节日促销活动」第 6–8 条；纯函数，只算金额，不碰个人资料。
+      拆分：节日促销计价规则层的第二个任务（4 个允许路径），依赖 SHOP-TASK-231（测试用它的 price_promotion 走通第 8 条算例）；接入下单与计价接口见之后登记的服务层任务。
+    status: ready
+    depends_on:
+      - SHOP-TASK-231
+    acceptance_criteria:
+      - 活动优惠——price_order(lines, *, promotion_discounts=None, percent_off=None, fixed_off=None, points_redeemed=0)：promotion_discounts 的长度须等于展开后的件数、每项为不超过该件原价的非负整数，否则抛 ValueError（不接受 float 与 bool，抛 TypeError）。活动后金额为原价减活动优惠；百分比券对整单活动后商品额计算一次，固定券取券额与整单活动后商品额较小者；券按每件活动后金额的比例分摊，积分按券后金额分摊（超过券后商品额照旧抛 ValueError）；每件现金实付为原价减活动优惠、分摊券额与分摊积分额；获得积分照第 3 条
+      - 结果——UnitAllocation 加 promotion_discount，PricingResult 加 promotion_discount（活动优惠合计）；subtotal 仍为原价小计，cash_total 等于 subtotal 减活动优惠合计、券折扣与积分抵扣。不传 promotion_discounts 或全为 0 时，结果与改动前逐字段相同，tests/test_pricing.py 现有的测试不改即通过
+      - 取更优——新增 frozen 数据类 CouponTerms(percent_off, fixed_off, min_spend_sen)（percent_off 为 Decimal 或 None，fixed_off 为整数仙或 None，恰有一个不为 None）与 PromotionPlan(use_promotion, use_coupon, points_allowed, promotion_pre_points_total, other_pre_points_total)，以及 choose_promotion_plan(lines, promotion_discounts, *, shipping_fee_sen, shipping_waived_sen, coupon, coupon_combinable, points_combinable)。shipping_fee_sen 为未免的运费，shipping_waived_sen 为活动免去的运费（不超过前者）；coupon 为 CouponTerms 或 None
+      - 比较规则（第 6 条）——甲的活动后商品额为原价小计减活动优惠合计；甲用券当且仅当 coupon 不为 None、coupon_combinable 为 True 且活动后商品额大于或等于最低消费；甲的积分前应付为活动后商品额减甲的券折扣（口径同 price_order）加未免的运费减免去的运费。乙用券当且仅当 coupon 不为 None 且原价小计大于或等于最低消费；乙的积分前应付为原价小计减乙的券折扣加未免的运费。取较低者，相同取甲；use_coupon 为所取方案是否用券，points_allowed 在取甲时为 points_combinable、取乙时为 True；promotion_pre_points_total 与 other_pre_points_total 分别为甲与乙的积分前应付
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_pricing.py 加 promotion_discounts 的校验、全为 0 与不传逐字段相同、固定券大于活动后商品额时取后者、百分比券按活动后金额计算。新文件 tests/test_promotion_plans.py 以 SHOP-TASK-231 的 price_promotion 走通第 8 条：首例（两开关都打开，10% 券最低消费 RM50，1000 积分，西马运费 800 免去）甲 5310、乙 8270 取甲，price_order 的券分摊 184、184、111、111、0，积分分摊 313、313、187、187、0，现金实付 1347、1347、808、808、0，应付 4310，获得积分 14、13、8、8、0；关闭券同用时甲 5900、乙 8270 取甲且甲不用券；D 例甲 18800、乙 17800 取乙；第三例甲的活动后商品额 9900 够不到券的最低消费，甲 10700、乙 5800 取乙；只关闭积分同用时取甲且 points_allowed 为 False；两方案相同取甲。每条测试的文档字符串写明它守住的第几条哪一句
+      - docs/task-records/SHOP-TASK-232.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明 price_order 的新参数与 choose_promotion_plan 的签名，供之后的服务层引用）；改动只落在 allowed_change_paths；不改 app/services/promotion_pricing.py、coupons.py 与下单服务、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+    allowed_change_paths:
+      - app/services/pricing.py
+      - tests/test_pricing.py
+      - tests/test_promotion_plans.py
+      - docs/task-records/SHOP-TASK-232.md
     allowed_commands:
       - lint.check
       - format.check
