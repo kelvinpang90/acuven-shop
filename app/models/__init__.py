@@ -23,6 +23,15 @@ from app.models.order import (
 )
 from app.models.order_access import OrderAccessGrant, OrderAccessSession
 from app.models.points import PointEntry, PointLot
+from app.models.promotion import (
+    Promotion,
+    PromotionDecoration,
+    PromotionPublishLock,
+    PromotionRule,
+    PromotionRuleCategory,
+    PromotionRuleProduct,
+    PromotionSpendTier,
+)
 from app.models.refund import RefundLine, RefundLineUnit, RefundRequest
 from app.models.shipping import DemoFxRate, ShippingRate
 from app.models.site import SiteSetting
@@ -55,6 +64,13 @@ __all__ = [
     "ProductOption",
     "ProductOptionValue",
     "ProductVariant",
+    "Promotion",
+    "PromotionDecoration",
+    "PromotionPublishLock",
+    "PromotionRule",
+    "PromotionRuleCategory",
+    "PromotionRuleProduct",
+    "PromotionSpendTier",
     "ReceiptConfirmation",
     "RefundLine",
     "RefundLineUnit",
