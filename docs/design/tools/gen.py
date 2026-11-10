@@ -12,10 +12,12 @@ import json
 import math
 import os
 import sys
+from urllib.parse import quote
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
+from promo_src import OPTIONAL_NONE, PACKS, SLOTS  # noqa: E402
 from themes_src import STATUS, THEMES  # noqa: E402
 
 OUT = os.path.join(HERE, "..", "tokens")
@@ -188,6 +190,104 @@ for th in THEMES:
         dark = resolve_accent(dark_fill, "dark", dk)
         resolved[tid]["accents"].append({"id": aid, "name": aname, "light": light, "dark": dark})
 
+
+# ---------- festival promotion palettes (DESIGN 1.23「节日促销活动」第 12 条) ----------
+def mix(a, b, t):
+    """sRGB blend: t = 0 gives a, t = 1 gives b."""
+    return rgb2hex(tuple(x + (y - x) * t for x, y in zip(hex2rgb(a), hex2rgb(b), strict=True)))
+
+
+WHITE, BLACK, NIGHT = "#ffffff", "#000000", "#0e0e10"
+
+
+def promo_seed_modes(seeds):
+    p, s, d = seeds["primary"], seeds["secondary"], seeds["demo"]
+    ink_l = mix(BLACK, p, 0.22)
+    light = {
+        "surface": mix(WHITE, p, 0.035),
+        "surface-alt": mix(WHITE, p, 0.08),
+        "surface-raised": mix(WHITE, p, 0.012),
+        "tile": mix(WHITE, s, 0.2),
+        "tile-alt": mix(WHITE, p, 0.12),
+        "ink": ink_l,
+        "ink-muted": mix(ink_l, WHITE, 0.32),
+        "rule": mix(WHITE, p, 0.16),
+        "border": mix(WHITE, ink_l, 0.55),
+        "accent": p,
+        "demo": d,
+        "on-demo": "#161616",
+        "demo-soft": mix(WHITE, d, 0.28),
+        "on-demo-soft": mix(BLACK, d, 0.4),
+        "demo-mark": mix(BLACK, d, 0.55),
+        "banner": mix(BLACK, p, 0.62),
+        "banner-2": mix(BLACK, p, 0.5),
+        "on-banner": mix(WHITE, s, 0.12),
+        "footer": mix(BLACK, p, 0.5),
+        "on-footer": mix(WHITE, s, 0.1),
+        "promo-1": p,
+        "promo-2": s,
+        "promo-soft": mix(WHITE, s, 0.22),
+        "on-promo-soft": ink_l,
+    }
+    ink_d = mix(WHITE, s, 0.06)
+    surf_d = mix(NIGHT, p, 0.1)
+    dark = {
+        "surface": surf_d,
+        "surface-alt": mix(NIGHT, p, 0.16),
+        "surface-raised": mix(NIGHT, p, 0.2),
+        "tile": mix(NIGHT, s, 0.22),
+        "tile-alt": mix(NIGHT, p, 0.26),
+        "ink": ink_d,
+        "ink-muted": mix(ink_d, surf_d, 0.35),
+        "rule": mix(NIGHT, p, 0.32),
+        "border": mix(surf_d, ink_d, 0.45),
+        "accent": dark_variant(p),
+        "demo": d,
+        "on-demo": "#161616",
+        "demo-soft": mix(NIGHT, d, 0.22),
+        "on-demo-soft": mix(WHITE, d, 0.35),
+        "demo-mark": d,
+        "banner": mix(NIGHT, p, 0.5),
+        "banner-2": mix(NIGHT, p, 0.38),
+        "on-banner": mix(WHITE, s, 0.12),
+        "footer": mix(BLACK, p, 0.12),
+        "on-footer": mix(WHITE, p, 0.1),
+        "promo-1": dark_variant(p),
+        "promo-2": dark_variant(s),
+        "promo-soft": mix(NIGHT, s, 0.24),
+        "on-promo-soft": ink_d,
+    }
+    return {"light": light, "dark": dark}
+
+
+promo_resolved = {}
+for pk in PACKS:
+    pid = pk["id"]
+    promo_resolved[pid] = {}
+    for mode, t in promo_seed_modes(pk["seeds"]).items():
+        t.update(STATUS[mode])
+        name = f"promo:{pid}"
+        surfaces = ["surface", "surface-alt", "surface-raised"]
+        fix(name, mode, t, "ink", surfaces + ["tile", "tile-alt"], 4.5)
+        fix(name, mode, t, "ink-muted", surfaces, 4.5)
+        fix(name, mode, t, "border", ["surface", "surface-raised"], 3.0)
+        fix(name, mode, t, "on-demo", ["demo"], 4.5)
+        fix(name, mode, t, "on-demo-soft", ["demo-soft"], 4.5)
+        fix(name, mode, t, "demo-mark", ["demo-soft", "surface", "surface-raised"], 3.0)
+        fix(name, mode, t, "on-banner", ["banner", "banner-2"], 4.5)
+        fix(name, mode, t, "on-footer", ["footer"], 4.5)
+        for s in ("success", "danger"):
+            fix(name, mode, t, f"on-{s}-soft", [f"{s}-soft"], 4.5)
+            fix(name, mode, t, s, ["surface", "surface-raised"], 4.5)
+        t.update(resolve_accent(t["accent"], mode, t))
+        # Badge, strip and progress fill: a graphic at least 3:1 on the page, text on it 4.5:1.
+        fix(name, mode, t, "promo-1", ["surface", "surface-alt", "surface-raised"], 3.0)
+        t["on-promo-1"] = pick_on(t["promo-1"], t["ink"] if mode == "light" else "#0b0b0b")
+        fix(name, mode, t, "promo-1", ["on-promo-1"], 4.5)
+        t["promo-ink"] = ensure(t["promo-1"], [t[k] for k in surfaces], 4.5)
+        fix(name, mode, t, "on-promo-soft", ["promo-soft"], 4.5)
+        promo_resolved[pid][mode] = t
+
 # ---------- audit ----------
 PAIRS = [
     ("ink", ["surface", "surface-alt", "surface-raised", "tile", "tile-alt"], 4.5),
@@ -221,6 +321,20 @@ for tid, r in resolved.items():
                     c = contrast(x[fg], x[b])
                     if c < target:
                         fails.append(f"{tid}/{mode}/accent {a['id']}: {fg} on {b} = {c:.2f}")
+
+PROMO_PAIRS = PAIRS + [
+    ("promo-1", ["surface", "surface-alt", "surface-raised", "promo-soft"], 3.0),
+    ("on-promo-1", ["promo-1"], 4.5),
+    ("promo-ink", ["surface", "surface-alt", "surface-raised"], 4.5),
+    ("on-promo-soft", ["promo-soft"], 4.5),
+]
+for pid, modes in promo_resolved.items():
+    for mode, t in modes.items():
+        for fg, bgs, target in PROMO_PAIRS:
+            for b in bgs:
+                c = contrast(t[fg], t[b])
+                if c < target - 1e-9:
+                    fails.append(f"promo:{pid}/{mode}: {fg} on {b} = {c:.2f} < {target}")
 
 print("AUTO-ADJUSTED:")
 print("\n".join(log) or "  none")
@@ -343,6 +457,69 @@ for th in THEMES:
             f"{{ {decls(a['dark'])} }} }}"
         )
 
+
+# Promotion palettes and motifs. A palette sits on an element inside .acs (the .acs-promo wrapper,
+# or a preview sketch), so its values replace the theme colours there whatever the theme selector
+# specificity; fonts, radii and layout still come from the theme on .acs.
+def svg_url(inner):
+    svg = f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'>{inner}</svg>"
+    return 'url("data:image/svg+xml,' + quote(svg, safe="/:=' .,-()") + '")'
+
+
+# A 240 px tile with the motif scattered at a few sizes and angles
+# (ornament "fall", poster pattern).
+SCATTER = [
+    (18, 22, 1.0, 0),
+    (128, 8, 0.7, 25),
+    (196, 96, 1.1, -15),
+    (62, 132, 0.8, 40),
+    (150, 178, 0.6, 10),
+]
+
+
+def scatter_url(inner):
+    parts = "".join(
+        f"<g transform='translate({x} {y}) rotate({r} 12 12) scale({k})'>{inner}</g>"
+        for x, y, k, r in SCATTER
+    )
+    svg = f"<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 240 240'>{parts}</svg>"
+    return 'url("data:image/svg+xml,' + quote(svg, safe="/:=' .,-()") + '")'
+
+
+css.append(
+    "/* ===== Festival promotions: generated from tools/promo_src.py "
+    "(DESIGN 1.23 第 12 条) ===== */"
+)
+for pk in PACKS:
+    pid = pk["id"]
+    css.append(
+        f'.acs [data-promo-pack="{pid}"] {{ --promo-motif: {svg_url(pk["motif"])}; '
+        f"--promo-art: {svg_url(pk['art'])}; --promo-scatter: {scatter_url(pk['motif'])}; }}"
+    )
+for pk in PACKS:
+    pid = pk["id"]
+    lt, dk = promo_resolved[pid]["light"], promo_resolved[pid]["dark"]
+    sel = f'[data-promo-palette="{pid}"]'
+    css.append(f"/* {pk['name']} {pk['zh']} colours */")
+    css.append(f".acs {sel} {{ {decls(lt)} }}")
+    dark = (
+        f'.acs[data-mode="dark"] {sel}, .acs {sel}[data-mode="dark"], '
+        f'html[data-theme$="-dark"] .acs:not([data-mode="light"]) {sel}'
+    )
+    css.append(f"{dark} {{ {decls(dk)} }}")
+    css.append(
+        f"@media (prefers-color-scheme: dark) {{ "
+        f'.acs[data-mode="auto"] {sel}:not([data-mode="light"]) '
+        f"{{ {decls(dk)} }} }}"
+    )
+# Patterned demo banners repaint with the palette's banner colours.
+for th in THEMES:
+    img, _ = BANNER[th["banner"]]
+    if img != "none":
+        css.append(
+            f'.acs[data-shop-theme="{th["id"]}"] [data-promo-palette] {{ --banner-image: {img}; }}'
+        )
+
 with open(os.path.join(SRC, "components.css"), encoding="utf-8") as f:
     components = f.read()
 write("acuven-shop.css", FONT_FACES + "\n" + "\n".join(css) + "\n" + components)
@@ -408,4 +585,35 @@ tokens = {
     },
 }
 write("tokens.json", json.dumps(tokens, ensure_ascii=False, indent=1) + "\n")
+
+# ---------- promotions.json (the preset lists of DESIGN 1.23「节日促销活动」第 12 条) ----------
+promotions = {
+    "version": 1,
+    "note": "Festival promotion presets: theme packs, their palettes and the decoration "
+    "slot variants. "
+    'A promotion keeps the store theme colours (palette "theme") or uses one pack\'s palette.',
+    "keepThemePalette": "theme",
+    "slots": [
+        {
+            "id": slot,
+            "variants": variants,
+            **({"none": OPTIONAL_NONE[slot]} if slot in OPTIONAL_NONE else {}),
+        }
+        for slot, variants in SLOTS.items()
+    ],
+    "colorKeys": list(promo_resolved[PACKS[0]["id"]]["light"].keys()),
+    "packs": [
+        {
+            "id": pk["id"],
+            "name": pk["name"],
+            "nameZh": pk["zh"],
+            "copyKey": f"admin.pack_{pk['id']}",
+            "variants": dict(SLOTS),
+            "palette": promo_resolved[pk["id"]],
+        }
+        for pk in PACKS
+    ],
+}
+write("promotions.json", json.dumps(promotions, ensure_ascii=False, indent=1) + "\n")
+print("wrote promotions.json")
 print("wrote acuven-shop.css, themes.json, tokens.json")
