@@ -205,7 +205,7 @@
 | P02 商品列表有活动 · 桌面（2026-11-10） | [P02-promo-desktop.html](pages/P02-promo-desktop.html) | [P02-promo-desktop.png](reference/P02-promo-desktop.png) | 1440 × 2460 |
 | P02 商品列表有活动 · 手机（2026-11-10） | [P02-promo-phone.html](pages/P02-promo-phone.html) | [P02-promo-phone.png](reference/P02-promo-phone.png) | 390 × 1640 |
 | P03 商品详情有活动 · 桌面（2026-11-10） | [P03-promo-desktop.html](pages/P03-promo-desktop.html) | [P03-promo-desktop.png](reference/P03-promo-desktop.png) | 1440 × 1760 |
-| P03 商品详情有活动 · 手机（2026-11-10） | [P03-promo-phone.html](pages/P03-promo-phone.html) | [P03-promo-phone.png](reference/P03-promo-phone.png) | 390 × 2140 |
+| P03 商品详情有活动 · 手机（2026-11-10） | [P03-promo-phone.html](pages/P03-promo-phone.html) | [P03-promo-phone.png](reference/P03-promo-phone.png) | 390 × 1720 |
 | P04 购物车有活动（会员） · 桌面（2026-11-10） | [P04-promo-desktop.html](pages/P04-promo-desktop.html) | [P04-promo-desktop.png](reference/P04-promo-desktop.png) | 1440 × 1320 |
 | P04 购物车有活动 · 手机（2026-11-10） | [P04-promo-phone.html](pages/P04-promo-phone.html) | [P04-promo-phone.png](reference/P04-promo-phone.png) | 390 × 1580 |
 | P05 结账有活动、取更优说明 · 桌面（2026-11-10） | [P05-promo-desktop.html](pages/P05-promo-desktop.html) | [P05-promo-desktop.png](reference/P05-promo-desktop.png) | 1440 × 1380 |
@@ -215,5 +215,5 @@
 | P15 只有整单级规则、没有活动（2026-11-10） | [P15-states.html](pages/P15-states.html) | [P15-states.png](reference/P15-states.png) | 1440 × 1240 |
 | A12 促销活动列表 · 桌面（2026-11-10） | [A12-desktop.html](pages/A12-desktop.html) | [A12-desktop.png](reference/A12-desktop.png) | 1440 × 900 |
 | A12 活动编辑区 · 桌面（2026-11-10） | [A12-editor-desktop.html](pages/A12-editor-desktop.html) | [A12-editor-desktop.png](reference/A12-editor-desktop.png) | 1440 × 3020 |
-| A12 活动编辑区 · 手机（2026-11-10） | [A12-phone.html](pages/A12-phone.html) | [A12-phone.png](reference/A12-phone.png) | 390 × 1560 |
-| A12 前台预览条、确认框、保存结果、AI 与其他状态（2026-11-10） | [A12-states.html](pages/A12-states.html) | [A12-states.png](reference/A12-states.png) | 1440 × 2240 |
+| A12 活动编辑区 · 手机（2026-11-10） | [A12-phone.html](pages/A12-phone.html) | [A12-phone.png](reference/A12-phone.png) | 390 × 6160 |
+| A12 前台预览条、确认框、保存结果、AI 与其他状态（2026-11-10） | [A12-states.html](pages/A12-states.html) | [A12-states.png](reference/A12-states.png) | 1440 × 2600 |

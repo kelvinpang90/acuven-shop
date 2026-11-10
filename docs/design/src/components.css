@@ -341,8 +341,8 @@ html[data-theme$="-dark"] .acs-admin, .acs-admin[data-mode="dark"] { --a-bg: #15
   .acs-admin__choice:has(input:checked) { font-weight: 700; }
 }
 @media (max-width: 767px) { .acs-admin__shell { grid-template-columns: 1fr; } .acs-admin__nav { display: none; } }
-/* A12 前台预览条（2026-11-10，UX 0.20）：活动前台预览最上方的后台条，沿用后台的中性样式，不随店铺主题或节日配色变化。 */
-.acs-admin.acs-admin__previewbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 0; padding: 8px 20px; background: var(--a-nav); color: var(--a-on-nav); font-size: 13px; }
+/* A12 前台预览条（2026-11-10，UX 0.20）：活动前台预览最上方的后台条，滚动时固定在顶部、不可关闭；沿用后台的中性样式，不随店铺主题或节日配色变化。 */
+.acs-admin.acs-admin__previewbar { position: sticky; top: 0; z-index: 100; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 0; padding: 8px 20px; background: var(--a-nav); color: var(--a-on-nav); font-size: 13px; }
 .acs-admin__previewbar nav { display: flex; flex-wrap: wrap; gap: 4px; }
 .acs-admin__previewbar nav a { padding: 6px 10px; border-radius: 4px; color: var(--a-nav-muted); text-decoration: none; }
 .acs-admin__previewbar nav a[aria-current="page"] { background: rgba(255, 255, 255, 0.12); color: var(--a-on-nav); font-weight: 600; }
