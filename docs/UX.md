@@ -1,7 +1,24 @@
 # Acuven Shop 前端页面结构与线框（审阅稿）
 
-> **审阅稿。0.7 已于 2026-10-01 经 Kelvin 审阅通过（记录见 `docs/HANDOFF.md`）；0.8 只在「管理后台总体」与 A09 增加后台退出按钮与视觉稿说明，P01–P14、V1 与 A01–A08 各页内容与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只在 A02、A03 增加状态与补充说明，其余各页与 0.8 相同，Kelvin 已于 2026-10-06 认可；0.10 只把 A01 的登录名改为邮箱（`[admin.email]`），其余各页与 0.9 相同，Kelvin 已于 2026-10-07 批准（记录见 `docs/HANDOFF.md`）。0.11 只在 P06、P07、P14、A03、A09 增加 Stripe 测试环境支付的状态与说明，其余各页与 0.10 相同，Kelvin 已于 2026-10-15 审阅通过（记录见 `docs/HANDOFF.md`）。0.12 只在 A03「Stripe 测试」增加已批准却没有 Stripe 退款尝试时的提示，其余各页与 0.11 相同，Kelvin 已于 2026-10-23 审阅通过（记录见 `docs/HANDOFF.md`）。0.13 只在 P06、P07 增加会员的当前订单（本标签页暂存订单号）与找不到订单时的状态，并在页面地图与 P13 入口同步新的去向，其余各页与 0.12 相同，Kelvin 已于 2026-10-24 审阅通过（记录见 `docs/HANDOFF.md`）。0.14 只在 A09 增加短信服务配置不齐全时 `[admin.sms_on]` 禁用与保存被拒的状态（DESIGN 1.15），其余各页与 0.13 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.15 只在 A06 增加国家运费与演示汇率的增删、保存结果与数据已被改动时的状态（DESIGN 1.16），其余各页与 0.14 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.16 只在 A06 把马来西亚运费由各州属改为西马、东马两档，并同步 P05 的运费口径（DESIGN 1.17），其余各页与 0.15 相同，Kelvin 已于 2026-10-28 审阅通过（记录见 `docs/HANDOFF.md`）。0.17 按 DESIGN 1.18 改 A04、A07、A09、P03、P04、P05 并新增 A10 后台分类，其余各页与 0.16 相同，Kelvin 已于 2026-10-30 审阅通过（记录见 `docs/HANDOFF.md`）。0.18 只在 A08 写明店铺标志图的上传、替换与移除并补上标志加载失败时退回文字品牌，其余各页与 0.17 相同，Kelvin 已于 2026-11-05 批准（记录见 `docs/HANDOFF.md`）。**
-> 版本 0.19（2026-11-08），运营者修订（Claude Code），在 0.18（提交 `a870f78`）上按已批准的 `docs/DESIGN.md` 1.22「Stripe 测试环境支付」第 11 条与 `docs/REQUIREMENTS.md` 1.18（Kelvin 2026-11-07 批准，记录见 `docs/HANDOFF.md` 0.89），新增 A11 后台 Stripe 待处理，后台导航在 `[admin.nav_refunds]` 之后加 `[admin.nav_stripe_pending]`，其余各页与 0.18 相同；三语文案见 [UX-COPY.md](UX-COPY.md) 0.21。以下为 0.18 及更早版本的历史说明：版本 0.18（2026-11-05），运营者修订（Claude Code），在 0.17（提交 `fcb30c9`）上按 `docs/DESIGN.md` 1.20 候批稿「计价、优惠、积分与库存」第 15 条，只在 A08 写明店铺标志图的上传、替换与移除（立即生效、不随保存提交、上传中与被拒的状态、移除确认）并在「店铺装修」一条补上标志加载失败时退回文字品牌，其余各页与 0.17 相同；三语文案见 [UX-COPY.md](UX-COPY.md) 0.19。以下为 0.17 及更早版本的历史说明：版本 0.17（2026-10-30），运营者修订（Claude Code），在 0.16（提交 `80e3775`）上按已批准的 `docs/DESIGN.md` 1.18 与 `docs/REQUIREMENTS.md` 1.15（记录见 `docs/HANDOFF.md` 0.73），改 A04、A07、A09、P03、P04、P05，新增 A10 后台分类；三语文案见 [UX-COPY.md](UX-COPY.md) 0.18。以下为 0.16 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.16（2026-10-28），运营者修订（Claude Code），在 0.15（提交 `e9a1c93`）上按 Kelvin 2026-10-28 的决定与 `docs/DESIGN.md` 1.17 候批稿，把 A06 的马来西亚运费由各州属改为西马、东马两档，并在 P05 的金额元素表同步运费口径；三语文案见 [UX-COPY.md](UX-COPY.md) 0.17。以下为 0.15 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.15（2026-10-27），运营者修订（Claude Code），在 0.14（提交 `1c668e6`）上按 Kelvin 2026-10-27 的决定与 `docs/DESIGN.md` 1.16 候批稿，在 A06 增加国家运费与演示汇率的增删、保存结果与数据已被改动时的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.16；版本 0.14（2026-10-27），运营者修订（Claude Code），在 0.13（提交 `450c2fa`）上按 Kelvin 2026-10-27 的决定与 `docs/DESIGN.md` 1.15 候批稿，在 A09 增加短信服务配置不齐全时 `[admin.sms_on]` 禁用与保存被拒的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.15；版本 0.13（2026-10-23），运营者修订（Claude Code），在 0.12（提交 `5e69c3e`）上按 Kelvin 2026-10-23 的决定与 `docs/DESIGN.md` 1.13 候批稿，在 P06、P07 增加会员的当前订单与找不到订单时的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.14；版本 0.12（2026-10-23），运营者修订（Claude Code），在 0.11（提交 `e922fcf`）上按 Kelvin 2026-10-23 的决定，在 A03「Stripe 测试」增加一种状态（不改设计）；三语文案见 [UX-COPY.md](UX-COPY.md) 0.13；版本 0.11（2026-10-15），运营者修订（Claude Code），在 0.10（提交 `eb2bdc4`）上按已批准的 `docs/DESIGN.md` 1.12「Stripe 测试环境支付」与 `docs/REQUIREMENTS.md` 1.13（Kelvin 2026-10-15 批准，记录见 `docs/HANDOFF.md` 0.50）增加 Stripe 测试环境支付；新增元素的依据写 DESIGN 1.12 的小节与条号；三语文案见 [UX-COPY.md](UX-COPY.md) 0.12；版本 0.10（2026-10-07），运营者修订（Claude Code），在 0.9（提交 `1a65f6b`）上按 Kelvin 2026-10-07 的决定把 A01 的登录名改为邮箱；0.9（2026-10-06）在 0.8（提交 `61f7b8a`）上按 Kelvin 2026-10-06 的决定与认可补充 A02、A03 的状态；0.8（2026-10-05）在 0.7（提交 `2d13250`）上按 Kelvin 2026-10-05 的决定增加后台退出按钮；0.7 在 0.6（提交 `e3b3505`）上按 Kelvin 2026-10-01 的短信验证开关决定修改。依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；未特别注明时，各页「金额与个人资料元素」表引用的小节仍指 DESIGN 1.9（1.10、1.11 未改小节标题）。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。三语文案见 [UX-COPY.md](UX-COPY.md)（0.10）。视觉稿（设计系统、10 款主题、每页静态页面与参考图）见 [design/README.md](design/README.md)，只管样式，内容与流程以本稿为准；本版新增的元素沿用相邻元素的样式。本稿不改设计，冲突之处列入文末「待决问题」。
+> **审阅稿。0.7 已于 2026-10-01 经 Kelvin 审阅通过（记录见 `docs/HANDOFF.md`）；0.8 只在「管理后台总体」与 A09 增加后台退出按钮与视觉稿说明，P01–P14、V1 与 A01–A08 各页内容与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只在 A02、A03 增加状态与补充说明，其余各页与 0.8 相同，Kelvin 已于 2026-10-06 认可；0.10 只把 A01 的登录名改为邮箱（`[admin.email]`），其余各页与 0.9 相同，Kelvin 已于 2026-10-07 批准（记录见 `docs/HANDOFF.md`）。0.11 只在 P06、P07、P14、A03、A09 增加 Stripe 测试环境支付的状态与说明，其余各页与 0.10 相同，Kelvin 已于 2026-10-15 审阅通过（记录见 `docs/HANDOFF.md`）。0.12 只在 A03「Stripe 测试」增加已批准却没有 Stripe 退款尝试时的提示，其余各页与 0.11 相同，Kelvin 已于 2026-10-23 审阅通过（记录见 `docs/HANDOFF.md`）。0.13 只在 P06、P07 增加会员的当前订单（本标签页暂存订单号）与找不到订单时的状态，并在页面地图与 P13 入口同步新的去向，其余各页与 0.12 相同，Kelvin 已于 2026-10-24 审阅通过（记录见 `docs/HANDOFF.md`）。0.14 只在 A09 增加短信服务配置不齐全时 `[admin.sms_on]` 禁用与保存被拒的状态（DESIGN 1.15），其余各页与 0.13 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.15 只在 A06 增加国家运费与演示汇率的增删、保存结果与数据已被改动时的状态（DESIGN 1.16），其余各页与 0.14 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.16 只在 A06 把马来西亚运费由各州属改为西马、东马两档，并同步 P05 的运费口径（DESIGN 1.17），其余各页与 0.15 相同，Kelvin 已于 2026-10-28 审阅通过（记录见 `docs/HANDOFF.md`）。0.17 按 DESIGN 1.18 改 A04、A07、A09、P03、P04、P05 并新增 A10 后台分类，其余各页与 0.16 相同，Kelvin 已于 2026-10-30 审阅通过（记录见 `docs/HANDOFF.md`）。0.18 只在 A08 写明店铺标志图的上传、替换与移除并补上标志加载失败时退回文字品牌，其余各页与 0.17 相同，Kelvin 已于 2026-11-05 批准（记录见 `docs/HANDOFF.md`）。0.19 只新增 A11 后台 Stripe 待处理并在后台导航加入口，其余各页与 0.18 相同，Kelvin 已于 2026-11-08 审阅通过（记录见 `docs/HANDOFF.md`）。**
+> 版本 0.20（2026-11-10），运营者修订（Claude Code），在 0.19（提交 `bb8adb7`）上按已批准的 `docs/DESIGN.md` 1.23「节日促销活动」与 `docs/REQUIREMENTS.md` 1.19（Kelvin 2026-11-10 批准，记录见 `docs/HANDOFF.md` 0.92），新增 P15 活动专题页与 A12 后台促销活动（含前台预览），并在全局框架、P01–P05、P09、A02、A08 加入活动的显示，其余各页与 0.19 相同；三语文案见 [UX-COPY.md](UX-COPY.md) 0.22。以下为 0.19 及更早版本的历史说明：版本 0.19（2026-11-08），运营者修订（Claude Code），在 0.18（提交 `a870f78`）上按已批准的 `docs/DESIGN.md` 1.22「Stripe 测试环境支付」第 11 条与 `docs/REQUIREMENTS.md` 1.18（Kelvin 2026-11-07 批准，记录见 `docs/HANDOFF.md` 0.89），新增 A11 后台 Stripe 待处理，后台导航在 `[admin.nav_refunds]` 之后加 `[admin.nav_stripe_pending]`，其余各页与 0.18 相同；三语文案见 [UX-COPY.md](UX-COPY.md) 0.21。以下为 0.18 及更早版本的历史说明：版本 0.18（2026-11-05），运营者修订（Claude Code），在 0.17（提交 `fcb30c9`）上按 `docs/DESIGN.md` 1.20 候批稿「计价、优惠、积分与库存」第 15 条，只在 A08 写明店铺标志图的上传、替换与移除（立即生效、不随保存提交、上传中与被拒的状态、移除确认）并在「店铺装修」一条补上标志加载失败时退回文字品牌，其余各页与 0.17 相同；三语文案见 [UX-COPY.md](UX-COPY.md) 0.19。以下为 0.17 及更早版本的历史说明：版本 0.17（2026-10-30），运营者修订（Claude Code），在 0.16（提交 `80e3775`）上按已批准的 `docs/DESIGN.md` 1.18 与 `docs/REQUIREMENTS.md` 1.15（记录见 `docs/HANDOFF.md` 0.73），改 A04、A07、A09、P03、P04、P05，新增 A10 后台分类；三语文案见 [UX-COPY.md](UX-COPY.md) 0.18。以下为 0.16 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.16（2026-10-28），运营者修订（Claude Code），在 0.15（提交 `e9a1c93`）上按 Kelvin 2026-10-28 的决定与 `docs/DESIGN.md` 1.17 候批稿，把 A06 的马来西亚运费由各州属改为西马、东马两档，并在 P05 的金额元素表同步运费口径；三语文案见 [UX-COPY.md](UX-COPY.md) 0.17。以下为 0.15 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.15（2026-10-27），运营者修订（Claude Code），在 0.14（提交 `1c668e6`）上按 Kelvin 2026-10-27 的决定与 `docs/DESIGN.md` 1.16 候批稿，在 A06 增加国家运费与演示汇率的增删、保存结果与数据已被改动时的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.16；版本 0.14（2026-10-27），运营者修订（Claude Code），在 0.13（提交 `450c2fa`）上按 Kelvin 2026-10-27 的决定与 `docs/DESIGN.md` 1.15 候批稿，在 A09 增加短信服务配置不齐全时 `[admin.sms_on]` 禁用与保存被拒的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.15；版本 0.13（2026-10-23），运营者修订（Claude Code），在 0.12（提交 `5e69c3e`）上按 Kelvin 2026-10-23 的决定与 `docs/DESIGN.md` 1.13 候批稿，在 P06、P07 增加会员的当前订单与找不到订单时的状态；三语文案见 [UX-COPY.md](UX-COPY.md) 0.14；版本 0.12（2026-10-23），运营者修订（Claude Code），在 0.11（提交 `e922fcf`）上按 Kelvin 2026-10-23 的决定，在 A03「Stripe 测试」增加一种状态（不改设计）；三语文案见 [UX-COPY.md](UX-COPY.md) 0.13；版本 0.11（2026-10-15），运营者修订（Claude Code），在 0.10（提交 `eb2bdc4`）上按已批准的 `docs/DESIGN.md` 1.12「Stripe 测试环境支付」与 `docs/REQUIREMENTS.md` 1.13（Kelvin 2026-10-15 批准，记录见 `docs/HANDOFF.md` 0.50）增加 Stripe 测试环境支付；新增元素的依据写 DESIGN 1.12 的小节与条号；三语文案见 [UX-COPY.md](UX-COPY.md) 0.12；版本 0.10（2026-10-07），运营者修订（Claude Code），在 0.9（提交 `1a65f6b`）上按 Kelvin 2026-10-07 的决定把 A01 的登录名改为邮箱；0.9（2026-10-06）在 0.8（提交 `61f7b8a`）上按 Kelvin 2026-10-06 的决定与认可补充 A02、A03 的状态；0.8（2026-10-05）在 0.7（提交 `2d13250`）上按 Kelvin 2026-10-05 的决定增加后台退出按钮；0.7 在 0.6（提交 `e3b3505`）上按 Kelvin 2026-10-01 的短信验证开关决定修改。依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；未特别注明时，各页「金额与个人资料元素」表引用的小节仍指 DESIGN 1.9（1.10、1.11 未改小节标题）。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。三语文案见 [UX-COPY.md](UX-COPY.md)（0.10）。视觉稿（设计系统、10 款主题、每页静态页面与参考图）见 [design/README.md](design/README.md)，只管样式，内容与流程以本稿为准；本版新增的元素沿用相邻元素的样式。本稿不改设计，冲突之处列入文末「待决问题」。
+
+## 0.20 修订要点
+
+依据已批准的 `docs/DESIGN.md` 1.23「节日促销活动」与 `docs/REQUIREMENTS.md` 1.19「节日促销活动」（Kelvin 2026-11-10 批准，记录见 `docs/HANDOFF.md` 0.92）：
+
+- **全局框架**：有活动生效时，前台在店铺装修之上叠加活动装饰（六个装饰位，见「1. 全局框架」），页头导航在 `[common.nav_shop]` 之后加 `[promo.nav]` → P15；没有生效活动时各页与 0.19 完全相同。
+- **商品卡与价格**（P01 精选、P02、P15 共用）：参加打折的商品显示划线原价与活动价，参加买 X 享 Y 的商品显示角标、不改价格；角标短语（活动文案）与规则角标并排。列表的价格排序仍按原价（DESIGN 1.23 未改排序口径）。
+- **P01**：★ 提示之后、所有区块之前显示活动海报（模板或上传图），不属于任何区块，A08 不能隐藏。
+- **P02**：标题下显示活动横条（横条文字、倒计时、去 P15）。
+- **P03**：价格区显示活动价与角标，其下新增活动规则区（本商品适用的规则、整单规则、同用说明、倒计时）。
+- **P04**：行显示活动价；摘要新增活动优惠（暂算）与活动后金额；凑单提示（满额减下一档、免运费、买 X 享 Y）与进度条；会员另有取更优说明。
+- **P05**：摘要新增 `[checkout.summary_promo]`（游客与会员都显示），活动免运费时运费行显示 `[checkout.shipping_free]`；会员用券或积分时显示系统所取方案的说明。
+- **P09、A02**：金额明细新增活动优惠一行与免运费的显示；A02 另显示活动名称。
+- **A08**：说明活动期间前台叠加活动装饰，A08 的设置不变。
+- **P15 活动专题页**（新增，`/sale`）与 **A12 后台促销活动**（新增，`/admin/promotions`，导航项排在 `[admin.nav_coupons]` 之后；含 `/admin/promotions/<活动 ID>/preview` 前台预览）。
+- 规则说明一律由前台按规则参数套文案模板生成（`promo.rule_*`），不显示 AI 或管理员写的规则描述（DESIGN 1.23 第 10 条）。
+- 各装饰位的变体、7 套素材包与节日配色的样子由视觉稿给出；本稿只定装饰位的位置与作用。
 
 ## 0.19 修订要点
 
@@ -150,6 +167,8 @@
 - **网络中断**：下单、模拟支付、取消订单、确认收货、退款申请提交后如网络中断，先显示 `[common.network_check]` 并查询原订单或申请状态，再允许重试；按钮提交期间禁用（DESIGN 1.9「失败、并发与重试」）。
 - **限流/服务不可用**：查单、登录、短信被拒时显示 `[common.rate_limited]` 或 `[common.service_unavailable]`；商品浏览继续可用（DESIGN 1.9「失败、并发与重试」）。结账时短信停发另有降级提示，见 V1 与 P05。
 - **短信验证开关**（0.7，DESIGN 1.11「边界与原则」）：A09 关闭短信验证（默认）时全站不发短信，前台各短信入口按 V1「短信验证开关关闭时」显示暂停提示，结账以游客进行；页头导航不变。
+- **节日促销活动**（0.20，DESIGN 1.23「节日促销活动」第 10、12 条）：有活动生效时，所有前台页面在店铺装修之上叠加活动装饰，所选节日配色只替换颜色（主题的字体、圆角与版式不变）。装饰位共六个：`ambient` 页面装饰（页头花边、角落纹样或飘落动画，P01–P05、P15）、`home_poster` 模板海报的版式（P01）、`list_strip` 活动横条（P02、P15）、`card_badge` 角标样式（商品卡与 P03）、`detail_ribbon` 价格飘带与规则区（P03）、`cart_progress` 凑单进度条（P04）；每位的变体由视觉稿给出，`ambient` 另有「无」。装饰图案读屏忽略，不遮挡演示横幅、★ 提示与操作；访客设备设置了减少动态效果时不播放动画。页头导航在 `[common.nav_shop]` 之后加 `[promo.nav]` → P15（手机 ☰ 菜单同位置）。倒计时以服务端返回的结束时间与服务端当前时间之差为准，到 0 时页面重新读取活动数据并去掉全部活动内容（购物车与结账重新计价）。没有生效活动时各页与 0.19 完全相同。
+- **商品卡价格与角标**（0.20，P01 精选、P02、P15 共用）：商品命中打折规则时，价格处先显示划线原价（读屏标签 `[promo.a11y_original]`），再显示活动价（读屏标签 `[promo.a11y_sale]`）；两者都按原有规则用 `[common.price_myr]` 或 `[list.price_from]`（多于一个启用规格时，原价取最低原价、活动价取最低活动单价，两者都加「起」）。卡片角上显示角标：打折为 `[promo.badge_percent]` 或 `[promo.badge_amount]`，买 X 享 Y 为 `[promo.badge_bxgy_free]`（享受的件 100%）或 `[promo.badge_bxgy_pct]`，价格不变；活动的角标短语（管理员或 AI 写的文案，可为空）显示在规则角标之前。只命中整单级规则的商品不显示角标。售罄商品照样显示活动价与 `[list.out_of_stock]`。
 - **店铺装修**（0.4，REQUIREMENTS 1.9「店铺装修」）：所有前台页面按 A08 保存的主题与主色显示，版式、区块内容、流程与文案不因主题改变；每款主题有浅色与深色，按访客设备设置自动切换，页面不设切换控件。管理员上传标志图后，页头与页脚的品牌 `ACUVEN SHOP` 显示为该图（读屏文字仍为 `ACUVEN SHOP`），未上传时显示文字；标志图加载失败时同样显示文字（0.18）。演示横幅与各页演示提示在所有主题下照常显示。
 
 桌面框架：
@@ -264,6 +283,7 @@ V1 金额与个人资料元素：
 | P12 | 登录（密码 / 短信验证码）与忘记密码 | `/login`、`/forgot-password` | P13、来源页、P11 |
 | P13 | 会员中心（我的订单、积分、优惠券、密码、注销） | `/account` | P09、P06、P12、P01 |
 | P14 | 隐私说明 | `/privacy` | 来源页、WhatsApp 占位 |
+| P15 | 活动专题页（0.20，有活动生效时） | `/sale` | P03、P02 |
 | A01 | 后台登录 | `/admin/login` | A02 |
 | A02 | 后台订单与模拟发货 | `/admin/orders` | A03 |
 | A03 | 后台退款审核 | `/admin/refunds` | A02 |
@@ -275,6 +295,7 @@ V1 金额与个人资料元素：
 | A09 | 后台站点设置（0.7） | `/admin/settings` | — |
 | A10 | 后台分类（0.17） | `/admin/categories` | A04 |
 | A11 | 后台 Stripe 待处理（0.19） | `/admin/stripe-pending` | — |
+| A12 | 后台促销活动（0.20，含前台预览） | `/admin/promotions`、`/admin/promotions/<活动 ID>`、`/admin/promotions/<活动 ID>/preview` | 前台预览 |
 
 会员订单详情路径 `/account/order` 不带订单号；页面以不含订单号的内部引用在请求体中取单，服务端按会员会话校验归属。
 
@@ -295,6 +316,13 @@ V1 金额与个人资料元素：
 | [common.demo_banner]                                                  |
 | <页头>                                                                |
 | ★ [home.demo_hint]                        （固定位置，不属于任何区块）  |
++---- 活动海报（0.20，有活动生效时；不属于任何区块，A08 不能隐藏）------+
+| 模板模式：                                                             |
+| <活动标题>                                  [素材包插画]（装饰）        |
+| <活动副标题>                                                           |
+| [promo.ends_in] ⏱                                                     |
+| ( [promo.shop_now] ) → P15                                            |
+| 上传图模式：[桌面海报图]（替代文字为活动的三语替代文字）→ 整图链到 P15  |
 +---- 区块：主视觉 ---------------------------------------------------+
 | [home.hero_title]                              [图][图][图]（装饰展台）|
 | [home.hero_body]                                                      |
@@ -319,6 +347,13 @@ V1 金额与个人资料元素：
 | [common.demo_banner_short]     |
 | <页头>                         |
 | ★ [home.demo_hint]（固定）      |
+| --- 活动海报（0.20）---          |
+| 模板：<活动标题>                 |
+|  <活动副标题>                    |
+|  [promo.ends_in] ⏱              |
+|  ( [promo.shop_now] ) → P15     |
+|  [素材包插画]                    |
+| 上传图：[手机海报图] → P15        |
 | --- 区块：主视觉 ---            |
 | [home.hero_title]              |
 | [home.hero_body]               |
@@ -344,12 +379,13 @@ V1 金额与个人资料元素：
 - 四个区块的顺序与显隐按 A08 保存的设置；隐藏的区块整块不渲染。四个都隐藏时页面只剩演示横幅、页头、★ 提示与页脚。区块内的文案仍全部来自文案键，不随装修改变。
 - 主视觉右侧三个图块是装饰性的示例商品图，不是链接；其形状随主题变化。
 - 「精选商品」区块（0.6）显示 A08 挑选的商品（最多 4 件），按挑选顺序只显示仍上架的；未挑选或挑选的都已下架时，显示按最新排序的前 4 件。
+- 活动海报（0.20，DESIGN 1.23 第 12 条）：有活动生效时显示在 ★ 提示之后、所有区块之前，不属于任何区块，A08 的区块设置不影响它；没有生效活动时不占位。模板模式按 `home_poster` 的变体排版，标题与副标题是活动文案（副标题为空时不显示该行），`{time}` 为倒计时；上传图模式桌面显示桌面图、手机显示手机图，按视觉稿的宽高比居中裁切，整图是去 P15 的链接，读屏读活动的替代文字。精选商品的卡片按「1. 全局框架」的商品卡规则显示活动价与角标。
 
 金额与个人资料元素：
 
 | 标记 | 元素 | 依据 DESIGN 1.9 小节 |
 | --- | --- | --- |
-| M1 | 商品卡价格（仅 MYR；商品有多于一个启用规格时一律 `[list.price_from]`，即使各规格同价，0.4；不显示参考外币，Q9 已决） | 「数据模型」「边界与原则」 |
+| M1 | 商品卡价格（仅 MYR；商品有多于一个启用规格时一律 `[list.price_from]`，即使各规格同价，0.4；不显示参考外币，Q9 已决）；有活动时另显示划线原价与活动价（0.20） | 「数据模型」「边界与原则」；DESIGN 1.23「节日促销活动」第 10 条 |
 
 ---
 
@@ -366,6 +402,7 @@ V1 金额与个人资料元素：
 | [common.demo_banner]                                                  |
 | <页头>                                                                |
 | [list.title]              ★ [list.demo_hint]                          |
+| 活动横条（0.20，有活动生效时）：<横条文字> [promo.ends_in] ⏱ ( [promo.view_all] ) → P15 |
 +------------------+----------------------------------------------------+
 | [list.filter_title]| [list.results_count]        [list.sort] ▾        |
 | [list.filter_category]                                                |
@@ -388,6 +425,9 @@ V1 金额与个人资料元素：
 | <页头含搜索>                    |
 | [list.title]                   |
 | ★ [list.demo_hint]             |
+| 活动横条（0.20）：<横条文字>      |
+|  [promo.ends_in] ⏱             |
+|  ( [promo.view_all] ) → P15    |
 | ([list.filter_title]) ([list.sort]▾) |
 | [list.results_count]           |
 | [图]<名称>     | [图]<名称>     |
@@ -405,7 +445,9 @@ V1 金额与个人资料元素：
 
 | 标记 | 元素 | 依据 DESIGN 1.9 小节 |
 | --- | --- | --- |
-| M1 | 商品卡价格与「价格」排序，仅显示 MYR，不显示参考外币（Q9 已决）；商品有多于一个启用规格时一律 `[list.price_from]`，即使各规格同价（0.4） | 「数据模型」「边界与原则」 |
+| M1 | 商品卡价格与「价格」排序，仅显示 MYR，不显示参考外币（Q9 已决）；商品有多于一个启用规格时一律 `[list.price_from]`，即使各规格同价（0.4）；有活动时另显示划线原价与活动价，「价格」排序仍按原价（0.20） | 「数据模型」「边界与原则」；DESIGN 1.23「节日促销活动」第 10 条 |
+
+说明（0.20）：活动横条按 `list_strip` 的变体显示，文字为活动的横条文字（为空时用活动标题）；商品卡按「1. 全局框架」的商品卡规则显示活动价与角标。
 
 ---
 
@@ -425,6 +467,7 @@ V1 金额与个人资料元素：
 +-------------------------------+---------------------------------------+
 | [主图]                        | <商品名称>   [detail.english_only]?   |
 |                               | [M1] RM <所选规格单价>                 |
+|                               | 有活动时（0.20）：[M1] <划线原价> <活动价>  <角标短语> <规则角标> |
 | [缩略图][缩略图][缩略图]        | [detail.options]                      |
 |                               |  <规格名>: (<值>) (<值>) (<值>)         |
 |                               |  <规格名>: (<值>) (<值>) (<值>)         |
@@ -433,6 +476,13 @@ V1 金额与个人资料元素：
 |                               | [detail.stock_left]                   |
 |                               | ( [detail.add_to_cart] )              |
 |                               | ★ [detail.demo_hint]                  |
+|                               | 活动规则区（0.20，有活动生效时）：      |
+|                               |  [promo.detail_title]  <活动标题>      |
+|                               |  · <本商品适用的商品级规则说明>         |
+|                               |  · <整单级规则说明>（满额减各档、免运费）|
+|                               |  · [promo.coupon_not_combinable]?     |
+|                               |  · [promo.points_not_combinable]?     |
+|                               |  [promo.ends_in] ⏱ ([promo.view_all]) → P15 |
 +-------------------------------+---------------------------------------+
 | [detail.description]                                                  |
 | <描述>                                                                |
@@ -451,6 +501,8 @@ V1 金额与个人资料元素：
 | [主图，可左右滑动]               |
 | <商品名称> [detail.english_only]? |
 | [M1] RM <单价>                 |
+| 有活动时：[M1] <划线原价> <活动价> |
+|  <角标短语> <规则角标>           |
 | [detail.options]               |
 |  <规格名>: (<值>)(<值>)(<值>)   |
 |  <规格名>: (<值>)(<值>)(<值>)   |
@@ -458,6 +510,11 @@ V1 金额与个人资料元素：
 | [detail.max_per_order]         |
 | [detail.stock_left]            |
 | ★ [detail.demo_hint]           |
+| 活动规则区（0.20）：             |
+|  [promo.detail_title] <活动标题> |
+|  · <规则说明> …                 |
+|  [promo.ends_in] ⏱             |
+|  ([promo.view_all]) → P15      |
 | [detail.description] ▾         |
 +--------------------------------+
 | 底部固定：( [detail.add_to_cart] ) |
@@ -471,11 +528,13 @@ V1 金额与个人资料元素：
 
 数量可直接输入（0.17，Kelvin 2026-10-30 决定）：(-) 与 (+) 之间是数字输入框（读屏标签 `[detail.quantity]`），只收整数，回车或离开输入框时生效；为空、小于 1 或不是整数时恢复为原来的件数；超过上限时改为上限，并在数量下方显示 `[common.qty_capped]`（`{count}` 为上限）。本页的上限即上一段所说的件数。
 
+活动（0.20，DESIGN 1.23「节日促销活动」第 3、10 条）：有活动生效时，价格区按 `detail_ribbon` 的变体显示所选规格的划线原价与活动单价（命中打折规则时）以及角标（规则同「1. 全局框架」的商品卡），切换规格时随服务端数据刷新。其下的活动规则区在任何商品上都显示（整单级规则适用于全部商品）：先列本商品命中的商品级规则说明（没有命中时不列），再列满额减或满额折的各档与免运费，规则说明按规则参数套 `promo.rule_*` 文案生成；活动关闭了与优惠券或积分同用时，分别显示 `[promo.coupon_not_combinable]`、`[promo.points_not_combinable]`。
+
 金额与个人资料元素：
 
 | 标记 | 元素 | 依据 DESIGN 1.9 小节 |
 | --- | --- | --- |
-| M1 | 所选规格的 MYR 单价；切换规格时由服务端数据刷新；不显示参考外币 | 「数据模型」「边界与原则」 |
+| M1 | 所选规格的 MYR 单价；切换规格时由服务端数据刷新；不显示参考外币；命中打折规则时显示该规格的划线原价与活动单价（0.20） | 「数据模型」「边界与原则」；DESIGN 1.23「节日促销活动」第 3、10 条 |
 | — | 每单限购件数与购物车 20 行上限：只按本浏览器购物车提示并禁用按钮，下单时服务端再校验（0.6） | 「计价、优惠、积分与库存」（第 8 条，DESIGN 1.10 候批稿） |
 | — | 整单 2,000 件上限（按全部行计数）：只按本浏览器购物车提示并禁用按钮，下单时服务端再校验（0.17） | DESIGN 1.18「计价、优惠、积分与库存」（第 8 条） |
 | — | 库存剩余只作提示，加入购物车不预留库存 | 「计价、优惠、积分与库存」（第 6 条） |
@@ -505,6 +564,14 @@ V1 金额与个人资料元素：
 空：[cart.empty] ([cart.continue])
 超出整单件数上限（0.17）：[cart.item_changed] 的位置下另显示 [cart.units_over_limit]
 超出整单金额上限（0.17）：同一位置另显示 [cart.amount_over_limit]（两者可同时显示）
+有活动生效时（0.20）：
+  打折的行：[M1] 处先显示划线的原价行小计，再显示活动价行小计；行下显示 <规则角标>
+  右栏依次为：[cart.subtotal] [M2]
+             [cart.promo_discount] [M8]（有活动优惠时）
+             [cart.after_promo] [M9]（有活动优惠时）
+             <凑单进度条 cart_progress> + 凑单提示（见下方说明）
+             [cart.member_scheme_note]（已登录会员且有活动优惠时）
+             [cart.shipping_later] [cart.price_recheck] ( [cart.checkout] ) ([cart.continue])
 ```
 
 手机：
@@ -524,18 +591,25 @@ V1 金额与个人资料元素：
 +--------------------------------+
 | 底部固定：[cart.subtotal] [M2]  |
 |        ( [cart.checkout] )     |
+有活动时（0.20）：凑单进度条与提示、[cart.promo_discount] [M8]、
+  [cart.after_promo] [M9]、[cart.member_scheme_note] 放在 [cart.shipping_later] 之前；
+  底部固定栏改为显示 [cart.after_promo] [M9]（没有活动优惠时仍为 [cart.subtotal] [M2]）
 ```
 
 说明（0.6）：同一商品各行的件数合计达到每单限购时，这些行的数量 (+) 禁用。计价接口把某商品的各行标为超出限购时，在这些行下显示 `[cart.over_limit]`（`{count}` 为接口返回的限购件数），并与其他变化一样显示 `[cart.item_changed]`；访客减少件数或移除后重新计价。
 
 整单上限（0.17，DESIGN 1.18「计价、优惠、积分与库存」第 8 条）：购物车全部行的件数合计达到 2,000 时，各行的数量 (+) 禁用。数量可直接输入（0.17，Kelvin 2026-10-30 决定）：(-) 与 (+) 之间是数字输入框（读屏标签 `[detail.quantity]`），只收整数，回车或离开输入框时生效；为空、小于 1 或不是整数时恢复为原来的件数；超过上限时改为上限，并在数量下方显示 `[common.qty_capped]`（`{count}` 为上限）。输入值不大于该行现有件数时照收（减少件数不受上限约束）；大于时，上限为「该行现有件数 + max(0, min(限购件数减去该商品各行合计, 2,000 减去全部行合计))」（后台调低限购后购物车可能已超出，这时上限就是现有件数：输入更大的数只恢复为原件数，不显示 `[common.qty_capped]`，原因由同时出现的 `[cart.over_limit]` 说明）；生效后与 (+)(-) 一样重新计价。计价接口返回超出整单件数上限的标记时显示 `[cart.units_over_limit]`（`{count}` 为接口返回的上限件数），返回超出整单金额上限的标记时显示 `[cart.amount_over_limit]`（`{amount}` 为接口返回的上限金额，按整数仙格式化）；两者与各行的标注互不影响，同时存在时都显示，样式与 `[cart.item_changed]` 相同，位置在它之下。本页没有运费，金额上限按商品小计判断。`[cart.checkout]` 照旧显示（与有非正常行时相同），P05 再次提示并禁止下单。
 
+活动（0.20，DESIGN 1.23「节日促销活动」第 4、5、10 条）：有活动生效时，金额都是计价接口返回的暂算结果（本页没有运费报价）：`[cart.promo_discount]` 为商品级与整单级活动优惠之和，`[cart.after_promo]` 为商品小计减去它；为 0 时这两行都不显示。凑单提示按接口返回的差额显示，每条一行：满额减或满额折还有下一档时 `[cart.hint_tier_amount]` 或 `[cart.hint_tier_percent]`（`{amount}` 为还差的金额，`{save}`、`{percent}` 为下一档的优惠）；有免运费规则时，未达门槛显示 `[cart.hint_free_shipping]`，已达显示 `[cart.free_shipping_reached]`（门槛为 0 时不显示提示）；每条买 X 享 Y 规则的范围内已有商品时显示 `[cart.hint_bxgy]`（`{rule}` 为该规则的角标文字，`{n}` 为接口返回的再加件数，`{y}` 为 Y）。进度条按 `cart_progress` 的变体只画离得最近的一个门槛（满额减下一档或免运费），已全部达到时显示满格。已登录会员且有活动优惠时显示 `[cart.member_scheme_note]`，说明结账用券或积分时系统可能改为不参加活动的更优算法；游客不显示。活动在本页停留期间结束时，倒计时到 0 后重新计价并去掉这些内容。
+
 金额与个人资料元素：
 
 | 标记 | 元素 | 依据 DESIGN 1.9 小节 |
 | --- | --- | --- |
-| M1 | 行小计（单价 × 数量），由服务端按当前价格返回，不信任浏览器保存的价格 | 「数据模型」（`Cart`） |
-| M2 | 商品小计（仅 MYR）；运费、优惠、积分不在此计算 | 「数据模型」（`Cart`）「计价、优惠、积分与库存」（第 1 条） |
+| M1 | 行小计（单价 × 数量），由服务端按当前价格返回，不信任浏览器保存的价格；打折的行另显示活动价行小计（0.20） | 「数据模型」（`Cart`）；DESIGN 1.23「节日促销活动」第 3、4 条 |
+| M2 | 商品小计（仅 MYR，原价）；运费、优惠券、积分不在此计算（活动优惠另列为 M8，0.20） | 「数据模型」（`Cart`）「计价、优惠、积分与库存」（第 1 条） |
+| M8 | 活动优惠（暂算，0.20）：商品级与整单级之和；还没有运费报价，不判定是否参加活动，会员结账用券或积分后可能改为不参加 | DESIGN 1.23「节日促销活动」第 4、6、10 条 |
+| M9 | 活动后金额（暂算，0.20）＝ M2 − M8；凑单提示的差额按商品级优惠后的金额计算，由接口返回 | DESIGN 1.23「节日促销活动」第 4、10 条 |
 | — | 整单 2,000 件与 RM999,999.99 上限：由计价接口返回标记与上限，本页只提示（0.17） | DESIGN 1.18「计价、优惠、积分与库存」（第 8 条） |
 
 ---
@@ -704,6 +778,7 @@ V1 金额与个人资料元素：
 | 游客：[checkout.coupon_members_only] |
 |      [checkout.points_guest]   |
 | [cart.subtotal]            [M2]|
+| [checkout.summary_promo]   [M8]|
 | [checkout.summary_coupon]  [M3]|
 | [checkout.summary_points]  [M4]|
 | [checkout.summary_shipping][M5]|
@@ -723,6 +798,7 @@ V1 金额与个人资料元素：
 - 游客的收货电话就是第 1 步的号码（即查单凭据），只读，下单时不按收货国家重新解析；要改须点 `[checkout.phone_change]` 回到第 1 步重新判定（改为马新号码则须验证）。以收货国家作为默认区号只用于会员改填的收货电话：会员的收货电话默认会员手机号，可改为其他号码或虚构号码，按收货国家补默认区号（`[checkout.phone_hint]`）。
 - 手机版顶部折叠摘要与底部固定栏在选定收货国家前显示商品小计 `[M2]`，不显示合计；选定收货国家、服务端算出示例运费后才显示合计 `[M6]`。
 - 游客结账（白名单外号码与降级下单）的摘要不显示 `[checkout.summary_coupon]` `[M3]` 与 `[checkout.summary_points]` `[M4]` 两行，桌面与手机相同；会员照常显示（Kelvin 2026-09-30 决定，0.4）。
+- 节日促销活动（0.20，DESIGN 1.23「节日促销活动」第 4、6、10 条）：本单参加活动时，摘要在 `[cart.subtotal]` 之后、`[checkout.summary_coupon]` 之前加一行 `[checkout.summary_promo]` `[M8]`（桌面与手机相同），游客与会员都显示；活动免运费时 `[checkout.summary_shipping]` 一行的金额改为 `[checkout.shipping_free]`（`{amount}` 为免去的运费）。还没有选定收货国家（没有运费报价）时，这一行改用 `[cart.promo_discount]`（暂算），选定后按服务端判定的结果显示。会员用券或积分时，优惠券与积分输入区下方按计价接口返回的方案显示一条说明：取参加活动时为 `[checkout.scheme_promo]`（`{other}` 为不参加活动的积分前应付），其中活动不与积分同用而会员填了积分时另显示 `[checkout.points_not_combinable]`，券因活动后的金额够不到最低消费而没用时另显示 `[checkout.coupon_not_applied_sale]`；取不参加活动时为 `[checkout.scheme_no_promo]`（`{other}` 为参加活动的积分前应付），摘要不显示 `[checkout.summary_promo]`，运费照常。下单时服务端按同一规则重算，订单快照为准。
 - 服务端创建订单时强制执行：游客订单的收货电话属于白名单国家即拒绝，除非服务端记录显示该号码刚遇到短信无法送达或停发；前端游客表单不是这一规则的依据。
 - 短信验证开关关闭时（0.7，DESIGN 1.11「权限与资料保护」）：第 1 步以 `[checkout.phone_notice_sms_off]` 代替 `[checkout.phone_notice]`，`[checkout.login_password]` 照常（已设密码的会员仍可密码登录）；号码按所选或输入的国家码规范化后显示 `[checkout.guest_sms_off]`，以游客表单进入第 3 步，马新号码也一样。服务端按下单时开关的当前值判定；开关在填表途中被打开时下单被拒，页面回到第 1 步重新判定。
 - 参考外币金额 `[M7]` 只在选定收货国家后显示，改变国家或州属后运费与参考外币由服务端重算；未选国家时不显示 `[M7]`、`[checkout.fx_note]` 或 `[checkout.fx_none]`（Q9 已决）。
@@ -738,6 +814,7 @@ V1 金额与个人资料元素：
 | M5 | 示例运费（按国家；马来西亚分西马、东马两档，按所选州属归档（0.16）；其他国家兜底） | 「数据模型」（`ShippingRate` / `DemoFxRate`）「计价、优惠、积分与库存」（第 10 条，DESIGN 1.17 候批稿） |
 | M6 | MYR 合计，不低于运费；不单列税费 | 「计价、优惠、积分与库存」（第 1 条）「边界与原则」 |
 | M7 | 参考外币金额，按收货国家与固定演示汇率，只在选定收货国家后显示；该国无汇率时只显示 MYR | 「边界与原则」「数据模型」（`ShippingRate` / `DemoFxRate`） |
+| M8 | 活动优惠（0.20）：商品级与整单级之和，游客与会员都显示；选定收货国家前为暂算；会员用券或积分时按取更优的结果，取不参加活动时不显示；活动免运费时 M5 显示为免 | DESIGN 1.23「节日促销活动」第 4、6、7 条 |
 | P4 | 结账手机号（身份判定）：国家码下拉列出所有国家、默认 +60，以 `+` 开头时以输入为准，按所选或输入的国家码规范化为 E.164，之后选的收货国家不改变已判定的号码（Q16 已决）；马新号码经人机挑战与短信验证后注册或登录，白名单外号码游客下单；验证码错误不降级 | 「权限与资料保护」「边界与原则」「失败、并发与重试」 |
 | — | 短信验证开关关闭时 `[checkout.phone_notice_sms_off]`：未登录访客无论号码都不发短信、以游客结账（已登录会员不经第 1 步，照常以会员结账）；服务端下单时按开关当前值判定（0.7） | 「边界与原则」「权限与资料保护」（DESIGN 1.11） |
 | — | 手机号旁告知 `[checkout.phone_notice]`：自动注册、手机号保留至注销、可在会员中心注销；无勾选框 | 「权限与资料保护」「资料保留」 |
@@ -1172,6 +1249,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 | <名称>/<规格> x1 …                           | [P1] <地址>/<邮编>      |
 |---------------------------------------------|      <地区>/<国家>      |
 | [cart.subtotal]            [M3]             |                         |
+| [checkout.summary_promo]   [M3]（0.20）     |                         |
 | [checkout.summary_coupon]  [M3]             |                         |
 | [checkout.summary_points]  [M3]             |                         |
 | [checkout.summary_shipping][M3]             |                         |
@@ -1226,7 +1304,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 | --- | --- | --- |
 | M1 | 商品单价快照 | 「数据模型」（`Order` / `OrderItem`） |
 | M2 | 逐件实付快照（不含积分抵扣），界面文字 `[order.cash_paid]` 不用「现金」一词 | 「计价、优惠、积分与库存」（第 2、4 条） |
-| M3 | 小计、优惠、积分、示例运费、合计快照；游客订单（下单时不是会员，含之后被认领的）不显示优惠与积分两行，查单模式与会员模式相同（0.5） | 「数据模型」（`Order` / `OrderItem`）「计价、优惠、积分与库存」（第 7 条） |
+| M3 | 小计、优惠、积分、示例运费、合计快照；游客订单（下单时不是会员，含之后被认领的）不显示优惠与积分两行，查单模式与会员模式相同（0.5）；订单记有活动时另显示活动优惠一行（游客订单也显示），活动免运费时运费行显示 `[checkout.shipping_free]`（0.20，DESIGN 1.23「节日促销活动」第 7 条） | 「数据模型」（`Order` / `OrderItem`）「计价、优惠、积分与库存」（第 7 条） |
 | M4 | 累计已退、剩余可退、每笔申请金额 | 「订单与退款状态」 |
 | P1 | 完整收货姓名、电话、地址：查单模式凭查单授权可见；会员模式仅本人下单或认领的订单可见；长期保存，不再显示「已匿名化」 | 「权限与资料保护」「资料保留」 |
 | L | 查单授权：当前浏览器、仅该单、30 分钟；可查看、确认收货、申请退款；不能支付或取消；查其他订单须重新输入订单号和电话；过期须重新查单 | 「权限与资料保护」 |
@@ -1674,11 +1752,72 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 
 ---
 
+## P15 活动专题页（0.20）
+
+依据 DESIGN 1.23「节日促销活动」第 10、12 条。
+
+- **目的**：集中列出当前活动的规则与参加活动的商品。
+- **入口**：P01 活动海报；P02、P03 的 `[promo.view_all]`；页头 `[promo.nav]`。
+- **去向**：P03（商品卡）；P02（`[promo.browse_all]`）。
+- **演示提示**：常驻横幅；★ `[promo.demo_hint]`。
+
+桌面：
+
+```text
+| [common.demo_banner]                                                  |
+| <页头>                                                                |
+| ★ [promo.demo_hint]                                                   |
+| 活动横条（list_strip）：<活动标题>   [promo.ends_in] ⏱                 |
+| <活动副标题>                                                           |
++-----------------------------------------------------------------------+
+| [promo.rules_title]                                                   |
+|  · <每条规则的说明>（商品级规则在前，按规则排序；整单级规则在后）        |
+|  · [promo.coupon_not_combinable]?  [promo.points_not_combinable]?     |
++-----------------------------------------------------------------------+
+| [promo.products_title]                       [list.results_count]     |
+| [图] <名称>        [图] <名称>      [图] <名称>      （商品卡同 P02）    |
+|  <划线原价> [M1]    <角标>  [M1]     …                                 |
+| (‹) 1 2 3 (›)                                                         |
+只有整单级规则时：商品区替换为 [promo.order_level_only] ( [promo.browse_all] ) → P02
+没有生效活动（活动已结束或尚未开始）：[promo.ended] ( [promo.browse_all] ) → P02
+```
+
+手机：
+
+```text
+| [common.demo_banner_short]     |
+| <页头>                         |
+| ★ [promo.demo_hint]            |
+| 活动横条：<活动标题>             |
+|  [promo.ends_in] ⏱             |
+| <活动副标题>                    |
+| [promo.rules_title]            |
+|  · <规则说明> …                 |
+| [promo.products_title]         |
+| [list.results_count]           |
+| [图]<名称>     | [图]<名称>     |
+|     [M1]       |     [M1]       |
+| ( [list.load_more] )           |
+```
+
+说明：
+
+- 商品区列出生效活动全部商品级规则范围内的上架商品，排序与分页同 P02 的默认排序（不设筛选与排序控件），商品卡按「1. 全局框架」的商品卡规则显示。规则说明按规则参数套 `promo.rule_*` 文案生成；商品级规则含分类时，说明后附 `[promo.rule_scope]`（`{names}` 为分类名称），选中的单件商品不逐一列出（它们就在下方的商品区）。
+- 访客停留期间活动结束时，倒计时到 0 后页面重新读取，显示 `[promo.ended]`。直接打开 `/sale` 而没有生效活动时同样显示 `[promo.ended]`。
+
+金额与个人资料元素：
+
+| 标记 | 元素 | 依据 DESIGN 1.9 小节 |
+| --- | --- | --- |
+| M1 | 商品卡价格，规则同 P02（0.20） | 「数据模型」「边界与原则」；DESIGN 1.23「节日促销活动」第 10 条 |
+
+---
+
 ## 管理后台总体
 
 - 单一管理员；后台同样支持英文、中文、马来文，默认英文。
 - 每页顶部常驻 `[admin.demo_banner]`，作为后台每页的演示提示（★）；各页另有操作旁提示。
-- 桌面：左侧导航 + 右侧内容；手机：顶部 ☰ 导航，表格改为卡片列表。导航项依次为 `[admin.nav_orders]`、`[admin.nav_refunds]`、`[admin.nav_stripe_pending]`（0.19）、`[admin.nav_products]`、`[admin.nav_categories]`（0.17）、`[admin.nav_coupons]`、`[admin.nav_shipping]`、`[admin.nav_stock_resets]`、`[admin.nav_store_design]`（0.4）、`[admin.nav_settings]`（0.7），界面语言切换用 `[common.lang_*]`；A02 线框展开写出导航，A03–A11 以「☰ 导航」标注代替。手机顶栏「☰ [admin.nav_*]」显示当前页的导航项名称。
+- 桌面：左侧导航 + 右侧内容；手机：顶部 ☰ 导航，表格改为卡片列表。导航项依次为 `[admin.nav_orders]`、`[admin.nav_refunds]`、`[admin.nav_stripe_pending]`（0.19）、`[admin.nav_products]`、`[admin.nav_categories]`（0.17）、`[admin.nav_coupons]`、`[admin.nav_promotions]`（0.20）、`[admin.nav_shipping]`、`[admin.nav_stock_resets]`、`[admin.nav_store_design]`（0.4）、`[admin.nav_settings]`（0.7），界面语言切换用 `[common.lang_*]`；A02 线框展开写出导航，A03–A11 以「☰ 导航」标注代替。手机顶栏「☰ [admin.nav_*]」显示当前页的导航项名称。
 - 除 A01 外每页右上角常驻 `[admin.logout]`：桌面在 `[admin.demo_banner]` 右侧，手机在顶栏右端；退出后撤销当前后台会话、回到 A01（0.8）。
 - 表格列头、状态值、按钮与区块标题同样都用 `[key]`；`<…>` 为运行时数据，与前台约定相同。
 - 所有权限由服务端检查，前端隐藏按钮不代替授权（DESIGN 1.9「权限与资料保护」）。
@@ -1795,7 +1934,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 
 | 标记 | 元素 | 依据 DESIGN 1.9 小节 |
 | --- | --- | --- |
-| M1 | 订单金额快照 | 「数据模型」（`Order` / `OrderItem`） |
+| M1 | 订单金额快照；订单记有活动时，金额明细在商品小计之后加 `[checkout.summary_promo]` 一行并显示 `[admin.order_promotion]`（活动的内部名称），活动免运费时运费行显示 `[checkout.shipping_free]`（0.20） | 「数据模型」（`Order` / `OrderItem`）；DESIGN 1.23「节日促销活动」第 7 条 |
 | M2 | 行项目与逐件分摊快照 | 「数据模型」（`Order` / `OrderItem`）「计价、优惠、积分与库存」（第 2 条） |
 | P1 | 原始收货资料，仅管理员可见，查看留审计；长期保存，不再显示「已匿名化」；不设导出 | 「权限与资料保护」「资料保留」 |
 | K | 订单号列、订单号搜索框与详情标题中的订单号 | 「权限与资料保护」 |
@@ -2268,6 +2407,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 - **入口**：后台导航 `[admin.nav_store_design]`。
 - **去向**：—（本页内完成；保存后前台立即按新设置显示）。
 - **演示提示**：★ `[admin.demo_banner]`；`[admin.design_demo_note]`（演示横幅与演示提示始终显示，这里不能关闭）。
+- **节日促销活动**（0.20）：页内显示 `[admin.design_promo_note]`：活动生效期间前台在本页设置之上叠加活动装饰（可临时换节日配色），活动结束即恢复；活动不改本页的设置。本页预览不显示活动装饰，活动效果在 A12 的前台预览里看。
 
 桌面：
 
@@ -2589,6 +2729,140 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 | — | 作废后若该会话仍被付款，按迟到付款全额退款，订单保持已取消 | 「Stripe 测试环境支付」（第 6、11 条） |
 | — | 只显示对账字段与订单号，不显示收货资料、Stripe ID 与客户资料 | 「Stripe 测试环境支付」（第 10、11 条） |
 
+## A12 后台促销活动（0.20）
+
+依据 DESIGN 1.23「节日促销活动」第 1–3、6、11–13 条与 REQUIREMENTS 1.19「节日促销活动」。
+
+- **目的**：建立、修改、预览、发布、撤回、提前结束、复制与删除节日促销活动；配置规则、同用开关、文案、装饰与海报；请 AI 给出装饰与文案的提案。
+- **入口**：后台导航 `[admin.nav_promotions]`（排在 `[admin.nav_coupons]` 之后）。
+- **去向**：活动编辑区；前台预览（`/admin/promotions/<活动 ID>/preview`）。
+- **演示提示**：★ `[admin.demo_banner]`；`[admin.rules_apply_new]`；`[admin.promo_demo_note]`（活动价格与优惠都是演示）。
+
+列表（桌面）：
+
+```text
+| [admin.demo_banner]                                                   |
++-----------+-----------------------------------------------------------+
+| ☰ 导航     | [admin.nav_promotions]                      ( [common.create] ) |
+|           | [admin.promo_demo_note]                                   |
+|           | [admin.promo_name] [admin.filter_status] [admin.promo_time] [admin.promo_rule_count] |
+|           | <内部名称> [admin.promo_running]   <开始>–<结束> <n> ( [admin.promo_open] ) |
+|           | <内部名称> [admin.promo_scheduled] <开始>–<结束> <n> ( [admin.promo_open] ) |
+|           | <内部名称> [admin.promo_draft]     <开始>–<结束>? <n> ( [admin.promo_open] ) |
+|           | <内部名称> [admin.promo_ended]     <开始>–<结束> <n> ( [admin.promo_open] ) |
+| 空：[admin.promo_empty]                                                |
++-----------+-----------------------------------------------------------+
+```
+
+编辑区（桌面，`/admin/promotions/<活动 ID>`；新建时同一版式）：
+
+```text
+| [admin.demo_banner]                                                   |
+| ☰ 导航 | ([admin.promo_back]) → 列表    <内部名称>  <状态>                |
+|  操作栏：( [common.save] ) ( [admin.promo_publish] ) ( [admin.promo_withdraw] ) |
+|          ( [admin.promo_end_now] ) ( [admin.promo_copy] ) ( [admin.promo_delete] ) |
+|          ( [admin.promo_preview] )      （按下表的状态显示，不可用的不显示）    |
+|  结果提示：[admin.promo_saved] / [admin.promo_changed] / [admin.promo_invalid] / [admin.promo_overlap] |
++---- [admin.promo_basic] ----------------------------------------------+
+| [admin.promo_name] [______________]                                   |
+| [admin.promo_start] [____-__-__ __:__]  [admin.promo_end] [____-__-__ __:__] |
+| [admin.promo_time_note]                                               |
+| [admin.promo_rules_locked]（已开始时显示；本区、规则与同用开关只读）      |
++---- [admin.promo_rules] ----------------------------------------------+
+| 1 [admin.rule_item_discount]                       (↑)(↓) ([admin.rule_remove]) |
+|   [admin.rule_scope]: [admin.rule_categories] ☐<分类> ☐<分类> …        |
+|                       [admin.rule_products] [搜索____] <已选商品> ✕ …   |
+|   ( ) [admin.rule_percent] [__] %   ( ) [admin.rule_amount] [M1 ____] |
+| 2 [admin.rule_bxgy]                                (↑)(↓) ([admin.rule_remove]) |
+|   [admin.rule_scope]: …                                               |
+|   [admin.rule_buy] [__]  [admin.rule_get] [__]  [admin.rule_get_percent] [___] % |
+|   [admin.rule_get_percent_hint]                                       |
+| 3 [admin.rule_tiers]                               (↑)(↓) ([admin.rule_remove]) |
+|   ( ) [admin.rule_tier_amount] ( ) [admin.rule_tier_percent]           |
+|   [admin.rule_tier_threshold] [M1 ____]  [admin.rule_tier_discount] [M1 ____] 或 [__] % ([admin.rule_remove_tier]) |
+|   ( [admin.rule_add_tier] )                                           |
+| 4 [admin.rule_free_shipping]                       (↑)(↓) ([admin.rule_remove]) |
+|   [admin.rule_threshold] [M1 ____]  [admin.rule_threshold_hint]       |
+| ( [admin.rule_add] ▾ [admin.rule_item_discount] / [admin.rule_bxgy] / [admin.rule_tiers] / [admin.rule_free_shipping] ) |
++---- [admin.promo_combine] --------------------------------------------+
+| ☐ [admin.promo_allow_coupon]   ☐ [admin.promo_allow_points]           |
+| [admin.promo_combine_hint]                                            |
++---- [admin.promo_texts] ----------------------------------------------+
+|            [common.lang_en]      [common.lang_zh]      [common.lang_ms] |
+| [admin.copy_title]    [______]   [______]   [______]   <已用>/40          |
+| [admin.copy_subtitle] [______]   [______]   [______]   <已用>/80          |
+| [admin.copy_badge]    [______]   [______]   [______]   <已用>/12          |
+| [admin.copy_strip]    [______]   [______]   [______]   <已用>/60          |
+| [admin.copy_fallback]                                                 |
++---- [admin.promo_decoration] -----------------------------------------+
+| [admin.promo_pack]    <素材包> ▾（[admin.pack_*] 七项）                 |
+| [admin.promo_palette] ( ) [admin.palette_keep]  ( ) [admin.palette_of] ▾ |
+| [admin.slot_ambient]  <变体> ▾（含 [admin.variant_none]）               |
+| [admin.slot_home_poster] <变体> ▾   [admin.slot_list_strip] <变体> ▾    |
+| [admin.slot_card_badge]  <变体> ▾   [admin.slot_detail_ribbon] <变体> ▾ |
+| [admin.slot_cart_progress] <变体> ▾                                    |
++---- [admin.promo_poster] ---------------------------------------------+
+| ( ) [admin.poster_template]   ( ) [admin.poster_image]                 |
+| 上传图时：[admin.poster_desktop] <缩略图>( [admin.upload] )  [admin.poster_desktop_rules] |
+|           [admin.poster_phone]   <缩略图>( [admin.upload] )  [admin.poster_phone_rules]   |
+|           [admin.image_rules]                                         |
+|           [admin.poster_alt]  [EN ____] [中文 ____] [BM ____]（各 150） |
++---- [admin.ai_title] -------------------------------------------------+
+| [admin.ai_describe] [______________________________]  <已用>/500       |
+| [admin.ai_privacy]                                                    |
+| ( [admin.ai_generate] )   提交中：[admin.ai_generating]                 |
+| 结果：<提案的素材包、配色、各装饰位变体与三语文案>                         |
+|       [admin.ai_review_copy]   ( [admin.ai_apply] )                    |
+| 失败：[admin.ai_invalid] / [admin.ai_unavailable] / [admin.ai_daily_limit] |
+| 未配置：( [admin.ai_generate] ) 禁用，[admin.ai_not_configured]          |
++-----------------------------------------------------------------------+
+```
+
+手机：同一编辑区单列排列，各区块可折叠（默认展开 `[admin.promo_basic]` 与 `[admin.promo_rules]`），操作栏固定在底部，`[common.save]` 之外的操作收在 `[admin.promo_more]` ▾ 里；文案表格改为按语言分三组。列表改为卡片：<内部名称>、<状态>、<开始>–<结束>、( `[admin.promo_open]` )。
+
+状态与可用操作（DESIGN 1.23 第 2 条；状态值 `[admin.promo_draft]` 草稿、`[admin.promo_scheduled]` 已发布未开始、`[admin.promo_running]` 进行中、`[admin.promo_ended]` 已结束）：
+
+| 状态 | 可改的区块 | 可用操作 |
+| --- | --- | --- |
+| 草稿 | 全部 | 保存、发布、复制、删除、预览 |
+| 已发布未开始 | 全部（保存时重新检查发布条件） | 保存、撤回为草稿、复制、预览 |
+| 进行中 | 文案、装饰、海报、AI（基本信息、规则与同用开关只读，显示 `[admin.promo_rules_locked]`） | 保存、提前结束、复制、预览 |
+| 已结束 | 无（全部只读，显示 `[admin.promo_ended_readonly]`） | 复制 |
+
+说明：
+
+- **时间**：开始与结束按马来西亚时间输入到分钟（`[admin.promo_time_note]`）；草稿可以不填时间，发布时须填。列表按进行中、未开始（开始时间从早到晚）、草稿（最近修改在前）、已结束（结束时间从晚到早）排列。
+- **规则**：最多 20 条商品级规则、一条满额减或满额折、一条免运费；已有满额减或免运费时 `[admin.rule_add]` 里的对应项禁用。(↑)(↓) 调整规则排序（读屏标签 `[admin.rule_move_up]`、`[admin.rule_move_down]`）。商品范围的搜索只列已上架商品；分类为勾选。金额以 RM 输入、提交整仙。取值超出范围、商品级规则重叠、发布条件不满足时整次不生效：`[admin.promo_invalid]` 下逐条列出问题（重叠为 `[admin.promo_scope_overlap]`，`{product}` 为商品名称；发布条件为 `[admin.promo_publish_missing]`），与其他已发布活动时间重叠为 `[admin.promo_overlap]`（`{name}` 为对方的内部名称）；版本不符为 `[admin.promo_changed]` 与 `( [admin.reload] )`，不自动合并。
+- **提前结束、撤回、删除**都先弹确认框：`[admin.promo_end_confirm]`、`[admin.promo_withdraw_confirm]`、`[admin.promo_delete_confirm]`，按钮为该操作本身（`[admin.promo_end_now]`、`[admin.promo_withdraw]`、`[admin.promo_delete]`）与 `( [common.cancel] )`，与 A08 移除标志的确认框写法相同。复制成功后进入新草稿的编辑区，显示 `[admin.promo_copied]`。
+- **文案**：英文标题必填，其他缺译回退英文（`[admin.copy_fallback]`）；输入时显示已用字数，超出不能保存。不能输入换行。
+- **装饰**：素材包与配色从清单中选；`[admin.palette_of]` 下拉列出 7 套节日配色（`{pack}` 为对应素材包名称），默认是所选素材包的配色。各装饰位的下拉列出所选素材包的变体（以视觉稿的缩略图与 `[admin.variant_n]` 表示）；换素材包时各装饰位改为新素材包的第一个变体。
+- **海报**：上传图模式须有桌面与手机两张图及英文替代文字才能发布；上传即替换该位置的图，上传结果提示沿用 A08 标志图的写法。
+- **AI**：AI 结果只在点 `[admin.ai_apply]` 后填回本页的文案、装饰与配色，不保存，也不改规则、时间与开关；填回后显示 `[admin.ai_applied]`，管理员检查文字、预览后再保存。进行中的活动也可用 AI 改装饰与文案；已结束的不可用。
+- **预览**：`[admin.promo_preview]` 在新标签页打开前台预览，显示的是**已保存**的内容；有未保存修改时先提示 `[admin.promo_save_first]`。离开有未保存修改的编辑区时沿用 A04、A10 的离开确认。
+- 所有保存、发布、撤回、提前结束、删除与复制都写后台审计记录（DESIGN 1.23 第 2 条）。
+
+前台预览（`/admin/promotions/<活动 ID>/preview`，DESIGN 1.23 第 11 条）：
+
+```text
+| [promo.preview_bar]                              ( [promo.preview_exit] ) |
+| [admin.preview_home] | [admin.preview_list] | [admin.preview_detail] | [admin.preview_cart] | [admin.preview_sale] |
++-----------------------------------------------------------------------+
+| <前台页面，含演示横幅、页头与页脚，按该活动正在生效时的样子显示>           |
+| P04 的 ( [cart.checkout] ) 禁用，旁边显示 [promo.preview_no_checkout]     |
++-----------------------------------------------------------------------+
+```
+
+- 预览条在最上方、所有前台内容之前，不可关闭。预览中点击商品、分类等链接仍留在预览里；`[admin.preview_detail]` 打开活动范围内的第一件商品（没有商品级规则时打开最新上架的商品）。购物车预览用本浏览器的购物车计价，不能结账、不能下单。
+- 预览凭管理员会话经后台接口取数，倒计时按活动的结束时间显示；未开始的活动按它正在生效的样子显示。浅色与深色随管理员设备设置。
+
+金额与个人资料元素：
+
+| 标记 | 元素 | 依据 DESIGN 1.9 小节 |
+| --- | --- | --- |
+| M1 | 每件直降额、满额门槛与满额减额、免运费门槛（RM 输入，提交整仙）；百分比为整数 | DESIGN 1.23「节日促销活动」第 3 条 |
+| — | 规则、时间与同用开关在活动开始后不能改；修改只影响之后的计价与下单 | DESIGN 1.23「节日促销活动」第 2、14 条 |
+| — | AI 只收到描述、规则参数与预置清单；描述不保存，提示不要填写个人资料 | DESIGN 1.23「节日促销活动」第 13 条 |
+
 ## 演示提示汇总
 
 | 位置 | 提示 |
@@ -2596,6 +2870,7 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 | 所有前台页 | 常驻 `[common.demo_banner]` / `[common.demo_banner_short]`；页脚 `[common.footer_demo]` |
 | 每页 ★ | P01 `home.demo_hint`；P02 `list.demo_hint`；P03 `detail.demo_hint`；P04 `cart.demo_hint`；P05 `checkout.demo_hint`；P06 `pay.demo_hint`（支付途径为 Stripe 测试时 `pay.stripe_demo_hint`，0.11）；P07 `result.demo_hint`（Stripe 确认中不显示，0.11）；P08 `lookup.demo_hint`；P09 `order.demo_hint`；P10 `refund.demo_hint`；P11 `auth.register_demo_hint`；P12 `auth.login_demo_hint`；P13 `account.demo_hint`；P14 `privacy.demo_hint`；A01–A10 `admin.demo_banner`；A08 另有 `admin.design_demo_note` |
 | 店铺装修（0.4） | 演示横幅、每页 ★ 与 ◆ 提示、结账两处告知在所有主题与深浅色下照常显示，A08 不能隐藏或弱化；P01 的 ★ `home.demo_hint` 固定在所有区块之前 |
+| 节日促销活动（0.20） | P15 ★ `promo.demo_hint`；活动装饰、海报与节日配色下，演示横幅、每页 ★ 与 ◆ 提示照常显示，不被遮挡；A12 前台预览另有常驻的 `[promo.preview_bar]` |
 | ◆ 下单 | P05 下单按钮旁 `[checkout.place_order_hint]` |
 | ◆ 模拟支付 | P06 成功/失败按钮旁 `[pay.action_hint]`；支付途径为 Stripe 测试时，跳转按钮旁 `[pay.stripe_notice]` 与 `[pay.stripe_test_card]`，★ 改为 `[pay.stripe_demo_hint]`（0.11） |
 | ◆ 退款 | P10 提交按钮旁 `[refund.submit_hint]`；后台 A03 `[admin.refund_hint]`，经 Stripe 测试付款的订单另有 `[admin.stripe_refund_hint]`（0.11） |
