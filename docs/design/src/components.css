@@ -171,6 +171,122 @@
 .acs-switcher select { font: inherit; padding: 4px 6px; }
 html[data-theme$="-dark"] .acs-switcher { color: #bbb; }
 
+/* ===== Festival promotions (DESIGN 1.23「节日促销活动」第 12 条; UX 0.20「1. 全局框架」, 2026-11-10) =====
+   While a promotion is shown, .acs-promo wraps everything inside .acs: data-promo-pack picks the motif,
+   data-promo-palette (optional) swaps every colour for that pack's palette, data-promo-ambient picks the
+   page ornament. Without a palette the store theme colours stay and the promo colours follow its accent.
+   Ornaments are decorative (aria-hidden), sit behind content, never cover the demo banner, hints or
+   controls, and stay still under prefers-reduced-motion. */
+.acs { --promo-1: var(--accent); --on-promo-1: var(--on-accent); --promo-2: var(--accent-ink); --promo-soft: var(--surface-alt); --on-promo-soft: var(--ink); --promo-ink: var(--accent-ink); }
+.acs-promo { position: relative; isolation: isolate; display: flex; flex-direction: column; flex-grow: 1; background: var(--surface); color: var(--ink); }
+.acs-vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.acs-promo-motif { display: inline-block; flex-shrink: 0; width: 20px; height: 20px; background: var(--promo-1); -webkit-mask: var(--promo-motif) center / contain no-repeat; mask: var(--promo-motif) center / contain no-repeat; }
+.acs-promo-motif--art { -webkit-mask-image: var(--promo-art); mask-image: var(--promo-art); }
+.acs-promo-motif--current { background: currentColor; }
+
+/* Ambient ornaments: garland (a strip under the header), corners (two large motifs in the side margins),
+   fall (scattered motifs drifting down behind the page) */
+.acs-promo-garland { position: relative; height: 28px; background: var(--promo-soft); border-bottom: 2px solid var(--promo-1); }
+.acs-promo-garland::before { content: ""; position: absolute; inset: 4px 0; background: var(--promo-1); -webkit-mask-image: var(--promo-motif); mask-image: var(--promo-motif); -webkit-mask-size: 18px 18px; mask-size: 18px 18px; -webkit-mask-repeat: space no-repeat; mask-repeat: space no-repeat; -webkit-mask-position: center; mask-position: center; }
+.acs-promo[data-promo-ambient="corners"]::before, .acs-promo[data-promo-ambient="corners"]::after { content: ""; position: absolute; z-index: -1; top: var(--promo-corner-top, 150px); width: var(--promo-corner, 220px); height: var(--promo-corner, 220px); background: var(--promo-2); opacity: 0.22; pointer-events: none; -webkit-mask: var(--promo-motif) center / contain no-repeat; mask: var(--promo-motif) center / contain no-repeat; }
+.acs-promo[data-promo-ambient="corners"]::before { left: calc(var(--promo-corner, 220px) * -0.36); transform: rotate(-18deg); }
+.acs-promo[data-promo-ambient="corners"]::after { right: calc(var(--promo-corner, 220px) * -0.36); transform: rotate(14deg); }
+.acs-promo[data-promo-ambient="fall"]::before { content: ""; position: absolute; z-index: -1; inset: 0; background: var(--promo-2); opacity: 0.16; pointer-events: none; -webkit-mask: var(--promo-scatter) 0 0 / 240px 240px repeat; mask: var(--promo-scatter) 0 0 / 240px 240px repeat; animation: acs-promo-fall 30s linear infinite; }
+@keyframes acs-promo-fall { to { -webkit-mask-position: 40px 240px; mask-position: 40px 240px; } }
+@media (prefers-reduced-motion: reduce) { .acs-promo[data-promo-ambient="fall"]::before { animation: none; } }
+@media (max-width: 767px) { .acs-promo[data-promo-ambient="corners"] { --promo-corner: 120px; --promo-corner-top: 110px; } }
+.acs--phone .acs-promo[data-promo-ambient="corners"] { --promo-corner: 120px; --promo-corner-top: 110px; }
+
+/* Countdown chip (P01 poster, P02/P15 strip, P03 ribbon) */
+.acs-promo-count { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 12px; border: 1px solid currentColor; border-radius: min(var(--radius-control), 999px); font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; font-size: 14px; white-space: nowrap; }
+
+/* Home poster (template): split = text on the promo colour beside the pack artwork; centered = text over the pattern */
+.acs-promo-poster { display: grid; border-radius: var(--radius-card); overflow: hidden; }
+.acs-promo-poster__text { display: grid; gap: 20px; align-content: center; justify-items: start; padding: 56px 64px; }
+.acs-promo-poster__title { color: inherit; }
+.acs-promo-poster__sub { margin: 0; font-size: 18px; line-height: 1.5; }
+.acs-promo-poster__art { position: relative; display: grid; place-items: center; min-height: 340px; background: var(--promo-soft); }
+.acs-promo-poster__art::before { content: ""; position: absolute; inset: 0; background: var(--promo-2); opacity: 0.45; -webkit-mask: var(--promo-scatter) 0 0 / 240px 240px repeat; mask: var(--promo-scatter) 0 0 / 240px 240px repeat; }
+.acs-promo-poster__art::after { content: ""; position: relative; width: min(60%, 260px); aspect-ratio: 1 / 1; background: var(--promo-1); -webkit-mask: var(--promo-art) center / contain no-repeat; mask: var(--promo-art) center / contain no-repeat; }
+.acs-promo-poster--split { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); background: var(--promo-1); color: var(--on-promo-1); }
+.acs-promo-poster--split .acs-btn--promo { background: var(--on-promo-1); color: var(--promo-1); }
+.acs-promo-poster--centered { position: relative; isolation: isolate; justify-items: center; text-align: center; background: var(--promo-soft); color: var(--on-promo-soft); border: 2px solid var(--promo-1); }
+.acs-promo-poster--centered::before { content: ""; position: absolute; z-index: -1; inset: 0; background: var(--promo-2); opacity: 0.3; -webkit-mask: var(--promo-scatter) 0 0 / 240px 240px repeat; mask: var(--promo-scatter) 0 0 / 240px 240px repeat; }
+.acs-promo-poster--centered .acs-promo-poster__text { justify-items: center; padding: 64px 64px 72px; max-width: 760px; }
+.acs-promo-poster--centered .acs-promo-poster__art { display: none; }
+.acs-promo-poster--centered .acs-btn--promo { background: var(--promo-1); color: var(--on-promo-1); }
+.acs-promo-poster__crown { display: flex; gap: 14px; }
+.acs-promo-poster__crown .acs-promo-motif { width: 28px; height: 28px; }
+.acs-promo-poster--split .acs-promo-poster__crown { display: none; }
+.acs-promo-poster-img { display: block; aspect-ratio: 3 / 1; border-radius: var(--radius-card); overflow: hidden; background: var(--tile); }
+.acs-promo-poster-img img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+@media (max-width: 767px) {
+  .acs-promo-poster--split { grid-template-columns: 1fr; }
+  .acs-promo-poster__art { order: -1; min-height: 180px; }
+  .acs-promo-poster__text, .acs-promo-poster--centered .acs-promo-poster__text { padding: 28px 20px 32px; gap: 16px; }
+  .acs-promo-poster-img { aspect-ratio: 4 / 5; }
+}
+.acs--phone .acs-promo-poster--split { grid-template-columns: 1fr; }
+.acs--phone .acs-promo-poster__art { order: -1; min-height: 180px; }
+.acs--phone .acs-promo-poster__text, .acs--phone .acs-promo-poster--centered .acs-promo-poster__text { padding: 28px 20px 32px; gap: 16px; }
+.acs--phone .acs-promo-poster-img { aspect-ratio: 4 / 5; }
+
+/* Sale strip (P02, P15): band = solid promo colour; ticket = dashed coupon edge on the soft colour */
+.acs-promo-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 14px 20px; border-radius: var(--radius-card); }
+.acs-promo-strip__title { font-weight: 700; font-size: 18px; line-height: 1.3; }
+.acs-promo-strip__end { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-left: auto; }
+.acs-promo-strip a { color: inherit; font-weight: 600; }
+.acs-promo-strip--band { background: var(--promo-1); color: var(--on-promo-1); }
+.acs-promo-strip--band .acs-promo-motif { background: currentColor; }
+.acs-promo-strip--ticket { background: var(--promo-soft); color: var(--on-promo-soft); border: 2px dashed var(--promo-1); }
+
+/* Product badges and the sale price pair (product cards, P03, P04 lines) */
+.acs-pcard__img { position: relative; }
+.acs-promo-badges { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+.acs-promo-badge { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 26px; padding: 3px 10px; font-size: 13px; font-weight: 700; line-height: 1.2; }
+.acs-promo-badge--tag { background: var(--promo-1); color: var(--on-promo-1); border-radius: min(var(--radius-control), 6px); }
+.acs-promo-badge--seal { background: var(--surface-raised); color: var(--promo-ink); border: 2px solid var(--promo-1); border-radius: 999px; padding-left: 6px; }
+.acs-promo-badge--seal .acs-promo-motif { width: 16px; height: 16px; }
+.acs-prices { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.acs-price-was { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 400; color: var(--ink-muted); text-decoration: line-through; }
+.acs-price-sale { font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 700; color: var(--promo-ink); }
+
+/* Product page price ribbon (P03): ribbon = price on the promo colour with a notched end; panel = outlined box */
+.acs-promo-ribbon { display: grid; gap: 10px; padding: 16px 20px; border-radius: var(--radius-card); }
+.acs-promo-ribbon__prices { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.acs-promo-ribbon__sale { font-size: 30px; line-height: 1.15; }
+.acs-promo-ribbon__meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 14px; }
+.acs-promo-ribbon--ribbon { padding-right: 44px; background: var(--promo-1); color: var(--on-promo-1); clip-path: polygon(0 0, 100% 0, calc(100% - 20px) 50%, 100% 100%, 0 100%); }
+.acs-promo-ribbon--ribbon .acs-price-was, .acs-promo-ribbon--ribbon .acs-price-sale { color: inherit; }
+.acs-promo-ribbon--ribbon .acs-promo-badge--tag { background: var(--on-promo-1); color: var(--promo-1); }
+.acs-promo-ribbon--panel { position: relative; background: var(--surface-raised); border: 2px solid var(--promo-1); }
+.acs-promo-ribbon--panel::after { content: ""; position: absolute; top: 12px; right: 14px; width: 26px; height: 26px; background: var(--promo-1); -webkit-mask: var(--promo-motif) center / contain no-repeat; mask: var(--promo-motif) center / contain no-repeat; }
+.acs-promo-rules { display: grid; gap: 10px; padding: 20px; border-radius: var(--radius-card); background: var(--promo-soft); color: var(--on-promo-soft); }
+.acs-promo-rules ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.acs-promo-rules li { display: flex; gap: 10px; align-items: flex-start; }
+.acs-promo-rules li::before { content: ""; flex-shrink: 0; width: 16px; height: 16px; margin-top: 4px; background: var(--promo-1); -webkit-mask: var(--promo-motif) center / contain no-repeat; mask: var(--promo-motif) center / contain no-repeat; }
+.acs-promo-rules a { color: inherit; font-weight: 600; }
+
+/* Cart progress (P04): bar = one track to the nearest threshold; steps = ten blocks */
+.acs-promo-progress { display: grid; gap: 8px; }
+.acs-promo-progress__track { position: relative; height: 10px; margin-right: 11px; border-radius: 999px; background: var(--rule); }
+.acs-promo-progress__fill { position: absolute; inset: 0 auto 0 0; width: var(--progress, 0%); border-radius: inherit; background: var(--promo-1); }
+.acs-promo-progress__fill::after { content: ""; position: absolute; top: 50%; right: -11px; width: 22px; height: 22px; transform: translateY(-50%); background: var(--promo-1); -webkit-mask: var(--promo-motif) center / contain no-repeat; mask: var(--promo-motif) center / contain no-repeat; }
+.acs-promo-progress__steps { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 4px; }
+.acs-promo-progress__steps > span { height: 12px; border-radius: min(var(--radius-control), 3px); background: var(--rule); }
+.acs-promo-progress__steps > span[data-on] { background: var(--promo-1); }
+.acs-promo-progress__labels { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--ink-muted); font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.acs-promo-progress__hint { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; }
+.acs-promo-progress__hint .acs-promo-motif { width: 16px; height: 16px; margin-top: 3px; }
+
+/* Palette swatches for the back office: put data-promo-palette on the element inside an .acs */
+.acs-promo-swatch { display: flex; border-radius: 4px; overflow: hidden; }
+.acs-promo-swatch > span { width: 18px; height: 22px; }
+.acs-promo-swatch__1 { background: var(--promo-1); }
+.acs-promo-swatch__2 { background: var(--promo-2); }
+.acs-promo-swatch__soft { background: var(--promo-soft); }
+.acs-promo-swatch__surface { background: var(--surface); }
+
 /* ===== Back office: one fixed neutral style, never themed by store decoration ===== */
 .acs-admin { --a-bg: #f5f6f8; --a-panel: #ffffff; --a-line: #dde0e5; --a-border: #8a919c; --a-ink: #1a1d23; --a-muted: #545b66; --a-accent: #2c3440; --a-on-accent: #ffffff; --a-nav: #1a1d23; --a-on-nav: #e7e9ee; --a-nav-muted: #a9afba; --a-select: #eceef2;
   --demo: #ffc629; --on-demo: #2a1f00; --demo-soft: #fff4d1; --on-demo-soft: #4d3900; --demo-mark: #9a6f00; --danger: #b3261e; --danger-soft: #fbe0dd; --on-danger-soft: #7a1a14; --success-soft: #dcf0e3; --on-success-soft: #145233; --focus: #2c3440;
@@ -225,3 +341,9 @@ html[data-theme$="-dark"] .acs-admin, .acs-admin[data-mode="dark"] { --a-bg: #15
   .acs-admin__choice:has(input:checked) { font-weight: 700; }
 }
 @media (max-width: 767px) { .acs-admin__shell { grid-template-columns: 1fr; } .acs-admin__nav { display: none; } }
+/* A12 前台预览条（2026-11-10，UX 0.20）：活动前台预览最上方的后台条，沿用后台的中性样式，不随店铺主题或节日配色变化。 */
+.acs-admin.acs-admin__previewbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 0; padding: 8px 20px; background: var(--a-nav); color: var(--a-on-nav); font-size: 13px; }
+.acs-admin__previewbar nav { display: flex; flex-wrap: wrap; gap: 4px; }
+.acs-admin__previewbar nav a { padding: 6px 10px; border-radius: 4px; color: var(--a-nav-muted); text-decoration: none; }
+.acs-admin__previewbar nav a[aria-current="page"] { background: rgba(255, 255, 255, 0.12); color: var(--a-on-nav); font-weight: 600; }
+.acs-admin__previewbar .acs-admin__btn--secondary { margin-left: auto; color: var(--a-on-nav); border-color: var(--a-nav-muted); }

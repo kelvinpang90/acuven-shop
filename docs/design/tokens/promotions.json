@@ -1,0 +1,853 @@
+{
+ "version": 1,
+ "note": "Festival promotion presets: theme packs, their palettes and the decoration slot variants. A promotion keeps the store theme colours (palette \"theme\") or uses one pack's palette.",
+ "keepThemePalette": "theme",
+ "slots": [
+  {
+   "id": "ambient",
+   "variants": [
+    "garland",
+    "corners",
+    "fall"
+   ],
+   "none": "none"
+  },
+  {
+   "id": "home_poster",
+   "variants": [
+    "split",
+    "centered"
+   ]
+  },
+  {
+   "id": "list_strip",
+   "variants": [
+    "band",
+    "ticket"
+   ]
+  },
+  {
+   "id": "card_badge",
+   "variants": [
+    "tag",
+    "seal"
+   ]
+  },
+  {
+   "id": "detail_ribbon",
+   "variants": [
+    "ribbon",
+    "panel"
+   ]
+  },
+  {
+   "id": "cart_progress",
+   "variants": [
+    "bar",
+    "steps"
+   ]
+  }
+ ],
+ "colorKeys": [
+  "surface",
+  "surface-alt",
+  "surface-raised",
+  "tile",
+  "tile-alt",
+  "ink",
+  "ink-muted",
+  "rule",
+  "border",
+  "accent",
+  "demo",
+  "on-demo",
+  "demo-soft",
+  "on-demo-soft",
+  "demo-mark",
+  "banner",
+  "banner-2",
+  "on-banner",
+  "footer",
+  "on-footer",
+  "promo-1",
+  "promo-2",
+  "promo-soft",
+  "on-promo-soft",
+  "success",
+  "success-soft",
+  "on-success-soft",
+  "danger",
+  "danger-soft",
+  "on-danger-soft",
+  "on-accent",
+  "accent-ink",
+  "focus",
+  "on-promo-1",
+  "promo-ink"
+ ],
+ "packs": [
+  {
+   "id": "cny",
+   "name": "Chinese New Year",
+   "nameZh": "农历新年",
+   "copyKey": "admin.pack_cny",
+   "variants": {
+    "ambient": [
+     "garland",
+     "corners",
+     "fall"
+    ],
+    "home_poster": [
+     "split",
+     "centered"
+    ],
+    "list_strip": [
+     "band",
+     "ticket"
+    ],
+    "card_badge": [
+     "tag",
+     "seal"
+    ],
+    "detail_ribbon": [
+     "ribbon",
+     "panel"
+    ],
+    "cart_progress": [
+     "bar",
+     "steps"
+    ]
+   },
+   "palette": {
+    "light": {
+     "surface": "#fdf7f7",
+     "surface-alt": "#f9eced",
+     "surface-raised": "#fefcfc",
+     "tile": "#f9edd5",
+     "tile-alt": "#f6e3e4",
+     "ink": "#280407",
+     "ink-muted": "#6d5456",
+     "rule": "#f4d9db",
+     "border": "#897577",
+     "accent": "#b8141f",
+     "demo": "#7cc6c0",
+     "on-demo": "#161616",
+     "demo-soft": "#daefed",
+     "on-demo-soft": "#324f4d",
+     "demo-mark": "#446d6a",
+     "banner": "#720c13",
+     "banner-2": "#5c0a10",
+     "on-banner": "#fcf4e6",
+     "footer": "#5c0a10",
+     "on-footer": "#fcf6ea",
+     "promo-1": "#b8141f",
+     "promo-2": "#e2a72e",
+     "promo-soft": "#f9ecd1",
+     "on-promo-soft": "#280407",
+     "success": "#1f7a4a",
+     "success-soft": "#dcf0e3",
+     "on-success-soft": "#145233",
+     "danger": "#b3261e",
+     "danger-soft": "#fbe0dd",
+     "on-danger-soft": "#7a1a14",
+     "on-accent": "#ffffff",
+     "accent-ink": "#b8141f",
+     "focus": "#b8141f",
+     "on-promo-1": "#ffffff",
+     "promo-ink": "#b8141f"
+    },
+    "dark": {
+     "surface": "#1f0f12",
+     "surface-alt": "#290f12",
+     "surface-raised": "#300f13",
+     "tile": "#3d3017",
+     "tile-alt": "#3a1014",
+     "ink": "#fdfaf2",
+     "ink-muted": "#afa8a4",
+     "rule": "#441015",
+     "border": "#837977",
+     "accent": "#ff9b92",
+     "demo": "#7cc6c0",
+     "on-demo": "#161616",
+     "demo-soft": "#263637",
+     "on-demo-soft": "#d1ebe9",
+     "demo-mark": "#7cc6c0",
+     "banner": "#631118",
+     "banner-2": "#4f1016",
+     "on-banner": "#fcf4e6",
+     "footer": "#160204",
+     "on-footer": "#f8e8e9",
+     "promo-1": "#ff9b92",
+     "promo-2": "#e9b452",
+     "promo-soft": "#413317",
+     "on-promo-soft": "#fdfaf2",
+     "success": "#78d39c",
+     "success-soft": "#173524",
+     "on-success-soft": "#c3eed3",
+     "danger": "#ff8f86",
+     "danger-soft": "#3d1a17",
+     "on-danger-soft": "#ffd2cd",
+     "on-accent": "#0b0b0b",
+     "accent-ink": "#ff9b92",
+     "focus": "#ff9b92",
+     "on-promo-1": "#0b0b0b",
+     "promo-ink": "#ff9b92"
+    }
+   }
+  },
+  {
+   "id": "raya",
+   "name": "Hari Raya",
+   "nameZh": "开斋节",
+   "copyKey": "admin.pack_raya",
+   "variants": {
+    "ambient": [
+     "garland",
+     "corners",
+     "fall"
+    ],
+    "home_poster": [
+     "split",
+     "centered"
+    ],
+    "list_strip": [
+     "band",
+     "ticket"
+    ],
+    "card_badge": [
+     "tag",
+     "seal"
+    ],
+    "detail_ribbon": [
+     "ribbon",
+     "panel"
+    ],
+    "cart_progress": [
+     "bar",
+     "steps"
+    ]
+   },
+   "palette": {
+    "light": {
+     "surface": "#f7faf8",
+     "surface-alt": "#ecf3f0",
+     "surface-raised": "#fcfdfd",
+     "tile": "#f7edd3",
+     "tile-alt": "#e2ede9",
+     "ink": "#03180f",
+     "ink-muted": "#54625c",
+     "rule": "#d9e7e1",
+     "border": "#74807b",
+     "accent": "#0f6b45",
+     "demo": "#f0a39b",
+     "on-demo": "#161616",
+     "demo-soft": "#fbe5e3",
+     "on-demo-soft": "#60413e",
+     "demo-mark": "#845a55",
+     "banner": "#09422b",
+     "banner-2": "#083622",
+     "on-banner": "#faf4e4",
+     "footer": "#083622",
+     "on-footer": "#fbf6e9",
+     "promo-1": "#0f6b45",
+     "promo-2": "#d9a521",
+     "promo-soft": "#f7ebce",
+     "on-promo-soft": "#03180f",
+     "success": "#1f7a4a",
+     "success-soft": "#dcf0e3",
+     "on-success-soft": "#145233",
+     "danger": "#b3261e",
+     "danger-soft": "#fbe0dd",
+     "on-danger-soft": "#7a1a14",
+     "on-accent": "#ffffff",
+     "accent-ink": "#0f6b45",
+     "focus": "#0f6b45",
+     "on-promo-1": "#ffffff",
+     "promo-ink": "#0f6b45"
+    },
+    "dark": {
+     "surface": "#0e1715",
+     "surface-alt": "#0e1d18",
+     "surface-raised": "#0e211b",
+     "tile": "#3b2f14",
+     "tile-alt": "#0e261e",
+     "ink": "#fdfaf2",
+     "ink-muted": "#a9aba5",
+     "rule": "#0e2c21",
+     "border": "#7a7d78",
+     "accent": "#81d2a6",
+     "demo": "#f0a39b",
+     "on-demo": "#161616",
+     "demo-soft": "#402f2f",
+     "on-demo-soft": "#fadfdc",
+     "demo-mark": "#f0a39b",
+     "banner": "#0e3d2a",
+     "banner-2": "#0e3124",
+     "on-banner": "#faf4e4",
+     "footer": "#020d08",
+     "on-footer": "#e7f0ec",
+     "promo-1": "#81d2a6",
+     "promo-2": "#e5b650",
+     "promo-soft": "#3f3214",
+     "on-promo-soft": "#fdfaf2",
+     "success": "#78d39c",
+     "success-soft": "#173524",
+     "on-success-soft": "#c3eed3",
+     "danger": "#ff8f86",
+     "danger-soft": "#3d1a17",
+     "on-danger-soft": "#ffd2cd",
+     "on-accent": "#0b0b0b",
+     "accent-ink": "#81d2a6",
+     "focus": "#81d2a6",
+     "on-promo-1": "#0b0b0b",
+     "promo-ink": "#81d2a6"
+    }
+   }
+  },
+  {
+   "id": "deepavali",
+   "name": "Deepavali",
+   "nameZh": "屠妖节",
+   "copyKey": "admin.pack_deepavali",
+   "variants": {
+    "ambient": [
+     "garland",
+     "corners",
+     "fall"
+    ],
+    "home_poster": [
+     "split",
+     "centered"
+    ],
+    "list_strip": [
+     "band",
+     "ticket"
+    ],
+    "card_badge": [
+     "tag",
+     "seal"
+    ],
+    "detail_ribbon": [
+     "ribbon",
+     "panel"
+    ],
+    "cart_progress": [
+     "bar",
+     "steps"
+    ]
+   },
+   "palette": {
+    "light": {
+     "surface": "#faf7fb",
+     "surface-alt": "#f3edf6",
+     "surface-raised": "#fdfcfe",
+     "tile": "#fce8d3",
+     "tile-alt": "#ede4f2",
+     "ink": "#18071f",
+     "ink-muted": "#625667",
+     "rule": "#e7dbed",
+     "border": "#807784",
+     "accent": "#6b1f8f",
+     "demo": "#9fd8c8",
+     "on-demo": "#161616",
+     "demo-soft": "#e4f4f0",
+     "on-demo-soft": "#405650",
+     "demo-mark": "#57776e",
+     "banner": "#421359",
+     "banner-2": "#361048",
+     "on-banner": "#fdf1e5",
+     "footer": "#361048",
+     "on-footer": "#fef3e9",
+     "promo-1": "#6b1f8f",
+     "promo-2": "#f08a24",
+     "promo-soft": "#fce5cf",
+     "on-promo-soft": "#18071f",
+     "success": "#1f7a4a",
+     "success-soft": "#dcf0e3",
+     "on-success-soft": "#145233",
+     "danger": "#b3261e",
+     "danger-soft": "#fbe0dd",
+     "on-danger-soft": "#7a1a14",
+     "on-accent": "#ffffff",
+     "accent-ink": "#6b1f8f",
+     "focus": "#6b1f8f",
+     "on-promo-1": "#ffffff",
+     "promo-ink": "#6b1f8f"
+    },
+    "dark": {
+     "surface": "#17101d",
+     "surface-alt": "#1d1124",
+     "surface-raised": "#211129",
+     "tile": "#402914",
+     "tile-alt": "#261231",
+     "ink": "#fef8f2",
+     "ink-muted": "#ada7a7",
+     "rule": "#2c1339",
+     "border": "#7f787d",
+     "accent": "#daa5fa",
+     "demo": "#9fd8c8",
+     "on-demo": "#161616",
+     "demo-soft": "#2e3a38",
+     "on-demo-soft": "#ddf1ec",
+     "demo-mark": "#9fd8c8",
+     "banner": "#3d1650",
+     "banner-2": "#311440",
+     "on-banner": "#fdf1e5",
+     "footer": "#0d0411",
+     "on-footer": "#f0e9f4",
+     "promo-1": "#daa5fa",
+     "promo-2": "#fba863",
+     "promo-soft": "#442c15",
+     "on-promo-soft": "#fef8f2",
+     "success": "#78d39c",
+     "success-soft": "#173524",
+     "on-success-soft": "#c3eed3",
+     "danger": "#ff8f86",
+     "danger-soft": "#3d1a17",
+     "on-danger-soft": "#ffd2cd",
+     "on-accent": "#0b0b0b",
+     "accent-ink": "#daa5fa",
+     "focus": "#daa5fa",
+     "on-promo-1": "#0b0b0b",
+     "promo-ink": "#daa5fa"
+    }
+   }
+  },
+  {
+   "id": "christmas",
+   "name": "Christmas",
+   "nameZh": "圣诞节",
+   "copyKey": "admin.pack_christmas",
+   "variants": {
+    "ambient": [
+     "garland",
+     "corners",
+     "fall"
+    ],
+    "home_poster": [
+     "split",
+     "centered"
+    ],
+    "list_strip": [
+     "band",
+     "ticket"
+    ],
+    "card_badge": [
+     "tag",
+     "seal"
+    ],
+    "detail_ribbon": [
+     "ribbon",
+     "panel"
+    ],
+    "cart_progress": [
+     "bar",
+     "steps"
+    ]
+   },
+   "palette": {
+    "light": {
+     "surface": "#f7f9f8",
+     "surface-alt": "#edf2ef",
+     "surface-raised": "#fcfdfd",
+     "tile": "#f4d5d5",
+     "tile-alt": "#e4ebe7",
+     "ink": "#06140d",
+     "ink-muted": "#565f5a",
+     "rule": "#dbe5df",
+     "border": "#767e7a",
+     "accent": "#1c5a39",
+     "demo": "#f3c769",
+     "on-demo": "#161616",
+     "demo-soft": "#fcefd5",
+     "on-demo-soft": "#61502a",
+     "demo-mark": "#866d3a",
+     "banner": "#113823",
+     "banner-2": "#0e2d1c",
+     "on-banner": "#f8e6e6",
+     "footer": "#0e2d1c",
+     "on-footer": "#f9eaea",
+     "promo-1": "#1c5a39",
+     "promo-2": "#c62f2f",
+     "promo-soft": "#f2d1d1",
+     "on-promo-soft": "#06140d",
+     "success": "#1f7a4a",
+     "success-soft": "#dcf0e3",
+     "on-success-soft": "#145233",
+     "danger": "#b3261e",
+     "danger-soft": "#fbe0dd",
+     "on-danger-soft": "#7a1a14",
+     "on-accent": "#ffffff",
+     "accent-ink": "#1c5a39",
+     "focus": "#1c5a39",
+     "on-promo-1": "#ffffff",
+     "promo-ink": "#1c5a39"
+    },
+    "dark": {
+     "surface": "#0f1614",
+     "surface-alt": "#101a17",
+     "surface-raised": "#111d18",
+     "tile": "#361517",
+     "tile-alt": "#12221b",
+     "ink": "#fcf3f3",
+     "ink-muted": "#a9a6a5",
+     "rule": "#12261d",
+     "border": "#7a7978",
+     "accent": "#91cea7",
+     "demo": "#f3c769",
+     "on-demo": "#161616",
+     "demo-soft": "#403724",
+     "on-demo-soft": "#fbebcb",
+     "demo-mark": "#f3c769",
+     "banner": "#153424",
+     "banner-2": "#132b20",
+     "on-banner": "#f8e6e6",
+     "footer": "#030b07",
+     "on-footer": "#e8eeeb",
+     "promo-1": "#91cea7",
+     "promo-2": "#ff9b91",
+     "promo-soft": "#3a1617",
+     "on-promo-soft": "#fcf3f3",
+     "success": "#78d39c",
+     "success-soft": "#173524",
+     "on-success-soft": "#c3eed3",
+     "danger": "#ff8f86",
+     "danger-soft": "#3d1a17",
+     "on-danger-soft": "#ffd2cd",
+     "on-accent": "#0b0b0b",
+     "accent-ink": "#91cea7",
+     "focus": "#91cea7",
+     "on-promo-1": "#0b0b0b",
+     "promo-ink": "#91cea7"
+    }
+   }
+  },
+  {
+   "id": "merdeka",
+   "name": "Merdeka",
+   "nameZh": "国庆",
+   "copyKey": "admin.pack_merdeka",
+   "variants": {
+    "ambient": [
+     "garland",
+     "corners",
+     "fall"
+    ],
+    "home_poster": [
+     "split",
+     "centered"
+    ],
+    "list_strip": [
+     "band",
+     "ticket"
+    ],
+    "card_badge": [
+     "tag",
+     "seal"
+    ],
+    "detail_ribbon": [
+     "ribbon",
+     "panel"
+    ],
+    "cart_progress": [
+     "bar",
+     "steps"
+    ]
+   },
+   "palette": {
+    "light": {
+     "surface": "#f7f8fa",
+     "surface-alt": "#eceff5",
+     "surface-raised": "#fcfdfd",
+     "tile": "#f6d2d5",
+     "tile-alt": "#e3e6ef",
+     "ink": "#040b1b",
+     "ink-muted": "#545964",
+     "rule": "#d9deea",
+     "border": "#757982",
+     "accent": "#14317c",
+     "demo": "#ffd23f",
+     "on-demo": "#161616",
+     "demo-soft": "#fff2c9",
+     "on-demo-soft": "#665419",
+     "demo-mark": "#8c7423",
+     "banner": "#0c1e4d",
+     "banner-2": "#0a183e",
+     "on-banner": "#fae4e6",
+     "footer": "#0a183e",
+     "on-footer": "#fbe9ea",
+     "promo-1": "#14317c",
+     "promo-2": "#d4202e",
+     "promo-soft": "#f6ced1",
+     "on-promo-soft": "#040b1b",
+     "success": "#1f7a4a",
+     "success-soft": "#dcf0e3",
+     "on-success-soft": "#145233",
+     "danger": "#b3261e",
+     "danger-soft": "#fbe0dd",
+     "on-danger-soft": "#7a1a14",
+     "on-accent": "#ffffff",
+     "accent-ink": "#14317c",
+     "focus": "#14317c",
+     "on-promo-1": "#ffffff",
+     "promo-ink": "#14317c"
+    },
+    "dark": {
+     "surface": "#0f121b",
+     "surface-alt": "#0f1421",
+     "surface-raised": "#0f1526",
+     "tile": "#3a1217",
+     "tile-alt": "#10172c",
+     "ink": "#fcf2f2",
+     "ink-muted": "#a9a4a7",
+     "rule": "#101933",
+     "border": "#7a777c",
+     "accent": "#93bcff",
+     "demo": "#ffd23f",
+     "on-demo": "#161616",
+     "demo-soft": "#43391a",
+     "on-demo-soft": "#ffefbc",
+     "demo-mark": "#ffd23f",
+     "banner": "#112046",
+     "banner-2": "#101b39",
+     "on-banner": "#fae4e6",
+     "footer": "#02060f",
+     "on-footer": "#e8eaf2",
+     "promo-1": "#93bcff",
+     "promo-2": "#ff9b94",
+     "promo-soft": "#3e1217",
+     "on-promo-soft": "#fcf2f2",
+     "success": "#78d39c",
+     "success-soft": "#173524",
+     "on-success-soft": "#c3eed3",
+     "danger": "#ff8f86",
+     "danger-soft": "#3d1a17",
+     "on-danger-soft": "#ffd2cd",
+     "on-accent": "#0b0b0b",
+     "accent-ink": "#93bcff",
+     "focus": "#93bcff",
+     "on-promo-1": "#0b0b0b",
+     "promo-ink": "#93bcff"
+    }
+   }
+  },
+  {
+   "id": "mega_sale",
+   "name": "Mega sale (11.11, 12.12, Black Friday)",
+   "nameZh": "电商大促",
+   "copyKey": "admin.pack_mega_sale",
+   "variants": {
+    "ambient": [
+     "garland",
+     "corners",
+     "fall"
+    ],
+    "home_poster": [
+     "split",
+     "centered"
+    ],
+    "list_strip": [
+     "band",
+     "ticket"
+    ],
+    "card_badge": [
+     "tag",
+     "seal"
+    ],
+    "detail_ribbon": [
+     "ribbon",
+     "panel"
+    ],
+    "cart_progress": [
+     "bar",
+     "steps"
+    ]
+   },
+   "palette": {
+    "light": {
+     "surface": "#fef9f7",
+     "surface-alt": "#fcf0ed",
+     "surface-raised": "#fffdfc",
+     "tile": "#e1d5f7",
+     "tile-alt": "#fae9e4",
+     "ink": "#301006",
+     "ink-muted": "#725c56",
+     "rule": "#f9e2db",
+     "border": "#8d7c76",
+     "accent": "#d44315",
+     "demo": "#93d99a",
+     "on-demo": "#161616",
+     "demo-soft": "#e1f4e3",
+     "on-demo-soft": "#3b573e",
+     "demo-mark": "#517755",
+     "banner": "#872d11",
+     "banner-2": "#6c240e",
+     "on-banner": "#ede6fa",
+     "footer": "#6c240e",
+     "on-footer": "#f0eafb",
+     "promo-1": "#d44315",
+     "promo-2": "#6a2fd6",
+     "promo-soft": "#ded1f6",
+     "on-promo-soft": "#301006",
+     "success": "#1f7a4a",
+     "success-soft": "#dcf0e3",
+     "on-success-soft": "#145233",
+     "danger": "#b3261e",
+     "danger-soft": "#fbe0dd",
+     "on-danger-soft": "#7a1a14",
+     "on-accent": "#ffffff",
+     "accent-ink": "#cb3a05",
+     "focus": "#cb3a05",
+     "on-promo-1": "#ffffff",
+     "promo-ink": "#cb3a05"
+    },
+    "dark": {
+     "surface": "#221411",
+     "surface-alt": "#2e1712",
+     "surface-raised": "#371a12",
+     "tile": "#22153c",
+     "tile-alt": "#431d13",
+     "ink": "#f6f3fd",
+     "ink-muted": "#aca5aa",
+     "rule": "#4f2114",
+     "border": "#81787b",
+     "accent": "#ff9e82",
+     "demo": "#93d99a",
+     "on-demo": "#161616",
+     "demo-soft": "#2b3b2e",
+     "on-demo-soft": "#d9f2dc",
+     "demo-mark": "#93d99a",
+     "banner": "#732b16",
+     "banner-2": "#5b2415",
+     "on-banner": "#ede6fa",
+     "footer": "#1a0903",
+     "on-footer": "#fbede8",
+     "promo-1": "#ff9e82",
+     "promo-2": "#bfaeff",
+     "promo-soft": "#241640",
+     "on-promo-soft": "#f6f3fd",
+     "success": "#78d39c",
+     "success-soft": "#173524",
+     "on-success-soft": "#c3eed3",
+     "danger": "#ff8f86",
+     "danger-soft": "#3d1a17",
+     "on-danger-soft": "#ffd2cd",
+     "on-accent": "#0b0b0b",
+     "accent-ink": "#ff9e82",
+     "focus": "#ff9e82",
+     "on-promo-1": "#0b0b0b",
+     "promo-ink": "#ff9e82"
+    }
+   }
+  },
+  {
+   "id": "generic",
+   "name": "General sale",
+   "nameZh": "通用",
+   "copyKey": "admin.pack_generic",
+   "variants": {
+    "ambient": [
+     "garland",
+     "corners",
+     "fall"
+    ],
+    "home_poster": [
+     "split",
+     "centered"
+    ],
+    "list_strip": [
+     "band",
+     "ticket"
+    ],
+    "card_badge": [
+     "tag",
+     "seal"
+    ],
+    "detail_ribbon": [
+     "ribbon",
+     "panel"
+    ],
+    "cart_progress": [
+     "bar",
+     "steps"
+    ]
+   },
+   "palette": {
+    "light": {
+     "surface": "#f7f8fa",
+     "surface-alt": "#eeeff4",
+     "surface-raised": "#fcfdfd",
+     "tile": "#fce0de",
+     "tile-alt": "#e5e7ee",
+     "ink": "#090d19",
+     "ink-muted": "#585a63",
+     "rule": "#dddfe9",
+     "border": "#787a80",
+     "accent": "#283a73",
+     "demo": "#ffd166",
+     "on-demo": "#161616",
+     "demo-soft": "#fff2d4",
+     "on-demo-soft": "#665429",
+     "demo-mark": "#8c7338",
+     "banner": "#192447",
+     "banner-2": "#141d3a",
+     "on-banner": "#fdedeb",
+     "footer": "#141d3a",
+     "on-footer": "#fef0ee",
+     "promo-1": "#283a73",
+     "promo-2": "#f2665a",
+     "promo-soft": "#fcdddb",
+     "on-promo-soft": "#090d19",
+     "success": "#1f7a4a",
+     "success-soft": "#dcf0e3",
+     "on-success-soft": "#145233",
+     "danger": "#b3261e",
+     "danger-soft": "#fbe0dd",
+     "on-danger-soft": "#7a1a14",
+     "on-accent": "#ffffff",
+     "accent-ink": "#283a73",
+     "focus": "#283a73",
+     "on-promo-1": "#ffffff",
+     "promo-ink": "#283a73"
+    },
+    "dark": {
+     "surface": "#11121a",
+     "surface-alt": "#121520",
+     "surface-raised": "#131724",
+     "tile": "#402120",
+     "tile-alt": "#15192a",
+     "ink": "#fef6f5",
+     "ink-muted": "#aba6a8",
+     "rule": "#161c30",
+     "border": "#7c797d",
+     "accent": "#a2bcff",
+     "demo": "#ffd166",
+     "on-demo": "#161616",
+     "demo-soft": "#433923",
+     "on-demo-soft": "#ffefc9",
+     "demo-mark": "#ffd166",
+     "banner": "#1b2442",
+     "banner-2": "#181f36",
+     "on-banner": "#fdedeb",
+     "footer": "#05070e",
+     "on-footer": "#eaebf1",
+     "promo-1": "#a2bcff",
+     "promo-2": "#ff9c8f",
+     "promo-soft": "#452322",
+     "on-promo-soft": "#fef6f5",
+     "success": "#78d39c",
+     "success-soft": "#173524",
+     "on-success-soft": "#c3eed3",
+     "danger": "#ff8f86",
+     "danger-soft": "#3d1a17",
+     "on-danger-soft": "#ffd2cd",
+     "on-accent": "#0b0b0b",
+     "accent-ink": "#a2bcff",
+     "focus": "#a2bcff",
+     "on-promo-1": "#0b0b0b",
+     "promo-ink": "#a2bcff"
+    }
+   }
+  }
+ ]
+}

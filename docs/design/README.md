@@ -14,6 +14,8 @@
 > 2026-11-05 补充店铺标志图的画板（落实 `docs/DESIGN.md` 1.20 候批稿第 15 条、`docs/UX.md` 0.18 与 `docs/UX-COPY.md` 0.19，审阅稿）：A08 标志的没有标志、有标志、上传中、被拒与移除确认框 `A08-logo-states`，前台页头与页脚显示标志的桌面与手机稿 `P-logo-header-footer`（示例标志为虚构店名）。A08 桌面与手机稿未重画，其中标志一段的说明以 `A08-logo-states` 为准。画法同 2026-10-29 的 A06。
 >
 > 2026-11-08 补充后台 A11 Stripe 待处理的画板（落实 `docs/DESIGN.md` 1.22 第 11 条、`docs/UX.md` 0.19 与 `docs/UX-COPY.md` 0.21，审阅稿）：桌面与手机稿 `A11-desktop`、`A11-phone`，作废确认框、作废与重试的结果、空列表与读取失败 `A11-states`。后台导航在 Refunds 之后多了 Stripe follow-ups；其他后台画板未重画，导航顺序以 UX 0.19 为准。画法同 2026-10-29 的 A06。
+>
+> 2026-11-10 补充节日促销活动的画板（落实 `docs/DESIGN.md` 1.23「节日促销活动」第 12 条、`docs/UX.md` 0.20 与 `docs/UX-COPY.md` 0.22，审阅稿）：7 套素材包的图案与节日配色总览（浅色、深色各一张 `PROMO-packs-light`、`PROMO-packs-dark`），六个装饰位的变体 `PROMO-slots`（含「保持店铺主题配色」的对照），有活动时的 P01–P05 桌面与手机稿、海报的居中样式与上传图裁切 `P01-promo-posters`，新增的 P15 活动专题页（桌面、手机、只有整单级规则与没有活动的状态），后台 A12 促销活动的列表、编辑区（桌面与手机）与状态（前台预览条、确认框、保存结果、字段检查、变体下拉、AI 提案与失败）。素材包、配色与变体的清单由 `tools/promo_src.py` 经 `tools/gen.py` 生成到 `tokens/promotions.json` 与 `tokens/acuven-shop.css`，节日配色与主题一样过对比度检查。画板用虚构的示例活动「Lunar New Year Sale」（服装八折、家居买二送一、满 RM 150 减 15 / 满 RM 300 减 40、满 RM 120 免运费，可与优惠券同用、不可与积分同用），金额按 DESIGN 1.23 第 4–6 条算出。P09、A02 的活动优惠行与 A08 的说明只是在现有金额明细与页面里加一行文字，沿用相邻元素的样式，未另画。后台导航在 Coupons 之后多了 Promotions；其他后台画板未重画，导航顺序以 UX 0.20 为准。画法同 2026-10-29 的 A06。
 
 页面的内容、流程、去向与文案以 [UX.md](../UX.md) 与 [UX-COPY.md](../UX-COPY.md) 为准；本目录只规定样式。二者冲突时以 UX 文档为准，并把冲突报给运营者。
 
@@ -28,6 +30,8 @@
 | `tokens/tokens.json` | 默认主题（班兰）的颜色、间距与字号 |
 | `src/components.css` | 组件样式的源文件 |
 | `tools/themes_src.py`、`tools/gen.py` | 主题源数据与生成脚本（仅标准库） |
+| `tools/promo_src.py` | 节日促销素材包源数据：7 套的图案、配色种子与各装饰位的变体（2026-11-10） |
+| `tokens/promotions.json` | 节日促销的预置清单：素材包 id、各装饰位变体 id、每套节日配色的浅色与深色取值（DESIGN 1.23 第 12 条的清单，保存活动时据此校验 id） |
 | `pages/*.html` | 每张画板的静态页面，默认主题、浅色，断网可直接用浏览器打开（直接打开文件时取不到 `/fonts/` 下的字体，显示系统字体；参考图是按原字体截的） |
 | `reference/*.png` | 每张画板的参考图（与 `pages/` 同名） |
 
@@ -192,3 +196,24 @@
 | A11 Stripe 待处理 · 桌面（2026-11-08） | [A11-desktop.html](pages/A11-desktop.html) | [A11-desktop.png](reference/A11-desktop.png) | 1440 × 900 |
 | A11 Stripe 待处理 · 手机（2026-11-08） | [A11-phone.html](pages/A11-phone.html) | [A11-phone.png](reference/A11-phone.png) | 390 × 1480 |
 | A11 作废确认框、作废与重试结果、空列表与读取失败（2026-11-08） | [A11-states.html](pages/A11-states.html) | [A11-states.png](reference/A11-states.png) | 520 × 2140 |
+| 节日促销 7 套素材包与配色 · 浅色（2026-11-10） | [PROMO-packs-light.html](pages/PROMO-packs-light.html) | [PROMO-packs-light.png](reference/PROMO-packs-light.png) | 1440 × 1860 |
+| 节日促销 7 套素材包与配色 · 深色（2026-11-10） | [PROMO-packs-dark.html](pages/PROMO-packs-dark.html) | [PROMO-packs-dark.png](reference/PROMO-packs-dark.png) | 1440 × 1860 |
+| 节日促销六个装饰位的变体与「保持店铺主题配色」对照（2026-11-10） | [PROMO-slots.html](pages/PROMO-slots.html) | [PROMO-slots.png](reference/PROMO-slots.png) | 1440 × 2560 |
+| P01 首页有活动 · 桌面（2026-11-10） | [P01-promo-desktop.html](pages/P01-promo-desktop.html) | [P01-promo-desktop.png](reference/P01-promo-desktop.png) | 1440 × 1640 |
+| P01 首页有活动 · 手机（2026-11-10） | [P01-promo-phone.html](pages/P01-promo-phone.html) | [P01-promo-phone.png](reference/P01-promo-phone.png) | 390 × 2000 |
+| P01 居中样式海报与上传图（桌面 3:1、手机 4:5）（2026-11-10） | [P01-promo-posters.html](pages/P01-promo-posters.html) | [P01-promo-posters.png](reference/P01-promo-posters.png) | 1440 × 1500 |
+| P02 商品列表有活动 · 桌面（2026-11-10） | [P02-promo-desktop.html](pages/P02-promo-desktop.html) | [P02-promo-desktop.png](reference/P02-promo-desktop.png) | 1440 × 2460 |
+| P02 商品列表有活动 · 手机（2026-11-10） | [P02-promo-phone.html](pages/P02-promo-phone.html) | [P02-promo-phone.png](reference/P02-promo-phone.png) | 390 × 1640 |
+| P03 商品详情有活动 · 桌面（2026-11-10） | [P03-promo-desktop.html](pages/P03-promo-desktop.html) | [P03-promo-desktop.png](reference/P03-promo-desktop.png) | 1440 × 1760 |
+| P03 商品详情有活动 · 手机（2026-11-10） | [P03-promo-phone.html](pages/P03-promo-phone.html) | [P03-promo-phone.png](reference/P03-promo-phone.png) | 390 × 2140 |
+| P04 购物车有活动（会员） · 桌面（2026-11-10） | [P04-promo-desktop.html](pages/P04-promo-desktop.html) | [P04-promo-desktop.png](reference/P04-promo-desktop.png) | 1440 × 1320 |
+| P04 购物车有活动 · 手机（2026-11-10） | [P04-promo-phone.html](pages/P04-promo-phone.html) | [P04-promo-phone.png](reference/P04-promo-phone.png) | 390 × 1580 |
+| P05 结账有活动、取更优说明 · 桌面（2026-11-10） | [P05-promo-desktop.html](pages/P05-promo-desktop.html) | [P05-promo-desktop.png](reference/P05-promo-desktop.png) | 1440 × 1380 |
+| P05 结账选定国家前的暂算 · 手机（2026-11-10） | [P05-promo-phone.html](pages/P05-promo-phone.html) | [P05-promo-phone.png](reference/P05-promo-phone.png) | 390 × 1140 |
+| P15 活动专题页 · 桌面（2026-11-10） | [P15-desktop.html](pages/P15-desktop.html) | [P15-desktop.png](reference/P15-desktop.png) | 1440 × 2420 |
+| P15 活动专题页 · 手机（2026-11-10） | [P15-phone.html](pages/P15-phone.html) | [P15-phone.png](reference/P15-phone.png) | 390 × 2160 |
+| P15 只有整单级规则、没有活动（2026-11-10） | [P15-states.html](pages/P15-states.html) | [P15-states.png](reference/P15-states.png) | 1440 × 1240 |
+| A12 促销活动列表 · 桌面（2026-11-10） | [A12-desktop.html](pages/A12-desktop.html) | [A12-desktop.png](reference/A12-desktop.png) | 1440 × 900 |
+| A12 活动编辑区 · 桌面（2026-11-10） | [A12-editor-desktop.html](pages/A12-editor-desktop.html) | [A12-editor-desktop.png](reference/A12-editor-desktop.png) | 1440 × 3020 |
+| A12 活动编辑区 · 手机（2026-11-10） | [A12-phone.html](pages/A12-phone.html) | [A12-phone.png](reference/A12-phone.png) | 390 × 1560 |
+| A12 前台预览条、确认框、保存结果、AI 与其他状态（2026-11-10） | [A12-states.html](pages/A12-states.html) | [A12-states.png](reference/A12-states.png) | 1440 × 2240 |
