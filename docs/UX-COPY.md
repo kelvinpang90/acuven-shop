@@ -865,8 +865,9 @@
 | `cart.member_scheme_note` | Members: if you use a coupon or points at checkout, we'll work out whether the sale or your coupon and points is better for you, and use that. | 会员：结账时若使用优惠券或积分，系统会比较参加活动与使用券和积分哪种更划算，按更划算的一种计算。 | Ahli: jika anda guna kupon atau mata semasa pembayaran, kami akan kira sama ada jualan atau kupon dan mata anda lebih jimat, lalu gunakannya. | P04 已登录会员且有活动优惠时 |
 | `checkout.summary_promo` | Sale discount | 活动优惠 | Diskaun jualan | P05、P09、A02 金额明细；游客与会员都显示 |
 | `checkout.shipping_free` | Free (was RM {amount}) | 免运费（原 RM {amount}） | Percuma (asal RM {amount}) | P05、P09、A02 运费行；活动免运费时 |
-| `checkout.scheme_promo` | We've applied the sale because it's better value for you. Without the sale, this order would be RM {other} before points. | 已按参加活动计算，对你更划算；不参加活动时本单积分抵扣前为 RM {other}。 | Kami gunakan jualan kerana ia lebih jimat untuk anda. Tanpa jualan, pesanan ini RM {other} sebelum mata. | P05 会员用券或积分、取参加活动时 |
-| `checkout.scheme_no_promo` | We've used your coupon and points without the sale because that's better value for you. With the sale, this order would be RM {other} before points. | 已按不参加活动、使用优惠券与积分计算，对你更划算；参加活动时本单积分抵扣前为 RM {other}。 | Kami gunakan kupon dan mata anda tanpa jualan kerana itu lebih jimat untuk anda. Dengan jualan, pesanan ini RM {other} sebelum mata. | P05 会员用券或积分、取不参加活动时 |
+| `checkout.scheme_promo` | We've applied the sale. Without it, this order would be RM {other} before points — RM {diff} more. | 已按参加活动计算。不参加活动时本单积分抵扣前为 RM {other}，多 RM {diff}。 | Kami gunakan jualan. Tanpanya, pesanan ini RM {other} sebelum mata — RM {diff} lebih. | P05 会员用券或积分、取参加活动且两者不同时；`{diff}` 为差额 |
+| `checkout.scheme_promo_equal` | With or without the sale, this order comes to the same amount before points, so we've applied the sale. | 参加与不参加活动，本单积分抵扣前的金额相同，已按参加活动计算。 | Dengan atau tanpa jualan, jumlah pesanan ini sama sebelum mata, jadi kami gunakan jualan. | P05 两种方案相同时 |
+| `checkout.scheme_no_promo` | We've left out the sale and used what you chose, because that's better value for you. With the sale, this order would be RM {other} before points — RM {diff} more. | 已按不参加活动、使用你所选的优惠计算，对你更划算。参加活动时本单积分抵扣前为 RM {other}，多 RM {diff}。 | Kami tidak gunakan jualan dan gunakan pilihan anda kerana itu lebih jimat. Dengan jualan, pesanan ini RM {other} sebelum mata — RM {diff} lebih. | P05 会员用券或积分、取不参加活动时（此时差额必大于 0）；不预设券与积分都已使用 |
 | `checkout.points_not_combinable` | This sale can't be combined with points, so no points were used. Your points stay in your account. | 本活动不与积分同用，本单未使用积分，积分仍保留在你的账户。 | Jualan ini tidak boleh digabung dengan mata, jadi tiada mata digunakan. Mata anda kekal dalam akaun. | P05，与 `checkout.scheme_promo` 同时显示 |
 | `checkout.coupon_not_applied_sale` | After the sale discount, this order is below the coupon's minimum spend, so the coupon wasn't used. | 活动优惠后本单未达到优惠券的最低消费，未使用该券。 | Selepas diskaun jualan, pesanan ini di bawah perbelanjaan minimum kupon, jadi kupon tidak digunakan. | P05，与 `checkout.scheme_promo` 同时显示 |
 
@@ -898,7 +899,7 @@
 | `admin.promo_invalid` | Not saved. Please fix: | 未保存，请修正： | Tidak disimpan. Sila betulkan: | 其下逐条列出问题 |
 | `admin.promo_overlap` | The time overlaps another published promotion: {name}. | 时间与另一个已发布的活动重叠：{name}。 | Masa bertindih dengan promosi lain yang diterbitkan: {name}. | `{name}` 为对方的内部名称 |
 | `admin.promo_scope_overlap` | {product} is in more than one item rule. | {product} 同时属于多条商品级规则。 | {product} berada dalam lebih daripada satu peraturan item. | 商品级规则重叠 |
-| `admin.promo_publish_missing` | To publish, add at least one rule, an English title and an end time in the future; with an image poster, also both images and English alt text. | 发布需要至少一条规则、英文标题、晚于现在的结束时间；海报为上传图时还需两张图与英文替代文字。 | Untuk menerbitkan, tambah sekurang-kurangnya satu peraturan, tajuk Inggeris dan masa tamat pada masa hadapan; untuk poster imej, tambah juga kedua-dua imej dan teks alternatif Inggeris. | 发布条件不满足 |
+| `admin.promo_publish_missing` | To publish, add at least one rule, an English title, a start time and an end time in the future; with an image poster, also both images and English alt text. | 发布需要至少一条规则、英文标题、开始时间与晚于现在的结束时间；海报为上传图时还需两张图与英文替代文字。 | Untuk menerbitkan, tambah sekurang-kurangnya satu peraturan, tajuk Inggeris, masa mula dan masa tamat pada masa hadapan; untuk poster imej, tambah juga kedua-dua imej dan teks alternatif Inggeris. | 发布条件不满足 |
 | `admin.promo_end_confirm` | End this promotion now? It can't be restarted. | 现在结束这个活动？结束后不能恢复。 | Tamatkan promosi ini sekarang? Ia tidak boleh dimulakan semula. | 确认框 |
 | `admin.promo_withdraw_confirm` | Move this promotion back to draft? It won't start until you publish it again. | 把这个活动撤回为草稿？重新发布之前不会开始。 | Kembalikan promosi ini ke draf? Ia tidak akan bermula sehingga anda menerbitkannya semula. | 确认框 |
 | `admin.promo_delete_confirm` | Delete this draft? This can't be undone. | 删除这个草稿？删除后无法恢复。 | Padam draf ini? Ini tidak boleh dibuat asal. | 确认框 |
@@ -970,9 +971,9 @@
 | `admin.poster_template` | Template | 模板 | Templat | — |
 | `admin.poster_image` | Uploaded image | 上传图片 | Imej dimuat naik | — |
 | `admin.poster_desktop` | Desktop image | 桌面图 | Imej desktop | — |
-| `admin.poster_desktop_rules` | At least 1,200 pixels wide. | 宽至少 1,200 像素。 | Lebar sekurang-kurangnya 1,200 piksel. | — |
+| `admin.poster_desktop_rules` | At least 1,200 pixels wide. Best at 1,800 × 600 (3:1); other shapes are cropped from the centre. | 宽至少 1,200 像素；建议 1,800 × 600（3:1），其他比例会从中间裁切。 | Lebar sekurang-kurangnya 1,200 piksel. Terbaik 1,800 × 600 (3:1); bentuk lain dipotong dari tengah. | — |
 | `admin.poster_phone` | Phone image | 手机图 | Imej telefon | — |
-| `admin.poster_phone_rules` | At least 600 pixels wide. | 宽至少 600 像素。 | Lebar sekurang-kurangnya 600 piksel. | — |
+| `admin.poster_phone_rules` | At least 600 pixels wide. Best at 960 × 1,200 (4:5); other shapes are cropped from the centre. | 宽至少 600 像素；建议 960 × 1,200（4:5），其他比例会从中间裁切。 | Lebar sekurang-kurangnya 600 piksel. Terbaik 960 × 1,200 (4:5); bentuk lain dipotong dari tengah. | — |
 | `admin.poster_alt` | Image description (alt text) | 图片说明（替代文字） | Penerangan imej (teks alternatif) | 三语，各 1–150 个字符，英文必填 |
 | `admin.ai_title` | Design with AI | 用 AI 装饰 | Reka dengan AI | 区块标题 |
 | `admin.ai_describe` | Describe the look you want | 描述你想要的效果 | Terangkan rupa yang anda mahu | 1–500 个字符；输入框占位可写例子，如「农历新年，喜庆红金」 |
