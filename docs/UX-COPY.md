@@ -843,6 +843,7 @@
 | `promo.rule_tier_percent` | Spend RM {threshold}, get {percent}% off | 满 RM {threshold} 减 {percent}% | Belanja RM {threshold}, diskaun {percent}% | 满额折每一档一条 |
 | `promo.rule_free_shipping` | Free sample shipping on orders from RM {threshold} | 满 RM {threshold} 免示例运费 | Penghantaran contoh percuma untuk pesanan dari RM {threshold} | 免运费规则说明 |
 | `promo.rule_free_shipping_all` | Free sample shipping on all orders | 全部订单免示例运费 | Penghantaran contoh percuma untuk semua pesanan | 免运费门槛为 0 时 |
+| `promo.rule_scope_with_items` | Applies to: {names}, and the items below | 适用：{names}，以及下方列出的商品 | Untuk: {names}, dan item di bawah | P15 规则同时含分类与单件商品时 |
 | `promo.rule_scope` | Applies to: {names} | 适用：{names} | Untuk: {names} | P15 商品级规则含分类时附在说明后；`{names}` 为分类名称，以当前语言的顿号或逗号分隔 |
 | `promo.coupon_not_combinable` | This sale can't be combined with coupons. | 本活动不与优惠券同用。 | Jualan ini tidak boleh digabung dengan kupon. | 活动关闭了与优惠券同用时 |
 | `promo.points_not_combinable` | This sale can't be combined with points. | 本活动不与积分同用。 | Jualan ini tidak boleh digabung dengan mata. | 活动关闭了与积分同用时 |
@@ -862,12 +863,13 @@
 | `cart.hint_free_shipping` | Add RM {amount} more for free sample shipping. | 再买 RM {amount}，免示例运费。 | Tambah RM {amount} lagi untuk penghantaran contoh percuma. | P04 凑单提示（免运费） |
 | `cart.free_shipping_reached` | You've unlocked free sample shipping. | 已达免示例运费门槛。 | Anda layak untuk penghantaran contoh percuma. | P04 已达免运费门槛 |
 | `cart.hint_bxgy` | {rule}: add {n} more to get {y} more at the offer price. | {rule}：再加 {n} 件，可多享 {y} 件优惠。 | {rule}: tambah {n} lagi untuk {y} lagi item pada harga tawaran. | P04；`{rule}` 为该规则的角标文字 |
-| `cart.member_scheme_note` | Members: if you use a coupon or points at checkout, we'll work out whether the sale or your coupon and points is better for you, and use that. | 会员：结账时若使用优惠券或积分，系统会比较参加活动与使用券和积分哪种更划算，按更划算的一种计算。 | Ahli: jika anda guna kupon atau mata semasa pembayaran, kami akan kira sama ada jualan atau kupon dan mata anda lebih jimat, lalu gunakannya. | P04 已登录会员且有活动优惠时 |
+| `cart.member_scheme_note` | Members: if you use a coupon or points at checkout, we'll work out the order both with and without the sale and use whichever is better for you. | 会员：结账时若使用优惠券或积分，系统会分别按参加与不参加活动计算，取对你更划算的一种。 | Ahli: jika anda guna kupon atau mata semasa pembayaran, kami akan mengira pesanan dengan dan tanpa jualan dan menggunakan yang lebih jimat untuk anda. | P04 已登录会员且有活动优惠时 |
 | `checkout.summary_promo` | Sale discount | 活动优惠 | Diskaun jualan | P05、P09、A02 金额明细；游客与会员都显示 |
 | `checkout.shipping_free` | Free (was RM {amount}) | 免运费（原 RM {amount}） | Percuma (asal RM {amount}) | P05、P09、A02 运费行；活动免运费时 |
 | `checkout.scheme_promo` | We've applied the sale. Without it, this order would be RM {other} before points — RM {diff} more. | 已按参加活动计算。不参加活动时本单积分抵扣前为 RM {other}，多 RM {diff}。 | Kami gunakan jualan. Tanpanya, pesanan ini RM {other} sebelum mata — RM {diff} lebih. | P05 会员用券或积分、取参加活动且两者不同时；`{diff}` 为差额 |
 | `checkout.scheme_promo_equal` | With or without the sale, this order comes to the same amount before points, so we've applied the sale. | 参加与不参加活动，本单积分抵扣前的金额相同，已按参加活动计算。 | Dengan atau tanpa jualan, jumlah pesanan ini sama sebelum mata, jadi kami gunakan jualan. | P05 两种方案相同时 |
 | `checkout.scheme_no_promo` | We've left out the sale and used what you chose, because that's better value for you. With the sale, this order would be RM {other} before points — RM {diff} more. | 已按不参加活动、使用你所选的优惠计算，对你更划算。参加活动时本单积分抵扣前为 RM {other}，多 RM {diff}。 | Kami tidak gunakan jualan dan gunakan pilihan anda kerana itu lebih jimat. Dengan jualan, pesanan ini RM {other} sebelum mata — RM {diff} lebih. | P05 会员用券或积分、取不参加活动时（此时差额必大于 0）；不预设券与积分都已使用 |
+| `checkout.coupon_not_combinable` | This sale can't be combined with coupons, so your coupon wasn't used. It's still available. | 本活动不与优惠券同用，本单未使用该券，券仍可再用。 | Jualan ini tidak boleh digabung dengan kupon, jadi kupon anda tidak digunakan. Ia masih boleh digunakan. | P05，取参加活动时（与 `checkout.scheme_promo` 或 `checkout.scheme_promo_equal` 同时显示） |
 | `checkout.points_not_combinable` | This sale can't be combined with points, so no points were used. Your points stay in your account. | 本活动不与积分同用，本单未使用积分，积分仍保留在你的账户。 | Jualan ini tidak boleh digabung dengan mata, jadi tiada mata digunakan. Mata anda kekal dalam akaun. | P05，取参加活动时（与 `checkout.scheme_promo` 或 `checkout.scheme_promo_equal` 同时显示） |
 | `checkout.coupon_not_applied_sale` | After the sale discount, this order is below the coupon's minimum spend, so the coupon wasn't used. | 活动优惠后本单未达到优惠券的最低消费，未使用该券。 | Selepas diskaun jualan, pesanan ini di bawah perbelanjaan minimum kupon, jadi kupon tidak digunakan. | P05，取参加活动时（与 `checkout.scheme_promo` 或 `checkout.scheme_promo_equal` 同时显示） |
 
@@ -896,16 +898,19 @@
 | `admin.promo_more` | More | 更多 | Lagi | 手机操作栏 |
 | `admin.promo_saved` | Saved. | 已保存。 | Disimpan. | 保存、发布、撤回、提前结束成功 |
 | `admin.promo_changed` | This promotion was changed elsewhere. Reload to see the latest version; your edits here weren't saved. | 这个活动已在别处被修改。请重新读取最新版本；本页的修改未保存。 | Promosi ini telah diubah di tempat lain. Muat semula untuk melihat versi terkini; suntingan anda di sini tidak disimpan. | 版本不符，配 `admin.reload` |
+| `admin.promo_field_invalid` | This value isn't allowed. Check the range shown for this field. | 这个值不合规定，请按本栏的范围填写。 | Nilai ini tidak dibenarkan. Semak julat untuk ruangan ini. | A12 提交前逐栏检查不合格时 |
+| `admin.promo_invalid_other` | Some values weren't accepted. Check the dates, numbers and text lengths, then try again. | 有取值未被接受，请检查日期、数字与文字长度后重试。 | Sesetengah nilai tidak diterima. Semak tarikh, nombor dan panjang teks, kemudian cuba lagi. | A12 服务端拒绝而原因不是重叠或发布条件时 |
+| `admin.poster_save_first` | Save this promotion first, then upload images. | 请先保存这个活动，再上传图片。 | Simpan promosi ini dahulu, kemudian muat naik imej. | A12 新建未保存时上传按钮禁用 |
 | `admin.promo_invalid` | Not saved. Please fix: | 未保存，请修正： | Tidak disimpan. Sila betulkan: | 其下逐条列出问题 |
 | `admin.promo_overlap` | The time overlaps another published promotion: {name}. | 时间与另一个已发布的活动重叠：{name}。 | Masa bertindih dengan promosi lain yang diterbitkan: {name}. | `{name}` 为对方的内部名称 |
 | `admin.promo_scope_overlap` | {product} is in more than one item rule. | {product} 同时属于多条商品级规则。 | {product} berada dalam lebih daripada satu peraturan item. | 商品级规则重叠 |
-| `admin.promo_publish_missing` | To publish, add at least one rule, an English title, a start time and an end time in the future; with an image poster, also both images and English alt text. | 发布需要至少一条规则、英文标题、开始时间与晚于现在的结束时间；海报为上传图时还需两张图与英文替代文字。 | Untuk menerbitkan, tambah sekurang-kurangnya satu peraturan, tajuk Inggeris, masa mula dan masa tamat pada masa hadapan; untuk poster imej, tambah juga kedua-dua imej dan teks alternatif Inggeris. | 发布条件不满足 |
+| `admin.promo_publish_missing` | To publish, add at least one rule, an English title, a start time (it may already have passed) and an end time that's still ahead; with an image poster, also both images and English alt text. | 发布需要至少一条规则、英文标题、开始时间与晚于现在的结束时间；海报为上传图时还需两张图与英文替代文字。 | Untuk menerbitkan, tambah sekurang-kurangnya satu peraturan, tajuk Inggeris, masa mula (boleh sudah berlalu) dan masa tamat yang belum berlalu; untuk poster imej, tambah juga kedua-dua imej dan teks alternatif Inggeris. | 发布条件不满足 |
 | `admin.promo_end_confirm` | End this promotion now? It can't be restarted. | 现在结束这个活动？结束后不能恢复。 | Tamatkan promosi ini sekarang? Ia tidak boleh dimulakan semula. | 确认框 |
 | `admin.promo_withdraw_confirm` | Move this promotion back to draft? It won't start until you publish it again. | 把这个活动撤回为草稿？重新发布之前不会开始。 | Kembalikan promosi ini ke draf? Ia tidak akan bermula sehingga anda menerbitkannya semula. | 确认框 |
 | `admin.promo_delete_confirm` | Delete this draft? This can't be undone. | 删除这个草稿？删除后无法恢复。 | Padam draf ini? Ini tidak boleh dibuat asal. | 确认框 |
 | `admin.promo_copied` | Copied. This is the new draft; set its time before publishing. | 已复制。这是新草稿，发布前请设定时间。 | Disalin. Ini draf baharu; tetapkan masanya sebelum diterbitkan. | 复制成功 |
 | `admin.promo_ended_readonly` | This promotion has ended. It can only be copied. | 这个活动已结束，只能复制。 | Promosi ini telah tamat. Ia hanya boleh disalin. | 已结束 |
-| `admin.promo_save_first` | Save your changes first — the preview shows the saved version. | 请先保存，预览显示的是已保存的内容。 | Simpan perubahan dahulu — pratonton menunjukkan versi yang disimpan. | 有未保存修改时点预览 |
+| `admin.promo_save_first` | Save your changes first. Preview, publish and the other actions use the saved version. | 请先保存。预览、发布等操作都按已保存的内容进行。 | Simpan perubahan dahulu. Pratonton, terbitan dan tindakan lain menggunakan versi yang disimpan. | 有未保存修改时点预览 |
 | `admin.promo_basic` | Basics | 基本信息 | Asas | 区块标题 |
 | `admin.promo_start` | Starts | 开始 | Mula | — |
 | `admin.promo_end` | Ends | 结束 | Tamat | — |
@@ -976,6 +981,7 @@
 | `admin.poster_phone_rules` | At least 600 pixels wide. Best at 960 × 1,200 (4:5); other shapes are cropped from the centre. | 宽至少 600 像素；建议 960 × 1,200（4:5），其他比例会从中间裁切。 | Lebar sekurang-kurangnya 600 piksel. Terbaik 960 × 1,200 (4:5); bentuk lain dipotong dari tengah. | — |
 | `admin.poster_alt` | Image description (alt text) | 图片说明（替代文字） | Penerangan imej (teks alternatif) | 三语，各 1–150 个字符，英文必填 |
 | `admin.ai_title` | Design with AI | 用 AI 装饰 | Reka dengan AI | 区块标题 |
+| `admin.ai_placeholder` | e.g. Chinese New Year, festive red and gold | 例如：农历新年，喜庆红金 | cth. Tahun Baru Cina, merah dan emas yang meriah | A12 描述输入框占位 |
 | `admin.ai_describe` | Describe the look you want | 描述你想要的效果 | Terangkan rupa yang anda mahu | 1–500 个字符；输入框占位可写例子，如「农历新年，喜庆红金」 |
 | `admin.ai_privacy` | Don't include personal information. Your description is sent to the AI service and isn't saved. | 请不要填写个人资料。描述会发送给 AI 服务，不会保存。 | Jangan masukkan maklumat peribadi. Penerangan anda dihantar kepada perkhidmatan AI dan tidak disimpan. | — |
 | `admin.ai_generate` | Suggest a design | 生成方案 | Cadangkan reka bentuk | — |
@@ -985,7 +991,7 @@
 | `admin.ai_applied` | Filled in. Check it in the editor preview, then save to use it. | 已填入编辑区。请在编辑区预览里检查，保存后才生效。 | Telah diisi. Semak dalam pratonton penyunting, kemudian simpan untuk menggunakannya. | — |
 | `admin.editor_preview` | Editor preview | 编辑区预览 | Pratonton penyunting | A12，随未保存的输入即时更新 |
 | `admin.editor_preview_note` | A sketch with sample products and amounts. Real prices are worked out on the storefront. | 示意图，商品与金额都是示例；实际价格以前台计算为准。 | Lakaran dengan produk dan jumlah contoh. Harga sebenar dikira di kedai. | A12 编辑区预览下方 |
-| `admin.promo_preview_needs_time` | Save a start and end time to preview on the storefront. | 保存开始与结束时间后才能在前台预览。 | Simpan masa mula dan tamat untuk pratonton di kedai. | A12 前台预览按钮禁用时 |
+| `admin.promo_preview_needs_time` | To preview on the storefront, save a start time and an end time that's still ahead. | 保存开始时间与尚未过去的结束时间后，才能在前台预览。 | Untuk pratonton di kedai, simpan masa mula dan masa tamat yang belum berlalu. | A12 前台预览按钮禁用时 |
 | `admin.ai_invalid` | The AI's suggestion couldn't be used. Try again, or set the decoration yourself. | AI 的结果不合格。请重试，或手动设置装饰。 | Cadangan AI tidak dapat digunakan. Cuba lagi, atau tetapkan hiasan sendiri. | — |
 | `admin.ai_unavailable` | AI isn't available right now. You can still set the decoration yourself. | AI 暂不可用，仍可手动设置装饰。 | AI tidak tersedia sekarang. Anda masih boleh menetapkan hiasan sendiri. | 超时、出错或余额不足 |
 | `admin.ai_daily_limit` | Today's AI limit ({count}) has been reached. Try again tomorrow, or set the decoration yourself. | 今天的 AI 次数（{count} 次）已用完。请明天再试，或手动设置装饰。 | Had AI hari ini ({count}) telah dicapai. Cuba esok, atau tetapkan hiasan sendiri. | — |
