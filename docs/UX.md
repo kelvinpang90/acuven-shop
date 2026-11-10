@@ -2801,6 +2801,10 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 | [admin.slot_home_poster] <变体> ▾   [admin.slot_list_strip] <变体> ▾    |
 | [admin.slot_card_badge]  <变体> ▾   [admin.slot_detail_ribbon] <变体> ▾ |
 | [admin.slot_cart_progress] <变体> ▾                                    |
+| [admin.editor_preview]（编辑区预览，随本页未保存的输入即时更新）          |
+|  <模板海报缩样> <活动横条缩样> <两张示例商品卡（角标）> <价格飘带缩样>     |
+|  <购物车进度条缩样>   ( [admin.preview_light] ) ( [admin.preview_dark] ) |
+|  [admin.editor_preview_note]                                          |
 +---- [admin.promo_poster] ---------------------------------------------+
 | ( ) [admin.poster_template]   ( ) [admin.poster_image]                 |
 | 上传图时：[admin.poster_desktop] <缩略图>( [admin.upload] )  [admin.poster_desktop_rules] |
@@ -2834,11 +2838,12 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 - **时间**：开始与结束按马来西亚时间输入到分钟（`[admin.promo_time_note]`）；草稿可以不填时间，发布时开始与结束都须填。列表按进行中、未开始（开始时间从早到晚）、草稿（最近修改在前）、已结束（结束时间从晚到早）排列。
 - **规则**：最多 20 条商品级规则、一条满额减或满额折、一条免运费；已有满额减或免运费时 `[admin.rule_add]` 里的对应项禁用。(↑)(↓) 调整规则排序（读屏标签 `[admin.rule_move_up]`、`[admin.rule_move_down]`）。商品范围的搜索只列已上架商品；分类为勾选。金额以 RM 输入、提交整仙。取值超出范围、商品级规则重叠、发布条件不满足时整次不生效：`[admin.promo_invalid]` 下逐条列出问题（重叠为 `[admin.promo_scope_overlap]`，`{product}` 为商品名称；发布条件为 `[admin.promo_publish_missing]`），与其他已发布活动时间重叠为 `[admin.promo_overlap]`（`{name}` 为对方的内部名称）；版本不符为 `[admin.promo_changed]` 与 `( [admin.reload] )`，不自动合并。
 - **提前结束、撤回、删除**都先弹确认框：`[admin.promo_end_confirm]`、`[admin.promo_withdraw_confirm]`、`[admin.promo_delete_confirm]`，按钮为该操作本身（`[admin.promo_end_now]`、`[admin.promo_withdraw]`、`[admin.promo_delete]`）与 `( [common.cancel] )`，与 A08 移除标志的确认框写法相同。复制成功后进入新草稿的编辑区，显示 `[admin.promo_copied]`。
-- **文案**：英文标题必填，其他缺译回退英文（`[admin.copy_fallback]`）；输入时显示已用字数，超出不能保存。不能输入换行。
+- **文案**：草稿可以不填英文标题，发布时须有（发布条件）；其他缺译回退英文（`[admin.copy_fallback]`）；输入时显示已用字数，超出不能保存。不能输入换行。
 - **装饰**：素材包与配色从清单中选；`[admin.palette_of]` 下拉列出 7 套节日配色（`{pack}` 为对应素材包名称），默认是所选素材包的配色。各装饰位的下拉列出所选素材包的变体（以视觉稿的缩略图与 `[admin.variant_n]` 表示）；换素材包时各装饰位改为新素材包的第一个变体。
 - **海报**：桌面图建议 1,800 × 600 像素（3:1），手机图建议 960 × 1,200 像素（4:5），不按比例的图照收、前台居中裁切（见 P01）；上传图模式须有桌面与手机两张图及英文替代文字才能发布；上传即替换该位置的图，上传结果提示沿用 A08 标志图的写法。
-- **AI**：AI 结果只在点 `[admin.ai_apply]` 后填回本页的文案、装饰与配色，不保存，也不改规则、时间与开关；填回后显示 `[admin.ai_applied]`，管理员检查文字、预览后再保存。进行中的活动也可用 AI 改装饰与文案；已结束的不可用。
-- **预览**：草稿与已发布未开始的活动可预览（DESIGN 1.23 第 11 条）；`[admin.promo_preview]` 在新标签页打开前台预览，显示的是**已保存**的内容；有未保存修改时先提示 `[admin.promo_save_first]`。离开有未保存修改的编辑区时沿用 A04、A10 的离开确认。
+- **编辑区预览**：装饰区下方的 `[admin.editor_preview]` 按本页当前（含未保存）的文案、素材包、配色、各装饰位变体与海报模式，在浏览器里画出模板海报、活动横条、两张示例商品卡、价格飘带与购物车进度条的缩样，可切换浅色与深色（沿用 A08 的 `[admin.preview_light]`、`[admin.preview_dark]`）；缩样用固定的示例商品与金额（`[admin.editor_preview_note]` 写明是示意），不调用计价，也不代表前台的实际价格。它在任何状态下都可用（已结束的只读显示），是 AI 提案与进行中活动改装饰时保存前的预览方式。
+- **AI**：AI 结果只在点 `[admin.ai_apply]` 后填回本页的文案、装饰与配色，不保存，也不改规则、时间与开关；填回后显示 `[admin.ai_applied]`，管理员在编辑区预览里检查文字与样子后再保存（DESIGN 1.23 第 13 条）。进行中的活动也可用 AI 改装饰与文案；已结束的不可用。
+- **前台预览**：草稿与已发布未开始的活动可预览（DESIGN 1.23 第 11 条），须已保存开始与结束时间，否则 `[admin.promo_preview]` 禁用并显示 `[admin.promo_preview_needs_time]`；`[admin.promo_preview]` 在新标签页打开前台预览，显示的是**已保存**的内容；有未保存修改时先提示 `[admin.promo_save_first]`。离开有未保存修改的编辑区时沿用 A04、A10 的离开确认。
 - 所有保存、发布、撤回、提前结束、删除与复制都写后台审计记录（DESIGN 1.23 第 2 条）。
 
 前台预览（`/admin/promotions/<活动 ID>/preview`，DESIGN 1.23 第 11 条）：

@@ -868,8 +868,8 @@
 | `checkout.scheme_promo` | We've applied the sale. Without it, this order would be RM {other} before points — RM {diff} more. | 已按参加活动计算。不参加活动时本单积分抵扣前为 RM {other}，多 RM {diff}。 | Kami gunakan jualan. Tanpanya, pesanan ini RM {other} sebelum mata — RM {diff} lebih. | P05 会员用券或积分、取参加活动且两者不同时；`{diff}` 为差额 |
 | `checkout.scheme_promo_equal` | With or without the sale, this order comes to the same amount before points, so we've applied the sale. | 参加与不参加活动，本单积分抵扣前的金额相同，已按参加活动计算。 | Dengan atau tanpa jualan, jumlah pesanan ini sama sebelum mata, jadi kami gunakan jualan. | P05 两种方案相同时 |
 | `checkout.scheme_no_promo` | We've left out the sale and used what you chose, because that's better value for you. With the sale, this order would be RM {other} before points — RM {diff} more. | 已按不参加活动、使用你所选的优惠计算，对你更划算。参加活动时本单积分抵扣前为 RM {other}，多 RM {diff}。 | Kami tidak gunakan jualan dan gunakan pilihan anda kerana itu lebih jimat. Dengan jualan, pesanan ini RM {other} sebelum mata — RM {diff} lebih. | P05 会员用券或积分、取不参加活动时（此时差额必大于 0）；不预设券与积分都已使用 |
-| `checkout.points_not_combinable` | This sale can't be combined with points, so no points were used. Your points stay in your account. | 本活动不与积分同用，本单未使用积分，积分仍保留在你的账户。 | Jualan ini tidak boleh digabung dengan mata, jadi tiada mata digunakan. Mata anda kekal dalam akaun. | P05，与 `checkout.scheme_promo` 同时显示 |
-| `checkout.coupon_not_applied_sale` | After the sale discount, this order is below the coupon's minimum spend, so the coupon wasn't used. | 活动优惠后本单未达到优惠券的最低消费，未使用该券。 | Selepas diskaun jualan, pesanan ini di bawah perbelanjaan minimum kupon, jadi kupon tidak digunakan. | P05，与 `checkout.scheme_promo` 同时显示 |
+| `checkout.points_not_combinable` | This sale can't be combined with points, so no points were used. Your points stay in your account. | 本活动不与积分同用，本单未使用积分，积分仍保留在你的账户。 | Jualan ini tidak boleh digabung dengan mata, jadi tiada mata digunakan. Mata anda kekal dalam akaun. | P05，取参加活动时（与 `checkout.scheme_promo` 或 `checkout.scheme_promo_equal` 同时显示） |
+| `checkout.coupon_not_applied_sale` | After the sale discount, this order is below the coupon's minimum spend, so the coupon wasn't used. | 活动优惠后本单未达到优惠券的最低消费，未使用该券。 | Selepas diskaun jualan, pesanan ini di bawah perbelanjaan minimum kupon, jadi kupon tidak digunakan. | P05，取参加活动时（与 `checkout.scheme_promo` 或 `checkout.scheme_promo_equal` 同时显示） |
 
 后台：
 
@@ -942,11 +942,11 @@
 | `admin.promo_allow_points` | Can be combined with points | 可与积分同用 | Boleh digabung dengan mata | 默认不勾选 |
 | `admin.promo_combine_hint` | When a member uses a coupon or points, the system compares the order with and without the sale and uses whichever is better for them. Unticked options can't be used together with the sale. | 会员使用优惠券或积分时，系统会比较参加与不参加活动两种算法，取对会员更划算的一种；未勾选的一项不能与活动同时使用。 | Apabila ahli menggunakan kupon atau mata, sistem membandingkan pesanan dengan dan tanpa jualan dan menggunakan yang lebih jimat untuk mereka. Pilihan yang tidak ditanda tidak boleh digunakan bersama jualan. | — |
 | `admin.promo_texts` | Sale text | 活动文案 | Teks jualan | 区块标题 |
-| `admin.copy_title` | Title | 标题 | Tajuk | 1–40 个字符，英文必填 |
+| `admin.copy_title` | Title | 标题 | Tajuk | 0–40 个字符；发布时英文须有（1–40） |
 | `admin.copy_subtitle` | Subtitle | 副标题 | Subtajuk | 0–80 个字符 |
 | `admin.copy_badge` | Badge phrase | 角标短语 | Frasa lencana | 0–12 个字符 |
 | `admin.copy_strip` | Banner text | 横条文字 | Teks sepanduk | 0–60 个字符 |
-| `admin.copy_fallback` | The English title is required. Empty Chinese or Malay text shows the English version. | 英文标题必填；中文或马来文留空时显示英文。 | Tajuk Inggeris diperlukan. Teks Cina atau Melayu yang kosong akan memaparkan versi Inggeris. | — |
+| `admin.copy_fallback` | An English title is needed to publish. Empty Chinese or Malay text shows the English version. | 发布前须填英文标题；中文或马来文留空时显示英文。 | Tajuk Inggeris diperlukan untuk menerbitkan. Teks Cina atau Melayu yang kosong akan memaparkan versi Inggeris. | — |
 | `admin.promo_decoration` | Decoration | 装饰 | Hiasan | 区块标题 |
 | `admin.promo_pack` | Theme pack | 素材包 | Pek tema | — |
 | `admin.pack_cny` | Chinese New Year | 农历新年 | Tahun Baru Cina | 素材包 |
@@ -982,7 +982,10 @@
 | `admin.ai_generating` | Designing… | 正在生成… | Sedang mereka… | 提交中 |
 | `admin.ai_review_copy` | Check the text before you save — it appears on the storefront. | 保存前请检查文字，它会显示在前台。 | Semak teks sebelum menyimpan — ia dipaparkan di kedai. | AI 结果下方 |
 | `admin.ai_apply` | Use this design | 填入编辑区 | Guna reka bentuk ini | 只填回，不保存 |
-| `admin.ai_applied` | Filled in. Preview and save to use it. | 已填入编辑区，预览并保存后才生效。 | Telah diisi. Pratonton dan simpan untuk menggunakannya. | — |
+| `admin.ai_applied` | Filled in. Check it in the editor preview, then save to use it. | 已填入编辑区。请在编辑区预览里检查，保存后才生效。 | Telah diisi. Semak dalam pratonton penyunting, kemudian simpan untuk menggunakannya. | — |
+| `admin.editor_preview` | Editor preview | 编辑区预览 | Pratonton penyunting | A12，随未保存的输入即时更新 |
+| `admin.editor_preview_note` | A sketch with sample products and amounts. Real prices are worked out on the storefront. | 示意图，商品与金额都是示例；实际价格以前台计算为准。 | Lakaran dengan produk dan jumlah contoh. Harga sebenar dikira di kedai. | A12 编辑区预览下方 |
+| `admin.promo_preview_needs_time` | Save a start and end time to preview on the storefront. | 保存开始与结束时间后才能在前台预览。 | Simpan masa mula dan tamat untuk pratonton di kedai. | A12 前台预览按钮禁用时 |
 | `admin.ai_invalid` | The AI's suggestion couldn't be used. Try again, or set the decoration yourself. | AI 的结果不合格。请重试，或手动设置装饰。 | Cadangan AI tidak dapat digunakan. Cuba lagi, atau tetapkan hiasan sendiri. | — |
 | `admin.ai_unavailable` | AI isn't available right now. You can still set the decoration yourself. | AI 暂不可用，仍可手动设置装饰。 | AI tidak tersedia sekarang. Anda masih boleh menetapkan hiasan sendiri. | 超时、出错或余额不足 |
 | `admin.ai_daily_limit` | Today's AI limit ({count}) has been reached. Try again tomorrow, or set the decoration yourself. | 今天的 AI 次数（{count} 次）已用完。请明天再试，或手动设置装饰。 | Had AI hari ini ({count}) telah dicapai. Cuba esok, atau tetapkan hiasan sendiri. | — |
