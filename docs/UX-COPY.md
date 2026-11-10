@@ -1,7 +1,16 @@
 # Acuven Shop 三语文案与演示提示（审阅稿）
 
-> **审阅稿。0.7 已于 2026-10-05 经 Kelvin 认可（记录见 `docs/HANDOFF.md`）；0.8 只新增后台登录页过渡状态的文案键 `admin.logged_in`，其余各键与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只新增 `admin.reviewed_by`，其余各键与 0.8 相同，Kelvin 已于 2026-10-06 认可；0.10 只新增 `admin.email` 并停用 `admin.username`，Kelvin 已于 2026-10-07 批准（记录见 `docs/HANDOFF.md`）；0.11 只新增 A05 新建优惠券被拒时的 `admin.coupon_code_taken` 与 `admin.coupon_invalid`，Kelvin 已于 2026-10-12 认可（记录见 `docs/HANDOFF.md`）。0.12 只新增 Stripe 测试环境支付所需的文案键，其余各键与 0.11 相同，Kelvin 已于 2026-10-15 审阅通过（记录见 `docs/HANDOFF.md`）。0.13 只新增 `admin.stripe_refund_not_sent`，其余各键与 0.12 相同，Kelvin 已于 2026-10-23 审阅通过（记录见 `docs/HANDOFF.md`）。0.14 只新增 `pay.member_reopen`，其余各键与 0.13 相同，Kelvin 已于 2026-10-24 审阅通过（记录见 `docs/HANDOFF.md`）。0.15 只新增 `admin.sms_not_configured`，其余各键与 0.14 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.16 只新增 A06 增删与保存结果所需的文案键，其余各键与 0.15 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.17 只新增 `admin.shipping_my_west` 与 `admin.shipping_my_east` 并把 `admin.shipping_my_state` 改为区块标题，其余各键与 0.16 相同，Kelvin 已于 2026-10-28 审阅通过（记录见 `docs/HANDOFF.md`）。0.18 按 DESIGN 1.18 新增 A04、A07、A09、A10、整单上限与数量直接输入的文案键，并改 `admin.image_rules`、`admin.max_per_order_hint` 与 `admin.initial_stock_note`，其余各键与 0.17 相同，Kelvin 已于 2026-10-30 审阅通过（记录见 `docs/HANDOFF.md`）。0.19 只新增 A08 店铺标志图的 4 个键，Kelvin 已于 2026-11-05 批准；0.20 只改三个已有键的「已告警运营者」措辞，Kelvin 已于 2026-11-06 认可（记录见 `docs/HANDOFF.md`）。**
-> 版本 0.21（2026-11-08），运营者修订（Claude Code），在 0.20（提交 `5be346e`）上按已批准的 `docs/DESIGN.md` 1.22「Stripe 测试环境支付」第 11 条，只新增 A11 后台 Stripe 待处理所需的 26 个文案键，其余各键与 0.20 相同；页面见 [UX.md](UX.md) 0.19。以下为 0.20 及更早版本的历史说明：版本 0.20（2026-11-06），运营者修订（Claude Code），在 0.19（提交 `a870f78`）上按已批准的 `docs/DESIGN.md` 1.21「运营告警邮件」第 7 条（告警是记日志并尽力发信，不保证送达），只改 `admin.stock_reset_failed`、`admin.stripe_refund_not_sent` 与 `admin.stripe_refund_blocked` 三个已有键的三语文字：「已告警运营者」改为「已记录运营告警」，其余字句不变；页面结构不变（UX 0.18）。以下为 0.19 及更早版本的历史说明：版本 0.19（2026-11-05），运营者修订（Claude Code），在 0.18（最近一次改动为提交 `d2fe571`）上按 `docs/DESIGN.md` 1.20 候批稿「计价、优惠、积分与库存」第 15 条新增 A08 店铺标志图的 4 个键，页面结构见 [UX.md](UX.md) 0.18。以下为 0.18 及更早版本的历史说明：版本 0.18（2026-10-30），运营者修订（Claude Code），在 0.17（提交 `80e3775`）上按已批准的 `docs/DESIGN.md` 1.18 新增 A04、A07、A09、A10 与整单上限的文案键，并改动 `admin.image_rules`、`admin.max_per_order_hint` 与 `admin.initial_stock_note`，页面结构见 [UX.md](UX.md) 0.17。以下为 0.17 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.17（2026-10-28），运营者修订（Claude Code），在 0.16（提交 `e9a1c93`）上按 Kelvin 2026-10-28 的决定新增 A06 的 `admin.shipping_my_west` 与 `admin.shipping_my_east`，并把 `admin.shipping_my_state` 改为区块标题「Malaysia」，页面结构见 [UX.md](UX.md) 0.16。以下为 0.16 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.16（2026-10-27），运营者修订（Claude Code），在 0.15（提交 `1c668e6`）上按 Kelvin 2026-10-27 的决定新增 A06 的 `admin.remove`、`admin.add_fx`、`admin.fx_currency`、`admin.fx_decimals`、`admin.fx_rate_new`、`admin.rates_saved`、`admin.rates_invalid`、`admin.rates_changed` 与 `admin.reload`，页面结构见 [UX.md](UX.md) 0.15；版本 0.15（2026-10-27），运营者修订（Claude Code），在 0.14（提交 `450c2fa`）上按 Kelvin 2026-10-27 的决定新增 `admin.sms_not_configured`，页面结构见 [UX.md](UX.md) 0.14；版本 0.14（2026-10-23），运营者修订（Claude Code），在 0.13（提交 `5e69c3e`）上按 Kelvin 2026-10-23 的决定新增 `pay.member_reopen`，页面结构见 [UX.md](UX.md) 0.13；版本 0.13（2026-10-23），运营者修订（Claude Code），在 0.12（提交 `e922fcf`）上按 Kelvin 2026-10-23 的决定新增 `admin.stripe_refund_not_sent`，页面结构见 [UX.md](UX.md) 0.12；版本 0.12（2026-10-15），运营者修订（Claude Code），在 0.11（提交 `d943045`）上按已批准的 `docs/DESIGN.md` 1.12「Stripe 测试环境支付」与 `docs/REQUIREMENTS.md` 1.13（Kelvin 2026-10-15 批准，记录见 `docs/HANDOFF.md` 0.50）新增 Stripe 测试环境支付的文案键，页面结构见 [UX.md](UX.md) 0.11；版本 0.11（2026-10-12），运营者修订（Claude Code），在 0.10（提交 `eb2bdc4`）上新增 `admin.coupon_code_taken` 与 `admin.coupon_invalid`；0.10（2026-10-07）在 0.9（提交 `1a65f6b`）上新增 `admin.email`；0.9（2026-10-06）在 0.8（提交 `f333b19`）上新增 `admin.reviewed_by`；0.8（2026-10-05）在 0.7（提交 `61f7b8a`）上新增 `admin.logged_in`；0.7 在 0.6（提交 `2d13250`）上新增 `admin.logout`；0.6（2026-10-01）在 0.5（提交 `e3b3505`）上增补短信验证开关所需的文案键，并修改 `privacy.fictional`、`privacy.sms` 两键。页面结构与线框见 [UX.md](UX.md)（0.10）；依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；「提示」列中依据 DESIGN 的小节除特别注明外仍指 1.9。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
+> **审阅稿。0.7 已于 2026-10-05 经 Kelvin 认可（记录见 `docs/HANDOFF.md`）；0.8 只新增后台登录页过渡状态的文案键 `admin.logged_in`，其余各键与 0.7 相同，Kelvin 已于 2026-10-05 认可；0.9 只新增 `admin.reviewed_by`，其余各键与 0.8 相同，Kelvin 已于 2026-10-06 认可；0.10 只新增 `admin.email` 并停用 `admin.username`，Kelvin 已于 2026-10-07 批准（记录见 `docs/HANDOFF.md`）；0.11 只新增 A05 新建优惠券被拒时的 `admin.coupon_code_taken` 与 `admin.coupon_invalid`，Kelvin 已于 2026-10-12 认可（记录见 `docs/HANDOFF.md`）。0.12 只新增 Stripe 测试环境支付所需的文案键，其余各键与 0.11 相同，Kelvin 已于 2026-10-15 审阅通过（记录见 `docs/HANDOFF.md`）。0.13 只新增 `admin.stripe_refund_not_sent`，其余各键与 0.12 相同，Kelvin 已于 2026-10-23 审阅通过（记录见 `docs/HANDOFF.md`）。0.14 只新增 `pay.member_reopen`，其余各键与 0.13 相同，Kelvin 已于 2026-10-24 审阅通过（记录见 `docs/HANDOFF.md`）。0.15 只新增 `admin.sms_not_configured`，其余各键与 0.14 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.16 只新增 A06 增删与保存结果所需的文案键，其余各键与 0.15 相同，Kelvin 已于 2026-10-27 审阅通过（记录见 `docs/HANDOFF.md`）。0.17 只新增 `admin.shipping_my_west` 与 `admin.shipping_my_east` 并把 `admin.shipping_my_state` 改为区块标题，其余各键与 0.16 相同，Kelvin 已于 2026-10-28 审阅通过（记录见 `docs/HANDOFF.md`）。0.18 按 DESIGN 1.18 新增 A04、A07、A09、A10、整单上限与数量直接输入的文案键，并改 `admin.image_rules`、`admin.max_per_order_hint` 与 `admin.initial_stock_note`，其余各键与 0.17 相同，Kelvin 已于 2026-10-30 审阅通过（记录见 `docs/HANDOFF.md`）。0.19 只新增 A08 店铺标志图的 4 个键，Kelvin 已于 2026-11-05 批准；0.20 只改三个已有键的「已告警运营者」措辞，Kelvin 已于 2026-11-06 认可（记录见 `docs/HANDOFF.md`）。0.21 只新增 A11 后台 Stripe 待处理所需的 26 个文案键，Kelvin 已于 2026-11-08 审阅通过（记录见 `docs/HANDOFF.md`）。**
+> 版本 0.22（2026-11-10），运营者修订（Claude Code），在 0.21（提交 `bb8adb7`）上按已批准的 `docs/DESIGN.md` 1.23「节日促销活动」与 `docs/REQUIREMENTS.md` 1.19（Kelvin 2026-11-10 批准，记录见 `docs/HANDOFF.md` 0.92），只新增「11. 节日促销活动」一节的文案键与第 10 节的导航项 `admin.nav_promotions`（排在 `admin.nav_coupons` 之后），其余各键与 0.21 相同；页面见 [UX.md](UX.md) 0.20。以下为 0.21 及更早版本的历史说明：版本 0.21（2026-11-08），运营者修订（Claude Code），在 0.20（提交 `5be346e`）上按已批准的 `docs/DESIGN.md` 1.22「Stripe 测试环境支付」第 11 条，只新增 A11 后台 Stripe 待处理所需的 26 个文案键，其余各键与 0.20 相同；页面见 [UX.md](UX.md) 0.19。以下为 0.20 及更早版本的历史说明：版本 0.20（2026-11-06），运营者修订（Claude Code），在 0.19（提交 `a870f78`）上按已批准的 `docs/DESIGN.md` 1.21「运营告警邮件」第 7 条（告警是记日志并尽力发信，不保证送达），只改 `admin.stock_reset_failed`、`admin.stripe_refund_not_sent` 与 `admin.stripe_refund_blocked` 三个已有键的三语文字：「已告警运营者」改为「已记录运营告警」，其余字句不变；页面结构不变（UX 0.18）。以下为 0.19 及更早版本的历史说明：版本 0.19（2026-11-05），运营者修订（Claude Code），在 0.18（最近一次改动为提交 `d2fe571`）上按 `docs/DESIGN.md` 1.20 候批稿「计价、优惠、积分与库存」第 15 条新增 A08 店铺标志图的 4 个键，页面结构见 [UX.md](UX.md) 0.18。以下为 0.18 及更早版本的历史说明：版本 0.18（2026-10-30），运营者修订（Claude Code），在 0.17（提交 `80e3775`）上按已批准的 `docs/DESIGN.md` 1.18 新增 A04、A07、A09、A10 与整单上限的文案键，并改动 `admin.image_rules`、`admin.max_per_order_hint` 与 `admin.initial_stock_note`，页面结构见 [UX.md](UX.md) 0.17。以下为 0.17 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.17（2026-10-28），运营者修订（Claude Code），在 0.16（提交 `e9a1c93`）上按 Kelvin 2026-10-28 的决定新增 A06 的 `admin.shipping_my_west` 与 `admin.shipping_my_east`，并把 `admin.shipping_my_state` 改为区块标题「Malaysia」，页面结构见 [UX.md](UX.md) 0.16。以下为 0.16 及更早版本的历史说明，其中的版本依据与交叉引用指当时的版本：版本 0.16（2026-10-27），运营者修订（Claude Code），在 0.15（提交 `1c668e6`）上按 Kelvin 2026-10-27 的决定新增 A06 的 `admin.remove`、`admin.add_fx`、`admin.fx_currency`、`admin.fx_decimals`、`admin.fx_rate_new`、`admin.rates_saved`、`admin.rates_invalid`、`admin.rates_changed` 与 `admin.reload`，页面结构见 [UX.md](UX.md) 0.15；版本 0.15（2026-10-27），运营者修订（Claude Code），在 0.14（提交 `450c2fa`）上按 Kelvin 2026-10-27 的决定新增 `admin.sms_not_configured`，页面结构见 [UX.md](UX.md) 0.14；版本 0.14（2026-10-23），运营者修订（Claude Code），在 0.13（提交 `5e69c3e`）上按 Kelvin 2026-10-23 的决定新增 `pay.member_reopen`，页面结构见 [UX.md](UX.md) 0.13；版本 0.13（2026-10-23），运营者修订（Claude Code），在 0.12（提交 `e922fcf`）上按 Kelvin 2026-10-23 的决定新增 `admin.stripe_refund_not_sent`，页面结构见 [UX.md](UX.md) 0.12；版本 0.12（2026-10-15），运营者修订（Claude Code），在 0.11（提交 `d943045`）上按已批准的 `docs/DESIGN.md` 1.12「Stripe 测试环境支付」与 `docs/REQUIREMENTS.md` 1.13（Kelvin 2026-10-15 批准，记录见 `docs/HANDOFF.md` 0.50）新增 Stripe 测试环境支付的文案键，页面结构见 [UX.md](UX.md) 0.11；版本 0.11（2026-10-12），运营者修订（Claude Code），在 0.10（提交 `eb2bdc4`）上新增 `admin.coupon_code_taken` 与 `admin.coupon_invalid`；0.10（2026-10-07）在 0.9（提交 `1a65f6b`）上新增 `admin.email`；0.9（2026-10-06）在 0.8（提交 `f333b19`）上新增 `admin.reviewed_by`；0.8（2026-10-05）在 0.7（提交 `61f7b8a`）上新增 `admin.logged_in`；0.7 在 0.6（提交 `2d13250`）上新增 `admin.logout`；0.6（2026-10-01）在 0.5（提交 `e3b3505`）上增补短信验证开关所需的文案键，并修改 `privacy.fictional`、`privacy.sms` 两键。页面结构与线框见 [UX.md](UX.md)（0.10）；依据 `docs/REQUIREMENTS.md` 1.12 候批稿与 `docs/DESIGN.md` 1.11 候批稿；「提示」列中依据 DESIGN 的小节除特别注明外仍指 1.9。Kelvin 2026-09-30 对待决问题 Q11、Q14、Q16、Q17、Q18、Q19 的决定见 `docs/HANDOFF.md`。
+
+## 0.22 修订要点
+
+- 依据已批准的 `docs/DESIGN.md` 1.23「节日促销活动」与 UX 0.20 的 P01–P05、P09、P15、A02、A08、A12：新增「11. 节日促销活动」一节，含前台的 `promo.*`（角标、倒计时、规则说明模板、专题页、预览条），购物车与结账新增的 `cart.*`、`checkout.*`，以及后台的 `admin.*`（A12 列表与编辑区、规则、文案、装饰、海报、AI、前台预览的页签、A08 与 A02 的说明）。
+- 后台导航项 `admin.nav_promotions` 放在第 10 节的导航项里、`admin.nav_coupons` 之后，与 UX 0.20「管理后台总体」的导航顺序一致（`frontend/src/components/AdminFrame.test.tsx` 按本表导航键的先后核对导航顺序）。
+- 规则说明一律用 `promo.rule_*` 模板按规则参数生成，不显示 AI 或管理员写的规则描述（DESIGN 1.23 第 10 条）。活动标题、副标题、角标短语、横条文字与海报替代文字是管理员（或 AI 提案）写的活动文案，不在本表。
+- 素材包名称 `admin.pack_*` 共 7 个，与 DESIGN 1.23 第 12 条的清单一致；节日配色以 `admin.palette_of` 套素材包名称显示，不另设键。装饰位变体的名称用 `admin.variant_n`。
+- 沿用的键：`common.create`、`common.save`、`common.cancel`、`common.lang_en`/`zh`/`ms`、`list.results_count`、`list.load_more`、`list.price_from`、`common.price_myr`、`cart.checkout`、`cart.subtotal`、`admin.filter_status`、`admin.reload`、`admin.upload`、`admin.image_rules`、`admin.rules_apply_new`、`admin.unsaved_confirm`。
+- 已有键未改动；前端尚未使用新键，`frontend/src/i18n/copy.ts` 不改。
 
 ## 0.21 修订要点
 
@@ -544,6 +553,7 @@
 | `admin.nav_products` | Products | 商品 | Produk | — |
 | `admin.nav_categories` | Categories | 分类 | Kategori | A10 导航与页标题，排在 `admin.nav_products` 之后（0.18） |
 | `admin.nav_coupons` | Coupons | 优惠券 | Kupon | — |
+| `admin.nav_promotions` | Promotions | 促销活动 | Promosi | A12 导航与页标题，排在 `admin.nav_coupons` 之后（0.22） |
 | `admin.nav_shipping` | Shipping & demo rates | 运费与演示汇率 | Penghantaran & kadar demo | — |
 | `admin.nav_stock_resets` | Stock resets | 库存重置 | Tetapan semula stok | — |
 | `admin.filter_status` | Status | 状态 | Status | — |
@@ -807,6 +817,197 @@
 | `admin.stripe_void_unavailable` | Stripe isn't available right now, and this record already shows a payment, so it can't be voided. Try again later. | Stripe 暂不可用，而这条记录已显示付款，不能作废。请稍后再试。 | Stripe tidak tersedia buat masa ini dan rekod ini sudah menunjukkan bayaran, jadi ia tidak boleh dibatalkan. Cuba lagi kemudian. | A11 作废结果：unavailable（0.21） |
 | `admin.stripe_pending_changed` | This record has changed or no longer needs handling. The list has been reloaded. | 这条记录已有变化或已无需处理，列表已重新读取。 | Rekod ini telah berubah atau tidak lagi perlu diuruskan. Senarai telah dimuat semula. | A11 作废或重试时记录已变化或不存在（404）（0.21） |
 | `admin.stripe_late_refund_retried` | A new refund attempt has been created and will be sent to Stripe. Check its result in the Stripe dashboard. | 已建立新的退款尝试，会发送到 Stripe；结果请到 Stripe 后台核对。 | Cubaan bayaran balik baharu telah dibuat dan akan dihantar ke Stripe. Semak keputusannya di papan pemuka Stripe. | A11 重试成功（0.21） |
+
+## 11. 节日促销活动（P01–P05、P09、P15、A02、A08、A12；0.22）
+
+前台：
+
+| 键 | English | 中文 | Bahasa Melayu | 提示 |
+| --- | --- | --- | --- | --- |
+| `promo.nav` | Sale | 活动 | Jualan | 页头导航，只在有活动生效时显示，排在 `common.nav_shop` 之后 |
+| `promo.a11y_original` | Original price | 原价 | Harga asal | 划线原价的读屏标签 |
+| `promo.a11y_sale` | Sale price | 活动价 | Harga jualan | 活动价的读屏标签 |
+| `promo.badge_percent` | −{percent}% | −{percent}% | −{percent}% | 打折（百分比）的角标 |
+| `promo.badge_amount` | RM {amount} off | 立减 RM {amount} | Jimat RM {amount} | 打折（每件直降）的角标 |
+| `promo.badge_bxgy_free` | Buy {x} get {y} free | 买 {x} 送 {y} | Beli {x} percuma {y} | 买 X 享 Y，享受的件 100% 时的角标 |
+| `promo.badge_bxgy_pct` | Buy {x}, {y} more {percent}% off | 买 {x} 件，再 {y} 件减 {percent}% | Beli {x}, {y} lagi diskaun {percent}% | 买 X 享 Y，享受的件不足 100% 时的角标 |
+| `promo.ends_in` | Ends in {time} | 距结束还有 {time} | Tamat dalam {time} | 倒计时；`{time}` 用 `promo.countdown_days` 或 `promo.countdown` |
+| `promo.countdown_days` | {d}d {hh}:{mm}:{ss} | {d} 天 {hh}:{mm}:{ss} | {d} hari {hh}:{mm}:{ss} | 剩余 1 天以上 |
+| `promo.countdown` | {hh}:{mm}:{ss} | {hh}:{mm}:{ss} | {hh}:{mm}:{ss} | 剩余不足 1 天 |
+| `promo.shop_now` | Shop the sale | 去逛活动 | Beli-belah jualan | P01 模板海报按钮 → P15 |
+| `promo.view_all` | See all sale items | 查看全部活动商品 | Lihat semua item jualan | P02 横条与 P03 规则区 → P15 |
+| `promo.detail_title` | Sale offers | 活动优惠 | Tawaran jualan | P03 活动规则区标题，其后显示活动标题 |
+| `promo.rule_item_percent` | {percent}% off | 立减 {percent}% | Diskaun {percent}% | 打折规则说明（百分比） |
+| `promo.rule_item_amount` | RM {amount} off each item | 每件立减 RM {amount} | Jimat RM {amount} setiap item | 打折规则说明（每件直降） |
+| `promo.rule_bxgy_free` | Buy {x}, get {y} free — the lowest-priced items are free | 买 {x} 送 {y}，送价格最低的件 | Beli {x}, percuma {y} — item paling murah adalah percuma | 买 X 享 Y 规则说明（100%） |
+| `promo.rule_bxgy_pct` | Buy {x}, get {y} more at {percent}% off — the discount goes to the lowest-priced items | 买 {x} 件，再 {y} 件减 {percent}%，优惠给价格最低的件 | Beli {x}, {y} lagi diskaun {percent}% — diskaun untuk item paling murah | 买 X 享 Y 规则说明（不足 100%） |
+| `promo.rule_tier_amount` | Spend RM {threshold}, save RM {amount} | 满 RM {threshold} 减 RM {amount} | Belanja RM {threshold}, jimat RM {amount} | 满额减每一档一条；门槛按商品级优惠后的金额判断 |
+| `promo.rule_tier_percent` | Spend RM {threshold}, get {percent}% off | 满 RM {threshold} 减 {percent}% | Belanja RM {threshold}, diskaun {percent}% | 满额折每一档一条 |
+| `promo.rule_free_shipping` | Free sample shipping on orders from RM {threshold} | 满 RM {threshold} 免示例运费 | Penghantaran contoh percuma untuk pesanan dari RM {threshold} | 免运费规则说明 |
+| `promo.rule_free_shipping_all` | Free sample shipping on all orders | 全部订单免示例运费 | Penghantaran contoh percuma untuk semua pesanan | 免运费门槛为 0 时 |
+| `promo.rule_scope_with_items` | Applies to: {names}, and the items below | 适用：{names}，以及下方列出的商品 | Untuk: {names}, dan item di bawah | P15 规则同时含分类与单件商品时 |
+| `promo.rule_scope` | Applies to: {names} | 适用：{names} | Untuk: {names} | P15 商品级规则含分类时附在说明后；`{names}` 为分类名称，以当前语言的顿号或逗号分隔 |
+| `promo.coupon_not_combinable` | This sale can't be combined with coupons. | 本活动不与优惠券同用。 | Jualan ini tidak boleh digabung dengan kupon. | 活动关闭了与优惠券同用时 |
+| `promo.points_not_combinable` | This sale can't be combined with points. | 本活动不与积分同用。 | Jualan ini tidak boleh digabung dengan mata. | 活动关闭了与积分同用时 |
+| `promo.demo_hint` | This is a demo sale. Prices and discounts are examples; no real money is charged. | 这是演示活动，价格与优惠都是示例，不会真实扣款。 | Ini jualan demo. Harga dan diskaun hanyalah contoh; tiada wang sebenar dicaj. | ★ P15 |
+| `promo.rules_title` | Offers | 活动规则 | Tawaran | P15 |
+| `promo.products_title` | Sale items | 活动商品 | Item jualan | P15 |
+| `promo.order_level_only` | This sale applies to your whole order, so every product counts. | 本活动按整单计算，全部商品都适用。 | Jualan ini dikira untuk keseluruhan pesanan, jadi semua produk layak. | P15 只有整单级规则时 |
+| `promo.browse_all` | Browse all products | 浏览全部商品 | Lihat semua produk | P15 → P02 |
+| `promo.ended` | There's no sale running right now. | 目前没有进行中的活动。 | Tiada jualan sedang berjalan sekarang. | P15 没有生效活动时 |
+| `promo.preview_bar` | Preview — only you can see this sale here. Checkout is turned off. | 预览：只有你看得到这个活动，预览中不能结账。 | Pratonton — hanya anda boleh melihat jualan ini di sini. Pembayaran dimatikan. | A12 前台预览顶部常驻 |
+| `promo.preview_exit` | Close preview | 关闭预览 | Tutup pratonton | A12 前台预览 |
+| `promo.preview_no_checkout` | Checkout is off in preview. | 预览中不能结账。 | Pembayaran dimatikan dalam pratonton. | A12 前台预览的 P04 |
+| `cart.promo_discount` | Sale discount (estimate) | 活动优惠（暂算） | Diskaun jualan (anggaran) | P04、P05 选定收货国家前；为 0 时不显示 |
+| `cart.after_promo` | After sale discount (estimate) | 活动后金额（暂算） | Selepas diskaun jualan (anggaran) | P04；P05 选定收货国家前的手机折叠摘要与底栏；活动优惠为 0 时不显示 |
+| `cart.hint_tier_amount` | Add RM {amount} more to save RM {save}. | 再买 RM {amount}，可减 RM {save}。 | Tambah RM {amount} lagi untuk jimat RM {save}. | P04 凑单提示（满额减下一档） |
+| `cart.hint_tier_percent` | Add RM {amount} more to get {percent}% off. | 再买 RM {amount}，可减 {percent}%。 | Tambah RM {amount} lagi untuk diskaun {percent}%. | P04 凑单提示（满额折下一档） |
+| `cart.hint_free_shipping` | Add RM {amount} more for free sample shipping. | 再买 RM {amount}，免示例运费。 | Tambah RM {amount} lagi untuk penghantaran contoh percuma. | P04 凑单提示（免运费） |
+| `cart.free_shipping_reached` | You've unlocked free sample shipping. | 已达免示例运费门槛。 | Anda layak untuk penghantaran contoh percuma. | P04 已达免运费门槛 |
+| `cart.hint_bxgy` | {rule}: add {n} more to get {y} more at the offer price. | {rule}：再加 {n} 件，可多享 {y} 件优惠。 | {rule}: tambah {n} lagi untuk {y} lagi item pada harga tawaran. | P04；`{rule}` 为该规则的角标文字 |
+| `cart.member_scheme_note` | Members: if you use a coupon or points at checkout, we'll work out the order both with and without the sale and use whichever is better for you. | 会员：结账时若使用优惠券或积分，系统会分别按参加与不参加活动计算，取对你更划算的一种。 | Ahli: jika anda guna kupon atau mata semasa pembayaran, kami akan mengira pesanan dengan dan tanpa jualan dan menggunakan yang lebih jimat untuk anda. | P04 已登录会员且有活动优惠时 |
+| `checkout.summary_promo` | Sale discount | 活动优惠 | Diskaun jualan | P05、P09、A02 金额明细；游客与会员都显示 |
+| `checkout.shipping_free` | Free (was RM {amount}) | 免运费（原 RM {amount}） | Percuma (asal RM {amount}) | P05、P09、A02 运费行；活动免运费时 |
+| `checkout.scheme_promo` | We've applied the sale. Without it, this order would be RM {other} before points — RM {diff} more. | 已按参加活动计算。不参加活动时本单积分抵扣前为 RM {other}，多 RM {diff}。 | Kami gunakan jualan. Tanpanya, pesanan ini RM {other} sebelum mata — RM {diff} lebih. | P05 会员用券或积分、取参加活动且两者不同时；`{diff}` 为差额 |
+| `checkout.scheme_promo_equal` | With or without the sale, this order comes to the same amount before points, so we've applied the sale. | 参加与不参加活动，本单积分抵扣前的金额相同，已按参加活动计算。 | Dengan atau tanpa jualan, jumlah pesanan ini sama sebelum mata, jadi kami gunakan jualan. | P05 两种方案相同时 |
+| `checkout.scheme_no_promo` | We've left out the sale and used what you chose, because that's better value for you. With the sale, this order would be RM {other} before points — RM {diff} more. | 已按不参加活动、使用你所选的优惠计算，对你更划算。参加活动时本单积分抵扣前为 RM {other}，多 RM {diff}。 | Kami tidak gunakan jualan dan gunakan pilihan anda kerana itu lebih jimat. Dengan jualan, pesanan ini RM {other} sebelum mata — RM {diff} lebih. | P05 会员用券或积分、取不参加活动时（此时差额必大于 0）；不预设券与积分都已使用 |
+| `checkout.coupon_not_combinable` | This sale can't be combined with coupons, so your coupon wasn't used. It's still available. | 本活动不与优惠券同用，本单未使用该券，券仍可再用。 | Jualan ini tidak boleh digabung dengan kupon, jadi kupon anda tidak digunakan. Ia masih boleh digunakan. | P05，取参加活动时（与 `checkout.scheme_promo` 或 `checkout.scheme_promo_equal` 同时显示） |
+| `checkout.points_not_combinable` | This sale can't be combined with points, so no points were used. Your points stay in your account. | 本活动不与积分同用，本单未使用积分，积分仍保留在你的账户。 | Jualan ini tidak boleh digabung dengan mata, jadi tiada mata digunakan. Mata anda kekal dalam akaun. | P05，取参加活动时（与 `checkout.scheme_promo` 或 `checkout.scheme_promo_equal` 同时显示） |
+| `checkout.coupon_not_applied_sale` | After the sale discount, this order is below the coupon's minimum spend, so the coupon wasn't used. | 活动优惠后本单未达到优惠券的最低消费，未使用该券。 | Selepas diskaun jualan, pesanan ini di bawah perbelanjaan minimum kupon, jadi kupon tidak digunakan. | P05，取参加活动时（与 `checkout.scheme_promo` 或 `checkout.scheme_promo_equal` 同时显示） |
+
+后台：
+
+| 键 | English | 中文 | Bahasa Melayu | 提示 |
+| --- | --- | --- | --- | --- |
+| `admin.promo_demo_note` | Sale prices and discounts are demo amounts; no real money moves. | 活动价格与优惠都是演示金额，不发生真实资金流动。 | Harga dan diskaun jualan ialah jumlah demo; tiada wang sebenar berpindah. | ★ A12 |
+| `admin.promo_name` | Internal name | 内部名称 | Nama dalaman | 只在后台显示，1–100 个字符 |
+| `admin.promo_time` | Time (Malaysia) | 时间（马来西亚） | Masa (Malaysia) | A12 列表列头 |
+| `admin.promo_rule_count` | Rules | 规则数 | Peraturan | A12 列表列头 |
+| `admin.promo_draft` | Draft | 草稿 | Draf | 状态值 |
+| `admin.promo_scheduled` | Scheduled | 未开始 | Dijadualkan | 状态值：已发布、未到开始时间 |
+| `admin.promo_running` | Running | 进行中 | Sedang berjalan | 状态值 |
+| `admin.promo_ended` | Ended | 已结束 | Tamat | 状态值 |
+| `admin.promo_open` | Open | 打开 | Buka | A12 列表 |
+| `admin.promo_empty` | No promotions yet. | 还没有促销活动。 | Belum ada promosi. | A12 列表为空 |
+| `admin.promo_back` | All promotions | 全部活动 | Semua promosi | 编辑区回到列表 |
+| `admin.promo_publish` | Publish | 发布 | Terbitkan | 草稿 |
+| `admin.promo_withdraw` | Back to draft | 撤回为草稿 | Kembali ke draf | 已发布未开始 |
+| `admin.promo_end_now` | End now | 提前结束 | Tamatkan sekarang | 进行中 |
+| `admin.promo_copy` | Copy as new draft | 复制为新草稿 | Salin sebagai draf baharu | 任何状态 |
+| `admin.promo_delete` | Delete draft | 删除草稿 | Padam draf | 草稿 |
+| `admin.promo_preview` | Preview on the storefront | 在前台预览 | Pratonton di kedai | 新标签页打开前台预览 |
+| `admin.promo_more` | More | 更多 | Lagi | 手机操作栏 |
+| `admin.promo_saved` | Saved. | 已保存。 | Disimpan. | 保存、发布、撤回、提前结束成功 |
+| `admin.promo_changed` | This promotion was changed elsewhere. Reload to see the latest version; your edits here weren't saved. | 这个活动已在别处被修改。请重新读取最新版本；本页的修改未保存。 | Promosi ini telah diubah di tempat lain. Muat semula untuk melihat versi terkini; suntingan anda di sini tidak disimpan. | 版本不符，配 `admin.reload` |
+| `admin.promo_field_invalid` | This value isn't allowed. See the note under this field. | 这个值不合规定，请看本栏下方的说明。 | Nilai ini tidak dibenarkan. Lihat nota di bawah ruangan ini. | A12 提交前逐栏检查不合格时 |
+| `admin.promo_invalid_other` | Some values weren't accepted. Check the dates, numbers and text lengths, then try again. | 有取值未被接受，请检查日期、数字与文字长度后重试。 | Sesetengah nilai tidak diterima. Semak tarikh, nombor dan panjang teks, kemudian cuba lagi. | A12 服务端拒绝而原因不是重叠或发布条件时 |
+| `admin.poster_save_first` | Save this promotion first, then upload images. | 请先保存这个活动，再上传图片。 | Simpan promosi ini dahulu, kemudian muat naik imej. | A12 新建未保存时上传按钮禁用 |
+| `admin.promo_invalid` | Not saved. Please fix: | 未保存，请修正： | Tidak disimpan. Sila betulkan: | 其下逐条列出问题 |
+| `admin.promo_overlap` | The time overlaps another published promotion: {name}. | 时间与另一个已发布的活动重叠：{name}。 | Masa bertindih dengan promosi lain yang diterbitkan: {name}. | `{name}` 为对方的内部名称 |
+| `admin.promo_scope_overlap` | {product} is in more than one item rule. | {product} 同时属于多条商品级规则。 | {product} berada dalam lebih daripada satu peraturan item. | 商品级规则重叠 |
+| `admin.promo_publish_missing` | To publish, add at least one rule, an English title, a start time (it may already have passed) and an end time that's still ahead; with an image poster, also both images and English alt text. | 发布需要至少一条规则、英文标题、开始时间与晚于现在的结束时间；海报为上传图时还需两张图与英文替代文字。 | Untuk menerbitkan, tambah sekurang-kurangnya satu peraturan, tajuk Inggeris, masa mula (boleh sudah berlalu) dan masa tamat yang belum berlalu; untuk poster imej, tambah juga kedua-dua imej dan teks alternatif Inggeris. | 发布条件不满足 |
+| `admin.promo_end_confirm` | End this promotion now? It can't be restarted. | 现在结束这个活动？结束后不能恢复。 | Tamatkan promosi ini sekarang? Ia tidak boleh dimulakan semula. | 确认框 |
+| `admin.promo_withdraw_confirm` | Move this promotion back to draft? It won't start until you publish it again. | 把这个活动撤回为草稿？重新发布之前不会开始。 | Kembalikan promosi ini ke draf? Ia tidak akan bermula sehingga anda menerbitkannya semula. | 确认框 |
+| `admin.promo_delete_confirm` | Delete this draft? This can't be undone. | 删除这个草稿？删除后无法恢复。 | Padam draf ini? Ini tidak boleh dibuat asal. | 确认框 |
+| `admin.promo_copied` | Copied. This is the new draft; set its time before publishing. | 已复制。这是新草稿，发布前请设定时间。 | Disalin. Ini draf baharu; tetapkan masanya sebelum diterbitkan. | 复制成功 |
+| `admin.promo_ended_readonly` | This promotion has ended. It can only be copied. | 这个活动已结束，只能复制。 | Promosi ini telah tamat. Ia hanya boleh disalin. | 已结束 |
+| `admin.promo_save_first` | Save your changes first. Preview, publish and the other actions use the saved version. | 请先保存。预览、发布等操作都按已保存的内容进行。 | Simpan perubahan dahulu. Pratonton, terbitan dan tindakan lain menggunakan versi yang disimpan. | 有未保存修改时点预览 |
+| `admin.promo_basic` | Basics | 基本信息 | Asas | 区块标题 |
+| `admin.promo_start` | Starts | 开始 | Mula | — |
+| `admin.promo_end` | Ends | 结束 | Tamat | — |
+| `admin.promo_time_note` | Malaysia time (UTC+8), to the minute. It must end after it starts, and last up to 92 days. | 马来西亚时间（UTC+8），精确到分钟；结束须晚于开始，最长 92 天。 | Masa Malaysia (UTC+8), hingga minit. Ia mesti tamat selepas bermula, dan berlangsung sehingga 92 hari. | — |
+| `admin.promo_rules_locked` | This promotion has started, so its time, rules and combining options can't be changed. You can still edit its text and decoration. | 活动已开始，时间、规则与同用开关不能再改；文案与装饰仍可修改。 | Promosi ini telah bermula, jadi masa, peraturan dan pilihan gabungannya tidak boleh diubah. Anda masih boleh menyunting teks dan hiasannya. | 进行中 |
+| `admin.promo_rules` | Rules | 规则 | Peraturan | 区块标题 |
+| `admin.rule_add` | Add rule | 添加规则 | Tambah peraturan | 下拉选类别 |
+| `admin.rule_remove` | Remove | 移除 | Buang | — |
+| `admin.rule_move_up` | Move up | 上移 | Naikkan | 读屏标签 |
+| `admin.rule_move_down` | Move down | 下移 | Turunkan | 读屏标签 |
+| `admin.rule_item_discount` | Discount on items | 商品打折 | Diskaun item | 规则类别 |
+| `admin.rule_bxgy` | Buy X get Y | 买 X 享 Y | Beli X dapat Y | 规则类别 |
+| `admin.rule_tiers` | Spend and save | 满额减或满额折 | Belanja dan jimat | 规则类别 |
+| `admin.rule_free_shipping` | Free shipping | 满额免运费 | Penghantaran percuma | 规则类别 |
+| `admin.rule_scope_hint` | Up to 200 products and 30 categories. A product can be in only one item rule. | 最多 200 件商品与 30 个分类；一件商品只能属于一条商品级规则。 | Sehingga 200 produk dan 30 kategori. Satu produk hanya boleh berada dalam satu peraturan item. | A12 商品级规则的范围下方 |
+| `admin.rule_item_hint` | Percent off: 1–90%. Amount off: RM0.01 to RM500,000.00 per item (never more than the item's price). | 百分比 1–90%；每件直降 RM0.01 至 RM500,000.00（不超过该件单价）。 | Peratus diskaun: 1–90%. Jumlah diskaun: RM0.01 hingga RM500,000.00 setiap item (tidak melebihi harga item). | A12 商品打折下方 |
+| `admin.rule_xy_hint` | Buy and Get: 1–10 each. | 买、享各 1–10 件。 | Beli dan Dapat: 1–10 setiap satu. | A12 买 X 享 Y 下方 |
+| `admin.rule_tiers_hint` | Up to 5 tiers. Each tier needs a higher spend and a bigger discount than the one before; an amount off must be less than its spend, and a percent off is 1–90%. Spend: RM0.01 to RM999,999.99. | 最多 5 档；每一档的门槛与优惠都须高于上一档；减金额须小于该档门槛，减百分比为 1–90%；门槛 RM0.01 至 RM999,999.99。 | Sehingga 5 peringkat. Setiap peringkat perlu perbelanjaan dan diskaun yang lebih tinggi daripada sebelumnya; jumlah diskaun mesti kurang daripada perbelanjaannya, dan peratus diskaun 1–90%. Perbelanjaan: RM0.01 hingga RM999,999.99. | A12 满额减或满额折下方 |
+| `admin.rule_scope` | Applies to | 适用范围 | Untuk | — |
+| `admin.rule_categories` | Categories | 分类 | Kategori | — |
+| `admin.rule_products` | Products | 商品 | Produk | — |
+| `admin.rule_percent` | Percent off | 按百分比 | Peratus diskaun | 1–90 |
+| `admin.rule_amount` | Amount off each item | 每件直降 | Jumlah diskaun setiap item | RM |
+| `admin.rule_buy` | Buy | 买 | Beli | X，1–10 |
+| `admin.rule_get` | Get | 享 | Dapat | Y，1–10 |
+| `admin.rule_get_percent` | Discount on those | 这几件的折扣 | Diskaun untuk item itu | 1–100 |
+| `admin.rule_get_percent_hint` | 1–100%. 100% means free; 50% means half price. The discount goes to the lowest-priced items in this rule. | 1–100%。100% 即送，50% 即半价；优惠给本规则范围内价格最低的件。 | 1–100%. 100% bermaksud percuma; 50% bermaksud separuh harga. Diskaun diberi kepada item paling murah dalam peraturan ini. | — |
+| `admin.rule_tier_amount` | Amount off | 减金额 | Jumlah diskaun | 满额减方式 |
+| `admin.rule_tier_percent` | Percent off | 减百分比 | Peratus diskaun | 满额折方式 |
+| `admin.rule_tier_threshold` | Spend at least | 满 | Belanja sekurang-kurangnya | 每档门槛 |
+| `admin.rule_tier_discount` | Discount | 优惠 | Diskaun | 每档优惠 |
+| `admin.rule_add_tier` | Add tier | 添加一档 | Tambah peringkat | 最多 5 档 |
+| `admin.rule_remove_tier` | Remove tier | 移除这一档 | Buang peringkat | — |
+| `admin.rule_threshold` | Minimum spend | 门槛 | Perbelanjaan minimum | 免运费 |
+| `admin.rule_threshold_hint` | RM0.00 to RM999,999.99; 0 means every order ships free. Thresholds use the amount after item discounts. | RM0.00 至 RM999,999.99，填 0 即全部订单免运费；门槛按商品打折后的金额判断。 | RM0.00 hingga RM999,999.99; 0 bermaksud semua pesanan dihantar percuma. Had dikira selepas diskaun item. | — |
+| `admin.promo_combine` | Combining with coupons and points | 与优惠券、积分同用 | Gabungan dengan kupon dan mata | 区块标题 |
+| `admin.promo_allow_coupon` | Can be combined with coupons | 可与优惠券同用 | Boleh digabung dengan kupon | 默认不勾选 |
+| `admin.promo_allow_points` | Can be combined with points | 可与积分同用 | Boleh digabung dengan mata | 默认不勾选 |
+| `admin.promo_combine_hint` | When a member uses a coupon or points, the system compares the order with and without the sale and uses whichever is better for them. Unticked options can't be used together with the sale. | 会员使用优惠券或积分时，系统会比较参加与不参加活动两种算法，取对会员更划算的一种；未勾选的一项不能与活动同时使用。 | Apabila ahli menggunakan kupon atau mata, sistem membandingkan pesanan dengan dan tanpa jualan dan menggunakan yang lebih jimat untuk mereka. Pilihan yang tidak ditanda tidak boleh digunakan bersama jualan. | — |
+| `admin.promo_texts` | Sale text | 活动文案 | Teks jualan | 区块标题 |
+| `admin.copy_title` | Title | 标题 | Tajuk | 0–40 个字符；发布时英文须有（1–40） |
+| `admin.copy_subtitle` | Subtitle | 副标题 | Subtajuk | 0–80 个字符 |
+| `admin.copy_badge` | Badge phrase | 角标短语 | Frasa lencana | 0–12 个字符 |
+| `admin.copy_strip` | Banner text | 横条文字 | Teks sepanduk | 0–60 个字符 |
+| `admin.copy_fallback` | An English title is needed to publish. Empty Chinese or Malay text shows the English version. | 发布前须填英文标题；中文或马来文留空时显示英文。 | Tajuk Inggeris diperlukan untuk menerbitkan. Teks Cina atau Melayu yang kosong akan memaparkan versi Inggeris. | — |
+| `admin.promo_decoration` | Decoration | 装饰 | Hiasan | 区块标题 |
+| `admin.promo_pack` | Theme pack | 素材包 | Pek tema | — |
+| `admin.pack_cny` | Chinese New Year | 农历新年 | Tahun Baru Cina | 素材包 |
+| `admin.pack_raya` | Hari Raya | 开斋节 | Hari Raya | 素材包 |
+| `admin.pack_deepavali` | Deepavali | 屠妖节 | Deepavali | 素材包 |
+| `admin.pack_christmas` | Christmas | 圣诞节 | Krismas | 素材包 |
+| `admin.pack_merdeka` | Merdeka | 国庆 | Merdeka | 素材包 |
+| `admin.pack_mega_sale` | Mega sale (11.11, 12.12, Black Friday) | 电商大促（11.11、12.12、黑五） | Jualan mega (11.11, 12.12, Black Friday) | 素材包 |
+| `admin.pack_generic` | General sale | 通用促销 | Jualan umum | 素材包 |
+| `admin.promo_palette` | Colours | 配色 | Warna | — |
+| `admin.palette_keep` | Keep the store theme colours | 保持店铺主题配色 | Kekalkan warna tema kedai | — |
+| `admin.palette_of` | {pack} colours | {pack}配色 | Warna {pack} | `{pack}` 为素材包名称 |
+| `admin.slot_ambient` | Page ornaments | 页面装饰 | Hiasan halaman | 装饰位 |
+| `admin.slot_home_poster` | Home poster layout | 首页海报版式 | Susun atur poster utama | 装饰位，模板海报用 |
+| `admin.slot_list_strip` | Sale banner | 活动横条 | Sepanduk jualan | 装饰位，P02、P15 |
+| `admin.slot_card_badge` | Product badge | 商品角标 | Lencana produk | 装饰位 |
+| `admin.slot_detail_ribbon` | Product page price ribbon | 详情页价格飘带 | Reben harga halaman produk | 装饰位，P03 |
+| `admin.slot_cart_progress` | Cart progress bar | 购物车进度条 | Bar kemajuan troli | 装饰位，P04 |
+| `admin.variant_none` | None | 无 | Tiada | 只用于 `admin.slot_ambient` |
+| `admin.variant_n` | Style {n} | 样式 {n} | Gaya {n} | 装饰位变体 |
+| `admin.promo_poster` | Home poster | 首页海报 | Poster utama | 区块标题 |
+| `admin.poster_template` | Template | 模板 | Templat | — |
+| `admin.poster_image` | Uploaded image | 上传图片 | Imej dimuat naik | — |
+| `admin.poster_desktop` | Desktop image | 桌面图 | Imej desktop | — |
+| `admin.poster_desktop_rules` | At least 1,200 pixels wide. Best at 1,800 × 600 (3:1); other shapes are cropped from the centre. | 宽至少 1,200 像素；建议 1,800 × 600（3:1），其他比例会从中间裁切。 | Lebar sekurang-kurangnya 1,200 piksel. Terbaik 1,800 × 600 (3:1); bentuk lain dipotong dari tengah. | — |
+| `admin.poster_phone` | Phone image | 手机图 | Imej telefon | — |
+| `admin.poster_phone_rules` | At least 600 pixels wide. Best at 960 × 1,200 (4:5); other shapes are cropped from the centre. | 宽至少 600 像素；建议 960 × 1,200（4:5），其他比例会从中间裁切。 | Lebar sekurang-kurangnya 600 piksel. Terbaik 960 × 1,200 (4:5); bentuk lain dipotong dari tengah. | — |
+| `admin.poster_alt` | Image description (alt text) | 图片说明（替代文字） | Penerangan imej (teks alternatif) | 三语，各 1–150 个字符，英文必填 |
+| `admin.ai_title` | Design with AI | 用 AI 装饰 | Reka dengan AI | 区块标题 |
+| `admin.ai_placeholder` | e.g. Chinese New Year, festive red and gold | 例如：农历新年，喜庆红金 | cth. Tahun Baru Cina, merah dan emas yang meriah | A12 描述输入框占位 |
+| `admin.ai_describe` | Describe the look you want | 描述你想要的效果 | Terangkan rupa yang anda mahu | 1–500 个字符；输入框占位可写例子，如「农历新年，喜庆红金」 |
+| `admin.ai_privacy` | Don't include personal information. Your description is sent to the AI service and isn't saved. | 请不要填写个人资料。描述会发送给 AI 服务，不会保存。 | Jangan masukkan maklumat peribadi. Penerangan anda dihantar kepada perkhidmatan AI dan tidak disimpan. | — |
+| `admin.ai_generate` | Suggest a design | 生成方案 | Cadangkan reka bentuk | — |
+| `admin.ai_generating` | Designing… | 正在生成… | Sedang mereka… | 提交中 |
+| `admin.ai_review_copy` | Check the text before you save — it appears on the storefront. | 保存前请检查文字，它会显示在前台。 | Semak teks sebelum menyimpan — ia dipaparkan di kedai. | AI 结果下方 |
+| `admin.ai_apply` | Use this design | 填入编辑区 | Guna reka bentuk ini | 只填回，不保存 |
+| `admin.ai_applied` | Filled in. Check it in the editor preview, then save to use it. | 已填入编辑区。请在编辑区预览里检查，保存后才生效。 | Telah diisi. Semak dalam pratonton penyunting, kemudian simpan untuk menggunakannya. | — |
+| `admin.editor_preview` | Editor preview | 编辑区预览 | Pratonton penyunting | A12，随未保存的输入即时更新 |
+| `admin.editor_preview_note` | A sketch with sample products and amounts. Real prices are worked out on the storefront. | 示意图，商品与金额都是示例；实际价格以前台计算为准。 | Lakaran dengan produk dan jumlah contoh. Harga sebenar dikira di kedai. | A12 编辑区预览下方 |
+| `admin.promo_preview_needs_time` | To preview on the storefront, save a start time and an end time that's still ahead. | 保存开始时间与尚未过去的结束时间后，才能在前台预览。 | Untuk pratonton di kedai, simpan masa mula dan masa tamat yang belum berlalu. | A12 前台预览按钮禁用时 |
+| `admin.ai_invalid` | The AI's suggestion couldn't be used. Try again, or set the decoration yourself. | AI 的结果不合格。请重试，或手动设置装饰。 | Cadangan AI tidak dapat digunakan. Cuba lagi, atau tetapkan hiasan sendiri. | — |
+| `admin.ai_unavailable` | AI isn't available right now. You can still set the decoration yourself. | AI 暂不可用，仍可手动设置装饰。 | AI tidak tersedia sekarang. Anda masih boleh menetapkan hiasan sendiri. | 超时、出错或余额不足 |
+| `admin.ai_daily_limit` | Today's AI limit ({count}) has been reached. Try again tomorrow, or set the decoration yourself. | 今天的 AI 次数（{count} 次）已用完。请明天再试，或手动设置装饰。 | Had AI hari ini ({count}) telah dicapai. Cuba esok, atau tetapkan hiasan sendiri. | — |
+| `admin.ai_not_configured` | AI isn't set up for this store. You can set the decoration yourself. | 本店尚未设置 AI，可手动设置装饰。 | AI belum disediakan untuk kedai ini. Anda boleh menetapkan hiasan sendiri. | 按钮禁用时 |
+| `admin.preview_home` | Home | 首页 | Utama | 预览页签 |
+| `admin.preview_list` | Product list | 商品列表 | Senarai produk | 预览页签 |
+| `admin.preview_detail` | Product page | 商品详情 | Halaman produk | 预览页签 |
+| `admin.preview_cart` | Cart | 购物车 | Troli | 预览页签 |
+| `admin.preview_sale` | Sale page | 活动专题页 | Halaman jualan | 预览页签 |
+| `admin.design_promo_note` | While a promotion is running, its decoration is shown on top of these settings and may switch to festive colours. These settings don't change, and the storefront returns to them when it ends. | 活动进行期间，前台在本页设置之上叠加活动装饰，可能临时换为节日配色；本页设置不变，活动结束即恢复。 | Semasa promosi berjalan, hiasannya dipaparkan di atas tetapan ini dan mungkin bertukar kepada warna perayaan. Tetapan ini tidak berubah, dan kedai kembali kepadanya apabila promosi tamat. | A08 |
+| `admin.order_promotion` | Promotion: {name} | 活动：{name} | Promosi: {name} | A02 金额明细；`{name}` 为活动内部名称 |
 
 ## 待决问题
 
