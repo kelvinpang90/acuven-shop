@@ -857,7 +857,7 @@
 | `promo.preview_exit` | Close preview | 关闭预览 | Tutup pratonton | A12 前台预览 |
 | `promo.preview_no_checkout` | Checkout is off in preview. | 预览中不能结账。 | Pembayaran dimatikan dalam pratonton. | A12 前台预览的 P04 |
 | `cart.promo_discount` | Sale discount (estimate) | 活动优惠（暂算） | Diskaun jualan (anggaran) | P04、P05 选定收货国家前；为 0 时不显示 |
-| `cart.after_promo` | After sale discount (estimate) | 活动后金额（暂算） | Selepas diskaun jualan (anggaran) | P04；为 0 优惠时不显示 |
+| `cart.after_promo` | After sale discount (estimate) | 活动后金额（暂算） | Selepas diskaun jualan (anggaran) | P04；P05 选定收货国家前的手机折叠摘要与底栏；活动优惠为 0 时不显示 |
 | `cart.hint_tier_amount` | Add RM {amount} more to save RM {save}. | 再买 RM {amount}，可减 RM {save}。 | Tambah RM {amount} lagi untuk jimat RM {save}. | P04 凑单提示（满额减下一档） |
 | `cart.hint_tier_percent` | Add RM {amount} more to get {percent}% off. | 再买 RM {amount}，可减 {percent}%。 | Tambah RM {amount} lagi untuk diskaun {percent}%. | P04 凑单提示（满额折下一档） |
 | `cart.hint_free_shipping` | Add RM {amount} more for free sample shipping. | 再买 RM {amount}，免示例运费。 | Tambah RM {amount} lagi untuk penghantaran contoh percuma. | P04 凑单提示（免运费） |
@@ -898,7 +898,7 @@
 | `admin.promo_more` | More | 更多 | Lagi | 手机操作栏 |
 | `admin.promo_saved` | Saved. | 已保存。 | Disimpan. | 保存、发布、撤回、提前结束成功 |
 | `admin.promo_changed` | This promotion was changed elsewhere. Reload to see the latest version; your edits here weren't saved. | 这个活动已在别处被修改。请重新读取最新版本；本页的修改未保存。 | Promosi ini telah diubah di tempat lain. Muat semula untuk melihat versi terkini; suntingan anda di sini tidak disimpan. | 版本不符，配 `admin.reload` |
-| `admin.promo_field_invalid` | This value isn't allowed. Check the range shown for this field. | 这个值不合规定，请按本栏的范围填写。 | Nilai ini tidak dibenarkan. Semak julat untuk ruangan ini. | A12 提交前逐栏检查不合格时 |
+| `admin.promo_field_invalid` | This value isn't allowed. See the note under this field. | 这个值不合规定，请看本栏下方的说明。 | Nilai ini tidak dibenarkan. Lihat nota di bawah ruangan ini. | A12 提交前逐栏检查不合格时 |
 | `admin.promo_invalid_other` | Some values weren't accepted. Check the dates, numbers and text lengths, then try again. | 有取值未被接受，请检查日期、数字与文字长度后重试。 | Sesetengah nilai tidak diterima. Semak tarikh, nombor dan panjang teks, kemudian cuba lagi. | A12 服务端拒绝而原因不是重叠或发布条件时 |
 | `admin.poster_save_first` | Save this promotion first, then upload images. | 请先保存这个活动，再上传图片。 | Simpan promosi ini dahulu, kemudian muat naik imej. | A12 新建未保存时上传按钮禁用 |
 | `admin.promo_invalid` | Not saved. Please fix: | 未保存，请修正： | Tidak disimpan. Sila betulkan: | 其下逐条列出问题 |
@@ -914,7 +914,7 @@
 | `admin.promo_basic` | Basics | 基本信息 | Asas | 区块标题 |
 | `admin.promo_start` | Starts | 开始 | Mula | — |
 | `admin.promo_end` | Ends | 结束 | Tamat | — |
-| `admin.promo_time_note` | Malaysia time (UTC+8), to the minute. Up to 92 days. | 马来西亚时间（UTC+8），精确到分钟；最长 92 天。 | Masa Malaysia (UTC+8), hingga minit. Sehingga 92 hari. | — |
+| `admin.promo_time_note` | Malaysia time (UTC+8), to the minute. It must end after it starts, and last up to 92 days. | 马来西亚时间（UTC+8），精确到分钟；结束须晚于开始，最长 92 天。 | Masa Malaysia (UTC+8), hingga minit. Ia mesti tamat selepas bermula, dan berlangsung sehingga 92 hari. | — |
 | `admin.promo_rules_locked` | This promotion has started, so its time, rules and combining options can't be changed. You can still edit its text and decoration. | 活动已开始，时间、规则与同用开关不能再改；文案与装饰仍可修改。 | Promosi ini telah bermula, jadi masa, peraturan dan pilihan gabungannya tidak boleh diubah. Anda masih boleh menyunting teks dan hiasannya. | 进行中 |
 | `admin.promo_rules` | Rules | 规则 | Peraturan | 区块标题 |
 | `admin.rule_add` | Add rule | 添加规则 | Tambah peraturan | 下拉选类别 |
@@ -925,6 +925,10 @@
 | `admin.rule_bxgy` | Buy X get Y | 买 X 享 Y | Beli X dapat Y | 规则类别 |
 | `admin.rule_tiers` | Spend and save | 满额减或满额折 | Belanja dan jimat | 规则类别 |
 | `admin.rule_free_shipping` | Free shipping | 满额免运费 | Penghantaran percuma | 规则类别 |
+| `admin.rule_scope_hint` | Up to 200 products and 30 categories. A product can be in only one item rule. | 最多 200 件商品与 30 个分类；一件商品只能属于一条商品级规则。 | Sehingga 200 produk dan 30 kategori. Satu produk hanya boleh berada dalam satu peraturan item. | A12 商品级规则的范围下方 |
+| `admin.rule_item_hint` | Percent off: 1–90%. Amount off: RM0.01 to RM500,000.00 per item (never more than the item's price). | 百分比 1–90%；每件直降 RM0.01 至 RM500,000.00（不超过该件单价）。 | Peratus diskaun: 1–90%. Jumlah diskaun: RM0.01 hingga RM500,000.00 setiap item (tidak melebihi harga item). | A12 商品打折下方 |
+| `admin.rule_xy_hint` | Buy and Get: 1–10 each. | 买、享各 1–10 件。 | Beli dan Dapat: 1–10 setiap satu. | A12 买 X 享 Y 下方 |
+| `admin.rule_tiers_hint` | Up to 5 tiers. Each tier needs a higher spend and a bigger discount than the one before; an amount off must be less than its spend, and a percent off is 1–90%. Spend: RM0.01 to RM999,999.99. | 最多 5 档；每一档的门槛与优惠都须高于上一档；减金额须小于该档门槛，减百分比为 1–90%；门槛 RM0.01 至 RM999,999.99。 | Sehingga 5 peringkat. Setiap peringkat perlu perbelanjaan dan diskaun yang lebih tinggi daripada sebelumnya; jumlah diskaun mesti kurang daripada perbelanjaannya, dan peratus diskaun 1–90%. Perbelanjaan: RM0.01 hingga RM999,999.99. | A12 满额减或满额折下方 |
 | `admin.rule_scope` | Applies to | 适用范围 | Untuk | — |
 | `admin.rule_categories` | Categories | 分类 | Kategori | — |
 | `admin.rule_products` | Products | 商品 | Produk | — |
@@ -933,7 +937,7 @@
 | `admin.rule_buy` | Buy | 买 | Beli | X，1–10 |
 | `admin.rule_get` | Get | 享 | Dapat | Y，1–10 |
 | `admin.rule_get_percent` | Discount on those | 这几件的折扣 | Diskaun untuk item itu | 1–100 |
-| `admin.rule_get_percent_hint` | 100% means free; 50% means half price. The discount goes to the lowest-priced items in this rule. | 100% 即送，50% 即半价；优惠给本规则范围内价格最低的件。 | 100% bermaksud percuma; 50% bermaksud separuh harga. Diskaun diberi kepada item paling murah dalam peraturan ini. | — |
+| `admin.rule_get_percent_hint` | 1–100%. 100% means free; 50% means half price. The discount goes to the lowest-priced items in this rule. | 1–100%。100% 即送，50% 即半价；优惠给本规则范围内价格最低的件。 | 1–100%. 100% bermaksud percuma; 50% bermaksud separuh harga. Diskaun diberi kepada item paling murah dalam peraturan ini. | — |
 | `admin.rule_tier_amount` | Amount off | 减金额 | Jumlah diskaun | 满额减方式 |
 | `admin.rule_tier_percent` | Percent off | 减百分比 | Peratus diskaun | 满额折方式 |
 | `admin.rule_tier_threshold` | Spend at least | 满 | Belanja sekurang-kurangnya | 每档门槛 |
@@ -941,7 +945,7 @@
 | `admin.rule_add_tier` | Add tier | 添加一档 | Tambah peringkat | 最多 5 档 |
 | `admin.rule_remove_tier` | Remove tier | 移除这一档 | Buang peringkat | — |
 | `admin.rule_threshold` | Minimum spend | 门槛 | Perbelanjaan minimum | 免运费 |
-| `admin.rule_threshold_hint` | 0 means every order ships free. Thresholds use the amount after item discounts. | 填 0 即全部订单免运费；门槛按商品打折后的金额判断。 | 0 bermaksud semua pesanan dihantar percuma. Had dikira selepas diskaun item. | — |
+| `admin.rule_threshold_hint` | RM0.00 to RM999,999.99; 0 means every order ships free. Thresholds use the amount after item discounts. | RM0.00 至 RM999,999.99，填 0 即全部订单免运费；门槛按商品打折后的金额判断。 | RM0.00 hingga RM999,999.99; 0 bermaksud semua pesanan dihantar percuma. Had dikira selepas diskaun item. | — |
 | `admin.promo_combine` | Combining with coupons and points | 与优惠券、积分同用 | Gabungan dengan kupon dan mata | 区块标题 |
 | `admin.promo_allow_coupon` | Can be combined with coupons | 可与优惠券同用 | Boleh digabung dengan kupon | 默认不勾选 |
 | `admin.promo_allow_points` | Can be combined with points | 可与积分同用 | Boleh digabung dengan mata | 默认不勾选 |

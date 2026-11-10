@@ -816,6 +816,7 @@ V1 金额与个人资料元素：
 | M5 | 示例运费（按国家；马来西亚分西马、东马两档，按所选州属归档（0.16）；其他国家兜底） | 「数据模型」（`ShippingRate` / `DemoFxRate`）「计价、优惠、积分与库存」（第 10 条，DESIGN 1.17 候批稿） |
 | M6 | MYR 合计，不低于运费；不单列税费 | 「计价、优惠、积分与库存」（第 1 条）「边界与原则」 |
 | M7 | 参考外币金额，按收货国家与固定演示汇率，只在选定收货国家后显示；该国无汇率时只显示 MYR | 「边界与原则」「数据模型」（`ShippingRate` / `DemoFxRate`） |
+| M9 | 活动后金额（暂算，0.20）＝ M2 − M8，只在选定收货国家之前、有活动优惠时用于手机折叠摘要与底部固定栏，与 P04 的 M9 相同 | DESIGN 1.23「节日促销活动」第 4、10 条 |
 | M8 | 活动优惠（0.20）：商品级与整单级之和，游客与会员都显示；选定收货国家前为暂算；会员用券或积分时按取更优的结果，取不参加活动时不显示；活动免运费时 M5 显示为免 | DESIGN 1.23「节日促销活动」第 4、6、7 条 |
 | P4 | 结账手机号（身份判定）：国家码下拉列出所有国家、默认 +60，以 `+` 开头时以输入为准，按所选或输入的国家码规范化为 E.164，之后选的收货国家不改变已判定的号码（Q16 已决）；马新号码经人机挑战与短信验证后注册或登录，白名单外号码游客下单；验证码错误不降级 | 「权限与资料保护」「边界与原则」「失败、并发与重试」 |
 | — | 短信验证开关关闭时 `[checkout.phone_notice_sms_off]`：未登录访客无论号码都不发短信、以游客结账（已登录会员不经第 1 步，照常以会员结账）；服务端下单时按开关当前值判定（0.7） | 「边界与原则」「权限与资料保护」（DESIGN 1.11） |
@@ -2774,15 +2775,19 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 | 1 [admin.rule_item_discount]                       (↑)(↓) ([admin.rule_remove]) |
 |   [admin.rule_scope]: [admin.rule_categories] ☐<分类> ☐<分类> …        |
 |                       [admin.rule_products] [搜索____] <已选商品> ✕ …   |
+|   [admin.rule_scope_hint]                                             |
 |   ( ) [admin.rule_percent] [__] %   ( ) [admin.rule_amount] [M1 ____] |
+|   [admin.rule_item_hint]                                              |
 | 2 [admin.rule_bxgy]                                (↑)(↓) ([admin.rule_remove]) |
 |   [admin.rule_scope]: …                                               |
 |   [admin.rule_buy] [__]  [admin.rule_get] [__]  [admin.rule_get_percent] [___] % |
+|   [admin.rule_xy_hint]                                                |
 |   [admin.rule_get_percent_hint]                                       |
 | 3 [admin.rule_tiers]                               (↑)(↓) ([admin.rule_remove]) |
 |   ( ) [admin.rule_tier_amount] ( ) [admin.rule_tier_percent]           |
 |   [admin.rule_tier_threshold] [M1 ____]  [admin.rule_tier_discount] [M1 ____] 或 [__] % ([admin.rule_remove_tier]) |
 |   ( [admin.rule_add_tier] )                                           |
+|   [admin.rule_tiers_hint]                                             |
 | 4 [admin.rule_free_shipping]                       (↑)(↓) ([admin.rule_remove]) |
 |   [admin.rule_threshold] [M1 ____]  [admin.rule_threshold_hint]       |
 | ( [admin.rule_add] ▾ [admin.rule_item_discount] / [admin.rule_bxgy] / [admin.rule_tiers] / [admin.rule_free_shipping] ) |
@@ -2838,14 +2843,14 @@ Stripe 暂不可用：按钮下显示 [pay.stripe_unavailable]，按钮恢复可
 说明：
 
 - **时间**：开始与结束按马来西亚时间输入到分钟（`[admin.promo_time_note]`）；草稿可以不填时间，发布时开始与结束都须填。列表按进行中、未开始（开始时间从早到晚）、草稿（最近修改在前）、已结束（结束时间从晚到早）排列。
-- **规则**：最多 20 条商品级规则、一条满额减或满额折、一条免运费；已有满额减或免运费时 `[admin.rule_add]` 里的对应项禁用。(↑)(↓) 调整规则排序（读屏标签 `[admin.rule_move_up]`、`[admin.rule_move_down]`）。商品范围的搜索只列已上架商品；分类为勾选。金额以 RM 输入、提交整仙。取值超出范围、商品级规则重叠、发布条件不满足时整次不生效：`[admin.promo_invalid]` 下逐条列出问题（重叠为 `[admin.promo_scope_overlap]`，`{product}` 为商品名称；发布条件为 `[admin.promo_publish_missing]`），与其他已发布活动时间重叠为 `[admin.promo_overlap]`（`{name}` 为对方的内部名称）；版本不符为 `[admin.promo_changed]` 与 `( [admin.reload] )`，不自动合并。提交前页面先按 DESIGN 1.23 第 1–3、12 条的取值范围逐项检查（结束晚于开始、不超过 92 天、百分比与金额范围、X 与 Y、档位逐档递增、范围至多 200 件商品与 30 个分类、文案长度），不合格的字段旁显示 `[admin.promo_field_invalid]` 并不提交；服务端仍以「取值不合格」拒绝时，除商品级规则重叠（服务端指出商品）与发布条件之外，`[admin.promo_invalid]` 下只显示 `[admin.promo_invalid_other]`。
+- **规则**：最多 20 条商品级规则、一条满额减或满额折、一条免运费；已有满额减或免运费时 `[admin.rule_add]` 里的对应项禁用。(↑)(↓) 调整规则排序（读屏标签 `[admin.rule_move_up]`、`[admin.rule_move_down]`）。商品范围的搜索只列已上架商品；分类为勾选。金额以 RM 输入、提交整仙。取值超出范围、商品级规则重叠、发布条件不满足时整次不生效：`[admin.promo_invalid]` 下逐条列出问题（重叠为 `[admin.promo_scope_overlap]`，`{product}` 为商品名称；发布条件为 `[admin.promo_publish_missing]`），与其他已发布活动时间重叠为 `[admin.promo_overlap]`（`{name}` 为对方的内部名称）；版本不符为 `[admin.promo_changed]` 与 `( [admin.reload] )`，不自动合并。提交前页面先按 DESIGN 1.23 第 1–3、12 条的取值范围逐项检查（结束晚于开始、不超过 92 天、百分比与金额范围、X 与 Y、档位逐档递增、范围至多 200 件商品与 30 个分类、文案长度），不合格的字段旁显示 `[admin.promo_field_invalid]` 并不提交（各字段的范围以可见的提示写在字段下方：`[admin.promo_time_note]`、`[admin.rule_scope_hint]`、`[admin.rule_item_hint]`、`[admin.rule_xy_hint]`、`[admin.rule_get_percent_hint]`、`[admin.rule_tiers_hint]`、`[admin.rule_threshold_hint]` 与文案的已用字数）；服务端仍以「取值不合格」拒绝时，除商品级规则重叠（服务端指出商品）与发布条件之外，`[admin.promo_invalid]` 下只显示 `[admin.promo_invalid_other]`。
 - **提前结束、撤回、删除**都先弹确认框：`[admin.promo_end_confirm]`、`[admin.promo_withdraw_confirm]`、`[admin.promo_delete_confirm]`，按钮为该操作本身（`[admin.promo_end_now]`、`[admin.promo_withdraw]`、`[admin.promo_delete]`）与 `( [common.cancel] )`，与 A08 移除标志的确认框写法相同。复制成功后进入新草稿的编辑区，显示 `[admin.promo_copied]`。
 - **文案**：草稿可以不填英文标题，发布时须有（发布条件）；其他缺译回退英文（`[admin.copy_fallback]`）；输入时显示已用字数，超出不能保存。不能输入换行。
 - **装饰**：素材包与配色从清单中选；`[admin.palette_of]` 下拉列出 7 套节日配色（`{pack}` 为对应素材包名称），默认是所选素材包的配色。各装饰位的下拉列出所选素材包的变体（以视觉稿的缩略图与 `[admin.variant_n]` 表示）；换素材包时各装饰位改为新素材包的第一个变体。
-- **海报**：桌面图建议 1,800 × 600 像素（3:1），手机图建议 960 × 1,200 像素（4:5），不按比例的图照收、前台居中裁切（见 P01）；上传图模式须有桌面与手机两张图及英文替代文字才能发布；上传即替换该位置的图，上传结果提示沿用 A08 标志图的写法。上传与 A08 的标志图一样不随本页的保存提交（DESIGN 1.23 第 12 条照「计价、优惠、积分与库存」第 15 条）：上传成功即替换并立即生效（进行中的活动，前台海报当场更换），不改变活动的版本号，所以不会让之后的保存撞上 `[admin.promo_changed]`；新建而尚未保存的活动没有 ID，上传按钮禁用并显示 `[admin.poster_save_first]`；已结束的活动上传按钮禁用。替代文字随本页的保存提交。编辑区预览在上传图模式下显示已上传的图，没有图的位置显示占位。
+- **海报**：桌面图建议 1,800 × 600 像素（3:1），手机图建议 960 × 1,200 像素（4:5），不按比例的图照收、前台居中裁切（见 P01）；上传图模式须有桌面与手机两张图及英文替代文字才能发布；上传即替换该位置的图，上传结果提示沿用 A08 标志图的写法。上传与 A08 的标志图一样不随本页的保存提交（DESIGN 1.23 第 12 条照「计价、优惠、积分与库存」第 15 条）：上传成功即替换并立即生效（进行中的活动，前台海报当场更换），不改变活动的版本号，所以不会让之后的保存撞上 `[admin.promo_changed]`（DESIGN 1.23 没有明写，这是照「计价、优惠、积分与库存」第 13、15 条图片与标志「上传不随保存、不改所属对象版本」的类推，列为本稿待 Kelvin 确认的一点）；每次上传与替换照第 15 条写后台审计；新建而尚未保存的活动没有 ID，上传按钮禁用并显示 `[admin.poster_save_first]`；已结束的活动上传按钮禁用。替代文字随本页的保存提交。编辑区预览在上传图模式下显示已上传的图，没有图的位置显示占位。
 - **编辑区预览**：装饰区下方的 `[admin.editor_preview]` 按本页当前（含未保存）的文案、素材包、配色、各装饰位变体与海报模式，在浏览器里画出模板海报、活动横条、两张示例商品卡、价格飘带与购物车进度条的缩样，可切换浅色与深色（沿用 A08 的 `[admin.preview_light]`、`[admin.preview_dark]`）；缩样用固定的示例商品与金额（`[admin.editor_preview_note]` 写明是示意），不调用计价，也不代表前台的实际价格。它在任何状态下都可用（已结束的只读显示），是 AI 提案与进行中活动改装饰时保存前的预览方式。
 - **AI**：AI 结果只在点 `[admin.ai_apply]` 后填回本页的文案、装饰与配色，不保存，也不改规则、时间与开关；填回后显示 `[admin.ai_applied]`，管理员在编辑区预览里检查文字与样子后再保存（DESIGN 1.23 第 13 条）。进行中的活动也可用 AI 改装饰与文案；已结束的不可用。
-- **前台预览**：草稿与已发布未开始的活动可预览（DESIGN 1.23 第 11 条），须已保存开始与结束时间，否则 `[admin.promo_preview]` 禁用并显示 `[admin.promo_preview_needs_time]`；`[admin.promo_preview]` 在新标签页打开前台预览，显示的是**已保存**的内容；有未保存修改时先提示 `[admin.promo_save_first]`。发布、撤回为草稿、提前结束与复制都作用于已保存的版本：有未保存修改时这些按钮同样先提示 `[admin.promo_save_first]`，不连同未保存的输入一起提交。开始时间、结束时间未保存，或结束时间已过时，`[admin.promo_preview]` 禁用并显示 `[admin.promo_preview_needs_time]`。离开有未保存修改的编辑区时沿用 A04、A10 的离开确认。
+- **前台预览**：草稿与已发布未开始的活动可预览（DESIGN 1.23 第 11 条）；`[admin.promo_preview]` 在新标签页打开前台预览，显示的是**已保存**的内容；有未保存修改时先提示 `[admin.promo_save_first]`。发布、撤回为草稿、提前结束与复制都作用于已保存的版本：有未保存修改时这些按钮同样先提示 `[admin.promo_save_first]`，不连同未保存的输入一起提交。前台预览的唯一禁用条件是：已保存的内容里没有开始时间或结束时间，或结束时间已过——这时 `[admin.promo_preview]` 禁用并显示 `[admin.promo_preview_needs_time]`。离开有未保存修改的编辑区时沿用 A04、A10 的离开确认。
 - 所有保存、发布、撤回、提前结束、删除与复制都写后台审计记录（DESIGN 1.23 第 2 条）。
 
 前台预览（`/admin/promotions/<活动 ID>/preview`，DESIGN 1.23 第 11 条）：
