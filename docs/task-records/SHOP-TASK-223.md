@@ -25,3 +25,19 @@
 - 人工逐条对照验收标准与 DESIGN 1.22「Stripe 测试环境支付」第 11 条第（1）项、「订单与退款状态」第 3 条自查。
 - `tests/test_stripe_void.py`（FakeStripeGateway 与 SQLite 内存库，`ops_alert.alert` 以替身代替）覆盖：带时区的 `now` 先于访问数据库被拒；记录不存在抛 `CheckoutNotFound`；四种前置条件不满足返回 `changed`、不调用 Stripe、不写库；creating 不调用 Stripe 即作废（会员订单的库存、券与积分预占释放，事件操作者 admin，一次提交，告警时间不清空）；作废后 `pay_orders` 的取消原因为 `timeout`；已付款相符为 `confirmed`（只查询、不请求作废）；金额不符写成退款尝试后为 `cancelled`；查询为 open 时作废成功为 `cancelled`、查询为 expired 时不请求作废即 `cancelled`；`cancel_after_stripe_end` 的 `kept`（订单已付款为 `confirmed`、已取消为 `changed`）与 `changed` 的归类；查询不成、会话 ID 或创建幂等键不符、livemode、状态不认识，以及作废不成或仍为 open 时作废（不再查询）；complete 而付款未定（含 open 记录被确认改为 complete 后重新读取）作废；已付款而写不成退款尝试（needs_review）作废且不建退款尝试；确认返回 unavailable 时作废；本地已付款而 Stripe 不可用或答复冲突返回 `unavailable`、不写库；Stripe 处理期间记录被改为 complete、付款状态改为 paid 或订单被取消时返回 `changed`；`on_void` 在提交前以同一会话调用、看得到已作废的记录与订单，审计与作废一次提交；`on_void` 抛出时记录与订单都不变、异常原样传出；作废后同一会话的付款经 `confirm_checkout` 写成全额 pending 退款尝试、订单保持已取消；`cancel_after_stripe_end` 与 `cancel_order` 仍拒绝 admin。每条测试的文档字符串写明它守住的第 11 条哪一句。
 - 后端测试由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑后端测试。
+
+## 登记时的验收标准（原文）
+
+2026-11-10 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 入口——app/services/payment.py 新增 void_alerted_checkout(db, gateway, checkout_id, now, *, on_void=None) 返回 VoidResult；now 带时区抛 ValueError（先于访问数据库）；调用方不得持有锁或未提交的改动，函数先结束当前事务，调用 Stripe 时不持有任何数据库锁、不留着读事务；记录不存在抛 CheckoutNotFound
+      - 前置条件——以普通读取取记录与订单后结束读事务；告警时间为空、记录为 expired 或订单不是 awaiting_demo_payment 时不调用 Stripe、不写库，返回 changed
+      - 查得确定结果——有会话 ID（open、complete）时先 retrieve_checkout_session 查询一次，核对会话 ID、元数据里的创建幂等键与记录相同且不是 livemode（同 app/services/stripe_overdue.py 的 _belongs）；查询不成或核对不符为给不出确定结果。查到已付款或 complete 时调用 confirm_checkout（用这次查询到的会话），paid 返回 confirmed，refunded（金额或币种不符、已写成全额退款尝试）时不给记录 ID 以 system 调用 cancel_after_stripe_end 并返回 cancelled；查到 expired 时给记录 ID 以 system 调用 cancel_after_stripe_end 并返回 cancelled；查到 open 时请求 expire_checkout_session 一次，返回的会话为 expired 则同上取消并返回 cancelled，否则为给不出确定结果（不再查询第二次）。cancel_after_stripe_end 返回 changed 时返回 changed，返回 kept 时按订单当前状态（demo_paid 为 confirmed，其他为 changed）
+      - 人工作废的条件——只在以下情形进入人工作废：creating（不调用 Stripe）；confirm_checkout 返回 needs_review 或 pending；给不出确定结果，或 confirm_checkout 返回 unavailable，且读取时记录的付款状态不是 paid。读取时付款状态已是 paid 而 Stripe 给不出结果时不作废、不写库，返回 unavailable
+      - 人工作废的事务——进入前重新以普通读取取记录（Stripe 处理可能已改动它）；在一个事务里按会员、订单、记录的顺序加锁重查，记录仍属该订单、状态与这次读到的相同、不是 expired、告警时间非空、订单仍待支付且没有其他不是 expired 的记录，付款状态为 paid 时只在 needs_review 情形允许；不满足即回滚返回 changed。满足则记录记为 expired、活动列置空，订单以带条件的 UPDATE 改为 demo_cancelled（不看本地支付到期时间），加回库存、释放券与积分预占、写一条操作者为 admin 的订单事件，flush 后调用 on_void(db)（给出时），再提交并返回 voided；on_void 抛出时回滚、异常原样传出
+      - 订单规则——app/services/order_rules.py 的 (awaiting_demo_payment, demo_cancelled) 允许的操作者加上 admin，注释写明只经 DESIGN 1.22 第 11 条的人工作废；tests/test_order_rules.py 只为这一处的期望表与断言改动；其他迁移不变。app/services/payment.py 的 _cancelled_by 对操作者为 system 或 admin 的取消事件都给 timeout，guest 与 member 给 self，文档字符串随之更新；tests/test_stripe_void.py 断言人工作废后支付页数据（pay_orders）的取消原因为 timeout
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_stripe_void.py 用 app/services/stripe_gateway.py 的 FakeStripeGateway 与 SQLite，覆盖上面每一个分支的返回值与库里的结果（记录状态与活动列、订单状态、库存加回、券与积分预占释放、事件操作者），creating 不调用 Stripe，读取时已付款而 Stripe 不可用时不作废，Stripe 处理之后记录被并发改动时返回 changed，有会话 ID 时先查询会话（查到 open 才请求作废，查到已付款不请求作废），on_void 与作废同一事务（它抛出时记录与订单都不变），以及人工作废之后同一会话的付款经 confirm_checkout 按第 6 条写成全额退款尝试、订单保持已取消；每条测试的文档字符串写明它守住的 DESIGN 1.22 第 11 条哪一句
+      - docs/task-records/SHOP-TASK-223.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改接口、前端、数据库与迁移、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
+```

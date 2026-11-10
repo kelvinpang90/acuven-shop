@@ -28,3 +28,17 @@
   - 重试的地址、方法、请求头恰为两项、没有请求体；非法 ID 不发请求；200 不读响应体；404、409 各错误码（含作废的错误码与 A03 的 `refund_not_approved`）、403、401、422、503、500 与网络中断的归类。
   - 三个函数在成功、失败与网络中断时都不调用 console 的各方法，令牌不进地址，写操作只返回归类字符串。
   - 每条测试的注释写明它守住的 UX 0.19 A11 或 SHOP-TASK-225 记录段的原句。前端检查交由 PR 的必需 CI 检查 frontend 执行（Worker 沙箱不跑前端检查），检查命令结果由 Worker 另行记录。本任务不做浏览器验收。
+
+## 登记时的验收标准（原文）
+
+2026-11-10 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 读取——新文件 frontend/src/api/adminStripePending.ts 导出 readStripePending(signal)，GET /api/admin/stripe-pending；200 时逐项校验字段后返回 ok 与数据（csrf_token 为非空字符串；checkouts 每项 checkout_id 为正整数、status 为 creating、open、complete 之一、order_number 为字符串、created_at 与 alerted_at 为字符串；refunds 每项 checkout_id 与 attempt_id 为正整数、order_number 为字符串、amount_sen 为非负整数、attempted_at 为字符串、error_type 为字符串或 null），任一不合格算 failed；401 为 none，其他状态为 failed，网络中断为 network
+      - 作废——导出 voidCheckout(checkoutId, csrfToken)，POST …/checkouts/{ID}/void，请求体为 JSON 对象，只有 verified 为 true，Content-Type 为 application/json；回答 200 时按响应体 result 返回 confirmed、cancelled 或 voided（其他值算 failed）；409 stripe_pending_changed 与 404 为 changed；503 stripe_unavailable 为 unavailable；403 为 csrf；401 为 none；其他（含别的 409、503 与 422）为 failed；网络中断为 network
+      - 重试——导出 retryLateRefund(checkoutId, csrfToken)，POST …/checkouts/{ID}/refund-retry，没有请求体；200 为 done（响应体不读）；409 stripe_refund_not_retryable 与 404 为 changed；409 stripe_refund_cap 为 cap；403 为 csrf；401 为 none；其他为 failed；网络中断为 network
+      - 两个写操作的 ID 不是正整数时不发请求、返回 failed；三个函数都不在日志或错误里带出 CSRF 令牌与响应内容
+      - 测试验证意图（由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——新文件 frontend/src/api/adminStripePending.test.ts 以 fetch 替身覆盖每个函数的请求（方法、路径、请求头、请求体）、每种回答到返回值的映射与字段校验的每一种不合格；每条测试的注释写明它守住的 UX 0.19 A11 或 SHOP-TASK-225 契约的哪一句
+      - docs/task-records/SHOP-TASK-227.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改页面、路由、后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明不适用及理由），不合并、不直推
+```
