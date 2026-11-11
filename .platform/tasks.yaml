@@ -6264,7 +6264,7 @@ tasks:
       运营者落实写法：舍入与分摊复用 app/services/pricing.py 现有的 percent_coupon_discount（百分比以 Decimal 传入，「四舍五入，恰好半仙进一仙」）与 allocate_largest_remainder（最大余数、稳定序），不另写一套；参数校验照该文件 _require_non_negative_int 的写法（不接受 float 与 bool）。规则里的百分比（打折、买 X 享 Y 的享受百分比、满额折的档）都是 int，传给 percent_coupon_discount 时才转成 Decimal；SpendRule 的 mode 是字符串，模块导出常量 SPEND_AMOUNT（amount）与 SPEND_PERCENT（percent）。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 3–5、8、10 条；纯函数，只算金额，不碰个人资料。
       拆分：节日促销计价规则层的第一个任务（3 个允许路径），与 SHOP-TASK-229、230 互不依赖。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 输入——frozen 数据类 PromoLine(line_index, unit_price, quantity, rule_id)（rule_id 为该行命中的商品级规则 ID 或 None）、ItemDiscountRule(rule_id, percent, amount_sen)（percent 与 amount_sen 恰有一个不为 None）、BuyXGetYRule(rule_id, buy_quantity, get_quantity, get_percent)、SpendRule(mode, tiers)（mode 为 amount 或 percent，tiers 为 (threshold_sen, value) 的元组）、FreeShippingRule(threshold_sen)；入口 price_promotion(lines, *, item_rules, spend_rule=None, free_shipping_rule=None, shipping_fee_sen=None) 返回 PromotionPricing，item_rules 为规则 ID 到 ItemDiscountRule 或 BuyXGetYRule 的映射。lines 只含正常行（第 4 条），line_index 为非负整数且须严格递增，unit_price 为非负整数、quantity 为正整数、rule_id 为正整数或 None，shipping_fee_sen 为非负整数或 None（不另设上限，件数与金额上限由调用方按「计价、优惠、积分与库存」第 8 条先拦下）；取值超出第 3 条的范围、档的门槛或优惠不严格递增、rule_id 不在 item_rules 里都抛 ValueError，类型不对抛 TypeError
