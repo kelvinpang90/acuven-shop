@@ -50,3 +50,18 @@
   - 固定金额档按第 3 条小于门槛、门槛又不大于 S1，所以「取该档金额与 S1 较小者」在合格输入下总取该档金额；仍照第 4 条（二）写出。
 - 验证到什么程度：人工逐条对照验收标准与 DESIGN 1.23 第 3–5、8、10 条，手算核对第 8 条算例与各测试里的逐件数字。全部后端测试、ruff check 与 ruff format 由 PR 的必需 CI 检查 `backend` 执行。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-11 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 输入——frozen 数据类 PromoLine(line_index, unit_price, quantity, rule_id)（rule_id 为该行命中的商品级规则 ID 或 None）、ItemDiscountRule(rule_id, percent, amount_sen)（percent 与 amount_sen 恰有一个不为 None）、BuyXGetYRule(rule_id, buy_quantity, get_quantity, get_percent)、SpendRule(mode, tiers)（mode 为 amount 或 percent，tiers 为 (threshold_sen, value) 的元组）、FreeShippingRule(threshold_sen)；入口 price_promotion(lines, *, item_rules, spend_rule=None, free_shipping_rule=None, shipping_fee_sen=None) 返回 PromotionPricing，item_rules 为规则 ID 到 ItemDiscountRule 或 BuyXGetYRule 的映射。lines 只含正常行（第 4 条），line_index 为非负整数且须严格递增，unit_price 为非负整数、quantity 为正整数、rule_id 为正整数或 None，shipping_fee_sen 为非负整数或 None（不另设上限，件数与金额上限由调用方按「计价、优惠、积分与库存」第 8 条先拦下）；取值超出第 3 条的范围、档的门槛或优惠不严格递增、rule_id 不在 item_rules 里都抛 ValueError，类型不对抛 TypeError
+      - 商品级（第 3 条与第 4 条（一））——按行序、件序展开；打折百分比每件折扣为单价乘百分比除以 100，按同一舍入取整仙，直降每件取直降额与单价较小者；买 X 享 Y 照第 5 条，同一规则范围内各行的件合在一起共 n 件，k = ⌊n ÷ (X + Y)⌋ × Y，按单价从低到高、同价按行序与件序取前 k 件，每件折扣为单价乘百分比除以 100 按同一舍入；S1 为原价小计 S0 减去商品级折扣合计
+      - 整单级（第 4 条（二））——按 S1 取达到（大于或等于门槛）的最高一档；固定金额取该档金额与 S1 较小者，百分比为 S1 乘百分比除以 100 按同一舍入；按每件商品级折扣后的金额用 allocate_largest_remainder 分摊到件。没有满额规则或一档也没达到时为 0
+      - 免运费与是否参加（第 4 条（三）与末段）——有免运费规则且 S1 大于或等于门槛即 free_shipping_reached 为 True。shipping_fee_sen 为 None（还没有运费报价）时，shipping_actual_sen、shipping_waived_sen 与 participates 都为 None；有报价时达到门槛则免去的运费等于报价、实际运费为 0，否则免去 0、实际等于报价，participates 为商品级合计、整单级合计与免去的运费之和大于 0
+      - 输出——frozen 的 PromotionPricing：units 为每件的 PromoUnit(line_index, unit_index, original_price, item_discount, order_discount, promotion_discount, rule_id)（promotion_discount 为前两项之和；rule_id 为该行命中的规则 ID，不论这一件是否享受折扣）；subtotal（S0）、item_discount_total、after_item_subtotal（S1）、order_discount_total；spend_tier_reached（达到的档从 1 起的序号或 None）与 spend_next_gap_sen（下一档门槛减 S1，已到最高档或没有满额规则为 None）；free_shipping_reached 与 free_shipping_gap_sen（门槛减 S1 与 0 较大者，没有免运费规则为 None）；shipping_fee_sen、shipping_actual_sen、shipping_waived_sen、participates；buy_x_get_y 为每条买 X 享 Y 规则的 BuyXGetYProgress(rule_id, units_in_scope, units_to_next)（units_to_next 为 (X + Y) − n mod (X + Y)，第 10 条），按 rule_id 升序
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_promotion_pricing.py：第 8 条算例的（一）至（三）逐仙核对（A 两件各折 500、B 两件不折、C 折 900，S1 为 6400；达到第一档、整单减 500 分摊为 156、156、94、94、0；每件活动优惠 656、656、94、94、900，合计 2400；距下一档 3600；运费报价 800 时免去 800）；每类规则的边界（百分比恰好半仙进一仙、直降大于单价、n 不足 X + Y、多组、同价按行序件序、跨行混搭、享受百分比 100）；满额取最高档、一档未达、固定金额档、百分比档（含百分比折扣恰好半仙进一仙）；免运费门槛 0 与恰好等于门槛、没有运费报价；所有规则都没带来优惠时 participates 为 False；参数校验。每条测试的文档字符串写明它守住的第几条哪一句
+      - docs/task-records/SHOP-TASK-231.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明公开的数据类与函数签名，供 SHOP-TASK-232 与之后的服务层引用）；改动只落在 allowed_change_paths；不改 app/services/pricing.py、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```
