@@ -6321,7 +6321,7 @@ tasks:
       运营者落实写法：quote_cart 新增只限关键字参数 promotion（SHOP-TASK-233 的 LoadedPromotion 或 None，默认 None 即没有活动），由调用方读出后传入——计价接口传 active_promotion(db, 当前时刻)，之后的管理员预览传要预览的活动；现有调用不传，结果与现在逐字段相同（新字段取默认值）。活动只算 status 为 ok 的行（第 4 条），用 233 的 price_lines，行的商品 ID 与分类 ID 取自 quote_cart 内部已查到的商品。计价接口在 app/api/checkout.py 新增模块级的 _utcnow()（不带时区的 UTC，照 app/api/member_orders.py），测试替换它来固定时钟。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 4、10 条与「计价、优惠、积分与库存」第 1、8 条：计价结果的金额与凑单提示，不碰个人资料。
       拆分：节日促销服务层的第二个任务（6 个允许路径，其中两个现有测试文件只为新字段改期望值），依赖 SHOP-TASK-233。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-233
     acceptance_criteria:
