@@ -6410,7 +6410,7 @@ tasks:
       运营者落实写法：照 SHOP-TASK-235 游客下单的写法读活动、取每件活动优惠与写快照列；取甲时只在 use_coupon 为 True 时预占券（reserve_coupon 的 subtotal_sen 传活动后商品额，按它判断最低消费），只在 points_allowed 为 True 时预占积分；券本身可用而按方案未用、或积分按方案不用时照常下单（不抛 CouponUnavailable 与 PointsUnavailable），券与积分都不预占。取乙时与没有活动时相同。请求指纹不变。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 6、7、14 条：订单金额快照、券与积分的预占，不改收货资料的处理。
       拆分：节日促销服务层的第五个任务（3 个允许路径），依赖 SHOP-TASK-230（订单列）、233（price_lines）、235（游客下单的写法）与 236（方案判定函数）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-230
       - SHOP-TASK-233
