@@ -6290,7 +6290,7 @@ tasks:
       运营者落实写法：新参数 promotion_discounts 只限关键字、默认 None（即每件为 0），不改现有参数与调用方；UnitAllocation 的 promotion_discount 字段与 PricingResult 的 promotion_discount 字段加在各自现有字段之后（全仓库只有 pricing.py 构造这两个数据类）。CouponTerms 在 __post_init__ 里校验（percent_off 与 fixed_off 恰有一个不为 None、fixed_off 与 min_spend_sen 为非负整数、percent_off 为 0–100 的有限 Decimal，不对抛 ValueError，类型不对抛 TypeError）；choose_promotion_plan 对 promotion_discounts、两个运费参数照 price_order 的写法校验（长度、非负整数、每项不超过该件原价、免去的运费不超过未免的运费，不对抛 ValueError，类型不对抛 TypeError）。choose_promotion_plan 只在本单参加活动、且会员选了券或填了积分时由服务层调用（第 6 条）；调用时机由调用方判断，函数本身对任何输入都照下面的规则比较。
       设计闸门：DESIGN 1.23（提交 b7f9355）「计价、优惠、积分与库存」第 1、2 条与「节日促销活动」第 6–8 条；纯函数，只算金额，不碰个人资料。
       拆分：节日促销计价规则层的第二个任务（4 个允许路径），依赖 SHOP-TASK-231（测试用它的 price_promotion 走通第 8 条算例）；接入下单与计价接口见之后登记的服务层任务。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-231
     acceptance_criteria:
