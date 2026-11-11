@@ -6438,7 +6438,7 @@ tasks:
       运营者落实写法：app/services/order_lookup.py 的 LookupOrder（P09 的游客订单查询与会员的订单详情都用它）与 app/services/admin_orders.py 的 AdminOrderDetail 各加 promotion_discount_sen（订单的商品级与整单级活动优惠之和）与 shipping_waived_sen；AdminOrderDetail 另加 promotion_name（订单记有活动时为该活动的内部名称，否则为 None）。现有字段与接口路径不变；JSON 照模型原样输出。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 7 条：只显示订单金额快照，不新增个人资料的输出。
       拆分：节日促销服务层的第六个任务（6 个允许路径，其中两个现有测试文件只为新字段改期望值），依赖 SHOP-TASK-230（订单列）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-230
     acceptance_criteria:
