@@ -37,6 +37,10 @@ app/services/refund_review.py 的退款审核相同）：
 件数与预计金额列表、该单的退款申请记录；都由 app/services/refunds.py 按服务端规则算出，
 不含积分相关字段（游客订单）。
 
+查单视图另带活动优惠与免去的运费（SHOP-TASK-238，依据 docs/DESIGN.md 1.23（提交 b7f9355）
+「节日促销活动」第 7 条与 docs/UX.md 0.20 P09「金额明细」）：取自订单快照，不重算；
+游客订单与会员订单都给出，没有活动的订单为 0。
+
 本模块不写日志；异常消息不含个人资料、订单号、电话、幂等键或令牌。库里的时间一律是不带时区的
 UTC，返回的视图里换成带 UTC 时区的时间。
 """
@@ -186,7 +190,11 @@ class LookupOrder(BaseModel):
     placed_by_member: bool
     coupon_discount_sen: int
     points_redeemed: int
+    # 订单快照的商品级与整单级活动优惠之和；没有活动为 0。
+    promotion_discount_sen: int
+    # 实际运费（活动免运费时为 0）与免去的运费（未免为 0）。
     shipping_fee_sen: int
+    shipping_waived_sen: int
     total_sen: int
     # 订单摘要不依赖收货资料记录存在：没有那一条时为空。
     recipient: PayRecipient | None
@@ -335,7 +343,11 @@ def lookup_orders(
             placed_by_member=order.claim_status == CLAIM_NOT_CLAIMABLE,
             coupon_discount_sen=order.coupon_discount_sen,
             points_redeemed=order.points_redeemed,
+            promotion_discount_sen=(
+                order.promotion_item_discount_sen + order.promotion_order_discount_sen
+            ),
             shipping_fee_sen=order.shipping_fee_sen,
+            shipping_waived_sen=order.shipping_waived_sen,
             total_sen=order.total_sen,
             recipient=None if recipient is None else _recipient(recipient),
             refund_deadline=None if deadline is None else _utc(deadline),

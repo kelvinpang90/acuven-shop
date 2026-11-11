@@ -17,6 +17,11 @@ normalize_order_number 与 lookup_orders（全部已退由它调用 SHOP-TASK-02
 refund_state 算出）；迁移判定用 SHOP-TASK-010 的 is_transition_allowed；推进前的
 全部已退判定直接用 refund_state；审计用 SHOP-TASK-035 的 record_audit。
 
+后台详情另带活动优惠、免去的运费与活动的内部名称（SHOP-TASK-238，依据 docs/DESIGN.md 1.23
+（提交 b7f9355）「节日促销活动」第 7 条与 docs/UX.md 0.20 A02「金额明细」）：前两项取自查单
+视图（即订单快照），内部名称按订单的 promotion_id 读活动；只显示订单金额快照，不重算。
+后台订单列表不变。
+
 锁定协议（推进、访客确认收货与退款审核共用，SHOP-TASK-040 补上第一步；见
 docs/HANDOFF.md 0.33 记录的 Kelvin 2026-10-06 决定）：推进先结束本请求此前的数据库事务
 （此前只有读取，回滚即可），再以 SELECT … FOR UPDATE（lock_order_statement，即
@@ -43,7 +48,7 @@ from pydantic import BaseModel
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
-from app.models import Order, OrderEvent, RefundRequest
+from app.models import Order, OrderEvent, Promotion, RefundRequest
 from app.models.order import ACTOR_ADMIN
 from app.models.refund import REFUND_REQUESTED
 from app.services.admin_auth import record_audit
@@ -154,8 +159,13 @@ class AdminOrderDetail(BaseModel):
     # 积分抵扣为订单的 points_redeemed，1 积分抵 1 仙。
     coupon_discount_sen: int
     points_discount_sen: int
+    # UX A02「金额明细」的活动优惠（商品级与整单级之和）与免运费显示；没有活动为 0。
+    promotion_discount_sen: int
     shipping_fee_sen: int
+    shipping_waived_sen: int
     total_sen: int
+    # 订单记有活动时为该活动的内部名称，否则为空。
+    promotion_name: str | None
     # 收货资料原文；订单摘要不依赖收货资料记录存在，没有那一条时为空。
     recipient: PayRecipient | None
     # 按时间从早到晚，同一时间按事件 ID 从小到大。
@@ -239,16 +249,19 @@ def order_detail(
     """一张订单的后台详情；订单不存在时为空。只读，不写审计。
 
     订单行、金额、收货资料与全部已退取自 lookup_orders 的查单视图，不另行组装；
-    查单视图不含的券折扣与积分抵扣直接取订单上的快照列。
+    查单视图不含的券折扣与积分抵扣直接取订单上的快照列；活动的内部名称按订单的
+    promotion_id 读活动，没有活动时为空。
     """
     views = lookup_orders(db, [order_id], lang, now)
     if not views:
         return None
     view = views[0]
-    discount_stmt = select(Order.coupon_discount_sen, Order.points_redeemed).where(
-        Order.id == order_id
+    discount_stmt = (
+        select(Order.coupon_discount_sen, Order.points_redeemed, Promotion.name)
+        .outerjoin(Promotion, Promotion.id == Order.promotion_id)
+        .where(Order.id == order_id)
     )
-    coupon_discount_sen, points_redeemed = db.execute(discount_stmt).tuples().one()
+    coupon_discount_sen, points_redeemed, promotion_name = db.execute(discount_stmt).tuples().one()
 
     event_stmt = (
         select(OrderEvent.created_at, OrderEvent.to_status, OrderEvent.actor_type)
@@ -279,8 +292,11 @@ def order_detail(
         subtotal_sen=view.subtotal_sen,
         coupon_discount_sen=coupon_discount_sen,
         points_discount_sen=points_redeemed,
+        promotion_discount_sen=view.promotion_discount_sen,
         shipping_fee_sen=view.shipping_fee_sen,
+        shipping_waived_sen=view.shipping_waived_sen,
         total_sen=view.total_sen,
+        promotion_name=promotion_name,
         recipient=view.recipient,
         events=events,
         refunds_pending=pending_refund_counts(db, [order_id]).get(order_id, 0),
