@@ -6350,7 +6350,7 @@ tasks:
       运营者落实写法：在调用 quote_cart 之前以 active_promotion(db, now, share_lock=True) 读生效活动（共享锁，与后台撤回互相等待，SHOP-TASK-233）并传入（SHOP-TASK-234 的 promotion 参数）；本单参加活动（quote 的 promotion 不为 None 且 participates 为 True）时，以 SHOP-TASK-233 的 price_lines 取每件的活动优惠，按展开顺序传给 price_order 的 promotion_discounts（SHOP-TASK-232），订单的 shipping_fee_sen 写实际运费（运费报价减免去的运费），shipping_waived_sen 写免去的运费；不参加活动时与现在相同，活动列取 0 与空。游客没有券与积分，不做第 6 条的比较。请求指纹不变。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 4、7、14 条：订单金额快照与逐件分摊，不改收货资料的处理。
       拆分：节日促销服务层的第三个任务（3 个允许路径），依赖 SHOP-TASK-230（订单列）、232（price_order 的活动参数）与 234（quote_cart 的活动参数）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-230
       - SHOP-TASK-232
