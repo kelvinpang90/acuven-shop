@@ -13,11 +13,16 @@ lang 与目录接口相同，只接受 en、zh、ms，默认 en。
 JSON 解析与字段校验之前，按访客来源（SHOP-TASK-026 的 client_source）计一次，桶名
 checkout_quote_source，10 分钟 300 次，成功失败都计；超过即 429 rate_limited，不回显请求内容。
 Redis 未配置、连不上、超时或出错时放行，见 enforce_source_limit。
+
+节日促销活动（docs/DESIGN.md 1.23，提交 b7f9355，「节日促销活动」第 1、4、10 条，SHOP-TASK-234）：
+每次请求以 active_promotion(session, _utcnow()) 读当时生效的活动传给 quote_cart，不缓存；
+没有生效活动时响应的 promotion 为 null。测试替换 _utcnow 来固定时钟。
 """
 
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import Annotated
 
 import redis
@@ -37,6 +42,7 @@ from app.services.checkout import (
     CheckoutQuote,
     quote_cart,
 )
+from app.services.promotions import active_promotion
 from app.services.rate_limit import (
     RateLimitUnavailable,
     client_source,
@@ -56,6 +62,10 @@ QUOTE_SOURCE_LIMIT = 300
 QUOTE_SOURCE_WINDOW_SECONDS = 10 * 60
 
 OptionalRedisDep = Annotated[redis.Redis | None, Depends(get_optional_redis_client)]
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 async def enforce_source_limit(
@@ -154,6 +164,7 @@ def quote(body: QuoteRequestDep, session: SessionDep, lang: Language = "en") -> 
             lang=lang,
             country_code=body.country_code,
             state_code=body.state_code,
+            promotion=active_promotion(session, _utcnow()),
         )
     except InvalidDestination:
         raise HTTPException(status_code=422, detail="invalid country or state code") from None

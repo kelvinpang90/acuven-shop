@@ -231,6 +231,9 @@ def _red_line(quantity: int = 1, **overrides: object) -> dict[str, object]:
         "image": "img/tee-1.jpg",
         "unit_price_sen": 2590,
         "line_subtotal_sen": 2590 * quantity,
+        # SHOP-TASK-234：没有生效活动时取默认值。
+        "promotion_rule_id": None,
+        "promotion_item_discount_sen": 0,
     }
     return line | overrides
 
@@ -268,6 +271,8 @@ def test_ok_line_has_exactly_the_public_fields(db: Session, client: TestClient) 
         "units_over_limit": False,
         "amount_limit_sen": 99999999,
         "amount_over_limit": False,
+        # SHOP-TASK-234：没有生效活动时为 null。
+        "promotion": None,
     }
 
 
