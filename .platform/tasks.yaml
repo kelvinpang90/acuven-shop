@@ -6236,7 +6236,7 @@ tasks:
       运营者落实写法：订单的实际运费仍是 shipping_fee_sen（免运费时为 0），免去的运费另记一列；四个金额列与逐件活动优惠都是非空整数、库里默认 0（模型与迁移都写 server_default 0，照 app/models/catalog.py 的 version 列），所以现有直接构造 Order 与 OrderItemUnit 的约 60 个测试文件不用改。运营者在登记前对当时 main 的导出试改模型并跑全部后端测试：只有 tests/test_order_models.py（26 项）与 tests/test_member_models.py（3 项）因为按已有各列对表级检查约束逐条求值而失败，二者列入允许路径，只为让它们的行值带上新列而改。第 4 条末句（所有规则都没带来优惠时不记活动）与第 7 条「不参加活动或取了乙方案时为空」合起来，即活动 ID 为空当且仅当三项活动金额都为 0，库里用一条约束守住。
       设计闸门：DESIGN 1.23（提交 b7f9355）「数据模型」与「节日促销活动」第 7 条；订单金额快照的结构与约束，不涉及个人资料。
       拆分：节日促销数据库层的第二个任务（5 个允许路径），依赖 SHOP-TASK-229（外键指向它建的活动表与规则表）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-229
     acceptance_criteria:
