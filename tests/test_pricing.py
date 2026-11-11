@@ -247,3 +247,102 @@ def test_an_order_takes_at_most_one_coupon() -> None:
     """第 1 条：「优惠券先抵商品额」——一张订单只算一张券，同时给百分比与固定额拒绝。"""
     with pytest.raises(ValueError):
         price_order(EXAMPLE_LINES, percent_off=Decimal(10), fixed_off=100)
+
+
+# 以下守住 DESIGN 1.23（提交 b7f9355）「计价、优惠、积分与库存」第 1、2 条的活动优惠部分。
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {},
+        {"percent_off": Decimal(10), "points_redeemed": 300},
+        {"fixed_off": 700, "points_redeemed": 1},
+        {"percent_off": Decimal("17.5")},
+    ],
+)
+def test_zero_or_missing_promotion_discounts_change_nothing(kwargs) -> None:
+    """1.23 第 2 条：「没有活动优惠的订单，本条与 1.22 的算法逐仙相同。」
+
+    不传 promotion_discounts 与逐件全为 0 的结果逐字段相同，活动优惠字段都是 0。
+    """
+    without = price_order(EXAMPLE_LINES, **kwargs)
+    with_zero = price_order(EXAMPLE_LINES, promotion_discounts=[0, 0, 0], **kwargs)
+
+    assert with_zero == without
+    assert without.promotion_discount == 0
+    assert _column(without, "promotion_discount") == [0, 0, 0]
+    assert without.cash_total == (
+        without.subtotal - without.coupon_discount - without.points_redeemed
+    )
+
+
+def test_percent_coupon_is_computed_on_the_amount_after_promotion() -> None:
+    """1.23 第 2 条：「百分比券对整单活动后商品额计算一次」，「将整单券折扣按每件活动后金额占
+    整单活动后商品额的比例分摊；再将积分抵扣按每件券后金额占整单券后金额的比例分摊」，
+    「每件现金实付 = 原价 − 分摊活动优惠 − 分摊券额 − 分摊积分额」。
+
+    活动后 900、900、500 共 2300 仙：10% 券为 230 仙（按原价 2500 会得 250），分 90、90、50；
+    券后 810、810、450，300 积分分 118、117、65。
+    """
+    result = price_order(
+        EXAMPLE_LINES,
+        promotion_discounts=[100, 100, 0],
+        percent_off=Decimal(10),
+        points_redeemed=300,
+    )
+
+    assert result.subtotal == 2500
+    assert result.promotion_discount == 200
+    assert _column(result, "promotion_discount") == [100, 100, 0]
+    assert result.coupon_discount == 230
+    assert _column(result, "coupon_discount") == [90, 90, 50]
+    assert _column(result, "points_discount") == [118, 117, 65]
+    assert _column(result, "cash_paid") == [692, 693, 385]
+    assert result.cash_total == 2500 - 200 - 230 - 300
+    assert result.points_earned == 17
+    assert _column(result, "points_earned") == [6, 7, 4]
+
+
+def test_fixed_coupon_larger_than_amount_after_promotion_is_capped_at_it() -> None:
+    """1.23 第 2 条：「固定金额券取券额与整单活动后商品额较小者」。
+
+    原价 1000 + 500 仙、活动优惠 400 + 100 仙：活动后 1000 仙，1500 仙的券只抵 1000 仙。
+    """
+    lines = [OrderLine(1000, 1), OrderLine(500, 1)]
+    result = price_order(lines, promotion_discounts=[400, 100], fixed_off=1500)
+
+    assert result.coupon_discount == 1000
+    assert _column(result, "coupon_discount") == [600, 400]
+    assert _column(result, "cash_paid") == [0, 0]
+    assert result.cash_total == 0
+    assert result.points_earned == 0
+    with pytest.raises(ValueError):
+        price_order(lines, promotion_discounts=[400, 100], fixed_off=1500, points_redeemed=1)
+
+
+@pytest.mark.parametrize(
+    "promotion_discounts",
+    [[100, 100], [100, 100, 0, 0], [-1, 0, 0], [0, 0, 501], [1001, 0, 0]],
+)
+def test_invalid_promotion_discounts_are_rejected(promotion_discounts) -> None:
+    """1.23 第 2 条：「先按「节日促销活动」第 4、7 条得到每件的活动优惠与活动后金额」——
+    逐件一项，且「每件现金实付……不为负」（第 7 条），所以每项为不超过该件原价的非负整数。
+    """
+    with pytest.raises(ValueError):
+        price_order(EXAMPLE_LINES, promotion_discounts=promotion_discounts)
+
+
+def test_promotion_discount_equal_to_unit_price_is_allowed() -> None:
+    """1.23 第 2 条：活动优惠恰好等于原价时该件活动后金额为 0，券与积分都不分到它。"""
+    result = price_order(EXAMPLE_LINES, promotion_discounts=[0, 0, 500], fixed_off=200)
+
+    assert _column(result, "coupon_discount") == [100, 100, 0]
+    assert _column(result, "cash_paid") == [900, 900, 0]
+
+
+@pytest.mark.parametrize("promotion_discounts", [[100.0, 0, 0], [True, 0, 0], [0, 0, Decimal(1)]])
+def test_float_and_bool_promotion_discounts_are_rejected(promotion_discounts) -> None:
+    """1.23 第 2 条：金额以「整仙」计——活动优惠只收 int，float 与 bool 一律拒绝。"""
+    with pytest.raises(TypeError):
+        price_order(EXAMPLE_LINES, promotion_discounts=promotion_discounts)
