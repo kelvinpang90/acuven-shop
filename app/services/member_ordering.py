@@ -23,12 +23,19 @@
   decide_member_promotion 判定方案（会员选了券或填了积分才比较甲乙）；取甲时券与积分在活动后
   的金额上计算，券的最低消费也按活动后的金额判断，合计按实际运费。下单（SHOP-TASK-237）复用
   同一个函数，计价与下单得到同一结果。
+- 下单接入节日促销活动（DESIGN 1.23，提交 b7f9355，「节日促销活动」第 6、7、14 条，
+  SHOP-TASK-237）：下单事务里照 SHOP-TASK-235 游客下单的写法以共享锁读当时生效的活动，传入
+  重新计价，再由 decide_member_promotion 按同一规则重算方案，不信任前台的选择。取甲时订单记
+  活动、商品级与整单级活动优惠、实际运费与免去的运费，逐件快照记该件的活动优惠与该行命中的商品级
+  规则；券只在 use_coupon 为真时预占（reserve_coupon 的商品额为活动后的金额，最低消费按它判断），
+  积分只在 points_allowed 为真时校验与预占。券本身可用而按方案不用、或积分按方案不用时照常
+  下单，二者都不预占。取乙或不参加活动时与没有活动时相同。按幂等键重放不重读活动、不重新计价。
 - 下单（place_member_order）的加锁顺序：结束此前的只读事务后，以 SELECT … FOR UPDATE 锁住
   该会员的行作为新事务的第一条语句（同 app/services/refund_review.py 的锁定协议：之后的读取
-  都不早于这个锁，看得到等锁期间别人提交的预占），再按 SKU 规格 ID 从小到大扣库存，写订单，
-  然后由 reserve_coupon 锁订单与券、reserve_points 锁积分批次与流水。会员 → 订单 → 券与
-  app/services/coupons.py、app/services/points.py 一致。SQLite 不支持行锁，SQLAlchemy 在
-  SQLite 上不生成 FOR UPDATE，并发只在 MySQL 上成立。
+  都不早于这个锁，看得到等锁期间别人提交的预占），再以共享锁读生效活动，按 SKU 规格 ID 从小到大
+  扣库存，写订单，然后由 reserve_coupon 锁订单与券、reserve_points 锁积分批次与流水。会员 →
+  订单 → 券与 app/services/coupons.py、app/services/points.py 一致。SQLite 不支持行锁，
+  SQLAlchemy 在 SQLite 上不生成 FOR UPDATE，并发只在 MySQL 上成立。
 - 任何一步拒绝或失败都回滚整个事务，再按幂等键查一次：同键的并发请求已提交则按重放处理。
 
 请求格式校验、手机号规范化与登录会话由调用方（之后的接口任务 SHOP-TASK-089）完成。
@@ -537,10 +544,10 @@ def place_member_order(
     1. 按幂等键查订单：有则在其会员 ID 等于该会员且指纹相同时重放（不重新计价，不动库存、
        券与积分），否则抛 IdempotencyConflict。
     2. 回滚此前的只读事务，锁会员行（新事务的第一条语句），核对为 active。
-    3. 按收货国家与州属重新计价，按 SKU 规格 ID 从小到大扣库存。
-    4. 判定券与积分，按 price_order 计价。
-    5. 同一事务里写订单、订单行、逐件分摊（含获得积分快照）、收货资料与下单事件，
-       预占券与积分，然后提交。
+    3. 以共享锁读当时生效的活动，按收货国家与州属重新计价，按 SKU 规格 ID 从小到大扣库存。
+    4. 判定券，由 decide_member_promotion 判定方案，判定积分，按 price_order 计价。
+    5. 同一事务里写订单（取甲时含活动列）、订单行、逐件分摊（含获得积分与活动优惠快照）、
+       收货资料与下单事件，按方案预占券与积分，然后提交。
 
     任何一步拒绝或失败（含插入订单撞上幂等键唯一约束）都回滚整个事务，再按幂等键查一次：
     同键的并发请求已提交则按重放处理，否则抛出原异常。
@@ -588,12 +595,15 @@ def _create_order(
     if member is None or member.status != MEMBER_ACTIVE:
         raise MemberNotActive
 
+    # 第 14 条：以下单事务里读到的活动为准；共享锁与后台撤回、保存的排他锁互相等待。
+    promotion = active_promotion(db, now, share_lock=True)
     quote = quote_cart(
         db,
         list(request.lines),
         lang="en",
         country_code=request.country_code,
         state_code=request.state_code,
+        promotion=promotion,
     )
     lines = [line for line in quote.lines if isinstance(line, PricedLine)]
     if not quote.can_place_order or quote.shipping is None or len(lines) != len(request.lines):
@@ -606,29 +616,85 @@ def _create_order(
         raise OrderNotPlaceable
 
     priced = [OrderLine(unit_price=line.unit_price_sen, quantity=line.quantity) for line in lines]
-    coupon_id = None
-    coupon_kwargs: dict[str, int | Decimal] = {}
+    check = None
     if request.coupon_code is not None:
         code = normalize_coupon_code(request.coupon_code)
         if code is None:
             raise CouponUnavailable
+        # 同计价：以原价小计查一次，券本身不成立即拒绝，不论方案是否用它。
         check = check_coupon(db, code, member_id, quote.subtotal_sen, now)
         if not check.ok:
             raise CouponUnavailable
+
+    # 第 6 条末句：服务端按同一规则重算方案，不信任前台的选择。
+    participating = (
+        promotion is not None
+        and quote.promotion is not None
+        and quote.promotion.participates is True
+    )
+    promo_lines: list[PromoInputLine] = []
+    if participating:
+        promo_lines = [
+            PromoInputLine(
+                line_index=line_index,
+                unit_price=line.unit_price_sen,
+                quantity=line.quantity,
+                product_id=found[item.sku][1].id,
+                category_id=found[item.sku][1].category_id,
+            )
+            for line_index, (item, line) in enumerate(zip(request.lines, lines, strict=True))
+        ]
+    decision = decide_member_promotion(
+        promotion if participating else None,
+        promo_lines,
+        shipping_fee_sen=quote.shipping.fee_sen,
+        coupon=check,
+        points_to_redeem=request.points_to_redeem,
+    )
+
+    coupon_id = None
+    coupon_kwargs: dict[str, int | Decimal] = {}
+    if check is not None and decision.use_coupon:
         coupon_id = check.coupon_id
         coupon_kwargs = check.price_kwargs()
+    discounts = decision.promotion_discounts
 
-    points = request.points_to_redeem
-    after_coupon = price_order(priced, **coupon_kwargs)
-    goods_after_coupon = after_coupon.subtotal - after_coupon.coupon_discount
+    # 活动不与积分同用时按方案不用积分：不是积分输入错误，照常下单、不预占。
+    points = request.points_to_redeem if decision.points_allowed else 0
+    after_coupon = price_order(priced, promotion_discounts=discounts, **coupon_kwargs)
+    goods_after_coupon = (
+        after_coupon.subtotal - after_coupon.promotion_discount - after_coupon.coupon_discount
+    )
     if points > available_points(db, member_id, now) or points > goods_after_coupon:
         raise PointsUnavailable
-    pricing = price_order(priced, points_redeemed=points, **coupon_kwargs)
+    pricing = price_order(
+        priced, promotion_discounts=discounts, points_redeemed=points, **coupon_kwargs
+    )
 
-    order = _write_order(db, member_id, idempotency_key, fingerprint, now, quote.shipping, pricing)
+    order = _write_order(
+        db,
+        member_id,
+        idempotency_key,
+        fingerprint,
+        now,
+        quote.shipping,
+        pricing,
+        # 第 7 条：不参加活动或取了乙方案时为空。
+        promotion_id=(
+            None
+            if promotion is None or decision.promotion_pricing is None
+            else promotion.promotion_id
+        ),
+        promotion_pricing=decision.promotion_pricing,
+        shipping_waived_sen=decision.shipping_waived_sen,
+    )
     items = _order_items(db, order.id, request.lines, lines, found)
     db.add_all(items)
     db.flush()
+    # 命中的商品级规则按行给出，不论这一件是否享受折扣（第 7 条）；不取甲时为空。
+    rule_ids: list[int | None] = [None] * len(pricing.units)
+    if decision.promotion_pricing is not None:
+        rule_ids = [u.rule_id for u in decision.promotion_pricing.units]
     db.add_all(
         OrderItemUnit(
             order_item_id=items[unit.line_index].id,
@@ -639,8 +705,10 @@ def _create_order(
             cash_paid_sen=unit.cash_paid,
             # 获得积分在下单时写快照（Kelvin 2026-10-11 决定 3），支付成功时才发放。
             points_earned=unit.points_earned,
+            promotion_discount_sen=unit.promotion_discount,
+            promotion_rule_id=rule_id,
         )
-        for unit in pricing.units
+        for unit, rule_id in zip(pricing.units, rule_ids, strict=True)
     )
     db.add(
         OrderRecipient(
@@ -665,8 +733,15 @@ def _create_order(
     db.flush()
 
     if coupon_id is not None:
+        # 券的最低消费按活动后的商品额判断（计价第 2 条，1.23）；不取甲时即原价小计。
         reserved = reserve_coupon(
-            db, coupon_id, order.id, member_id, pricing.coupon_discount, pricing.subtotal, now
+            db,
+            coupon_id,
+            order.id,
+            member_id,
+            pricing.coupon_discount,
+            pricing.subtotal - pricing.promotion_discount,
+            now,
         )
         if not reserved.ok:
             raise CouponUnavailable
@@ -686,16 +761,31 @@ def _write_order(
     now: datetime,
     shipping: ShippingQuote,
     pricing: PricingResult,
+    *,
+    promotion_id: int | None,
+    promotion_pricing: PromotionPricing | None,
+    shipping_waived_sen: int,
 ) -> Order:
+    """取甲时 promotion_id 与 promotion_pricing 非空；不取甲时为空、shipping_waived_sen 为 0。"""
+    shipping_fee = shipping.fee_sen - shipping_waived_sen
     order = Order(
         order_number=generate_order_number(),
         status=STATUS_AWAITING_PAYMENT,
         subtotal_sen=pricing.subtotal,
         coupon_discount_sen=pricing.coupon_discount,
         points_redeemed=pricing.points_redeemed,
-        shipping_fee_sen=shipping.fee_sen,
-        # 券与积分都不抵运费，应付不低于运费。
-        total_sen=pricing.cash_total + shipping.fee_sen,
+        # 实际运费：取甲且达到免运费门槛时为 0。
+        shipping_fee_sen=shipping_fee,
+        # 活动、券与积分都不抵运费，应付不低于实际运费。
+        total_sen=pricing.cash_total + shipping_fee,
+        promotion_id=promotion_id,
+        promotion_item_discount_sen=(
+            0 if promotion_pricing is None else promotion_pricing.item_discount_total
+        ),
+        promotion_order_discount_sen=(
+            0 if promotion_pricing is None else promotion_pricing.order_discount_total
+        ),
+        shipping_waived_sen=shipping_waived_sen,
         points_earned=pricing.points_earned,
         shipping_zone_code=shipping.zone_code,
         shipping_rate_version=shipping.version,
