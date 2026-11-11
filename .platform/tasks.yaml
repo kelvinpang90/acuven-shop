@@ -6291,7 +6291,7 @@ tasks:
     title: 读取生效的节日促销活动与规则换算（服务层）
     purpose: >-
       按 docs/DESIGN.md 1.23「节日促销活动」第 1、3、4 条，新建 app/services/promotions.py：从数据库读出当前生效的活动（或按 ID 读出任一活动，供之后的管理员预览），换算成 SHOP-TASK-231 的纯函数所需的规则对象，判定每个商品命中哪条商品级规则，并对一组正常行算出 PromotionPricing。供之后的游客与会员计价、下单、展示与预览任务调用。不改计价与下单服务、接口与前端，不改数据库。
-      运营者落实写法：生效活动每次都从数据库读、不缓存（第 1 条），不需要定时任务；同一时刻至多一个活动由之后的发布服务保证，读到多于一个时（数据异常）取开始时间最早、同时取 ID 最小的一个，并记一条 warning 日志（键 promotion_overlap，只带活动 ID）。商品级规则的范围按商品当时所属分类判断（第 3 条），一个商品落在多条商品级规则的范围里时取排序数最小的规则（第 3 条末段）；哪些行是正常行由调用方决定，本模块只接收正常行。
+      运营者落实写法：生效活动每次都从数据库读、不缓存（第 1 条），不需要定时任务；同一时刻至多一个活动由之后的发布服务保证，读到多于一个时（数据异常）取开始时间最早、同时取 ID 最小的一个，并记一条 warning 日志（键 promotion_overlap，只带活动 ID）。active_promotion 另有只限关键字参数 share_lock（默认 False）：为 True 时以共享锁读活动行（SQLAlchemy 的 with_for_update(read=True)），供下单事务使用，与后台撤回、保存时对活动行的排他锁互相等待，免得订单引用刚被撤回的活动（SHOP-TASK-235、237、241）。商品级规则的范围按商品当时所属分类判断（第 3 条），一个商品落在多条商品级规则的范围里时取排序数最小的规则（第 3 条末段）；哪些行是正常行由调用方决定，本模块只接收正常行。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 1、3、4 条；只读活动与规则、算金额，不碰个人资料。
       拆分：节日促销服务层的第一个任务（3 个允许路径），依赖 SHOP-TASK-229（活动表）与 231（计价纯函数）。
     status: ready
@@ -6300,7 +6300,7 @@ tasks:
       - SHOP-TASK-231
     acceptance_criteria:
       - 数据类——frozen 的 LoadedItemRule(rule_id, position, rule, product_ids, category_ids)（rule 为 ItemDiscountRule 或 BuyXGetYRule，两个 ID 集合为 frozenset）与 LoadedPromotion(promotion_id, version, status, starts_at, effective_end, coupon_combinable, points_combinable, item_rules, spend_rule, free_shipping_rule)：item_rules 按 position 升序；spend_rule 为 SpendRule（各档按 position 升序，模式取规则的 discount_mode）或 None；free_shipping_rule 为 FreeShippingRule 或 None；effective_end 为提前结束时间（有时）或结束时间，草稿没有时间时 starts_at 与 effective_end 为 None
-      - 读取——active_promotion(db, now) 返回 status 为 published、starts_at <= now 且 now < effective_end 的活动（now 为不带时区的 UTC，带时区抛 ValueError），没有返回 None；多于一个时照上面的落实写法取一个并记日志。load_promotion(db, promotion_id) 按 ID 读出任一状态的活动（不存在返回 None）。两者都只读、不加锁，规则、范围与满额档各用一次查询取出（不按规则逐条查询）
+      - 读取——active_promotion(db, now) 返回 status 为 published、starts_at <= now 且 now < effective_end 的活动（now 为不带时区的 UTC，带时区抛 ValueError），没有返回 None；多于一个时照上面的落实写法取一个并记日志。load_promotion(db, promotion_id) 按 ID 读出任一状态的活动（不存在返回 None）。两者都只读，除 share_lock 外不加锁，规则、范围与满额档各用一次查询取出（不按规则逐条查询）
       - 命中规则——rule_for_product(promotion, product_id, category_id) 返回范围（商品 ID 集合或分类 ID 集合）包含该商品的商品级规则中 position 最小者的 rule_id，没有返回 None
       - 计价——price_lines(promotion, lines, *, shipping_fee_sen) 接收 PromoInputLine(line_index, unit_price, quantity, product_id, category_id) 的序列（frozen 数据类，只含正常行，line_index 严格递增），按 rule_for_product 定每行的 rule_id，调用 price_promotion（item_rules 为本活动全部商品级规则的 ID 到规则对象的映射）并原样返回 PromotionPricing；shipping_fee_sen 为 None 时照 price_promotion 不判定是否参加
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_promotions_active.py 用 SQLite 内存库建活动：生效判定的边界（开始时刻生效、结束时刻与提前结束时刻不再生效、草稿与未开始的不生效）；读到两个已发布且重叠的活动时取开始最早者并记日志；按商品命中与按分类命中、两条规则都命中时取排序小者、商品改分类后按新分类判断；满额档按 position 排序；price_lines 以第 8 条算例的商品与规则得到 SHOP-TASK-231 测试里同样的每件活动优惠；load_promotion 读得到草稿。每条测试的文档字符串写明它守住的第几条哪一句
@@ -6347,7 +6347,7 @@ tasks:
     title: 游客下单接入节日促销活动（订单与逐件快照）
     purpose: >-
       按 docs/DESIGN.md 1.23「节日促销活动」第 4、7、14 条，改 app/services/ordering.py 的 place_guest_order：下单事务里读当时生效的活动，本单参加活动时按活动后的金额与实际运费写订单，并在订单与逐件快照里记活动、商品级与整单级活动优惠、免去的运费、每件的活动优惠与命中的规则。不改接口、前端与数据库；按幂等键重放原订单、库存、支付与取消的规则不变（第 14 条）。
-      运营者落实写法：在调用 quote_cart 之前以 active_promotion(db, now) 读生效活动并传入（SHOP-TASK-234 的 promotion 参数）；本单参加活动（quote 的 promotion 不为 None 且 participates 为 True）时，以 SHOP-TASK-233 的 price_lines 取每件的活动优惠，按展开顺序传给 price_order 的 promotion_discounts（SHOP-TASK-232），订单的 shipping_fee_sen 写实际运费（运费报价减免去的运费），shipping_waived_sen 写免去的运费；不参加活动时与现在相同，活动列取 0 与空。游客没有券与积分，不做第 6 条的比较。请求指纹不变。
+      运营者落实写法：在调用 quote_cart 之前以 active_promotion(db, now, share_lock=True) 读生效活动（共享锁，与后台撤回互相等待，SHOP-TASK-233）并传入（SHOP-TASK-234 的 promotion 参数）；本单参加活动（quote 的 promotion 不为 None 且 participates 为 True）时，以 SHOP-TASK-233 的 price_lines 取每件的活动优惠，按展开顺序传给 price_order 的 promotion_discounts（SHOP-TASK-232），订单的 shipping_fee_sen 写实际运费（运费报价减免去的运费），shipping_waived_sen 写免去的运费；不参加活动时与现在相同，活动列取 0 与空。游客没有券与积分，不做第 6 条的比较。请求指纹不变。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 4、7、14 条：订单金额快照与逐件分摊，不改收货资料的处理。
       拆分：节日促销服务层的第三个任务（3 个允许路径），依赖 SHOP-TASK-230（订单列）、232（price_order 的活动参数）与 234（quote_cart 的活动参数）。
     status: ready
@@ -6385,7 +6385,7 @@ tasks:
       - SHOP-TASK-235
     acceptance_criteria:
       - 新字段——MemberCheckoutQuote 末尾加 promotion（quote_cart 给出的 PromotionQuote 或 None，原样转出）、promotion_plan（promotion、no_promotion 或 None）、promotion_pre_points_total_sen 与 other_pre_points_total_sen（int 或 None）、coupon_note（not_combinable、below_min_after_sale 或 None）、points_not_combinable（bool）。有不正常的行或超出整单上限时照现在提前返回，promotion 照转，其余新字段为 None 与 False
-      - 不比较的情形——没有运费报价、没有生效活动或本单不参加活动时，券与积分照现在按原价计算，promotion_plan 为 None；参加活动而会员没选券也没填积分时，promotion_plan 为 promotion，按活动后的金额与实际运费给出合计，两个积分前应付为 None
+      - 不比较的情形——没有运费报价、没有生效活动或本单不参加活动时，券与积分照现在按原价计算，promotion_plan 为 None；参加活动而会员没选券也没填积分时，promotion_plan 为 promotion，按活动后的金额与实际运费给出合计，两个积分前应付为 None，points_cap 在活动与积分同用时为可用余额与活动后商品额较小者、不同用时为 0
       - 比较——参加活动且会员选了券或填了积分时调用 choose_promotion_plan（coupon 为可用券组成的 CouponTerms 或 None，两个开关取活动的设置）：promotion_plan 照所取方案；两个积分前应付分别为甲与乙的；取甲时 price_order 带每件活动优惠、券只在 use_coupon 时用、积分只在 points_allowed 时按现在的上限规则接受，合计为现金实付合计加实际运费；取乙时与没有活动时相同（含未免的运费）
       - 说明字段——取甲且券可用而未用时，coupon_note 在活动不与券同用时为 not_combinable，否则为 below_min_after_sale；取甲、会员填了积分而 points_allowed 为 False 时 points_not_combinable 为 True、points_cap 为 0、points_redeemed 为 0、points_accepted 为 True（这是活动不同用积分，不是积分输入错误）；coupon_applicable 仍表示券本身是否可用
       - 接口——MemberQuoteOut 加同名字段（promotion 的结构同 PromotionQuote，可直接以该数据类为字段类型），照服务层结果输出；其余校验、错误与 no-store 不变
@@ -6417,7 +6417,7 @@ tasks:
       - SHOP-TASK-235
       - SHOP-TASK-236
     acceptance_criteria:
-      - 方案——下单事务里以 active_promotion(db, now) 读活动，按 236 的方案判定函数得到与计价相同的结果；取甲时订单记活动与两项合计、实际运费与免去的运费，逐件记活动优惠与命中规则，券与积分按方案使用；取乙或不参加活动时订单不记活动，金额与现在相同
+      - 方案——下单事务里以 active_promotion(db, now, share_lock=True) 读活动（共享锁，同 SHOP-TASK-235），按 236 的方案判定函数得到与计价相同的结果；取甲时订单记活动与两项合计、实际运费与免去的运费，逐件记活动优惠与命中规则，券与积分按方案使用；取乙或不参加活动时订单不记活动，金额与现在相同
       - 券与积分——取甲且 use_coupon 为 True 时以活动后商品额调用 reserve_coupon、券折扣按活动后的金额计算；按方案不用的券不写用券记录、不占用次数；按方案不用的积分不预占；券或积分本身不成立时照现在抛 CouponUnavailable 或 PointsUnavailable、不建订单
       - 时点——计价后活动结束、提前结束或开关被改都以下单事务读到的为准；按幂等键重放原订单不重新计价
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_member_order_promotion.py 照第 8 条：首例下单后订单商品级 1900、整单级 500、券 590、积分 1000、实际运费 0、免去 800、应付 4310，五件的活动优惠、券、积分、现金实付与 SHOP-TASK-232 测试的数字相同，支付成功后获得 43 积分按 14、13、8、8、0 分摊；关闭券同用时不写用券记录、券仍可再用；D 例与第三例订单不记活动、券照常预占；只关闭积分同用时积分不预占；第 9 条只退第一件 B 时模拟退现金 808、返还 187 积分、追回 8 积分（沿用现有退款服务，不改它）。每条测试的文档字符串写明它守住的第几条哪一句
@@ -6470,8 +6470,8 @@ tasks:
       - SHOP-TASK-229
     acceptance_criteria:
       - 输入——frozen 数据类 TierInput(threshold_sen, amount_sen, percent)、RuleInput(kind, discount_mode, percent, amount_sen, buy_quantity, get_quantity, get_percent, threshold_sen, product_ids, category_ids, tiers)、DecorationInput(pack, palette, ambient, home_poster, list_strip, card_badge, detail_ribbon, cart_progress, poster_mode)、CopyInput（title、subtitle、badge、strip、poster_alt 各有 _en、_zh、_ms）与 PromotionInput(name, starts_at, ends_at, coupon_combinable, points_combinable, rules, decoration, copy)；规则的排序为 rules 里的顺序（从 1 起）
-      - 问题与异常——PromotionProblem(code, field, product_id) 与 PromotionInvalid(problems)；问题码至少有 name、time、duration、rule、scope、tiers、decoration、copy，供 249 再加 scope_overlap、publish_missing、rules_locked、ended_readonly；每个问题的 field 指出出错的字段（规则带从 1 起的序号）
-      - 检查函数——check_rule_params(rule) 只查类别与参数（第 3 条的范围与满额档 1–5 档、方式一致、门槛与优惠逐档严格递增、固定金额小于门槛），不查范围；check_rule_scope(rule) 查商品级规则至少选一件商品或一个分类、各至多 200 件与 30 个、同一规则里不重复；check_decoration(decoration) 查各 ID 在 app/models/promotion.py 的常量里（第 12 条，以 docs/design/tokens/promotions.json 为准）；check_copy(copy) 查长度（标题 0–40、副标题 0–80、角标短语 0–12、横条文字 0–60、替代文字 0–150）与不含换行和控制字符；check_promotion_input(data) 依次组合以上各项并查内部名称 1–100 个字符、时间格式（分钟精度或 None；两者都有时结束晚于开始、时长不超过 92 天）、商品级规则至多 20 条、满额减或满额折与免运费各至多一条，有问题即抛 PromotionInvalid
+      - 问题与异常——PromotionProblem(code, field, product_id, product_name)（后两项只在 scope_overlap 时有值，product_name 为英文名称，供页面显示）与 PromotionInvalid(problems)；问题码至少有 name、time、duration、rule、scope、tiers、decoration、copy，供 249 再加 scope_overlap、publish_missing、rules_locked、ended_readonly；每个问题的 field 指出出错的字段（规则带从 1 起的序号）
+      - 检查函数——check_rule_params(rule) 只查类别与参数（第 3 条的范围与满额档 1–5 档、方式一致、门槛与优惠逐档严格递增、固定金额小于门槛；不属于该类别的参数与满额档须为空，否则问题码 rule），不查范围；check_rule_scope(rule) 查商品级规则至少选一件商品或一个分类、各至多 200 件与 30 个、同一规则里不重复，整单级规则的范围须为空（问题码 scope）；check_decoration(decoration) 查各 ID 在 app/models/promotion.py 的常量里（第 12 条，以 docs/design/tokens/promotions.json 为准）；check_copy(copy) 查长度（标题 0–40、副标题 0–80、角标短语 0–12、横条文字 0–60、替代文字 0–150）与不含换行和控制字符（Unicode 类别 Cc，以及行分隔符与段分隔符 U+2028、U+2029；零宽连接符等 Cf 类允许，emoji 要用）；内部名称同样去掉首尾空白、照同一字符规则检查；check_promotion_input(data) 依次组合以上各项并查内部名称 1–100 个字符、时间格式（分钟精度或 None；两者都有时结束晚于开始、时长不超过 92 天）、商品级规则至多 20 条、满额减或满额折与免运费各至多一条，有问题即抛 PromotionInvalid
       - 时间与状态——to_utc(local) 与 to_local(utc) 照落实写法换算（格式不对抛 ValueError）；promotion_state(status, starts_at, effective_end, now) 返回 draft、scheduled、running 或 ended
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_promotion_input.py：每项取值的边界与问题码（含 92 天整与多一分钟、百分比 0 与 91、X 与 Y 的 0 与 11、档的递增与固定金额等于门槛、201 件商品与 31 个分类、41 个字符的标题与含换行的文案、清单外的 ID）；check_rule_params 不因缺范围报错；时间换算（跨日、带秒的 UTC 反向换算截秒）；四种状态的边界（开始时刻为 running、实际结束时刻为 ended）。每条测试的文档字符串写明它守住的第几条哪一句
       - docs/task-records/SHOP-TASK-239.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明公开的数据类、函数签名、异常与问题码，供 249、241、248 引用）；改动只落在 allowed_change_paths；不改查库与写库的逻辑、接口、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
@@ -6488,7 +6488,7 @@ tasks:
     title: 节日促销海报图的上传、替换与移除（服务层）
     purpose: >-
       按 docs/DESIGN.md 1.23「节日促销活动」第 12 条（海报图沿用「计价、优惠、积分与库存」第 13 条的格式、文件大小与存储规则，另用自己的存储键前缀；像素尺寸为桌面图宽至少 1,200、手机图宽至少 600；上传即替换该位置的图，存放与替换的顺序照第 15 条）与 HANDOFF 0.93 确认的一点（海报图的上传与替换立即生效、不随保存提交、不改活动的版本号，每次上传与替换写后台审计），照店铺标志的服务层（app/services/store_logo.py）做活动海报图的替换与移除。接口见 SHOP-TASK-250。不改前端与数据库。
-      运营者落实写法：app/services/image_processing.py 的 process_image 加只限关键字参数 min_width（默认 0，即不另限宽度），海报传桌面 1200、手机 600，其余检查照商品图片（宽与高各 200–4,000）；宽度下限按上传的原图判断（第 12 条写的是上传图的宽），之后照常把长边缩到 1,600，展示图的宽可能小于下限，接受（前台按比例居中裁切显示）。app/services/image_store.py 加 POSTER_KEY_PREFIX（promotion-posters/）。上传与移除只对存在且不是 ended 的活动（状态用 SHOP-TASK-239 的 promotion_state），锁活动行后改该位置的五列与更新时间、写审计并提交，不改 version；替换与移除后删除旧对象（只尝试 1 次，失败只记日志）。已发布（scheduled 或 running）且海报为上传图模式的活动不能移除图（第 2 条的发布条件要求两张图都有，与 SHOP-TASK-249 保存时守住的一致）。位置 slot 为 desktop 或 phone。
+      运营者落实写法：app/services/image_processing.py 的 process_image 加只限关键字参数 min_width（默认 0，即不另限宽度），海报传桌面 1200、手机 600，其余检查照商品图片（宽与高各 200–4,000）；宽度下限按上传的原图判断（第 12 条写的是上传图的宽），之后照常把长边缩到 1,600，展示图的宽可能小于下限，接受（前台按比例居中裁切显示）。app/services/image_store.py 加 POSTER_KEY_PREFIX（promotion-posters/）。上传与移除只对存在且不是 ended 的活动（状态用 SHOP-TASK-239 的 promotion_state），锁活动行后改装饰行该位置的五列与装饰行的 updated_at、写审计并提交，不改活动的 version 与 updated_at（海报不随保存提交，HANDOFF 0.93）；替换与移除后删除旧对象（只尝试 1 次，失败只记日志）。已发布（scheduled 或 running）且海报为上传图模式的活动不能移除图（第 2 条的发布条件要求两张图都有，与 SHOP-TASK-249 保存时守住的一致）。位置 slot 为 desktop 或 phone。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 12 条与「计价、优惠、积分与库存」第 13、15 条：图片的校验与存储，不碰金额与个人资料。
       拆分：节日促销后台层的第三个任务（7 个允许路径），依赖 SHOP-TASK-229 与 249（PromotionNotFound 与读取）。原登记稿把服务与接口合在一个任务，预审报 TOO_LARGE，接口拆到 250。
     status: ready
@@ -6496,7 +6496,7 @@ tasks:
       - SHOP-TASK-229
       - SHOP-TASK-249
     acceptance_criteria:
-      - 处理——process_image(data, *, min_side, min_long_side, min_width=0)：原图宽小于 min_width 即 ImageRejected，其余行为与现在相同（现有调用不传，结果不变）
+      - 处理——process_image(data, *, min_side, min_long_side, min_width=0)：按 EXIF 方向转正之后的宽（即显示方向的宽）小于 min_width 即 ImageRejected，其余行为与现在相同（现有调用不传，结果不变）
       - 服务——新文件 app/services/promotion_poster.py：poster_path(file_name) 返回 /api/promotion-posters/ 加文件名加 .webp；poster_file_names(db) 返回所有活动装饰行引用的海报文件名集合（供 250 的公开提供判断）；replace_poster(db, settings, admin_account_id, promotion_id, slot, image, now) 照 replace_logo 的顺序（锁外写对象、事务里锁活动行改五列、写审计、提交失败删新对象、提交后删旧对象）并返回新路径；remove_poster(db, settings, admin_account_id, promotion_id, slot, now) 照 remove_logo（没有图时照样成功、不写审计）
       - 状态与异常——活动不存在抛 249 的 PromotionNotFound；ended 抛新异常 PromotionEnded（加在 app/services/admin_promotions.py，241 复用）；已发布的上传图模式移除抛新异常 PosterRequired（加在本文件）；审计 action 为 admin_promotion_poster_uploaded 与 admin_promotion_poster_removed，target 为 promotion 与活动 ID，旧值与新值为「slot 文件名」，没有图的一侧只写 slot
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_promotion_poster.py（以替身代替存储）：宽 1199 与 1200 的桌面图、宽 599 与 600 的手机图；替换后旧对象被删；移除；不改活动的 version；ended、不存在与已发布上传图模式的移除；审计写法；process_image 不传 min_width 时与现在相同。每条测试的文档字符串写明它守住的设计句子、HANDOFF 0.93 的那一点或本任务的落实写法
@@ -6517,7 +6517,7 @@ tasks:
     title: 后台促销活动的发布、撤回、提前结束、删除与复制（服务层）
     purpose: >-
       按 docs/DESIGN.md 1.23「节日促销活动」第 1、2 条与 docs/UX.md 0.20 的 A12 状态表，在 app/services/admin_promotions.py 新增活动的五种状态操作：发布（检查发布条件与时间不重叠）、已发布未开始的撤回为草稿、进行中的提前结束、草稿的删除（连同海报图）、任何活动的复制为新草稿。每种操作带读取时的版本号、在事务里核对，写审计。不改接口、前端与数据库。
-      运营者落实写法：发布与撤回改变 status，提前结束写 ended_early_at，都加版本；复制与删除不改原活动的版本。发布先锁 promotion_publish_locks 那一行、再锁活动行（第 2 条），检查与 SHOP-TASK-249 保存 scheduled 时相同的发布条件与时间重叠（复用它的检查函数）；开始时间已过的发布即生效。撤回在锁住活动行后另查是否已有订单引用该活动，有即按已开始处理、拒绝撤回（开始时刻前后的并发下单可能已引用它，第 2 条「已开始的活动不能撤回」）；删除只对草稿，草稿从未发布、不会被订单引用。提前结束只缩短实际结束时间，不会造成与其他活动重叠，所以不锁 promotion_publish_locks。提前结束的时刻为服务端当前时刻截到整秒（SHOP-TASK-229 的落实写法），之后不能恢复。删除先读出两张海报图的文件名，提交后以 SHOP-TASK-240 的 POSTER_KEY_PREFIX 删除对象（只尝试 1 次，失败只记日志）。复制照第 2 条复制内部名称、规则、两个开关、装饰与文案，不复制时间与海报图（海报改回模板模式，替代文字一并清空），新草稿 version 为 1。
+      运营者落实写法：发布与撤回改变 status，提前结束写 ended_early_at，都加版本；复制与删除不改原活动的版本。发布先锁 promotion_publish_locks 那一行、再锁活动行（第 2 条），检查与 SHOP-TASK-249 保存 scheduled 时相同的发布条件、商品级规则重叠与时间重叠（复用它导出的 publish_problems 与 ensure_no_overlap）；开始时间已过的发布即生效。撤回以排他锁锁住活动行后另查是否已有订单引用该活动，有即按已开始处理、拒绝撤回（第 2 条「已开始的活动不能撤回」）；下单事务读活动时加共享锁（SHOP-TASK-233 的 share_lock，235 与 237 使用），撤回提交前不会有新的订单引用它，撤回提交后下单读到的已是草稿、不再引用，所以撤回成功的活动不被任何订单引用，之后作为草稿删除不会撞上订单的外键。删除只对草稿。提前结束只缩短实际结束时间，不会造成与其他活动重叠，所以不锁 promotion_publish_locks。提前结束的时刻为服务端当前时刻截到整秒（SHOP-TASK-229 的落实写法），之后不能恢复。删除先读出两张海报图的文件名，提交后以 SHOP-TASK-240 的 POSTER_KEY_PREFIX 删除对象（只尝试 1 次，失败只记日志）。复制照第 2 条复制内部名称、规则、两个开关、装饰与文案，不复制时间与海报图（海报改回模板模式，替代文字一并清空），新草稿 version 为 1。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 1、2 条：活动何时生效（发布、撤回、提前结束），决定之后的计价；只写后台审计，不碰个人资料。
       拆分：节日促销后台层的第五个任务（3 个允许路径），依赖 SHOP-TASK-233（测试用 active_promotion）、249（检查函数与异常）与 240（海报存储前缀与 PromotionEnded）。
     status: ready
@@ -6545,7 +6545,7 @@ tasks:
     title: 后台促销活动的接口（列表、读取、新建、保存与状态操作）
     purpose: >-
       按 docs/UX.md 0.20 的 A12 与 docs/DESIGN.md 1.23「节日促销活动」第 1–3、12 条，新建 app/api/admin_promotions.py，把 SHOP-TASK-239、249 与 241 的服务层接成后台接口，供 A12 页面使用。不改服务层的规则，不改前端与数据库。
-      运营者落实写法：照 app/api/admin_categories.py 的写法（_NoStoreRoute、AdminDep、CsrfDep、WriteBodyDep 读请求体但上限另设为 64 KB——规则可带 20 × 230 个商品与分类 ID，8 KB 不够；请求模型 extra forbid 与 strict；422 照 app/api/pay.py 的 _body_errors 不回显输入；路径 ID 照 _category_id 校验；读取接口带 csrf_token）。时间以马来西亚本地「YYYY-MM-DDTHH:MM」字符串或 null 收发，与服务层相同。错误映射：PromotionInvalid 为 422 promotion_invalid，响应体 detail 为 {"code": "promotion_invalid", "problems": [...]}（每项 code、field、product_id）；PromotionOverlap 为 409，detail 为 {"code": "promotion_overlap", "name": 对方内部名称}；PromotionChanged 为 409 promotion_changed；PromotionNotFound 为 404 promotion_not_found；PromotionStateInvalid 为 409，detail 为 {"code": "promotion_state_invalid", "state": 当前状态}；PromotionEnded 为 409 promotion_ended。列表响应为 promotions（PromotionSummary 的列表）与 csrf_token 两个字段；删除成功为 204、没有响应体。
+      运营者落实写法：照 app/api/admin_categories.py 的写法（_NoStoreRoute、AdminDep、CsrfDep、WriteBodyDep 读请求体但上限另设为 64 KB——规则可带 20 × 230 个商品与分类 ID，8 KB 不够；请求模型 extra forbid 与 strict；422 照 app/api/pay.py 的 _body_errors 不回显输入；路径 ID 照 _category_id 校验；读取接口带 csrf_token）。时间以马来西亚本地「YYYY-MM-DDTHH:MM」字符串或 null 收发，与服务层相同。错误映射：PromotionInvalid 为 422 promotion_invalid，响应体 detail 为 {"code": "promotion_invalid", "problems": [...]}（每项 code、field、product_id、product_name）；PromotionOverlap 为 409，detail 为 {"code": "promotion_overlap", "name": 对方内部名称}；PromotionChanged 为 409 promotion_changed；PromotionNotFound 为 404 promotion_not_found；PromotionStateInvalid 为 409，detail 为 {"code": "promotion_state_invalid", "state": 当前状态}；PromotionEnded 为 409 promotion_ended。列表响应为 promotions（PromotionSummary 的列表）与 csrf_token 两个字段；删除成功为 204、没有响应体。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 1–3、12 条：后台接口只传递与校验字段，规则、核对与审计在 SHOP-TASK-239、249 与 241 的服务层；不返回个人资料。
       拆分：节日促销后台层的第六个任务（4 个允许路径），依赖 SHOP-TASK-249 与 241。
     status: ready
@@ -6581,7 +6581,7 @@ tasks:
       - SHOP-TASK-240
     acceptance_criteria:
       - 数据——frozen 或 Pydantic 的 PromotionDisplay(promotion_id, title, subtitle, badge, strip, pack, palette, ambient, home_poster, list_strip, card_badge, detail_ribbon, cart_progress, poster_mode, poster_desktop, poster_phone, poster_alt, ends_at, coupon_combinable, points_combinable, rules)，rules 为 RuleDisplay(rule_id, position, kind, discount_mode, percent, amount_sen, buy_quantity, get_quantity, get_percent, threshold_sen, tiers, categories, has_products) 按 position 升序，tiers 为对象 {threshold_sen, amount_sen, percent} 的列表，categories 为对象 {slug, name} 的列表（只列启用且有英文名称的分类：停用分类下的商品按现有发布规则本来就不显示）；海报图地址为 SHOP-TASK-240 的 poster_path 或 null；不含内部名称与版本
-      - 函数——promotion_display(db, promotion_id, lang) 返回 PromotionDisplay，活动不存在返回 None；只读、结束读事务；ends_at 为实际结束（提前结束时为提前结束的时刻，草稿没有时间时为 null）
+      - 函数——promotion_display(db, promotion_id, lang) 返回 PromotionDisplay，活动不存在返回 None（每个活动都有装饰行，由 SHOP-TASK-249 新建时建好；万一缺少也返回 None）；海报为模板模式时 poster_desktop、poster_phone 与 poster_alt 都为 null（已上传的图不在前台显示）；只读、结束读事务；ends_at 为实际结束（提前结束时为提前结束的时刻，草稿没有时间时为 null）
       - 接口——新文件 app/api/promotion.py：GET /api/promotion?lang=，响应为 {"promotion"：PromotionDisplay 或 null，"server_time"：服务端当前时间}；每次请求从数据库读、不缓存；带 no-store；lang 不合法为 422 且不回显；在 app/main.py 公开段照现有顺序注册
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_promotion_display.py：三种语言的回退（中文缺译回退英文、空即 null）；第 8 条算例的四条规则给出的类别与参数（家居分类的名称、A 的规则 has_products 为 true）；海报模板与上传图两种模式；接口在活动生效、未开始、已结束与提前结束后的 promotion 与 server_time（固定 _utcnow）；响应不含内部名称；no-store 与 422。每条测试的文档字符串写明它守住的第 10 或 12 条哪一句
       - docs/task-records/SHOP-TASK-243.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明 JSON 字段名，供前台任务引用）；改动只落在 allowed_change_paths；不改计价、商品目录、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
@@ -6638,7 +6638,7 @@ tasks:
       - SHOP-TASK-244
     acceptance_criteria:
       - 路由——GET /api/admin/promotions/{promotion_id}/preview?lang=（响应为 promotion 与 server_time 两个字段，同 GET /api/promotion）、GET …/preview/products（查询参数同 GET /api/catalog/products，含 sale）、GET …/preview/products/{slug}（找不到 404 照商品详情）、POST …/preview/quote（请求体同游客计价，响应同游客计价）；在 app/main.py 后台段照现有顺序注册
-      - 条件与错误——每个路由先校验会话（401 admin_session_required）、路径 ID（422），再读活动：不存在 404 promotion_not_found，不满足可预览条件 409 promotion_preview_unavailable；POST 的顺序为会话、CSRF（403 csrf_failed）、路径、请求体（413、415、422 照游客计价接口），再读活动；预览计价不受游客计价的来源限流约束；所有响应带 no-store
+      - 条件与错误——每个路由先校验会话（401 admin_session_required）、路径 ID（422），再读活动：不存在 404 promotion_not_found，不满足可预览条件 409 promotion_preview_unavailable；POST 的顺序为会话、CSRF（403 csrf_failed）、路径、请求体（大小上限与 422 的写法照游客计价接口 POST /api/checkout/quote，它不查 Content-Type、不是 JSON 也是 422），再读活动；预览计价不受游客计价的来源限流约束；所有响应带 no-store
       - 隔离——公开的 GET /api/promotion、商品目录与计价接口不读任何预览参数，管理员预览期间访客看到的不变（测试同时调用公开接口断言 promotion 为 null）
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_promotion_preview_api.py（固定本模块与 admin_auth 的 _utcnow）：草稿与未开始活动的四个预览路由给出活动价、角标、sale 列表与第 8 条的计价（游客，西马 800 时 total_sen 5900）；进行中、已结束、草稿缺时间、结束已过时 409；不存在 404；没有会话 401；POST 没有 CSRF 403；公开接口同时为 null。每条测试的文档字符串写明它守住的第 11 条或 UX 的哪一句
       - docs/task-records/SHOP-TASK-245.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明路由与错误码，供前台 A12 预览任务引用）；改动只落在 allowed_change_paths；不改服务层、公开接口、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
@@ -6682,7 +6682,7 @@ tasks:
     title: 调用 Billing Hub 的 AI 消息接口（配置与客户端）
     purpose: >-
       按 docs/DESIGN.md 1.23「节日促销活动」第 13 条「链路」与「限制」两段，加本项目调用 ai_billing_hub 的 POST /v1/messages 所需的私有配置与一个只用标准库的客户端：接口地址、客户端 ID、项目密钥与模型名经私有配置注入（仓库只记变量名），未配置时视为 AI 不可用；单次调用 60 秒超时、不自动重试。只做配置与客户端；提示词、计数与校验见 SHOP-TASK-248。
-      运营者落实写法：Settings 加 ai_hub_base_url、ai_hub_client_id、ai_hub_access_secret、ai_model（都是 str，默认空串，空串即未配置）与 ai_daily_call_limit（int，默认 50），注释照现有写法说明用途与「空串即未配置」；四个字符串都不为空、且地址以 https 加冒号加两个斜杠开头才算已配置（照 sms_provider 的 configured）。新文件 app/services/ai_hub.py 照 app/services/sms_provider.py 的写法：HttpRequest、HttpResponse、可注入的 transport、禁止重定向、响应最多读 64 KB；请求为 JSON（Content-Type application/json），带请求头 X-Acuven-Client-Id 与 Authorization（Bearer 加项目密钥）；请求体字段为 feature（固定为 shop.promotion_proposal）、model、system、messages（只有一条，形如 role 为 user、content 为字符串）、max_tokens 与可选的 output_config（形如 format 为对象 {type 为 json_schema, schema 为 JSON Schema 对象}），照 Billing Hub 的 POST /v1/messages 约定（ai_billing_hub 仓库 docs/api.md：请求体严格、未知字段 422；成功 200 的响应有字符串 text 与 usage 的 input_tokens、output_tokens）；超时 60 秒。密钥与请求内容不进 repr 与日志。docker-compose.yml 只为把这五个变量传给 shop_api 而改（照现有 SHOP_ 变量的写法，默认值与 Settings 相同），tests/test_compose_env.py 照现有写法核对。.env.example 的五个变量名与占位值已由运营者在登记 PR 里加好（控制面不许 run 改 .env 开头的文件），本任务不改它，变量名照它。生产环境的取值由 Kelvin 在服务器的私有配置里设置；在 Billing Hub 为本项目开通身份与签发密钥另在 ai_billing_hub 的会话里做。
+      运营者落实写法：Settings 加 ai_hub_base_url、ai_hub_client_id、ai_hub_access_secret、ai_model（都是 str，默认空串，空串即未配置）与 ai_daily_call_limit（int，默认 50），注释照现有写法说明用途与「空串即未配置」；四个字符串都不为空、且地址以 https 加冒号加两个斜杠开头才算已配置（照 sms_provider 的 configured）。新文件 app/services/ai_hub.py 照 app/services/sms_provider.py 的写法：HttpRequest、HttpResponse、可注入的 transport、禁止重定向、响应最多读 64 KB；请求为 JSON（Content-Type application/json），带请求头 X-Acuven-Client-Id 与 Authorization（Bearer 加项目密钥）；请求体字段为 feature（固定为 shop.promotion_proposal）、model、system、messages（只有一条，形如 role 为 user、content 为字符串）、max_tokens 与可选的 output_config（形如 format 为对象 {type 为 json_schema, schema 为 JSON Schema 对象}），照 Billing Hub 的 POST /v1/messages 约定（ai_billing_hub 仓库 docs/api.md：请求体严格、未知字段 422；成功 200 的响应有字符串 text 与 usage 的 input_tokens、output_tokens）；超时 60 秒，即 urllib 的 timeout 参数（连接与每次读取各自的套接字超时，与 sms_provider 相同的含义）；socket 超时（TimeoutError，含被 URLError 包着的）算 AiTimeout，其余失败算 AiUnavailable。密钥与请求内容不进 repr 与日志。docker-compose.yml 只为把这五个变量传给 shop_api 而改（照现有 SHOP_ 变量的写法，默认值与 Settings 相同），tests/test_compose_env.py 照现有写法核对。.env.example 的五个变量名与占位值已由运营者在登记 PR 里加好（控制面不许 run 改 .env 开头的文件），本任务不改它，变量名照它。生产环境的取值由 Kelvin 在服务器的私有配置里设置；在 Billing Hub 为本项目开通身份与签发密钥另在 ai_billing_hub 的会话里做。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 13 条：出站调用只带管理员的描述与活动的规则参数等（由 248 组装），客户端本身不读订单、会员与收货资料；密钥只在私有配置。
       拆分：节日促销 AI 提案的第二个任务（6 个允许路径），与 SHOP-TASK-246 互不依赖。
     status: ready
@@ -6735,7 +6735,7 @@ tasks:
     title: 后台促销活动的列表、读取、新建与保存（服务层，查库与写库）
     purpose: >-
       按 docs/DESIGN.md 1.23「节日促销活动」第 1–3、12 条与 docs/UX.md 0.20 的 A12，在 app/services/admin_promotions.py 加上列出全部活动、读出一个活动的全部可改内容、新建草稿与以一次保存提交一个活动的内部名称、时间、两个开关、规则、装饰与文案：用 SHOP-TASK-239 的检查函数，加上查库的检查、按状态限制可改的内容、版本核对与审计。不改接口、前端与数据库。
-      运营者落实写法：可改范围照 UX 0.20 A12 的状态表：draft 与 scheduled 全部可改；running 只能改内部名称、装饰与文案，请求里的时间、开关与规则须与当前相同，不同即问题码 rules_locked；ended 全部只读，保存即问题码 ended_readonly。已发布的活动（scheduled 与 running）每次保存都要仍满足内容方面的发布条件（英文标题；海报为上传图模式时两张图与英文替代文字都有），scheduled 另查全部发布条件与时间不重叠——第 2 条只写明未开始的「每次保存重新检查发布条件」，进行中的活动可改装饰与文案，运营者按同一条件守住，免得前台显示没有英文标题或没有图的上传图海报。加锁顺序：要查时间重叠的保存先锁 promotion_publish_locks 那一行、再锁活动行（与 SHOP-TASK-241 的发布相同，免得死锁）；锁住活动行后另查是否已有订单引用该活动，有即按 running 处理（防止开始时刻前后的并发下单与改规则）。保存规则时整批替换该活动的规则、范围与满额档（新规则的 ID 是新的；只有尚无订单引用的活动会改规则）。商品级规则的重叠按显式选的商品（不论是否上架），加上所选分类当前下属且满足现有发布规则的商品计算（与计价只算正常行一致）。异常与版本核对照 app/services/admin_categories.py（先查请求本身、再回滚并加锁核对版本，有改动才加版本并写审计，任何异常先回滚再抛出）。
+      运营者落实写法：可改范围照 UX 0.20 A12 的状态表：draft 与 scheduled 全部可改；running 只能改内部名称、装饰与文案，请求里的时间、开关与规则须与当前相同，不同即问题码 rules_locked；ended 全部只读，保存即问题码 ended_readonly。已发布的活动（scheduled 与 running）每次保存都要仍满足内容方面的发布条件（英文标题；海报为上传图模式时两张图与英文替代文字都有），scheduled 另查全部发布条件与时间不重叠——第 2 条只写明未开始的「每次保存重新检查发布条件」，进行中的活动可改装饰与文案，运营者按同一条件守住，免得前台显示没有英文标题或没有图的上传图海报。加锁顺序：要查时间重叠的保存先锁 promotion_publish_locks 那一行、再锁活动行（与 SHOP-TASK-241 的发布相同，免得死锁）；锁住活动行后另查是否已有订单引用该活动，有即按 running 处理（防止开始时刻前后的并发下单与改规则）。保存规则时整批替换该活动的规则、范围与满额档（新规则的 ID 是新的；只有尚无订单引用的活动会改规则）。商品级规则的重叠按显式选的商品（不论是否上架），加上所选分类当前下属且满足现有发布规则的商品计算（与计价只算正常行一致）；只在草稿与未开始活动的保存（以及 241 的发布）时检查——进行中的规则不能改，商品之后改分类造成的重叠照第 3 条末段在计价时取排序数小的规则，若仍检查则进行中的活动永远保存不了文案。「规则与当前相同」的比较口径：规则条数与顺序相同，每条的类别与参数相同，商品 ID 与分类 ID 作为集合相同，满额档按顺序逐档相同；相同即不替换规则行（不改规则 ID、不算改动）。供 241 复用的检查导出为 publish_problems(db, promotion, now)（返回发布条件缺的问题列表，不加锁）与 ensure_no_overlap(db, promotion_id, starts_at, effective_end)（调用方须已锁 promotion_publish_locks 那一行；重叠抛 PromotionOverlap）。异常与版本核对照 app/services/admin_categories.py（先查请求本身、再回滚并加锁核对版本，有改动才加版本并写审计，任何异常先回滚再抛出）。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 1–3、12 条：活动的规则、时间、开关与状态，决定之后的计价；只写后台审计，不碰个人资料。
       拆分：节日促销后台层的第二个任务（3 个允许路径），依赖 SHOP-TASK-229 与 239。
     status: ready
@@ -6743,11 +6743,11 @@ tasks:
       - SHOP-TASK-229
       - SHOP-TASK-239
     acceptance_criteria:
-      - 查库检查（同一事务）——规则引用的商品与分类须存在（问题码 scope）；商品级规则两两不得有共同的商品（照落实写法计算），每件重叠的商品一个 scope_overlap 问题（带 product_id），第 3 条末段；已发布活动的发布条件照落实写法，缺的每项一个 publish_missing 问题（field 指出缺哪一项）；scheduled 另与其他已发布活动的时间不重叠（重叠抛 PromotionOverlap，带对方的内部名称；相接可以）
+      - 查库检查（同一事务）——规则引用的商品与分类须存在（问题码 scope）；草稿与未开始活动的商品级规则两两不得有共同的商品（照落实写法计算），每件重叠的商品一个 scope_overlap 问题（带 product_id 与 product_name），第 3 条末段；已发布活动的发布条件照落实写法，缺的每项一个 publish_missing 问题（field 指出缺哪一项）；scheduled 另与其他已发布活动的时间不重叠（重叠抛 PromotionOverlap，带对方的内部名称；相接可以）
       - 列表与读取——list_promotions(db, now) 返回 PromotionSummary(id, name, state, starts_at, ends_at, rule_count, updated_at) 的列表（时间为马来西亚本地字符串，ends_at 为实际结束；updated_at 为不带时区的 UTC），按 running、scheduled（开始从早到晚）、draft（最近修改在前）、ended（结束从晚到早）排列，同序按 ID 从大到小；read_promotion(db, promotion_id, now) 返回 PromotionDetail（id、version、state、PromotionInput 的全部字段、规则各带 rule_id 与所选商品的 slug 和英文名称、两张海报图的提供路径——/api/promotion-posters/ 加文件名加 .webp，该接口由 SHOP-TASK-250 提供——或 None），不存在抛 PromotionNotFound
       - 新建与保存——create_promotion(db, admin_account_id, data, now) 新建草稿（version 1，装饰一行）并返回 PromotionDetail；save_promotion(db, admin_account_id, promotion_id, version, data, now) 照落实写法按状态限制、检查、加锁核对版本（不同或不存在抛 PromotionChanged），有改动版本加一，没有改动不加版本、不写审计，返回 PromotionDetail
       - 审计——record_audit 的 target_type 为 promotion、target_id 为活动 ID：新建写一条 admin_promotion_created（新值为内部名称）；保存每个改动的字段写一条 admin_promotion_changed，旧值与新值写成「字段 值」（时间为马来西亚本地字符串，布尔为 true 或 false，空值只写字段名，文案带语言、值取前 100 个字符），规则有改动时只写一条，值为「rules 条数」；不含个人资料
-      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_promotions.py 用 SQLite 内存库：引用不存在的商品与分类；按商品与按分类的重叠各报出重叠商品，未上架商品只在显式选时算重叠；四种状态的可改范围（running 改规则或时间报 rules_locked、running 清空英文标题报 publish_missing、ended 报 ended_readonly、running 改文案成功）；已有订单引用的 scheduled 活动按 running 处理；scheduled 保存时缺发布条件与时间重叠；版本不符与不存在；没有改动不加版本；审计的条数与写法；列表的排序。每条测试的文档字符串写明它守住的设计或 UX 句子，或本任务的落实写法
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_promotions.py 用 SQLite 内存库：引用不存在的商品与分类；按商品与按分类的重叠各报出重叠商品与名称，未上架商品只在显式选时算重叠；进行中的活动在商品改分类后仍能保存文案；规则只改了范围的顺序时不算改动；四种状态的可改范围（running 改规则或时间报 rules_locked、running 清空英文标题报 publish_missing、ended 报 ended_readonly、running 改文案成功）；已有订单引用的 scheduled 活动按 running 处理；scheduled 保存时缺发布条件与时间重叠；版本不符与不存在；没有改动不加版本；审计的条数与写法；列表的排序。每条测试的文档字符串写明它守住的设计或 UX 句子，或本任务的落实写法
       - docs/task-records/SHOP-TASK-249.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明公开的函数签名、异常与问题码，供 240、241、242 与前台任务引用）；改动只落在 allowed_change_paths；不改计价、下单、接口、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
     allowed_change_paths:
       - app/services/admin_promotions.py
