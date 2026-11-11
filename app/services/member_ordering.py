@@ -17,6 +17,12 @@
   任一整单上限（docs/DESIGN.md 1.18 第 8 条，SHOP-TASK-178）时不判定券与积分。
   所有行都正常时券代码非空则查券（只给是否可用，不给原因），不可用不计入；积分上限为
   可用余额与券后商品额的较小值，抵扣积分超过上限时不计入并标明不接受。
+- 节日促销活动（DESIGN 1.23，提交 b7f9355，「节日促销活动」第 4、6、10 条与「计价、优惠、积分
+  与库存」第 1、2 条，SHOP-TASK-236）：计价以 active_promotion 读生效活动传给 quote_cart；
+  券以原价小计查一次，可用即两种方案都有这张券。有运费报价且本单参加活动时由
+  decide_member_promotion 判定方案（会员选了券或填了积分才比较甲乙）；取甲时券与积分在活动后
+  的金额上计算，券的最低消费也按活动后的金额判断，合计按实际运费。下单（SHOP-TASK-237）复用
+  同一个函数，计价与下单得到同一结果。
 - 下单（place_member_order）的加锁顺序：结束此前的只读事务后，以 SELECT … FOR UPDATE 锁住
   该会员的行作为新事务的第一条语句（同 app/services/refund_review.py 的锁定协议：之后的读取
   都不早于这个锁，看得到等锁期间别人提交的预占），再按 SKU 规格 ID 从小到大扣库存，写订单，
@@ -50,11 +56,12 @@ from app.services.catalog import Language
 from app.services.checkout import (
     CartItem,
     PricedLine,
+    PromotionQuote,
     UnavailableLine,
     purchasable,
     quote_cart,
 )
-from app.services.coupons import check_coupon, normalize_coupon_code, reserve_coupon
+from app.services.coupons import CouponCheck, check_coupon, normalize_coupon_code, reserve_coupon
 from app.services.order_rules import generate_order_number
 from app.services.ordering import (
     PAYMENT_WINDOW,
@@ -65,8 +72,28 @@ from app.services.ordering import (
     _reserve_stock,
 )
 from app.services.points import InsufficientPoints, available_points, reserve_points
-from app.services.pricing import OrderLine, PricingResult, price_order
+from app.services.pricing import (
+    CouponTerms,
+    OrderLine,
+    PricingResult,
+    choose_promotion_plan,
+    price_order,
+)
+from app.services.promotion_pricing import PromotionPricing
+from app.services.promotions import (
+    LoadedPromotion,
+    PromoInputLine,
+    active_promotion,
+    price_lines,
+)
 from app.services.shipping import MALAYSIA, FxReference, ShippingQuote, reference_amount
+
+# 第 6 条所取的方案（promotion_plan）。
+PLAN_PROMOTION = "promotion"
+PLAN_NO_PROMOTION = "no_promotion"
+# 取甲且券本身可用而甲不用券的原因（coupon_note）。
+COUPON_NOT_COMBINABLE = "not_combinable"
+COUPON_BELOW_MIN_AFTER_SALE = "below_min_after_sale"
 
 
 class MemberNotActive(Exception):
@@ -85,8 +112,9 @@ class PointsUnavailable(Exception):
 class MemberCheckoutQuote:
     """会员计价结果。
 
-    lines、subtotal_sen、shipping、fx_reference、can_place_order 与四个整单上限字段沿用
-    quote_cart；total_sen 在给了收货国家时为现金实付合计加运费，否则为空。
+    lines、subtotal_sen、shipping、fx_reference、can_place_order、四个整单上限字段与
+    promotion 沿用 quote_cart；total_sen 在给了收货国家时为现金实付合计加实际运费（取甲时为
+    运费报价减免去的运费，否则为运费报价），否则为空。
     """
 
     lines: list[UnavailableLine | PricedLine]
@@ -106,9 +134,49 @@ class MemberCheckoutQuote:
     points_redeemed: int
     points_earned: int
     available_points: int
-    # 可用余额与券后商品额的较小值；有不正常的行或超出整单上限时为 0。
+    # 可用余额与券后商品额（取甲时为活动与券之后）的较小值；有不正常的行或超出整单上限时，
+    # 以及取甲而活动不与积分同用时为 0。
     points_cap: int
     points_accepted: bool
+    # quote_cart 给出的活动结果，原样转出；没有生效活动时为空。
+    promotion: PromotionQuote | None
+    # PLAN_PROMOTION 或 PLAN_NO_PROMOTION；没有运费报价、没有生效活动、本单不参加活动、
+    # 有不正常的行或超出整单上限时为空。
+    promotion_plan: str | None
+    # 甲与乙的积分抵扣之前的应付；只在比较过时给出。
+    promotion_pre_points_total_sen: int | None
+    other_pre_points_total_sen: int | None
+    # 取甲且券本身可用而甲不用券时为 COUPON_NOT_COMBINABLE 或 COUPON_BELOW_MIN_AFTER_SALE。
+    coupon_note: str | None
+    # 取甲、会员填了积分而活动不与积分同用时为真。
+    points_not_combinable: bool
+
+
+@dataclass(frozen=True)
+class MemberPromotionPlan:
+    """decide_member_promotion 的结果：本单按哪种方案计价。
+
+    plan 为空（不比较也不参加）或 PLAN_NO_PROMOTION 时，promotion_pricing 为空、
+    shipping_waived_sen 为 0，券与积分照没有活动时使用（use_coupon 即券可用，points_allowed
+    为真）。plan 为 PLAN_PROMOTION 时 promotion_pricing 为活动的计价结果（units 按行序、件序，
+    与 price_order 的展开一一对应），shipping_waived_sen 为免去的运费，use_coupon 与
+    points_allowed 为甲是否用券、是否接受积分。两个积分前应付只在比较过时给出。
+    """
+
+    plan: str | None
+    promotion_pricing: PromotionPricing | None
+    shipping_waived_sen: int
+    use_coupon: bool
+    points_allowed: bool
+    promotion_pre_points_total_sen: int | None
+    other_pre_points_total_sen: int | None
+
+    @property
+    def promotion_discounts(self) -> list[int] | None:
+        """传给 price_order 的每件活动优惠；不取甲时为 None。"""
+        if self.promotion_pricing is None:
+            return None
+        return [unit.promotion_discount for unit in self.promotion_pricing.units]
 
 
 @dataclass(frozen=True)
@@ -205,6 +273,81 @@ def member_request_fingerprint(member_id: int, request: MemberOrderRequest) -> s
 # ---------------------------------------------------------------------------
 
 
+def _coupon_terms(coupon: CouponCheck | None) -> CouponTerms | None:
+    """可用券组成的 CouponTerms；没给券代码或券不可用时为 None。"""
+    if coupon is None or not coupon.ok:
+        return None
+    if coupon.min_subtotal_sen is None:
+        raise ValueError("a usable coupon check must carry min_subtotal_sen")
+    return CouponTerms(
+        percent_off=coupon.percent_off,
+        fixed_off=coupon.fixed_off,
+        min_spend_sen=coupon.min_subtotal_sen,
+    )
+
+
+def decide_member_promotion(
+    promotion: LoadedPromotion | None,
+    lines: Sequence[PromoInputLine],
+    *,
+    shipping_fee_sen: int | None,
+    coupon: CouponCheck | None,
+    points_to_redeem: int,
+) -> MemberPromotionPlan:
+    """「节日促销活动」第 4 条末句与第 6 条：判定会员本单的方案。计价与下单共用。
+
+    lines 为全部正常行（行序严格递增，单价与件数同 price_order 的订单行）；shipping_fee_sen
+    为未免的运费报价，None 即还没有运费报价；coupon 为以原价小计查券的结果，没给券代码时为
+    None；points_to_redeem 为会员所填的抵扣积分。
+
+    没有运费报价、没有活动或本单不参加活动时 plan 为空。参加活动而没选券也没填积分时取甲、
+    不比较。否则以 choose_promotion_plan 比较（coupon 为可用券组成的 CouponTerms 或 None，
+    两个开关取活动的设置）。
+    """
+    points_to_redeem = _points_value(points_to_redeem)
+    usable = coupon is not None and coupon.ok
+    if promotion is None or shipping_fee_sen is None:
+        return MemberPromotionPlan(None, None, 0, usable, True, None, None)
+    pricing = price_lines(promotion, lines, shipping_fee_sen=shipping_fee_sen)
+    if not pricing.participates:
+        return MemberPromotionPlan(None, None, 0, usable, True, None, None)
+
+    waived = pricing.shipping_waived_sen or 0
+    if coupon is None and points_to_redeem == 0:
+        return MemberPromotionPlan(
+            PLAN_PROMOTION, pricing, waived, False, promotion.points_combinable, None, None
+        )
+
+    chosen = choose_promotion_plan(
+        [OrderLine(unit_price=line.unit_price, quantity=line.quantity) for line in lines],
+        [unit.promotion_discount for unit in pricing.units],
+        shipping_fee_sen=shipping_fee_sen,
+        shipping_waived_sen=waived,
+        coupon=_coupon_terms(coupon),
+        coupon_combinable=promotion.coupon_combinable,
+        points_combinable=promotion.points_combinable,
+    )
+    if chosen.use_promotion:
+        return MemberPromotionPlan(
+            PLAN_PROMOTION,
+            pricing,
+            waived,
+            chosen.use_coupon,
+            chosen.points_allowed,
+            chosen.promotion_pre_points_total,
+            chosen.other_pre_points_total,
+        )
+    return MemberPromotionPlan(
+        PLAN_NO_PROMOTION,
+        None,
+        0,
+        chosen.use_coupon,
+        chosen.points_allowed,
+        chosen.promotion_pre_points_total,
+        chosen.other_pre_points_total,
+    )
+
+
 def quote_member_cart(
     db: Session,
     member_id: int,
@@ -220,7 +363,7 @@ def quote_member_cart(
     """会员结账计价。只读，不写库、不锁行；结果只供显示，下单时重新判定。
 
     会员不是 active 时抛 MemberNotActive。给了收货国家时，目的地不合法或运费行缺失照
-    quote_cart 抛出。
+    quote_cart 抛出。生效活动按 now 从数据库读，不缓存；方案由 decide_member_promotion 判定。
     """
     now = _naive(now)
     points_to_redeem = _points_value(points_to_redeem)
@@ -230,12 +373,21 @@ def quote_member_cart(
     if member is None or member.status != MEMBER_ACTIVE:
         raise MemberNotActive
 
-    quote = quote_cart(db, items, lang=lang, country_code=country_code, state_code=state_code)
+    promotion = active_promotion(db, now)
+    quote = quote_cart(
+        db,
+        items,
+        lang=lang,
+        country_code=country_code,
+        state_code=state_code,
+        promotion=promotion,
+    )
     balance = available_points(db, member_id, now)
 
     over_cap = quote.units_over_limit or quote.amount_over_limit
     if over_cap or not all(line.status == "ok" for line in quote.lines):
-        # 不判定券与积分；quote_cart 的合计即无券无积分的现金实付合计加运费。
+        # 不判定券、积分与方案；合计照 quote_cart（无券无积分，参加活动时按活动后的金额
+        # 与实际运费）。
         return MemberCheckoutQuote(
             lines=quote.lines,
             subtotal_sen=quote.subtotal_sen,
@@ -254,30 +406,92 @@ def quote_member_cart(
             available_points=balance,
             points_cap=0,
             points_accepted=False,
+            promotion=quote.promotion,
+            promotion_plan=None,
+            promotion_pre_points_total_sen=None,
+            other_pre_points_total_sen=None,
+            coupon_note=None,
+            points_not_combinable=False,
         )
 
-    priced = [
-        OrderLine(unit_price=line.unit_price_sen, quantity=line.quantity)
-        for line in quote.lines
-        if isinstance(line, PricedLine)
-    ]
+    # 到这里所有行都正常，与请求的行一一对应。
+    lines = [line for line in quote.lines if isinstance(line, PricedLine)]
+    priced = [OrderLine(unit_price=line.unit_price_sen, quantity=line.quantity) for line in lines]
+    check = None
     coupon_applicable = None
-    coupon_kwargs: dict[str, int | Decimal] = {}
     if coupon_code is not None:
+        # 以原价小计查一次：可用即两种方案都有这张券，不可用即都不用券。
         check = check_coupon(db, coupon_code, member_id, quote.subtotal_sen, now)
         coupon_applicable = check.ok
+
+    # 有运费报价且本单参加活动时才判定方案；每件的活动优惠照 SHOP-TASK-235 以 price_lines 重算。
+    participating = (
+        promotion is not None
+        and quote.promotion is not None
+        and quote.promotion.participates is True
+    )
+    promo_lines: list[PromoInputLine] = []
+    if participating:
+        found = purchasable(db, [item.sku for item in items])
+        promo_lines = [
+            PromoInputLine(
+                line_index=line_index,
+                unit_price=line.unit_price_sen,
+                quantity=line.quantity,
+                product_id=found[item.sku][1].id,
+                category_id=found[item.sku][1].category_id,
+            )
+            for line_index, (item, line) in enumerate(zip(items, lines, strict=True))
+        ]
+    decision = decide_member_promotion(
+        promotion if participating else None,
+        promo_lines,
+        shipping_fee_sen=None if quote.shipping is None else quote.shipping.fee_sen,
+        coupon=check,
+        points_to_redeem=points_to_redeem,
+    )
+
+    coupon_kwargs: dict[str, int | Decimal] = {}
+    if check is not None and decision.use_coupon:
         coupon_kwargs = check.price_kwargs()
-    after_coupon = price_order(priced, **coupon_kwargs)
-    cap = min(balance, after_coupon.subtotal - after_coupon.coupon_discount)
-    accepted = points_to_redeem <= cap
+    discounts = decision.promotion_discounts
+    after_coupon = price_order(priced, promotion_discounts=discounts, **coupon_kwargs)
     pricing = after_coupon
-    if accepted and points_to_redeem > 0:
-        pricing = price_order(priced, points_redeemed=points_to_redeem, **coupon_kwargs)
+    points_not_combinable = False
+    if decision.points_allowed:
+        cap = min(
+            balance,
+            after_coupon.subtotal - after_coupon.promotion_discount - after_coupon.coupon_discount,
+        )
+        accepted = points_to_redeem <= cap
+        if accepted and points_to_redeem > 0:
+            pricing = price_order(
+                priced,
+                promotion_discounts=discounts,
+                points_redeemed=points_to_redeem,
+                **coupon_kwargs,
+            )
+    else:
+        # 活动不与积分同用：不是积分输入错误，所以照样接受、不计入。
+        cap = 0
+        accepted = True
+        points_not_combinable = points_to_redeem > 0
+
+    coupon_note = None
+    if (
+        promotion is not None
+        and decision.plan == PLAN_PROMOTION
+        and coupon_applicable
+        and not decision.use_coupon
+    ):
+        coupon_note = (
+            COUPON_BELOW_MIN_AFTER_SALE if promotion.coupon_combinable else COUPON_NOT_COMBINABLE
+        )
 
     total = None
     fx = None
     if quote.shipping is not None:
-        total = pricing.cash_total + quote.shipping.fee_sen
+        total = pricing.cash_total + quote.shipping.fee_sen - decision.shipping_waived_sen
         fx = reference_amount(db, country_code, total)
     return MemberCheckoutQuote(
         lines=quote.lines,
@@ -297,6 +511,12 @@ def quote_member_cart(
         available_points=balance,
         points_cap=cap,
         points_accepted=accepted,
+        promotion=quote.promotion,
+        promotion_plan=decision.plan,
+        promotion_pre_points_total_sen=decision.promotion_pre_points_total_sen,
+        other_pre_points_total_sen=decision.other_pre_points_total_sen,
+        coupon_note=coupon_note,
+        points_not_combinable=points_not_combinable,
     )
 
 

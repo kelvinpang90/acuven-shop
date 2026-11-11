@@ -121,6 +121,13 @@ MEMBER_QUOTE_FIELDS = {
     "points_accepted",
     "points_redeemed",
     "points_earned",
+    # DESIGN 1.23「节日促销活动」第 6、10 条（SHOP-TASK-236）。
+    "promotion",
+    "promotion_plan",
+    "promotion_pre_points_total_sen",
+    "other_pre_points_total_sen",
+    "coupon_note",
+    "points_not_combinable",
 }
 GUEST_QUOTE_FIELDS = {
     "lines",
