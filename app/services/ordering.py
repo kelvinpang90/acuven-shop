@@ -18,6 +18,12 @@
 - 「权限与资料保护」第 6 条：游客订单创建成功后，给当前浏览器一个
   30 分钟有效、仅限该单的短期凭据。
 
+节日促销活动依据 docs/DESIGN.md 1.23（提交 b7f9355）「节日促销活动」第 4、7、14 条
+（SHOP-TASK-235）：下单事务里以共享锁读当时生效的活动（与后台撤回、保存互相等待），
+传入重新计价；本单参加活动时按活动后的金额与实际运费写订单，订单记活动、商品级与整单级
+活动优惠、免去的运费，逐件快照记该件的活动优惠与该行命中的商品级规则。不参加活动时活动列
+取 0 与空，其余与之前相同。游客没有券与积分，没有第 6 条的比较。按幂等键重放不重读活动。
+
 请求格式校验与手机号规范化由调用方（app/api/orders.py）完成。
 本模块不写日志；异常消息不含个人资料、订单号、幂等键或令牌。
 成功时由本模块提交事务，任何失败都回滚。时间一律是不带时区的 UTC。
@@ -66,6 +72,8 @@ from app.services.order_access import IssuedAccess, issue_order_access
 from app.services.order_rules import generate_order_number
 from app.services.phone import is_sms_whitelisted
 from app.services.pricing import OrderLine, price_order
+from app.services.promotion_pricing import PromotionPricing
+from app.services.promotions import PromoInputLine, active_promotion, price_lines
 from app.services.shipping import MALAYSIA
 from app.services.site_settings import is_sms_verification_enabled
 
@@ -169,10 +177,11 @@ def place_guest_order(
 
     1. 按幂等键查订单：有则重放或报冲突，不重新计价、不动库存。
     2. 按短信验证开关的当前值判定能否以游客下单。
-    3. 按收货国家与州属重新计价；运费行缺失抛 ShippingRateMissing。
+    3. 以共享锁读当时生效的活动，按收货国家与州属重新计价；
+       运费行缺失抛 ShippingRateMissing。
     4. 按 SKU 规格 ID 从小到大逐行扣库存。
-    5. 同一事务里写订单、订单行、逐件分摊、收货资料、下单事件，
-       签发 guest_checkout 授权，然后提交。
+    5. 同一事务里写订单（本单参加活动时按活动后的金额与实际运费）、订单行、
+       逐件分摊、收货资料、下单事件，签发 guest_checkout 授权，然后提交。
 
     计价判定不可下单、扣库存失败或插入订单撞上幂等键唯一约束时，
     回滚后再按幂等键查一次：同键的并发请求可能已经提交。
@@ -184,12 +193,15 @@ def place_guest_order(
 
     _require_guest_allowed(db, request.phone, now)
 
+    # 第 14 条：以下单事务里读到的活动为准；共享锁与后台撤回、保存的排他锁互相等待。
+    promotion = active_promotion(db, now, share_lock=True)
     quote = quote_cart(
         db,
         list(request.lines),
         lang="en",
         country_code=request.country_code,
         state_code=request.state_code,
+        promotion=promotion,
     )
     lines = [line for line in quote.lines if isinstance(line, PricedLine)]
     if not quote.can_place_order or quote.shipping is None or len(lines) != len(request.lines):
@@ -201,17 +213,44 @@ def place_guest_order(
     if not _reserve_stock(db, request.lines, found):
         return _after_failure(db, idempotency_key, fingerprint, cookie_value, now)
 
+    # 第 4 条末句：所有规则都没有带来优惠时不参加活动，活动列取 0 与空。
+    promo: PromotionPricing | None = None
+    promotion_id: int | None = None
+    if promotion is not None and quote.promotion is not None and quote.promotion.participates:
+        promotion_id = promotion.promotion_id
+        promo = price_lines(
+            promotion,
+            [
+                PromoInputLine(
+                    line_index=line_index,
+                    unit_price=line.unit_price_sen,
+                    quantity=line.quantity,
+                    product_id=found[item.sku][1].id,
+                    category_id=found[item.sku][1].category_id,
+                )
+                for line_index, (item, line) in enumerate(zip(request.lines, lines, strict=True))
+            ],
+            shipping_fee_sen=quote.shipping.fee_sen,
+        )
     pricing = price_order(
-        [OrderLine(unit_price=line.unit_price_sen, quantity=line.quantity) for line in lines]
+        [OrderLine(unit_price=line.unit_price_sen, quantity=line.quantity) for line in lines],
+        # 两边都按行序、件序展开，逐件一一对应。
+        promotion_discounts=None if promo is None else [u.promotion_discount for u in promo.units],
     )
+    waived = 0 if promo is None else promo.shipping_waived_sen or 0
+    shipping_fee = quote.shipping.fee_sen - waived
     order = Order(
         order_number=generate_order_number(),
         status=STATUS_AWAITING_PAYMENT,
         subtotal_sen=pricing.subtotal,
         coupon_discount_sen=0,
         points_redeemed=0,
-        shipping_fee_sen=quote.shipping.fee_sen,
-        total_sen=pricing.subtotal + quote.shipping.fee_sen,
+        shipping_fee_sen=shipping_fee,
+        total_sen=pricing.cash_total + shipping_fee,
+        promotion_id=promotion_id,
+        promotion_item_discount_sen=0 if promo is None else promo.item_discount_total,
+        promotion_order_discount_sen=0 if promo is None else promo.order_discount_total,
+        shipping_waived_sen=waived,
         points_earned=0,
         shipping_zone_code=quote.shipping.zone_code,
         shipping_rate_version=quote.shipping.version,
@@ -238,6 +277,10 @@ def place_guest_order(
     items = _order_items(db, order.id, request.lines, lines, found)
     db.add_all(items)
     db.flush()
+    # 命中的商品级规则按行给出，不论这一件是否享受折扣（第 7 条）。
+    rule_ids: list[int | None] = [None] * len(pricing.units)
+    if promo is not None:
+        rule_ids = [u.rule_id for u in promo.units]
     db.add_all(
         OrderItemUnit(
             order_item_id=items[unit.line_index].id,
@@ -248,8 +291,10 @@ def place_guest_order(
             cash_paid_sen=unit.cash_paid,
             # 游客不积累积分（第 3 条），与订单的获得积分 0 一致。
             points_earned=0,
+            promotion_discount_sen=unit.promotion_discount,
+            promotion_rule_id=rule_id,
         )
-        for unit in pricing.units
+        for unit, rule_id in zip(pricing.units, rule_ids, strict=True)
     )
     db.add(
         OrderRecipient(
