@@ -108,6 +108,9 @@ ORDER_FIELDS = {
     "refundable_left_sen",
     "fully_refunded",
     "refund_requests",
+    # SHOP-TASK-238 新增的活动优惠与免去的运费（取值见 tests/test_order_promotion_display.py）。
+    "promotion_discount_sen",
+    "shipping_waived_sen",
 }
 
 SOURCE_BUCKET = "order_lookup_source"

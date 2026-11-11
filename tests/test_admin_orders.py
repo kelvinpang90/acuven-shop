@@ -764,8 +764,13 @@ def test_detail_fields_recipient_and_events(db: Session, client: TestClient, tok
         "subtotal_sen": SUBTOTAL,
         "coupon_discount_sen": COUPON,
         "points_discount_sen": 0,
+        # SHOP-TASK-238 新增的活动字段：本条对响应整体做相等断言，所以补上；
+        # 订单没有活动（取值见 tests/test_order_promotion_display.py）。
+        "promotion_discount_sen": 0,
         "shipping_fee_sen": SHIPPING,
+        "shipping_waived_sen": 0,
         "total_sen": TOTAL,
+        "promotion_name": None,
         "recipient": {
             "name": NAME,
             "phone": PHONE,
