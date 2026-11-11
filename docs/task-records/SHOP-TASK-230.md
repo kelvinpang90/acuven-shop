@@ -32,3 +32,17 @@
   - `promotion_rule_id` 不另建索引（验收未要求）；MySQL 会为外键自动建同名索引。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.23 第 4、7、8 条，人工核对迁移常量与模型文本一致并由测试逐字比对，算例的各项金额已逐项核算。迁移在 MySQL 8 上的往返与 alembic check、全部后端测试由 PR 的必需 CI 检查 `backend` 执行。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-11 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 订单列——Order 加 promotion_id（可空 Integer，外键 promotions.id ON DELETE RESTRICT，建索引）、promotion_item_discount_sen、promotion_order_discount_sen、shipping_waived_sen（非空 Integer，server_default 0）；新检查约束 promotion_item_discount_sen_non_negative、promotion_order_discount_sen_non_negative、shipping_waived_sen_non_negative，promotion_amounts_match（promotion_id 为空且三项都为 0，或 promotion_id 不为空且三项之和大于 0），shipping_waived_means_free（shipping_waived_sen 为 0 或 shipping_fee_sen 为 0）
+      - 订单约束改写——discounts_within_subtotal 改为 promotion_item_discount_sen + promotion_order_discount_sen + coupon_discount_sen + points_redeemed <= subtotal_sen；total_formula 改为 total_sen = subtotal_sen - promotion_item_discount_sen - promotion_order_discount_sen - coupon_discount_sen - points_redeemed + shipping_fee_sen；约束名不变，total_covers_shipping 与其余约束不变；Order 文档字符串的应付公式随之更新
+      - 逐件列——OrderItemUnit 加 promotion_discount_sen（非空 Integer，server_default 0，检查约束 promotion_discount_sen_non_negative）与 promotion_rule_id（可空 Integer，外键 promotion_rules.id ON DELETE RESTRICT）；cash_paid_formula 改为 cash_paid_sen = original_price_sen - promotion_discount_sen - coupon_discount_sen - points_discount，约束名不变；文档字符串写明 promotion_discount_sen 对应之后 UnitAllocation 的活动优惠、promotion_rule_id 为该行命中的商品级规则（不论这一件是否享受折扣，不参加活动时为空）
+      - 迁移——新文件 alembic/versions/20261110_0028_order_promotion.py，revision 0028、down_revision 0027，照 0024、0025 的写法（不 import app，约束表达式作为常量自带并与模型逐字相同，约束名按 app/db/base.py 的命名约定逐个写出）。upgrade 先加列（已有行的金额列取 0、两个外键列为空，新约束建立时即可通过），再建外键、索引与新约束，最后删掉三条旧约束、按新表达式重建同名约束。downgrade 先读出订单中 promotion_id 不为空或三项活动金额不全为 0 的行数与逐件中 promotion_discount_sen 不为 0 或 promotion_rule_id 不为空的行数，任一大于 0 即抛 RuntimeError、库保持原样（这些订单按旧公式不成立）；否则先删掉三条改写后的约束、再按旧表达式建同名约束，然后删掉其余引用新列的约束、外键与索引，最后删列（DDL 在 MySQL 上隐式提交，判断必须在第一条 DDL 之前）
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，含 MySQL 8 上的迁移往返与 alembic check；Worker 沙箱不跑后端测试）——tests/test_order_models.py 的订单与逐件行值带上新列，现有断言照旧成立；新增每条新约束与三条改写约束的正例与只让该约束不成立的反例（断言报出的是该约束名），含活动 ID 为空而有活动金额、活动 ID 不为空而三项都为 0、免去运费而实际运费不为 0；两个外键拒绝不存在的活动与规则、被订单或逐件引用的活动与规则不能删除；不写新列时插入的订单与逐件取 0 与空；经 importlib 载入迁移，核对 revision、down_revision 与约束常量与模型逐字相同。tests/test_member_models.py 只为行值带上新列而改。每条新增测试的文档字符串写明它守住的第 7 条哪一句
+      - docs/task-records/SHOP-TASK-230.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明六个新列与约束名，供之后的下单任务引用）；改动只落在 allowed_change_paths；不改下单、计价、退款与展示的服务与接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```

@@ -48,3 +48,17 @@
   - 模块文档字符串的设计依据由 1.6（提交 845fd93）改为 1.23（提交 `b7f9355`）；`tests/test_pricing.py` 现有测试的文档字符串不改，新增测试注明引用 1.23。
 - 验证到什么程度：人工逐条对照验收标准与 DESIGN 1.23 上述条文，手算核对第 8 条各例与新增测试里的逐件数字。全部后端测试、ruff check 与 ruff format 由 PR 的必需 CI 检查 `backend` 执行。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-11 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 活动优惠——price_order(lines, *, promotion_discounts=None, percent_off=None, fixed_off=None, points_redeemed=0)：promotion_discounts 的长度须等于展开后的件数、每项为不超过该件原价的非负整数，否则抛 ValueError（不接受 float 与 bool，抛 TypeError）。活动后金额为原价减活动优惠；百分比券对整单活动后商品额计算一次，固定券取券额与整单活动后商品额较小者；券按每件活动后金额的比例分摊，积分按券后金额分摊（超过券后商品额照旧抛 ValueError）；每件现金实付为原价减活动优惠、分摊券额与分摊积分额；获得积分照第 3 条
+      - 结果——UnitAllocation 加 promotion_discount，PricingResult 加 promotion_discount（活动优惠合计）；subtotal 仍为原价小计，cash_total 等于 subtotal 减活动优惠合计、券折扣与积分抵扣。不传 promotion_discounts 或全为 0 时，结果与改动前逐字段相同，tests/test_pricing.py 现有的测试不改即通过
+      - 取更优——新增 frozen 数据类 CouponTerms(percent_off, fixed_off, min_spend_sen)（percent_off 为 Decimal 或 None，fixed_off 为整数仙或 None，恰有一个不为 None）与 PromotionPlan(use_promotion, use_coupon, points_allowed, promotion_pre_points_total, other_pre_points_total)，以及 choose_promotion_plan(lines, promotion_discounts, *, shipping_fee_sen, shipping_waived_sen, coupon, coupon_combinable, points_combinable)。shipping_fee_sen 为未免的运费，shipping_waived_sen 为活动免去的运费（不超过前者）；coupon 为 CouponTerms 或 None
+      - 比较规则（第 6 条）——甲的活动后商品额为原价小计减活动优惠合计；甲用券当且仅当 coupon 不为 None、coupon_combinable 为 True 且活动后商品额大于或等于最低消费；甲的积分前应付为活动后商品额减甲的券折扣（口径同 price_order）加未免的运费减免去的运费。乙用券当且仅当 coupon 不为 None 且原价小计大于或等于最低消费；乙的积分前应付为原价小计减乙的券折扣加未免的运费。取较低者，相同取甲；use_coupon 为所取方案是否用券，points_allowed 在取甲时为 points_combinable、取乙时为 True；promotion_pre_points_total 与 other_pre_points_total 分别为甲与乙的积分前应付
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_pricing.py 加 promotion_discounts 的校验、全为 0 与不传逐字段相同、固定券大于活动后商品额时取后者、百分比券按活动后金额计算。新文件 tests/test_promotion_plans.py 以 SHOP-TASK-231 的 price_promotion 走通第 8 条：首例（两开关都打开，10% 券最低消费 RM50，1000 积分，西马运费 800 免去）甲 5310、乙 8270 取甲，price_order 的券分摊 184、184、111、111、0，积分分摊 313、313、187、187、0，现金实付 1347、1347、808、808、0，应付 4310，获得积分 14、13、8、8、0；关闭券同用时甲 5900、乙 8270 取甲且甲不用券；D 例甲 18800、乙 17800 取乙；第三例甲的活动后商品额 9900 够不到券的最低消费，甲 10700、乙 5800 取乙；只关闭积分同用时取甲且 points_allowed 为 False；两方案相同取甲。每条测试的文档字符串写明它守住的第几条哪一句
+      - docs/task-records/SHOP-TASK-232.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明 price_order 的新参数与 choose_promotion_plan 的签名，供之后的服务层引用）；改动只落在 allowed_change_paths；不改 app/services/promotion_pricing.py、coupons.py 与下单服务、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```
