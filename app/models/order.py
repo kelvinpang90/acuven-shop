@@ -9,6 +9,9 @@ PaymentAttempt / OrderEvent 三行，以及「订单与退款状态」「失败�
 不级联删除；只有订单行到 SKU 规格的外键在规格被删除时置空，订单行靠快照照常显示。
 订单的可空会员 ID 与游客订单认领状态由 SHOP-TASK-012 加上（见 app/models/member.py）；
 优惠券、退款与参考外币都不在这些表里，由之后的任务另加。
+订单与逐件快照的节日促销活动列依据 docs/DESIGN.md 1.23（提交 b7f9355）「数据模型」的
+Order / OrderItem 一行与「节日促销活动」第 7 条，由 SHOP-TASK-230 加上（迁移 0028）；
+下单时怎样写这些列由之后的下单任务实现。已有订单的新列取 0 或空。
 
 检查约束只用比较、算术、LENGTH、LIKE、IN 与 IS NULL，MySQL 与 SQLite 都能执行。
 MySQL 的 LENGTH 按字节计，所以幂等键只在库里保证非空，不超过 64 个字符由列长保证；
@@ -100,7 +103,11 @@ def _utcnow() -> datetime:
 class Order(Base):
     """一张订单的金额快照与状态。
 
-    应付 = 商品小计 − 券折扣 − 积分抵扣 + 运费；券与积分都不抵运费，所以应付不低于运费。
+    应付 = 商品小计 − 商品级活动优惠 − 整单级活动优惠 − 券折扣 − 积分抵扣 + 运费；
+    活动优惠、券与积分都不抵运费，所以应付不低于运费。运费是实际运费：活动免运费时为 0，
+    免去的运费另记在 shipping_waived_sen（未免为 0）。活动 ID 为空当且仅当三项活动金额都为 0
+    （「节日促销活动」第 4 条末句与第 7 条：不参加活动或取了乙方案时不记活动）。
+    四个活动列由服务端默认值填 0 与空，不写它们的已有代码照常写入不参加活动的订单。
     支付到期时间由下单写为创建时间加 15 分钟，超时取消与支付页倒计时都以它为准。
 
     认领状态的两条检查约束挂在列上而不是 __table_args__：tests/test_order_models.py 只按
@@ -127,11 +134,34 @@ class Order(Base):
         CheckConstraint("total_sen >= 0", name="total_sen_non_negative"),
         CheckConstraint("points_earned >= 0", name="points_earned_non_negative"),
         CheckConstraint(
-            "coupon_discount_sen + points_redeemed <= subtotal_sen",
+            "promotion_item_discount_sen >= 0",
+            name="promotion_item_discount_sen_non_negative",
+        ),
+        CheckConstraint(
+            "promotion_order_discount_sen >= 0",
+            name="promotion_order_discount_sen_non_negative",
+        ),
+        CheckConstraint("shipping_waived_sen >= 0", name="shipping_waived_sen_non_negative"),
+        CheckConstraint(
+            "(promotion_id IS NULL AND promotion_item_discount_sen = 0"
+            " AND promotion_order_discount_sen = 0 AND shipping_waived_sen = 0)"
+            " OR (promotion_id IS NOT NULL AND promotion_item_discount_sen"
+            " + promotion_order_discount_sen + shipping_waived_sen > 0)",
+            name="promotion_amounts_match",
+        ),
+        CheckConstraint(
+            "shipping_waived_sen = 0 OR shipping_fee_sen = 0",
+            name="shipping_waived_means_free",
+        ),
+        CheckConstraint(
+            "promotion_item_discount_sen + promotion_order_discount_sen"
+            " + coupon_discount_sen + points_redeemed <= subtotal_sen",
             name="discounts_within_subtotal",
         ),
         CheckConstraint(
-            "total_sen = subtotal_sen - coupon_discount_sen - points_redeemed + shipping_fee_sen",
+            "total_sen = subtotal_sen - promotion_item_discount_sen"
+            " - promotion_order_discount_sen - coupon_discount_sen - points_redeemed"
+            " + shipping_fee_sen",
             name="total_formula",
         ),
         CheckConstraint("total_sen >= shipping_fee_sen", name="total_covers_shipping"),
@@ -187,6 +217,17 @@ class Order(Base):
         ),
         default=CLAIM_OPEN,
     )
+    # 本单所用的节日促销活动；已开始的活动被订单引用，不能删除。
+    promotion_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("promotions.id", ondelete="RESTRICT"),
+        index=True,
+    )
+    # 商品级与整单级活动优惠的合计，等于逐件活动优惠中这两部分各自的合计。
+    promotion_item_discount_sen: Mapped[int] = mapped_column(Integer, server_default="0")
+    promotion_order_discount_sen: Mapped[int] = mapped_column(Integer, server_default="0")
+    # 免去的运费（免运费时为原运费）；实际运费仍是 shipping_fee_sen。
+    shipping_waived_sen: Mapped[int] = mapped_column(Integer, server_default="0")
 
 
 class OrderItem(Base):
@@ -238,6 +279,10 @@ class OrderItemUnit(Base):
     line_index 由所属订单行给出；unit_index、original_price、coupon_discount、
     points_discount、cash_paid、points_earned 依次存为 unit_index、original_price_sen、
     coupon_discount_sen、points_discount、cash_paid_sen、points_earned。
+    promotion_discount_sen 对应之后 UnitAllocation 的活动优惠（该件的商品级折扣
+    加分摊到的整单级优惠，「节日促销活动」第 7 条），由服务端默认值填 0。
+    promotion_rule_id 为该件所在行命中的商品级规则，不论这一件是否享受折扣
+    （买 X 享 Y 只有最便宜的 k 件享受），不参加活动或不在任何商品级规则里时为空。
     """
 
     __tablename__ = "order_item_units"
@@ -249,8 +294,10 @@ class OrderItemUnit(Base):
         CheckConstraint("points_discount >= 0", name="points_discount_non_negative"),
         CheckConstraint("cash_paid_sen >= 0", name="cash_paid_sen_non_negative"),
         CheckConstraint("points_earned >= 0", name="points_earned_non_negative"),
+        CheckConstraint("promotion_discount_sen >= 0", name="promotion_discount_sen_non_negative"),
         CheckConstraint(
-            "cash_paid_sen = original_price_sen - coupon_discount_sen - points_discount",
+            "cash_paid_sen = original_price_sen - promotion_discount_sen"
+            " - coupon_discount_sen - points_discount",
             name="cash_paid_formula",
         ),
         MYSQL_TABLE_OPTIONS,
@@ -269,6 +316,12 @@ class OrderItemUnit(Base):
     points_discount: Mapped[int] = mapped_column(Integer)
     cash_paid_sen: Mapped[int] = mapped_column(Integer)
     points_earned: Mapped[int] = mapped_column(Integer)
+    promotion_discount_sen: Mapped[int] = mapped_column(Integer, server_default="0")
+    # 被订单引用的规则不能删除，所以其活动也不能删除（规则到活动是 CASCADE）。
+    promotion_rule_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("promotion_rules.id", ondelete="RESTRICT"),
+    )
 
 
 class OrderRecipient(Base):
