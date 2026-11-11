@@ -14,7 +14,9 @@ docs/UX.md 0.10 P05 与 P13：结账输入代码；「我的优惠券」列出�
 - 有效：启用中且生效时间 ≤ 当前时间 ≤ 截止时间（两端都含，截止时间是仍有效的最后一刻）。
 - 查券按 not_found、inactive、not_started、expired、below_min_spend、total_exhausted、
   member_exhausted 的顺序判定，首个不成立的即为原因；都成立时可用，并给出 price_order 的券参数
-  （fixed 为 fixed_off 的仙数，percent 为 percent_off 的 Decimal 百分比），不另算折扣。
+  （fixed 为 fixed_off 的仙数，percent 为 percent_off 的 Decimal 百分比），不另算折扣；另给出
+  该券的最低消费（DESIGN 1.23「节日促销活动」第 6 条，SHOP-TASK-236），供调用方在活动后的金额上
+  再判断一次。
 - 计数口径：状态为 reserved 或 used 的用券记录计次，released 不计；总次数按该券全部记录，每会员
   次数按用券记录上的会员 ID（不按订单上的会员 ID，后者在注销时被清空）。上限为空即不限。
 - 预占的行锁：依次以 SELECT … FOR UPDATE 锁住会员行、订单行与券行（会员 → 订单 → 券，与会员注销
@@ -77,13 +79,15 @@ _CODE_PATTERN = re.compile(rf"[A-Za-z0-9]{{{CODE_MIN_LENGTH},{CODE_MAX_LENGTH}}}
 class CouponCheck:
     """查券或预占的结果：reason 为空即可用，此时给出券 ID 与 price_order 的券参数。
 
-    fixed_off 与 percent_off 至多一个非空；不可用时三者都为空。
+    fixed_off 与 percent_off 至多一个非空；min_subtotal_sen 为该券的最低消费（仙）。
+    不可用时四者都为空。
     """
 
     reason: str | None
     coupon_id: int | None = None
     fixed_off: int | None = None
     percent_off: Decimal | None = None
+    min_subtotal_sen: int | None = None
 
     @property
     def ok(self) -> bool:
@@ -200,8 +204,18 @@ def _judge(
         if member_limit is not None and member_count >= member_limit:
             return CouponCheck(REASON_MEMBER_EXHAUSTED)
     if coupon.coupon_type == TYPE_FIXED:
-        return CouponCheck(None, coupon_id=coupon.id, fixed_off=coupon.amount_off_sen)
-    return CouponCheck(None, coupon_id=coupon.id, percent_off=Decimal(coupon.percent_off))
+        return CouponCheck(
+            None,
+            coupon_id=coupon.id,
+            fixed_off=coupon.amount_off_sen,
+            min_subtotal_sen=coupon.min_subtotal_sen,
+        )
+    return CouponCheck(
+        None,
+        coupon_id=coupon.id,
+        percent_off=Decimal(coupon.percent_off),
+        min_subtotal_sen=coupon.min_subtotal_sen,
+    )
 
 
 # ---------------------------------------------------------------------------

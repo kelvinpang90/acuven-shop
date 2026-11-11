@@ -11,6 +11,8 @@
 下单时券或积分已不可用即整单拒绝。字段参照 docs/UX.md 0.10 的 P05 会员表单
 （优惠券代码与使用积分，摘要显示券与积分两行）。规则函数见
 app/services/member_ordering.py（SHOP-TASK-088），会话依赖取自 app/api/member_auth.py。
+计价接入节日促销活动依据 DESIGN 1.23（提交 b7f9355）「节日促销活动」第 6、10 条
+（SHOP-TASK-236）：服务层按本模块的 _utcnow 读当时生效的活动并判定方案，响应照转。
 
 两个接口的检查顺序，每一步不通过即停止：
 1. 请求体按实际读到的字节逐块判断，超过 8 KB 即 413，先于一切校验；不是 JSON 415。
@@ -78,7 +80,13 @@ from app.api.orders import (
 )
 from app.api.pay import LanguageDep, _body_errors, _json_body, _utcnow
 from app.db.session import get_session
-from app.services.checkout import MAX_CART_LINES, CartItem, PricedLine, UnavailableLine
+from app.services.checkout import (
+    MAX_CART_LINES,
+    CartItem,
+    PricedLine,
+    PromotionQuote,
+    UnavailableLine,
+)
 from app.services.member_ordering import (
     CouponUnavailable,
     IdempotencyConflict,
@@ -166,6 +174,16 @@ class MemberQuoteOut:
     # 计入的抵扣积分；不接受时为 0。
     points_redeemed: int
     points_earned: int
+    # DESIGN 1.23「节日促销活动」第 6、10 条（SHOP-TASK-236），照服务层结果输出：
+    # 生效活动的计价结果（没有时为空）、所取方案（promotion 或 no_promotion，不比较也不参加时
+    # 为空）、甲与乙的积分前应付（比较过才有）、甲不用可用券的原因（not_combinable 或
+    # below_min_after_sale）与活动不同用积分的标记。
+    promotion: PromotionQuote | None
+    promotion_plan: str | None
+    promotion_pre_points_total_sen: int | None
+    other_pre_points_total_sen: int | None
+    coupon_note: str | None
+    points_not_combinable: bool
 
 
 class MemberOrderOut(BaseModel):
@@ -335,6 +353,12 @@ def quote(
         points_accepted=result.points_accepted,
         points_redeemed=result.points_redeemed,
         points_earned=result.points_earned,
+        promotion=result.promotion,
+        promotion_plan=result.promotion_plan,
+        promotion_pre_points_total_sen=result.promotion_pre_points_total_sen,
+        other_pre_points_total_sen=result.other_pre_points_total_sen,
+        coupon_note=result.coupon_note,
+        points_not_combinable=result.points_not_combinable,
     )
 
 
