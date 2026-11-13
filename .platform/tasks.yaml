@@ -6575,7 +6575,7 @@ tasks:
       运营者落实写法：展示函数按活动 ID 组装（不判断是否生效），公开接口先以 SHOP-TASK-233 的 active_promotion(db, _utcnow()) 取生效活动的 ID 再调用它。规则的商品级范围只给分类（slug 与所选语言的名称，缺译回退英文）与「是否另选了单件商品」，不逐一列出商品（UX 0.20 P15：选中的单件商品不逐一列出）。文案为空即 null。接口照 app/api/store_design.py 用 _NoStoreRoute（第 10 条「展示接口的响应带 no-store」），lang 照 app/api/pay.py 的 LanguageDep 校验，时间带 UTC 时区输出。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 10、12 条：只给展示数据，不返回内部名称、版本与任何个人资料。
       拆分：节日促销展示层的第一个任务（5 个允许路径），依赖 SHOP-TASK-233（active_promotion）与 240（海报图路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-233
       - SHOP-TASK-240
