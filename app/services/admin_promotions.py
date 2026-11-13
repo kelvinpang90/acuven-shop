@@ -1,13 +1,13 @@
 """后台促销活动（A12）：输入数据类、取值检查、时间换算、活动状态，以及列表、读取、
-新建与保存。
+新建、保存与状态操作（发布、撤回、提前结束、删除、复制）。
 
 依据 docs/DESIGN.md 1.23（提交 b7f9355）「节日促销活动」第 1–3、12 条
-（下称「第 N 条」）与 docs/UX.md 0.20 的 A12，以及 SHOP-TASK-239 与 SHOP-TASK-249
-的落实写法。前半部分（SHOP-TASK-239）不读写数据库；后半部分（SHOP-TASK-249）
-做查库的检查（引用存在、商品级规则重叠、发布条件、时间重叠、按状态锁定）、
-列表、读取、新建与保存。AI 提案的校验（SHOP-TASK-248）复用这里的
-check_decoration 与 check_copy；发布（SHOP-TASK-241）复用 publish_problems、
-scope_overlap_problems 与 ensure_no_overlap。
+（下称「第 N 条」）与 docs/UX.md 0.20 的 A12，以及 SHOP-TASK-239、SHOP-TASK-249
+与 SHOP-TASK-241 的落实写法。前半部分（SHOP-TASK-239）不读写数据库；中间部分
+（SHOP-TASK-249）做查库的检查（引用存在、商品级规则重叠、发布条件、时间重叠、
+按状态锁定）、列表、读取、新建与保存；最后部分（SHOP-TASK-241）做状态操作。
+AI 提案的校验（SHOP-TASK-248）复用这里的 check_decoration 与 check_copy；发布
+复用 publish_problems、scope_overlap_problems 与 ensure_no_overlap。
 
 时间：后台按马来西亚时间输入到分钟（第 1 条）。服务层收发的时间是马来西亚
 本地时间的「YYYY-MM-DDTHH:MM」字符串或 None；to_utc 换成不带时区的 UTC
@@ -34,6 +34,7 @@ from sqlalchemy import Select, delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import Settings
 from app.models import (
     Category,
     Order,
@@ -60,6 +61,7 @@ from app.models.promotion import (
     NAME_MAX_LENGTH,
     PERCENT_MIN,
     POSTER_MODE_IMAGE,
+    POSTER_MODE_TEMPLATE,
     POSTER_MODES,
     QUANTITY_MAX,
     QUANTITY_MIN,
@@ -70,6 +72,7 @@ from app.models.promotion import (
     STATUS_PUBLISHED,
     THRESHOLD_MAX_SEN,
 )
+from app.services import image_store
 from app.services.admin_auth import record_audit
 from app.services.catalog import published
 from app.services.sms_budget import MALAYSIA_UTC_OFFSET
@@ -1427,6 +1430,351 @@ def save_promotion(
                 old_value=_audit_value(field, old_value),
                 new_value=_audit_value(field, new_value),
             )
+        saved = _detail(db, promotion, decoration, now)
+    except BaseException:
+        db.rollback()
+        raise
+
+    db.commit()
+    return saved
+
+
+# ===========================================================================
+# 状态操作：发布、撤回、提前结束、删除与复制（SHOP-TASK-241）
+#
+# 第 2 条与 UX 0.20 A12 的状态表：发布只对 draft，撤回只对 scheduled，提前结束
+# 只对 running，删除只对 draft，复制对任何状态。前四种带读取时的版本号，先回滚
+# 此前的事务、再以 FOR UPDATE 锁活动行核对（不存在或不同抛 PromotionChanged），
+# 状态在加锁后按 now 算出；任何异常先回滚再抛出。发布、撤回与提前结束版本加一、
+# 修改时间取 now；删除与复制不改原活动的版本。
+#
+# 加锁顺序与保存相同：只有发布先锁 promotion_publish_locks 那一行（它会让活动
+# 进入已发布的集合，须查时间重叠）；撤回、提前结束与删除只让活动离开已发布的
+# 集合或缩短实际结束时间，不会造成重叠，所以从活动行开始锁。
+#
+# 撤回与订单：下单事务读生效活动时加共享锁（SHOP-TASK-233 的 share_lock）。撤回
+# 锁住活动行后以 _has_orders 查订单引用，有即按已开始处理、拒绝；没有时提交前
+# 下单读不到它，提交后下单读到的已是草稿，所以撤回成功的活动不被任何订单引用，
+# 之后作为草稿删除不会撞上订单的外键。
+# ===========================================================================
+
+ADMIN_PROMOTION_PUBLISHED = "admin_promotion_published"
+ADMIN_PROMOTION_WITHDRAWN = "admin_promotion_withdrawn"
+ADMIN_PROMOTION_ENDED = "admin_promotion_ended"
+ADMIN_PROMOTION_DELETED = "admin_promotion_deleted"
+ADMIN_PROMOTION_COPIED = "admin_promotion_copied"
+
+# 复制时清空的文案列：海报改回模板模式，替代文字随海报图一并不复制。
+_POSTER_ALT_FIELDS = ("poster_alt_en", "poster_alt_zh", "poster_alt_ms")
+
+
+class PromotionStateInvalid(Exception):
+    """当前状态不允许这个操作（第 2 条、UX A12 的状态表），state 为当前状态。
+
+    已有订单引用的 scheduled 活动撤回时，state 为 running（按已开始处理）。
+    """
+
+    def __init__(self, state: str) -> None:
+        super().__init__(state)
+        self.state = state
+
+
+def _check_version(version: object) -> None:
+    # bool 是 int 的子类，但 True 不是一个版本号。
+    if type(version) is not int:
+        raise TypeError("version must be an integer")
+
+
+def _lock_promotion(db: Session, promotion_id: int, version: int) -> Promotion:
+    """以 FOR UPDATE 锁活动行；不存在或版本号与当前不同抛 PromotionChanged。"""
+    promotion = db.execute(
+        select(Promotion)
+        .where(Promotion.id == promotion_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+    if promotion is None or promotion.version != version:
+        raise PromotionChanged("the promotion was changed since it was read")
+    return promotion
+
+
+def _record(
+    db: Session,
+    action: str,
+    admin_account_id: int,
+    now: datetime,
+    *,
+    target_id: int,
+    old_value: str | None = None,
+) -> None:
+    """写一条对象类别为 promotion 的状态操作审计（没有新值），只 flush。"""
+    record_audit(
+        db,
+        action,
+        admin_account_id,
+        now,
+        target_type=AUDIT_TARGET_PROMOTION,
+        target_id=target_id,
+        old_value=old_value,
+    )
+
+
+def publish_promotion(
+    db: Session, admin_account_id: int, promotion_id: int, version: int, now: datetime
+) -> PromotionDetail:
+    """发布一个草稿（第 2 条），返回发布后的 PromotionDetail。
+
+    now 为不带时区的 UTC；admin_account_id 须在调用前取出（这里先回滚）。
+    version 不是整数抛 TypeError。按以下顺序：
+    1. 回滚，以 lock_publish_row 为新事务的第一条语句，再锁活动行（不存在或版本
+       不同抛 PromotionChanged）、再锁装饰行；不是 draft 抛 PromotionStateInvalid。
+    2. publish_problems（publish_missing）与 scope_overlap_problems（按当时的商品
+       与分类），有问题抛 PromotionInvalid（列出全部问题）。
+    3. ensure_no_overlap，与其他已发布活动时间重叠抛 PromotionOverlap。
+    4. status 改为 published、版本加一、修改时间取 now，写一条
+       admin_promotion_published 审计后提交。开始时间已过的发布即生效。
+    """
+    _require_naive(now, "now")
+    _check_version(version)
+
+    db.rollback()
+    try:
+        lock_publish_row(db)
+        promotion = _lock_promotion(db, promotion_id, version)
+        decoration = db.execute(_decoration_statement(promotion.id, lock=True)).scalar_one()
+        state = _state(promotion, now)
+        if state != STATE_DRAFT:
+            raise PromotionStateInvalid(state)
+
+        problems = publish_problems(db, promotion, now)
+        problems.extend(scope_overlap_problems(db, promotion.id))
+        if problems:
+            raise PromotionInvalid(problems)
+        ensure_no_overlap(db, promotion.id, promotion.starts_at, _effective_end(promotion))
+
+        promotion.status = STATUS_PUBLISHED
+        promotion.version += 1
+        promotion.updated_at = now
+        db.flush()
+        _record(db, ADMIN_PROMOTION_PUBLISHED, admin_account_id, now, target_id=promotion.id)
+        saved = _detail(db, promotion, decoration, now)
+    except BaseException:
+        db.rollback()
+        raise
+
+    db.commit()
+    return saved
+
+
+def withdraw_promotion(
+    db: Session, admin_account_id: int, promotion_id: int, version: int, now: datetime
+) -> PromotionDetail:
+    """把已发布未开始的活动撤回为草稿（第 2 条），返回撤回后的 PromotionDetail。
+
+    now、admin_account_id 与 version 同 publish_promotion。回滚后锁活动行（不存在
+    或版本不同抛 PromotionChanged）；不是 scheduled 抛 PromotionStateInvalid；已有
+    订单引用（以共享锁读 orders.promotion_id）按已开始处理，抛
+    PromotionStateInvalid（state 为 running）。之后 status 改回 draft、版本加一、
+    修改时间取 now，写一条 admin_promotion_withdrawn 审计后提交。不锁发布锁。
+    """
+    _require_naive(now, "now")
+    _check_version(version)
+
+    db.rollback()
+    try:
+        promotion = _lock_promotion(db, promotion_id, version)
+        state = _state(promotion, now)
+        if state != STATE_SCHEDULED:
+            raise PromotionStateInvalid(state)
+        if _has_orders(db, promotion.id):
+            raise PromotionStateInvalid(STATE_RUNNING)
+        decoration = db.execute(_decoration_statement(promotion.id)).scalar_one()
+
+        promotion.status = STATUS_DRAFT
+        promotion.version += 1
+        promotion.updated_at = now
+        db.flush()
+        _record(db, ADMIN_PROMOTION_WITHDRAWN, admin_account_id, now, target_id=promotion.id)
+        saved = _detail(db, promotion, decoration, now)
+    except BaseException:
+        db.rollback()
+        raise
+
+    db.commit()
+    return saved
+
+
+def end_promotion(
+    db: Session, admin_account_id: int, promotion_id: int, version: int, now: datetime
+) -> PromotionDetail:
+    """提前结束进行中的活动（第 2 条），返回结束后的 PromotionDetail（state 为 ended）。
+
+    now、admin_account_id 与 version 同 publish_promotion。回滚后锁活动行（不存在
+    或版本不同抛 PromotionChanged）；不是 running 抛 PromotionStateInvalid。
+    ended_early_at 取 now 截到整秒（不会早于开始、不会晚于结束：两者都是整分钟），
+    版本加一、修改时间取 now，写一条 admin_promotion_ended 审计后提交。之后活动为
+    ended，不能再提前结束或恢复。只缩短实际结束时间，不锁发布锁。
+    """
+    _require_naive(now, "now")
+    _check_version(version)
+
+    db.rollback()
+    try:
+        promotion = _lock_promotion(db, promotion_id, version)
+        state = _state(promotion, now)
+        if state != STATE_RUNNING:
+            raise PromotionStateInvalid(state)
+        decoration = db.execute(_decoration_statement(promotion.id)).scalar_one()
+
+        promotion.ended_early_at = now.replace(microsecond=0)
+        promotion.version += 1
+        promotion.updated_at = now
+        db.flush()
+        _record(db, ADMIN_PROMOTION_ENDED, admin_account_id, now, target_id=promotion.id)
+        saved = _detail(db, promotion, decoration, now)
+    except BaseException:
+        db.rollback()
+        raise
+
+    db.commit()
+    return saved
+
+
+def delete_promotion(
+    db: Session,
+    settings: Settings,
+    admin_account_id: int,
+    promotion_id: int,
+    version: int,
+    now: datetime,
+) -> None:
+    """删除一个草稿（第 2 条「草稿可任意修改、删除（连同它的海报图）」）。
+
+    now、admin_account_id 与 version 同 publish_promotion。回滚后锁活动行（不存在
+    或版本不同抛 PromotionChanged）；不是 draft 抛 PromotionStateInvalid。再锁装饰行，
+    读出两张海报图的文件名，删除规则的范围与满额档、规则、装饰行与活动行，写一条
+    admin_promotion_deleted 审计（旧值为内部名称）后提交。提交后以
+    image_store.delete_image（前缀 POSTER_KEY_PREFIX）删除每张海报图的对象（只尝试
+    1 次，存储未配置或失败都只记日志）。
+    """
+    _require_naive(now, "now")
+    _check_version(version)
+
+    db.rollback()
+    try:
+        promotion = _lock_promotion(db, promotion_id, version)
+        state = _state(promotion, now)
+        if state != STATE_DRAFT:
+            raise PromotionStateInvalid(state)
+        decoration = db.execute(_decoration_statement(promotion.id, lock=True)).scalar_one()
+        # 提交后 ORM 对象过期（且已删除），先取出要用的值。
+        name = promotion.name
+        file_names = [
+            file_name
+            for file_name in (
+                decoration.poster_desktop_file_name,
+                decoration.poster_phone_file_name,
+            )
+            if file_name is not None
+        ]
+
+        rule_ids = list(
+            db.scalars(select(PromotionRule.id).where(PromotionRule.promotion_id == promotion_id))
+        )
+        sync = {"synchronize_session": "fetch"}
+        if rule_ids:
+            for model, column in (
+                (PromotionRuleProduct, PromotionRuleProduct.rule_id),
+                (PromotionRuleCategory, PromotionRuleCategory.rule_id),
+                (PromotionSpendTier, PromotionSpendTier.rule_id),
+                (PromotionRule, PromotionRule.id),
+            ):
+                db.execute(delete(model).where(column.in_(rule_ids)).execution_options(**sync))
+        for statement in (
+            delete(PromotionDecoration).where(PromotionDecoration.promotion_id == promotion_id),
+            delete(Promotion).where(Promotion.id == promotion_id),
+        ):
+            db.execute(statement.execution_options(**sync))
+        _record(
+            db,
+            ADMIN_PROMOTION_DELETED,
+            admin_account_id,
+            now,
+            target_id=promotion_id,
+            old_value=name,
+        )
+        db.commit()
+    except BaseException:
+        db.rollback()
+        raise
+
+    for file_name in file_names:
+        image_store.delete_image(settings, file_name, prefix=image_store.POSTER_KEY_PREFIX)
+
+
+def copy_promotion(
+    db: Session, admin_account_id: int, promotion_id: int, now: datetime
+) -> PromotionDetail:
+    """把任何状态的活动复制为新草稿（第 2 条），返回新草稿的 PromotionDetail。
+
+    now 与 admin_account_id 同 publish_promotion。回滚后读原活动（不加锁），不存在抛
+    PromotionNotFound。新草稿复制内部名称、规则（含范围与满额档，规则 ID 是新的）、
+    两个开关、装饰与文案；不复制时间与海报图：开始与结束为空，海报改回模板模式、
+    两张图与三语替代文字清空。版本号 1，创建与修改时间取 now。写一条
+    admin_promotion_copied 审计（对象为新草稿，旧值为原活动 ID）后提交。
+    原活动不改，版本不变。
+    """
+    _require_naive(now, "now")
+
+    db.rollback()
+    try:
+        source = db.execute(
+            select(Promotion)
+            .where(Promotion.id == promotion_id)
+            .execution_options(populate_existing=True)
+        ).scalar_one_or_none()
+        if source is None:
+            raise PromotionNotFound(promotion_id)
+        source_decoration = db.execute(_decoration_statement(source.id)).scalar_one()
+        rules = [rule.as_input() for rule in _load_rules(db, source.id)]
+
+        promotion = Promotion(
+            name=source.name,
+            status=STATUS_DRAFT,
+            starts_at=None,
+            ends_at=None,
+            ended_early_at=None,
+            coupon_combinable=bool(source.coupon_combinable),
+            points_combinable=bool(source.points_combinable),
+            version=NEW_PROMOTION_VERSION,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(promotion)
+        db.flush()
+        decoration_values = {
+            f.name: getattr(source_decoration, f.name) for f in fields(DecorationInput)
+        }
+        copy_values = {f.name: getattr(source_decoration, f.name) for f in fields(CopyInput)}
+        decoration_values["poster_mode"] = POSTER_MODE_TEMPLATE
+        for name in _POSTER_ALT_FIELDS:
+            copy_values[name] = None
+        decoration = PromotionDecoration(
+            promotion_id=promotion.id,
+            **decoration_values,
+            **copy_values,
+            updated_at=now,
+        )
+        db.add(decoration)
+        _write_rules(db, promotion.id, rules)
+        _record(
+            db,
+            ADMIN_PROMOTION_COPIED,
+            admin_account_id,
+            now,
+            target_id=promotion.id,
+            old_value=str(source.id),
+        )
         saved = _detail(db, promotion, decoration, now)
     except BaseException:
         db.rollback()
