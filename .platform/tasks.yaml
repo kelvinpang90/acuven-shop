@@ -6520,7 +6520,7 @@ tasks:
       运营者落实写法：发布与撤回改变 status，提前结束写 ended_early_at，都加版本；复制与删除不改原活动的版本。发布先锁 promotion_publish_locks 那一行、再锁活动行（第 2 条），检查与 SHOP-TASK-249 保存 scheduled 时相同的发布条件、商品级规则重叠与时间重叠（复用它导出的 publish_problems、scope_overlap_problems 与 ensure_no_overlap）；开始时间已过的发布即生效。撤回以排他锁锁住活动行后另查是否已有订单引用该活动，有即按已开始处理、拒绝撤回（第 2 条「已开始的活动不能撤回」）；下单事务读活动时加共享锁（SHOP-TASK-233 的 share_lock，235 与 237 使用），撤回提交前不会有新的订单引用它，撤回提交后下单读到的已是草稿、不再引用，所以撤回成功的活动不被任何订单引用，之后作为草稿删除不会撞上订单的外键。删除只对草稿。提前结束只缩短实际结束时间，不会造成与其他活动重叠，所以不锁 promotion_publish_locks。提前结束的时刻为服务端当前时刻截到整秒（SHOP-TASK-229 的落实写法），之后不能恢复。删除先读出两张海报图的文件名，提交后以 SHOP-TASK-240 的 POSTER_KEY_PREFIX 删除对象（只尝试 1 次，失败只记日志）。复制照第 2 条复制内部名称、规则、两个开关、装饰与文案，不复制时间与海报图（海报改回模板模式，替代文字一并清空），新草稿 version 为 1。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 1、2 条：活动何时生效（发布、撤回、提前结束），决定之后的计价；只写后台审计，不碰个人资料。
       拆分：节日促销后台层的第五个任务（3 个允许路径），依赖 SHOP-TASK-233（测试用 active_promotion）、249（检查函数与异常）与 240（海报存储前缀与 PromotionEnded）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-233
       - SHOP-TASK-240
