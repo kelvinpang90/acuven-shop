@@ -27,12 +27,11 @@
 
 <!-- openclaw:planning-v1:begin -->
 ### 当前计划
-1. `SHOP-TASK-244` 商品目录的活动价与角标字段、活动专题页的商品列表
-2. `SHOP-TASK-245` 管理员预览草稿与未开始活动的数据接口
-3. `SHOP-TASK-246` AI 装饰提案的每日计数与调用记录表（模型与迁移 0029）
-4. `SHOP-TASK-247` 调用 Billing Hub 的 AI 消息接口（配置与客户端）
-5. `SHOP-TASK-248` AI 生成装饰提案（服务层）
-6. `SHOP-TASK-251` AI 生成装饰提案的后台接口
+1. `SHOP-TASK-245` 管理员预览草稿与未开始活动的数据接口
+2. `SHOP-TASK-246` AI 装饰提案的每日计数与调用记录表（模型与迁移 0029）
+3. `SHOP-TASK-247` 调用 Billing Hub 的 AI 消息接口（配置与客户端）
+4. `SHOP-TASK-248` AI 生成装饰提案（服务层）
+5. `SHOP-TASK-251` AI 生成装饰提案的后台接口
 
 ### 已阻塞
 
