@@ -1,0 +1,26 @@
+# SHOP-TASK-240 节日促销海报图的上传、替换与移除（服务层）
+
+- [x] 设计闸门：DESIGN 1.23（提交 `b7f9355`）「节日促销活动」第 12 条与「计价、优惠、积分与库存」第 13、15 条：图片的校验与存储，不碰金额与个人资料。另依据 HANDOFF 0.93 确认的一点（海报图的上传与替换立即生效、不随保存提交、不改活动的版本号，每次上传与替换写后台审计）与 HANDOFF 里 2026-11-11 登记第二批任务的运营者落实写法（不是已结束的活动都可上传、移除；已发布的上传图模式不能移除海报图；宽度下限按上传原图判断）。依赖 SHOP-TASK-229（模型）与 249（`PromotionNotFound`、读取）。不做接口（SHOP-TASK-250），不改计价、下单、数据库、前端、`.platform/`、CI 与部署配置，不装依赖，不改设计。
+- [x] `app/services/image_processing.py`：`process_image(data, *, min_side=MIN_SIDE, min_long_side=MIN_SIDE, min_width=0) -> ProcessedImage`。`min_width` 大于 0 时，按 EXIF 方向转正之后的宽（显示方向的宽：方向标签 0x0112 为 5–8 时取原图的高，否则取原图的宽）小于它即 `ImageRejected`。判断放在原有尺寸检查之后、JPEG 的 `draft` 与解码之前，按上传原图判断；之后照常把长边缩到 1,600，展示图的宽可能小于下限。`min_width` 为 0（默认）时不读 EXIF，现有调用的行为不变。
+- [x] `app/services/image_store.py`：新增 `POSTER_KEY_PREFIX = "promotion-posters/"`，对象键为 `promotion-posters/<文件名>.webp`。
+- [x] `app/services/admin_promotions.py`：只新增异常 `PromotionEnded`（活动已结束，不能再改；241 复用）。
+- [x] 新增 `app/services/promotion_poster.py`（函数都是同步函数，由调用方放进线程；本模块不写日志）：
+  - 常量：`ADMIN_PROMOTION_POSTER_UPLOADED = "admin_promotion_poster_uploaded"`、`ADMIN_PROMOTION_POSTER_REMOVED = "admin_promotion_poster_removed"`、`SLOT_DESKTOP = "desktop"`、`SLOT_PHONE = "phone"`、`POSTER_SLOTS`、`POSTER_DESKTOP_MIN_WIDTH = 1200`、`POSTER_PHONE_MIN_WIDTH = 600`、`POSTER_MIN_WIDTHS`（slot → 宽度下限）、`FILE_NAME_BYTES = 16`。
+  - 异常：`PosterRequired`（已发布即 scheduled 或 running、且海报为上传图模式的活动不能移除图）。另抛 249 的 `PromotionNotFound` 与本任务加在 `admin_promotions` 的 `PromotionEnded`；`slot` 不是 `desktop` 或 `phone` 抛 `ValueError`（在调用存储与查库之前）。
+  - `poster_path(file_name: str) -> str`：返回 `/api/promotion-posters/<文件名>.webp`（前后缀取 `admin_promotions.POSTER_PATH_PREFIX`、`POSTER_PATH_SUFFIX`），不查库、不校验文件名。
+  - `poster_file_names(db: Session) -> set[str]`：所有活动装饰行（不论状态，草稿的也算）引用的桌面与手机海报文件名；只发 SELECT，查询期间关闭 autoflush。供 250 的公开提供判断。
+  - `replace_poster(db, settings, admin_account_id, promotion_id, slot, image: ProcessedImage, now) -> str`：返回新图的提供路径。顺序：`secrets.token_hex(16)` 生成文件名 → `db.rollback()` → 事务之外 `image_store.put_image(..., prefix=POSTER_KEY_PREFIX)`（失败抛 `ImageStoreUnavailable`，记录不变）→ `FOR UPDATE` 锁活动行（不存在抛 `PromotionNotFound`）→ 锁装饰行 → 按 `now` 算状态（`promotion_state`，ended 抛 `PromotionEnded`）→ 读出该位置原有文件名，改写该位置五列（文件名、`image.source_format`、`image.width`、`image.height`、`len(image.data)`）与装饰行 `updated_at = now` → 写审计 → 提交。锁定到提交之间任何异常（`BaseException`）都回滚、以 `delete_image` 删除新对象后重新抛出；提交成功后原来有图的再 `delete_image` 删除原有对象。
+  - `remove_poster(db, settings, admin_account_id, promotion_id, slot, now) -> None`：`db.rollback()` → 锁活动行、装饰行，不存在与 ended 同上 → 已发布且 `poster_mode` 为 `image` 抛 `PosterRequired` → 该位置没有图时回滚并返回（不写审计、不调用存储、不改更新时间）→ 有图时五列置空、装饰行 `updated_at = now`、写审计、提交，提交后 `delete_image` 删除该对象。提交之前的任何异常都回滚再抛出。
+  - 两个改动函数都不改活动行（`version` 与 `updated_at` 不变）。`now` 为不带时区的 UTC；`admin_account_id` 须在调用前取出（函数开头会回滚）。
+- [x] 审计：`target_type` 为 `promotion`，`target_id` 为活动 ID，`occurred_at` 为传入的 `now`。旧值与新值为「slot 文件名」，没有图的一侧只写 slot：上传 `desktop` → `desktop <新文件名>`（原来没有图）或 `desktop <原文件名>` → `desktop <新文件名>`；移除 `phone <原文件名>` → `phone`。不含图片内容与个人资料。
+- [x] 供 SHOP-TASK-250 的调用写法：上传接口在会话里取出管理员 ID 后，于线程里依次调用 `process_image(data, min_width=POSTER_MIN_WIDTHS[slot])`（其余尺寸下限取默认值，即商品图片的宽与高各 200–4,000）与 `replace_poster(db, settings, admin_id, promotion_id, slot, image, now)`；移除接口调用 `remove_poster(db, settings, admin_id, promotion_id, slot, now)`；公开提供接口以 `poster_file_names(db)` 判断文件名是否被引用，读对象用 `image_store.get_image(settings, file_name, prefix=image_store.POSTER_KEY_PREFIX)`。需转成回答的异常：`ImageRejected`、`ImageStoreUnavailable`、`PromotionNotFound`、`PromotionEnded`、`PosterRequired`、`ValueError`（slot 不合格，接口可在路由层先挡住）。
+- [x] 测试 `tests/test_promotion_poster.py`（SQLite 内存库，StaticPool，打开外键检查；活动以 `create_promotion` 建成，已发布的直接改状态列；`ProcessedImage` 直接构造；`monkeypatch` 替换 `image_store.put_image` 与 `delete_image`，假函数的 `prefix` 只限关键字且没有默认值）：宽 1199 与 1200 的桌面图、宽 599 与 600 的手机图；EXIF 方向 6 的图按显示方向的宽判断；1,200×2,400 的图通过下限后缩为 800×1,600；不传 `min_width` 与传 0 结果相同、200 宽照样通过、转正后变窄的图不另受限；提供路径与被引用的文件名；没有图时替换写入五列与审计、不删对象；已有图时替换，提交后才删除旧对象；写入失败与提交失败；移除清空五列、提交后删除对象；没有图时移除不写审计；上传、替换与移除都不改活动的 `version` 与 `updated_at`；不存在、ended 与已发布上传图模式的移除；草稿的上传图模式与进行中的模板模式可以移除；slot 不合格。每条测试的文档字符串写明它守住的设计句子、HANDOFF 0.93 的那一点或本任务的落实写法。
+- 偏离与落实细节：
+  - 加锁顺序为活动行、装饰行（与 249 保存的后两步相同），不锁 `promotion_publish_locks`：海报不改时间与状态，不参与时间重叠的判断；与保存、发布同为先活动行后装饰行，不会互相死锁。
+  - 移除时 `PosterRequired` 的判断在「该位置没有图」之前：已发布的上传图模式按状态一律不能移除，不随该位置当前有没有图而变（正常情况下这种活动两张图都有）。
+  - 替换时活动不存在或已结束是在写入对象之后、锁定时才知道（照 `replace_logo` 的顺序，锁外先写对象）；这时照「提交失败」一样删除刚写入的新对象。
+  - 宽度下限用 EXIF 方向标签算出显示方向的宽，不等解码后再看：JPEG 超过 1,600 时会先按 `draft` 缩小解码，解码后的宽已不是原图的宽。PNG 的 `getexif` 可能先解码整张图，所以 `rawmode` 改在它之前取（取法不变），且只在 `min_width` 大于 0 时才读 EXIF。
+  - 宽度下限常量放在 `promotion_poster`（`POSTER_MIN_WIDTHS`），没有放进 `image_processing`；`image_processing` 只多一个参数。
+  - 在验收之外另导出 `SLOT_DESKTOP`、`SLOT_PHONE`、`POSTER_SLOTS` 与宽度下限常量，供 250 与测试共用。
+- 验证到什么程度：人工逐条对照验收标准、DESIGN 1.23 第 12 条、第 15 条的存放与替换顺序、HANDOFF 0.93，以及 `app/models/promotion.py` 海报五列的约束（同为空或同不为空、格式、展示图宽高 1–1,600）；存储以假函数替代，不访问 R2；SQLite 不生成 FOR UPDATE，MySQL 上的加锁与并发没有在这里验证。测试、ruff check 与 ruff format 由 Worker 与 PR 的必需 CI 检查 `backend` 执行，结果以它们的记录为准。
+- 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。

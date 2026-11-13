@@ -4,6 +4,8 @@
 标志图的为 LOGO_KEY_PREFIX（store-logos/），依据 docs/DESIGN.md 1.20（提交 a870f78）同一节第 15 条
 「展示图存为存储桶里键为 store-logos/<文件名>.webp 的对象」。按 docs/HANDOFF.md 0.84 的落实写法，
 前缀是写入、读取与删除只限关键字的参数；两者共用同一组 client、超时、尝试次数与日志约束。
+节日促销海报图的前缀为 POSTER_KEY_PREFIX（promotion-posters/），依据 docs/DESIGN.md 1.23
+（提交 b7f9355）「节日促销活动」第 12 条「另用自己的存储键前缀」（SHOP-TASK-240）。
 
 依据 docs/DESIGN.md 1.19（提交 6e8f655）「计价、优惠、积分与库存」第 13 条开头一段：展示图存在
 Cloudflare R2 的一个私有存储桶，经 S3 兼容接口用 boto3 访问；四项配置缺任一项或为空字符串即视为
@@ -33,6 +35,7 @@ logger = logging.getLogger(__name__)
 
 KEY_PREFIX = "product-images/"
 LOGO_KEY_PREFIX = "store-logos/"
+POSTER_KEY_PREFIX = "promotion-posters/"
 CONTENT_TYPE = "image/webp"
 
 REGION_NAME = "auto"
