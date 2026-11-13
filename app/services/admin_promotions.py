@@ -637,6 +637,10 @@ class PromotionNotFound(Exception):
     """读取的活动不存在。"""
 
 
+class PromotionEnded(Exception):
+    """活动已结束，不能再改（海报图的上传与移除由 SHOP-TASK-240 抛出，241 复用）。"""
+
+
 class PromotionChanged(Exception):
     """活动已被改动（第 2 条「并发」）：保存时活动不存在、版本号与当前不同，
     或替换规则时撞上订单逐件快照的外键。"""

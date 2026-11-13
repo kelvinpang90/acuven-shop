@@ -16,6 +16,11 @@
 的排队）。按 docs/HANDOFF.md 0.84 的落实写法，尺寸下限是 process_image 只限关键字的参数，默认值
 即商品图片的取值；标志的调用方传 LOGO_MIN_SIDE 与 LOGO_MIN_LONG_SIDE。
 
+节日促销海报图依据 docs/DESIGN.md 1.23（提交 b7f9355）「节日促销活动」第 12 条：桌面图宽至少
+1,200、手机图宽至少 600，其余同商品图片。按 SHOP-TASK-240 的落实写法，宽度下限是只限关键字的
+参数 min_width（默认 0，即不另限宽度），按上传原图转正之后（显示方向）的宽判断；之后照常缩到长边
+1,600，展示图的宽可能小于下限。海报的调用方传 promotion_poster.POSTER_MIN_WIDTHS 里该位置的值。
+
 process_image 是同步函数，由调用方放进线程；本模块不写磁盘，不碰存储、数据库与接口
 （SHOP-TASK-189、190、211 至 213）。
 """
@@ -47,6 +52,9 @@ _GRAY16_MODES = frozenset({"I", "I;16", "I;16B", "I;16L", "I;16N"})
 _LOW_BIT_GRAY_FACTORS = {"L;2": 85, "L;4": 17}
 # 颜色部分的模式 → ICC 配置文件须有的色彩空间。
 _PROFILE_SPACES = {"RGB": "RGB", "CMYK": "CMYK", "L": "GRAY"}
+# EXIF 方向标签；取值 5–8 时 exif_transpose 会互换宽高。
+_ORIENTATION_TAG = 0x0112
+_SWAPPED_ORIENTATIONS = frozenset({5, 6, 7, 8})
 
 _SRGB = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
 
@@ -68,21 +76,26 @@ _process_lock = threading.Lock()
 
 
 def process_image(
-    data: bytes, *, min_side: int = MIN_SIDE, min_long_side: int = MIN_SIDE
+    data: bytes,
+    *,
+    min_side: int = MIN_SIDE,
+    min_long_side: int = MIN_SIDE,
+    min_width: int = 0,
 ) -> ProcessedImage:
     """校验并处理上传的图片字节，返回展示图；不合格抛 ImageRejected。
 
     宽与高都须在 min_side 到 MAX_SIDE 之间、且长边不小于 min_long_side；默认值即商品图片的取值。
+    min_width 大于 0 时，按 EXIF 方向转正之后的宽（显示方向的宽）还须不小于它。
     """
     with _process_lock:
         try:
-            return _process(data, min_side, min_long_side)
+            return _process(data, min_side, min_long_side, min_width)
         except Exception:
             # 含本模块自己抛的 ImageRejected：一律换成不带文本、不带来源的新异常。
             raise ImageRejected from None
 
 
-def _process(data: bytes, min_side: int, min_long_side: int) -> ProcessedImage:
+def _process(data: bytes, min_side: int, min_long_side: int, min_width: int) -> ProcessedImage:
     with Image.open(io.BytesIO(data)) as opened:
         source_format = _ACCEPTED_FORMATS.get(opened.format or "")
         if source_format is None:
@@ -94,7 +107,10 @@ def _process(data: bytes, min_side: int, min_long_side: int) -> ProcessedImage:
             raise ImageRejected
         if max(width, height) < min_long_side:
             raise ImageRejected
+        # rawmode 须在 getexif 之前取：PNG 的 getexif 可能先解码、清空 tile。
         rawmode = _tile_rawmode(opened)
+        if min_width > 0 and _display_width(opened) < min_width:
+            raise ImageRejected
         if opened.format in ("JPEG", "MPO") and max(width, height) > DISPLAY_MAX_SIDE:
             # draft 只选不小于请求尺寸的缩小比例，之后仍按下面的缩放规则缩到长边 1,600。
             opened.draft(None, _fit_size(width, height))
@@ -120,6 +136,14 @@ def _process(data: bytes, min_side: int, min_long_side: int) -> ProcessedImage:
         width=clean.width,
         height=clean.height,
     )
+
+
+def _display_width(image: Image.Image) -> int:
+    """按 EXIF 方向转正之后的宽（与 exif_transpose 读同一个标签）。"""
+    width, height = image.size
+    if image.getexif().get(_ORIENTATION_TAG) in _SWAPPED_ORIENTATIONS:
+        return height
+    return width
 
 
 def _tile_rawmode(image: Image.Image) -> str | None:
