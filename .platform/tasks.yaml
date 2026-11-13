@@ -6738,7 +6738,7 @@ tasks:
       运营者落实写法：可改范围照 UX 0.20 A12 的状态表：draft 与 scheduled 全部可改；running 只能改内部名称、装饰与文案，请求里的时间、开关与规则须与当前相同，不同即问题码 rules_locked；ended 全部只读，保存即问题码 ended_readonly。已发布的活动（scheduled 与 running）每次保存都要仍满足内容方面的发布条件（英文标题；海报为上传图模式时两张图与英文替代文字都有），scheduled 另查全部发布条件与时间不重叠——第 2 条只写明未开始的「每次保存重新检查发布条件」，进行中的活动可改装饰与文案，运营者按同一条件守住，免得前台显示没有英文标题或没有图的上传图海报。加锁顺序：每次保存都先回滚此前的事务，以锁 promotion_publish_locks 那一行为新事务的第一条语句，再锁活动行（与 SHOP-TASK-241 的发布相同，免得死锁；保存前不先做普通读取，免得 MySQL 的读快照早于加锁），状态在加锁后读出；锁住活动行（排他锁）后以加锁读（with_for_update(read=True)）查是否已有订单引用该活动（orders.promotion_id，不只看逐件的规则 ID），有即按 running 处理；下单事务读活动时加共享锁（SHOP-TASK-233 的 share_lock，由 235 与 237 使用），二者互相等待，所以检查之后不会有新订单引用它（防止开始时刻前后的并发下单与改规则）；若替换规则时仍撞上订单逐件快照的外键（IntegrityError），回滚并抛 PromotionChanged。保存规则时整批替换该活动的规则、范围与满额档（新规则的 ID 是新的；只有尚无订单引用的活动会改规则）。商品级规则的重叠按显式选的商品（不论是否上架），加上所选分类当前下属且满足现有发布规则的商品计算（与计价只算正常行一致）；只在草稿与未开始活动的保存（以及 241 的发布）时检查——进行中的规则不能改，商品之后改分类造成的重叠照第 3 条末段在计价时取排序数小的规则，若仍检查则进行中的活动永远保存不了文案。「规则与当前相同」的比较口径：规则条数与顺序相同，每条的类别与参数相同，商品 ID 与分类 ID 作为集合相同，满额档按顺序逐档相同；相同即不替换规则行（不改规则 ID、不算改动）。供 241 复用的检查导出为 publish_problems(db, promotion, now)（返回发布条件缺的问题列表，不加锁）、scope_overlap_problems(db, promotion_id)（按当时的商品与分类返回该活动商品级规则之间的 scope_overlap 问题列表，口径同上）与 ensure_no_overlap(db, promotion_id, starts_at, effective_end)（调用方须已锁 promotion_publish_locks 那一行；重叠抛 PromotionOverlap）。异常与版本核对照 app/services/admin_categories.py（先查请求本身、再回滚并加锁核对版本，有改动才加版本并写审计，任何异常先回滚再抛出）。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 1–3、12 条：活动的规则、时间、开关与状态，决定之后的计价；只写后台审计，不碰个人资料。
       拆分：节日促销后台层的第二个任务（3 个允许路径），依赖 SHOP-TASK-229 与 239。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-229
       - SHOP-TASK-239
