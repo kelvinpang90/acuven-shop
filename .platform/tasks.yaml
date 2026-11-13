@@ -6631,7 +6631,7 @@ tasks:
       运营者落实写法：可预览的条件照 UX 0.20 A12：活动为 draft 或 scheduled，已保存的开始与结束时间都有，且结束晚于当前时刻；不满足即 409 promotion_preview_unavailable，不存在为 404 promotion_not_found。数据分别复用 SHOP-TASK-243 的 promotion_display、244 的 list_products 与 get_product、234 的 quote_cart，promotion 参数传 233 的 load_promotion 读出的该活动（不看是否生效）。路由照 app/api/admin_categories.py 用 _NoStoreRoute 与 AdminDep；计价是 POST，照后台写操作要 CSRF，请求体与游客计价接口 POST /api/checkout/quote 相同（复用其请求模型）。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 11 条：预览只经后台接口，不改公开接口，不产生订单，不碰个人资料。
       拆分：节日促销展示层的第三个任务（4 个允许路径），依赖 SHOP-TASK-234、243 与 244。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-234
       - SHOP-TASK-243
