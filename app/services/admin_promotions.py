@@ -1,10 +1,13 @@
-"""后台促销活动（A12）：输入数据类、不碰数据库的取值检查、时间换算与活动状态。
+"""后台促销活动（A12）：输入数据类、取值检查、时间换算、活动状态，以及列表、读取、
+新建与保存。
 
 依据 docs/DESIGN.md 1.23（提交 b7f9355）「节日促销活动」第 1–3、12 条
-（下称「第 N 条」）与 docs/UX.md 0.20 的 A12，以及 SHOP-TASK-239 的落实写法。
-本模块的这一部分不读写数据库：查库的检查（商品级规则重叠、发布条件、
-已开始与已结束的锁定）、列表、读取、新建与保存见 SHOP-TASK-249，AI 提案的
-校验（SHOP-TASK-248）复用这里的 check_decoration 与 check_copy。
+（下称「第 N 条」）与 docs/UX.md 0.20 的 A12，以及 SHOP-TASK-239 与 SHOP-TASK-249
+的落实写法。前半部分（SHOP-TASK-239）不读写数据库；后半部分（SHOP-TASK-249）
+做查库的检查（引用存在、商品级规则重叠、发布条件、时间重叠、按状态锁定）、
+列表、读取、新建与保存。AI 提案的校验（SHOP-TASK-248）复用这里的
+check_decoration 与 check_copy；发布（SHOP-TASK-241）复用 publish_problems、
+scope_overlap_problems 与 ensure_no_overlap。
 
 时间：后台按马来西亚时间输入到分钟（第 1 条）。服务层收发的时间是马来西亚
 本地时间的「YYYY-MM-DDTHH:MM」字符串或 None；to_utc 换成不带时区的 UTC
@@ -27,6 +30,22 @@ from collections.abc import Sequence
 from dataclasses import dataclass, fields, replace
 from datetime import datetime, timedelta
 
+from sqlalchemy import Select, delete, func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from app.models import (
+    Category,
+    Order,
+    Product,
+    Promotion,
+    PromotionDecoration,
+    PromotionPublishLock,
+    PromotionRule,
+    PromotionRuleCategory,
+    PromotionRuleProduct,
+    PromotionSpendTier,
+)
 from app.models.promotion import (
     DECORATION_CHOICES,
     DISCOUNT_PERCENT_MAX,
@@ -40,19 +59,22 @@ from app.models.promotion import (
     MODE_PERCENT,
     NAME_MAX_LENGTH,
     PERCENT_MIN,
+    POSTER_MODE_IMAGE,
     POSTER_MODES,
     QUANTITY_MAX,
     QUANTITY_MIN,
     RULE_KINDS,
+    SINGLETON_SLOT,
     SPEND_TIERS_MAX,
     STATUS_DRAFT,
     STATUS_PUBLISHED,
     THRESHOLD_MAX_SEN,
 )
+from app.services.admin_auth import record_audit
+from app.services.catalog import published
 from app.services.sms_budget import MALAYSIA_UTC_OFFSET
 
-# 问题码。scope_overlap、publish_missing、rules_locked、ended_readonly 由
-# SHOP-TASK-249 查库时再加。
+# 问题码。前八个由不碰数据库的检查报出；后四个由查库的检查报出（SHOP-TASK-249）。
 PROBLEM_NAME = "name"
 PROBLEM_TIME = "time"
 PROBLEM_DURATION = "duration"
@@ -61,6 +83,10 @@ PROBLEM_SCOPE = "scope"
 PROBLEM_TIERS = "tiers"
 PROBLEM_DECORATION = "decoration"
 PROBLEM_COPY = "copy"
+PROBLEM_SCOPE_OVERLAP = "scope_overlap"
+PROBLEM_PUBLISH_MISSING = "publish_missing"
+PROBLEM_RULES_LOCKED = "rules_locked"
+PROBLEM_ENDED_READONLY = "ended_readonly"
 
 # 由时间算出的活动状态（第 2 条）。
 STATE_DRAFT = "draft"
@@ -572,3 +598,835 @@ def check_promotion_input(data: PromotionInput) -> PromotionInput:
     if problems:
         raise PromotionInvalid(problems)
     return replace(data, name=data.name.strip(), copy=clean_copy(data.copy))
+
+
+# ===========================================================================
+# 查库的检查、列表、读取、新建与保存（SHOP-TASK-249）
+#
+# 新建与保存照 app/services/admin_categories.py：先不碰数据库检查请求本身
+# （check_promotion_input），再回滚此前的事务、加锁核对，任何异常先回滚再抛出；
+# 有改动才加版本、写审计并提交，没有改动回滚、不加版本、不写审计。
+#
+# 保存的加锁顺序（与 SHOP-TASK-241 的发布相同，免得死锁）：promotion_publish_locks
+# 那一行为新事务的第一条语句，再锁活动行，再锁装饰行；状态在加锁后读出。保存前
+# 不做普通读取，免得 MySQL 的读快照早于加锁。按状态的可改范围照 UX 0.20 A12 的
+# 状态表：draft 与 scheduled 全部可改；running 只能改内部名称、装饰与文案，请求
+# 里的时间、开关与规则须与当前相同，不同即 rules_locked；ended 保存即
+# ended_readonly。scheduled 而已有订单引用（orders.promotion_id，以共享锁读，与
+# 下单事务读活动时的共享锁互相等待）的按 running 处理。
+# ===========================================================================
+
+# 审计操作名与对象类别（对象 ID 为活动 ID）。
+ADMIN_PROMOTION_CREATED = "admin_promotion_created"
+ADMIN_PROMOTION_CHANGED = "admin_promotion_changed"
+AUDIT_TARGET_PROMOTION = "promotion"
+NEW_PROMOTION_VERSION = 1
+# 审计里文案的值取前 100 个字符。
+AUDIT_TEXT_LENGTH = 100
+# 海报图的提供路径：前缀加文件名加 .webp（接口由 SHOP-TASK-250 提供）。
+POSTER_PATH_PREFIX = "/api/promotion-posters/"
+POSTER_PATH_SUFFIX = ".webp"
+# 已结束的活动整体只读，ended_readonly 报在这个 field 上。
+STATE_FIELD = "state"
+
+# 列表的状态次序（UX A12「按进行中、未开始、草稿、已结束排列」）。
+_STATE_ORDER = {STATE_RUNNING: 0, STATE_SCHEDULED: 1, STATE_DRAFT: 2, STATE_ENDED: 3}
+
+
+class PromotionNotFound(Exception):
+    """读取的活动不存在。"""
+
+
+class PromotionChanged(Exception):
+    """活动已被改动（第 2 条「并发」）：保存时活动不存在、版本号与当前不同，
+    或替换规则时撞上订单逐件快照的外键。"""
+
+
+class PromotionOverlap(Exception):
+    """与其他已发布活动的「开始到实际结束」重叠（第 1 条），other_name 为对方的内部名称。"""
+
+    def __init__(self, other_name: str) -> None:
+        super().__init__(other_name)
+        self.other_name = other_name
+
+
+@dataclass(frozen=True)
+class PromotionSummary:
+    """列表的一项。starts_at 与 ends_at 为马来西亚本地时间（ends_at 为实际结束），
+    草稿未填时为 None；updated_at 为不带时区的 UTC。"""
+
+    id: int
+    name: str
+    state: str
+    starts_at: str | None
+    ends_at: str | None
+    rule_count: int
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class ScopeProduct:
+    """规则显式选的一件商品：ID、slug 与英文名称（为空时 None）。"""
+
+    id: int
+    slug: str
+    name_en: str | None
+
+
+@dataclass(frozen=True)
+class RuleDetail:
+    """读出的一条规则：RuleInput 的全部字段，另带规则 ID 与所选商品。
+
+    product_ids 与 category_ids 按 ID 从小到大；products 与 product_ids 一一对应。
+    """
+
+    rule_id: int
+    kind: str
+    discount_mode: str | None
+    percent: int | None
+    amount_sen: int | None
+    buy_quantity: int | None
+    get_quantity: int | None
+    get_percent: int | None
+    threshold_sen: int | None
+    product_ids: tuple[int, ...]
+    category_ids: tuple[int, ...]
+    tiers: tuple[TierInput, ...]
+    products: tuple[ScopeProduct, ...]
+
+    def as_input(self) -> RuleInput:
+        return RuleInput(**{f.name: getattr(self, f.name) for f in fields(RuleInput)})
+
+
+@dataclass(frozen=True)
+class PromotionDetail:
+    """一个活动的全部可改内容（PromotionInput 的全部字段）与只读的信息。
+
+    ended_early_at 为提前结束的马来西亚本地时刻或 None；两个海报图路径为
+    /api/promotion-posters/<文件名>.webp 或 None。
+    """
+
+    id: int
+    version: int
+    state: str
+    ended_early_at: str | None
+    name: str
+    starts_at: str | None
+    ends_at: str | None
+    coupon_combinable: bool
+    points_combinable: bool
+    rules: tuple[RuleDetail, ...]
+    decoration: DecorationInput
+    copy: CopyInput
+    poster_desktop_url: str | None
+    poster_phone_url: str | None
+
+    def as_input(self) -> PromotionInput:
+        """原样提交即「没有改动」的保存内容。"""
+        return PromotionInput(
+            name=self.name,
+            starts_at=self.starts_at,
+            ends_at=self.ends_at,
+            coupon_combinable=self.coupon_combinable,
+            points_combinable=self.points_combinable,
+            rules=tuple(rule.as_input() for rule in self.rules),
+            decoration=self.decoration,
+            copy=self.copy,
+        )
+
+
+# ---------------------------------------------------------------------------
+# 读取
+# ---------------------------------------------------------------------------
+
+
+def _effective_end(promotion: Promotion) -> datetime | None:
+    return promotion.ended_early_at or promotion.ends_at
+
+
+def _state(promotion: Promotion, now: datetime) -> str:
+    return promotion_state(promotion.status, promotion.starts_at, _effective_end(promotion), now)
+
+
+def _poster_path(file_name: str | None) -> str | None:
+    if file_name is None:
+        return None
+    return f"{POSTER_PATH_PREFIX}{file_name}{POSTER_PATH_SUFFIX}"
+
+
+def _load_rules(db: Session, promotion_id: int) -> tuple[RuleDetail, ...]:
+    """按排序读出活动的规则、范围与满额档（只查列值，不用会话里的旧对象）。"""
+    params = [getattr(PromotionRule, name) for name in _RULE_PARAMS]
+    rule_rows = db.execute(
+        select(PromotionRule.id, PromotionRule.kind, *params)
+        .where(PromotionRule.promotion_id == promotion_id)
+        .order_by(PromotionRule.position)
+    ).all()
+    rule_ids = [row[0] for row in rule_rows]
+    products: dict[int, list[ScopeProduct]] = {rule_id: [] for rule_id in rule_ids}
+    categories: dict[int, list[int]] = {rule_id: [] for rule_id in rule_ids}
+    tiers: dict[int, list[TierInput]] = {rule_id: [] for rule_id in rule_ids}
+    if rule_ids:
+        product_rows = db.execute(
+            select(PromotionRuleProduct.rule_id, Product.id, Product.slug, Product.name_en)
+            .join(Product, Product.id == PromotionRuleProduct.product_id)
+            .where(PromotionRuleProduct.rule_id.in_(rule_ids))
+            .order_by(Product.id)
+        )
+        for rule_id, product_id, slug, name_en in product_rows:
+            products[rule_id].append(ScopeProduct(product_id, slug, name_en or None))
+        category_rows = db.execute(
+            select(PromotionRuleCategory.rule_id, PromotionRuleCategory.category_id)
+            .where(PromotionRuleCategory.rule_id.in_(rule_ids))
+            .order_by(PromotionRuleCategory.category_id)
+        )
+        for rule_id, category_id in category_rows:
+            categories[rule_id].append(category_id)
+        tier_rows = db.execute(
+            select(
+                PromotionSpendTier.rule_id,
+                PromotionSpendTier.threshold_sen,
+                PromotionSpendTier.amount_sen,
+                PromotionSpendTier.percent,
+            )
+            .where(PromotionSpendTier.rule_id.in_(rule_ids))
+            .order_by(PromotionSpendTier.rule_id, PromotionSpendTier.position)
+        )
+        for rule_id, threshold_sen, amount_sen, percent in tier_rows:
+            tiers[rule_id].append(TierInput(threshold_sen, amount_sen, percent))
+
+    return tuple(
+        RuleDetail(
+            rule_id=row[0],
+            kind=row[1],
+            **dict(zip(_RULE_PARAMS, row[2:], strict=True)),
+            product_ids=tuple(product.id for product in products[row[0]]),
+            category_ids=tuple(categories[row[0]]),
+            tiers=tuple(tiers[row[0]]),
+            products=tuple(products[row[0]]),
+        )
+        for row in rule_rows
+    )
+
+
+def _decoration_statement(
+    promotion_id: int, *, lock: bool = False
+) -> Select[tuple[PromotionDecoration]]:
+    stmt = (
+        select(PromotionDecoration)
+        .where(PromotionDecoration.promotion_id == promotion_id)
+        .execution_options(populate_existing=True)
+    )
+    return stmt.with_for_update() if lock else stmt
+
+
+def _detail(
+    db: Session, promotion: Promotion, decoration: PromotionDecoration, now: datetime
+) -> PromotionDetail:
+    return PromotionDetail(
+        id=promotion.id,
+        version=promotion.version,
+        state=_state(promotion, now),
+        ended_early_at=to_local(promotion.ended_early_at),
+        name=promotion.name,
+        starts_at=to_local(promotion.starts_at),
+        ends_at=to_local(promotion.ends_at),
+        coupon_combinable=bool(promotion.coupon_combinable),
+        points_combinable=bool(promotion.points_combinable),
+        rules=_load_rules(db, promotion.id),
+        decoration=DecorationInput(
+            **{f.name: getattr(decoration, f.name) for f in fields(DecorationInput)}
+        ),
+        copy=CopyInput(**{f.name: getattr(decoration, f.name) for f in fields(CopyInput)}),
+        poster_desktop_url=_poster_path(decoration.poster_desktop_file_name),
+        poster_phone_url=_poster_path(decoration.poster_phone_file_name),
+    )
+
+
+def _ticks(value: datetime) -> int:
+    return (value - datetime.min) // timedelta(microseconds=1)
+
+
+def list_promotions(db: Session, now: datetime) -> list[PromotionSummary]:
+    """全部活动，按 running、scheduled（开始从早到晚）、draft（最近修改在前）、
+    ended（实际结束从晚到早）排列，同序按 ID 从大到小。只发 SELECT。
+
+    now 为不带时区的 UTC，用来算状态。
+    """
+    _require_naive(now, "now")
+    rule_count = (
+        select(func.count(PromotionRule.id))
+        .where(PromotionRule.promotion_id == Promotion.id)
+        .correlate(Promotion)
+        .scalar_subquery()
+    )
+    rows = db.execute(
+        select(
+            Promotion.id,
+            Promotion.name,
+            Promotion.status,
+            Promotion.starts_at,
+            Promotion.ends_at,
+            Promotion.ended_early_at,
+            Promotion.updated_at,
+            rule_count,
+        )
+    ).all()
+
+    keyed: list[tuple[tuple[int, int, int], PromotionSummary]] = []
+    for promotion_id, name, status, starts_at, ends_at, ended_early_at, updated_at, count in rows:
+        effective_end = ended_early_at or ends_at
+        state = promotion_state(status, starts_at, effective_end, now)
+        if state == STATE_SCHEDULED:
+            second = _ticks(starts_at)
+        elif state == STATE_DRAFT:
+            second = -_ticks(updated_at)
+        elif state == STATE_ENDED:
+            second = -_ticks(effective_end)
+        else:
+            second = 0
+        summary = PromotionSummary(
+            id=promotion_id,
+            name=name,
+            state=state,
+            starts_at=to_local(starts_at),
+            ends_at=to_local(effective_end),
+            rule_count=count,
+            updated_at=updated_at,
+        )
+        keyed.append(((_STATE_ORDER[state], second, -promotion_id), summary))
+    keyed.sort(key=lambda item: item[0])
+    return [summary for _, summary in keyed]
+
+
+def read_promotion(db: Session, promotion_id: int, now: datetime) -> PromotionDetail:
+    """一个活动的全部可改内容（PromotionDetail），不存在抛 PromotionNotFound。只发 SELECT。"""
+    _require_naive(now, "now")
+    promotion = db.execute(
+        select(Promotion)
+        .where(Promotion.id == promotion_id)
+        .execution_options(populate_existing=True)
+    ).scalar_one_or_none()
+    if promotion is None:
+        raise PromotionNotFound(promotion_id)
+    decoration = db.execute(_decoration_statement(promotion.id)).scalar_one()
+    return _detail(db, promotion, decoration, now)
+
+
+# ---------------------------------------------------------------------------
+# 查库的检查（供 SHOP-TASK-241 复用的三个函数导出）
+# ---------------------------------------------------------------------------
+
+
+def _reference_problems(db: Session, rules: Sequence[RuleInput]) -> list[PromotionProblem]:
+    """规则引用的商品与分类须存在：每条规则的 product_ids、category_ids 各至多一个 scope。"""
+    product_ids = {product_id for rule in rules for product_id in rule.product_ids}
+    category_ids = {category_id for rule in rules for category_id in rule.category_ids}
+    existing_products: set[int] = set()
+    existing_categories: set[int] = set()
+    if product_ids:
+        existing_products = set(db.scalars(select(Product.id).where(Product.id.in_(product_ids))))
+    if category_ids:
+        existing_categories = set(
+            db.scalars(select(Category.id).where(Category.id.in_(category_ids)))
+        )
+    problems: list[PromotionProblem] = []
+    for position, rule in enumerate(rules, start=1):
+        if not set(rule.product_ids) <= existing_products:
+            problems.append(PromotionProblem(PROBLEM_SCOPE, f"rules.{position}.product_ids"))
+        if not set(rule.category_ids) <= existing_categories:
+            problems.append(PromotionProblem(PROBLEM_SCOPE, f"rules.{position}.category_ids"))
+    return problems
+
+
+_Scope = tuple[int, Sequence[int], Sequence[int]]
+
+
+def _overlap_problems(db: Session, scopes: Sequence[_Scope]) -> list[PromotionProblem]:
+    """第 3 条「一件商品在同一活动里至多属于一条商品级规则」。
+
+    scopes 为商品级规则的（排序、商品 ID、分类 ID）。每条规则的商品为显式选的
+    商品（不论是否上架），加上所选分类当前下属且满足现有发布规则的商品。每件
+    落在两条及以上规则里的商品一个问题，field 为它第二次出现的规则（rules.<排序>），
+    按排序与商品 ID 排列；product_name 为英文名称，为空时用 slug。不存在的商品
+    不报（已由引用检查报出）。
+    """
+    category_ids = {category_id for _, _, categories in scopes for category_id in categories}
+    in_category: dict[int, set[int]] = {}
+    if category_ids:
+        rows = db.execute(
+            select(Product.id, Product.category_id)
+            .join(Category, Category.id == Product.category_id)
+            .where(Product.category_id.in_(category_ids), published())
+        )
+        for product_id, category_id in rows:
+            in_category.setdefault(category_id, set()).add(product_id)
+
+    first_seen: set[int] = set()
+    repeated: dict[int, int] = {}
+    for position, products, categories in sorted(scopes, key=lambda scope: scope[0]):
+        members = set(products)
+        for category_id in categories:
+            members |= in_category.get(category_id, set())
+        for product_id in members:
+            if product_id in first_seen:
+                repeated.setdefault(product_id, position)
+            else:
+                first_seen.add(product_id)
+    if not repeated:
+        return []
+
+    names = {
+        product_id: name_en or slug
+        for product_id, name_en, slug in db.execute(
+            select(Product.id, Product.name_en, Product.slug).where(Product.id.in_(list(repeated)))
+        )
+    }
+    return [
+        PromotionProblem(
+            PROBLEM_SCOPE_OVERLAP,
+            f"rules.{position}",
+            product_id=product_id,
+            product_name=names[product_id],
+        )
+        for product_id, position in sorted(repeated.items(), key=lambda item: (item[1], item[0]))
+        if product_id in names
+    ]
+
+
+def _input_scopes(rules: Sequence[RuleInput]) -> list[_Scope]:
+    return [
+        (position, rule.product_ids, rule.category_ids)
+        for position, rule in enumerate(rules, start=1)
+        if rule.kind in ITEM_KINDS
+    ]
+
+
+def scope_overlap_problems(db: Session, promotion_id: int) -> list[PromotionProblem]:
+    """该活动已保存的商品级规则之间的 scope_overlap 问题，按当时的商品与分类计算
+    （口径见 _overlap_problems）。不加锁。"""
+    rules = _load_rules(db, promotion_id)
+    return _overlap_problems(
+        db,
+        [
+            (position, rule.product_ids, rule.category_ids)
+            for position, rule in enumerate(rules, start=1)
+            if rule.kind in ITEM_KINDS
+        ],
+    )
+
+
+def _publish_missing(
+    *,
+    rule_count: int,
+    title_en: str | None,
+    starts_at: datetime | None,
+    ends_at: datetime | None,
+    poster_mode: str,
+    poster_desktop_file_name: str | None,
+    poster_phone_file_name: str | None,
+    poster_alt_en: str | None,
+    now: datetime,
+) -> list[PromotionProblem]:
+    """第 2 条的发布条件（时间重叠另由 ensure_no_overlap 查），缺的每项一个
+    publish_missing，按 rules、title_en、starts_at、ends_at 或 ends_at_past、
+    poster_desktop、poster_phone、poster_alt_en 的顺序。"""
+    missing: list[str] = []
+    if rule_count == 0:
+        missing.append("rules")
+    if clean_text(title_en) is None:
+        missing.append("title_en")
+    if starts_at is None:
+        missing.append("starts_at")
+    if ends_at is None:
+        missing.append("ends_at")
+    elif ends_at <= now:
+        missing.append("ends_at_past")
+    if poster_mode == POSTER_MODE_IMAGE:
+        if poster_desktop_file_name is None:
+            missing.append("poster_desktop")
+        if poster_phone_file_name is None:
+            missing.append("poster_phone")
+        if clean_text(poster_alt_en) is None:
+            missing.append("poster_alt_en")
+    return [PromotionProblem(PROBLEM_PUBLISH_MISSING, field) for field in missing]
+
+
+def publish_problems(db: Session, promotion: Promotion, now: datetime) -> list[PromotionProblem]:
+    """已保存的活动缺的发布条件（第 2 条：至少一条规则、英文标题、开始与结束时间、
+    结束晚于 now、上传图模式的两张图与英文替代文字），每项一个 publish_missing。
+
+    不查时间重叠（见 ensure_no_overlap），不加锁；now 为不带时区的 UTC。
+    """
+    _require_naive(now, "now")
+    rule_count = db.scalar(
+        select(func.count(PromotionRule.id)).where(PromotionRule.promotion_id == promotion.id)
+    )
+    decoration = db.execute(_decoration_statement(promotion.id)).scalar_one()
+    return _publish_missing(
+        rule_count=rule_count or 0,
+        title_en=decoration.title_en,
+        starts_at=promotion.starts_at,
+        ends_at=promotion.ends_at,
+        poster_mode=decoration.poster_mode,
+        poster_desktop_file_name=decoration.poster_desktop_file_name,
+        poster_phone_file_name=decoration.poster_phone_file_name,
+        poster_alt_en=decoration.poster_alt_en,
+        now=now,
+    )
+
+
+def ensure_no_overlap(
+    db: Session, promotion_id: int, starts_at: datetime, effective_end: datetime
+) -> None:
+    """第 1 条「所有已发布活动的开始时间到实际结束时间两两不得重叠（相接可以）」。
+
+    与该活动以外的已发布活动比较，重叠抛 PromotionOverlap（对方取开始最早、
+    同时 ID 最小的一个）。调用方须已以 lock_publish_row 锁住发布锁那一行。
+    """
+    other_end = func.coalesce(Promotion.ended_early_at, Promotion.ends_at)
+    name = db.scalar(
+        select(Promotion.name)
+        .where(
+            Promotion.status == STATUS_PUBLISHED,
+            Promotion.id != promotion_id,
+            Promotion.starts_at < effective_end,
+            other_end > starts_at,
+        )
+        .order_by(Promotion.starts_at, Promotion.id)
+        .limit(1)
+    )
+    if name is not None:
+        raise PromotionOverlap(name)
+
+
+def lock_publish_row(db: Session) -> None:
+    """锁住 promotion_publish_locks 那一行（SELECT … FOR UPDATE）。
+
+    保存与发布都以它为新事务的第一条语句。表里没有那一行（迁移 0027 应已写入）
+    是部署错误，抛 RuntimeError。
+    """
+    row = db.scalar(
+        select(PromotionPublishLock.id)
+        .where(PromotionPublishLock.singleton_slot == SINGLETON_SLOT)
+        .with_for_update()
+    )
+    if row is None:
+        raise RuntimeError("promotion_publish_locks has no row")
+
+
+def _has_orders(db: Session, promotion_id: int) -> bool:
+    """是否已有订单引用该活动（orders.promotion_id），以共享锁读。"""
+    order_id = db.scalar(
+        select(Order.id)
+        .where(Order.promotion_id == promotion_id)
+        .limit(1)
+        .with_for_update(read=True)
+    )
+    return order_id is not None
+
+
+# ---------------------------------------------------------------------------
+# 写入
+# ---------------------------------------------------------------------------
+
+
+def _rule_key(rule: RuleInput) -> tuple[object, ...]:
+    """「规则与当前相同」的比较口径：类别与参数相同，商品 ID 与分类 ID 作为集合
+    相同，满额档按顺序逐档相同。"""
+    return (
+        rule.kind,
+        *(getattr(rule, name) for name in _RULE_PARAMS),
+        frozenset(rule.product_ids),
+        frozenset(rule.category_ids),
+        tuple((tier.threshold_sen, tier.amount_sen, tier.percent) for tier in rule.tiers),
+    )
+
+
+def _rules_equal(new: Sequence[RuleInput], current: Sequence[RuleDetail]) -> bool:
+    """条数与顺序相同，且逐条按 _rule_key 相同。"""
+    return [_rule_key(rule) for rule in new] == [_rule_key(rule.as_input()) for rule in current]
+
+
+def _write_rules(db: Session, promotion_id: int, rules: Sequence[RuleInput]) -> None:
+    for position, rule in enumerate(rules, start=1):
+        row = PromotionRule(
+            promotion_id=promotion_id,
+            position=position,
+            kind=rule.kind,
+            **{name: getattr(rule, name) for name in _RULE_PARAMS},
+        )
+        db.add(row)
+        db.flush()
+        for product_id in rule.product_ids:
+            db.add(PromotionRuleProduct(rule_id=row.id, product_id=product_id))
+        for category_id in rule.category_ids:
+            db.add(PromotionRuleCategory(rule_id=row.id, category_id=category_id))
+        for number, tier in enumerate(rule.tiers, start=1):
+            db.add(
+                PromotionSpendTier(
+                    rule_id=row.id,
+                    position=number,
+                    threshold_sen=tier.threshold_sen,
+                    amount_sen=tier.amount_sen,
+                    percent=tier.percent,
+                )
+            )
+    db.flush()
+
+
+def _replace_rules(db: Session, promotion_id: int, rules: Sequence[RuleInput]) -> None:
+    """整批删除该活动的规则、范围与满额档，再按 rules 写入（新规则的 ID 是新的）。
+
+    撞上订单逐件快照的外键（IntegrityError）抛 PromotionChanged。
+    """
+    old_ids = list(
+        db.scalars(select(PromotionRule.id).where(PromotionRule.promotion_id == promotion_id))
+    )
+    # fetch：会话里可能留着已过期的旧规则对象，按删掉的主键把它们移出会话，
+    # 免得新行重用同一 ID 时撞上。
+    sync = {"synchronize_session": "fetch"}
+    try:
+        if old_ids:
+            for model, column in (
+                (PromotionRuleProduct, PromotionRuleProduct.rule_id),
+                (PromotionRuleCategory, PromotionRuleCategory.rule_id),
+                (PromotionSpendTier, PromotionSpendTier.rule_id),
+                (PromotionRule, PromotionRule.id),
+            ):
+                db.execute(delete(model).where(column.in_(old_ids)).execution_options(**sync))
+        _write_rules(db, promotion_id, rules)
+    except IntegrityError:
+        raise PromotionChanged("the promotion rules are referenced by orders") from None
+
+
+def _audit_value(field: str, value: str | bool | int | None) -> str:
+    """审计的「字段 值」：布尔为 true 或 false，空值只写字段名，文字取前 100 个字符。"""
+    if isinstance(value, bool):
+        return f"{field} {'true' if value else 'false'}"
+    if value is None or value == "":
+        return field
+    return f"{field} {str(value)[:AUDIT_TEXT_LENGTH]}"
+
+
+def create_promotion(
+    db: Session, admin_account_id: int, data: PromotionInput, now: datetime
+) -> PromotionDetail:
+    """新建一个草稿（版本号 1，装饰一行），返回它的 PromotionDetail。
+
+    now 为不带时区的 UTC（写入创建与修改时间、交给 record_audit）；admin_account_id
+    须在调用前取出（这里先回滚）。按以下顺序：
+    1. check_promotion_input，不发 SQL；不合格抛 PromotionInvalid，结构不对抛 TypeError。
+    2. 回滚此前的事务后查库：规则引用的商品与分类须存在（scope）、商品级规则两两
+       不得有共同的商品（scope_overlap），有问题抛 PromotionInvalid。草稿不查发布
+       条件与时间重叠，不锁 promotion_publish_locks。
+    3. 写入活动、装饰与规则，写一条 admin_promotion_created 审计（新值为内部名称）后提交。
+    任何异常都先回滚再抛出。
+    """
+    _require_naive(now, "now")
+    data = check_promotion_input(data)
+    starts_at, ends_at = to_utc(data.starts_at), to_utc(data.ends_at)
+
+    db.rollback()
+    try:
+        problems = _reference_problems(db, data.rules)
+        problems.extend(_overlap_problems(db, _input_scopes(data.rules)))
+        if problems:
+            raise PromotionInvalid(problems)
+
+        promotion = Promotion(
+            name=data.name,
+            status=STATUS_DRAFT,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            ended_early_at=None,
+            coupon_combinable=data.coupon_combinable,
+            points_combinable=data.points_combinable,
+            version=NEW_PROMOTION_VERSION,
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(promotion)
+        db.flush()
+        decoration = PromotionDecoration(
+            promotion_id=promotion.id,
+            **{f.name: getattr(data.decoration, f.name) for f in fields(DecorationInput)},
+            **{f.name: getattr(data.copy, f.name) for f in fields(CopyInput)},
+            updated_at=now,
+        )
+        db.add(decoration)
+        _write_rules(db, promotion.id, data.rules)
+        record_audit(
+            db,
+            ADMIN_PROMOTION_CREATED,
+            admin_account_id,
+            now,
+            target_type=AUDIT_TARGET_PROMOTION,
+            target_id=promotion.id,
+            new_value=data.name,
+        )
+        saved = _detail(db, promotion, decoration, now)
+    except BaseException:
+        db.rollback()
+        raise
+
+    db.commit()
+    return saved
+
+
+def save_promotion(
+    db: Session,
+    admin_account_id: int,
+    promotion_id: int,
+    version: int,
+    data: PromotionInput,
+    now: datetime,
+) -> PromotionDetail:
+    """以一次保存提交一个活动的内部名称、时间、两个开关、规则、装饰与文案，
+    返回保存后的 PromotionDetail。
+
+    now 与 admin_account_id 同 create_promotion。按以下顺序：
+    1. check_promotion_input，不发 SQL；version 不是整数（布尔值不算）抛 TypeError。
+    2. 回滚此前的事务，以 lock_publish_row 为新事务的第一条语句，再锁活动行：
+       不存在或版本号与当前不同抛 PromotionChanged。再锁装饰行，按 now 算状态。
+    3. ended：抛 PromotionInvalid（ended_readonly，field 为 state）。scheduled 而已有
+       订单引用的按 running 处理。running：时间、两个开关与规则须与当前相同，
+       不同的每项一个 rules_locked（field 为 starts_at、ends_at、coupon_combinable、
+       points_combinable、rules）。draft 与 scheduled：引用存在（scope）与商品级
+       规则不重叠（scope_overlap）。scheduled 与 running：保存后的内容仍须满足
+       发布条件（publish_missing）。有问题抛 PromotionInvalid（列出全部问题）。
+    4. scheduled（未按 running 处理时）：ensure_no_overlap，重叠抛 PromotionOverlap。
+    5. 按内部名称、开始、结束、两个开关、规则、装饰、文案的顺序与当前值比较，
+       有改动的写入（规则有改动时整批替换，撞上订单逐件快照的外键抛
+       PromotionChanged），版本号加一、修改时间取 now，每个改动的字段一条
+       admin_promotion_changed 审计（规则只写一条，值为「rules 条数」）后提交；
+       都没有改动时回滚、不加版本、不写审计。海报图不随保存提交，不在这里改。
+    任何异常都先回滚再抛出。
+    """
+    _require_naive(now, "now")
+    # bool 是 int 的子类，但 True 不是一个版本号。
+    if type(version) is not int:
+        raise TypeError("version must be an integer")
+    data = check_promotion_input(data)
+    new_starts, new_ends = to_utc(data.starts_at), to_utc(data.ends_at)
+
+    db.rollback()
+    try:
+        lock_publish_row(db)
+        promotion = db.execute(
+            select(Promotion)
+            .where(Promotion.id == promotion_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        ).scalar_one_or_none()
+        if promotion is None or promotion.version != version:
+            raise PromotionChanged("the promotion was changed since it was read")
+        decoration = db.execute(_decoration_statement(promotion.id, lock=True)).scalar_one()
+
+        state = _state(promotion, now)
+        if state == STATE_ENDED:
+            raise PromotionInvalid([PromotionProblem(PROBLEM_ENDED_READONLY, STATE_FIELD)])
+        locked = state == STATE_RUNNING or (
+            state == STATE_SCHEDULED and _has_orders(db, promotion.id)
+        )
+        current_rules = _load_rules(db, promotion.id)
+        rules_changed = not _rules_equal(data.rules, current_rules)
+
+        problems: list[PromotionProblem] = []
+        if locked:
+            for field, current, requested in (
+                ("starts_at", to_local(promotion.starts_at), data.starts_at),
+                ("ends_at", to_local(promotion.ends_at), data.ends_at),
+                ("coupon_combinable", bool(promotion.coupon_combinable), data.coupon_combinable),
+                ("points_combinable", bool(promotion.points_combinable), data.points_combinable),
+            ):
+                if current != requested:
+                    problems.append(PromotionProblem(PROBLEM_RULES_LOCKED, field))
+            if rules_changed:
+                problems.append(PromotionProblem(PROBLEM_RULES_LOCKED, "rules"))
+        else:
+            problems.extend(_reference_problems(db, data.rules))
+            problems.extend(_overlap_problems(db, _input_scopes(data.rules)))
+        if promotion.status == STATUS_PUBLISHED:
+            # 按 running 处理时时间与规则不能改，按当前值查（只有内容方面可能缺）。
+            problems.extend(
+                _publish_missing(
+                    rule_count=len(current_rules) if locked else len(data.rules),
+                    title_en=data.copy.title_en,
+                    starts_at=promotion.starts_at if locked else new_starts,
+                    ends_at=promotion.ends_at if locked else new_ends,
+                    poster_mode=data.decoration.poster_mode,
+                    poster_desktop_file_name=decoration.poster_desktop_file_name,
+                    poster_phone_file_name=decoration.poster_phone_file_name,
+                    poster_alt_en=data.copy.poster_alt_en,
+                    now=now,
+                )
+            )
+        if problems:
+            raise PromotionInvalid(problems)
+        if promotion.status == STATUS_PUBLISHED and not locked:
+            ensure_no_overlap(db, promotion.id, new_starts, new_ends)
+
+        # 按 running 处理时，时间、开关与规则到这里都与当前相同，下面不会改它们。
+        changes: list[tuple[str, str | bool | int | None, str | bool | int | None]] = []
+        if promotion.name != data.name:
+            changes.append(("name", promotion.name, data.name))
+            promotion.name = data.name
+        for field, requested_local, requested_utc in (
+            ("starts_at", data.starts_at, new_starts),
+            ("ends_at", data.ends_at, new_ends),
+        ):
+            current_local = to_local(getattr(promotion, field))
+            if current_local != requested_local:
+                changes.append((field, current_local, requested_local))
+                setattr(promotion, field, requested_utc)
+        for field in ("coupon_combinable", "points_combinable"):
+            current_flag, requested_flag = bool(getattr(promotion, field)), getattr(data, field)
+            if current_flag != requested_flag:
+                changes.append((field, current_flag, requested_flag))
+                setattr(promotion, field, requested_flag)
+        if rules_changed:
+            changes.append(("rules", len(current_rules), len(data.rules)))
+        decoration_changed = False
+        for source, names in (
+            (data.decoration, fields(DecorationInput)),
+            (data.copy, fields(CopyInput)),
+        ):
+            for f in names:
+                current_value = getattr(decoration, f.name)
+                requested_value = getattr(source, f.name)
+                if current_value != requested_value:
+                    changes.append((f.name, current_value, requested_value))
+                    setattr(decoration, f.name, requested_value)
+                    decoration_changed = True
+
+        if not changes:
+            saved = _detail(db, promotion, decoration, now)
+            db.rollback()
+            return saved
+
+        if rules_changed:
+            _replace_rules(db, promotion.id, data.rules)
+        promotion.version += 1
+        promotion.updated_at = now
+        if decoration_changed:
+            decoration.updated_at = now
+        db.flush()
+        for field, old_value, new_value in changes:
+            record_audit(
+                db,
+                ADMIN_PROMOTION_CHANGED,
+                admin_account_id,
+                now,
+                target_type=AUDIT_TARGET_PROMOTION,
+                target_id=promotion.id,
+                old_value=_audit_value(field, old_value),
+                new_value=_audit_value(field, new_value),
+            )
+        saved = _detail(db, promotion, decoration, now)
+    except BaseException:
+        db.rollback()
+        raise
+
+    db.commit()
+    return saved
