@@ -35,6 +35,7 @@ from app.api.order_lookup import router as order_lookup_router
 from app.api.orders import router as orders_router
 from app.api.pay import router as pay_router
 from app.api.product_images import router as product_images_router
+from app.api.promotion import router as promotion_router
 from app.api.promotion_posters import router as promotion_posters_router
 from app.api.refunds import router as refunds_router
 from app.api.regions import router as regions_router
@@ -61,6 +62,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(store_design_router)
     app.include_router(store_logos_router)
     app.include_router(promotion_posters_router)
+    app.include_router(promotion_router)
     app.include_router(orders_router)
     app.include_router(pay_router)
     app.include_router(stripe_pay_router)
