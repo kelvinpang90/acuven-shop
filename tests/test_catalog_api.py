@@ -190,6 +190,8 @@ def test_published_product_has_exactly_the_public_fields(db: Session, client: Te
         "min_price_sen": 2190,
         "has_multiple_variants": True,
         "sold_out_today": False,
+        "promotion": None,
+        "min_sale_price_sen": None,
     }
     assert listing == {"total": 1, "page": 1, "page_size": 24, "items": [expected_item]}
     assert detail == {
@@ -214,15 +216,18 @@ def test_published_product_has_exactly_the_public_fields(db: Session, client: Te
                 "options": {"color": "red"},
                 "price_sen": 2590,
                 "available_stock": 3,
+                "sale_price_sen": None,
             },
             {
                 "sku": "TEE-BLUE",
                 "options": {"color": "blue"},
                 "price_sen": 2190,
                 "available_stock": 0,
+                "sale_price_sen": None,
             },
         ],
         "max_per_order": 10,
+        "promotion": None,
     }
 
 
