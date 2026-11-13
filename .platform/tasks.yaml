@@ -6548,7 +6548,7 @@ tasks:
       运营者落实写法：照 app/api/admin_categories.py 的写法（_NoStoreRoute、AdminDep、CsrfDep、WriteBodyDep 读请求体但上限另设为 64 KB——规则可带 20 × 230 个商品与分类 ID，8 KB 不够；请求模型 extra forbid 与 strict；422 照 app/api/pay.py 的 _body_errors 不回显输入；路径 ID 照 _category_id 校验；读取接口带 csrf_token）。时间以马来西亚本地「YYYY-MM-DDTHH:MM」字符串或 null 收发，与服务层相同。错误映射：PromotionInvalid 为 422 promotion_invalid，响应体 detail 为 {"code": "promotion_invalid", "problems": [...]}（每项 code、field、product_id、product_name）；PromotionOverlap 为 409，detail 为 {"code": "promotion_overlap", "name": 对方内部名称}；PromotionChanged 为 409 promotion_changed；PromotionNotFound 为 404 promotion_not_found；PromotionStateInvalid 为 409，detail 为 {"code": "promotion_state_invalid", "state": 当前状态}；PromotionEnded 为 409 promotion_ended。列表响应为 promotions（PromotionSummary 的列表）与 csrf_token 两个字段；删除成功为 204、没有响应体。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 1–3、12 条：后台接口只传递与校验字段，规则、核对与审计在 SHOP-TASK-239、249 与 241 的服务层；不返回个人资料。
       拆分：节日促销后台层的第六个任务（4 个允许路径），依赖 SHOP-TASK-249 与 241。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-241
       - SHOP-TASK-249
