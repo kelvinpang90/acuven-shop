@@ -6603,7 +6603,7 @@ tasks:
       运营者落实写法：list_products 与 get_product 新增只限关键字参数 promotion（SHOP-TASK-233 的 LoadedPromotion 或 None，默认 None，现有调用不变），list_products 另加 sale_only（默认 False；为 True 而 promotion 为 None 时返回空页）。命中规则用 233 的 rule_for_product；一件的活动单价用 SHOP-TASK-231 的 price_promotion 对数量 1 的一行算出（不另写舍入）。两个接口以 active_promotion(db, _utcnow()) 读生效活动传入；因活动价随时间变化，成功响应另加 Cache-Control no-store（只加响应头，不改用 _NoStoreRoute，现有错误格式不变）。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 3、10 条：展示的活动价与计价同一算法，不碰个人资料。
       拆分：节日促销展示层的第二个任务（5 个允许路径，其中一个现有测试文件只为新字段改期望值），依赖 SHOP-TASK-231 与 233。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-231
       - SHOP-TASK-233
