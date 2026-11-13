@@ -11,6 +11,7 @@ from app.api.admin_coupons import router as admin_coupons_router
 from app.api.admin_orders import router as admin_orders_router
 from app.api.admin_product_images import router as admin_product_images_router
 from app.api.admin_products import router as admin_products_router
+from app.api.admin_promotion_poster import router as admin_promotion_poster_router
 from app.api.admin_refunds import router as admin_refunds_router
 from app.api.admin_shipping_rates import router as admin_shipping_rates_router
 from app.api.admin_site_settings import router as admin_site_settings_router
@@ -33,6 +34,7 @@ from app.api.order_lookup import router as order_lookup_router
 from app.api.orders import router as orders_router
 from app.api.pay import router as pay_router
 from app.api.product_images import router as product_images_router
+from app.api.promotion_posters import router as promotion_posters_router
 from app.api.refunds import router as refunds_router
 from app.api.regions import router as regions_router
 from app.api.site_settings import router as site_settings_router
@@ -57,6 +59,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(site_settings_router)
     app.include_router(store_design_router)
     app.include_router(store_logos_router)
+    app.include_router(promotion_posters_router)
     app.include_router(orders_router)
     app.include_router(pay_router)
     app.include_router(stripe_pay_router)
@@ -79,6 +82,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(admin_stripe_pending_router)
     app.include_router(admin_store_design_router)
     app.include_router(admin_store_logo_router)
+    app.include_router(admin_promotion_poster_router)
     app.include_router(admin_stock_resets_router)
     app.include_router(admin_site_settings_router)
     app.include_router(admin_shipping_rates_router)
