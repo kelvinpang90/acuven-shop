@@ -6465,7 +6465,7 @@ tasks:
       运营者落实写法：后台按马来西亚时间输入到分钟（第 1 条），服务层收发的时间是马来西亚本地时间的「YYYY-MM-DDTHH:MM」字符串或 None，换成不带时区的 UTC 时减 8 小时（照 app/services/admin_coupons.py 用 sms_budget.MALAYSIA_UTC_OFFSET），反向换算时秒数截去。活动状态由时间算出：草稿为 draft；已发布而当前时刻早于开始为 scheduled，在开始（含）与实际结束（不含）之间为 running，不早于实际结束为 ended。文案去掉首尾空白、空串存为空。检查函数各自返回问题列表，供 249 的保存与 248 的 AI 提案分别组合使用。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 1–3、12 条：活动规则的取值范围与状态判定，决定之后的计价；不碰个人资料。
       拆分：节日促销后台层的第一个任务（3 个允许路径），依赖 SHOP-TASK-229（模型常量）。原登记稿把它与读写合在一个任务，预审估计连同测试约 2,470 行（TOO_LARGE），拆成本任务与 249。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-229
     acceptance_criteria:
