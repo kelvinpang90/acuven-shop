@@ -73,7 +73,6 @@ CSRF_PREFIX = b"acuven-shop/admin-session/csrf\x00"
 
 # 不带时区的 UTC，即马来西亚 2026-11-13 12:00。
 NOW = datetime(2026, 11, 13, 4, 0)
-NOW_TEXT = "2026-11-13T04:00:00"
 SECRET = "SECRETVALUE"
 
 SESSION_REQUIRED = {"detail": "admin_session_required"}
@@ -580,14 +579,19 @@ def _stub_detail(promotion_id: int = 7) -> PromotionDetail:
 
 
 def _all_requests(
-    client: TestClient, token: str | None, promotion_id: int | str, *, csrf: str | None
+    client: TestClient,
+    token: str | None,
+    promotion_id: int | str,
+    *,
+    csrf: str | None,
+    writes_only: bool = False,
 ) -> list[Any]:
-    """九个路由各一次（带请求体的写操作都带合格的请求体）。"""
+    """九个路由各一次（带请求体的写操作都带合格的请求体）；writes_only 时不发两个读取。"""
     version = {"version": 1}
     save_body = _edit(_new() | {"version": 1})
+    reads = [] if writes_only else [_get(client, token), _get(client, token, _item(promotion_id))]
     return [
-        _get(client, token),
-        _get(client, token, _item(promotion_id)),
+        *reads,
         _send(client, "POST", URL, token, _new(), csrf=csrf),
         _send(client, "PUT", _item(promotion_id), token, save_body, csrf=csrf),
         _send(client, "POST", _item(promotion_id, "publish"), token, version, csrf=csrf),
@@ -650,8 +654,8 @@ def test_writes_without_a_valid_csrf_token_are_403(
     服务层，数据与审计不变。"""
     before = _snapshot(engine)
 
-    responses = _all_requests(client, token, draft["id"], csrf=csrf)[2:]
-    responses += _all_requests(client, token, "0", csrf=csrf)[2:]
+    responses = _all_requests(client, token, draft["id"], csrf=csrf, writes_only=True)
+    responses += _all_requests(client, token, "0", csrf=csrf, writes_only=True)
     for method, path in WRITE_PATHS_WITH_BODY:
         responses.append(_send(client, method, path, token, {"name": SECRET}, csrf=csrf))
 
@@ -1046,6 +1050,13 @@ def test_list_returns_promotions_and_csrf_token(
     other = _ok(_send(client, "POST", URL, token, empty), 201)
     calls.clear()
     before = _snapshot(engine)
+    # updated_at 由服务层或模型在写入时自己取时间，不一定是 NOW：期望值从库里读出。
+    updated = dict(
+        _read(
+            engine,
+            lambda session: session.execute(select(Promotion.id, Promotion.updated_at)).all(),
+        )
+    )
 
     body = _ok(_get(client, token))
 
@@ -1060,7 +1071,7 @@ def test_list_returns_promotions_and_csrf_token(
             "starts_at": SCHEDULED[0],
             "ends_at": SCHEDULED[1],
             "rule_count": 4,
-            "updated_at": NOW_TEXT,
+            "updated_at": updated[draft["id"]].isoformat(),
         },
         {
             "id": other["id"],
@@ -1069,7 +1080,7 @@ def test_list_returns_promotions_and_csrf_token(
             "starts_at": None,
             "ends_at": None,
             "rule_count": 0,
-            "updated_at": NOW_TEXT,
+            "updated_at": updated[other["id"]].isoformat(),
         },
     ]
     assert calls == ["list_promotions"]
@@ -1466,7 +1477,8 @@ def test_routes_are_registered(app: FastAPI) -> None:
     """验收「路由——GET /api/admin/promotions（列表）、POST（新建）、GET、PUT 与 DELETE
     /{promotion_id}、POST /{promotion_id}/publish、/withdraw、/end 与 /copy……在 app/main.py
     后台段照现有顺序注册」「路由清单的断言只列本文件 router 上的路由」：本模块的 router 上恰好
-    这九个，且都已注册到应用。"""
+    这九个，且都已注册到应用（照 tests/test_admin_categories_api.py 从应用的 OpenAPI 路径读出，
+    只查这九个是否在其中）。"""
     item = f"{URL}/{{promotion_id}}"
     expected = {
         ("GET", URL),
@@ -1486,10 +1498,9 @@ def test_routes_are_registered(app: FastAPI) -> None:
         for method in route.methods
     }
     registered = {
-        (method, route.path)
-        for route in app.routes
-        if isinstance(route, APIRoute)
-        for method in route.methods
+        (method.upper(), path)
+        for path, operations in app.openapi()["paths"].items()
+        for method in operations
     }
 
     assert own == expected
