@@ -5,13 +5,18 @@
 lang 只接受 en、zh、ms，默认 en，其他值由 FastAPI 校验拒绝（422）。
 未发布与不存在的 slug 返回同一个 404，不暴露未发布的商品是否存在。
 商品列表可重复的 slug 筛选供首页按店铺装修取精选商品卡片（SHOP-TASK-053）。
+商品列表与详情的活动价与角标、列表的 sale 筛选依据 docs/DESIGN.md 1.23（提交 b7f9355）
+「节日促销活动」第 3、10 条与 docs/UX.md 0.20 的 P15（SHOP-TASK-244）：每次请求以
+active_promotion(db, _utcnow()) 读生效活动、不缓存；活动价随时间变化，两者的成功响应
+带 Cache-Control: no-store（错误响应照旧）。
 """
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.orm import Session
 
@@ -31,6 +36,7 @@ from app.services.catalog import (
     list_filter_options,
     list_products,
 )
+from app.services.promotions import active_promotion
 
 router = APIRouter(prefix="/api/catalog", tags=["catalog"])
 
@@ -38,6 +44,10 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 MAX_SLUGS = 20
 MAX_SLUG_LENGTH = 100
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _slug_filter(slug: Annotated[list[str] | None, Query()] = None) -> list[str]:
@@ -85,6 +95,7 @@ def options(session: SessionDep, lang: Language = "en") -> list[OptionDetail]:
 def products(
     slugs: Annotated[list[str], Depends(_slug_filter)],
     session: SessionDep,
+    response: Response,
     lang: Language = "en",
     q: Annotated[str | None, Query(max_length=100)] = None,
     category: Annotated[list[str] | None, Query()] = None,
@@ -92,8 +103,10 @@ def products(
     sort: SortOrder = "newest",
     page: Annotated[int, Query(ge=1)] = 1,
     page_size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = DEFAULT_PAGE_SIZE,
+    sale: bool = False,
 ) -> ProductPage:
-    return list_products(
+    """sale=true 为专题页列表（P15）：只列生效活动商品级规则范围内的商品，没有活动时为空页。"""
+    result = list_products(
         session,
         lang=lang,
         query=q.strip() if q else None,
@@ -103,12 +116,19 @@ def products(
         page=page,
         page_size=page_size,
         slugs=slugs,
+        promotion=active_promotion(session, _utcnow()),
+        sale_only=sale,
     )
+    response.headers["Cache-Control"] = "no-store"
+    return result
 
 
 @router.get("/products/{slug}", response_model=ProductDetail)
-def product_detail(slug: str, session: SessionDep, lang: Language = "en") -> ProductDetail:
-    detail = get_product(session, slug, lang)
+def product_detail(
+    slug: str, session: SessionDep, response: Response, lang: Language = "en"
+) -> ProductDetail:
+    detail = get_product(session, slug, lang, promotion=active_promotion(session, _utcnow()))
     if detail is None:
         raise HTTPException(status_code=404, detail="product not found")
+    response.headers["Cache-Control"] = "no-store"
     return detail

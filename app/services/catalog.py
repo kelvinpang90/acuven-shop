@@ -9,6 +9,10 @@
 商品详情的每单限购件数依据 docs/DESIGN.md 1.10（提交 e3b3505）
 「数据模型」的 Product / Variant 一行与「计价、优惠、积分与库存」第 8 条（SHOP-TASK-016）；
 商品列表与分类不带它。
+活动价与角标依据 docs/DESIGN.md 1.23（提交 b7f9355）「节日促销活动」第 3、10 条与
+docs/UX.md 0.20 的商品卡规则、P03、P15（SHOP-TASK-244）：生效活动由调用方读出后以
+promotion 传入；命中的商品级规则取 rule_for_product，一件的活动单价取 price_promotion
+对数量 1 的一行的结果，与计价同一算法。sale_only 的专题页列表只列商品级规则范围内的商品。
 """
 
 from __future__ import annotations
@@ -29,6 +33,14 @@ from app.models import (
     ProductVariant,
     VariantOptionValue,
 )
+from app.models.promotion import KIND_BUY_X_GET_Y, KIND_ITEM_DISCOUNT, MODE_AMOUNT, MODE_PERCENT
+from app.services.promotion_pricing import (
+    BuyXGetYRule,
+    ItemDiscountRule,
+    PromoLine,
+    price_promotion,
+)
+from app.services.promotions import LoadedPromotion, rule_for_product
 
 Language = Literal["en", "zh", "ms"]
 SortOrder = Literal["newest", "price_asc", "price_desc"]
@@ -62,6 +74,23 @@ class CategoryListItem:
 
 
 @dataclass(frozen=True)
+class CardPromotion:
+    """商品命中的商品级规则：角标所需的类别与参数，不属于该类别的参数为 None。
+
+    kind 为 item_discount 或 buy_x_get_y；discount_mode 只有打折有（percent 或 amount）。
+    """
+
+    rule_id: int
+    kind: str
+    discount_mode: str | None
+    percent: int | None
+    amount_sen: int | None
+    buy_quantity: int | None
+    get_quantity: int | None
+    get_percent: int | None
+
+
+@dataclass(frozen=True)
 class ProductSummary:
     slug: str
     name: LocalizedText
@@ -74,6 +103,10 @@ class ProductSummary:
     has_multiple_variants: bool
     # 所有启用 SKU 的当日可用库存都是 0。
     sold_out_today: bool
+    # 生效活动中命中的商品级规则；没有生效活动或没有命中时为 None。
+    promotion: CardPromotion | None
+    # 命中打折规则时各启用 SKU 活动单价的最小值，「起」照 has_multiple_variants；否则 None。
+    min_sale_price_sen: int | None
 
 
 @dataclass(frozen=True)
@@ -104,6 +137,8 @@ class VariantDetail:
     options: dict[str, str]
     price_sen: int
     available_stock: int
+    # 命中打折规则时该 SKU 的活动单价；否则 None（买 X 享 Y 不改显示单价）。
+    sale_price_sen: int | None
 
 
 @dataclass(frozen=True)
@@ -117,6 +152,8 @@ class ProductDetail:
     variants: list[VariantDetail]
     # 每单限购件数：该商品所有 SKU 在一张购物车或订单中的件数合计上限。
     max_per_order: int
+    # 生效活动中命中的商品级规则；没有生效活动或没有命中时为 None。
+    promotion: CardPromotion | None
 
 
 def _present(column: ColumnElement[str | None]) -> ColumnElement[bool]:
@@ -214,6 +251,74 @@ def _has_matching_variant(filters: Mapping[str, Sequence[str]]) -> ColumnElement
     return exists().where(*conditions)
 
 
+ItemRule = ItemDiscountRule | BuyXGetYRule
+
+
+def _hit_rule(
+    promotion: LoadedPromotion | None, product: Product
+) -> tuple[CardPromotion, ItemRule] | None:
+    """第 3 条：商品按当时所属的分类命中的商品级规则（重叠时取排序小者），换成角标参数。"""
+    if promotion is None:
+        return None
+    rule_id = rule_for_product(promotion, product.id, product.category_id)
+    if rule_id is None:
+        return None
+    rule = next(item.rule for item in promotion.item_rules if item.rule_id == rule_id)
+    if isinstance(rule, ItemDiscountRule):
+        card = CardPromotion(
+            rule_id=rule_id,
+            kind=KIND_ITEM_DISCOUNT,
+            discount_mode=MODE_PERCENT if rule.percent is not None else MODE_AMOUNT,
+            percent=rule.percent,
+            amount_sen=rule.amount_sen,
+            buy_quantity=None,
+            get_quantity=None,
+            get_percent=None,
+        )
+    else:
+        # 第 10 条：买 X 享 Y 只给角标所需的 X、Y 与百分比，不改显示单价。
+        card = CardPromotion(
+            rule_id=rule_id,
+            kind=KIND_BUY_X_GET_Y,
+            discount_mode=None,
+            percent=None,
+            amount_sen=None,
+            buy_quantity=rule.buy_quantity,
+            get_quantity=rule.get_quantity,
+            get_percent=rule.get_percent,
+        )
+    return card, rule
+
+
+def _card(hit: tuple[CardPromotion, ItemRule] | None) -> CardPromotion | None:
+    return None if hit is None else hit[0]
+
+
+def _sale_price(rule: ItemRule, price_sen: int) -> int | None:
+    """打折规则下一件的活动单价：price_promotion 对数量 1 的一行的活动价小计；其余为 None。"""
+    if not isinstance(rule, ItemDiscountRule):
+        return None
+    line = PromoLine(line_index=0, unit_price=price_sen, quantity=1, rule_id=rule.rule_id)
+    return price_promotion([line], item_rules={rule.rule_id: rule}).after_item_subtotal
+
+
+def _sale_scope(promotion: LoadedPromotion | None) -> ColumnElement[bool] | None:
+    """P15：全部商品级规则范围（显式选的商品加所选分类下的商品）；没有范围时为 None。"""
+    if promotion is None:
+        return None
+    product_ids: set[int] = set()
+    category_ids: set[int] = set()
+    for item_rule in promotion.item_rules:
+        product_ids |= item_rule.product_ids
+        category_ids |= item_rule.category_ids
+    scopes = []
+    if product_ids:
+        scopes.append(Product.id.in_(sorted(product_ids)))
+    if category_ids:
+        scopes.append(Product.category_id.in_(sorted(category_ids)))
+    return or_(*scopes) if scopes else None
+
+
 def list_categories(session: Session, lang: Language) -> list[CategoryListItem]:
     """启用且有英文名称的分类，按 id 排序。
 
@@ -307,15 +412,25 @@ def list_products(
     page: int = 1,
     page_size: int = DEFAULT_PAGE_SIZE,
     slugs: Sequence[str] = (),
+    promotion: LoadedPromotion | None = None,
+    sale_only: bool = False,
 ) -> ProductPage:
     """已发布商品的一页。
 
     query 按当前语言名称或英文名称做不区分大小写的包含匹配；多个分类 slug 之间为或；
     options 是规格名 code → 规格值 code 列表；slugs 非空时只留 slug 在其中的商品，
-    不存在或未发布的 slug 自然被略去（SHOP-TASK-053）。各筛选之间为且。价格排序按最低单价；
-    平手一律按商品 id 升序，翻页不重复、不遗漏。
+    不存在或未发布的 slug 自然被略去（SHOP-TASK-053）。各筛选之间为且。价格排序按最低单价
+    （有活动时仍按原价）；平手一律按商品 id 升序，翻页不重复、不遗漏。
+
+    promotion 为调用方读出的生效活动，每项据此给出命中的规则与最低活动单价；sale_only 为真时
+    只留 promotion 全部商品级规则范围内的商品，没有活动或活动没有商品级规则时为空页。
     """
     conditions = [published()]
+    if sale_only:
+        scope = _sale_scope(promotion)
+        if scope is None:
+            return ProductPage(total=0, page=page, page_size=page_size, items=[])
+        conditions.append(scope)
     if query:
         conditions.append(
             or_(
@@ -347,7 +462,23 @@ def list_products(
         .limit(page_size)
         .offset((page - 1) * page_size)
     )
-    rows = session.execute(stmt)
+    rows = session.execute(stmt).all()
+
+    hits = {product.id: _hit_rule(promotion, product) for product, *_ in rows}
+    discounted = [
+        product_id
+        for product_id, hit in hits.items()
+        if hit is not None and isinstance(hit[1], ItemDiscountRule)
+    ]
+    sale_prices: dict[int, list[int]] = {}
+    if discounted:
+        stmt = select(ProductVariant.product_id, ProductVariant.price_sen).where(
+            ProductVariant.product_id.in_(discounted), ProductVariant.is_active.is_(True)
+        )
+        for product_id, price_sen in session.execute(stmt):
+            sale_price = _sale_price(hits[product_id][1], price_sen)
+            sale_prices.setdefault(product_id, []).append(sale_price)
+
     items = [
         ProductSummary(
             slug=product.slug,
@@ -357,6 +488,8 @@ def list_products(
             min_price_sen=min_price_sen,
             has_multiple_variants=active_count > 1,
             sold_out_today=max_stock == 0,
+            promotion=_card(hits[product.id]),
+            min_sale_price_sen=min(sale_prices.get(product.id, ()), default=None),
         )
         for product, category, min_price_sen, active_count, max_stock, image in rows
     ]
@@ -368,8 +501,17 @@ def _in_sort_order[T](session: Session, model: type[T], product_id: int) -> list
     return list(session.scalars(stmt))
 
 
-def get_product(session: Session, slug: str, lang: Language) -> ProductDetail | None:
-    """已发布商品的详情；不存在与未发布同样返回 None，调用方给同一个 404。"""
+def get_product(
+    session: Session,
+    slug: str,
+    lang: Language,
+    *,
+    promotion: LoadedPromotion | None = None,
+) -> ProductDetail | None:
+    """已发布商品的详情；不存在与未发布同样返回 None，调用方给同一个 404。
+
+    promotion 为调用方读出的生效活动，据此给出命中的规则与打折规则下各 SKU 的活动单价。
+    """
     stmt = select(Product, Category).join_from(Product, Category, _in_category)
     row = session.execute(stmt.where(published(), Product.slug == slug)).first()
     if row is None:
@@ -398,6 +540,7 @@ def get_product(session: Session, slug: str, lang: Language) -> ProductDetail | 
     for link in links:
         chosen.setdefault(link.variant_id, {})[link.option_id] = value_code[link.option_value_id]
 
+    hit = _hit_rule(promotion, product)
     variant_details = []
     for variant in variants:
         selected = chosen.get(variant.id, {})
@@ -407,6 +550,7 @@ def get_product(session: Session, slug: str, lang: Language) -> ProductDetail | 
                 options={o.code: selected[o.id] for o in options if o.id in selected},
                 price_sen=variant.price_sen,
                 available_stock=variant.available_stock,
+                sale_price_sen=None if hit is None else _sale_price(hit[1], variant.price_sen),
             )
         )
 
@@ -426,4 +570,5 @@ def get_product(session: Session, slug: str, lang: Language) -> ProductDetail | 
         ],
         variants=variant_details,
         max_per_order=product.max_per_order,
+        promotion=_card(hit),
     )
