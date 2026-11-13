@@ -6765,7 +6765,7 @@ tasks:
       运营者落实写法：两个方法都先查会话（401 admin_session_required）、CSRF（403 csrf_failed）、路径（活动 ID 照 app/api/admin_categories.py 的 _category_id 校验，slot 不是 desktop 或 phone，都为 422），再以普通读取看活动（不存在 404 promotion_not_found，ended 409 promotion_ended）。PUT 接着查存储是否配置（503）、Content-Type（415）、声明长度（413）、读请求体与处理（422 poster_invalid），最后调用服务（锁内再核一次）；DELETE 没有请求体、不查存储配置，直接调用移除服务——照 remove_logo，存储未配置时照常清空记录并提交，只记日志、不调用存储。公开提供只认 240 的 poster_file_names 里的文件名（草稿的也提供，供管理员预览）。上线前反向代理须为海报上传路径放行至少 5 MB 的请求体，记入 HANDOFF 的上线依赖。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 12 条：图片的上传与提供，不碰金额与个人资料。
       拆分：节日促销后台层的第四个任务（5 个允许路径），依赖 SHOP-TASK-240。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-240
     acceptance_criteria:
