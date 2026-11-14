@@ -7068,7 +7068,7 @@ tasks:
       运营者落实写法（HANDOFF 0.97）：新增 CardPromotion（rule_id、kind、discount_mode、percent、amount_sen、buy_quantity、get_quantity、get_percent，类型同 app/services/catalog.py）；ProductSummary 加 promotion（CardPromotion 或 null）与 min_sale_price_sen（数或 null），VariantDetail 加 sale_price_sen（数或 null），ProductDetail 加 promotion（CardPromotion 或 null），都写成必填（接口总会给出）；ProductListRequest 加 sale（布尔，可省略），为真时 productsUrl 在现有参数之后加 sale=true，省略或为假时地址与现在逐字相同。照现有写法不做逐字段校验。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 10 条：只加读取目录活动价的类型，不计算金额，不碰个人资料。
       拆分：前台目录模块一层（8 个允许路径：目录模块与测试、5 个只补替身字段的测试文件与任务记录）。字段写成必填后，完整写出这些类型的测试替身必然过不了类型检查：运营者登记时把字段按必填加进类型，在 main 的导出上跑类型检查，报错的只有下列 5 个测试文件，所以与类型一起改、只补字段。依赖 SHOP-TASK-244。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-244
     acceptance_criteria:
