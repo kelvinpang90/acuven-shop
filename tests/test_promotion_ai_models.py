@@ -228,7 +228,10 @@ def test_negative_token_count_is_rejected(db: Session, column: str) -> None:
 
 
 def test_migration_revision_follows_0028() -> None:
-    """落实写法「revision 0029、down_revision 0028」。"""
+    """第 13 条「按日在 MySQL 计数：计数表以马来西亚日期为主键」与
+    「每次调用记时间、结果类别与用量」：两张表由排在 0028 之后的迁移建出
+    （落实写法「revision 0029、down_revision 0028」）。
+    """
     assert (MIGRATION.revision, MIGRATION.down_revision) == ("0029", "0028")
 
 
@@ -238,9 +241,11 @@ def test_migration_tables_match_the_models() -> None:
 
 
 def test_migration_check_constraints_match_the_models() -> None:
-    """落实写法「约束表达式作为常量自带并与模型逐字相同，约束名按
-    app/db/base.py 的命名约定逐个写出」（alembic check 不比较检查约束）：
-    迁移每张表的检查约束与模型的名称与文本逐字相同。
+    """第 13 条「计数表以马来西亚日期为主键（每天至多一行）」的计数与
+    「每次调用记时间、结果类别与用量（输入与输出 token 数）」的结果类别与
+    用量，在库里由同样的检查约束守住：落实写法「约束表达式作为常量自带并与
+    模型逐字相同，约束名按 app/db/base.py 的命名约定逐个写出」（alembic
+    check 不比较检查约束），迁移每张表的检查约束与模型的名称与文本逐字相同。
     """
     assert set(MIGRATION.CHECK_CONSTRAINTS) == set(MIGRATION.TABLES)
     for model in MODELS:
