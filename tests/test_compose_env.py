@@ -1,6 +1,7 @@
 """docker-compose.yml 把短信、人机挑战与联系链接的配置传进 shop_api（SHOP-TASK-143），以及商品图片的
 R2 配置与 API 内存上限（DESIGN 1.19），以及运营告警邮件的七项配置与 shop_jobs 的 SHOP_REDIS_URL
-（DESIGN 1.21「运营告警邮件」第 1、4 条，SHOP-TASK-217）。
+（DESIGN 1.21「运营告警邮件」第 1、4 条，SHOP-TASK-217），
+以及 AI 装饰提案的五项配置（DESIGN 1.23「节日促销活动」第 13 条，SHOP-TASK-247）。
 
 写法照 tests/test_stripe_gateway.py 的 test_compose_passes_all_six_variables_to_api_and_jobs：
 读取 docker-compose.yml，逐字比较 environment 里的写法。每条测试的文档字符串写明它守住的是什么。
@@ -147,6 +148,42 @@ def test_compose_passes_redis_url_to_jobs() -> None:
     jobs = _environment("shop_jobs")
     assert jobs.get("SHOP_REDIS_URL") == "${SHOP_REDIS_URL:-}"
     assert jobs["SHOP_REDIS_URL"] == api["SHOP_REDIS_URL"]
+
+
+AI_EXPECTED = {
+    "SHOP_AI_HUB_BASE_URL": "${SHOP_AI_HUB_BASE_URL:-}",
+    "SHOP_AI_HUB_CLIENT_ID": "${SHOP_AI_HUB_CLIENT_ID:-}",
+    "SHOP_AI_HUB_ACCESS_SECRET": "${SHOP_AI_HUB_ACCESS_SECRET:-}",
+    "SHOP_AI_MODEL": "${SHOP_AI_MODEL:-}",
+    "SHOP_AI_DAILY_CALL_LIMIT": "${SHOP_AI_DAILY_CALL_LIMIT:-50}",
+}
+
+
+def test_compose_passes_ai_variables_only_to_api() -> None:
+    """DESIGN 1.23「节日促销活动」第 13 条「接口地址、项目密钥与模型名经私有配置注入，仓库只记
+    变量名」：五个 SHOP_AI_ 变量照现有写法传给 shop_api，前四项未设置时为空串（未配置，AI 按钮
+    禁用）、照常部署；定时任务不调用模型，不传给 shop_jobs。"""
+    environment = _environment("shop_api")
+    for name, value in AI_EXPECTED.items():
+        assert environment.get(name) == value, name
+    jobs = _environment("shop_jobs")
+    assert not any(name.startswith("SHOP_AI_") for name in jobs)
+
+
+def test_ai_compose_defaults_match_settings_defaults() -> None:
+    """DESIGN 1.23「节日促销活动」第 13 条「全站每天（马来西亚时间）调用次数上限经私有配置设定
+    （默认 50）」与「未配置时后台的 AI 按钮禁用」：compose 里 :- 之后的默认值就是 Settings 对应
+    字段的默认值（四个字符串为空串、上限为 50），以后只改了一边时失败。"""
+    fields = Settings.model_fields
+    for name, value in AI_EXPECTED.items():
+        field = name.removeprefix("SHOP_").lower()
+        default = value.split(":-", 1)[1].removesuffix("}")
+        assert default == str(fields[field].default), name
+    assert fields["ai_daily_call_limit"].annotation is int
+    assert fields["ai_daily_call_limit"].default == 50
+    for field in ("ai_hub_base_url", "ai_hub_client_id", "ai_hub_access_secret", "ai_model"):
+        assert fields[field].annotation is str, field
+        assert fields[field].default == "", field
 
 
 def test_api_memory_limit_is_512m() -> None:
