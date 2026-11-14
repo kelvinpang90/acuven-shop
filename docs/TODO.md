@@ -27,8 +27,7 @@
 
 <!-- openclaw:planning-v1:begin -->
 ### 当前计划
-1. `SHOP-TASK-248` AI 生成装饰提案（服务层）
-2. `SHOP-TASK-251` AI 生成装饰提案的后台接口
+1. `SHOP-TASK-251` AI 生成装饰提案的后台接口
 
 ### 已阻塞
 
