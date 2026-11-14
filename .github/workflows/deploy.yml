@@ -10,7 +10,7 @@
 #   D3 结论：只有新版本已上线、且上线后健康检查报出 DEPLOY_SHA 才以 success 结束；迁移失败、
 #            不健康、回滚（无论回滚是否成功）、中断都以失败结束。没有 continue-on-error。
 #   D4 并发：不取消进行中的部署（被取消的运行按失败处理）。
-#   D5 期限：两个 job 的 timeout-minutes 合计 24 分钟，30 分钟内给出结论；不用需要人工批准的 environment。
+#   D5 期限：两个 job 的 timeout-minutes 合计 29 分钟，30 分钟内给出结论；不用需要人工批准的 environment。
 # OpenClaw 只读结论：不部署、不回滚、不重跑，也不登录生产。
 #
 # 本文件不写主机名、IP、域名、路径、密钥：连接信息与部署目录放 GitHub secrets，
@@ -114,7 +114,7 @@ jobs:
     name: deploy
     needs: build
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 17
     permissions:
       contents: read
       packages: read
