@@ -132,6 +132,9 @@ jobs:
       # 所有值经 envs 传给远端脚本，不拼进脚本文本。
       # 远端先检出 DEPLOY_SHA，再跑那个提交里的 deploy/deploy.sh（D2）；它失败即非零退出（D3）。
       # 结束时登出仓库；登出失败只会把结论变成失败，不会把失败变成成功。
+      # command_timeout：ssh-action v1.0.3 默认 10 分钟。deploy.sh 最坏要等主机部署锁 5 分钟，
+      # 再加部署与回滚约 7 分钟（约 12 分钟），默认值会在部署中途切断 SSH；设为 13 分钟，留 1 分钟余量。
+      # job 的 17 分钟按「等锁 5 + 部署与回滚约 7 + 健康检查 5」估算（方案第 5.1 节）。
       - name: Deploy
         uses: appleboy/ssh-action@v1.0.3
         env:
@@ -147,6 +150,7 @@ jobs:
           port: ${{ secrets.VPS_PORT }}
           fingerprint: ${{ secrets.VPS_FINGERPRINT }}
           envs: DEPLOY_SHA,IMAGE_REPO,APP_DIR,GHCR_USER,GHCR_TOKEN
+          command_timeout: 13m
           script: |
             set -euo pipefail
             cd "$APP_DIR"
