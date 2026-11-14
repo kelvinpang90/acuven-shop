@@ -6685,7 +6685,7 @@ tasks:
       运营者落实写法：Settings 加 ai_hub_base_url、ai_hub_client_id、ai_hub_access_secret、ai_model（都是 str，默认空串，空串即未配置）与 ai_daily_call_limit（int，默认 50），注释照现有写法说明用途与「空串即未配置」；四个字符串都不为空、且地址以 https 加冒号加两个斜杠开头才算已配置（照 sms_provider 的 configured）。新文件 app/services/ai_hub.py 照 app/services/sms_provider.py 的写法：HttpRequest、HttpResponse、可注入的 transport、禁止重定向、响应最多读 64 KB；请求为 JSON（Content-Type application/json），带请求头 X-Acuven-Client-Id 与 Authorization（Bearer 加项目密钥）；请求体字段为 feature（固定为 shop.promotion_proposal）、model、system、messages（只有一条，形如 role 为 user、content 为字符串）、max_tokens 与可选的 output_config（形如 format 为对象 {type 为 json_schema, schema 为 JSON Schema 对象}），照 Billing Hub 的 POST /v1/messages 约定（ai_billing_hub 仓库 docs/api.md：请求体严格、未知字段 422；成功 200 的响应有字符串 text 与 usage 的 input_tokens、output_tokens）；超时 60 秒，即 urllib 的 timeout 参数（连接与每次读取各自的套接字超时，与 sms_provider 相同的含义）；socket 超时（TimeoutError，含被 URLError 包着的）算 AiTimeout，其余失败算 AiUnavailable。密钥与请求内容不进 repr 与日志。docker-compose.yml 只为把这五个变量传给 shop_api 而改（照现有 SHOP_ 变量的写法，默认值与 Settings 相同），tests/test_compose_env.py 照现有写法核对。.env.example 的五个变量名与占位值已由运营者在登记 PR 里加好（控制面不许 run 改 .env 开头的文件），本任务不改它，变量名照它。生产环境的取值由 Kelvin 在服务器的私有配置里设置；在 Billing Hub 为本项目开通身份与签发密钥另在 ai_billing_hub 的会话里做。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 13 条：出站调用只带管理员的描述与活动的规则参数等（由 248 组装），客户端本身不读订单、会员与收货资料；密钥只在私有配置。
       拆分：节日促销 AI 提案的第二个任务（6 个允许路径），与 SHOP-TASK-246 互不依赖。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 配置——app/core/config.py 的 Settings 照落实写法加五个字段；AiHubClient.from_settings(settings, transport=urllib_transport) 的 configured 属性照落实写法判断，repr 只显示 configured
