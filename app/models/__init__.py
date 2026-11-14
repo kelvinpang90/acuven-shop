@@ -32,6 +32,7 @@ from app.models.promotion import (
     PromotionRuleProduct,
     PromotionSpendTier,
 )
+from app.models.promotion_ai import PromotionAiCall, PromotionAiDailyUsage
 from app.models.refund import RefundLine, RefundLineUnit, RefundRequest
 from app.models.shipping import DemoFxRate, ShippingRate
 from app.models.site import SiteSetting
@@ -65,6 +66,8 @@ __all__ = [
     "ProductOptionValue",
     "ProductVariant",
     "Promotion",
+    "PromotionAiCall",
+    "PromotionAiDailyUsage",
     "PromotionDecoration",
     "PromotionPublishLock",
     "PromotionRule",
