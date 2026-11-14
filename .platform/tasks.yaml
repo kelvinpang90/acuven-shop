@@ -7135,7 +7135,7 @@ tasks:
       「不写服务器绝对路径」规则的例外（只限这一个锁文件路径）。部署 job 最坏要等锁 5 分钟，所以 deploy.yml 的部署 job 超时改为 17 分钟，
       两个 job 合计 29 分钟，仍满足 D5 的 30 分钟；Deploy 步骤的 ssh-action 默认 10 分钟的命令超时同步改为 13 分钟。不改触发器（on 段）、build job、compose 与应用代码，不加拉镜像重试，不加审批闸门。
       设计闸门：不适用（部署脚本与 CI 配置，不碰钱、不碰个人数据、不改数据库结构）。由运营者实现，不交给 Worker。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 锁——deploy/deploy.sh 在 SHOP_IMAGE_REPO 检查之后、记下正在跑的版本之前插入方案第 5.1 节的锁片段（项目名 acuven_shop）；ACUVEN_DEPLOY_LOCK 与 ACUVEN_DEPLOY_LOCK_WAIT 可覆盖默认锁文件与 300 秒；锁之后的顺序与各条失败语义不变
