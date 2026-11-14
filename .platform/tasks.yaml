@@ -6712,7 +6712,7 @@ tasks:
       运营者落实写法：送出的内容只有第 13 条所列四项：描述原文、规则类别与参数（不含商品与分类 ID）、SHOP-TASK-229 模型常量里的素材包、配色与各装饰位变体 ID 及文案长度限制、店铺装修单例行的 theme 与 accent；不读订单、会员与收货资料。提案的字段只有八个装饰 ID（pack、palette、ambient、home_poster、list_strip、card_badge、detail_ribbon、cart_progress）与 title、subtitle、badge、strip 各三语，不含海报模式与替代文字（由管理员定）；没有规则、时间、开关与金额的字段。校验用 SHOP-TASK-239 的 check_decoration 与 check_copy（装饰的海报模式取 template、替代文字取空，只为套用检查函数），另要求英文标题不为空；送出的规则先以 239 的 check_rule_params 检查（问题码 rule）。计数照 app/services/sms_budget.py 的写法：先以普通查询看当天（马来西亚日期，sms_budget.malaysia_date）的行，没有就在 begin_nested 里插入零值行、主键冲突即忽略，再锁行，未达 ai_daily_call_limit 才加一并提交，然后调用模型；加一之后的调用无论结果如何都占用当天的一次，不退回。每次调用后写一条 PromotionAiCall（结果类别与 token 数），不记描述与回答原文。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 12、13 条：出站内容限定为第 13 条四项；描述不保存；提案不改规则与金额。
       拆分：节日促销 AI 提案的第三个任务（3 个允许路径），依赖 SHOP-TASK-239（检查函数）、246（计数与记录表）与 247（客户端）。原登记稿把服务与接口合在一个任务，预审报 TOO_LARGE，接口拆到 251。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-239
       - SHOP-TASK-246
