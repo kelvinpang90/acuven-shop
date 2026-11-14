@@ -3130,6 +3130,91 @@ export const COPY = {
     zh: "已建立新的退款尝试，会发送到 Stripe；结果请到 Stripe 后台核对。",
     ms: "Cubaan bayaran balik baharu telah dibuat dan akan dihantar ke Stripe. Semak keputusannya di papan pemuka Stripe.",
   },
+  "promo.badge_percent": {
+    en: "−{percent}%",
+    zh: "−{percent}%",
+    ms: "−{percent}%",
+  },
+  "promo.badge_amount": {
+    en: "RM {amount} off",
+    zh: "立减 RM {amount}",
+    ms: "Jimat RM {amount}",
+  },
+  "promo.badge_bxgy_free": {
+    en: "Buy {x} get {y} free",
+    zh: "买 {x} 送 {y}",
+    ms: "Beli {x} percuma {y}",
+  },
+  "promo.badge_bxgy_pct": {
+    en: "Buy {x}, {y} more {percent}% off",
+    zh: "买 {x} 件，再 {y} 件减 {percent}%",
+    ms: "Beli {x}, {y} lagi diskaun {percent}%",
+  },
+  "promo.ends_in": {
+    en: "Ends in {time}",
+    zh: "距结束还有 {time}",
+    ms: "Tamat dalam {time}",
+  },
+  "promo.countdown_days": {
+    en: "{d}d {hh}:{mm}:{ss}",
+    zh: "{d} 天 {hh}:{mm}:{ss}",
+    ms: "{d} hari {hh}:{mm}:{ss}",
+  },
+  "promo.countdown": {
+    en: "{hh}:{mm}:{ss}",
+    zh: "{hh}:{mm}:{ss}",
+    ms: "{hh}:{mm}:{ss}",
+  },
+  "promo.rule_item_percent": {
+    en: "{percent}% off",
+    zh: "立减 {percent}%",
+    ms: "Diskaun {percent}%",
+  },
+  "promo.rule_item_amount": {
+    en: "RM {amount} off each item",
+    zh: "每件立减 RM {amount}",
+    ms: "Jimat RM {amount} setiap item",
+  },
+  "promo.rule_bxgy_free": {
+    en: "Buy {x}, get {y} free — the lowest-priced items are free",
+    zh: "买 {x} 送 {y}，送价格最低的件",
+    ms: "Beli {x}, percuma {y} — item paling murah adalah percuma",
+  },
+  "promo.rule_bxgy_pct": {
+    en: "Buy {x}, get {y} more at {percent}% off — the discount goes to the lowest-priced items",
+    zh: "买 {x} 件，再 {y} 件减 {percent}%，优惠给价格最低的件",
+    ms: "Beli {x}, {y} lagi diskaun {percent}% — diskaun untuk item paling murah",
+  },
+  "promo.rule_tier_amount": {
+    en: "Spend RM {threshold}, save RM {amount}",
+    zh: "满 RM {threshold} 减 RM {amount}",
+    ms: "Belanja RM {threshold}, jimat RM {amount}",
+  },
+  "promo.rule_tier_percent": {
+    en: "Spend RM {threshold}, get {percent}% off",
+    zh: "满 RM {threshold} 减 {percent}%",
+    ms: "Belanja RM {threshold}, diskaun {percent}%",
+  },
+  "promo.rule_free_shipping": {
+    en: "Free sample shipping on orders from RM {threshold}",
+    zh: "满 RM {threshold} 免示例运费",
+    ms: "Penghantaran contoh percuma untuk pesanan dari RM {threshold}",
+  },
+  "promo.rule_free_shipping_all": {
+    en: "Free sample shipping on all orders",
+    zh: "全部订单免示例运费",
+    ms: "Penghantaran contoh percuma untuk semua pesanan",
+  },
+  "promo.rule_scope_with_items": {
+    en: "Applies to: {names}, and the items below",
+    zh: "适用：{names}，以及下方列出的商品",
+    ms: "Untuk: {names}, dan item di bawah",
+  },
+  "promo.rule_scope": {
+    en: "Applies to: {names}",
+    zh: "适用：{names}",
+    ms: "Untuk: {names}",
+  },
 } as const satisfies Record<string, CopyEntry>;
 
 export type CopyKey = keyof typeof COPY;
