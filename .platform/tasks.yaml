@@ -6738,7 +6738,7 @@ tasks:
       运营者落实写法（HANDOFF 0.97）：读取模块照 frontend/src/api/catalog.ts（credentials 为 omit，语言用 ?lang=，非 2xx 抛错误类，响应按类型直接取用、不做逐字段校验）；类型照接口实际返回（promotion 为 null 或 PromotionDisplay，server_time 与 ends_at 为带 Z 的 UTC 字符串，规则含 tiers、categories 与 has_products）。文案函数都以 Language 为参数、内部用 translate 与 formatSen，不读组件上下文；金额只格式化接口给的整数仙，不另算。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 10 条：只把接口给的规则参数与金额套进文案模板，不计算金额，不碰个人资料。
       拆分：前台活动的第一层（6 个允许路径：读取模块与纯函数各带测试、copy.ts 与任务记录），依赖 SHOP-TASK-243（公开展示接口）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-243
     acceptance_criteria:
