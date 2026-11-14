@@ -6659,7 +6659,7 @@ tasks:
       运营者落实写法：计数表 promotion_ai_daily_usage（模型 PromotionAiDailyUsage）：usage_date 为 Date 主键（第 13 条「计数表以马来西亚日期为主键」，不另设 id 列）、call_count 非空 Integer（>= 0，检查约束 call_count_non_negative）。记录表 promotion_ai_calls（模型 PromotionAiCall）：id 主键、called_at 不带时区的 DateTime、result String(16) 取 ok、invalid、timeout、error（检查约束 result_valid；ok 为合格的提案，invalid 为模型回答不合格，timeout 为超时，error 为其余失败含 Billing Hub 拒绝）、input_tokens 与 output_tokens 为可空 Integer（>= 0，没拿到用量时为空）。不建外键（记录不关联活动与管理员，第 13 条只要求时间、结果类别与用量）。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 13 条：只记调用次数与用量，不存描述与回答原文，不碰个人资料与金额。
       拆分：节日促销 AI 提案的第一个任务（5 个允许路径），依赖 SHOP-TASK-230（迁移 0028 为它的 down_revision）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-230
     acceptance_criteria:
