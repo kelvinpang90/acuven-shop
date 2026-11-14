@@ -7121,3 +7121,33 @@ tasks:
       - format.check
     creates_branch: true
     creates_pull_request: true
+
+  # 同主机部署串行化（Kelvin 2026-11-14 批准方案 D）。同一台主机上多个项目合并即部署，一个项目部署成功后的 image prune
+  # 落在另一个项目拉镜像的几秒里，containerd 报错、部署失败（2026-10-27、11-03、11-14 三次；11-14 正是本项目部署后的 prune）。
+  # 各项目在 deploy/deploy.sh 开头取同一把主机级 flock，持锁覆盖整个脚本（含 prune 与回滚）。不碰钱、不碰个人数据，不走设计闸门。
+  # 由运营者在人工会话里实现（Kelvin 2026-11-14 决定第一批四个仓库各开一个人工会话），不在 Telegram 开启；合并部署后手工收尾。
+  - id: SHOP-TASK-264
+    title: 部署脚本加主机级部署锁，部署 job 超时改为 17 分钟
+    purpose: >-
+      让本项目的部署与同一台主机上其他项目的部署一个接一个跑：deploy/deploy.sh 在参数检查之后、第一次碰 docker 之前取主机级 flock，
+      持锁到脚本退出（拉镜像、迁移、换容器、等健康、prune、回滚都在锁内），最多等 300 秒，等不到就在改动任何东西之前以非零退出。
+      锁片段照 vps_infra 部署串行化方案第 5.1 节逐字照抄，项目名写 acuven_shop；默认锁文件路径写进脚本是 Kelvin 2026-11-14 批准的
+      「不写服务器绝对路径」规则的例外（只限这一个锁文件路径）。部署 job 最坏要等锁 5 分钟，所以 deploy.yml 的部署 job 超时改为 17 分钟，
+      两个 job 合计 29 分钟，仍满足 D5 的 30 分钟。不改触发器（on 段）、build job、compose 与应用代码，不加拉镜像重试，不加审批闸门。
+      设计闸门：不适用（部署脚本与 CI 配置，不碰钱、不碰个人数据、不改数据库结构）。由运营者实现，不交给 Worker。
+    status: ready
+    depends_on: []
+    acceptance_criteria:
+      - 锁——deploy/deploy.sh 在 SHOP_IMAGE_REPO 检查之后、记下正在跑的版本之前插入方案第 5.1 节的锁片段（项目名 acuven_shop）；ACUVEN_DEPLOY_LOCK 与 ACUVEN_DEPLOY_LOCK_WAIT 可覆盖默认锁文件与 300 秒；锁之后的顺序与各条失败语义不变
+      - 超时——.github/workflows/deploy.yml 的 deploy job 的 timeout-minutes 由 12 改为 17，文件头 D5 注释的合计由 24 改为 29 分钟；不改触发器（on 段）、build job 与其他步骤
+      - 验证——在 Linux 上用真 flock 跑两条路径并把结果写进 PR 描述：锁被占时脚本等待、日志写出持锁方；等锁超时时以非零退出，且没有执行任何 docker 命令
+      - docs/task-records/SHOP-TASK-264.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改 .platform/、compose 与应用代码，不装依赖；以 Draft PR 交付（设计闸门写明不适用及理由），CI 全绿、Codex 审查可合并后由运营者合并
+    allowed_change_paths:
+      - deploy/deploy.sh
+      - .github/workflows/deploy.yml
+      - docs/task-records/SHOP-TASK-264.md
+    allowed_commands:
+      - lint.check
+      - format.check
+    creates_branch: true
+    creates_pull_request: true
