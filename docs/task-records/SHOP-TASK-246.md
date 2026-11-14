@@ -27,3 +27,15 @@
   - `called_at` 不建索引（验收未要求；限额按计数表判断，不扫记录表）。
 - 验证到什么程度：人工逐条对照验收标准与 DESIGN 1.23 第 13 条，人工核对迁移常量与模型文本一致并由测试逐字比对。迁移在 MySQL 8 上的往返与 alembic check、全部后端测试由 PR 的必需 CI 检查 `backend` 执行。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-14 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 模型——app/models/promotion_ai.py 的 PromotionAiDailyUsage 与 PromotionAiCall 照落实写法的列与检查约束，结果类别导出常量 AI_RESULT_OK、AI_RESULT_INVALID、AI_RESULT_TIMEOUT、AI_RESULT_ERROR 与元组 AI_RESULTS；两个模型加进 app/models/__init__.py 的 import 与 __all__
+      - 迁移——新文件 alembic/versions/20261111_0029_promotion_ai.py，revision 0029、down_revision 0028，照 0027 的写法（不 import app，约束表达式作为常量自带并与模型逐字相同，约束名按 app/db/base.py 的命名约定逐个写出）；upgrade 建两张表；downgrade 直接删两张表（只是计数与调用记录，不影响订单与活动）
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，含 MySQL 8 上的迁移往返与 alembic check；Worker 沙箱不跑后端测试）——新文件 tests/test_promotion_ai_models.py 照 tests/test_promotion_models.py 用 SQLite 内存库：同一日期不能有两行；每条检查约束的正例与只让它不成立的反例；token 数可空；经 importlib 载入迁移核对 revision、down_revision 与约束常量和模型逐字相同。每条测试的文档字符串写明它守住的第 13 条哪一句
+      - docs/task-records/SHOP-TASK-246.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明表名、模型名与常量名，供 SHOP-TASK-248 引用）；改动只落在 allowed_change_paths；不改服务、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```

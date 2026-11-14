@@ -28,3 +28,18 @@
   - 取甲而活动不与积分同用、会员没填积分（只选了券）时，`points_cap` 为 0、`points_accepted` 为真、`points_not_combinable` 为假。
 - 验证到什么程度：人工逐条对照验收标准与 DESIGN 1.23 第 4、6、8、10 条，手算核对测试里的数字（如首例：甲 8300 − 2400 − 590 + 800 − 800 = 5310，乙 8300 − 830 + 800 = 8270；合计 5310 − 1000 = 4310）。测试、ruff check 与 ruff format 由 Worker 与 PR 的必需 CI 检查 `backend` 执行，结果以它们的记录为准。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-14 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 新字段——MemberCheckoutQuote 末尾加 promotion（quote_cart 给出的 PromotionQuote 或 None，原样转出）、promotion_plan（promotion、no_promotion 或 None）、promotion_pre_points_total_sen 与 other_pre_points_total_sen（int 或 None）、coupon_note（not_combinable、below_min_after_sale 或 None）、points_not_combinable（bool）。有不正常的行或超出整单上限时照现在提前返回，promotion 照转，其余新字段为 None 与 False
+      - 不比较的情形——没有运费报价、没有生效活动或本单不参加活动时，券与积分照现在按原价计算，promotion_plan 为 None；参加活动而会员没选券也没填积分时，promotion_plan 为 promotion，按活动后的金额与实际运费给出合计，两个积分前应付为 None，points_cap 在活动与积分同用时为可用余额与活动后商品额较小者、不同用时为 0
+      - 比较——参加活动且会员选了券或填了积分时调用 choose_promotion_plan（coupon 为可用券组成的 CouponTerms 或 None，两个开关取活动的设置）：promotion_plan 照所取方案；两个积分前应付分别为甲与乙的；取甲时 price_order 带每件活动优惠、券只在 use_coupon 时用、积分只在 points_allowed 时按现在的上限规则接受，合计为现金实付合计加实际运费；取乙时与没有活动时相同（含未免的运费）
+      - 说明字段——取甲且券可用而未用时，coupon_note 在活动不与券同用时为 not_combinable，否则为 below_min_after_sale；取甲、会员填了积分而 points_allowed 为 False 时 points_not_combinable 为 True、points_cap 为 0、points_redeemed 为 0、points_accepted 为 True（这是活动不同用积分，不是积分输入错误）；coupon_applicable 仍表示券本身是否可用
+      - 接口——MemberQuoteOut 加同名字段（promotion 的结构同 PromotionQuote，可直接以该数据类为字段类型），照服务层结果输出；其余校验、错误与 no-store 不变
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_member_promotion_quote.py 照第 8 条：首例（两个开关都打开，10% 券最低消费 RM50，1000 积分，西马）取甲，两个积分前应付为 5310 与 8270，券 590、积分 1000、合计 4310；关闭券同用时取甲、coupon_note 为 not_combinable、合计 4900；D 例取乙；第三例取乙且合计 5800；只关闭积分同用时 points_not_combinable 为 True；没有运费报价时 promotion_plan 为 None 而 promotion 有暂算值；check_coupon 与 reserve_coupon 在券可用时给出 min_subtotal_sen。接口层固定 _utcnow 后响应带上这些字段（MemberQuoteOut 在路由里逐字段构造，新字段同样逐个传入）；tests/test_member_orders_api.py 的 MEMBER_QUOTE_FIELDS 只为加上新字段而改。每条测试的文档字符串写明它守住的第几条哪一句
+      - docs/task-records/SHOP-TASK-236.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明方案判定函数的名称与签名、新字段与 JSON 字段名）；改动只落在 allowed_change_paths；不改下单、游客计价、展示、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```

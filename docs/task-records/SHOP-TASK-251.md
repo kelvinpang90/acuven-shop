@@ -43,3 +43,15 @@
   - 客户端以 `AiHubClient.from_settings(request.app.state.settings)` 每次请求构造（不缓存），配置改动后重启即生效。
 - 验证到什么程度：人工逐条对照验收标准、第 13 条、A12 的 AI 区与 SHOP-TASK-248 的记录（签名、异常、字段），以及 `app/api/admin_categories.py` 与 `app/api/admin_promotions.py` 的写法。没有连真实的 Billing Hub。后端测试、ruff check 与 ruff format 由 Worker 与 PR 的必需 CI 检查 `backend` 执行，结果以它们的记录为准。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-14 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 路由——GET /api/admin/promotion-ai/status 返回只有 configured 一个布尔字段的对象；POST /api/admin/promotion-ai/proposal 请求体为 description（字符串）与 rules（每项为 kind 与 SHOP-TASK-239 RuleInput 的参数字段，不含商品与分类 ID），要 CSRF，成功 200 返回只有 proposal 一个字段的对象（字段同 DecorationProposal）；在 app/main.py 后台段照现有顺序注册
+      - 错误——没有会话 401 admin_session_required，POST 没有 CSRF 403 csrf_failed，请求体超过 8 KB 413、不是 JSON 415、结构或类型不对 422（不回显）；PromotionInvalid 为 422 promotion_invalid（带问题列表，写法同 SHOP-TASK-242）、AiNotConfigured 为 503 ai_not_configured、AiDailyLimit 为 429 ai_daily_limit、AiUnavailable 为 503 ai_unavailable、AiResultInvalid 为 502 ai_result_invalid；所有响应带 no-store
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_promotion_ai_api.py（以替身代替服务层或客户端，固定本模块与 admin_auth 的 _utcnow）：未配置与已配置时 status 的值；成功的响应形状；每个错误码；401、403、413、415、422 的顺序且不调用服务层；no-store。每条测试的文档字符串写明它守住的第 13 条或 UX 的哪一句
+      - docs/task-records/SHOP-TASK-251.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明路由、请求与响应字段、错误码，供前台 A12 的 AI 任务引用）；改动只落在 allowed_change_paths；不改服务层、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```

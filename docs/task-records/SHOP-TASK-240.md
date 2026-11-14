@@ -24,3 +24,16 @@
   - 在验收之外另导出 `SLOT_DESKTOP`、`SLOT_PHONE`、`POSTER_SLOTS` 与宽度下限常量，供 250 与测试共用。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.23 第 12 条、第 15 条的存放与替换顺序、HANDOFF 0.93，以及 `app/models/promotion.py` 海报五列的约束（同为空或同不为空、格式、展示图宽高 1–1,600）；存储以假函数替代，不访问 R2；SQLite 不生成 FOR UPDATE，MySQL 上的加锁与并发没有在这里验证。测试、ruff check 与 ruff format 由 Worker 与 PR 的必需 CI 检查 `backend` 执行，结果以它们的记录为准。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-14 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 处理——process_image(data, *, min_side, min_long_side, min_width=0)：按 EXIF 方向转正之后的宽（即显示方向的宽）小于 min_width 即 ImageRejected，其余行为与现在相同（现有调用不传，结果不变）
+      - 服务——新文件 app/services/promotion_poster.py：poster_path(file_name) 返回 /api/promotion-posters/ 加文件名加 .webp；poster_file_names(db) 返回所有活动装饰行引用的海报文件名集合（供 250 的公开提供判断）；replace_poster(db, settings, admin_account_id, promotion_id, slot, image, now) 照 replace_logo 的顺序（锁外写对象、事务里锁活动行改五列、写审计、提交失败删新对象、提交后删旧对象）并返回新路径；remove_poster(db, settings, admin_account_id, promotion_id, slot, now) 照 remove_logo（没有图时照样成功、不写审计）
+      - 状态与异常——活动不存在抛 249 的 PromotionNotFound；ended 抛新异常 PromotionEnded（加在 app/services/admin_promotions.py，241 复用）；已发布的上传图模式移除抛新异常 PosterRequired（加在本文件）；审计 action 为 admin_promotion_poster_uploaded 与 admin_promotion_poster_removed，target 为 promotion 与活动 ID，旧值与新值为「slot 文件名」，没有图的一侧只写 slot
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_promotion_poster.py（以替身代替存储）：宽 1199 与 1200 的桌面图、宽 599 与 600 的手机图；替换后旧对象被删；移除；不改活动的 version；ended、不存在与已发布上传图模式的移除；审计写法；process_image 不传 min_width 时与现在相同。每条测试的文档字符串写明它守住的设计句子、HANDOFF 0.93 的那一点或本任务的落实写法
+      - docs/task-records/SHOP-TASK-240.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明函数签名与异常，供 250 引用）；改动只落在 allowed_change_paths；app/services/admin_promotions.py 只为加 PromotionEnded 而改；不改接口、计价、下单、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```

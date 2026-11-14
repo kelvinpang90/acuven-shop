@@ -57,3 +57,16 @@
   - 最大请求体按 10 位数 ID 与写满的文案估算约 57 KB，64 KB 够用；页面应以紧凑 JSON（`JSON.stringify` 默认）提交。
 - 验证到什么程度：人工逐条对照验收标准、落实写法的错误映射与 `app/api/admin_categories.py` 的写法；SQLite 不生成 FOR UPDATE，MySQL 上的加锁不在这里验证。测试、ruff check 与 ruff format 由 Worker 与 PR 的必需 CI 检查 `backend` 执行，结果以它们的记录为准。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-14 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 路由——GET /api/admin/promotions（列表，带 csrf_token）、POST /api/admin/promotions（新建，201）、GET /api/admin/promotions/{promotion_id}（读取，带 csrf_token）、PUT /api/admin/promotions/{promotion_id}（保存，请求体为 PromotionInput 的字段加 version）、POST /api/admin/promotions/{promotion_id}/publish、/withdraw、/end（请求体只有 version）、POST /api/admin/promotions/{promotion_id}/copy（没有请求体，201）、DELETE /api/admin/promotions/{promotion_id}（请求体只有 version，成功 204）；在 app/main.py 后台段照现有顺序注册
+      - 请求与响应——请求模型字段名与 SHOP-TASK-239 的输入数据类相同（嵌套的规则、满额档、装饰与文案），类型严格；响应为 PromotionDetail 或列表的同名字段；写操作都要 CSRF（403 csrf_failed），没有会话 401 admin_session_required；所有响应带 no-store
+      - 错误——照落实写法映射；请求体超过 64 KB 为 413，不是 JSON 为 415，结构或类型不对为 422（不回显输入）
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_promotions_api.py 照 tests/test_admin_categories_api.py 的写法（固定本模块与 admin_auth 的 _utcnow）：每个路由的成功响应形状；路由清单的断言只列本文件 router 上的路由（不按 /api/admin/promotions 前缀扫描应用的全部路由——之后 SHOP-TASK-250 与 245 会在同一前缀下加海报与预览的路由）；401、403、413、415、422 的顺序且不调用服务层；六种服务层异常的映射与响应体；20 条规则各带 200 件商品与 30 个分类 ID 的请求能通过请求体大小与结构校验并传给服务层（这一条以替身代替服务层，只验证 64 KB 上限够用，不建这么多数据）；no-store。每条测试的文档字符串写明它守住的 UX 或设计句子
+      - docs/task-records/SHOP-TASK-242.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明路由、请求与响应字段、错误码，供前台 A12 任务引用）；改动只落在 allowed_change_paths；不改服务层、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```

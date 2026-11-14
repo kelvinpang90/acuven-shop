@@ -52,3 +52,15 @@
 - MySQL 上的行锁等待与主键冲突的错误文本只按 `sms_budget` 的同类写法推定，SQLite 测试不复现阻塞。
 - 后端测试、ruff check 与 ruff format 由 Worker 与 PR 的必需 CI 检查 `backend` 执行，结果以它们的记录为准。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-14 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 服务——propose_decoration(db, client, settings, description, rules, now) 返回 DecorationProposal（落实写法所列的字段）：rules 为 SHOP-TASK-239 的 RuleInput 序列（范围字段忽略、不送出）；描述去掉首尾空白后为 1–500 个字符（否则 PromotionInvalid，问题码 description），规则参数不合格同样抛 PromotionInvalid，都不计数；未配置抛 AiNotConfigured 且不计数；当天已达上限抛新异常 AiDailyLimit 且不调用；调用超时或失败抛 AiUnavailable（记 timeout 或 error）；回答不是一个 JSON 对象、多出或缺少字段、任何一项不合格抛新异常 AiResultInvalid（记 invalid）；合格记 ok 并返回
+      - 提示词——system 写明只回一个 JSON 对象、可选的 ID 清单与各文案的长度上限、文案不得含换行与控制字符、不得改动规则；user 内容为一个 JSON：描述、规则类别和参数，以及调用时从店铺装修单例行读出的当前 theme 与主色 ID（还没有那一行时取默认主题，照 app/services/store_design.py 的读取；accent 为空即该主题的默认主色，送出 app/models/store_design.py 的 THEME_ACCENTS 里该主题的第一项，不送 null）；以 output_schema 约束字段名；max_tokens 不超过 2000。测试断言送出的请求体里只有第 13 条所列四项，其中主题与主色等于当时店铺装修的取值（改过装修后送出新值；主色未选时送出该主题的默认主色 ID），没有商品 ID、订单与会员资料
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_promotion_ai.py（以替身客户端，SQLite 内存库）：合格的提案；清单外的 ID、超长文案、带换行、缺英文标题、多出字段、不是 JSON 时整份不用并记 invalid；上限 50 时第 51 次拒绝且不调用；当天没有行时先插后锁（两个会话各插一次不报错）；调用失败仍占用一次；记录表不含描述原文；送出的内容只有四项；描述与规则不合格不计数。每条测试的文档字符串写明它守住的第 12 或 13 条哪一句
+      - docs/task-records/SHOP-TASK-248.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明函数签名、提案字段与异常，供 251 引用）；改动只落在 allowed_change_paths；不改活动的保存与计价、接口、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```

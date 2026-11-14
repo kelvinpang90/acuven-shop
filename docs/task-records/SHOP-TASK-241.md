@@ -39,3 +39,17 @@
 - 供 SHOP-TASK-242 的调用写法：接口在会话里取出管理员 ID，以请求里的 `version` 调用对应函数；`now` 取服务端当前的不带时区 UTC（提前结束的时刻即由它截到整秒）；删除另传 `settings`，函数会调用存储，应放进线程。需转成回答的异常：`PromotionChanged`（「活动已被改动」）、`PromotionStateInvalid`（带 `state`）、`PromotionInvalid`（问题码 publish_missing、scope_overlap 及其 `field`，见 SHOP-TASK-249 的记录）、`PromotionOverlap`（`other_name`）、复制的 `PromotionNotFound`。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.23 第 1、2 条、UX A12 的状态表，以及 `app/models/promotion.py` 的约束（`ended_early_within`、`published_has_times`、海报五列同为空或同不为空）与 `app/models/order.py` 的 `orders.promotion_id`；手算核对测试里的时间换算，例如马来西亚 2026-11-13 12:00 为 UTC 04:00，UTC 04:00:30.75 截到整秒为 04:00:30。SQLite 不生成 FOR UPDATE，MySQL 上的加锁顺序、撤回与下单共享锁的互斥没有在这里验证。测试、ruff check 与 ruff format 由 Worker 与 PR 的必需 CI 检查 `backend` 执行，结果以它们的记录为准。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-14 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 函数——publish_promotion、withdraw_promotion、end_promotion、delete_promotion 的签名为 (db, settings 或省略, admin_account_id, promotion_id, version, now)（只有 delete 带 settings），copy_promotion(db, admin_account_id, promotion_id, now) 返回新草稿的 PromotionDetail；其余返回操作后的 PromotionDetail（删除返回 None）。版本不符或不存在抛 PromotionChanged（复制时不存在抛 PromotionNotFound）
+      - 状态限制——发布只对 draft；撤回只对 scheduled；提前结束只对 running；删除只对 draft；复制对任何状态。不满足即抛新异常 PromotionStateInvalid（带当前 state），不改库
+      - 发布——不满足发布条件或商品级规则按当时的商品与分类有重叠抛 PromotionInvalid（publish_missing 与 scope_overlap 问题），与其他已发布活动时间重叠抛 PromotionOverlap；通过后 status 为 published、版本加一。撤回——status 改回 draft、版本加一；已有订单引用时抛 PromotionStateInvalid（state 为 running）。提前结束——ended_early_at 为截到整秒的当前时刻，版本加一，之后 active_promotion 不再返回它
+      - 审计——发布、撤回、提前结束、删除、复制各写一条：admin_promotion_published、admin_promotion_withdrawn、admin_promotion_ended、admin_promotion_deleted（旧值为内部名称）、admin_promotion_copied（target 为新草稿，旧值为原活动 ID）；target_type 为 promotion；不含个人资料
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_promotion_status.py：每种操作在允许与不允许的状态下；发布条件逐项缺失；草稿保存后商品改了分类、发布时报 scope_overlap；两个活动的时间相接可以、重叠不行；开始时间已过的发布立即生效（active_promotion 返回它）；提前结束后不再生效且 ended_early_at 不晚于结束时间；已有订单引用的 scheduled 活动不能撤回；删除连同规则、范围、满额档与装饰，提交后删海报对象（以替身记录调用）；复制的新草稿没有时间与海报、模式为模板、规则与原活动相同但 ID 不同；版本不符；审计写法。每条测试的文档字符串写明它守住的第 1 或 2 条哪一句
+      - docs/task-records/SHOP-TASK-241.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明函数签名与异常，供 242 引用）；改动只落在 allowed_change_paths；不改接口、计价、下单、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```

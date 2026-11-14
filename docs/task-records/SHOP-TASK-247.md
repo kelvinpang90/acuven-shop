@@ -42,3 +42,16 @@
 - `tests/test_ai_hub.py` 以替身传输函数覆盖：请求的地址（含末尾斜杠）、方法、两个请求头、请求体字段与 `feature`、`output_config` 的格式；200 的解析（含多余字段）；超时（`TransportTimeout` 与 `TimeoutError`）为 `AiTimeout`、网络错误与各种非 200 为 `AiUnavailable`，都只发一次；缺 `usage`、`text` 不是字符串、token 数不是整数、不是 JSON 或被截断时为 `AiUnavailable`；四项缺一或地址不是 `https://` 时 `AiNotConfigured` 且不调用传输函数；默认设置未配置、从 `SHOP_AI_*` 环境变量读取；`repr` 只显示 configured，请求、响应、结果与异常的 repr 和消息里没有密钥、请求内容或响应内容；本模块不写日志。默认传输：一次 JSON POST、超时 60 秒、响应最多读 64 KB、非 2xx 作为响应、超时（含被 `URLError` 包着的）为 `TransportTimeout`、其余为 `TransportError`、拒绝 `http://`、不跟随重定向。
 - `tests/test_compose_env.py`：五个 `SHOP_AI_` 变量在 `shop_api` 的写法、不在 `shop_jobs`、compose 默认值与 `Settings` 默认值一致（四项字符串为空串、上限为整数 50）。
 - 每条新增测试的文档字符串写明它守住的第 13 条哪一句。后端测试由 PR 的必需 CI 检查 backend 执行，Worker 沙箱不跑后端测试。
+
+## 登记时的验收标准（原文）
+
+2026-11-14 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 配置——app/core/config.py 的 Settings 照落实写法加五个字段；AiHubClient.from_settings(settings, transport=urllib_transport) 的 configured 属性照落实写法判断，repr 只显示 configured
+      - 调用——AiHubClient.create_message(system, user_text, *, max_tokens, output_schema) 发出一次 POST（地址为 base_url 去掉末尾斜杠后接 /v1/messages），output_schema 不为 None 时带 output_config 的 format（type 为 json_schema）；成功（200 且 JSON 里有字符串 text 与整数的 usage.input_tokens、usage.output_tokens）返回 AiReply(text, input_tokens, output_tokens)；未配置抛 AiNotConfigured 且不发请求；超时抛 AiTimeout；其余失败（连不上、非 200、响应不是所述的 JSON）抛 AiUnavailable，异常不带响应内容与密钥；不重试
+      - 部署配置——docker-compose.yml 的 shop_api 加五个 SHOP_ 变量（只为此改动这个文件，变量名与 .env.example 里运营者已加的相同），不写真实地址与密钥
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_ai_hub.py 以替身 transport 覆盖：请求的地址、方法、两个请求头、请求体字段与 feature；200 的解析；超时、非 200、缺 usage、text 不是字符串时的异常；未配置时不调用 transport；repr 与异常信息里没有密钥；tests/test_compose_env.py 的现有核对（每个 Settings 字段都传给 api）因新字段需要的期望值照现有写法更新。每条测试的文档字符串写明它守住的第 13 条哪一句
+      - docs/task-records/SHOP-TASK-247.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明五个变量名、类与异常名，并列出上线前 Kelvin 要在服务器私有配置里设置的变量）；改动只落在 allowed_change_paths；除 docker-compose.yml 的这五个变量外不改部署配置、CI 与 .platform/，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```

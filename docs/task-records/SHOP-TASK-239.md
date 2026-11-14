@@ -38,3 +38,17 @@
   - 新增验收未点名的 `clean_text`、`clean_copy`、`has_forbidden_char`、`STATE_*` 与若干上限常量，供 249、241、248 共用。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.23 第 1–3、12 条、UX A12 与 `app/models/promotion.py` 的常量，手算核对测试里的边界（2027-01-01 加 92 天为 2027-04-03；带零宽连接符的一家三口 emoji 为 5 个码位）。测试、ruff check 与 ruff format 由 Worker 与 PR 的必需 CI 检查 `backend` 执行，结果以它们的记录为准。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-14 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 输入——frozen 数据类 TierInput(threshold_sen, amount_sen, percent)、RuleInput(kind, discount_mode, percent, amount_sen, buy_quantity, get_quantity, get_percent, threshold_sen, product_ids, category_ids, tiers)、DecorationInput(pack, palette, ambient, home_poster, list_strip, card_badge, detail_ribbon, cart_progress, poster_mode)、CopyInput（title、subtitle、badge、strip、poster_alt 各有 _en、_zh、_ms）与 PromotionInput(name, starts_at, ends_at, coupon_combinable, points_combinable, rules, decoration, copy)；规则的排序为 rules 里的顺序（从 1 起）
+      - 问题与异常——PromotionProblem(code, field, product_id, product_name)（后两项只在 scope_overlap 时有值，product_name 为英文名称，供页面显示）与 PromotionInvalid(problems)；问题码至少有 name、time、duration、rule、scope、tiers、decoration、copy，供 249 再加 scope_overlap、publish_missing、rules_locked、ended_readonly；每个问题的 field 指出出错的字段（规则带从 1 起的序号）
+      - 检查函数——check_rule_params(rule) 只查类别与参数（第 3 条的范围与满额档 1–5 档、方式一致、门槛与优惠逐档严格递增、固定金额小于门槛；不属于该类别的参数与满额档须为空，否则问题码 rule），不查范围；check_rule_scope(rule) 查商品级规则至少选一件商品或一个分类、各至多 200 件与 30 个、同一规则里不重复，整单级规则的范围须为空（问题码 scope）；check_decoration(decoration) 查各 ID 在 app/models/promotion.py 的常量里（第 12 条，以 docs/design/tokens/promotions.json 为准）；check_copy(copy) 查长度（标题 0–40、副标题 0–80、角标短语 0–12、横条文字 0–60、替代文字 0–150）与不含换行和控制字符（Unicode 类别 Cc，以及行分隔符与段分隔符 U+2028、U+2029；零宽连接符等 Cf 类允许，emoji 要用）；内部名称同样去掉首尾空白、照同一字符规则检查；check_promotion_input(data) 依次组合以上各项并查内部名称 1–100 个字符、时间格式（分钟精度或 None；两者都有时结束晚于开始、时长不超过 92 天）、商品级规则至多 20 条、满额减或满额折与免运费各至多一条，有问题即抛 PromotionInvalid
+      - 时间与状态——to_utc(local) 与 to_local(utc) 照落实写法换算（格式不对抛 ValueError）；promotion_state(status, starts_at, effective_end, now) 返回 draft、scheduled、running 或 ended
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_promotion_input.py：每项取值的边界与问题码（含 92 天整与多一分钟、百分比 0 与 91、X 与 Y 的 0 与 11、档的递增与固定金额等于门槛、201 件商品与 31 个分类、41 个字符的标题与含换行的文案、清单外的 ID）；check_rule_params 不因缺范围报错；时间换算（跨日、带秒的 UTC 反向换算截秒）；四种状态的边界（开始时刻为 running、实际结束时刻为 ended）。每条测试的文档字符串写明它守住的第几条哪一句
+      - docs/task-records/SHOP-TASK-239.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明公开的数据类、函数签名、异常与问题码，供 249、241、248 引用）；改动只落在 allowed_change_paths；不改查库与写库的逻辑、接口、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```

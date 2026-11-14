@@ -26,3 +26,15 @@
   - 反向代理为海报上传路径放行至少 5 MB 请求体的上线依赖已记在 `docs/HANDOFF.md`（「节日促销海报图上线前……」一条），本任务不改 HANDOFF。
 - 验证到什么程度：人工逐条对照验收标准、落实写法的检查顺序与 `app/api/admin_store_logo.py`、`app/api/store_logos.py` 的写法；存储以替身代替，不访问 R2；SQLite 不生成 FOR UPDATE，MySQL 上的加锁没有在这里验证。测试、ruff check 与 ruff format 由 Worker 与 PR 的必需 CI 检查 `backend` 执行，结果以它们的记录为准。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-14 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 后台接口——新文件 app/api/admin_promotion_poster.py：PUT 与 DELETE /api/admin/promotions/{promotion_id}/poster/{slot}，按落实写法的顺序检查；请求体读取、415、413、503 与 no-store 照 app/api/admin_store_logo.py；PosterRequired 为 409 poster_required；成功 200，响应体只有 poster 一个字段（新路径，移除后为 null）
+      - 公开提供——新文件 app/api/promotion_posters.py：GET /api/promotion-posters/{name}，文件名格式、404、503、响应头与缓存照 app/api/store_logos.py；文件名不在 poster_file_names 里即 404。两个路由在 app/main.py 照现有顺序注册（公开段与后台段各一处）
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_promotion_poster_api.py 照 tests/test_admin_store_logo_api.py 与 tests/test_store_logos_api.py 的写法（固定本模块与 admin_auth 的 _utcnow，以替身代替存储）：检查顺序（不存在与 ended 先于存储与请求体的检查，不读请求体）；上传、替换、移除的响应；图片不合格 422；已发布上传图模式移除 409；公开提供被引用与未被引用的文件名、存储不可用 503。每条测试的文档字符串写明它守住的设计句子或本任务的落实写法
+      - docs/task-records/SHOP-TASK-250.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明路径与错误码，供前台 A12 任务引用）；改动只落在 allowed_change_paths；不改服务层、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```

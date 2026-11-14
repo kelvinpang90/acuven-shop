@@ -24,3 +24,16 @@
   - 计价请求体在 CSRF 与路径 ID 之后才读取（游客计价没有会话与 CSRF，413 先于一切）；413 因此在 401、403 与路径 422 之后。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.23 第 8、11 条、UX 0.20 A12 与所复用的服务层函数签名。测试、ruff check 与 ruff format 由 Worker 与 PR 的必需 CI 检查 `backend` 执行，结果以它们的记录为准。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-14 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 路由——GET /api/admin/promotions/{promotion_id}/preview?lang=（响应为 promotion 与 server_time 两个字段，同 GET /api/promotion）、GET …/preview/products（查询参数同 GET /api/catalog/products，含 sale）、GET …/preview/products/{slug}（找不到 404 照商品详情）、POST …/preview/quote（请求体同游客计价，响应同游客计价）；在 app/main.py 后台段照现有顺序注册
+      - 条件与错误——每个路由先校验会话（401 admin_session_required）、路径 ID（422），再读活动：不存在 404 promotion_not_found，不满足可预览条件 409 promotion_preview_unavailable（查询参数与请求体的 422，含目录接口在处理函数里做的选项参数解析，都先于读活动完成；只有 quote_cart 内部按收货地址查运费时给出的目的地不合法 422 与运费行缺失 503 在读活动之后，照游客计价接口的写法回答）；POST 的顺序为会话、CSRF（403 csrf_failed）、路径、请求体（大小上限与 422 的写法照游客计价接口 POST /api/checkout/quote，它不查 Content-Type、不是 JSON 也是 422），再读活动；预览计价不受游客计价的来源限流约束；所有响应带 no-store
+      - 隔离——公开的 GET /api/promotion、商品目录与计价接口不读任何预览参数，管理员预览期间访客看到的不变（测试同时调用公开接口断言 promotion 为 null）
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_promotion_preview_api.py（固定本模块与 admin_auth 的 _utcnow）：草稿与未开始活动的四个预览路由给出活动价、角标、sale 列表与第 8 条的计价（游客，西马 800 时 total_sen 5900）；进行中、已结束、草稿缺时间、结束已过时 409；不存在 404；没有会话 401；POST 没有 CSRF 403；公开接口同时为 null。每条测试的文档字符串写明它守住的第 11 条或 UX 的哪一句
+      - docs/task-records/SHOP-TASK-245.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明路由与错误码，供前台 A12 预览任务引用）；改动只落在 allowed_change_paths；不改服务层、公开接口、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```

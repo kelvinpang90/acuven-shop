@@ -51,3 +51,17 @@
   - 重叠问题的 `field` 取该商品第二次出现的那条规则 `rules.<序号>`；`product_name` 在英文名称为空时用 slug，免得页面没有可显示的名称。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.23 第 1–3、12 条、UX A12 的状态表，以及 `app/models/promotion.py`、`app/models/order.py` 的约束；手算核对测试里的时间换算，例如 UTC 2026-11-08 00:00 为马来西亚 08:00，UTC 2026-11-12 01:30:45 截到分钟为马来西亚 09:30。MySQL 上的加锁顺序与并发没有在 SQLite 里验证（SQLite 不生成 FOR UPDATE）。测试、ruff check 与 ruff format 由 Worker 与 PR 的必需 CI 检查 `backend` 执行，结果以它们的记录为准。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-14 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 查库检查（同一事务）——规则引用的商品与分类须存在（问题码 scope）；草稿与未开始活动的商品级规则两两不得有共同的商品（照落实写法计算），每件重叠的商品一个 scope_overlap 问题（带 product_id 与 product_name），第 3 条末段；已发布活动的发布条件照落实写法，缺的每项一个 publish_missing 问题，field 取 rules、title_en、starts_at、ends_at、ends_at_past（结束不晚于当前时刻）、poster_desktop、poster_phone、poster_alt_en 之一（scheduled 清空开始或结束时间即 starts_at 或 ends_at 的 publish_missing）；scheduled 另与其他已发布活动的时间不重叠（重叠抛 PromotionOverlap，带对方的内部名称；相接可以）
+      - 列表与读取——list_promotions(db, now) 返回 PromotionSummary(id, name, state, starts_at, ends_at, rule_count, updated_at) 的列表（时间为马来西亚本地字符串，ends_at 为实际结束；updated_at 为不带时区的 UTC），按 running、scheduled（开始从早到晚）、draft（最近修改在前）、ended（结束从晚到早）排列，同序按 ID 从大到小；read_promotion(db, promotion_id, now) 返回 PromotionDetail（id、version、state、ended_early_at（提前结束的马来西亚本地时刻或 None）、PromotionInput 的全部字段、规则各带 rule_id 与所选商品的 slug 和英文名称、两张海报图的提供路径——/api/promotion-posters/ 加文件名加 .webp，该接口由 SHOP-TASK-250 提供——或 None），不存在抛 PromotionNotFound
+      - 新建与保存——create_promotion(db, admin_account_id, data, now) 照草稿的规则做 239 的取值检查与本任务的查库检查（商品与分类存在、商品级规则不重叠；草稿不查发布条件与时间重叠，不锁 promotion_publish_locks），新建草稿（version 1，装饰一行）并返回 PromotionDetail；save_promotion(db, admin_account_id, promotion_id, version, data, now) 照落实写法按状态限制、检查、加锁核对版本（不同或不存在抛 PromotionChanged），有改动版本加一，没有改动不加版本、不写审计，返回 PromotionDetail
+      - 审计——record_audit 的 target_type 为 promotion、target_id 为活动 ID：新建写一条 admin_promotion_created（新值为内部名称）；保存每个改动的字段写一条 admin_promotion_changed，旧值与新值写成「字段 值」（时间为马来西亚本地字符串，布尔为 true 或 false，空值只写字段名，文案带语言、值取前 100 个字符），规则有改动时只写一条，值为「rules 条数」；不含个人资料
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_promotions.py 用 SQLite 内存库：引用不存在的商品与分类；按商品与按分类的重叠各报出重叠商品与名称，未上架商品只在显式选时算重叠；进行中的活动在商品改分类后仍能保存文案；规则只改了范围的顺序时不算改动；四种状态的可改范围（running 改规则或时间报 rules_locked、running 清空英文标题报 publish_missing、ended 报 ended_readonly、running 改文案成功）；已有订单引用的 scheduled 活动按 running 处理；scheduled 保存时缺发布条件与时间重叠；版本不符与不存在；没有改动不加版本；审计的条数与写法；列表的排序。每条测试的文档字符串写明它守住的设计或 UX 句子，或本任务的落实写法
+      - docs/task-records/SHOP-TASK-249.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明公开的函数签名、异常与问题码，供 240、241、242 与前台任务引用）；改动只落在 allowed_change_paths；不改计价、下单、接口、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```
