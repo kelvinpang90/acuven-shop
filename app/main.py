@@ -11,6 +11,7 @@ from app.api.admin_coupons import router as admin_coupons_router
 from app.api.admin_orders import router as admin_orders_router
 from app.api.admin_product_images import router as admin_product_images_router
 from app.api.admin_products import router as admin_products_router
+from app.api.admin_promotion_ai import router as admin_promotion_ai_router
 from app.api.admin_promotion_poster import router as admin_promotion_poster_router
 from app.api.admin_promotion_preview import router as admin_promotion_preview_router
 from app.api.admin_promotions import router as admin_promotions_router
@@ -96,6 +97,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(admin_product_images_router)
     app.include_router(admin_promotions_router)
     app.include_router(admin_promotion_preview_router)
+    app.include_router(admin_promotion_ai_router)
     return app
 
 
