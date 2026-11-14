@@ -33,6 +33,7 @@ import RefundPage, { MemberRefundPage } from "./pages/RefundPage";
 import RegisterPage from "./pages/RegisterPage";
 import TrackOrderPage, { MemberOrderPage } from "./pages/TrackOrderPage";
 import TrackPage from "./pages/TrackPage";
+import { PromotionProvider } from "./promotion";
 import { RouterProvider, useRouter } from "./router";
 import type { RoutePattern } from "./router";
 import { StoreDesignProvider } from "./storeDesign";
@@ -84,6 +85,7 @@ function isAdminPattern(pattern: RoutePattern): boolean {
 
 // 以实际路径为 key：从一件商品换到另一件时页面重新开始（规格、数量与提示不带过去）。
 // 店铺装修设置只给前台：提供者在前台页之间切换时保留，设置只取一次；后台页不取。
+// 节日促销活动（promotion.tsx）同样只给前台：打开页面与切换语言时读取，在前台页之间切换时不再读取；后台页不读取。
 function CurrentPage({ storage }: { storage: LanguageStorage | null | undefined }) {
   const { path, pattern } = useRouter();
   const Page = PAGES[pattern];
@@ -92,7 +94,9 @@ function CurrentPage({ storage }: { storage: LanguageStorage | null | undefined 
     page
   ) : (
     <StoreDesignProvider storage={storage}>
-      <SiteFrame>{page}</SiteFrame>
+      <PromotionProvider>
+        <SiteFrame>{page}</SiteFrame>
+      </PromotionProvider>
     </StoreDesignProvider>
   );
 }
