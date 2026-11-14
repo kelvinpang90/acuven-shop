@@ -6791,7 +6791,7 @@ tasks:
       运营者落实写法：路径放在 /api/admin/promotion-ai/ 下，不放在 /api/admin/promotions/ 下（免得被活动 ID 的路由先匹配）。照 app/api/admin_categories.py 的会话、CSRF、请求体读取（上限 8 KB）、请求模型 extra forbid 与 strict、422 不回显（app/api/pay.py 的 _body_errors）与 _NoStoreRoute 写法。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 13 条：接口只传递与校验字段，出站内容与计数在 248 的服务层；不返回个人资料。
       拆分：节日促销 AI 提案的第四个任务（4 个允许路径），依赖 SHOP-TASK-248。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-248
     acceptance_criteria:
