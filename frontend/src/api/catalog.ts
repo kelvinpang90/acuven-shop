@@ -31,6 +31,19 @@ export interface CategoryListItem {
   image: string | null;
 }
 
+// 商品命中的生效活动商品级规则（DESIGN 1.23，SHOP-TASK-244）：角标所需的类别与参数，不属于该类别的参数为 null。
+// kind 为 item_discount 或 buy_x_get_y；discount_mode 只有打折有（percent 或 amount）。
+export interface CardPromotion {
+  rule_id: number;
+  kind: string;
+  discount_mode: string | null;
+  percent: number | null;
+  amount_sen: number | null;
+  buy_quantity: number | null;
+  get_quantity: number | null;
+  get_percent: number | null;
+}
+
 export interface ProductSummary {
   slug: string;
   name: LocalizedText;
@@ -40,6 +53,10 @@ export interface ProductSummary {
   min_price_sen: number;
   has_multiple_variants: boolean;
   sold_out_today: boolean;
+  // 命中的商品级规则；没有生效活动或没有命中时为 null。
+  promotion: CardPromotion | null;
+  // 命中打折规则时各启用规格活动单价的最小值（MYR 整数仙）；否则 null。页面不自行计算。
+  min_sale_price_sen: number | null;
 }
 
 export interface ProductPage {
@@ -68,6 +85,8 @@ export interface VariantDetail {
   price_sen: number;
   // 当日可用库存，只作提示。
   available_stock: number;
+  // 命中打折规则时该 SKU 的活动单价（MYR 整数仙）；否则 null（买 X 享 Y 不改显示单价）。
+  sale_price_sen: number | null;
 }
 
 export interface ProductDetail {
@@ -81,6 +100,8 @@ export interface ProductDetail {
   variants: VariantDetail[];
   // 每单限购：该商品所有 SKU 在一张购物车或订单中的件数合计上限。
   max_per_order: number;
+  // 命中的商品级规则；没有生效活动或没有命中时为 null。
+  promotion: CardPromotion | null;
 }
 
 // 商品列表接口的参数；category、option 与 slug 可重复，option 写成 <规格名 code>:<规格值 code>。
@@ -93,6 +114,8 @@ export interface ProductListRequest {
   sort?: SortOrder | undefined;
   page?: number | undefined;
   pageSize?: number | undefined;
+  // 专题页列表（UX P15，DESIGN 1.23）：为真时只取生效活动商品级规则范围内的商品；省略或为假时条件不变。
+  sale?: boolean | undefined;
 }
 
 export function categoriesUrl(language: Language): string {
@@ -121,6 +144,9 @@ export function productsUrl(language: Language, request: ProductListRequest = {}
   params.set("page", String(request.page ?? 1));
   if (request.pageSize !== undefined) {
     params.set("page_size", String(request.pageSize));
+  }
+  if (request.sale === true) {
+    params.set("sale", "true");
   }
   return `${CATALOG_BASE}/products?${params.toString()}`;
 }

@@ -36,6 +36,8 @@ function item(slug: string, image: string | null): ProductSummary {
     min_price_sen: 1500,
     has_multiple_variants: false,
     sold_out_today: false,
+    promotion: null,
+    min_sale_price_sen: null,
   };
 }
 

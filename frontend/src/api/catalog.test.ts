@@ -11,6 +11,7 @@ import {
   productDetailUrl,
   productsUrl,
 } from "./catalog";
+import type { ProductListRequest } from "./catalog";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -122,6 +123,34 @@ describe("catalog request addresses", () => {
   it("adds no slug parameter to other product list requests", () => {
     expect(productsUrl("en", { q: "tee" })).not.toContain("slug=");
     expect(featuredProductsUrl("en")).not.toContain("slug=");
+  });
+
+  // SHOP-TASK-262 验收「productsUrl 照落实写法支持 sale」，守住 UX 0.20 P15「商品区列出生效活动全部商品级规则范围内的上架商品」：
+  // 专题页的列表请求在现有参数之后带 sale=true，由服务端按生效活动的商品级规则取商品，页面不自行过滤。
+  it("asks for the sale products after the existing parameters when sale is true", () => {
+    const url = productsUrl("zh", { categories: ["bags"], sort: "price_asc", page: 2, pageSize: 12, sale: true });
+    expect(pathOf(url)).toBe("/api/catalog/products");
+    expect(params(url)).toEqual([
+      ["lang", "zh"],
+      ["category", "bags"],
+      ["sort", "price_asc"],
+      ["page", "2"],
+      ["page_size", "12"],
+      ["sale", "true"],
+    ]);
+    expect(productsUrl("en", { sale: true })).toBe("/api/catalog/products?lang=en&sort=newest&page=1&sale=true");
+  });
+
+  // SHOP-TASK-262 验收「sale 省略或为假时地址与现在逐字相同」，守住 UX 0.20 P15 只在专题页收窄商品范围：其他列表请求不带 sale 参数。
+  it("keeps the product list address unchanged when sale is omitted or false", () => {
+    const request: ProductListRequest = { q: "tee", categories: ["apparel"], options: ["size:m"], sort: "price_desc", page: 3, pageSize: 4 };
+    const unchanged = "/api/catalog/products?lang=ms&q=tee&category=apparel&option=size%3Am&sort=price_desc&page=3&page_size=4";
+    expect(productsUrl("ms", request)).toBe(unchanged);
+    expect(productsUrl("ms", { ...request, sale: false })).toBe(unchanged);
+    expect(productsUrl("ms")).toBe("/api/catalog/products?lang=ms&sort=newest&page=1");
+    expect(productsUrl("ms", { sale: false })).toBe("/api/catalog/products?lang=ms&sort=newest&page=1");
+    expect(featuredProductsUrl("en")).not.toContain("sale=");
+    expect(featuredBySlugsUrl("en", ["mug"])).not.toContain("sale=");
   });
 });
 

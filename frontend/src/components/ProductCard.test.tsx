@@ -17,6 +17,8 @@ function product(overrides: Partial<ProductSummary> = {}): ProductSummary {
     min_price_sen: 3900,
     has_multiple_variants: false,
     sold_out_today: false,
+    promotion: null,
+    min_sale_price_sen: null,
     ...overrides,
   };
 }

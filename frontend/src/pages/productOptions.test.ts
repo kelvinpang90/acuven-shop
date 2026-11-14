@@ -19,7 +19,7 @@ function text(value: string) {
 }
 
 function variant(sku: string, options: Record<string, string>, price_sen = 3900, available_stock = 20): VariantDetail {
-  return { sku, options, price_sen, available_stock };
+  return { sku, options, price_sen, available_stock, sale_price_sen: null };
 }
 
 function product(variants: VariantDetail[], overrides: Partial<ProductDetail> = {}): ProductDetail {
@@ -35,6 +35,7 @@ function product(variants: VariantDetail[], overrides: Partial<ProductDetail> = 
     ],
     variants,
     max_per_order: 10,
+    promotion: null,
     ...overrides,
   };
 }
