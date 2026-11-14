@@ -21,6 +21,8 @@ function item(slug: string, overrides: Partial<ProductSummary> = {}): ProductSum
     min_price_sen: 1800,
     has_multiple_variants: false,
     sold_out_today: false,
+    promotion: null,
+    min_sale_price_sen: null,
     ...overrides,
   };
 }

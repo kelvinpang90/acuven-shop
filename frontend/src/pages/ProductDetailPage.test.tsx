@@ -19,7 +19,7 @@ function text(value: string, english_fallback = false) {
 }
 
 function variant(sku: string, options: Record<string, string>, price_sen: number, available_stock = 20): VariantDetail {
-  return { sku, options, price_sen, available_stock };
+  return { sku, options, price_sen, available_stock, sale_price_sen: null };
 }
 
 // 只有红/S（RM 39.00）与蓝/M（RM 42.00）两个启用 SKU 的商品。
@@ -36,6 +36,7 @@ function product(overrides: Partial<ProductDetail> = {}): ProductDetail {
     ],
     variants: [variant("tee-red-s", { color: "red", size: "s" }, 3900, 7), variant("tee-blue-m", { color: "blue", size: "m" }, 4200, 3)],
     max_per_order: 5,
+    promotion: null,
     ...overrides,
   };
 }
