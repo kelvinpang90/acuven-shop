@@ -8,6 +8,11 @@ body { margin: 0; }
 .site { --gutter: 80px; display: flex; flex-direction: column; min-height: 100vh; }
 .site .acs-hint { margin: 0; }
 
+/* 节日促销活动的包裹元素（COMPONENTS「FestivalPromotion」）：始终渲染，与 .site 一样纵向弹性布局并撑满剩余高度，
+   页脚仍贴底，没有活动时外观不变。活动生效时的图案、配色与飘落动画来自 acuven-shop.css 的 .acs-promo 与 .acs-promo-garland */
+.site__promo { display: flex; flex-direction: column; flex-grow: 1; }
+.site__promo > .acs-promo-garland { flex-shrink: 0; }
+
 /* 桌面只显示 site-desktop-only，手机只显示 site-phone-only */
 .site-phone-only { display: none; }
 

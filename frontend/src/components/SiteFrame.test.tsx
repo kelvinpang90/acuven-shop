@@ -4,12 +4,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createMemberSessionReader, MEMBER_SESSION_URL } from "../api/memberSession";
 import type { MemberSessionReader } from "../api/memberSession";
+import type { PromotionDisplay, PromotionResponse } from "../api/promotion";
 import { createWhatsAppContactReader } from "../api/siteSettings";
 import type { WhatsAppContactReader } from "../api/siteSettings";
 import App from "../App";
 import { BRAND, COPY, LANGUAGES, formatCopy } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
+import { PromotionProvider } from "../promotion";
 import { isRoutePath, ROUTE_PATHS, RouterProvider } from "../router";
 import { DEFAULT_STORE_DESIGN, StoreDesignContext } from "../storeDesign";
 import SiteFrame, { StoreBrand, storeLogoBroken } from "./SiteFrame";
@@ -538,5 +540,114 @@ describe("store logo", () => {
     expect(footer(html)).toContain(`<div class="site-footer__main"><span class="acs-brand">${BRAND}</span>`);
     expect(html).not.toContain("<img");
     expect(footer(render("/"))).toContain(`<span class="acs-brand">${BRAND}</span>`);
+  });
+});
+
+describe("promotion decoration", () => {
+  function promotion(overrides: Partial<PromotionDisplay> = {}): PromotionDisplay {
+    return {
+      promotion_id: 7,
+      title: "Deepavali Sale",
+      subtitle: null,
+      badge: null,
+      strip: null,
+      pack: "deepavali",
+      palette: "deepavali",
+      ambient: "corners",
+      home_poster: "split",
+      list_strip: "band",
+      card_badge: "tag",
+      detail_ribbon: "ribbon",
+      cart_progress: "bar",
+      poster_mode: "template",
+      poster_desktop: null,
+      poster_phone: null,
+      poster_alt: null,
+      ends_at: "2026-11-14T05:00:00Z",
+      coupon_combinable: true,
+      points_combinable: true,
+      rules: [],
+      ...overrides,
+    };
+  }
+
+  // 以给定的一次读取结果（PromotionProvider 的 initial）渲染全站框架；读取替身从不返回，服务端渲染时也不会被调用。
+  function renderWithPromotion(display: PromotionDisplay | null): string {
+    return renderToStaticMarkup(
+      <LanguageProvider storage={null}>
+        <RouterProvider initialPath="/">
+          <PromotionProvider
+            initial={{ promotion: display, server_time: "2026-11-14T04:00:00Z" }}
+            fetcher={() => new Promise<PromotionResponse>(() => undefined)}
+            clock={() => 0}
+          >
+            <SiteFrame>
+              <main />
+            </SiteFrame>
+          </PromotionProvider>
+        </RouterProvider>
+      </LanguageProvider>,
+    );
+  }
+
+  // 根元素之内、包住横幅到页脚的包裹元素（开头标签）。
+  const wrapper = (html: string) => section(html, /^<div class="acs site"[^>]*><div class="site__promo[^"]*"[^>]*>/).replace(/^<div class="acs site"[^>]*>/, "");
+
+  // COMPONENTS「FestivalPromotion」「put one div.acs-promo data-promo-pack directly inside the page's .acs element, around the banner, header, page and footer」
+  // 与 HANDOFF 0.97「活动生效时另加 acs-promo 类与 data-promo-pack，palette 不为 theme 时加 data-promo-palette，ambient 为 corners 或 fall 时加 data-promo-ambient」：
+  // 包裹元素是根元素的第一个子元素，带三种属性，横幅、页头、页面与页脚都在它里面。
+  it.each(["corners", "fall"])("marks the wrapper with the pack, palette and %s ambient", (ambient) => {
+    const html = renderWithPromotion(promotion({ ambient }));
+    expect(wrapper(html)).toBe(
+      `<div class="site__promo acs-promo" data-promo-pack="deepavali" data-promo-palette="deepavali" data-promo-ambient="${ambient}">`,
+    );
+    expect(html).toMatch(/^<div class="acs site"[^>]*><div class="site__promo acs-promo"[^>]*><div class="acs-banner">/);
+    expect(html.endsWith("</footer></div></div>")).toBe(true);
+    expect(html).not.toContain("acs-promo-garland");
+  });
+
+  // HANDOFF 0.97「为 garland 时在页头之后放 div.acs-promo-garland（aria-hidden 为 true）」与 COMPONENTS「garland = … right after the header」：
+  // 花边紧接页头、在页面之前，读屏忽略，没有内容；包裹元素不带 data-promo-ambient。横幅与页头都在花边之前（不被遮挡）。
+  it("puts the garland right after the header", () => {
+    const html = renderWithPromotion(promotion({ ambient: "garland" }));
+    expect(wrapper(html)).toBe(`<div class="site__promo acs-promo" data-promo-pack="deepavali" data-promo-palette="deepavali">`);
+    expect(html).toContain(`</header><div class="acs-promo-garland" aria-hidden="true"></div><main></main>`);
+    expect(html.match(/acs-promo-garland/g)).toHaveLength(1);
+    expect(html.indexOf('class="acs-banner"')).toBeLessThan(html.indexOf("acs-promo-garland"));
+  });
+
+  // HANDOFF 0.97「为 none 时什么都不画」：没有 data-promo-ambient，也没有花边。
+  it("draws no ornament for none", () => {
+    const html = renderWithPromotion(promotion({ ambient: "none" }));
+    expect(wrapper(html)).toBe(`<div class="site__promo acs-promo" data-promo-pack="deepavali" data-promo-palette="deepavali">`);
+    expect(html).not.toContain("acs-promo-garland");
+  });
+
+  // COMPONENTS「leave it out to keep the store theme colours」与 HANDOFF 0.97「palette 不为 theme 时加 data-promo-palette」：palette 为 theme 时不带它。
+  it("leaves out the palette when the promotion keeps the theme colours", () => {
+    const html = renderWithPromotion(promotion({ palette: "theme", ambient: "fall" }));
+    expect(wrapper(html)).toBe(`<div class="site__promo acs-promo" data-promo-pack="deepavali" data-promo-ambient="fall">`);
+    expect(html).not.toContain("data-promo-palette");
+  });
+
+  // COMPONENTS「Remove the wrapper attributes, or the wrapper, as soon as no promotion is running」与 HANDOFF 0.97「包裹元素始终渲染为 div.site__promo」：
+  // 没有活动时（读取结果为没有活动、App 的首次渲染）包裹元素只有 site__promo，没有 acs-promo 类、data-promo-* 属性与花边。
+  it("renders a plain wrapper without a promotion", () => {
+    for (const html of [renderWithPromotion(null), render("/"), render("/products", "zh")]) {
+      expect(wrapper(html)).toBe(`<div class="site__promo">`);
+      expect(html).not.toMatch(/acs-promo|data-promo-/);
+    }
+  });
+
+  // 验收「App.tsx 只在前台页加 PromotionProvider，后台页不读取活动」：后台页没有前台框架，也没有包裹元素。
+  it("leaves admin pages without the wrapper", () => {
+    expect(render("/admin/login")).not.toContain("site__promo");
+  });
+
+  // 验收：页面代码里不写死颜色——装饰都由类与属性交给 acuven-shop.css，没有行内样式。
+  it("adds no inline styles", () => {
+    for (const ambient of ["garland", "corners", "fall", "none"]) {
+      expect(renderWithPromotion(promotion({ ambient }))).not.toContain("style=");
+    }
   });
 });
