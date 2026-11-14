@@ -106,6 +106,19 @@ class Settings(BaseSettings):
     # 收件人，逗号分隔的 1 到 5 个地址。
     alert_to: str = ""
 
+    # 节日促销的 AI 装饰提案（DESIGN 1.23「节日促销活动」第 13 条），经 ai_billing_hub 的
+    # POST /v1/messages 调用模型，以本项目在 Billing Hub 的身份计量。空串 = 未配置；四项缺一或
+    # 接口地址不是 https:// 时调用一律抛 AiNotConfigured、不发请求（app/services/ai_hub.py），
+    # 后台的 AI 按钮禁用。接口地址只写到主机，如 https://BILLING_HUB_HOST，路径由客户端拼接。
+    ai_hub_base_url: str = ""
+    # 本项目在 Billing Hub 的客户端 ID 与项目密钥（请求头 X-Acuven-Client-Id 与 Bearer 认证）。
+    ai_hub_client_id: str = ""
+    ai_hub_access_secret: str = ""
+    # 模型名，原样放进请求体的 model。
+    ai_model: str = ""
+    # 全站每天（马来西亚日期）AI 调用次数上限，默认 50；计数在 SHOP-TASK-248。
+    ai_daily_call_limit: int = 50
+
 
 @lru_cache
 def get_settings() -> Settings:

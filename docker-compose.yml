@@ -71,6 +71,13 @@ services:
       SHOP_ALERT_SMTP_PASSWORD: ${SHOP_ALERT_SMTP_PASSWORD:-}
       SHOP_ALERT_FROM: ${SHOP_ALERT_FROM:-}
       SHOP_ALERT_TO: ${SHOP_ALERT_TO:-}
+      # 节日促销的 AI 装饰提案（DESIGN 1.23「节日促销活动」第 13 条，经 ai_billing_hub 调用模型）：可以不设，
+      # 前四项未设置时为空串（未配置，后台的 AI 按钮禁用），每日调用上限未设置时为 50，照常部署。只传给 shop_api。
+      SHOP_AI_HUB_BASE_URL: ${SHOP_AI_HUB_BASE_URL:-}
+      SHOP_AI_HUB_CLIENT_ID: ${SHOP_AI_HUB_CLIENT_ID:-}
+      SHOP_AI_HUB_ACCESS_SECRET: ${SHOP_AI_HUB_ACCESS_SECRET:-}
+      SHOP_AI_MODEL: ${SHOP_AI_MODEL:-}
+      SHOP_AI_DAILY_CALL_LIMIT: ${SHOP_AI_DAILY_CALL_LIMIT:-50}
     networks: [proxy_net, data_net]
     healthcheck:
       test:
