@@ -3,8 +3,10 @@
 
 依据 docs/DESIGN.md 1.23（提交 b7f9355）「节日促销活动」第 13 条
 （下称「第 13 条」）、docs/UX.md 0.20 的 A12 AI 区（下称「A12」）与
-SHOP-TASK-251 的落实写法与验收（下称「落实写法」「验收」）。
-每条测试（参数化的测试是每个用例）的文档字符串写明它守住的原句。
+SHOP-TASK-251 的落实写法与验收（下称「落实写法」「验收」）；任务的设计闸门
+把第 13 条落实为「接口只传递与校验字段，出站内容与计数在 248 的服务层」
+（下称「设计闸门」）。每条测试（参数化的测试是每个用例）的文档字符串写明
+它守住的第 13 条或 A12 的原句，需要时另引落实写法与验收。
 
 夹具照 tests/test_admin_promotions_api.py：SQLite 内存库按模型建表
 （StaticPool、开外键），写入一个管理员；https 的 base_url，以
@@ -399,8 +401,10 @@ def test_status_is_true_when_ai_is_configured(
 
 
 def test_status_does_not_need_csrf(client: TestClient, token: str) -> None:
-    """验收「POST 没有 CSRF 403」只针对提案：GET …/status 不带
-    X-CSRF-Token 照常 200。"""
+    """第 13 条「未配置时后台的 AI 按钮禁用并说明原因」；A12「未配置：
+    ( [admin.ai_generate] ) 禁用，[admin.ai_not_configured]」：编辑页只读
+    状态来决定按钮，不改任何东西，所以不要 CSRF（验收「POST 没有 CSRF 403」
+    只针对提案）：GET …/status 不带 X-CSRF-Token 照常 200。"""
     response = client.get(STATUS_URL, headers=_headers(token, None))
 
     assert _ok(response) == {"configured": True}
@@ -431,7 +435,8 @@ def test_proposal_returns_only_the_proposal(
 def test_proposal_passes_the_fields_through_to_the_service(
     client: TestClient, token: str, calls: list[dict[str, Any]], service: RecordingService
 ) -> None:
-    """第 13 条「接口只传递与校验字段，出站内容与计数在 248 的服务层」：
+    """第 13 条「送出的内容只有：这段描述、活动的规则类别与参数」与设计闸门
+    「接口只传递与校验字段，出站内容与计数在 248 的服务层」：
     描述原样（首尾空白由服务层去掉）、规则按顺序转成 RuleInput（没有商品
     与分类 ID），连同按本应用配置构造的客户端、本应用的 Settings 与当前
     时间传给 propose_decoration，只调用一次。"""
@@ -466,8 +471,10 @@ def test_proposal_accepts_empty_rules_and_omitted_params(
 def test_body_at_the_size_limit_is_accepted(
     client: TestClient, token: str, calls: list[dict[str, Any]], service: RecordingService
 ) -> None:
-    """落实写法「请求体读取（上限 8 KB）」：恰好 8 KB（用 JSON 空白补足）的
-    合法请求照常处理，回 200。"""
+    """第 13 条「输入一段描述（1–500 个字符…）」「送出的内容只有：这段描述、
+    活动的规则类别与参数」：上限不能挡住合格的描述与规则；落实写法「请求体
+    读取（上限 8 KB）」：恰好 8 KB（用 JSON 空白补足）的合法请求照常处理，
+    回 200。"""
     service.outcome = PROPOSAL
     content = json.dumps(_body()).encode()
     content += b" " * (MAX_BODY_BYTES - len(content))
@@ -596,9 +603,12 @@ def test_both_endpoints_require_an_admin_session(
 def test_proposal_without_a_valid_csrf_token_is_403(
     client: TestClient, token: str, calls: list[dict[str, Any]], csrf: str | None
 ) -> None:
-    """验收「POST 没有 CSRF 403 csrf_failed」；落实写法「照 admin_categories
-    的 CSRF」（先 CSRF、再请求体）：X-CSRF-Token 缺少、为空或不一致时 403，
-    请求体结构不合格的也先 403，不调用服务层。"""
+    """第 13 条「管理员在活动编辑页输入一段描述…请求 AI 给出一份装饰与文案
+    的提案」「加一之后的调用无论成功、不合格、超时或出错都占用当天的一次，
+    不退回」：只有编辑页发出的请求才能调用并占用当天的次数；验收「POST 没有
+    CSRF 403 csrf_failed」；落实写法「照 admin_categories 的 CSRF」（先
+    CSRF、再请求体）：X-CSRF-Token 缺少、为空或不一致时 403，请求体结构不
+    合格的也先 403，不调用服务层。"""
     responses = [
         _post(client, token, csrf=csrf),
         _post(client, token, {"description": SECRET, "extra": 1}, csrf=csrf),
@@ -613,9 +623,10 @@ def test_proposal_without_a_valid_csrf_token_is_403(
 def test_body_over_the_limit_is_413_before_anything_else(
     client: TestClient, token: str, calls: list[dict[str, Any]], logged_in: bool
 ) -> None:
-    """验收「请求体超过 8 KB 413」；落实写法「照 admin_categories 的请求体
-    读取（上限 8 KB）」（先于会话与 CSRF）：多一个字节即 413，有没有会话
-    都一样，不调用服务层。"""
+    """第 13 条「送出的内容只有：这段描述、活动的规则类别与参数…」与设计闸门
+    「接口只传递与校验字段」：超出上限的请求体不传给服务层；验收「请求体超过
+    8 KB 413」；落实写法「照 admin_categories 的请求体读取（上限 8 KB）」
+    （先于会话与 CSRF）：多一个字节即 413，有没有会话都一样，不调用服务层。"""
     content = json.dumps(_body()).encode()
     content += b" " * (MAX_BODY_BYTES + 1 - len(content))
 
@@ -634,8 +645,10 @@ def test_non_json_is_415(
     content_type: str | None,
     logged_in: bool,
 ) -> None:
-    """验收「不是 JSON 415」（照 admin_categories 的 WriteBodyDep，先于会话
-    与 CSRF）：Content-Type 不是 JSON 时有没有会话都 415，不调用服务层。"""
+    """第 13 条「送出的内容只有：这段描述、活动的规则类别与参数…」与设计闸门
+    「接口只传递与校验字段」：不是 JSON 的请求体不传给服务层；验收「不是
+    JSON 415」（照 admin_categories 的 WriteBodyDep，先于会话与 CSRF）：
+    Content-Type 不是 JSON 时有没有会话都 415，不调用服务层。"""
     content = json.dumps(_body()).encode()
 
     response = _raw(client, token if logged_in else None, content, content_type)
@@ -674,7 +687,10 @@ def _tier(**fields: Any) -> dict[str, Any]:
 def test_bad_structure_is_422_without_echo(
     client: TestClient, token: str, calls: list[dict[str, Any]], body: Any
 ) -> None:
-    """验收「结构或类型不对 422（不回显）」「rules 每项为 kind 与 RuleInput
+    """第 13 条「送出的内容只有：这段描述、活动的规则类别与参数」「描述是
+    管理员自填的自由文字，系统无法保证其中没有个人资料」与设计闸门「接口只
+    传递与校验字段」：只收描述与规则的类别与参数，错误里不回显所给的值；
+    验收「结构或类型不对 422（不回显）」「rules 每项为 kind 与 RuleInput
     的参数字段，不含商品与分类 ID」；落实写法「请求模型 extra forbid 与
     strict」「422 不回显（app/api/pay.py 的 _body_errors）」：缺字段、类型
     不对（整数不收字符串、布尔值与浮点数）、多出字段（含 product_ids 与
@@ -689,8 +705,10 @@ def test_bad_structure_is_422_without_echo(
 def test_malformed_json_is_422_without_echo(
     client: TestClient, token: str, calls: list[dict[str, Any]]
 ) -> None:
-    """验收「结构或类型不对 422（不回显）」：Content-Type 为 JSON 但内容
-    不是合法 JSON 时 422，不回显所给的内容，不调用服务层。"""
+    """第 13 条「描述是管理员自填的自由文字，系统无法保证其中没有个人资料」
+    与设计闸门「接口只传递与校验字段」：坏的请求体不传给服务层，也不回显；
+    验收「结构或类型不对 422（不回显）」：Content-Type 为 JSON 但内容不是
+    合法 JSON 时 422，不回显所给的内容，不调用服务层。"""
     content = json.dumps({"description": SECRET}).encode()[:-1]
 
     response = _raw(client, token, content, "application/json")
@@ -707,7 +725,9 @@ def test_malformed_json_is_422_without_echo(
 def test_routes_are_outside_the_promotion_id_routes(
     client: TestClient, token: str, service: RecordingService
 ) -> None:
-    """落实写法「路径放在 /api/admin/promotion-ai/ 下，不放在
+    """第 13 条「管理员在活动编辑页…请求 AI 给出一份装饰与文案的提案」「未
+    配置时后台的 AI 按钮禁用并说明原因」：编辑页的两个请求都到达本接口；
+    落实写法「路径放在 /api/admin/promotion-ai/ 下，不放在
     /api/admin/promotions/ 下（免得被活动 ID 的路由先匹配）」：两个路径都由
     本模块回答（状态与提案都 200），不是活动接口的路径 ID 422。"""
     service.outcome = PROPOSAL
@@ -719,7 +739,9 @@ def test_routes_are_outside_the_promotion_id_routes(
 def test_every_response_is_no_store(
     client: TestClient, token: str, service: RecordingService
 ) -> None:
-    """落实写法「_NoStoreRoute 写法」；验收「所有响应带 no-store」：状态、
+    """第 13 条「合格的提案只返回给编辑页」「生成的文案在保存前须经管理员
+    确认…不会未经确认出现在前台」：提案与错误都不留在任何缓存里；落实写法
+    「_NoStoreRoute 写法」；验收「所有响应带 no-store」：状态、
     成功的提案、401、403、413、415、422 与服务层的拒绝都带
     Cache-Control: no-store。"""
     big = json.dumps(_body(description="x" * MAX_BODY_BYTES)).encode()
