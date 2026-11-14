@@ -8,6 +8,7 @@ import { BRAND, LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { browserStorage, htmlLang, useCopy, useLanguage } from "../i18n/language";
 import { keywordSearch, parseProductListQuery } from "../pages/productListQuery";
+import { usePromotion } from "../promotion";
 import { HOME_PATH, isRoutePath, Link, PRODUCTS_PATH, useRouter } from "../router";
 import type { RoutePath } from "../router";
 import { STORE_MODE, useStoreDesign } from "../storeDesign";
@@ -23,6 +24,11 @@ import { STORE_MODE, useStoreDesign } from "../storeDesign";
 // 店铺标志（UX 0.18「店铺装修」，HANDOFF 0.84）：GET /api/store-design 给出 logo 后，页头与页脚的品牌显示为该图（alt 为 BRAND），
 // 没有标志、设置还没返回或标志加载失败时显示文字品牌。加载失败按路径记在根组件，页头与页脚一起退回文字；logo 换成另一个路径时重新尝试。
 // 标志按原图显示，不随主题与深浅色改色（Kelvin 2026-11-05 决定）。
+//
+// 节日促销活动的装饰（UX 0.20「1. 全局框架」，DESIGN 1.23 第 12 条，COMPONENTS「FestivalPromotion」，HANDOFF 0.97）：
+// 根元素之内始终有包裹元素 div.site__promo，包住演示横幅、页头、页面与页脚（活动开始或结束时页面状态不被重建）。
+// 活动生效时另加 acs-promo 类与 data-promo-pack；palette 不为 theme 时加 data-promo-palette；ambient 为 corners 或 fall 时加
+// data-promo-ambient，为 garland 时在页头之后放读屏忽略的 div.acs-promo-garland，为 none 时什么都不画。图案与配色来自 acuven-shop.css。
 
 interface NavItem {
   path: string;
@@ -337,17 +343,32 @@ function SiteFooter({ brand }: { brand: StoreBrandProps }) {
   );
 }
 
+// 活动沿用店铺主题配色时的 palette 值。
+const PROMO_PALETTE_THEME = "theme";
+// 由包裹元素画在内容之后的装饰；garland 是页头之后的元素，none 不画。
+const PROMO_WRAPPER_AMBIENTS: readonly string[] = ["corners", "fall"];
+const PROMO_AMBIENT_GARLAND = "garland";
+
 // 前台根元素：class acs 与店铺装修的主题（storeDesign.ts）；主色为 null 时不设 data-accent，即该主题的默认主色。
 export default function SiteFrame({ children }: { children: ReactNode }) {
   const { theme, accent, logo } = useStoreDesign();
+  const { promotion } = usePromotion();
   const [brokenLogo, setBrokenLogo] = useState<string | null>(null);
   const brand: StoreBrandProps = { logo, broken: storeLogoBroken(logo, brokenLogo), onBroken: setBrokenLogo };
   return (
     <div className="acs site" data-shop-theme={theme} data-accent={accent ?? undefined} data-mode={STORE_MODE}>
-      <DemoBanner />
-      <SiteHeader brand={brand} />
-      {children}
-      <SiteFooter brand={brand} />
+      <div
+        className={promotion === null ? "site__promo" : "site__promo acs-promo"}
+        data-promo-pack={promotion?.pack}
+        data-promo-palette={promotion !== null && promotion.palette !== PROMO_PALETTE_THEME ? promotion.palette : undefined}
+        data-promo-ambient={promotion !== null && PROMO_WRAPPER_AMBIENTS.includes(promotion.ambient) ? promotion.ambient : undefined}
+      >
+        <DemoBanner />
+        <SiteHeader brand={brand} />
+        {promotion?.ambient === PROMO_AMBIENT_GARLAND && <div className="acs-promo-garland" aria-hidden="true" />}
+        {children}
+        <SiteFooter brand={brand} />
+      </div>
     </div>
   );
 }
