@@ -22,3 +22,16 @@
   - 活动数据异常使 `price_promotion` 拒绝规则参数时照它抛出，不在目录里吞掉。
 - 验证到什么程度：人工逐条对照验收标准、DESIGN 1.23 第 3、10 条与 UX 0.20 的商品卡规则、P03、P15。测试、ruff check 与 ruff format 由 Worker 与 PR 的必需 CI 检查 `backend` 执行，结果以它们的记录为准。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-14 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 字段——新增数据类 CardPromotion(rule_id, kind, discount_mode, percent, amount_sen, buy_quantity, get_quantity, get_percent)；ProductSummary 末尾加 promotion（CardPromotion 或 None）与 min_sale_price_sen（命中打折规则时为各启用 SKU 活动单价的最小值，否则 None）；ProductDetail 末尾加 promotion；VariantDetail 末尾加 sale_price_sen（命中打折规则时为该 SKU 的活动单价，否则 None）。买 X 享 Y 时 promotion 有值而两个价格字段为 None
+      - 专题页列表——GET /api/catalog/products 新增查询参数 sale（布尔，默认 false）：为 true 时只列商品级规则范围（显式选的商品加所选分类下的商品）内满足现有发布规则的商品，排序与分页照默认（newest），其他筛选参数照常可用；没有生效活动时为空页（total 为 0）
+      - 接口——列表与详情每次请求读生效活动（不缓存），成功响应带 Cache-Control no-store；没有生效活动时新字段都为 null，其余字段与现在相同
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_catalog_promotion.py：八折与直降的活动单价（含恰好半仙进一仙、直降大于单价时为 0）、多规格的最低活动单价、买 X 享 Y 只给角标参数、按分类与按商品命中、两条规则都命中时取排序小者、sale 列表的范围与分页、没有生效活动时与现在相同；tests/test_catalog_api.py 对列表与详情的整体比较只为加上新字段（为 null）而改。每条测试的文档字符串写明它守住的第 3 或 10 条或 UX 的哪一句
+      - docs/task-records/SHOP-TASK-244.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明 JSON 字段名与 sale 参数，供前台任务引用）；改动只落在 allowed_change_paths；不改计价、下单、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```

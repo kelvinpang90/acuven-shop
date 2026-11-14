@@ -46,3 +46,17 @@
   - SQLite 不支持 `FOR UPDATE`，测试只核对 `share_lock=True` 读出的结果与不加锁时相同；锁的效果留给在 MySQL 上跑的下单任务。
 - 验证到什么程度：人工逐条对照验收标准与 DESIGN 1.23 第 1、3、4、8 条，手算核对第 8 条算例的逐件数字。全部后端测试、ruff check 与 ruff format 由 PR 的必需 CI 检查 `backend` 执行。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-14 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 数据类——frozen 的 LoadedItemRule(rule_id, position, rule, product_ids, category_ids)（rule 为 ItemDiscountRule 或 BuyXGetYRule，两个 ID 集合为 frozenset）与 LoadedPromotion(promotion_id, version, status, starts_at, effective_end, coupon_combinable, points_combinable, item_rules, spend_rule, free_shipping_rule)：item_rules 按 position 升序；spend_rule 为 SpendRule（各档按 position 升序，模式取规则的 discount_mode）或 None；free_shipping_rule 为 FreeShippingRule 或 None；effective_end 为提前结束时间（有时）或结束时间，草稿没有时间时 starts_at 与 effective_end 为 None
+      - 读取——active_promotion(db, now) 返回 status 为 published、starts_at <= now 且 now < effective_end 的活动（now 为不带时区的 UTC，带时区抛 ValueError），没有返回 None；多于一个时照上面的落实写法取一个并记日志。load_promotion(db, promotion_id) 按 ID 读出任一状态的活动（不存在返回 None）。两者都只读，除 share_lock 外不加锁，规则、范围与满额档各用一次查询取出（不按规则逐条查询）
+      - 命中规则——rule_for_product(promotion, product_id, category_id) 返回范围（商品 ID 集合或分类 ID 集合）包含该商品的商品级规则中 position 最小者的 rule_id，没有返回 None
+      - 计价——price_lines(promotion, lines, *, shipping_fee_sen) 接收 PromoInputLine(line_index, unit_price, quantity, product_id, category_id) 的序列（frozen 数据类，只含正常行，line_index 严格递增），按 rule_for_product 定每行的 rule_id，调用 price_promotion（item_rules 为本活动全部商品级规则的 ID 到规则对象的映射）并原样返回 PromotionPricing；shipping_fee_sen 为 None 时照 price_promotion 不判定是否参加
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_promotions_active.py 用 SQLite 内存库建活动：生效判定的边界（开始时刻生效、结束时刻与提前结束时刻不再生效、草稿与未开始的不生效）；读到两个已发布且重叠的活动时取开始最早者并记日志；按商品命中与按分类命中、两条规则都命中时取排序小者、商品改分类后按新分类判断；满额档按 position 排序；price_lines 以第 8 条算例的商品与规则得到 SHOP-TASK-231 测试里同样的每件活动优惠；load_promotion 读得到草稿。每条测试的文档字符串写明它守住的第几条哪一句
+      - docs/task-records/SHOP-TASK-233.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明公开的数据类与函数签名，供之后的任务引用）；改动只落在 allowed_change_paths；不改计价、下单与展示的服务与接口、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```

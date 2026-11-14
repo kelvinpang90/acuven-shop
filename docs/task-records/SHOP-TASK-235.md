@@ -21,3 +21,16 @@
   - `tests/test_guest_order.py` 未改：其中没有生效活动，下单结果与之前相同。
 - 验证到什么程度：人工逐条对照验收标准与 DESIGN 1.23 第 4、7、8、14 条，手算核对测试里的数字（如 A：2500 − 500 − 156 = 1844；B：1200 − 94 = 1106）。测试、ruff check 与 ruff format 由 Worker 与 PR 的必需 CI 检查 `backend` 执行，结果以它们的记录为准。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23 提交 `b7f9355`；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-14 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 订单——参加活动时 Order 的 promotion_id 为该活动、promotion_item_discount_sen 与 promotion_order_discount_sen 为两项合计、shipping_fee_sen 为实际运费、shipping_waived_sen 为免去的运费、total_sen 为现金实付合计加实际运费；不参加活动（没有生效活动，或所有规则都没带来优惠）时 promotion_id 为空、三项为 0，其余与现在相同
+      - 逐件——参加活动时每件 OrderItemUnit 的 promotion_discount_sen 为该件的活动优惠（商品级折扣加分摊到的整单级优惠），promotion_rule_id 为该件所在行命中的商品级规则（不论这一件是否享受折扣，没有命中为空），cash_paid_sen 为原价减活动优惠；不参加活动时两列为 0 与空
+      - 时点——活动以下单事务里读到的为准（第 14 条）：访客计价后活动结束或提前结束，下单按不参加活动；下单后活动结束不改已下单订单；按幂等键重放原订单不重新计价、不重读活动
+      - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_guest_order_promotion.py 以第 8 条算例的商品与规则下游客订单（西马运费 800，免运费）：订单商品级 1900、整单级 500、实际运费 0、免去 800、应付 5900；五件的活动优惠 656、656、94、94、900，现金实付 1844、1844、1106、1106、0，命中规则依次为 A 的打折规则、A 的打折规则、家居的买 X 享 Y、同前、同前；没有生效活动、活动未开始与已结束、所有规则都没带来优惠时订单不记活动且金额与现在相同；计价后活动提前结束则下单不记活动；重放原订单返回原快照。每条测试的文档字符串写明它守住的第几条哪一句
+      - docs/task-records/SHOP-TASK-235.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改接口、会员下单、计价服务、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```
