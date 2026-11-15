@@ -727,13 +727,15 @@ describe("promotion entry", () => {
   });
 
   // UX 0.20「1. 全局框架」「节日促销活动」：「没有生效活动时各页与 0.19 完全相同」——接口说没有活动与读取中时，
-  // 桌面导航与手机菜单与加入活动入口之前逐字相同，页头没有去 /sale 的链接与 promo.nav。
+  // 桌面导航与手机菜单与加入活动入口之前逐字相同，导航里没有去 /sale 的链接，页头没有 promo.nav。
+  // 在 /sale 上渲染时，页头的语言切换链接本来就指向当前路径（href="/sale"），所以去 /sale 的检查只看两处导航。
   it.each(languages)("leaves the header as before without a sale in %s", (language) => {
     const expected = expectedNavs(language, "");
     for (const html of [renderEntry(null, "/", language), renderEntry(undefined, "/", language), render("/sale", language)]) {
       expect(desktopNav(html)).toBe(expected.desktop);
       expect(phoneNav(html)).toBe(expected.phone);
-      expect(header(html)).not.toContain(`href="/sale"`);
+      expect(desktopNav(html)).not.toContain(`href="/sale"`);
+      expect(phoneNav(html)).not.toContain(`href="/sale"`);
       expect(header(html)).not.toContain(`>${COPY["promo.nav"][language]}<`);
       expect(header(html)).not.toContain("site-header__promo");
     }
