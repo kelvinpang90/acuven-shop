@@ -60,7 +60,9 @@ function memberOrder(overrides: Partial<LookupOrder> = {}): LookupOrder {
     placed_by_member: true,
     coupon_discount_sen: 300,
     points_redeemed: 200,
+    promotion_discount_sen: 0,
     shipping_fee_sen: 1500,
+    shipping_waived_sen: 0,
     total_sen: 8800,
     recipient: {
       name: "Sam Taylor",

@@ -78,7 +78,9 @@ function lookupOrder(overrides: Partial<LookupOrder> = {}): LookupOrder {
     placed_by_member: false,
     coupon_discount_sen: 0,
     points_redeemed: 0,
+    promotion_discount_sen: 0,
     shipping_fee_sen: 800,
+    shipping_waived_sen: 0,
     total_sen: 11800,
     recipient: {
       name: "Aina Rahman",
@@ -1322,6 +1324,113 @@ describe("coupon and points rows", () => {
       for (const block of [desktopAmounts(html), phoneAmounts(html)]) {
         expect(rowsOf(block).map(([, amount]) => amount)).toEqual(["RM 100.00", "RM 12.34", "RM 0.01", "RM 10.00", "RM 999.99"]);
       }
+    }
+  });
+});
+
+describe("sale discount and free shipping rows", () => {
+  const rowsOf = (amounts: string) =>
+    [...amounts.matchAll(/<div class="acs-row[^"]*"><span>([^<]*)<\/span><span class="acs-num">([^<]*)<\/span><\/div>/g)].map((m) => [unescapeHtml(m[1] ?? ""), unescapeHtml(m[2] ?? "")]);
+  const priceIn = (language: Language, amount: string) => formatCopy(COPY["common.price_myr"][language], { amount });
+  const freeIn = (language: Language, amount: string) => formatCopy(COPY["checkout.shipping_free"][language], { amount });
+  // 订单快照：活动优惠 RM 25.60、免去运费 RM 8.00（实际运费 0），合计照接口给的数。
+  const sale = { promotion_discount_sen: 2560, shipping_fee_sen: 0, shipping_waived_sen: 800 };
+  const guestSale = lookupOrder({ ...sale, total_sen: 8440 });
+  const memberSale = lookupOrder({ ...sale, placed_by_member: true, coupon_discount_sen: 1000, points_redeemed: 500, total_sen: 6940 });
+  // 两种模式各渲染一次。
+  const both = (order: LookupOrder, language: Language) => [render(ready(order), language), memberView(signedIn({ order }), language)];
+  const blocks = (html: string) => [desktopAmounts(html), phoneAmounts(html)];
+
+  // UX 0.20 P09 M3「订单记有活动且活动优惠合计大于 0 时另显示活动优惠一行（游客订单也显示），活动免运费时运费行显示 [checkout.shipping_free]」
+  // 与线框「[cart.subtotal] [checkout.summary_promo] … [checkout.summary_shipping] [checkout.summary_total]」：游客订单（含会员模式里的认领订单）
+  // 在两种模式、桌面与手机折叠里依次为小计、活动优惠、免运费的运费行与合计，不出现券与积分两行。
+  it.each(LANGUAGES)("shows the sale discount and free shipping on a guest order in both modes in %s", (language) => {
+    const expected = [
+      [COPY["cart.subtotal"][language], priceIn(language, "110.00")],
+      [COPY["checkout.summary_promo"][language], priceIn(language, "25.60")],
+      [COPY["checkout.summary_shipping"][language], freeIn(language, "8.00")],
+      [COPY["checkout.summary_total"][language], priceIn(language, "84.40")],
+    ];
+    for (const html of both(guestSale, language)) {
+      for (const block of blocks(html)) {
+        expect(rowsOf(block)).toEqual(expected);
+      }
+    }
+  });
+
+  // UX 0.20 P09 线框「[cart.subtotal] [checkout.summary_promo] [checkout.summary_coupon] [checkout.summary_points] [checkout.summary_shipping] [checkout.summary_total]」
+  // 与 M3「活动免运费时运费行显示 [checkout.shipping_free]」：下单时是会员的订单在两种模式里按此顺序六行，活动优惠紧接小计、在券之前。
+  it.each(LANGUAGES)("shows the sale discount before the coupon on a member order in both modes in %s", (language) => {
+    const expected = [
+      [COPY["cart.subtotal"][language], priceIn(language, "110.00")],
+      [COPY["checkout.summary_promo"][language], priceIn(language, "25.60")],
+      [COPY["checkout.summary_coupon"][language], priceIn(language, "10.00")],
+      [COPY["checkout.summary_points"][language], priceIn(language, "5.00")],
+      [COPY["checkout.summary_shipping"][language], freeIn(language, "8.00")],
+      [COPY["checkout.summary_total"][language], priceIn(language, "69.40")],
+    ];
+    for (const html of both(memberSale, language)) {
+      for (const block of blocks(html)) {
+        expect(rowsOf(block)).toEqual(expected);
+      }
+    }
+  });
+
+  // UX 0.20 P09 M3「订单记有活动且活动优惠合计大于 0 时另显示活动优惠一行…活动免运费时运费行显示 [checkout.shipping_free]」：
+  // 两项都为 0 时游客订单仍是三行、会员订单仍是五行，运费为实际运费，不出现活动优惠与免运费的文字（与加入活动之前相同）。
+  it.each(LANGUAGES)("keeps the breakdown unchanged when both are zero in %s", (language) => {
+    const guestRows = [
+      [COPY["cart.subtotal"][language], priceIn(language, "110.00")],
+      [COPY["checkout.summary_shipping"][language], priceIn(language, "8.00")],
+      [COPY["checkout.summary_total"][language], priceIn(language, "118.00")],
+    ];
+    const placed = lookupOrder({ placed_by_member: true, coupon_discount_sen: 1000, points_redeemed: 500, total_sen: 10300 });
+    const memberRows = [
+      [COPY["cart.subtotal"][language], priceIn(language, "110.00")],
+      [COPY["checkout.summary_coupon"][language], priceIn(language, "10.00")],
+      [COPY["checkout.summary_points"][language], priceIn(language, "5.00")],
+      [COPY["checkout.summary_shipping"][language], priceIn(language, "8.00")],
+      [COPY["checkout.summary_total"][language], priceIn(language, "103.00")],
+    ];
+    const freePattern = copyPattern(COPY["checkout.shipping_free"][language]);
+    for (const [order, expected] of [
+      [lookupOrder(), guestRows],
+      [placed, memberRows],
+    ] as const) {
+      for (const html of both(order, language)) {
+        for (const block of blocks(html)) {
+          expect(rowsOf(block)).toEqual(expected);
+        }
+        expect(has(html, "checkout.summary_promo", language)).toBe(false);
+        expect(visibleTexts(html).some((text) => freePattern.test(text))).toBe(false);
+      }
+    }
+  });
+
+  // UX 0.20 P09 M3「订单记有活动且活动优惠合计大于 0 时另显示活动优惠一行」与「活动免运费时运费行显示 [checkout.shipping_free]」两条各自成立：
+  // 只有活动优惠时运费照常；只免运费时不显示活动优惠一行；金额照快照原样格式化，不在浏览器计算（DESIGN 1.23「节日促销活动」第 7 条）。
+  it("shows each part on its own and every amount exactly as the order returns it", () => {
+    const promoOnly = lookupOrder({ promotion_discount_sen: 1, total_sen: 99999 });
+    for (const html of both(promoOnly, "en")) {
+      for (const block of blocks(html)) {
+        expect(rowsOf(block)).toEqual([
+          [COPY["cart.subtotal"].en, "RM 110.00"],
+          [COPY["checkout.summary_promo"].en, "RM 0.01"],
+          [COPY["checkout.summary_shipping"].en, "RM 8.00"],
+          [COPY["checkout.summary_total"].en, "RM 999.99"],
+        ]);
+      }
+    }
+    const waivedOnly = lookupOrder({ shipping_fee_sen: 0, shipping_waived_sen: 1234, total_sen: 11000 });
+    for (const html of both(waivedOnly, "en")) {
+      for (const block of blocks(html)) {
+        expect(rowsOf(block)).toEqual([
+          [COPY["cart.subtotal"].en, "RM 110.00"],
+          [COPY["checkout.summary_shipping"].en, freeIn("en", "12.34")],
+          [COPY["checkout.summary_total"].en, "RM 110.00"],
+        ]);
+      }
+      expect(has(html, "checkout.summary_promo")).toBe(false);
     }
   });
 });

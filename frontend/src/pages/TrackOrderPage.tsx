@@ -38,6 +38,7 @@ import { TRACK_PATH } from "./TrackPage";
 // 退款部分：接口判定在退款期内且剩余可退大于零时显示去 P10 的 order.request_refund 与截止时间；已支付时显示累计已退、剩余可退与申请记录；
 // 接口判定全部已退时显示 order.fulfilment_frozen。
 // 下单时是会员的订单显示优惠券与积分两行，游客订单与后来被认领的游客订单不显示（UX P09 M3），两种模式相同。
+// 活动优惠与活动免运费照订单快照显示，游客订单也显示（UX 0.20 P09 M3），两种模式相同。
 // 订单号与 CSRF 令牌只在页面内存（React 状态）里，不进网址或任何浏览器存储；页面不显示授权内容或其剩余时间。
 // 金额只格式化接口返回的整数仙。
 //
@@ -172,6 +173,8 @@ function OrderLine({ line }: { line: LookupLine }) {
 
 // 金额明细：商品小计、示例运费、合计；下单时是会员的订单（两种模式相同）在小计之后另有 checkout.summary_coupon 与
 // checkout.summary_points（为 0 时也显示，原样格式化、不加负号；积分数即抵扣的仙数）。游客订单与后来被认领的游客订单不显示这两行（UX P09 M3）。
+// 活动优惠快照大于 0 时紧接小计另有 checkout.summary_promo（游客订单也显示，不加负号）；免去的运费大于 0 时运费行的金额为
+// checkout.shipping_free（amount 为免去的运费）（UX 0.20 P09 M3，DESIGN 1.23「节日促销活动」第 7 条）。只显示快照，不计算。
 function AmountRows({ order }: { order: LookupOrder }) {
   const t = useCopy();
   const price = usePrice();
@@ -181,6 +184,12 @@ function AmountRows({ order }: { order: LookupOrder }) {
         <span>{t("cart.subtotal")}</span>
         <span className="acs-num">{price(order.subtotal_sen)}</span>
       </div>
+      {order.promotion_discount_sen > 0 && (
+        <div className="acs-row">
+          <span>{t("checkout.summary_promo")}</span>
+          <span className="acs-num">{price(order.promotion_discount_sen)}</span>
+        </div>
+      )}
       {order.placed_by_member && (
         <>
           <div className="acs-row">
@@ -195,7 +204,9 @@ function AmountRows({ order }: { order: LookupOrder }) {
       )}
       <div className="acs-row">
         <span>{t("checkout.summary_shipping")}</span>
-        <span className="acs-num">{price(order.shipping_fee_sen)}</span>
+        <span className="acs-num">
+          {order.shipping_waived_sen > 0 ? t("checkout.shipping_free", { amount: formatSen(order.shipping_waived_sen) }) : price(order.shipping_fee_sen)}
+        </span>
       </div>
       <div className="acs-row acs-row--total">
         <span>{t("checkout.summary_total")}</span>
