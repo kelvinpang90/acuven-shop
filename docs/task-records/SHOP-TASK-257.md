@@ -19,7 +19,7 @@
 - [x] 测试（`vitest` 与 `react-dom/server`；有活动的状态以 `PromotionProvider` 的 `initial` 传入，目录读取以替身代替）：
   - 新文件 `frontend/src/pages/SalePage.test.tsx`：三语下读取中只有 ★ 提示；没有活动与活动到期后的 `promo.ended`、`promo.browse_all`；有活动时各部分的顺序；横条为活动标题、带倒计时、没有 `promo.view_all`、ticket 变体；副标题为 null 或空串不显示；规则顺序（接口顺序打乱时按 position，商品级在前）与 `promo.rule_scope`、`promo.rule_scope_with_items`、不附范围三种情形；不同用说明；只有整单级规则时的 `promo.order_level_only`；目录返回 0 件；商品卡、结果数、角标与活动价；商品读取中；首次读取与翻页失败；页码为按钮、没有地址；第一页、最后一页与只有一页；加载更多的追加与失败；`/sale` 在前台框架里渲染。`createSaleList`：请求带 `sale=true` 与 `sort=newest`、不带 `page_size`、语言随页面；翻页与加载更多不碰地址栏与历史记录（以替身 `window` 断言）；首次读取、翻页与加载更多失败；停止与换页时中止未完成的读取；给出初始状态时不读取；`saleListKey` 随活动 ID 与语言变化、同一活动不变，新的商品区从第 1 页读取。
   - `frontend/src/components/SiteFrame.test.tsx` 追加「promotion entry」：三语下有活动时桌面导航与手机菜单的完整标记（`promo.nav` 在 `common.nav_shop` 之后、`common.nav_track` 之前）；在 `/sale` 时两处标为当前；没有活动、读取中与 App 的首次渲染时两处与原来逐字相同、两处导航没有去 `/sale` 的链接、页头没有 `promo.nav`（在 `/sale` 上语言切换链接本来就指向当前路径，所以 `/sale` 链接只在导航范围内检查）。
-  - 现有断言除 `router.test.tsx` 的路由表外未改。每条新测试的注释写明它守住的 UX 0.20 P15、「1. 全局框架」或 HANDOFF 0.97 落实写法的原句。
+  - 现有断言除 `router.test.tsx` 的路由表外未改。每条新测试的注释写明它守住的 UX 0.20 P15 或「1. 全局框架」的原句（如 P15「排序与分页同 P02 的默认排序」、线框「(‹) 1 2 3 (›)」「( [list.load_more] )」，或「节日促销活动」「到 0 时页面重新读取活动数据」），HANDOFF 0.97 落实写法的原句并列其后。「给出初始状态时不读取」并入「第一页到达后显示它」的测试。
 - 偏离与落实细节：
   - 没有活动时的框：视觉稿是 1px `--rule` 边框、`--radius-card` 圆角、内边距 40px 的框；site.css 不写边框颜色与圆角，这里用 `acs-card`（边框宽度取 `--border-w`，另有 `--surface-raised` 底色），内边距照视觉稿 40px（手机 24px，视觉稿没有手机版）。
   - 手机稿的副标题没有 `acs-body-l`、结果数另有 `acs-body-s`；同一份标记不能按宽度换字体类（site.css 不声明字体），这里桌面与手机都用桌面稿的类。

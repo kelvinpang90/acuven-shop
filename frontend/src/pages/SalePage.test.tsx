@@ -291,7 +291,8 @@ describe("sale page states", () => {
     );
   });
 
-  // HANDOFF 0.97 落实写法「副标题（为空不显示）」与 UX P01「副标题为空时不显示该行」同理：为 null 或空串时横条之后没有副标题。
+  // UX P15 桌面线框「活动横条（list_strip）：<活动标题>   [promo.ends_in] ⏱ / <活动副标题>」（副标题是横条之下的一行活动数据）
+  // 与 HANDOFF 0.97 落实写法「副标题（为空不显示）」：为 null 或空串时横条之后没有副标题这一行。
   it.each([null, ""])("leaves out an empty subtitle (%j)", (subtitle) => {
     expect(intro(render({ display: sale({ subtitle }) }))).toBe(`<div class="site-sale__intro">${strip("en", "Lunar New Year Sale")}</div>`);
   });
@@ -356,7 +357,9 @@ describe("sale page products", () => {
     expect(html).toContain(`<span class="acs-promo-badge acs-promo-badge--tag"><span>Lunar deal</span></span>`);
   });
 
-  // HANDOFF 0.97 落实写法「商品级规则范围内没有上架商品（目录返回 0 件）时显示 list.results_count 与 list.empty（不显示 list.filter_clear）」。
+  // UX P15「商品区列出生效活动全部商品级规则范围内的上架商品，排序与分页同 P02 的默认排序（不设筛选与排序控件）」与桌面线框
+  // 「[promo.products_title]  [list.results_count]」，以及 HANDOFF 0.97 落实写法「商品级规则范围内没有上架商品（目录返回 0 件）时
+  // 显示 list.results_count 与 list.empty（不显示 list.filter_clear）」：范围内没有上架商品时结果数为 0、显示 list.empty，没有清除筛选。
   it.each(LANGUAGES)("shows the count and list.empty without list.filter_clear when no item is listed in %s", (language) => {
     const html = render({ display: sale(), list: shown(page(0, 1, [])), language });
     expect(products(html)).toBe(
@@ -368,14 +371,16 @@ describe("sale page products", () => {
     expect(html).not.toContain(escapeHtml(COPY["list.load_more"][language]));
   });
 
-  // 照 P02「接口返回之前」：商品读取中时网格为空并标 aria-busy，还没有结果数。
+  // UX P15 桌面线框「[图] <名称> …（商品卡同 P02）」与说明「排序与分页同 P02 的默认排序」，照 P02「接口返回之前」：
+  // 商品读取中时网格为空并标 aria-busy，还没有结果数。
   it("shows a busy grid while the products load", () => {
     const html = products(render({ display: sale(), list: SALE_LIST_START }));
     expect(html).toContain(`<div class="acs-pgrid site-list__grid" aria-busy="true"></div>`);
     expect(html).not.toContain("acs-muted");
   });
 
-  // HANDOFF 0.97 落实写法「商品读取失败时照 P02：首次读取与桌面翻页失败显示 ErrorNotice」：商品区的标题之后是 common.error_retry，
+  // UX P15「排序与分页同 P02 的默认排序」与桌面线框「[promo.products_title] … (‹) 1 2 3 (›)」，以及 HANDOFF 0.97 落实写法
+  // 「商品读取失败时照 P02：首次读取与桌面翻页失败显示 ErrorNotice」：商品区的标题之后是 common.error_retry，
   // 没有结果数、商品卡与页码；★ 提示、横条与规则区照常。
   it.each(LANGUAGES)("shows the retry message in place of the products in %s", (language) => {
     for (const pageNumber of [1, 2]) {
@@ -411,7 +416,8 @@ describe("sale page products", () => {
     expect(html).not.toContain(`href="/sale?`);
   });
 
-  // 同一条「样式与显隐照 P02」：第一页没有可用的上一页、最后一页没有可用的下一页；只有一页时没有页码。
+  // 同一条 UX P15「(‹) 1 2 3 (›)」、「排序与分页同 P02 的默认排序」与 HANDOFF「样式与显隐照 P02」：
+  // 第一页没有可用的上一页、最后一页没有可用的下一页；只有一页时没有页码。
   it("disables previous on the first page and next on the last, and has no pages for a single page", () => {
     const first = pagination(render({ display: sale(), list: shown(page(60, 1, [item("a")])) }));
     expect(first).toMatch(/^<div class="site-desktop-only site-list__pages"><span class="acs-btn acs-btn--secondary acs-btn--sm" aria-hidden="true" aria-disabled="true">/);
@@ -434,7 +440,8 @@ describe("sale page products", () => {
     expect(done).not.toContain(escapeHtml(COPY["list.load_more"][language]));
   });
 
-  // HANDOFF 0.97「手机加载更多失败照 P02 加载更多的失败状态」：已显示的商品保留，手机显示 common.error_retry，可再按 list.load_more。
+  // UX P15 手机「( [list.load_more] )」与说明「排序与分页同 P02 的默认排序」，以及 HANDOFF 0.97「手机加载更多失败照 P02 加载更多的失败状态」：
+  // 已显示的商品保留，手机显示 common.error_retry，可再按 list.load_more。
   it.each(LANGUAGES)("keeps the shown products and offers load more again when loading more fails in %s", (language) => {
     const html = products(render({ display: sale(), list: shown(page(60, 1, [item("a")]), { items: [], lastPage: 1, status: "error" }), language }));
     expect(cardLinks(html)).toEqual(["/products/a"]);
@@ -496,7 +503,8 @@ describe("sale list", () => {
     expect(list.current()).toEqual(SALE_LIST_START);
   });
 
-  // 同一条：第一页到达后显示它。
+  // 同一条 UX P15「商品区列出生效活动全部商品级规则范围内的上架商品」：第一页到达后显示它；
+  // 商品区从给定的已列出状态开始（测试与预览）时照样列出它，不再读取。
   it("shows the first page once it arrives", async () => {
     const { list, call } = setup();
     list.start();
@@ -504,8 +512,14 @@ describe("sale list", () => {
     call(0).resolve(data);
     await settle();
     expect(list.current()).toEqual(shown(data));
+
+    const given = setup("en", LISTED);
+    given.list.start();
+    expect(given.fetcher).not.toHaveBeenCalled();
+    expect(given.list.current()).toBe(LISTED);
   });
 
+  // UX P15「排序与分页同 P02 的默认排序（不设筛选与排序控件）」、桌面「(‹) 1 2 3 (›)」与手机「( [list.load_more] )」，以及
   // HANDOFF 0.97「页码只放在页面状态里、不进地址（路由的查询参数只给商品列表用）」：桌面翻页与手机加载更多只读目录、改读取对象里的状态，
   // 不碰地址栏与历史记录；翻到第 2 页替换显示的页，加载更多追加第 3 页。
   it("pages and loads more without touching the address", async () => {
@@ -538,7 +552,8 @@ describe("sale list", () => {
     expect(location).toEqual({ pathname: "/sale", search: "" });
   });
 
-  // HANDOFF 0.97「商品读取失败时照 P02：首次读取与桌面翻页失败显示 ErrorNotice」：两种失败都使商品区为 error，翻页失败时记着所在的页。
+  // UX P15「排序与分页同 P02 的默认排序」与桌面「(‹) 1 2 3 (›)」，以及 HANDOFF 0.97「商品读取失败时照 P02：首次读取与桌面翻页失败显示 ErrorNotice」：
+  // 两种失败都使商品区为 error，翻页失败时记着所在的页。
   it("fails the first read and a desktop page", async () => {
     const { list, call } = setup();
     list.start();
@@ -556,7 +571,8 @@ describe("sale list", () => {
     expect(again.list.current()).toEqual({ page: 3, products: { status: "error" }, more: null });
   });
 
-  // HANDOFF 0.97「手机加载更多失败照 P02 加载更多的失败状态」：失败时已显示与已追加的商品保留，再按一次重新请求同一页。
+  // UX P15 手机「( [list.load_more] )」与说明「排序与分页同 P02 的默认排序」，以及 HANDOFF 0.97「手机加载更多失败照 P02 加载更多的失败状态」：
+  // 失败时已显示与已追加的商品保留，再按一次重新请求同一页。
   it("keeps the items when loading more fails and retries the same page", async () => {
     const { list, call } = setup();
     list.start();
@@ -574,7 +590,8 @@ describe("sale list", () => {
     expect(call(3).url).toBe(saleProductsUrl("en", 3));
   });
 
-  // 验收「商品区随页码与加载更多读取，离开页面时中止未完成的读取」：停止时中止未完成的读取，之后到达的结果不改状态。
+  // UX「1. 全局框架」「节日促销活动」「到 0 时页面重新读取活动数据并去掉全部活动内容」与 P15「倒计时到 0 后页面重新读取，显示 [promo.ended]」：
+  // 活动结束或离开页面时商品区停止，未完成的读取被中止，之后到达的结果不改状态、不再显示活动商品（验收「离开页面时中止未完成的读取」）。
   it("aborts the pending read when stopped", async () => {
     const { list, call } = setup();
     const stop = list.start();
@@ -585,7 +602,8 @@ describe("sale list", () => {
     expect(list.current()).toEqual(SALE_LIST_START);
   });
 
-  // 同一条「商品区随页码……读取」：换页时中止上一页未完成的读取，它的结果不再显示。
+  // UX P15「排序与分页同 P02 的默认排序」与桌面「(‹) 1 2 3 (›)」：显示的是最后选的那一页；
+  // 换页时中止上一页未完成的读取，它的结果不再显示（验收「商品区随页码与加载更多读取」）。
   it("drops a page that is still loading when another page is asked for", async () => {
     const { list, call } = setup();
     list.start();
@@ -596,14 +614,8 @@ describe("sale list", () => {
     expect(list.current()).toEqual({ page: 2, products: { status: "loading" }, more: null });
   });
 
-  // 测试与预览给出商品区一开始的状态时不读取。
-  it("does not read when it starts from a given state", () => {
-    const { list, fetcher } = setup("en", LISTED);
-    list.start();
-    expect(fetcher).not.toHaveBeenCalled();
-    expect(list.current()).toBe(LISTED);
-  });
-
+  // UX P15「商品区列出生效活动全部商品级规则范围内的上架商品，排序与分页同 P02 的默认排序」与「1. 全局框架」「节日促销活动」
+  // 「到 0 时页面重新读取活动数据」：重新读取后活动换了，商品区列的是新活动的商品、从第 1 页起；切换语言时以新语言从第 1 页读取。
   // HANDOFF 0.97「generation 变化且活动换了（promotion_id 不同或变为没有活动）时、以及切换语言时，回到第 1 页重新读取商品」：
   // 商品区以 saleListKey 为身份，活动 ID 或语言变了即换一个新的商品区，从第 1 页、以新语言读取；同一活动重新读取（其余字段变了）时身份不变。
   // 变为没有活动时商品区不渲染（见上方 promo.ended 的测试），活动回来时同样是新的商品区。
