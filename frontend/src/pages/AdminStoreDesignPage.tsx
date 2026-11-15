@@ -805,7 +805,8 @@ export interface AdminStoreDesignViewProps extends FormHandlers, LogoLinks {
   state: DesignState;
 }
 
-// 页头之下为表单区：读取中标 aria-busy、不显示表单；读取失败时只有提示。取得设置后另有预览：桌面为表单区右侧的预览栏，
+// 页头之下为表单区：读取中标 aria-busy、不显示表单；读取失败时只有提示。取得设置后表单区第一项为活动说明 admin.design_promo_note
+// （UX 0.20 A08「节日促销活动」，SHOP-TASK-261；样式沿用演示说明），其后为表单。取得设置后另有预览：桌面为表单区右侧的预览栏，
 // 手机为表单里的 details（两份按 site.css 的媒体查询显隐，共用同一个深浅色选择，默认浅色）。
 // 标志的加载失败按提供路径记在这里，标志段与两份预览共用（logoBroken）。
 export function AdminStoreDesignView({ state, logoBusy, onLogo, onLogoReread, onLogin, onLogoBusy, ...handlers }: AdminStoreDesignViewProps) {
@@ -820,6 +821,7 @@ export function AdminStoreDesignView({ state, logoBusy, onLogo, onLogoReread, on
       <p className="site-admin-store-design__note">{t("admin.design_demo_note")}</p>
       <div className="site-admin-store-design__body" aria-busy={state.status === "loading"}>
         {state.status === "failed" && <AdminAlert error={state.error} />}
+        {state.status === "ready" && <p className="site-admin-store-design__note">{t("admin.design_promo_note")}</p>}
         {state.status === "ready" && (
           <DesignFormView state={state} mode={mode} onMode={setMode} {...handlers} links={links} broken={broken} onBroken={setBrokenLogo} />
         )}

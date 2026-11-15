@@ -177,6 +177,10 @@ const DETAIL: AdminOrderDetail = {
   points_discount_sen: 500,
   shipping_fee_sen: 800,
   total_sen: 10300,
+  // SHOP-TASK-261 改动：合格响应补上 SHOP-TASK-238 的三个字段（这份订单没有活动）；只为此改。
+  promotion_discount_sen: 0,
+  shipping_waived_sen: 0,
+  promotion_name: null,
   recipient: RECIPIENT,
   events: [
     { created_at: "2026-09-30T06:02:00Z", status: "awaiting_demo_payment", actor_type: "guest" },
@@ -292,6 +296,45 @@ describe("reading the order detail", () => {
   ])("reports the reply %#", async (reply, kind) => {
     stubFetch(reply);
     await expect(readAdminOrder("42", "en")).resolves.toEqual({ kind });
+  });
+
+  // UX 0.20 A02 M1「订单记有活动时显示 [admin.order_promotion]（活动的内部名称），活动优惠合计大于 0 时金额明细在商品小计之后加
+  // [checkout.summary_promo] 一行，活动免运费时运费行显示 [checkout.shipping_free]」所需的三个字段：记有活动的订单原样取到
+  // 活动优惠、免去的运费与内部名称（含空字符串的名称）；请求与没有活动时相同。
+  it("keeps the promotion snapshot of the order", async () => {
+    const sale = { ...DETAIL, promotion_discount_sen: 2400, shipping_fee_sen: 0, shipping_waived_sen: 800, total_sen: 7100, promotion_name: "Raya 2026 (internal)" };
+    const calls = stubFetch(json(200, sale));
+    await expect(readAdminOrder("42", "en")).resolves.toEqual({ kind: "ok", order: sale });
+    expect(calls[0]?.url).toBe("/api/admin/orders/42?lang=en");
+    expect(calls[0]?.init).toMatchObject({ method: "GET", credentials: "same-origin", cache: "no-store" });
+    expect(calls[0]?.init.body).toBeUndefined();
+    const blank = { ...DETAIL, promotion_name: "" };
+    stubFetch(json(200, blank));
+    await expect(readAdminOrder("42", "en")).resolves.toEqual({ kind: "ok", order: blank });
+  });
+
+  // 同一句所需的三个字段不合格时按现有写法算失败：活动优惠与免去的运费须为非负整数，名称须为字符串或 null；缺少任一字段也算不合格。
+  it.each<[string, unknown]>([
+    ["promotion_discount_sen", -1],
+    ["promotion_discount_sen", 24.5],
+    ["promotion_discount_sen", "2400"],
+    ["promotion_discount_sen", null],
+    ["shipping_waived_sen", -800],
+    ["shipping_waived_sen", 8.5],
+    ["shipping_waived_sen", "800"],
+    ["shipping_waived_sen", null],
+    ["promotion_name", 7],
+    ["promotion_name", false],
+    ["promotion_name", { name: "Raya" }],
+    ["promotion_name", ["Raya"]],
+  ])("rejects %s set to %j", async (field, value) => {
+    stubFetch(json(200, { ...DETAIL, [field]: value }));
+    await expect(readAdminOrder("42", "en")).resolves.toEqual({ kind: "failed" });
+  });
+
+  it.each(["promotion_discount_sen", "shipping_waived_sen", "promotion_name"])("rejects a detail without %s", async (field) => {
+    stubFetch(json(200, Object.fromEntries(Object.entries(DETAIL).filter(([key]) => key !== field))));
+    await expect(readAdminOrder("42", "en")).resolves.toEqual({ kind: "failed" });
   });
 
   // 验收第 3 条「路径里的 ID 不是…时不发请求」与 Kelvin 2026-10-07「网址里的内部 ID 不存在或不合法时显示 common.error_retry 与 common.back」：
