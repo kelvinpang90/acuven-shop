@@ -1,18 +1,25 @@
 import { useEffect, useId, useState } from "react";
 
 import { productDetailUrl, useCatalog } from "../api/catalog";
-import type { FilterOption, LocalizedText, ProductDetail, Remote } from "../api/catalog";
+import type { CardPromotion, FilterOption, LocalizedText, ProductDetail, Remote } from "../api/catalog";
+import type { PromotionDisplay } from "../api/promotion";
 import { MAX_CART_LINES, MAX_CART_UNITS, addToCart, saveCart, useCartLines } from "../cart";
 import type { CartLine, CartStorage } from "../cart";
 import { PlaceholderShape } from "../components/ProductCard";
+import { PromoBadges, PromoCount, PromoRuleList, saleLinkPath, shownRule } from "../components/PromoParts";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
+import type { CopyKey, CopyVars } from "../i18n/copy";
 import { browserStorage, useCopy, useLanguage } from "../i18n/language";
+import { badgeText } from "../promoText";
+import { usePromotion } from "../promotion";
 import { isRoutePath, Link, PRODUCTS_PATH, useRouter } from "../router";
 import type { RoutePath } from "../router";
 import { categorySearch } from "./productListQuery";
 import {
   clampQuantity,
   detailPriceCopy,
+  detailRuleLines,
+  detailSalePriceCopy,
   initialSelection,
   isValueEnabled,
   purchaseState,
@@ -20,7 +27,7 @@ import {
   selectedVariant,
   toggleValue,
 } from "./productOptions";
-import type { QuantityInputResult, Selection } from "./productOptions";
+import type { QuantityInputResult, SalePriceCopy, Selection } from "./productOptions";
 
 // 商品详情 P03（docs/UX.md P03）：面包屑、图片、名称（回退英文时 detail.english_only）、价格、规格、数量、
 // 每单限购与当日库存、加入购物车、★ detail.demo_hint、描述。数据来自商品详情接口（随当前语言），
@@ -29,6 +36,8 @@ import type { QuantityInputResult, Selection } from "./productOptions";
 // 数量可直接输入（UX 0.17）：输入中的文字只存在页面状态里，回车或离开输入框时生效。
 // 桌面缩略图点选切换主图；767px 以下主图横向滑动、描述可折叠、加入按钮固定在底部（site.css）。
 // 购物车页 P04 自 SHOP-TASK-018 起在路由表中：detail.view_cart 按路由规则渲染，链到 /cart。
+// 活动（UX 0.20 P03，HANDOFF 0.97）：商品命中的规则在正在显示的活动里时，价格区换成价格飘带（detail_ribbon），
+// ★ 提示之后为活动规则区；只显示目录接口给的价格与公开接口的规则参数，不计算金额（DESIGN 1.23「节日促销活动」第 3、10 条）。
 
 // 加入后的提示：已加入、未选全规格、写入本浏览器失败。
 export type AddNotice = "added" | "select_all_options" | "error" | null;
@@ -178,6 +187,91 @@ function OptionGroup({ option, product, selection, onToggle }: OptionGroupProps)
   );
 }
 
+// detail_ribbon 的取值：panel 为带边框的面板，其余（ribbon）为飘带。
+const RIBBON_PANEL = "panel";
+
+interface PriceRibbonProps {
+  promotion: PromotionDisplay;
+  rule: CardPromotion;
+  // 现有的价格文案（detailPriceCopy）；命中买 X 享 Y 或没有活动单价时照它显示、不划线。
+  price: [CopyKey, CopyVars] | null;
+  // 命中打折规则时的划线原价与活动价（detailSalePriceCopy）。
+  sale: SalePriceCopy | null;
+}
+
+// 价格飘带（COMPONENTS「FestivalPromotion」Price ribbon）：__prices 为划线原价与活动价（或现有的价格文字），__meta 为角标。
+function PriceRibbon({ promotion, rule, price, sale }: PriceRibbonProps) {
+  const t = useCopy();
+  const { language } = useLanguage();
+  const variant = promotion.detail_ribbon === RIBBON_PANEL ? "panel" : "ribbon";
+  const ruleBadge = badgeText(language, rule);
+  const hasBadge = [promotion.badge, ruleBadge].some((text) => text !== null && text !== "");
+  return (
+    <div className={`acs-promo-ribbon acs-promo-ribbon--${variant}`}>
+      <div className="acs-promo-ribbon__prices">
+        {sale ? (
+          <>
+            <span className="acs-price-was acs-price--l">
+              <span className="acs-vh">{t("promo.a11y_original")}</span>
+              {t(...sale.original)}
+            </span>
+            <span className="acs-price-sale acs-promo-ribbon__sale">
+              <span className="acs-vh">{t("promo.a11y_sale")}</span>
+              {t(...sale.sale)}
+            </span>
+          </>
+        ) : (
+          price && <span className="acs-price acs-price--l">{t(...price)}</span>
+        )}
+      </div>
+      {hasBadge && (
+        <div className="acs-promo-ribbon__meta">
+          <PromoBadges phrase={promotion.badge} rule={ruleBadge} style={promotion.card_badge} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// 标题与活动标题之间的分隔点：图形，读屏忽略（同面包屑的分隔符）。
+function DotIcon() {
+  return (
+    <svg width="4" height="4" viewBox="0 0 4 4" aria-hidden="true">
+      <circle cx="2" cy="2" r="2" fill="currentColor" />
+    </svg>
+  );
+}
+
+// 活动规则区（UX 0.20 P03）：promo.detail_title 加活动标题、说明行与不同用说明（PromoRuleList），最后是倒计时与 promo.view_all
+// （saleLinkPath() 为 null 时不放）。说明行为空（两类规则都没有）时整区不渲染。
+function PromoRules({ promotion, lines }: { promotion: PromotionDisplay; lines: readonly string[] }) {
+  const t = useCopy();
+  if (lines.length === 0) {
+    return null;
+  }
+  const sale = saleLinkPath();
+  return (
+    <section className="acs-promo-rules">
+      <h2 className="acs-display-s site-detail__promo-title">
+        {t("promo.detail_title")}
+        {promotion.title !== null && promotion.title !== "" && (
+          <>
+            <DotIcon />
+            <span>{promotion.title}</span>
+          </>
+        )}
+      </h2>
+      <PromoRuleList lines={lines} couponCombinable={promotion.coupon_combinable} pointsCombinable={promotion.points_combinable} />
+      {(promotion.ends_at !== null || sale !== null) && (
+        <div className="site-detail__promo-end">
+          <PromoCount />
+          {sale !== null && <Link to={sale}>{t("promo.view_all")}</Link>}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export interface ProductDetailViewProps {
   product: ProductDetail;
   selection: Selection;
@@ -214,9 +308,13 @@ export function ProductDetailView({
   onImage,
 }: ProductDetailViewProps) {
   const t = useCopy();
+  const { language } = useLanguage();
+  const { promotion } = usePromotion();
   const quantityId = useId();
   const variant = selectedVariant(product, selection);
   const price = detailPriceCopy(product, variant);
+  const rule = shownRule(promotion, product.promotion);
+  const ruleLines = detailRuleLines(language, promotion, rule);
   const { remaining, block } = purchaseState(product, variant, lines);
   const shownQuantity = clampQuantity(quantity, remaining);
   const englishOnly = product.name.english_fallback || product.description.english_fallback;
@@ -239,7 +337,11 @@ export function ProductDetailView({
             </h1>
             {englishOnly && <span className="acs-tag acs-tag--outline">{t("detail.english_only")}</span>}
           </div>
-          {price && <span className="acs-price acs-price--l">{t(...price)}</span>}
+          {promotion !== null && rule !== null ? (
+            <PriceRibbon promotion={promotion} rule={rule} price={price} sale={detailSalePriceCopy(product, variant, rule)} />
+          ) : (
+            price && <span className="acs-price acs-price--l">{t(...price)}</span>
+          )}
           {product.options.length > 0 && (
             <div className="site-detail__options">
               <span className="acs-field__label">{t("detail.options")}</span>
@@ -333,6 +435,7 @@ export function ProductDetailView({
             </button>
           </div>
           <DemoHint>{t("detail.demo_hint")}</DemoHint>
+          {promotion !== null && <PromoRules promotion={promotion} lines={ruleLines} />}
         </div>
       </div>
       <section className="site-desktop-only site-detail__description">

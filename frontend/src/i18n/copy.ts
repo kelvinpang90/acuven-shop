@@ -3235,6 +3235,21 @@ export const COPY = {
     zh: "查看全部活动商品",
     ms: "Lihat semua item jualan",
   },
+  "promo.detail_title": {
+    en: "Sale offers",
+    zh: "活动优惠",
+    ms: "Tawaran jualan",
+  },
+  "promo.coupon_not_combinable": {
+    en: "This sale can't be combined with coupons.",
+    zh: "本活动不与优惠券同用。",
+    ms: "Jualan ini tidak boleh digabung dengan kupon.",
+  },
+  "promo.points_not_combinable": {
+    en: "This sale can't be combined with points.",
+    zh: "本活动不与积分同用。",
+    ms: "Jualan ini tidak boleh digabung dengan mata.",
+  },
 } as const satisfies Record<string, CopyEntry>;
 
 export type CopyKey = keyof typeof COPY;

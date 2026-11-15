@@ -111,6 +111,31 @@ export function PromoCount() {
   );
 }
 
+interface PromoRuleListProps {
+  // 已套好 promo.rule_* 模板的说明行，按要显示的顺序。
+  lines: readonly string[];
+  // 活动的 coupon_combinable、points_combinable：为假时分别显示 promo.coupon_not_combinable、promo.points_not_combinable。
+  couponCombinable: boolean;
+  pointsCombinable: boolean;
+}
+
+// 规则列表（UX 0.20 P03、P15，COMPONENTS「FestivalPromotion」Price ribbon 的 rules area）：说明行的 ul，其后是不同用说明。
+// P03 的活动规则区与 P15（SHOP-TASK-257）共用；标题、倒计时与链接由调用方放。
+export function PromoRuleList({ lines, couponCombinable, pointsCombinable }: PromoRuleListProps) {
+  const t = useCopy();
+  return (
+    <>
+      <ul>
+        {lines.map((line, index) => (
+          <li key={index}>{line}</li>
+        ))}
+      </ul>
+      {!couponCombinable && <p className="acs-body-s">{t("promo.coupon_not_combinable")}</p>}
+      {!pointsCombinable && <p className="acs-body-s">{t("promo.points_not_combinable")}</p>}
+    </>
+  );
+}
+
 // list_strip 的取值：ticket 为虚线票券，其余（band）为整条色带。
 const STRIP_TICKET = "ticket";
 

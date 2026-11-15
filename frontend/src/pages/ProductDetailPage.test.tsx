@@ -1,13 +1,17 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import type { ProductDetail, VariantDetail } from "../api/catalog";
+import type { CardPromotion, ProductDetail, VariantDetail } from "../api/catalog";
+import type { PromotionDisplay, PromotionResponse, RuleDisplay } from "../api/promotion";
 import App from "../App";
 import { CART_STORAGE_KEY, readCart } from "../cart";
 import type { CartLine, CartStorage } from "../cart";
-import { BRAND, COPY, LANGUAGES } from "../i18n/copy";
+import { saleLinkPath } from "../components/PromoParts";
+import { BRAND, COPY, LANGUAGES, translate } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
+import { PromotionProvider } from "../promotion";
+import { badgeText, countdownText } from "../promoText";
 import { RouterProvider } from "../router";
 import { ProductDetailView, addSelection, detailRedirect } from "./ProductDetailPage";
 import type { AddNotice } from "./ProductDetailPage";
@@ -58,6 +62,8 @@ interface RenderOptions {
   notice?: AddNotice;
   image?: number;
   language?: Language;
+  // 一次活动读取的结果（PromotionProvider 的 initial）；不给时不包 PromotionProvider（没有活动）。
+  promotion?: PromotionResponse;
 }
 
 function render({
@@ -70,26 +76,36 @@ function render({
   notice = null,
   image = 0,
   language = "en",
+  promotion,
 }: RenderOptions = {}): string {
+  const view = (
+    <ProductDetailView
+      product={item}
+      selection={selection}
+      quantity={quantity}
+      draft={draft}
+      capped={capped}
+      lines={lines}
+      notice={notice}
+      image={image}
+      onToggle={() => undefined}
+      onQuantity={() => undefined}
+      onDraft={() => undefined}
+      onQuantityInput={() => undefined}
+      onAdd={() => undefined}
+      onImage={() => undefined}
+    />
+  );
   return renderToStaticMarkup(
     <LanguageProvider storage={languageStorage(language)}>
       <RouterProvider initialPath={`/products/${item.slug}`}>
-        <ProductDetailView
-          product={item}
-          selection={selection}
-          quantity={quantity}
-          draft={draft}
-          capped={capped}
-          lines={lines}
-          notice={notice}
-          image={image}
-          onToggle={() => undefined}
-          onQuantity={() => undefined}
-          onDraft={() => undefined}
-          onQuantityInput={() => undefined}
-          onAdd={() => undefined}
-          onImage={() => undefined}
-        />
+        {promotion === undefined ? (
+          view
+        ) : (
+          <PromotionProvider initial={promotion} fetcher={() => new Promise<PromotionResponse>(() => undefined)} clock={() => 0}>
+            {view}
+          </PromotionProvider>
+        )}
       </RouterProvider>
     </LanguageProvider>,
   );
@@ -553,6 +569,282 @@ describe("adding to the browser cart", () => {
     expect(addSelection(null, item, { color: "red", size: "s" }, 1, [])).toBe("error");
     const html = buy(render({ notice: "error" }));
     expect(html).toContain(COPY["common.error_retry"].en);
+  });
+});
+
+// 活动（UX 0.20 P03）：红/S RM 39.00 → 31.20、蓝/M RM 42.00 → 33.60，命中打折 20%（规则 11）。
+const SERVER_TIME = "2026-11-14T04:00:00Z";
+// 服务端时间之后一小时结束：时钟替身固定为 0，倒计时文字为 countdownText(language, HOUR_MS)。
+const ENDS_AT = "2026-11-14T05:00:00Z";
+const HOUR_MS = 3_600_000;
+
+function cardRule(rule_id: number, kind: string): CardPromotion {
+  return { rule_id, kind, discount_mode: "percent", percent: 20, amount_sen: null, buy_quantity: 2, get_quantity: 1, get_percent: 100 };
+}
+
+const ITEM_RULE = cardRule(11, "item_discount");
+const BXGY_RULE = cardRule(14, "buy_x_get_y");
+
+function saleVariant(sku: string, options: Record<string, string>, price_sen: number, sale_price_sen: number): VariantDetail {
+  return { ...variant(sku, options, price_sen), sale_price_sen };
+}
+
+const onSale = product({
+  variants: [
+    saleVariant("tee-red-s", { color: "red", size: "s" }, 3900, 3120),
+    saleVariant("tee-blue-m", { color: "blue", size: "m" }, 4200, 3360),
+  ],
+  promotion: ITEM_RULE,
+});
+
+function ruleDisplay(rule_id: number, position: number, overrides: Partial<RuleDisplay>): RuleDisplay {
+  return {
+    rule_id,
+    position,
+    kind: "item_discount",
+    discount_mode: null,
+    percent: null,
+    amount_sen: null,
+    buy_quantity: null,
+    get_quantity: null,
+    get_percent: null,
+    threshold_sen: null,
+    tiers: [],
+    categories: [],
+    has_products: false,
+    ...overrides,
+  };
+}
+
+const ITEM_DISPLAY = ruleDisplay(11, 1, { discount_mode: "percent", percent: 20 });
+const BXGY_DISPLAY = ruleDisplay(14, 2, { kind: "buy_x_get_y", buy_quantity: 2, get_quantity: 1, get_percent: 100 });
+const SPEND_DISPLAY = ruleDisplay(12, 3, {
+  kind: "spend_discount",
+  tiers: [
+    { threshold_sen: 15000, amount_sen: 1500, percent: null },
+    { threshold_sen: 30000, amount_sen: 4000, percent: null },
+  ],
+});
+const SHIPPING_DISPLAY = ruleDisplay(13, 4, { kind: "free_shipping", threshold_sen: 12000 });
+
+function sale(overrides: Partial<PromotionDisplay> = {}): PromotionResponse {
+  return {
+    promotion: {
+      promotion_id: 7,
+      title: "Lunar New Year Sale",
+      subtitle: null,
+      badge: "Lunar deal",
+      strip: null,
+      pack: "cny",
+      palette: "cny",
+      ambient: "none",
+      home_poster: "split",
+      list_strip: "band",
+      card_badge: "tag",
+      detail_ribbon: "ribbon",
+      cart_progress: "bar",
+      poster_mode: "template",
+      poster_desktop: null,
+      poster_phone: null,
+      poster_alt: null,
+      ends_at: ENDS_AT,
+      coupon_combinable: true,
+      points_combinable: true,
+      rules: [ITEM_DISPLAY, BXGY_DISPLAY, SPEND_DISPLAY, SHIPPING_DISPLAY],
+      ...overrides,
+    },
+    server_time: SERVER_TIME,
+  };
+}
+
+const NO_SALE: PromotionResponse = { promotion: null, server_time: SERVER_TIME };
+
+const ribbon = (html: string) => part(html, /<div class="acs-promo-ribbon [\s\S]*?(?=<div class="site-detail__options">)/);
+const rulesArea = (html: string) => part(html, /<section class="acs-promo-rules">[\s\S]*?<\/section>/);
+const tag = (text: string) => `<span class="acs-promo-badge acs-promo-badge--tag"><span>${escapeHtml(text)}</span></span>`;
+
+function meta(language: Language, rule: CardPromotion): string {
+  return `<div class="acs-promo-ribbon__meta"><span class="acs-promo-badges">${tag("Lunar deal")}${tag(badgeText(language, rule) ?? "")}</span></div>`;
+}
+
+function salePrices(language: Language, original: string, saleText: string): string {
+  return (
+    `<div class="acs-promo-ribbon__prices">` +
+    `<span class="acs-price-was acs-price--l"><span class="acs-vh">${COPY["promo.a11y_original"][language]}</span>${escapeHtml(original)}</span>` +
+    `<span class="acs-price-sale acs-promo-ribbon__sale"><span class="acs-vh">${COPY["promo.a11y_sale"][language]}</span>${escapeHtml(saleText)}</span>` +
+    `</div>`
+  );
+}
+
+const CLOCK_ICON =
+  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">` +
+  `<circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l3 2M9 2h6"></path></svg>`;
+
+// promo.view_all 链接：P15 在路由表里时才有（按 saleLinkPath() 的返回值，不写死）。
+function viewAllLink(language: Language): string {
+  const path = saleLinkPath();
+  return path === null ? "" : `<a href="${path}">${escapeHtml(COPY["promo.view_all"][language])}</a>`;
+}
+
+function promoEnd(language: Language): string {
+  return `<div class="site-detail__promo-end"><span class="acs-promo-count">${CLOCK_ICON}<span>${escapeHtml(countdownText(language, HOUR_MS))}</span></span>${viewAllLink(language)}</div>`;
+}
+
+describe("price ribbon", () => {
+  // UX 0.20 P03「价格区按 detail_ribbon 的变体显示所选规格的划线原价与活动单价（命中打折规则时）以及角标（规则同「1. 全局框架」的商品卡）」：
+  // 选全前划线价为最低单价（不加「起」）、活动价为最低活动单价加 list.price_from，角标为角标短语与规则角标。
+  it.each(LANGUAGES)("shows the lowest prices with a from-price sale before every option is chosen in %s", (language) => {
+    const html = render({ item: onSale, selection: { color: "blue" }, promotion: sale(), language });
+    expect(ribbon(html)).toBe(
+      `<div class="acs-promo-ribbon acs-promo-ribbon--ribbon">` +
+        salePrices(language, translate(language, "common.price_myr", { amount: "39.00" }), translate(language, "list.price_from", { amount: "31.20" })) +
+        meta(language, ITEM_RULE) +
+        `</div>`,
+    );
+    expect(html).not.toContain(`<span class="acs-price acs-price--l">`);
+  });
+
+  // 同上「所选规格的划线原价与活动单价」与「切换规格时随服务端数据刷新」：选全后为所选 SKU 的原价与活动单价，都不加「起」。
+  it.each(LANGUAGES)("shows the chosen SKU's original and sale price in %s", (language) => {
+    const blue = ribbon(render({ item: onSale, selection: { color: "blue", size: "m" }, promotion: sale(), language }));
+    expect(blue).toContain(salePrices(language, translate(language, "common.price_myr", { amount: "42.00" }), translate(language, "common.price_myr", { amount: "33.60" })));
+    const red = ribbon(render({ item: onSale, selection: { color: "red", size: "s" }, promotion: sale(), language }));
+    expect(red).toContain(salePrices(language, translate(language, "common.price_myr", { amount: "39.00" }), translate(language, "common.price_myr", { amount: "31.20" })));
+  });
+
+  // UX 0.20「商品卡价格与角标」（P03 规则同它）：「只有一个规格时用 [common.price_myr]」——单规格商品的活动价不加「起」。
+  it.each(LANGUAGES)("shows a plain sale price for a single SKU in %s", (language) => {
+    const single = product({ variants: [saleVariant("tee-red-s", { color: "red", size: "s" }, 3900, 3120)], promotion: ITEM_RULE });
+    const html = ribbon(render({ item: single, promotion: sale(), language }));
+    expect(html).toContain(salePrices(language, translate(language, "common.price_myr", { amount: "39.00" }), translate(language, "common.price_myr", { amount: "31.20" })));
+  });
+
+  // UX 0.20「1. 全局框架」：「detail_ribbon 价格飘带与规则区（P03）……每位的变体由视觉稿给出」——panel 变体用 --panel，其他取值按 ribbon。
+  it.each(["panel", "ribbon", "unknown"])("uses the %s variant of the ribbon", (variant) => {
+    const html = render({ item: onSale, promotion: sale({ detail_ribbon: variant }) });
+    expect(ribbon(html)).toMatch(new RegExp(`^<div class="acs-promo-ribbon acs-promo-ribbon--${variant === "panel" ? "panel" : "ribbon"}">`));
+  });
+
+  // UX 0.20「商品卡价格与角标」：「买 X 享 Y 为 [promo.badge_bxgy_free]……价格不变」——飘带里是现有的价格文字（不划线）与角标。
+  it.each(LANGUAGES)("keeps the plain price and adds the badges for buy X get Y in %s", (language) => {
+    const html = render({ item: product({ promotion: BXGY_RULE }), promotion: sale(), language });
+    expect(ribbon(html)).toBe(
+      `<div class="acs-promo-ribbon acs-promo-ribbon--ribbon">` +
+        `<div class="acs-promo-ribbon__prices"><span class="acs-price acs-price--l">${escapeHtml(COPY["list.price_from"][language].replace("{amount}", "39.00"))}</span></div>` +
+        meta(language, BXGY_RULE) +
+        `</div>`,
+    );
+    expect(html).not.toContain("acs-price-was");
+  });
+
+  // UX 0.20「商品卡价格与角标」：「活动的角标短语（……可为空）显示在规则角标之前」——短语为空时只放规则角标。
+  it("leaves out an empty badge phrase", () => {
+    const html = ribbon(render({ item: onSale, promotion: sale({ badge: null }) }));
+    expect(html).toContain(`<div class="acs-promo-ribbon__meta"><span class="acs-promo-badges">${tag("−20%")}</span></div>`);
+  });
+
+  // UX 0.20「节日促销活动」：「没有生效活动时各页与 0.19 完全相同」，以及 HANDOFF 0.97「只在……商品的 promotion.rule_id 在该活动的 rules 里时显示」：
+  // 没有活动、没有命中或规则不在当前活动里时，整页与不带活动的渲染逐字相同（活动没有整单级规则，规则区也不出现）。
+  it.each(LANGUAGES)("is exactly the page without a sale when nothing applies in %s", (language) => {
+    for (const selection of [{}, { color: "blue", size: "m" }]) {
+      const plain = render({ item: onSale, selection, language });
+      expect(render({ item: onSale, selection, promotion: NO_SALE, language })).toBe(plain);
+      expect(render({ item: onSale, selection, promotion: sale({ rules: [BXGY_DISPLAY] }), language })).toBe(plain);
+      expect(render({ item: product({ ...onSale, promotion: null }), selection, promotion: sale({ rules: [ITEM_DISPLAY] }), language })).toBe(
+        render({ item: product({ ...onSale, promotion: null }), selection, language }),
+      );
+      expect(plain).not.toContain("acs-promo");
+    }
+  });
+
+  // 同上：只命中整单级规则（商品没有命中）时价格区照旧——去掉规则区后与不带活动的渲染逐字相同。
+  it("keeps the price area unchanged when only order-level rules apply", () => {
+    const item = product({ ...onSale, promotion: null });
+    const html = render({ item, promotion: sale() });
+    expect(html).not.toContain("acs-promo-ribbon");
+    expect(html.replace(rulesArea(html), "")).toBe(render({ item }));
+  });
+});
+
+describe("sale rules area", () => {
+  // UX 0.20 P03 线框「★ [detail.demo_hint]」之后「活动规则区：[promo.detail_title] <活动标题> · <本商品适用的商品级规则说明> · <整单级规则说明>（满额减各档、免运费）
+  // · [promo.coupon_not_combinable]? · [promo.points_not_combinable]? [promo.ends_in] ⏱ ([promo.view_all]) → P15」与说明「先列本商品命中的商品级规则说明……再列满额减或满额折的各档与免运费」。
+  it.each(LANGUAGES)("lists the product's rule, then the order-level rules, then the notes and the countdown in %s", (language) => {
+    const html = render({ item: onSale, promotion: sale({ coupon_combinable: false, points_combinable: false }), language });
+    const items = [
+      translate(language, "promo.rule_item_percent", { percent: 20 }),
+      translate(language, "promo.rule_tier_amount", { threshold: "150.00", amount: "15.00" }),
+      translate(language, "promo.rule_tier_amount", { threshold: "300.00", amount: "40.00" }),
+      translate(language, "promo.rule_free_shipping", { threshold: "120.00" }),
+    ];
+    expect(rulesArea(html)).toBe(
+      `<section class="acs-promo-rules">` +
+        `<h2 class="acs-display-s site-detail__promo-title">${escapeHtml(COPY["promo.detail_title"][language])}` +
+        `<svg width="4" height="4" viewBox="0 0 4 4" aria-hidden="true"><circle cx="2" cy="2" r="2" fill="currentColor"></circle></svg>` +
+        `<span>Lunar New Year Sale</span></h2>` +
+        `<ul>${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>` +
+        `<p class="acs-body-s">${escapeHtml(COPY["promo.coupon_not_combinable"][language])}</p>` +
+        `<p class="acs-body-s">${escapeHtml(COPY["promo.points_not_combinable"][language])}</p>` +
+        promoEnd(language) +
+        `</section>`,
+    );
+    const hint = html.indexOf(escapeHtml(COPY["detail.demo_hint"][language]));
+    expect(hint).toBeGreaterThanOrEqual(0);
+    expect(html.indexOf(`<section class="acs-promo-rules">`)).toBeGreaterThan(hint);
+    expect(html.indexOf(`<section class="acs-promo-rules">`)).toBeLessThan(html.indexOf(`site-detail__description`));
+  });
+
+  // UX 0.20 P03「活动关闭了与优惠券或积分同用时，分别显示」——只关闭其中一个时只显示那一条，都可同用时都不显示。
+  it("shows only the note for what cannot be combined", () => {
+    const coupon = escapeHtml(COPY["promo.coupon_not_combinable"].en);
+    const points = escapeHtml(COPY["promo.points_not_combinable"].en);
+    const pointsOnly = rulesArea(render({ item: onSale, promotion: sale({ points_combinable: false }) }));
+    expect(pointsOnly).toContain(points);
+    expect(pointsOnly).not.toContain(coupon);
+    const couponOnly = rulesArea(render({ item: onSale, promotion: sale({ coupon_combinable: false }) }));
+    expect(couponOnly).toContain(coupon);
+    expect(couponOnly).not.toContain(points);
+    const both = rulesArea(render({ item: onSale, promotion: sale() }));
+    expect(both).not.toContain(coupon);
+    expect(both).not.toContain(points);
+  });
+
+  // UX 0.20 P03「其下的活动规则区在活动有整单级规则或本商品命中商品级规则时显示……先列本商品命中的商品级规则说明（没有命中时不列）」：
+  // 没有命中的商品只列满额各档与免运费。
+  it.each(LANGUAGES)("shows the area with only the order-level rules for a product without a hit in %s", (language) => {
+    const area = rulesArea(render({ item: product(), promotion: sale(), language }));
+    expect([...area.matchAll(/<li>([^<]*)<\/li>/g)].map((m) => m[1])).toEqual(
+      [
+        translate(language, "promo.rule_tier_amount", { threshold: "150.00", amount: "15.00" }),
+        translate(language, "promo.rule_tier_amount", { threshold: "300.00", amount: "40.00" }),
+        translate(language, "promo.rule_free_shipping", { threshold: "120.00" }),
+      ].map(escapeHtml),
+    );
+  });
+
+  // 同上：只有本商品命中的商品级规则、没有整单级规则时只列它。
+  it("shows the area with only the product's rule", () => {
+    const area = rulesArea(render({ item: onSale, promotion: sale({ rules: [ITEM_DISPLAY] }) }));
+    expect([...area.matchAll(/<li>([^<]*)<\/li>/g)].map((m) => m[1])).toEqual([translate("en", "promo.rule_item_percent", { percent: 20 })]);
+  });
+
+  // UX 0.20 P03「（两者都没有时整区不显示）」：只有别的商品的规则、本商品没有命中时不渲染规则区。
+  it("has no area when neither kind of rule applies", () => {
+    expect(render({ item: product(), promotion: sale({ rules: [BXGY_DISPLAY] }) })).not.toContain("acs-promo-rules");
+  });
+
+  // UX 0.20 P03 线框「[promo.detail_title]  <活动标题>」：活动标题为空时只放 promo.detail_title；不计时（ends_at 为 null）时只剩 promo.view_all，
+  // 也没有 P15 时不放末行。
+  it("leaves out an empty title and an absent countdown", () => {
+    const area = rulesArea(render({ item: onSale, promotion: sale({ title: null, ends_at: null }) }));
+    expect(area).toContain(`<h2 class="acs-display-s site-detail__promo-title">${COPY["promo.detail_title"].en}</h2>`);
+    expect(area).not.toContain("acs-promo-count");
+    const link = viewAllLink("en");
+    if (link === "") {
+      expect(area).not.toContain("site-detail__promo-end");
+    } else {
+      expect(area).toContain(`<div class="site-detail__promo-end">${link}</div>`);
+    }
   });
 });
 

@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import type { ProductDetail, VariantDetail } from "../api/catalog";
+import type { CardPromotion, ProductDetail, VariantDetail } from "../api/catalog";
+import type { PromotionDisplay, RuleDisplay } from "../api/promotion";
 import type { CartLine } from "../cart";
+import { LANGUAGES, translate } from "../i18n/copy";
 import {
   clampQuantity,
   detailPriceCopy,
+  detailRuleLines,
+  detailSalePriceCopy,
   initialSelection,
   isValueEnabled,
   purchaseState,
@@ -238,5 +242,164 @@ describe("typing a quantity", () => {
   // 任务契约「remaining 为 0 时恢复为原来的件数（按钮已禁用）」：不改成 0 件，也不显示 common.qty_capped。
   it("keeps the previous quantity when nothing more can be added", () => {
     expect(quantityInputResult("3", 1, 0)).toEqual({ quantity: 1, capped: false });
+  });
+});
+
+function saleVariant(sku: string, options: Record<string, string>, price_sen: number, sale_price_sen: number | null): VariantDetail {
+  return { ...variant(sku, options, price_sen), sale_price_sen };
+}
+
+function cardRule(rule_id: number, kind: string): CardPromotion {
+  return { rule_id, kind, discount_mode: "percent", percent: 20, amount_sen: null, buy_quantity: 2, get_quantity: 1, get_percent: 100 };
+}
+
+const ITEM_RULE = cardRule(11, "item_discount");
+const BXGY_RULE = cardRule(14, "buy_x_get_y");
+
+// 红/S RM 39.00 → 31.20，蓝/M RM 42.00 → 33.60（接口给的活动单价）。
+const onSale = product([
+  saleVariant("tee-red-s", { color: "red", size: "s" }, 3900, 3120),
+  saleVariant("tee-blue-m", { color: "blue", size: "m" }, 4200, 3360),
+]);
+
+const singleOnSale = product([saleVariant("tee-red-s", { color: "red", size: "s" }, 3900, 3120)]);
+
+describe("sale price in the price ribbon", () => {
+  // UX 0.20 P03「价格区按 detail_ribbon 的变体显示所选规格的划线原价与活动单价（命中打折规则时）」：
+  // 选全后为所选 SKU 的原价与活动单价，都按 common.price_myr，三种语言都不加「起」。
+  it.each(LANGUAGES)("shows the chosen SKU's original and sale price in %s", (language) => {
+    const copy = detailSalePriceCopy(onSale, selectedVariant(onSale, { color: "blue", size: "m" }), ITEM_RULE);
+    expect(copy).toEqual({ original: ["common.price_myr", { amount: "42.00" }], sale: ["common.price_myr", { amount: "33.60" }] });
+    expect(copy && translate(language, ...copy.original)).toBe(translate(language, "common.price_myr", { amount: "42.00" }));
+    expect(copy && translate(language, ...copy.sale)).toBe(translate(language, "common.price_myr", { amount: "33.60" }));
+  });
+
+  // UX 0.20 P03「规则同「1. 全局框架」的商品卡」——商品卡「多于一个启用规格时，活动价取最低活动单价并照原规则加「起」；划线原价……不加「起」」：
+  // 选全前划线价为启用 SKU 的最低单价（common.price_myr），活动价为最低活动单价加 list.price_from。
+  it.each(LANGUAGES)("shows the lowest prices with a from-price sale before every option is chosen in %s", (language) => {
+    const copy = detailSalePriceCopy(onSale, null, ITEM_RULE);
+    expect(copy).toEqual({ original: ["common.price_myr", { amount: "39.00" }], sale: ["list.price_from", { amount: "31.20" }] });
+    expect(copy && translate(language, ...copy.sale)).toBe(translate(language, "list.price_from", { amount: "31.20" }));
+  });
+
+  // 同上「照原规则用 [common.price_myr] 或 [list.price_from]」：只有一个启用 SKU 时活动价也不加「起」。
+  it("shows a plain sale price for a single SKU", () => {
+    const expected = { original: ["common.price_myr", { amount: "39.00" }], sale: ["common.price_myr", { amount: "31.20" }] };
+    expect(detailSalePriceCopy(singleOnSale, null, ITEM_RULE)).toEqual(expected);
+    expect(detailSalePriceCopy(singleOnSale, singleOnSale.variants[0] ?? null, ITEM_RULE)).toEqual(expected);
+  });
+
+  // UX 0.20「商品卡价格与角标」：「买 X 享 Y 为 [promo.badge_bxgy_free]……价格不变」；没有命中或没有活动单价时也不划线。
+  it("gives no sale price for buy X get Y, without a hit or without a sale price", () => {
+    expect(detailSalePriceCopy(onSale, null, BXGY_RULE)).toBeNull();
+    expect(detailSalePriceCopy(onSale, null, null)).toBeNull();
+    expect(detailSalePriceCopy(twoSkus, null, ITEM_RULE)).toBeNull();
+    expect(detailSalePriceCopy(twoSkus, twoSkus.variants[0] ?? null, ITEM_RULE)).toBeNull();
+  });
+
+  // 任务契约「现有 detailPriceCopy 不变」：有活动单价时现有价格文案照旧。
+  it("leaves the plain price copy unchanged", () => {
+    expect(detailPriceCopy(onSale, null)).toEqual(["list.price_from", { amount: "39.00" }]);
+    expect(detailPriceCopy(onSale, selectedVariant(onSale, { color: "blue", size: "m" }))).toEqual(["common.price_myr", { amount: "42.00" }]);
+  });
+});
+
+function ruleDisplay(rule_id: number, position: number, overrides: Partial<RuleDisplay>): RuleDisplay {
+  return {
+    rule_id,
+    position,
+    kind: "item_discount",
+    discount_mode: null,
+    percent: null,
+    amount_sen: null,
+    buy_quantity: null,
+    get_quantity: null,
+    get_percent: null,
+    threshold_sen: null,
+    tiers: [],
+    categories: [],
+    has_products: false,
+    ...overrides,
+  };
+}
+
+const ITEM_DISPLAY = ruleDisplay(11, 2, { discount_mode: "percent", percent: 20, categories: [{ slug: "apparel", name: "Apparel" }] });
+const BXGY_DISPLAY = ruleDisplay(14, 4, { kind: "buy_x_get_y", buy_quantity: 2, get_quantity: 1, get_percent: 100 });
+const SHIPPING_DISPLAY = ruleDisplay(13, 1, { kind: "free_shipping", threshold_sen: 12000 });
+const SPEND_DISPLAY = ruleDisplay(12, 3, {
+  kind: "spend_discount",
+  tiers: [
+    { threshold_sen: 15000, amount_sen: 1500, percent: null },
+    { threshold_sen: 30000, amount_sen: 4000, percent: null },
+  ],
+});
+
+function promotionWith(rules: RuleDisplay[]): PromotionDisplay {
+  return {
+    promotion_id: 7,
+    title: "Lunar New Year Sale",
+    subtitle: null,
+    badge: null,
+    strip: null,
+    pack: "cny",
+    palette: "cny",
+    ambient: "none",
+    home_poster: "split",
+    list_strip: "band",
+    card_badge: "tag",
+    detail_ribbon: "ribbon",
+    cart_progress: "bar",
+    poster_mode: "template",
+    poster_desktop: null,
+    poster_phone: null,
+    poster_alt: null,
+    ends_at: null,
+    coupon_combinable: true,
+    points_combinable: true,
+    rules,
+  };
+}
+
+describe("rule lines of the sale area", () => {
+  const all = promotionWith([SHIPPING_DISPLAY, ITEM_DISPLAY, SPEND_DISPLAY, BXGY_DISPLAY]);
+
+  // UX 0.20 P03「先列本商品命中的商品级规则说明（没有命中时不列），再列满额减或满额折的各档与免运费」：
+  // 本商品的打折规则在前（不附范围），其后按 position 为免运费（1）与满额减两档（3）；别的商品的买 X 享 Y 不列。
+  it.each(LANGUAGES)("lists the product's rule first, then the order-level rules by position in %s", (language) => {
+    expect(detailRuleLines(language, all, ITEM_RULE)).toEqual([
+      translate(language, "promo.rule_item_percent", { percent: 20 }),
+      translate(language, "promo.rule_free_shipping", { threshold: "120.00" }),
+      translate(language, "promo.rule_tier_amount", { threshold: "150.00", amount: "15.00" }),
+      translate(language, "promo.rule_tier_amount", { threshold: "300.00", amount: "40.00" }),
+    ]);
+  });
+
+  // 同上「再列满额减或满额折的各档与免运费」：接口顺序不是 position 顺序时也按 position 排。
+  it("orders the order-level rules by position", () => {
+    const shuffled = promotionWith([SPEND_DISPLAY, SHIPPING_DISPLAY]);
+    expect(detailRuleLines("en", shuffled, null)).toEqual([
+      translate("en", "promo.rule_free_shipping", { threshold: "120.00" }),
+      translate("en", "promo.rule_tier_amount", { threshold: "150.00", amount: "15.00" }),
+      translate("en", "promo.rule_tier_amount", { threshold: "300.00", amount: "40.00" }),
+    ]);
+  });
+
+  // 同上：命中买 X 享 Y 时它的说明在前。
+  it("puts a buy X get Y rule of the product first", () => {
+    expect(detailRuleLines("zh", all, BXGY_RULE)[0]).toBe(translate("zh", "promo.rule_bxgy_free", { x: 2, y: 1 }));
+  });
+
+  // 同上「没有命中时不列」，以及 HANDOFF 0.97「规则区的整单级部分只要有活动就显示」：没有命中或规则不在当前活动里时只列整单级规则。
+  it("lists only the order-level rules without a hit in this promotion", () => {
+    const orderOnly = detailRuleLines("en", all, null);
+    expect(orderOnly).toHaveLength(3);
+    expect(detailRuleLines("en", all, cardRule(99, "item_discount"))).toEqual(orderOnly);
+  });
+
+  // UX 0.20 P03「两者都没有时整区不显示」与「没有生效活动时各页与 0.19 完全相同」：没有活动、或只有别的商品的规则且本商品没有命中时为空。
+  it("has no lines without a promotion or without any rule to show", () => {
+    expect(detailRuleLines("en", null, ITEM_RULE)).toEqual([]);
+    expect(detailRuleLines("en", promotionWith([BXGY_DISPLAY]), null)).toEqual([]);
+    expect(detailRuleLines("en", promotionWith([BXGY_DISPLAY]), ITEM_RULE)).toEqual([]);
   });
 });

@@ -127,6 +127,11 @@ body { margin: 0; }
 .site-detail__added { justify-content: space-between; align-items: center; }
 .site-detail__added-text { display: flex; align-items: center; gap: 8px; }
 .site-detail__description { display: grid; gap: 12px; max-width: 800px; padding-top: 64px; }
+/* 价格飘带与活动规则区（SHOP-TASK-256，P03-promo-desktop、P03-promo-phone）：飘带、规则区的版式与配色来自 acuven-shop.css；
+   角标框在商品卡里贴图块定位，飘带里改为随 __meta 排列；规则区标题与活动标题之间、倒计时与链接之间的间距取自视觉稿 */
+.acs-promo-ribbon__meta > .acs-promo-badges { display: contents; }
+.site-detail__promo-title { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.site-detail__promo-end { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
 
 /* 购物车 P04：左侧各行，右侧 400px 小计栏；每行为 图片 | 名称与规格 | 数量 | 行小计 | 移除 */
 .site-cart { padding: 0 0 96px; }
