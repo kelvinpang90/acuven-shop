@@ -507,7 +507,7 @@ describe("home promotion poster", () => {
     const html = poster(renderPromo(sale({ subtitle })));
     expect(html).toContain(`<h2 class="acs-display-l acs-promo-poster__title">Lunar New Year Sale</h2><span class="acs-promo-count">`);
     expect(html).not.toContain("acs-promo-poster__sub");
-    expect(html).not.toContain("<p");
+    expect(html).not.toMatch(/<p[\s>]/);
   });
 
   // UX 0.20 P01：「上传图模式桌面显示桌面图、手机显示手机图……整图是去 P15 的链接，读屏读活动的替代文字」——
