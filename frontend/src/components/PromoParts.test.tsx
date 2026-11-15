@@ -3,11 +3,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import type { CardPromotion } from "../api/catalog";
-import type { PromotionDisplay, RuleDisplay } from "../api/promotion";
+import type { PromotionDisplay, PromotionResponse, RuleDisplay } from "../api/promotion";
 import { COPY, LANGUAGES } from "../i18n/copy";
 import type { Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
-import { PromoBadges, PromoPrices, shownRule } from "./PromoParts";
+import { PromotionProvider } from "../promotion";
+import { countdownText } from "../promoText";
+import { ROUTE_PATHS, RouterProvider } from "../router";
+import { PromoBadges, PromoPrices, PromoStrip, saleLinkPath, shownRule } from "./PromoParts";
 
 function render(node: ReactNode, language: Language = "en"): string {
   const storage = {
@@ -130,5 +133,88 @@ describe("shownRule", () => {
     expect(shownRule(null, CARD_RULE)).toBeNull();
     expect(shownRule(promotion([rule(11)]), null)).toBeNull();
     expect(shownRule(promotion([rule(12)]), CARD_RULE)).toBeNull();
+  });
+});
+
+const HOUR_MS = 3_600_000;
+const SERVER_TIME = "2026-11-14T04:00:00Z";
+// 服务端时间之后一小时结束：时钟替身固定为 0，倒计时文字为 countdownText(language, HOUR_MS)。
+const ENDS_AT = "2026-11-14T05:00:00Z";
+
+const CLOCK_ICON =
+  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">` +
+  `<circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l3 2M9 2h6"></path></svg>`;
+
+function countBox(language: Language): string {
+  return `<span class="acs-promo-count">${CLOCK_ICON}<span>${countdownText(language, HOUR_MS)}</span></span>`;
+}
+
+// 以给定的一次读取结果（PromotionProvider 的 initial）渲染；读取替身从不返回。
+function renderWithPromotion(node: ReactNode, display: PromotionDisplay | null, language: Language = "en"): string {
+  const initial: PromotionResponse = { promotion: display, server_time: SERVER_TIME };
+  return render(
+    <RouterProvider initialPath="/products">
+      <PromotionProvider initial={initial} fetcher={() => new Promise<PromotionResponse>(() => undefined)} clock={() => 0}>
+        {node}
+      </PromotionProvider>
+    </RouterProvider>,
+    language,
+  );
+}
+
+function shown(overrides: Partial<PromotionDisplay>): PromotionDisplay {
+  return { ...promotion([rule(11)]), ends_at: ENDS_AT, ...overrides };
+}
+
+// promo.view_all 链接：P15 在路由表里时才有（按 saleLinkPath() 的返回值，不写死）。
+function viewAllLink(language: Language): string {
+  const sale = saleLinkPath();
+  return sale === null ? "" : `<a href="${sale}">${COPY["promo.view_all"][language]}</a>`;
+}
+
+describe("saleLinkPath", () => {
+  // UX 0.20 P01「整图是去 P15 的链接」、P02「活动横条：<横条文字> [promo.ends_in] ⏱ ( [promo.view_all] ) → P15」——
+  // 去 P15 的链接只在 /sale 在路由表里时给出，否则为 null（HANDOFF 0.97）。
+  it("gives /sale only while it is in the route table", () => {
+    const routes: readonly string[] = ROUTE_PATHS;
+    expect(saleLinkPath()).toBe(routes.includes("/sale") ? "/sale" : null);
+  });
+});
+
+describe("PromoStrip", () => {
+  // UX 0.20 P02「活动横条按 `list_strip` 的变体显示」与「活动横条：<横条文字> [promo.ends_in] ⏱ ( [promo.view_all] ) → P15」：
+  // 两种变体都是图案、文字，末尾为倒计时与 promo.view_all（P15 不在路由表时不放）。
+  it.each(LANGUAGES.flatMap((language) => ["band", "ticket"].map((variant): [Language, string] => [language, variant])))(
+    "shows the %s %s strip with the text, the countdown and the view-all link",
+    (language, variant) => {
+      const html = renderWithPromotion(<PromoStrip text="Lunar New Year Sale" viewAll />, shown({ list_strip: variant }), language);
+      expect(html).toBe(
+        `<div class="acs-promo-strip acs-promo-strip--${variant}">` +
+          `<span class="acs-promo-motif" aria-hidden="true"></span>` +
+          `<span class="acs-promo-strip__title">Lunar New Year Sale</span>` +
+          `<span class="acs-promo-strip__end">${countBox(language)}${viewAllLink(language)}</span>` +
+          `</div>`,
+      );
+    },
+  );
+
+  // UX 0.20 P15「活动横条（list_strip）：<活动标题>   [promo.ends_in] ⏱」——P15 传入活动标题、不放 promo.view_all。
+  it("leaves out the view-all link when asked to", () => {
+    const html = renderWithPromotion(<PromoStrip text="Lunar New Year Sale" viewAll={false} />, shown({}));
+    expect(html).not.toContain("<a ");
+    expect(html).not.toContain(COPY["promo.view_all"].en);
+    expect(html).toContain(`<span class="acs-promo-strip__end">${countBox("en")}</span>`);
+  });
+
+  // UX 0.20「节日促销活动」：「没有生效活动时各页与 0.19 完全相同」——没有活动时横条什么都不渲染。
+  it("renders nothing without a promotion", () => {
+    expect(renderWithPromotion(<PromoStrip text="Lunar New Year Sale" viewAll />, null)).toBe("");
+  });
+
+  // UX 0.20 P02「[promo.ends_in] ⏱」——ends_at 为 null（不计时）时不放空的倒计时框。
+  it("leaves out the countdown when the promotion has no end", () => {
+    const html = renderWithPromotion(<PromoStrip text="Lunar New Year Sale" viewAll />, shown({ ends_at: null }));
+    expect(html).not.toContain("acs-promo-count");
+    expect(html).toContain(`<span class="acs-promo-strip__end">${viewAllLink("en")}</span>`);
   });
 });

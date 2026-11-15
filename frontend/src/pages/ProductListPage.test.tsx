@@ -1,11 +1,16 @@
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import type { CategoryListItem, FilterOption, ProductPage, ProductSummary, Remote } from "../api/catalog";
+import type { PromotionDisplay, PromotionResponse } from "../api/promotion";
 import App from "../App";
+import { saleLinkPath } from "../components/PromoParts";
 import { COPY, LANGUAGES } from "../i18n/copy";
 import type { Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
+import { PromotionProvider } from "../promotion";
+import { countdownText } from "../promoText";
 import { RouterProvider } from "../router";
 import { ProductListView } from "./ProductListPage";
 import type { MoreResults } from "./ProductListPage";
@@ -304,5 +309,138 @@ describe("product list route", () => {
     expect(html).toContain(COPY["common.footer_demo"].zh);
     expect(html).not.toContain(COPY["common.error_retry"].zh);
     expect(html).toMatch(/<option value="price_asc" selected="">/);
+  });
+});
+
+const HOUR_MS = 3_600_000;
+const SERVER_TIME = "2026-11-14T04:00:00Z";
+// 服务端时间之后一小时结束：时钟替身固定为 0，倒计时文字为 countdownText(language, HOUR_MS)。
+const ENDS_AT = "2026-11-14T05:00:00Z";
+
+function sale(overrides: Partial<PromotionDisplay> = {}): PromotionDisplay {
+  return {
+    promotion_id: 7,
+    title: "Lunar New Year Sale",
+    subtitle: null,
+    badge: null,
+    strip: "Lunar New Year Sale — 20% off apparel and more",
+    pack: "cny",
+    palette: "cny",
+    ambient: "garland",
+    home_poster: "split",
+    list_strip: "band",
+    card_badge: "tag",
+    detail_ribbon: "ribbon",
+    cart_progress: "bar",
+    poster_mode: "template",
+    poster_desktop: null,
+    poster_phone: null,
+    poster_alt: null,
+    ends_at: ENDS_AT,
+    coupon_combinable: true,
+    points_combinable: true,
+    rules: [],
+    ...overrides,
+  };
+}
+
+// 有活动的状态以 PromotionProvider 的 initial 传入（null 即接口说没有活动）；读取替身从不返回。
+function renderPromo(display: PromotionDisplay | null, options: RenderOptions = {}): string {
+  const initial: PromotionResponse = { promotion: display, server_time: SERVER_TIME };
+  return renderInside(options, (view) => (
+    <PromotionProvider initial={initial} fetcher={() => new Promise<PromotionResponse>(() => undefined)} clock={() => 0}>
+      {view}
+    </PromotionProvider>
+  ));
+}
+
+function renderInside(
+  {
+    query = DEFAULT_PRODUCT_LIST_QUERY,
+    products = loading,
+    categories = { status: "ready", data: categoryList },
+    options = { status: "ready", data: optionList },
+    more = null,
+    language = "en",
+  }: RenderOptions,
+  wrap: (view: ReactNode) => ReactNode,
+): string {
+  return renderToStaticMarkup(
+    <LanguageProvider storage={storage(language)}>
+      <RouterProvider initialPath="/products">
+        {wrap(
+          <ProductListView
+            query={query}
+            products={products}
+            categories={categories}
+            options={options}
+            more={more}
+            onQueryChange={() => undefined}
+            onLoadMore={() => undefined}
+          />,
+        )}
+      </RouterProvider>
+    </LanguageProvider>,
+  );
+}
+
+const STRIP = /<div class="site-list__strip"><div class="acs-promo-strip[\s\S]*?<\/div><\/div>/;
+
+function strip(html: string): string {
+  return STRIP.exec(html)?.[0] ?? "";
+}
+
+// promo.view_all 链接：P15 在路由表里时才有（按 saleLinkPath() 的返回值，不写死）。
+function viewAll(language: Language): string {
+  const path = saleLinkPath();
+  return path === null ? "" : `<a href="${path}">${COPY["promo.view_all"][language]}</a>`;
+}
+
+const listed: Remote<ProductPage> = { status: "ready", data: page(30, 1, [item("a"), item("b")]) };
+
+describe("product list promotion strip", () => {
+  // UX 0.20 P02：「标题下显示活动横条（横条文字、倒计时、去 P15）」「活动横条：<横条文字> [promo.ends_in] ⏱ ( [promo.view_all] ) → P15」——
+  // 位置照 P02-promo-desktop 与 P02-promo-phone：标题与 ★ 提示之后、筛选与商品之前；三种语言下文字、倒计时与 promo.view_all（P15 不在路由表时不放）。
+  it.each(LANGUAGES)("shows the strip below the title in %s", (language) => {
+    const html = renderPromo(sale(), { products: listed, language });
+    const found = strip(html);
+    expect(found).toContain(`<span class="acs-promo-strip__title">Lunar New Year Sale — 20% off apparel and more</span>`);
+    expect(found).toContain(`<span>${countdownText(language, HOUR_MS)}</span></span>${viewAll(language)}</span></div></div>`);
+    const at = html.indexOf(found);
+    expect(html.indexOf(COPY["list.demo_hint"][language])).toBeLessThan(at);
+    expect(html.indexOf(`<div class="site-list__body">`)).toBe(at + found.length);
+  });
+
+  // UX 0.20 P02：「活动横条按 `list_strip` 的变体显示」——band 与 ticket。
+  it.each(["band", "ticket"] as const)("uses the %s strip variant", (variant) => {
+    expect(strip(renderPromo(sale({ list_strip: variant })))).toMatch(
+      new RegExp(`^<div class="site-list__strip"><div class="acs-promo-strip acs-promo-strip--${variant}"><span class="acs-promo-motif" aria-hidden="true"></span>`),
+    );
+  });
+
+  // UX 0.20 P02：「文字为活动的横条文字（为空时用活动标题）」。
+  it.each([null, ""])("uses the promotion title when the strip text is empty (%j)", (text) => {
+    expect(strip(renderPromo(sale({ strip: text })))).toContain(`<span class="acs-promo-strip__title">Lunar New Year Sale</span>`);
+  });
+
+  // UX 0.20 P02 说明「列表的价格排序仍按原价」与验收「『价格』排序与筛选不变」——
+  // 有活动时除横条之外（排序选项、筛选、结果数与商品）与没有活动时逐字相同。
+  it("keeps sorting and filters unchanged", () => {
+    for (const query of [DEFAULT_PRODUCT_LIST_QUERY, parseProductListQuery("?sort=price_asc&category=bags")]) {
+      const withSale = renderPromo(sale(), { query, products: listed });
+      expect(strip(withSale)).not.toBe("");
+      expect(withSale.replace(STRIP, "")).toBe(renderPromo(null, { query, products: listed }));
+    }
+  });
+
+  // UX 0.20「节日促销活动」：「没有生效活动时各页与 0.19 完全相同」——接口说没有活动与读取中时与没有活动功能时逐字相同。
+  it("renders no promotion content without a promotion or while loading", () => {
+    const without = render({ products: listed });
+    expect(renderPromo(null, { products: listed })).toBe(without);
+    const whileLoading = renderInside({ products: listed }, (view) => (
+      <PromotionProvider fetcher={() => new Promise<PromotionResponse>(() => undefined)}>{view}</PromotionProvider>
+    ));
+    expect(whileLoading).toBe(without);
+    expect(without).not.toContain("acs-promo");
   });
 });
