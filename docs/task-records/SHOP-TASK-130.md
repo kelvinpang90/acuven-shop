@@ -31,3 +31,14 @@
       - docs/task-records/SHOP-TASK-130.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；三个字段的取值、偏离、验证到什么程度，并写明批准后调用 Stripe 与重试接口留给 SHOP-TASK-131、A03 页面留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/api/、app/services/stripe_refund.py、app/services/refund_review.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 8 条（后台退款详情显示各次尝试的 Stripe 退款状态；按记下的实际付款方式类型显示期限提示；最新一次尝试为 failed 时管理员可手动重试）与第 10 条（不显示 Stripe 返回的客户资料与错误原文），以及 docs/UX.md 0.11 的 A03「Stripe 测试（0.11）」，
+      在后台退款详情接口加入 Stripe 付款与退款尝试字段；期限提示与能否重试由页面从这些字段推出，接口不另给。不加接口，不调用 Stripe，不做前端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，退款。拆分：业务规则层（4 个允许路径）。
+```

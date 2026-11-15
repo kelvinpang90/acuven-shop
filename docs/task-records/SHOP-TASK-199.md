@@ -42,3 +42,18 @@
       - 测试——用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击），写在 frontend/src/pages/AdminCategoriesPage.test.tsx：列表与个数、已满时新建禁用并显示 admin.categories_full、英文名称为空显示 —、桌面与手机两套、编辑区默认不显示、内容语言切换保留各语言的值、admin.category_translation_missing 只在中文或马来文且为空时显示、新建不显示 slug、勾选启用缺英文名称不提交、停用确认只在可见件数大于 0 时出现、四种保存结果、新建成功进入编辑区、有未保存修改的判定（含名称为 null 的分类打开后未改不算修改、改了才算）、reload 后编辑区显示最新数据、保存 403 后重新读取而编辑区与已填的值和 version 保留、新建网络中断只显示 common.network_check 且不重新读取；SHOP-TASK-196 写的只有标题的断言改为新内容；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-199.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；含手机返回改在页内的偏离、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在 SHOP-TASK-196 的 A10 页面上接 SHOP-TASK-198 的请求模块与 SHOP-TASK-197 的未保存确认：按 docs/UX.md 0.17 的 A10 显示全部分类（名称、slug、前台可见商品件数、启用状态）与个数，新建与逐个编辑三语名称和启用状态并保存，
+      停用有前台可见商品的分类前确认，显示保存中与四种保存结果，依据 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 14 条。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.81）：打开页面时不选中任何分类，编辑区在点 common.edit 或 common.create 之后才显示；手机上编辑区打开时隐藏列表、编辑区上方为 common.back 按钮，照 frontend/src/pages/AdminCouponsPage.tsx 的写法（视觉稿 A10-phone 画在顶栏的返回改在页内，记入偏离）；
+      切换界面语言不重新读取、不丢失已填的值（分类数据与界面语言无关）；名称原样提交，不在页面去空白；页面只先查「勾选启用而英文名称为空（去掉首尾空白后）」一种，其余取值由服务端判断；{language} 为内容语言在当前界面语言下的名称（common.lang_zh 或 common.lang_ms 的文字）；
+      重新读取（admin.reload）整页读取后，编辑区显示同一分类的最新数据（已不存在时收起编辑区）；读取与保存的 401 照 A06 页面现有写法回到 A01；新建或保存遇到 403 时重新读取整页（取得新的 CSRF 令牌与列表），编辑区仍停在同一分类（或新建表单），已填的名称、启用状态与提交前的 version 都保留（不换成重新读取的 version，别处的改动仍由服务端以「分类已被改动」拦下），在表单上方显示 common.error_retry；新建或保存时网络中断只显示 common.network_check、保留表单，不自动重新读取（新建可能已经成功，再次提交会因英文名称重复被服务端以「取值不合格」拒绝，管理员可重新读取核对）；读取时网络中断照 A06 显示 common.network_check。
+      设计闸门：不适用（分类不碰金额与个人资料；取值核对、并发核对与审计在服务端，依据 DESIGN 1.18 第 14 条）。
+      拆分：A10 页面层（7 个允许路径，router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
+```

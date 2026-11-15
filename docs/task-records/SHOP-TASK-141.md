@@ -45,3 +45,16 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AdminRefundDetail.test.tsx 验证意图，写法照该文件现有测试（以 renderToStaticMarkup 渲染 View、直接调用导出的纯函数，不模拟点击）——三种状态下付款方式一行（含类型为 null）、期限提示按 fpx、grabpay、card 与 null 选择且已拒绝不显示、审核中的 ◆ 提示；已批准的尝试表（两条尝试的顺序、时间、金额、状态文案与 —）、最新为 pending、failed、succeeded 时的提示；amount_sen 为 0 时只有 admin.stripe_refund_none、amount_sen 大于 0 而没有尝试时只有 admin.stripe_refund_not_sent；模拟支付的三种状态没有任何 Stripe 文字；页面文字全部来自字典（照该文件的 visibleTexts、textNodes 与 unescapeHtml，— 照 AdminOrdersPage.test.tsx 的写法单独处理）；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；现有测试只在必要时修改并写明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-141.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；显示条件、偏离、验证到什么程度，只写实际存在的测试，写明未做浏览器验收，并写明重试按钮留给 SHOP-TASK-142）；改动只落在 allowed_change_paths（不新增路由，不改导航，不改 frontend/src/api/adminRefunds.ts）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.57），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在后台退款审核 A03 的申请详情上，按 docs/UX.md 0.12 的 A03「Stripe 测试（0.11）」与 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 8、10 条，
+      显示 SHOP-TASK-140 取到的 Stripe 付款方式、按付款方式的退款期限提示、审核中的 ◆ 提示，以及已批准申请的 Stripe 退款尝试表与相应提示。
+      手动重试按钮与重试结果留给 SHOP-TASK-142。不新增路由，不改导航，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.57，退款（Stripe 退款状态与期限提示的显示；状态与金额由服务端给出，页面只显示）。
+      拆分：A03 Stripe 部分的显示层，本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+```

@@ -31,3 +31,29 @@
   - 页头视觉稿里登录在右侧与购物车同组；现有页头把登录放在导航里，本任务只在 `common.nav_shop` 之后加入口，没有改动其他项的位置。
 - 验证到什么程度：人工逐条对照验收标准、UX 0.20 P15 与「1. 全局框架」的原句、UX-COPY 0.22 的七行与三张视觉稿的标记。前端检查与全部测试由 PR 的必需 CI 检查 `frontend` 执行，结果以它的记录为准。
 - 交付：以 Draft PR 交付，设计闸门写明不适用及理由（只显示公开接口的活动与目录数据，不计算金额，不碰个人资料）；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 路由——frontend/src/router.tsx 的路由表在 /products/:slug 之后加 /sale，文件头注释补上该路径；frontend/src/App.tsx 的页面表加 SalePage；frontend/src/router.test.tsx 只改按顺序列出路由表的断言与它的测试名，加入这一项，其余断言不动（运营者登记时在 main 的导出上做骨架实测：只加路由、页面表、只有 ★ 提示的空页面与框架的包裹元素，类型检查通过，全部测试中只有这一条失败）
+      - 页面——frontend/src/pages/SalePage.tsx 照落实写法渲染三种状态（有活动、只有整单级规则、没有活动）与读取中；商品区随页码与加载更多读取，离开页面时中止未完成的读取
+      - 页头——frontend/src/components/SiteFrame.tsx 的桌面导航与手机菜单在 common.nav_shop 之后加 promo.nav（链到 /sale），只在 usePromotion 有活动时显示；没有活动时页头与现在完全相同
+      - 文案与样式——frontend/src/i18n/copy.ts 加 promo.nav、promo.demo_hint、promo.rules_title、promo.products_title、promo.order_level_only、promo.browse_all、promo.ended，三语与 docs/UX-COPY.md 0.22 逐字相同；以 docs/design/pages/P15-desktop、P15-phone、P15-states 为准，布局写在 frontend/src/styles/site.css（手机写在 767px 及以下的媒体查询里，只写布局、显隐与媒体查询，固定间距与尺寸写像素值，不声明颜色、字体、圆角属性）；site.css 写不了的记入任务记录的偏离，评审不以此要求修改
+      - 测试验证意图（前端检查与全部测试由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——新文件 frontend/src/pages/SalePage.test.tsx 用 vitest 与 react-dom/server（有活动的状态以 PromotionProvider 的 initial 传入，目录读取以替身代替）覆盖三种语言下三种状态与读取中、目录返回 0 件、规则顺序与两种范围文案、目录请求带 sale=true 与默认排序、翻页与加载更多不改地址、活动换了与切换语言回到第 1 页、商品读取失败、横条显示活动标题且不显示 view_all；frontend/src/components/SiteFrame.test.tsx 补充入口只在有活动时显示且排在 common.nav_shop 之后（桌面与手机菜单）；现有断言除路由表外不改；每条测试的注释写明它守住的 UX 0.20 P15 或「1. 全局框架」原句
+      - docs/task-records/SHOP-TASK-257.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明不适用及理由），不合并、不直推
+```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.20 的 P15、「1. 全局框架」「节日促销活动」（页头导航在 common.nav_shop 之后加 promo.nav，手机 ☰ 菜单同位置）与 docs/DESIGN.md 1.23「节日促销活动」第 10 条，新建路由 /sale 与页面 frontend/src/pages/SalePage.tsx，并在页头与手机菜单加活动入口。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.97）：活动内容只取 usePromotion 的数据，读取中只显示 ★ promo.demo_hint；没有活动（含倒计时到 0 后重新读取的结果）时显示 promo.ended 与 promo.browse_all（链到 /products）。有活动时依次为 ★ promo.demo_hint、SHOP-TASK-255 的 PromoStrip（不显示 view_all）、副标题（为空不显示）、promo.rules_title 与 SHOP-TASK-256 的 PromoRuleList（规则按 position：商品级规则的说明后附 SHOP-TASK-252 scopeText 的结果，再列整单级规则），然后是 promo.products_title、list.results_count 与商品卡网格（以 SHOP-TASK-262 的 sale 参数读取目录，默认排序与每页条数同 P02）；P02 的分页组件写死 /products 的地址，P15 不复用它：页码只放在页面状态里、不进地址（路由的查询参数只给商品列表用），桌面的分页控件为按钮，手机为 list.load_more，样式与显隐照 P02；商品级规则范围内没有上架商品（目录返回 0 件）时显示 list.results_count 与 list.empty（不显示 list.filter_clear）；只有整单级规则时商品区换成 promo.order_level_only 与 promo.browse_all。generation 变化且活动换了（promotion_id 不同或变为没有活动）时、以及切换语言时，回到第 1 页重新读取商品。商品读取失败时照 P02：首次读取与桌面翻页失败显示 ErrorNotice，手机加载更多失败照 P02 加载更多的失败状态。页头入口只在有活动时显示。
+      设计闸门：不适用（只显示公开接口的活动与目录数据，不计算金额，不碰个人资料）。
+      拆分：P15 页面一层（10 个允许路径：页面与测试、框架与测试、router.tsx 与 router.test.tsx（新路由必然改路由表断言）、App.tsx、copy.ts、site.css 与任务记录），依赖 SHOP-TASK-255（横条）与 256（规则列表）。
+```

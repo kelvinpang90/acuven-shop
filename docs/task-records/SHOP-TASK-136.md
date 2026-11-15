@@ -22,3 +22,15 @@
       - docs/task-records/SHOP-TASK-136.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；加入的段落、偏离、验证到什么程度，并写明未做浏览器验收）
       - 改动只落在 allowed_change_paths（不新增路由）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.11 的 P14（「收集什么」段在 privacy.fictional 之后加 privacy.stripe，始终显示，不随支付方式开关隐藏）与 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 1、10 条、「资料保留」，
+      在隐私说明页加上 Stripe 测试环境的资料告知。不调用接口，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只加入 Kelvin 2026-10-15 审阅通过的告知文案，不收集、存储、展示或导出个人资料；告知内容依据 DESIGN 1.12 第 10 条）。
+      拆分：P14 的显示层（7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
+```

@@ -33,3 +33,16 @@
       - 现有测试只改必然失效的断言并写明原因——运营者的骨架实测列出的 25 条失败：AdminFrame.test.tsx 的导航顺序（3 条）与手机菜单（3 条），AdminCouponsPage.test.tsx、AdminRefundsPage.test.tsx、AdminShippingPage.test.tsx、AdminSiteSettingsPage.test.tsx、AdminStockResetsPage.test.tsx 与 AdminStoreDesignPage.test.tsx 里按顺序比较导航项的断言（各 3 条，测试名里的「after …」随新顺序改写），router.test.tsx 的路由表（1 条）；只在期望的导航项列表或路由表里补上新项，各页面自身的其他期望不变
       - docs/task-records/SHOP-TASK-196.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；改了哪些现有断言、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      为 A04 新建路由 /admin/products 与页面 frontend/src/pages/AdminProductsPage.tsx、为 A10 新建路由 /admin/categories 与页面 frontend/src/pages/AdminCategoriesPage.tsx（都用后台框架渲染，内容区只有标题），
+      后台导航按 docs/UX.md 0.17「管理后台总体」的顺序在退款之后依次加入商品与分类两项。请求模块与页面内容留给之后的任务（A10 为 SHOP-TASK-198、199，A04 另行登记），未保存修改的离开确认留给 SHOP-TASK-197。不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只加路由、导航与标题，不碰金额与个人资料）。
+      拆分：两页的框架层，照 A06 的 SHOP-TASK-173；两页的导航项相邻，一起加只让现有导航断言改一次。18 个允许路径，超过拆分规则的 12 个：导航多两项后，8 个现有测试文件里按顺序列出导航项或路由表的断言必然失效
+      （运营者在登记时对 main 的导出做骨架实测：类型检查与 lint 通过，25 条测试失败，全部在这 8 个文件里），只许改这些断言，与加导航的改动拆不开。
+```

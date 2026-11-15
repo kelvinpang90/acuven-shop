@@ -27,3 +27,16 @@
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖
       - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，只修订审阅文档、不实现页面），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.8 与 docs/REQUIREMENTS.md 1.7（2026-09-29 批准，批准记录见 docs/HANDOFF.md 0.16，文件抬头的「候批」字样被其覆盖）修订 SHOP-TASK-001 的审阅稿：结账先填手机号、
+      马新号码短信验证后自动注册或登录、白名单外号码游客下单、游客短期凭据与查单授权、密码与短信验证码两种登录、
+      会员在「我的订单」确认收货与申请退款、收货资料长期保存，并落实 Kelvin 对 UX 待决问题的决定。
+      交 Kelvin 审阅；审阅通过前不实现任何页面。只写文档，不碰 frontend/、后端代码、docs/DESIGN.md、docs/REQUIREMENTS.md、
+      docs/HANDOFF.md、CI 与部署配置。
+```

@@ -37,3 +37,15 @@
       - 测试验证意图（前端检查与全部测试由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——frontend/src/pages/AdminStripePendingPage.test.tsx 用 vitest 与 react-dom/server（不加测试依赖，请求模块以替身代替；以 renderToStaticMarkup 渲染、直接调用导出的纯函数），覆盖三种语言下两个列表的字段与空状态、读取失败、确认框的禁用与勾选、五种作废结果与三种重试结果的提示与是否重新读取、写操作 403 后关闭确认框并重新读取且下一次写操作带新读到的令牌、网络中断与其他失败的提示、401 回到 A01、页面不含 csrf_token；SHOP-TASK-226 的标题与导航断言保留；每条测试的注释写明它守住的 UX 0.19 A11 原句
       - docs/task-records/SHOP-TASK-228.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，偏离与验证到什么程度只写实际情况）；改动只落在 allowed_change_paths；不改请求模块、后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在 SHOP-TASK-226 的 A11 页面上接 SHOP-TASK-227 的请求模块：读取并显示两个列表，作废确认框与五种作废结果，迟到付款退款的重试与它的结果，依据 docs/UX.md 0.19 的 A11、docs/UX-COPY.md 0.21 与视觉稿 docs/design/pages/A11-desktop、A11-phone、A11-states。不装依赖，不改后端，不改设计。
+      运营者落实写法：桌面表格与手机卡片两套都渲染，由 site.css 按宽度显隐（照 A07）；时间照 A03 尝试表用 TrackOrderPage 的 formatDateTime，金额照 A03 用 usePrice；确认框照 A10 的 site-admin__confirm 写法；401 回到 A01，网络中断显示 common.network_check、其他失败显示 common.error_retry（照 A07 现有写法）；写操作的 403 关闭确认框、显示 common.error_retry 并重新读取（取得新的 CSRF 令牌，照 A03 重试的 csrf）。视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离，不借用其他组件的类来取颜色，评审不以此要求修改。
+      设计闸门：DESIGN 1.22（提交 ffb043e）「Stripe 测试环境支付」第 11 条与 HANDOFF 0.90、0.91，作废与重试的页面呈现（只显示对账字段与订单号，不显示 Stripe ID、收货资料与客户资料；规则、核对与审计在服务端）。
+      拆分：A11 页面的内容层（7 个允许路径，router.tsx、App.tsx 与 site.css 按页面任务的惯例列入），依赖 SHOP-TASK-225（接口）、226（页面）与 227（请求模块）。
+```

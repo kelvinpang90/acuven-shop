@@ -35,3 +35,14 @@
       - docs/task-records/SHOP-TASK-124.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写入规则、调用、告警、偏离、验证到什么程度，并写明批准与手动重试、定时任务、webhook 与后台接口留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/ 下的已有文件、app/api/、app/jobs.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 8 条（以尝试的本站 ID 为幂等键并写进退款元数据；状态映射；只有 Stripe 明确给出 failed 或 canceled，或以请求错误明确拒绝创建才记为 failed；有退款对象的尝试状态以查询到的当前对象为准；写入时锁住该尝试的行，只接受 pending 到 succeeded、pending 到 failed、succeeded 到 failed 三种改动；24 小时后不再调用退款接口）与第 9 条，
+      以及 docs/HANDOFF.md 0.54 记录的 Kelvin 2026-10-19 决定（明确拒绝以适配器归为 rejected 为准，记下错误类别，不自动重试；告警时间列只给会反复出现的告警去重），在新文件里实现退款尝试的写入规则与调用 Stripe 的函数，供之后的批准、手动重试、定时任务与 webhook 共用（SHOP-TASK-117 写的来源为会话的尝试也走这里）。不加接口，不接入定时任务，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.54，退款。拆分：业务规则层（3 个允许路径）。
+```

@@ -30,3 +30,15 @@
       - docs/TODO.md 新增 SHOP-TASK-065 记录段（列表、添加、保存、偏离、验证到什么程度，并写明未做浏览器验收、预览留给 SHOP-TASK-066），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths（不新增路由，不改导航，不改 frontend/src/api/adminStoreDesign.ts）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在 SHOP-TASK-064 的店铺装修表单上实现 A08 的精选商品挑选：最多 4 件、可排序、移出，保存时按列表提交。
+      原已在精选里、之后下架的商品照列（SHOP-TASK-061 放行保存，Kelvin 2026-10-08 决定）。不改请求文件，不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只改前台外观设置，不涉及金额计算与个人资料）。
+      拆分：见 SHOP-TASK-062，本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+```

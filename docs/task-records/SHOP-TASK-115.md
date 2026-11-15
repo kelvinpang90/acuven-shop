@@ -47,3 +47,14 @@
       - docs/TODO.md 新增 SHOP-TASK-115 记录段（两张表的含义与约束、活动来源列如何表示「至多一条」、偏离、验证到什么程度，并写明规则留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 StripeCheckout、其他已有模型与已有迁移、.platform/、CI、部署配置；不装依赖；不加接口、不改 app/main.py、app/services/ 与前端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「数据模型」StripeCheckout / StripeEvent / StripeRefund 一行与「Stripe 测试环境支付」第 6、7、8 条（事件 ID 去重；每条退款尝试有自己的本站 ID，同一来源至多一条不是 failed 的尝试，由数据库唯一约束保证），
+      在 SHOP-TASK-110 的会话记录表之上建事件表与退款尝试表及迁移。只建表与约束；webhook、迟到付款与退款规则由之后的任务实现。不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e），退款对账记录。拆分：数据库层（5 个允许路径），2026-10-15 由原 SHOP-TASK-110 拆出。
+```

@@ -41,3 +41,14 @@
       - docs/task-records/SHOP-TASK-125.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；批准时建尝试的条件、合计核对、手动重试、偏离、验证到什么程度，并写明调用 Stripe 由定时任务与之后的后台接口发起），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/api/、app/jobs.py、app/services/stripe_confirm.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 8 条（管理员批准退款的事务不变；订单经 Stripe 付款且本次批准的现金退款额（不含运费）大于 0 时，同一事务另写一条 pending 的尝试，来源为该退款申请；为 0 时不建尝试；同一 PaymentIntent 的 pending 与 succeeded 退款合计不得超过付款金额，新建前在锁住该付款的事务里核对，超出即不建并告警；最新一次尝试为 failed 时管理员可手动重试，重试是新建一条尝试）与「订单与退款状态」，
+      在 SHOP-TASK-124 之上改造 app/services/refund_review.py 的批准，并加手动重试的业务函数。调用 Stripe 由之后的后台退款详情与重试接口在提交后发起（HANDOFF 0.54），在那之前由定时任务发起；不加接口，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.54，退款。拆分：业务规则层（4 个允许路径）。
+```

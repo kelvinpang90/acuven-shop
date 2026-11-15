@@ -53,3 +53,16 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_ops_alert.py，以替身代替 smtplib 的 SMTP 与 SMTP_SSL、Redis 照现有测试的 FakeRedis 写法、时钟可注入（不靠真实等待，发送循环写成可在测试里同步推进的形式），覆盖第 9 条所列各项（未配置与配置不合格只记日志、入队不阻塞且不访问数据库、同一限频键入队前合并与队列满即丢弃、限频占用且发送失败也不释放、Redis 不可用改用进程内存、临时失败重试一次且等待重试时其他告警照发、永久失败不重试且 TLS 错误不重试、部分与全部收件人被拒的 4xx 与 5xx 处理且日志不带地址、starttls 不能以明文发送、邮件头不含收件人地址、正文只含四项且不含任何配置值与地址、CATEGORIES 每一项的说明与指引都不含链接与地址）；tests/test_jobs.py 补 send-test-alert 的三种退出码与不受限频、一次性命令退出前等队列与到时记下未发封数、run 不等队列；tests/test_compose_env.py 补两个服务的七个变量与 shop_jobs 的 SHOP_REDIS_URL；每条测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第几条哪一句
       - docs/task-records/SHOP-TASK-217.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明 alert 的签名、CATEGORIES 每一项的字段、对象类别码的写法与测试替换方式，供 SHOP-TASK-218 至 222 使用）；改动只落在 allowed_change_paths；不改数据库、接口、前端、.platform/、CI 与部署脚本，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 1 至 5 条与第 9 条，新增 app/services/ops_alert.py：读取七项告警配置、在本进程内存里合并与排队、由发信线程经通用 SMTP（只用标准库 smtplib、ssl 与 email，不加依赖）发出、按 Redis 限频；另加一次性命令 python -m app.jobs send-test-alert，补跑命令退出前等队列发完；docker-compose.yml 把七项配置传进 shop_api 与 shop_jobs。
+      本任务只接入测试告警 ops_alert_test，不接业务告警点（第 6、7 条的接线是 SHOP-TASK-218 至 222）。不改数据库、接口与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：调用方以 from app.services import ops_alert 引入、以 ops_alert.alert(category, target=None, *, error_class=None) 调用（测试替换模块属性 alert），target 为（对象类别, 内部 ID）二元组或 None；类别表 CATEGORIES 写在本模块，本任务只放 ops_alert_test，各接线任务把自己的类别加进来；七项配置在 Settings 里都是字符串、默认空串（端口与加密方式不合格不能让设置加载失败，由本模块判断）；shop_jobs 现在没有 SHOP_REDIS_URL，本任务另加上（第 4 条，API 与定时任务共用限频）；.env.example 的七个变量名由登记 PR 写好（控制面把 .env 开头的文件列为敏感文件名，Worker 改不了）。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」一节与 HANDOFF 0.88，告警邮件的配置、发送、限频与内容约束（邮件不得带个人资料与凭据）。
+      拆分：发送机制一层（8 个允许路径），各处接线为 SHOP-TASK-218 至 222，都只依赖本任务。
+```

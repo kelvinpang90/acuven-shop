@@ -36,3 +36,15 @@
       - docs/TODO.md 新增 SHOP-TASK-114 记录段（三个现有入口的改动、两个新异常、检查顺序、偏离、验证到什么程度，并写明定时任务留给 SHOP-TASK-116、接口对新异常的归类与 webhook 的 async_payment_failed 留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/stripe_checkout.py、app/services/stripe_confirm.py、app/jobs.py、app/api/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 2 条（同一订单的两条支付途径互斥；现有的模拟支付提交、本人取消、查看触发的超时取消与定时任务都要在锁住订单的同一事务里先查该单的 Stripe 记录）、
+      第 5 条（有 Stripe 记录的订单取消一律先处理会话：creating 先取得会话或对账，open 先请求作废，complete 且已付款按第 4 条确认，付款未定时继续等待；Stripe 不可用时本人取消提示稍后再试；以 Stripe 的状态为准，不以本地时钟代替）、
+      「计价、优惠、积分与库存」第 6 条，以及 docs/HANDOFF.md 0.53 的核验结论（作废已过期或已完成的会话被 400 拒绝，须再查询会话决定），改造 app/services/payment.py 的三个现有入口。定时任务由 SHOP-TASK-116 实现。不加接口；不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e），订单状态、库存、券与积分的释放。拆分：业务规则层（4 个允许路径）；预审估计原任务超过约 1500 行，2026-10-15 拆为本任务与 SHOP-TASK-116。
+```

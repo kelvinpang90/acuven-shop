@@ -28,3 +28,29 @@
   - 没有改 `router.tsx` 与 `App.tsx`（不需要；`PromotionProvider` 已在 `App.tsx`，本任务不新增路由）。
 - 验证到什么程度：人工逐条对照验收标准、UX 0.20 P05 的原句、UX-COPY 0.22 的八行与两张视觉稿。前端检查与全部测试由 PR 的必需 CI 检查 `frontend` 执行，结果以它的记录为准。
 - 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23（提交 b7f9355）；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 摘要——frontend/src/pages/CheckoutPage.tsx 的活动优惠行在 cart.subtotal 之后、优惠券行之前（桌面与手机相同，游客与会员都显示），标签、显示条件与运费行照落实写法；没有活动时摘要与现在完全相同
+      - 手机——折叠摘要与底部固定栏照落实写法显示 cart.after_promo，选定收货国家后恢复现有写法
+      - 会员说明——frontend/src/pages/CheckoutMember.tsx 照落实写法显示方案说明与三条不同用或未用券说明，游客不显示
+      - 文案与样式——frontend/src/i18n/copy.ts 加 checkout.summary_promo、checkout.shipping_free、checkout.scheme_promo、checkout.scheme_promo_equal、checkout.scheme_no_promo、checkout.coupon_not_combinable、checkout.points_not_combinable、checkout.coupon_not_applied_sale，三语与 docs/UX-COPY.md 0.22 逐字相同；以 docs/design/pages/P05-promo-desktop、P05-promo-phone 为准，布局写在 frontend/src/styles/site.css（只写布局、显隐与媒体查询，固定间距与尺寸写像素值，不声明颜色、字体、圆角属性）；site.css 写不了的记入任务记录的偏离，评审不以此要求修改
+      - 测试验证意图（前端检查与全部测试由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——frontend/src/pages/CheckoutPage.test.tsx 与 frontend/src/pages/CheckoutMember.test.tsx 用 vitest 与 react-dom/server（计价结果以替身给出）覆盖三种语言下选国家前后两种标签、participates 为假不显示、只有免运费时不显示活动优惠行而运费行为免运费、no_promotion 时不显示且运费照常、手机的活动后金额、三种方案说明与相等时的说明、两个积分前应付为空时不显示方案说明、三条不同用或未用券说明、generation 变化重新计价；CHECKOUT_KEYS 加入新键；现有断言不改；每条测试的注释写明它守住的 UX 0.20 P05 原句
+      - docs/task-records/SHOP-TASK-259.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的惯例列入，不需要时不改）；不改后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
+```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.20 的 P05（节日促销活动、M8、M9）与 docs/DESIGN.md 1.23「节日促销活动」第 4、6、10 条，在结账摘要显示游客与会员计价接口（SHOP-TASK-234、236）返回的活动优惠、活动免运费，以及会员用券或积分时的方案说明。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.97）：会员计价的活动字段由 SHOP-TASK-263 加好，本任务只用。活动优惠＝promotion 的 item_discount_sen 加 order_discount_sen：没有运费报价时大于 0 即显示，标签为 cart.promo_discount；有运费报价时 participates 为真且大于 0 才显示，标签为 checkout.summary_promo；会员的 promotion_plan 为 no_promotion 时不显示，运费照常。有运费报价、participates 为真、shipping_waived_sen 大于 0（会员另要 promotion_plan 不为 no_promotion）时运费行金额为 checkout.shipping_free（amount 为 shipping_waived_sen）。手机折叠摘要与底部固定栏在没有运费报价且活动优惠大于 0 时显示 cart.after_promo 与它的金额（小计减活动优惠）。会员的方案说明放在优惠券与积分输入区下方，只在两个积分前应付都不为空时显示：plan 为 promotion 时两者相等用 checkout.scheme_promo_equal，否则 checkout.scheme_promo（other 为 other_pre_points_total_sen，diff 为它减 promotion_pre_points_total_sen）；plan 为 no_promotion 时 checkout.scheme_no_promo（other 为 promotion_pre_points_total_sen，diff 为它减 other_pre_points_total_sen）。另按 coupon_note 为 not_combinable 或 below_min_after_sale 显示 checkout.coupon_not_combinable 或 checkout.coupon_not_applied_sale，points_not_combinable 为真时显示 checkout.points_not_combinable（这三条不受两个积分前应付是否为空限制）。usePromotion 的 generation 变化时重新计价。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 4、6、10 条：参加与否与取哪种方案由服务端判定，页面只显示接口结果与显示所需的加减，不碰个人资料。
+      拆分：P05 的活动内容一层（9 个允许路径：游客结账与会员结账各带测试，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入），依赖 SHOP-TASK-263（计价类型）与 258（同用 usePromotion 的重新计价写法）。
+```

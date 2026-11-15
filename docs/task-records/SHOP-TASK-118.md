@@ -27,3 +27,14 @@
       - docs/task-records/SHOP-TASK-118.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；适配器的传入、两个新错误码、偏离、验证到什么程度，并写明发起与确认接口留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 2 条（订单有不是 expired 的 Stripe 记录时不接受模拟支付）、第 5 条（有 Stripe 记录的订单取消一律先处理会话；Stripe 不可用时本人取消提示稍后再试）与第 9 条，
+      以及 docs/HANDOFF.md 0.54 的落实写法，让 app/api/pay.py 与 app/api/member_pay.py 现有的模拟支付与取消接口给 cancel_order 传入 Stripe 适配器，并把 SHOP-TASK-114 新增的两个异常归类为接口错误；现在这两个异常都会变成 500，Stripe 订单的本人取消一律按不可用处理。不加接口，不改服务层与设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.54，订单状态与取消。拆分：接口层（4 个允许路径）。
+```

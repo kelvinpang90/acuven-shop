@@ -25,3 +25,29 @@
   - 没有改 `router.tsx` 与 `App.tsx`（不需要；`PromotionProvider` 已在 `App.tsx`，本任务不新增路由）。
 - 验证到什么程度：人工逐条对照验收标准、UX 0.20 P01 与 P02 的原句、UX-COPY 0.22 的两行与五张视觉稿的标记。前端检查与全部测试由 PR 的必需 CI 检查 `frontend` 执行，结果以它的记录为准。
 - 交付：以 Draft PR 交付，设计闸门写明不适用及理由；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 首页——有活动时海报显示在 ★ 提示之后、所有区块之前，不属于任何区块、不受 A08 区块设置影响；没有活动或读取中时不占位；模板模式与上传图模式照落实写法，上传图缺任一张时按模板模式显示
+      - 列表——frontend/src/pages/ProductListPage.tsx 有活动时显示横条（位置照视觉稿 P02-promo-desktop、P02-promo-phone），没有活动时与现在完全相同；「价格」排序与筛选不变
+      - 组件——frontend/src/components/PromoParts.tsx 加 saleLinkPath 与 PromoStrip（.acs-promo-strip--band 或 --ticket，含 motif、__title 与 __end）；frontend/src/i18n/copy.ts 加 promo.shop_now 与 promo.view_all，三语与 docs/UX-COPY.md 0.22 逐字相同
+      - 样式——以 docs/design/pages/P01-promo-desktop、P01-promo-phone、P01-promo-posters、P02-promo-desktop、P02-promo-phone 为准，布局写在 frontend/src/styles/site.css（手机写在 767px 及以下的媒体查询里，只写布局、显隐与媒体查询，固定间距与尺寸写像素值，不声明颜色、字体、圆角属性；不改生成的 acuven-shop.css）；site.css 写不了的记入任务记录的偏离，评审不以此要求修改
+      - 测试验证意图（前端检查与全部测试由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——frontend/src/pages/HomePage.test.tsx、frontend/src/pages/ProductListPage.test.tsx 与 frontend/src/components/PromoParts.test.tsx 用 vitest 与 react-dom/server（有活动的状态以 PromotionProvider 的 initial 传入）覆盖三种语言下两种海报版式、副标题为空、上传图模式的两张图与替代文字、缺图退回模板、海报在区块之前且不受区块设置影响、横条两种变体与 strip 为空时用标题、没有活动时不渲染任何活动内容、链接的有无按 saleLinkPath() 断言；现有断言不改；每条测试的注释写明它守住的 UX 0.20 原句
+      - docs/task-records/SHOP-TASK-255.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的惯例列入，不需要时不改）；不改后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明不适用及理由），不合并、不直推
+```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.20 的 P01（活动海报）与 P02（活动横条）、docs/DESIGN.md 1.23「节日促销活动」第 10、12 条与 docs/design/COMPONENTS.md「FestivalPromotion」的 Home poster 与 Sale strip，在首页 ★ 提示之后、所有区块之前显示活动海报，在商品列表显示活动横条；横条做成可复用的组件放进 frontend/src/components/PromoParts.tsx（P15 在 SHOP-TASK-257 复用）。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.97）：活动内容只取 usePromotion 的数据。海报在模板模式按 home_poster（split 或 centered）排版，标题、副标题（为空时整行不显示）、PromotionCountdown 与 promo.shop_now 按钮（链到 /sale）。P15 路由在 SHOP-TASK-257 才加入路由表，所以 PromoParts.tsx 导出 saleLinkPath()：/sale 在 ROUTE_PATHS 里时返回它，否则返回 null；为 null 时按钮不渲染、整图不做成链接（a.acs-promo-poster-img 换成同类名的 div），257 合并后自动出现；本任务与 256 的测试按 saleLinkPath() 的返回值断言有无链接，不写死，257 加路由后不必改这些测试。上传图模式用 picture 元素，桌面图与手机图以 767px 的媒体条件切换（桌面 3:1、手机 4:5 的框居中裁切，object-fit 为 cover），alt 为 poster_alt。横条按 list_strip（band 或 ticket），文字为 strip、为空时用 title，末尾为倒计时与 promo.view_all（saleLinkPath() 为 null 时不渲染）；横条组件以参数接收显示的文字与是否显示 view_all（P15 传活动标题、不显示 view_all）。
+      设计闸门：不适用（只显示公开接口的活动文案、图片与倒计时，不计算金额，不碰个人资料）。
+      拆分：P01 与 P02 的活动内容一层（11 个允许路径：两个页面与组件各带测试，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入），依赖 SHOP-TASK-254。
+```

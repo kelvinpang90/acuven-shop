@@ -49,3 +49,17 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch、sessionStorage 与路由以替身代替）在 frontend/src/pages/PayPage.test.tsx 验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——① 的各分支（ok 与会话、signed_out 转 ②、not_found、failed 不清除）、② 的游客 401 之后三种会话结果；会员 P06 没有 pay.guest_access、游客仍有；pay.member_reopen 整页只有提示与去 /account 的 account.orders；会员写操作各结果的去向与暂存的清除或保留；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）；现有测试只在必要时修改并写明原因（打开函数多了会话读取与暂存参数的几条只补替身，期望的页面状态不变）
       - docs/task-records/SHOP-TASK-161.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；判定顺序、会员内容、写操作、偏离（含会员正常态照游客去掉 pay.guest_access、② 只用于打开时的游客 401）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不改 frontend/src/api/ 与 PayResultPage.tsx；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.14 提交 00f8f34 与 HANDOFF 0.63），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.13 的 P06「会员的当前订单」（判定顺序 ①②；会员凭会话支付、取消与 Stripe 发起；找不到订单时 pay.member_reopen 与 account.orders）与 docs/DESIGN.md 1.14「权限与资料保护」第 7 条，
+      让 frontend/src/pages/PayPage.tsx 在有当前订单号（SHOP-TASK-158 的暂存）时经会员接口读取与写操作，CSRF 令牌取自 SHOP-TASK-151 的会话；游客路径在凭据过期时另读会员会话。
+      运营者落实写法（HANDOFF 0.63）：会员 P06 正常态照游客 P06 去掉 pay.guest_access（没有会员正常态的视觉稿）；② 的会员会话检查只用于打开时游客读取回 401 的那一次，游客之后的写操作与重读回 401 仍为 pay.session_expired。
+      不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.14（提交 00f8f34）「权限与资料保护」第 5 条（会员仅能访问自己的订单，写操作另须 CSRF 令牌）、第 7 条（当前订单暂存的读取顺序与清除时机）与「Stripe 测试环境支付」第 3、5 条（发起与取消按现有授权）与 HANDOFF 0.63。
+      拆分：P06 会员模式，7 个允许路径。
+```

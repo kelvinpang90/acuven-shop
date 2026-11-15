@@ -40,3 +40,16 @@
       - docs/TODO.md 新增 SHOP-TASK-117 记录段（迟到与不符的退款尝试、已为 expired 的记录的去向、释放活动位的依据、告警只记一次、偏离、验证到什么程度，并写明向 Stripe 发起退款留给之后的退款任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/payment.py、app/services/order_rules.py、app/services/stripe_checkout.py、app/jobs.py、app/api/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 6 条（迟到与不符的付款：订单状态不变，在 Stripe 测试环境全额退款，记为来源为该会话的退款尝试并告警）、第 8 条的合计上限，
+      以及第 3 条末句（遗失会话 ID 的会话被付款时照第 4、6 条处理），在 SHOP-TASK-113 的确认函数里实现它只判定、不处理的情形——迟到与不符的付款和已为 expired 的记录；
+      核对不符的已付款会话写完退款尝试后标为 expired 释放订单，依据 docs/HANDOFF.md 0.53 记录的 Kelvin 2026-10-15 落实决定（不改设计文本）。
+      向 Stripe 发起迟到付款的退款由之后的退款任务的定时重试完成，本任务只写 pending 尝试。不加接口；不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e），支付、订单状态与退款。拆分：业务规则层（4 个允许路径），2026-10-16 由原 SHOP-TASK-113 拆出。
+```

@@ -40,3 +40,17 @@
       - 代码结构沿用 frontend/src/pages/CartPage.tsx 现有写法（把输入文字变成件数、算上限的判定写成导出的纯函数，View 只依赖 props）；传给事件属性的处理函数不返回 Promise；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；用 vitest 与 react-dom/server（不加测试依赖，fetch 与存储以替身代替）验证意图（以 renderToStaticMarkup 渲染、直接调用导出的函数，不模拟点击）——CartPage.test.tsx 的整单 2,000 件时 (+) 禁用、输入框与读屏标签、空值与小于 1 恢复、减少照收、超过时改为上限并显示 common.qty_capped、后台调低限购后上限等于现有件数时只恢复不提示、两条上限提示的文字与先后、未超出时不显示；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - 现有测试只在必要时修改并写明原因——以 output 显示件数的断言改为输入框，夹具补四项，其余期望不变；docs/task-records/SHOP-TASK-194.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 P05 页面的源码；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 第 8 条与 HANDOFF 0.80），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 8 条与 docs/UX.md 0.17 的 P04「整单上限」一段：frontend/src/api/checkout.ts 的计价结果类型加入接口已返回的 unit_limit、units_over_limit、amount_limit_sen、amount_over_limit（SHOP-TASK-178），
+      P04 各行数量 (+) 在全部行合计达到 2,000 件时禁用，数量改为可直接输入（上限与 common.qty_capped 照 UX），计价返回超出整单件数或金额上限时在 cart.item_changed 的位置之下显示 cart.units_over_limit、cart.amount_over_limit。
+      P05 的提示留给 SHOP-TASK-195。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.80）：计价结果照现有写法不做运行时校验，只加类型字段；为新字段必须改的测试夹具（结账与会员结账的请求模块测试、P04 与 P05 的页面测试）只补这四项；{count} 直接传接口返回的 unit_limit，{amount} 为 frontend/src/format.ts 的 formatSen(amount_limit_sen)（与视觉稿 P03-P04-caps 一致，不分千位）。
+      设计闸门：DESIGN 1.18（提交 5ba9796）第 8 条与 HANDOFF 0.80，整单上限的提示与数量输入（上限判定与下单校验在服务端）。
+      拆分：计价类型与 P04 一层（12 个允许路径：类型加字段后 5 个现有测试文件的夹具类型检查必然不通过，只许补这四项，与加字段的改动拆不开；router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
+```

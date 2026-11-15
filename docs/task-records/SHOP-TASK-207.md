@@ -37,3 +37,20 @@
       - 测试——用 vitest 与 react-dom/server（不加测试依赖，fetch 以替身代替；以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）在 frontend/src/pages/AdminProductImages.test.tsx 验证意图：封面标记只在第一张、张数文字、首末按钮禁用、8 张与新建表单时 admin.upload 禁用且后者显示 admin.image_save_first、上传前的类型与大小先查（5,242,880 字节合格、多一字节不合格）、调序交换后的 ID 顺序、移除确认框的文字与按钮顺序、各种结果的提示、admin.reload 只替换图片区、操作进行中按钮禁用；frontend/src/pages/AdminProductsPage.test.tsx 只为接入补测试（编辑区出现图片区、图片变化不算未保存的修改）；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-207.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收、没有用真实图片与存储试过上传）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.17 的 A04「图片」一段，在编辑区新增图片区组件 frontend/src/pages/AdminProductImages.tsx 并接到 A04 页面：缩略图、封面标记、张数、前后移动、移除确认与上传，
+      经 SHOP-TASK-201 的图片请求各自立即生效，依据 docs/DESIGN.md 1.19「计价、优惠、积分与库存」第 13 条。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.82）：缩略图以 img 显示，src 为接口给的 storage_ref，alt 为空串；图片不算在未保存的修改里、不改商品的版本号，商品保存成功后图片区以返回的商品为准；同一时间只进行一项图片操作，进行中图片区的按钮都禁用；商品保存或新建进行中图片区的按钮也都禁用，图片操作进行中 common.save 禁用（两者互斥，避免较晚到达的保存结果以旧的图片列表覆盖较新的）；
+      admin.upload 是按钮，点它打开隐藏的单选文件输入框（accept 为 image/jpeg、image/png 与 image/webp），选好即先查类型（文件类型不是这三种显示 admin.image_type_unsupported）与大小（超过 5,242,880 字节显示 admin.image_too_large），通过才以文件本身与文件类型上传，之后清空文件输入框；
+      调序提交交换后的全部图片 ID；移除确认框照 SHOP-TASK-197 的确认框写法（role dialog、aria-modal、aria-labelledby 指向 admin.image_remove_confirm，按钮依次为 common.cancel（打开时取得焦点）与 admin.image_remove），确认后才提交；
+      图片操作的 403 由页面重新读取列表与分类取得新的 CSRF 令牌（编辑区与已填的值保留），显示 common.error_retry；网络中断显示 common.network_check；admin.images_changed 旁的 admin.reload 只重新读取该商品、只替换图片区，编辑区未保存的修改保留（该次读取为 none 时回到 A01，network 显示 common.network_check，其他失败显示 common.error_retry，图片区保留当前列表）；
+      新建表单（还没保存）时 admin.upload 禁用，旁边显示 admin.image_save_first，张数为 0。
+      设计闸门：不适用（图片的格式、大小、像素、元数据与存放规则在 SHOP-TASK-187 至 191 的服务端，依据 DESIGN 1.19 第 13 条；页面只做格式与大小的初步检查，不碰金额与个人资料）。
+      拆分：A04 的图片一层（9 个允许路径：新组件与测试，页面与页面测试只为接入，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
+```

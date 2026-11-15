@@ -22,3 +22,14 @@
       - docs/task-records/SHOP-TASK-123.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；新列的含义、迁移、偏离、验证到什么程度，并写明告警的写入留给之后的退款规则任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改其他模型与已有迁移、app/services/、app/api/、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「数据模型」StripeCheckout / StripeEvent / StripeRefund 一行（错误类别与时间）与「Stripe 测试环境支付」第 8 条（24 小时后对账找不到时告警、成功后又失败时告警、请求被明确拒绝时告警），
+      以及 docs/HANDOFF.md 0.54 记录的 Kelvin 2026-10-19 决定（退款尝试表补告警时间列，给会反复出现的告警去重），在 SHOP-TASK-115 的退款尝试表上加告警时间列与迁移。只加列；退款规则由之后的任务实现。不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.54，退款对账记录。拆分：数据库层（4 个允许路径）。
+```

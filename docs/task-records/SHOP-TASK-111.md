@@ -46,3 +46,17 @@
       - tests/test_stripe_gateway.py 验证意图（全部经替身传输，不连网）——配置判定（逐项缺失、http 地址、sk_live_ 与未知前缀不启用且记一条不含密钥的日志、未配置时不发请求）；六个调用的方法、路径、表单顺序、Idempotency-Key、expand 与认证头；归类（回放标记、返回值只有白名单字段而不含响应里的 customer_details 与邮箱、livemode 为真归 live、409、429 与 3xx 归 unavailable、400 与 422 带 type 与 param 归 rejected、非测试密钥的日志同一进程只记一次、超时与过大的响应）；签名校验（测试里自算签名——通过、篡改请求体、超出容差、多个 v1 其一相符、头格式不合）；异常与 repr 不含密钥与邮箱；每条测试写明它守住的是设计或核验结论的哪一句；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
       - docs/TODO.md 新增 SHOP-TASK-111 记录段（配置项、判定、六个调用、归类、签名校验、告警先记日志、偏离、验证到什么程度），不改 planning-v1 块，复选框只允许 [ ] / [x]；改动只落在 allowed_change_paths；除 docker-compose.yml 的这六个环境变量外不改 .platform/、CI、部署配置；不装依赖；不改模型、迁移、app/main.py 与前端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 1 条（只接测试环境：服务端只接受 sk_test_ 或 rk_test_ 开头的密钥，其他前缀一律不启用并告警；会话或付款的 livemode 为真即拒绝）、
+      第 7 条（用原始请求体与 webhook 签名密钥校验 Stripe-Signature，含时间容差）、第 9 条（CI 与本地测试用模拟的 Stripe 适配器，不调用 Stripe）与第 10 条（日志不记录 Stripe 请求与事件原文），
+      以及 docs/HANDOFF.md 0.53 记录的 2026-10-15 测试环境核验结论（创建会话已不接受 payment_method_types；过期后以同一幂等键重放返回当初保存的响应；退款与作废被拒时为 400），
+      新增配置项、Stripe 适配器、签名校验函数与测试用替身。不接业务、不加接口、不改模型；不改设计。
+      运营告警邮件尚未接入（docs/TODO.md 后续计划），设计里写「告警」之处一律先记一条 error 级日志（只含类别，有本站记录 ID 时带上），由告警邮件任务改为发邮件。
+      设计闸门：DESIGN 1.12（提交 acf576e），接入支付服务。拆分：基础设施层（5 个允许路径）。
+```

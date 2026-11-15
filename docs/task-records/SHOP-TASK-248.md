@@ -64,3 +64,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_promotion_ai.py（以替身客户端，SQLite 内存库）：合格的提案；清单外的 ID、超长文案、带换行、缺英文标题、多出字段、不是 JSON 时整份不用并记 invalid；上限 50 时第 51 次拒绝且不调用；当天没有行时先插后锁（两个会话各插一次不报错）；调用失败仍占用一次；记录表不含描述原文；送出的内容只有四项；描述与规则不合格不计数。每条测试的文档字符串写明它守住的第 12 或 13 条哪一句
       - docs/task-records/SHOP-TASK-248.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明函数签名、提案字段与异常，供 251 引用）；改动只落在 allowed_change_paths；不改活动的保存与计价、接口、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.23「节日促销活动」第 12、13 条，新建 app/services/promotion_ai.py：管理员输入一段描述（1–500 个字符），系统把描述、活动的规则类别与参数、第 12 条的清单与文案长度限制、当前店铺主题与主色 ID 送给模型，要求只回一个 JSON 对象；服务端按第 12 条逐项校验，合格的提案只返回给调用方、不自动保存，任何一项不合格即整份不用。全站每天的调用次数有上限，按日在 MySQL 计数。接口见 SHOP-TASK-251。不改前端与数据库。
+      运营者落实写法：送出的内容只有第 13 条所列四项：描述原文、规则类别与参数（不含商品与分类 ID）、SHOP-TASK-229 模型常量里的素材包、配色与各装饰位变体 ID 及文案长度限制、店铺装修单例行的 theme 与 accent；不读订单、会员与收货资料。提案的字段只有八个装饰 ID（pack、palette、ambient、home_poster、list_strip、card_badge、detail_ribbon、cart_progress）与 title、subtitle、badge、strip 各三语，不含海报模式与替代文字（由管理员定）；没有规则、时间、开关与金额的字段。校验用 SHOP-TASK-239 的 check_decoration 与 check_copy（装饰的海报模式取 template、替代文字取空，只为套用检查函数），另要求英文标题不为空；送出的规则先以 239 的 check_rule_params 检查（问题码 rule）。计数照 app/services/sms_budget.py 的写法：先以普通查询看当天（马来西亚日期，sms_budget.malaysia_date）的行，没有就在 begin_nested 里插入零值行、主键冲突即忽略，再锁行，未达 ai_daily_call_limit 才加一并提交，然后调用模型；加一之后的调用无论结果如何都占用当天的一次，不退回。每次调用后写一条 PromotionAiCall（结果类别与 token 数），不记描述与回答原文。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 12、13 条：出站内容限定为第 13 条四项；描述不保存；提案不改规则与金额。
+      拆分：节日促销 AI 提案的第三个任务（3 个允许路径），依赖 SHOP-TASK-239（检查函数）、246（计数与记录表）与 247（客户端）。原登记稿把服务与接口合在一个任务，预审报 TOO_LARGE，接口拆到 251。
+```

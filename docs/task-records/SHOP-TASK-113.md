@@ -39,3 +39,16 @@
       - docs/TODO.md 新增 SHOP-TASK-113 记录段（共用的迁移函数、确认的核对与结果、补齐付款方式类型、system 操作者、偏离、验证到什么程度，并写明迟到与不符的付款留给 SHOP-TASK-117），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/stripe_checkout.py、app/jobs.py、app/api/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 4 条（订单只在服务端确认 Stripe 付款成功后才进入 demo_paid；核对会话属于该订单、处于测试环境、币种 MYR、金额等于订单应付快照；
+      按模拟支付成功的同一事务进入 demo_paid；记下 PaymentIntent ID 与实际成功那笔 Charge 的付款方式类型，读不到时留空由定时任务补齐；确认不看 15 分钟支付到期时间，只看订单是否仍待支付；重复确认返回原结果）
+      与 docs/HANDOFF.md 0.53 的核验结论（付款方式类型取 PaymentIntent 的 latest_charge.payment_method_details.type），
+      实现确认函数与补齐付款方式类型的函数；第 6 条的迟到与不符的付款（以及已为 expired 的记录）本任务只判定、不处理，由 SHOP-TASK-117 接着实现。只做业务规则；webhook 与支付页接口之后调用它。不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e），支付与订单状态。拆分：业务规则层（7 个允许路径）；预审估计原任务约 1600 至 2000 行，2026-10-16 拆为本任务与 SHOP-TASK-117。
+```

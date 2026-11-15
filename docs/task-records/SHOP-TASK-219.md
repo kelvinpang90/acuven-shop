@@ -35,3 +35,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_stripe_gateway.py、tests/test_stripe_checkout.py、tests/test_stripe_overdue.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，在现有覆盖这些日志的情形里补断言（每个告警点在所写时机以所写类别与对象调用一次；不带记录 ID 的 stripe_livemode 不调用；已有告警时间的记录再次对账不再调用）；现有测试只为替换 alert 而改；每条新断言所在测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行
       - docs/task-records/SHOP-TASK-219.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改支付与对账规则、发送机制、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 6 条表中 stripe_key_not_test、stripe_checkout_needs_review、stripe_create_rejected、stripe_unreachable、stripe_payment_needs_review 五行，在 app/services/stripe_gateway.py、stripe_checkout.py 与 stripe_overdue.py 的现有 error 日志之后接入告警，并把五类加进 app/services/ops_alert.py 的 CATEGORIES。不改支付与对账规则，不改发送机制，不改数据库、接口与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：每条现有的告警日志之后紧接着调用 ops_alert.alert(类别, 对象)，类别取日志里的同一个常量；日志里为 checkout=<ID> 的，对象为（stripe_checkout, 结账记录 ID）；stripe_key_not_test 的对象为 None，只在现有的「每个进程第一次判定」那条日志之后调用；Stripe 适配器里不带记录 ID 的 stripe_livemode 日志不入队（第 6 条表）；五类都不以对象作去重键，窗口 3600 秒。第 6 条表里 stripe_create_rejected 的触发时机写作「对账时」，按第 2 条「入队位置跟现有 error 日志一致」落实为现有日志所在的创建调用被拒（登记预审指出两者不符，HANDOFF 0.88 第 9 项）。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6 条与 HANDOFF 0.88；告警不带 Stripe 的任何 ID、金额与个人资料。
+      拆分：Stripe 一组按文件分三个任务（219 结账创建与对账、220 确认付款与 webhook、221 退款），每个不超过 12 个允许路径；本任务 8 个，依赖 SHOP-TASK-217。
+```

@@ -30,3 +30,16 @@
       - docs/task-records/SHOP-TASK-213.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明公开读取的响应形状，供 SHOP-TASK-216 使用；偏离取舍）
       - 改动只落在 allowed_change_paths；不改服务层、模型与迁移、app/api/product_images.py、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.20 提交 a870f78 与 HANDOFF 0.84），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.20「计价、优惠、积分与库存」第 15 条「提供」一段与「读取与显示」一段的公开读取部分，新增 GET /api/store-logos/<文件名>.webp（app/api/store_logos.py；路由写成 /api/store-logos/{name}，name 取整段文件名、含扩展名，由处理函数校验），
+      经 SHOP-TASK-210 的存储（键前缀 store-logos/）读取当前标志提供给前台与后台，不要求会话；并在公开读取 GET /api/store-design 的响应里加上 logo。
+      运营者落实写法（HANDOFF 0.84）：文件名格式、错误 detail、no-store 与成功时的响应头照 app/api/product_images.py（沿用它的 _IMAGE_NAME、IMAGE_HEADERS 与两个错误，detail 为 image_not_found 与 image_store_unavailable）；文件名不是单例行当前记录的标志（含已被替换或移除的）即 404、不访问 R2；成功的响应长期缓存，所以不用 no-store 路由类，错误响应自行加 no-store；存储经 image_store 模块属性调用；处理函数为同步函数，R2 读取在线程池里执行。
+      不做前端，不改服务层与模型，不改设计。
+      设计闸门：DESIGN 1.20（提交 a870f78）第 15 条与 HANDOFF 0.84。拆分：提供接口与公开读取（7 个允许路径）。
+```

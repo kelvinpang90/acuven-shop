@@ -44,3 +44,16 @@
       - docs/task-records/SHOP-TASK-172.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；模型、迁移 0023 的两个纯函数与执行顺序、计价换算、后台一组改名、改动的现有测试与原因、偏离、验证到什么程度——pytest 只验证迁移的两个纯函数、不在 SQLite 上执行 0023，CI 的必需检查 backend 在 MySQL 8 上按种子数据对迁移做 upgrade、downgrade 再 upgrade 的往返与 alembic check，写明这一点；并写明 A06 页面待视觉稿重画后另行登记）
       - 改动只落在 allowed_change_paths；不改前端、app/services/regions.py、app/api/orders.py、app/api/checkout.py、订单模型与已有迁移；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.17 提交 80e3775 与 HANDOFF 0.69），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.17「数据模型」ShippingRate 一行、「计价、优惠、积分与库存」第 9 条与第 10 条，把运费表里马来西亚的 16 个州属行（区域类别 my_state）换成西马 MY-W 与东马 MY-E 两行（区域类别 my_region；东马为 MY-12、MY-13、MY-15，其余 13 个为西马），
+      在同一步里改模型与新迁移 0023、结账计价（按所选州属换算成档）、后台维护的服务层与接口（马来西亚一组的字段由 states 改名为 malaysia，西马在前），以及所有按州属建运费行的测试。
+      设计第 10 条要求写入两档行的那一步同时改计价与后台维护，否则马来西亚无法计价、后台保存会因表里有不认识的行而失败；模型的区域代码检查约束一改，按州属建行的测试在同一提交里全部失效，所以不能再拆，允许路径 16 个（其中 10 个是测试文件，多为改夹具的运费行与期望的区域代码）。
+      运营者落实写法（HANDOFF 0.69）：迁移照项目惯例只在 MySQL 上执行、不要求能在 SQLite 上执行（CI 的 backend 在 MySQL 8 上做迁移往返）（照 alembic/versions/20260930_0007_members.py 用 op.drop_constraint 与 op.create_check_constraint 改检查约束），换算规则写成迁移模块里的纯函数，由测试经 importlib 载入后直接调用；不改前端，不改结账的州属列表与校验，不改订单表与已有订单，不改设计。
+      设计闸门：DESIGN 1.17（提交 80e3775）与 HANDOFF 0.69，马来西亚运费两档（碰运费金额与数据结构）。A06 页面待视觉稿按两档重画、经 Kelvin 审阅后另行登记。
+```

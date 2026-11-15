@@ -25,3 +25,14 @@
       - docs/TODO.md 新增 SHOP-TASK-092 记录段（接入位置、两个积分数的来源、锁顺序与死锁、偏离、验证到什么程度，并写明退款申请页的积分预估留给 SHOP-TASK-093），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/points_refund.py、app/api/admin_refunds.py、tests/test_refund_review.py、模型、迁移、.platform/、CI、部署配置；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.46），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「计价、优惠、积分与库存」第 4、5 条与「订单与退款状态」（批准模拟退款时按原计价分摊回退未过期的已抵扣积分，并追回该商品产生的积分；余额不足扣至 0，剩余记待抵扣；事务内写订单、流水和事件），
+      以及 docs/HANDOFF.md 0.46 记录的 Kelvin 2026-10-10 决定（返还以整单为单位，从后到期的批次起返还），把 SHOP-TASK-087 的退款积分函数接入 app/services/refund_review.py 的批准。不做接口，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46（积分）。拆分：业务规则层（3 个允许路径）。
+```

@@ -62,3 +62,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_pricing.py 加 promotion_discounts 的校验、全为 0 与不传逐字段相同、固定券大于活动后商品额时取后者、百分比券按活动后金额计算。新文件 tests/test_promotion_plans.py 以 SHOP-TASK-231 的 price_promotion 走通第 8 条：首例（两开关都打开，10% 券最低消费 RM50，1000 积分，西马运费 800 免去）甲 5310、乙 8270 取甲，price_order 的券分摊 184、184、111、111、0，积分分摊 313、313、187、187、0，现金实付 1347、1347、808、808、0，应付 4310，获得积分 14、13、8、8、0；关闭券同用时甲 5900、乙 8270 取甲且甲不用券；D 例甲 18800、乙 17800 取乙；第三例甲的活动后商品额 9900 够不到券的最低消费，甲 10700、乙 5800 取乙；只关闭积分同用时取甲且 points_allowed 为 False；两方案相同取甲。每条测试的文档字符串写明它守住的第几条哪一句
       - docs/task-records/SHOP-TASK-232.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明 price_order 的新参数与 choose_promotion_plan 的签名，供之后的服务层引用）；改动只落在 allowed_change_paths；不改 app/services/promotion_pricing.py、coupons.py 与下单服务、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.23「计价、优惠、积分与库存」第 1、2 条（1.23 改为券在活动后的金额上计算与分摊）与「节日促销活动」第 6、7 条，改 app/services/pricing.py：price_order 接受每件的活动优惠，UnitAllocation 与 PricingResult 带上活动优惠；新增 choose_promotion_plan，比较「参加活动」（甲）与「不参加活动」（乙）两种方案的积分抵扣之前的应付并取较低者。仍只用标准库、不碰数据库：券是否在有效期、次数是否用完等查库判断仍在 app/services/coupons.py，由之后的服务层先判断，再把券的优惠与最低消费传进来。没有活动优惠时 price_order 的结果与现在逐仙相同（第 2 条末句）。
+      运营者落实写法：新参数 promotion_discounts 只限关键字、默认 None（即每件为 0），不改现有参数与调用方；UnitAllocation 的 promotion_discount 字段与 PricingResult 的 promotion_discount 字段加在各自现有字段之后（全仓库只有 pricing.py 构造这两个数据类）。CouponTerms 在 __post_init__ 里校验（percent_off 与 fixed_off 恰有一个不为 None、fixed_off 与 min_spend_sen 为非负整数、percent_off 为 0–100 的有限 Decimal，不对抛 ValueError，类型不对抛 TypeError）；choose_promotion_plan 对 promotion_discounts、两个运费参数照 price_order 的写法校验（长度、非负整数、每项不超过该件原价、免去的运费不超过未免的运费，不对抛 ValueError，类型不对抛 TypeError）。choose_promotion_plan 只在本单参加活动、且会员选了券或填了积分时由服务层调用（第 6 条）；调用时机由调用方判断，函数本身对任何输入都照下面的规则比较。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「计价、优惠、积分与库存」第 1、2 条与「节日促销活动」第 6–8 条；纯函数，只算金额，不碰个人资料。
+      拆分：节日促销计价规则层的第二个任务（4 个允许路径），依赖 SHOP-TASK-231（测试用它的 price_promotion 走通第 8 条算例）；接入下单与计价接口见之后登记的服务层任务。
+```

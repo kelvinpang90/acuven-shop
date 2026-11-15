@@ -29,3 +29,14 @@
       - docs/TODO.md 新增 SHOP-TASK-090 记录段（锁顺序、支付成功的核销与发放、取消与超时的释放、视图字段、偏离、验证到什么程度，并写明会员的支付页接口留给 SHOP-TASK-091），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/api/pay.py、app/jobs.py、app/services/coupons.py、app/services/points.py、模型、迁移、.platform/、CI、部署配置；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.46、0.47），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「计价、优惠、积分与库存」第 1、3 条（券与积分在取消或支付超时时释放；模拟支付成功后获得积分）、「订单与退款状态」（待支付订单可由下单者取消或超时为 demo_cancelled，释放库存、券及积分预占）与「失败、并发与重试」第 1 条，
+      以及 docs/HANDOFF.md 0.46、0.47 记录的 Kelvin 决定（预占与核销都计用券次数；预占的积分以预占时为准；获得积分按下单时的快照在支付成功时发放），把 SHOP-TASK-085、086 的函数接入 app/services/payment.py 的支付成功、本人取消与超时取消，并让支付与取消可以由会员操作。不做接口，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46、0.47（优惠券与积分）。拆分：业务规则层（4 个允许路径）。
+```

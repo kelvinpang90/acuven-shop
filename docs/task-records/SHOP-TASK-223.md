@@ -41,3 +41,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_stripe_void.py 用 app/services/stripe_gateway.py 的 FakeStripeGateway 与 SQLite，覆盖上面每一个分支的返回值与库里的结果（记录状态与活动列、订单状态、库存加回、券与积分预占释放、事件操作者），creating 不调用 Stripe，读取时已付款而 Stripe 不可用时不作废，Stripe 处理之后记录被并发改动时返回 changed，有会话 ID 时先查询会话（查到 open 才请求作废，查到已付款不请求作废），on_void 与作废同一事务（它抛出时记录与订单都不变），以及人工作废之后同一会话的付款经 confirm_checkout 按第 6 条写成全额退款尝试、订单保持已取消；每条测试的文档字符串写明它守住的 DESIGN 1.22 第 11 条哪一句
       - docs/task-records/SHOP-TASK-223.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改接口、前端、数据库与迁移、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.22「Stripe 测试环境支付」第 11 条第（1）项与「订单与退款状态」第 3 条，在 app/services/payment.py 新增公开函数 void_alerted_checkout(db, gateway, checkout_id, now)，供之后的后台接口处置已写告警时间、不是 expired、所属订单仍待支付的结账记录：先按第 4、5 条向 Stripe 查询一次，查得确定结果照现有规则处理；查不出结果、会话 complete 而付款未定、Stripe 答复已付款而照第 6 条写不成退款尝试，或记录为 creating 时，才把记录记为 expired 并以操作者 admin 取消订单（人工作废）。只做服务层；管理员的核实勾选、审计与响应由 SHOP-TASK-225 的接口处理。不改接口、前端、数据库与设计，不加依赖。
+      运营者落实写法：返回值为新的 StrEnum VoidResult（confirmed、cancelled、voided、changed、unavailable 五个值），记录不存在抛新异常 CheckoutNotFound。有会话 ID 时先查询一次会话（第 11 条「先按第 5 条向 Stripe 查询一次该会话」），再按查到的状态分流，不复用 _end_open（它先请求作废、只在部分结果下查询）；分流里的取消与确认沿用现有函数：给记录 ID 以操作者 system 调用 cancel_after_stripe_end，或调用 confirm_checkout；这些自动处理的订单事件操作者照现有规则为 system，只有人工作废的为 admin。审计：函数带只限关键字的参数 on_void（Callable[[Session], None] 或 None），人工作废的事务在提交之前调用它（由 SHOP-TASK-225 传入写审计的函数，审计与作废同一事务提交；它抛出的异常原样传出，作废随之不生效）；confirmed 与 cancelled 由现有函数各自提交，审计由接口在之后写。cancel_after_stripe_end 与 cancel_order 的操作者范围不变（tests/test_stripe_cancel.py 断言 cancel_after_stripe_end 拒绝 admin，保持通过）。本函数自己不写审计、不记日志、不发告警、不清空告警时间。访客看到的取消原因：同文件 _cancelled_by 把操作者 admin 的取消也归为 timeout（Kelvin 2026-11-08 决定，HANDOFF 0.90：这些订单都是 Stripe 24 小时以上没有结果才被作废，对访客就是超时未付；不改 UX 与文案），guest 与 member 仍为 self。
+      设计闸门：DESIGN 1.22（提交 ffb043e）「Stripe 测试环境支付」第 11 条第（1）项与「订单与退款状态」第 3 条。
+      拆分：人工处置的服务层第一个任务（5 个允许路径）；迟到付款退款重试与两类列表的查询见 SHOP-TASK-224，接口见 SHOP-TASK-225，后台页面待 UX 与视觉稿审阅后登记。
+```

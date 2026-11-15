@@ -26,3 +26,14 @@
       - docs/TODO.md 新增 SHOP-TASK-093 记录段（接口、选件规则、字段、偏离、验证到什么程度，并写明预估与批准时可能因到期或余额变化而不同、以批准时为准，会员模式与前端留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；POST /api/orders/refunds 的行为不变（模块说明可随之补充）；不改 app/services/ 下的文件、app/api/order_lookup.py、tests/test_refunds.py、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.46），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「计价、优惠、积分与库存」第 5 条与「权限与资料保护」第 6 条（访客仅能访问已通过查询验证的订单），以及 docs/UX.md 0.10 P10（会员订单另见积分返还与追回 refund.points_back、refund.points_reversed，已过期的抵扣积分不返还），
+      在 SHOP-TASK-087 的预估函数之上提供查单模式的积分预估接口，供退款申请页在提交前显示。会员模式随之后的会员订单接口提供。不做前端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46（积分）。拆分：接口层（3 个允许路径）。
+```

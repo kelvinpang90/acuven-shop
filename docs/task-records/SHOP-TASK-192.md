@@ -38,3 +38,17 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——frontend/src/api/adminSiteSettings.test.ts 的新字段与合格判定、请求体只有三项；frontend/src/pages/AdminSiteSettingsPage.test.tsx 的开关一组在支付方式之后、选中项随当前值、两个单选都可选、保存带三组选择、ok 更新三组、被拒时三组都不变、改选开关收起提示；frontend/src/pages/AdminStockResetsPage.test.tsx 的 admin.stock_reset_off_note 在 admin.stock_reset_note 之下常显；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - 现有测试只在必要时修改并写明原因——请求体与保存调用参数的断言、按顺序比较表单文字或单选的断言、legend 与 fieldset 的个数、状态与读取结果的整体比较、夹具与替身的 200 回答随第三项补上；A07 按顺序比较标题与说明的断言补上新的一段；短信、支付方式两组与后台框架、导航的期望不变；docs/task-records/SHOP-TASK-192.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由，不改导航；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 第 6 条与 HANDOFF 0.80），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在 A09 站点设置页加入每日恢复库存开关：frontend/src/api/adminSiteSettings.ts 读写 SHOP-TASK-179 新增的 daily_stock_reset_enabled，frontend/src/pages/AdminSiteSettingsPage.tsx 按 docs/UX.md 0.17 的 A09 在支付方式之后加入 admin.stock_reset_toggle 一组
+      （开启与关闭两个单选与 admin.stock_reset_toggle_hint；与短信、支付方式一起整页保存，任一项被拒三项都不写入；不加确认框），依据 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 6 条；
+      并在 A07 库存重置结果页 admin.stock_reset_note 之下加入常显的 admin.stock_reset_off_note（页面不读取开关状态）。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.80）：开关一组没有「不可用」状态，两个单选始终可选；保存的请求体总是带三项（服务端允许省略开关，但页面总是提交当前选择）；视觉稿 A09-stock-reset 只画了这一组，支付方式部分照 A09-stripe 两张。
+      设计闸门：DESIGN 1.18（提交 5ba9796）第 6 条与 HANDOFF 0.76、0.80，库存开关的显示与提交（取值核对与审计在服务端）。
+      拆分：请求模块与页面放在同一个任务（照 SHOP-TASK-169：请求模块改了保存的参数与结果，页面的调用必须同时改）；A07 只加一行常显说明，同属开关的页面部分，一并做；11 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+```

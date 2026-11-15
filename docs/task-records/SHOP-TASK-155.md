@@ -61,3 +61,19 @@
       - 现有测试只在必要时修改并写明原因——frontend/src/router.test.tsx 的路由表断言，以及把 /account/order/refund 当作未知路径的两处（isRoutePath 为假的一行与「renders the home page for an unknown path」，改用另一个不存在的路径）；RefundPage.test.tsx「has no points rows and no member-mode link」一条只改断言字典没有三个积分键的三行（键已加入），改为断言游客订单（placed_by_member 为假）不显示三行，其余断言不变；frontend/src/pages/TrackOrderPage.test.tsx 只在退款入口因 /account/order/refund 进入路由表而失败时修改
       - docs/task-records/SHOP-TASK-155.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；会员模式的打开与提交、积分预估的请求条件与显示、偏离（含预估失败的处理）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不改 frontend/src/api/ 与 TrackOrderPage.tsx）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.13 提交 450c2fa 与 HANDOFF 0.61），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.13 的 P10（会员模式凭会员会话；会员订单另见积分返还与追回）与 docs/DESIGN.md 1.13「计价、优惠、积分与库存」第 5 条，新增路由 /account/order/refund：
+      frontend/src/pages/RefundPage.tsx 支持会员模式——经 SHOP-TASK-150 取单、提交退款申请与积分预估，CSRF 令牌取自 SHOP-TASK-151 的会话，提交后回到 /account/order 显示 refund.submitted（沿用 handOffSubmittedRefund 交接）；
+      两种模式下下单时是会员的订单经对应的积分预估（查单模式用 SHOP-TASK-149 的游客预估）显示 refund.points_back、refund.points_reversed 与 refund.expired_points_note。
+      /account/order/refund 进入路由表后，SHOP-TASK-154 会员模式 P09 的退款入口随之出现。
+      运营者落实写法（HANDOFF 0.61）：刷新后没有订单号时用路由的 replace 回到 /account（Kelvin 2026-10-24 决定）；未登录时用 replace 进入 /login；只在 placed_by_member 为真时请求预估；预估失败不阻止提交，不显示积分行，不另加提示。
+      不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 3、5 条（会话到期与服务端授权检查；会员仅能访问自己认领或下单的订单，退款申请规则与查单页相同，写操作另须 CSRF 令牌）、「订单与退款状态」「失败、并发与重试」（退款申请幂等）与「计价、优惠、积分与库存」第 5 条（返还未过期的抵扣积分、追回获得积分，以批准时为准）与 HANDOFF 0.61。
+      拆分：P10 会员模式与积分行，9 个允许路径（TrackOrderPage.test.tsx 只在退款入口的断言需要时修改）。
+```

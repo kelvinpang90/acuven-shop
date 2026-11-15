@@ -18,3 +18,14 @@
       - docs/TODO.md 新增 SHOP-TASK-108 记录段（两个接口的字段、偏离、验证到什么程度，并写明前端 P13 留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、app/api/member_auth.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.46），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 6 条（会员仅能访问自己的资料）与 docs/UX.md 0.10 P13、docs/UX-COPY.md 0.10（我的积分；我的优惠券：可用券对全部会员相同、使用记录，Q19），
+      在 SHOP-TASK-095 的查询函数与 SHOP-TASK-085 的可用券、使用记录函数之上提供会员中心的两个只读接口。不做页面，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46（优惠券与积分）。拆分：接口层（4 个允许路径），2026-10-13 由原 SHOP-TASK-095 拆出。
+```

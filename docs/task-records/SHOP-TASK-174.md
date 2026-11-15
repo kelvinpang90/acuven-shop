@@ -33,3 +33,16 @@
       - docs/task-records/SHOP-TASK-174.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；请求、字段与合格条件、归类、偏离、验证到什么程度；只写实际存在的测试，写明页面留给 SHOP-TASK-175、176）
       - 改动只落在 allowed_change_paths（不改页面、路由与导航）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      为 A06 页面新建调用 SHOP-TASK-171 两个接口（读取 GET 与保存 PUT /api/admin/shipping-rates，马来西亚一组按 SHOP-TASK-172 为 malaysia）的请求模块与测试，供 SHOP-TASK-175、176 使用；
+      不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（运费与汇率的取值规则、核对与审计在 SHOP-TASK-170 到 172 的服务端，依据 DESIGN 1.17 第 9、10 条；请求模块只传递与校验字段）。
+      运营者落实写法（HANDOFF 0.72）：兜底行为 null 时读取算失败（迁移 0005 已写入兜底行，保存必须带它，缺了页面无法保存）；马来西亚行的区域代码只收 MY-W 与 MY-E。
+      拆分：A06 页面的请求层（3 个允许路径），照 A05 的 SHOP-TASK-101。
+```

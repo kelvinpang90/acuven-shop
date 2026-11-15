@@ -36,3 +36,14 @@
       - docs/task-records/SHOP-TASK-126.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；四种到期规则与频率、告警、任务顺序、手动补跑、偏离、验证到什么程度，并写明 webhook 的退款事件留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/stripe_refund.py 与其他已有服务、app/api/、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 8 条（还没有 Stripe 退款 ID 的尝试由定时任务在创建后 24 小时内以同一幂等键自动重试；24 小时后不再调用退款接口，改为列出该 PaymentIntent 退款的全部分页、按元数据里的尝试 ID 对账，找到就采用，找不到或无法列完都保持 pending 并告警；已有 Stripe 退款 ID 而状态未终结的由定时任务查询；已 succeeded 的在成功后 30 天内每天、之后每周再查询一次，不设终止），
+      以及 docs/HANDOFF.md 0.54 记录的 Kelvin 2026-10-19 决定（每 5 分钟、每 10 分钟、每小时的频率，从未调用过的尝试立即处理），在 SHOP-TASK-124 之上加退款尝试的定时处理并接入定时任务进程。不加接口，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.54，退款。拆分：定时任务层（7 个允许路径）。
+```

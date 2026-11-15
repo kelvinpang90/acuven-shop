@@ -33,3 +33,16 @@
       - docs/task-records/SHOP-TASK-170.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；服务层的函数与两种异常、两步核对、审计写法、行 ID 不复用的落实、偏离、验证到什么程度，并写明接口留给 SHOP-TASK-171）
       - 改动只落在 allowed_change_paths；app/services/shipping.py 与现有测试不变，tests/test_shipping.py 与 tests/test_demo_shipping_seed.py 照旧通过；不改迁移、接口、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.16（提交 e9a1c93）与 HANDOFF 0.67），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.16「计价、优惠、积分与库存」第 9 条（管理员在后台 A06 一次保存整页的运费与演示汇率：州属与兜底只改运费，国家运费与演示汇率可改、可新增、可删除；取值范围；先不碰数据库检查请求本身，再锁行按行 ID 与版本号核对；行 ID 不复用；
+      值未变的行不改版本、不写审计，改了值的行版本号加一，删除即删行，新增的行版本号为 1；每改、增、删一行写一条审计），新增服务层 app/services/admin_shipping_rates.py，读取整页数据、保存整页修改，供 SHOP-TASK-171 的后台接口调用。
+      运营者落实写法（HANDOFF 0.67）：两张表在 app/models/shipping.py 的表参数加 sqlite_autoincrement（测试用的 SQLite 不声明自增时会把删掉的最大 ID 再分配出去），不改迁移（生产 MySQL 8.0 的自增计数持久化，不复用删掉的 ID）；
+      同一事务里先删后增时先 flush 删除再插入；加锁顺序先运费表、再汇率表，各按 id 排序；删后再增各写一条审计。不做接口与前端，不改设计。
+      设计闸门：DESIGN 1.16（提交 e9a1c93）与 HANDOFF 0.67，运费与演示汇率的后台维护。拆分：业务规则层（4 个允许路径），接口由 SHOP-TASK-171 接上，页面待视觉稿补齐后另行登记。
+```

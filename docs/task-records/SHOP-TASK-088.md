@@ -37,3 +37,15 @@
       - docs/TODO.md 新增 SHOP-TASK-088 记录段（计价、下单步骤与锁顺序、拒绝条件、快照、重放、偏离、验证到什么程度，并写明行锁只在 MySQL 上成立、接口留给 SHOP-TASK-089、支付与取消的接线留给 SHOP-TASK-090），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/ordering.py、app/services/pricing.py、app/services/checkout.py、app/services/coupons.py、app/services/points.py、模型、迁移、.platform/、CI、部署配置；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.46、0.47），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「计价、优惠、积分与库存」第 1 至 3、6、8 条（优惠券先抵商品额、积分再抵剩余商品额，二者均不抵运费，最终应付不低于运费；券仅会员可用，券与积分在下单时预占；逐件分摊；15 分钟未支付自动取消；下单时重新校验限购）、
+      「失败、并发与重试」第 1 条（幂等键；库存、券与积分预占及订单创建在同一事务，失败全部回滚）与「权限与资料保护」第 1、3 条（已登录会员结账不再验证；会员下单的订单创建时即标记为不可认领），
+      以及 docs/HANDOFF.md 0.47 记录的 Kelvin 2026-10-11 决定（券或积分在下单时已不可用即整单拒绝；获得积分在下单时写快照、模拟支付成功时发放），在 SHOP-TASK-085、086 之上实现会员结账的计价与下单规则函数。不做接口，不接入支付与取消，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46、0.47（优惠券与积分）。拆分：业务规则层（3 个允许路径）。
+```

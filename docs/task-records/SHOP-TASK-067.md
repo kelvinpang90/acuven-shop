@@ -36,3 +36,14 @@
       - docs/TODO.md 新增 SHOP-TASK-067 记录段（两个适配器的调用与归类、配置项、偏离、验证到什么程度，并写明限流、预算、记录与接口留给 SHOP-TASK-068 到 070、真实服务未接通验证），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置与 docker-compose；不装依赖（不改 pyproject.toml）；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「失败、并发与重试」第 4 条（Twilio Verify 托管验证码、发送前托管人机挑战并在后端核验令牌）与 docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（人机挑战用 Cloudflare Turnstile），
+      新建两个适配器：Twilio Verify 的发送与核验、Turnstile 的令牌核验，以及它们的配置项与测试替身。只用标准库发请求，不加依赖；不做限流、预算、记录与接口（由 SHOP-TASK-068 到 070 接上），不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41（手机号与验证码交给短信服务商）。拆分：外部服务适配层（6 个允许路径）。
+```

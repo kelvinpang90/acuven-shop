@@ -35,3 +35,17 @@
       - docs/task-records/SHOP-TASK-210.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明两个函数的新签名与常量，供 SHOP-TASK-211 至 213 使用；验证到什么程度，只写实际存在的测试）
       - 改动只落在 allowed_change_paths；不改调用方（app/services/admin_product_images.py、app/api/admin_product_images.py、app/api/product_images.py）、模型与迁移、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.20 提交 a870f78 与 HANDOFF 0.84），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.20「计价、优惠、积分与库存」第 15 条（标志的像素尺寸为宽与高各 40 到 4,000、且长边至少 200；展示图存为键为 store-logos/<文件名>.webp 的对象；其余检查、处理与存储照第 13 条），
+      让 app/services/image_processing.py 的 process_image 可以传入最小边长与长边下限，让 app/services/image_store.py 的写入、读取与删除可以传入键前缀，供之后的标志服务层与接口（SHOP-TASK-211 至 213）调用；商品图片的调用方不改、行为不变。
+      运营者落实写法（HANDOFF 0.84）：两处都是只限关键字的参数，默认值即商品图片现在的取值，所以 SHOP-TASK-188 至 191 的调用方与测试原样通过；标志与商品图片共用同一把处理锁（同一进程同时只处理一张）与同一组 R2 client；日志仍只记操作名、文件名与异常类名，不记前缀以外的新内容。
+      不做服务层、数据库、接口与前端，不改设计。
+      设计闸门：DESIGN 1.20（提交 a870f78）第 13、15 条与 HANDOFF 0.84，图片按内容判断与处理（去掉拍摄地点等照片资料）的尺寸参数与存放位置。
+      拆分：共用的图片处理与存储一层（5 个允许路径）。
+```

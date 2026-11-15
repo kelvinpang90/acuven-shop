@@ -19,3 +19,15 @@
       - docs/TODO.md 新增 SHOP-TASK-109 记录段（新建表单、提交、偏离、验证到什么程度，只写实际存在的测试，并写明未做浏览器验收），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths（不新增路由，不改导航，不改 frontend/src/api/adminCoupons.ts）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在 SHOP-TASK-102 的优惠券列表上实现 A05 的新建：经 SHOP-TASK-101 的请求模块调用 SHOP-TASK-099 的新建接口，按 docs/HANDOFF.md 0.48 记录的 Kelvin 2026-10-12 决定（只新建与停用；有效期只录日期；新建被拒时显示 admin.coupon_code_taken 或 admin.coupon_invalid）。
+      不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（金额规则与校验在 SHOP-TASK-098、099 的服务端，页面只收集字段并把 RM 换成整数仙）。
+      拆分：2026-10-15 由原 SHOP-TASK-102 拆出（原因见 102），本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+```

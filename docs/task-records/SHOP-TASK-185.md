@@ -30,3 +30,15 @@
       - docs/task-records/SHOP-TASK-185.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）
       - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/catalog.py、app/services/checkout.py、app/services/admin_codes.py、现有测试（含 tests/test_admin_products.py 与 tests/test_admin_product_save.py）、前端、.platform/、CI 与部署配置，不装依赖，不改设计
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 11 条（可新增规格值与 SKU；新增的规格值与 SKU 各带一个请求内的临时编号，新增 SKU 以行 ID 引用已有规格值、以临时编号引用同一次保存里新增的规格值；新增的排在已有的之后；第三步查新增 SKU 的组合与已有 SKU（含停用的）不重复；新增 SKU 的当日可用库存等于每日初始库存），放开 SHOP-TASK-184 的 save_product 对新增项的拒绝。
+      运营者落实写法（HANDOFF 0.77）：代码生成复用 SHOP-TASK-183 的函数；新增 SKU 以行 ID 引用的规格值须是请求里列出的、属于该 SKU 所选规格名的已有规格值，否则归第一步「取值不合格」；新增的规格值与 SKU 各写一条 *_created 审计。
+      不做接口与前端，不改模型与迁移，不改设计。
+      设计闸门：DESIGN 1.18（提交 5ba9796） 第 11 条与 HANDOFF 0.77。拆分：保存时的新增（3 个允许路径）。
+```

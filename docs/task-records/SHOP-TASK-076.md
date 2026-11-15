@@ -32,3 +32,15 @@
       - docs/TODO.md 新增 SHOP-TASK-076 记录段（接口、cookie、字段、结果与状态码、共用依赖、偏离、验证到什么程度，并写明密码登录、设置与重设密码、注销与前端留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 3 条（注册、短信登录与结账验证是同一个短信验证流程；会话到期、退出与服务端授权检查）与第 5 条（会话以服务端会话实现，经 HttpOnly、Secure、SameSite=Lax 的 cookie 交给浏览器，写操作另须 CSRF 令牌），
+      以及 docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（会员会话 30 天、不随使用延长），提供短信登录或注册、读取当前会员会话与退出三个接口，并提供之后会员接口共用的会话与 CSRF 依赖。
+      调用 SHOP-TASK-075 的规则函数，不做密码登录、设置与重设密码、注销与前端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41（会员登录与个人资料）。拆分：接口层（4 个允许路径）。
+```

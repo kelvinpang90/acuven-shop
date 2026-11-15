@@ -47,3 +47,16 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AdminRefundDetail.test.tsx 验证意图，写法照该文件现有测试（以 renderToStaticMarkup 渲染 View、直接调用导出的纯函数与异步函数，不模拟点击）——按钮只在最新为 failed 时出现（含较早一条 failed 而最新为 pending 时不出现）；提交中按钮禁用与 aria-busy；done 后重新读取并显示多出的一行（覆盖新尝试为 pending 的情形，以及新尝试已为 failed 时按钮仍按最新一条显示）；cap 显示 admin.stripe_refund_blocked 且详情不变；not_retryable 与 csrf 重新读取后的 common.error_retry（按钮已不显示时提示仍在）；none 进入 /admin/login；network 与 failed；中止后不再更新；重试请求带详情的 csrf_token；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 SHOP-TASK-131 记录的哪一句；现有测试只在必要时修改并写明原因；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出（CI 的 eslint 带类型规则）；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-142.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；按钮条件、提交、结果、偏离、验证到什么程度，只写实际存在的测试，并写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由，不改导航，不改 frontend/src/api/adminRefunds.ts）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.57），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在 SHOP-TASK-141 的 Stripe 退款段上加入手动重试：最新一次尝试为失败时显示 admin.stripe_refund_retry，点按经 SHOP-TASK-140 的请求函数调用 SHOP-TASK-131 的重试接口，
+      按 docs/UX.md 0.12 的 A03「Stripe 测试（0.11）」（重试提交中按钮禁用；成功后重新读取，表中多出一行新的尝试；会超过 Stripe 付款金额时显示 admin.stripe_refund_blocked）与 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 8 条。
+      不新增路由，不改导航，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.57，退款（手动重试的触发与结果显示；能否重试、合计上限与审计在服务端）。
+      拆分：A03 Stripe 部分的重试，本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+```

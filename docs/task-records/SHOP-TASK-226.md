@@ -34,3 +34,15 @@
       - 测试验证意图（前端检查与全部测试由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——新文件 frontend/src/pages/AdminStripePendingPage.test.tsx 断言三种语言下标题、当前导航项（aria-current 为 page）与它在退款之后、商品之前；每条新增或改动的测试注释写明它守住的 UX 0.19「管理后台总体」或 A11 的原句
       - docs/task-records/SHOP-TASK-226.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明不适用及理由），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      为 A11 新建路由 /admin/stripe-pending 与页面 frontend/src/pages/AdminStripePendingPage.tsx（用后台框架渲染，当前导航项为 Stripe 待处理，内容区只有标题 admin.nav_stripe_pending），后台导航按 docs/UX.md 0.19「管理后台总体」的顺序在退款之后加入 Stripe 待处理一项；
+      请求模块留给 SHOP-TASK-227，列表、作废与重试留给 SHOP-TASK-228。不调用接口，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只加路由、导航与标题，不碰金额与个人资料）。
+      拆分：A11 页面的框架层，照 A06 的 SHOP-TASK-173。18 个允许路径，超过拆分规则的 12 个：导航多一项后，10 个现有测试文件里按顺序列出导航项或路由表的断言必然失效（运营者在登记时对 main 的导出做骨架实测，列出 31 条失败，全部在 router.test.tsx、AdminFrame.test.tsx 与 8 个后台页面测试里，都是导航顺序或路由表的断言），只许改这些断言，与加导航的改动拆不开；路由、页面表与导航项的类型互相依赖，也拆不开。
+```

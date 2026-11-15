@@ -46,7 +46,7 @@
 - 每个 `ready` 任务都要出现在 [docs/TODO.md](docs/TODO.md) 的 planning-v1 块里；「当前计划」里的每一项都要在 `tasks.yaml` 登记为 `ready`。
   格式见 `docs/TODO.md` 块上方的注释，格式不对整块作废、项目 fail closed。
 - `allowed_change_paths` 逐个写精确文件路径（不是目录、不是通配符）；`allowed_commands` 只引用 `.platform/commands.yaml` 里已有的 id。
-- **任务记录写在 `docs/task-records/<任务 id>.md`，不写进 `docs/TODO.md`（2026-10-19 起）**：登记时 `allowed_change_paths` 带这个文件、不带 `docs/TODO.md`，验收标准写「docs/task-records/<任务 id>.md 新增本任务记录（……）」。已交付任务的 `acceptance_criteria` 由运营者在登记 PR 里顺带原样移到该记录文件末尾，`tasks.yaml` 里只留一行指向；其余字段与 done 条目本身不删（后续任务的 `depends_on` 要在同一个 `tasks.yaml` 里读成 done）。
+- **任务记录写在 `docs/task-records/<任务 id>.md`，不写进 `docs/TODO.md`（2026-10-19 起）**：登记时 `allowed_change_paths` 带这个文件、不带 `docs/TODO.md`，验收标准写「docs/task-records/<任务 id>.md 新增本任务记录（……）」。已交付任务的 `acceptance_criteria` 与 `purpose` 由运营者在登记 PR 里顺带原样移到该记录文件末尾，`tasks.yaml` 里各只留一行指向（`purpose` 写「已交付；目的原文移到 docs/task-records/<任务 id>.md」，控制面要求它不为空；移 `purpose` 是 Kelvin 2026-11-15 定的，A12 那批登记后文件到了 598,965 字节）；其余字段与 done 条目本身不删（后续任务的 `depends_on` 要在同一个 `tasks.yaml` 里读成 done）。
   起因：Worker 读计划文件与契约的子进程输出上限是 1,000,000 字节，`docs/TODO.md` 涨到 1,001,658 字节后 SHOP-TASK-116 自动收尾以 `closeout_lost` 结束、规划上报一直是 `planning_invalid`、所有「开启」被拒（2026-10-19）。`tests/test_platform_tasks.py` 在 CI 里要求两个文件都不超过 600,000 字节。
 - **只在 CI 跑的检查不写进 `allowed_commands`**：用 TestClient / asyncio 的后端 pytest（`tests.unit`）和前端检查只在 CI 跑。
   Worker 的 MXC 沙箱里 ssl 等扩展加载失败、回环 socket 被禁，这类测试跑不通；Worker 本来就要等 PR 的必需 CI 检查

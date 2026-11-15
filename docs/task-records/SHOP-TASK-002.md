@@ -25,3 +25,14 @@
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表、不加迁移、不加接口
       - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.6，提交 845fd93），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.6「计价、优惠、积分与库存」第 2–4 条（已批准的 1A、2A）实现逐件分摊纯函数：
+      只用标准库，金额一律整数仙，积分一律整数积分。不碰数据库、API、库存、积分到期与退款，不改设计。
+      设计闸门：DESIGN 1.6（提交 845fd93）。
+```

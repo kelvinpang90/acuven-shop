@@ -65,3 +65,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_promotion_pricing.py：第 8 条算例的（一）至（三）逐仙核对（A 两件各折 500、B 两件不折、C 折 900，S1 为 6400；达到第一档、整单减 500 分摊为 156、156、94、94、0；每件活动优惠 656、656、94、94、900，合计 2400；距下一档 3600；运费报价 800 时免去 800）；每类规则的边界（百分比恰好半仙进一仙、直降大于单价、n 不足 X + Y、多组、同价按行序件序、跨行混搭、享受百分比 100）；满额取最高档、一档未达、固定金额档、百分比档（含百分比折扣恰好半仙进一仙）；免运费门槛 0 与恰好等于门槛、没有运费报价；所有规则都没带来优惠时 participates 为 False；参数校验。每条测试的文档字符串写明它守住的第几条哪一句
       - docs/task-records/SHOP-TASK-231.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明公开的数据类与函数签名，供 SHOP-TASK-232 与之后的服务层引用）；改动只落在 allowed_change_paths；不改 app/services/pricing.py、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.23「节日促销活动」第 3–5 条与第 10 条计价接口所需的数，新建 app/services/promotion_pricing.py：只用标准库、不碰数据库，算每件的商品级折扣（打折与买 X 享 Y 的选件）、满额减或满额折的档与分摊、免运费门槛，以及凑单提示要用的差额与件数。规则怎样从数据库读出、一行属于哪条商品级规则（含商品改分类后重叠时取排序数较小的规则）、哪些行是正常行，都由之后的服务层决定后传入。不改 app/services/pricing.py（券与积分接入活动与取更优方案见 SHOP-TASK-232）。
+      运营者落实写法：舍入与分摊复用 app/services/pricing.py 现有的 percent_coupon_discount（百分比以 Decimal 传入，「四舍五入，恰好半仙进一仙」）与 allocate_largest_remainder（最大余数、稳定序），不另写一套；参数校验照该文件 _require_non_negative_int 的写法（不接受 float 与 bool）。规则里的百分比（打折、买 X 享 Y 的享受百分比、满额折的档）都是 int，传给 percent_coupon_discount 时才转成 Decimal；SpendRule 的 mode 是字符串，模块导出常量 SPEND_AMOUNT（amount）与 SPEND_PERCENT（percent）。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 3–5、8、10 条；纯函数，只算金额，不碰个人资料。
+      拆分：节日促销计价规则层的第一个任务（3 个允许路径），与 SHOP-TASK-229、230 互不依赖。
+```

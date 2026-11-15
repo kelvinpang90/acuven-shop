@@ -32,3 +32,14 @@
       - docs/task-records/SHOP-TASK-129.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；检查顺序、各响应、偏离、验证到什么程度，并写明在 Stripe 测试环境建 webhook 端点、订阅 CHECKOUT_EVENT_TYPES 与 REFUND_EVENT_TYPES 六种事件、把签名密钥写进私有配置由运营者在合并部署后完成），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、app/api/ 下的其他文件、模型、迁移、现有测试、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 7 条（端点为 POST /api/stripe/webhook，用原始请求体与 webhook 签名密钥校验 Stripe-Signature（含时间容差），不通过回 400、不处理；已提交过的事件直接回 200；处理失败整个事务回滚、回 5xx，由 Stripe 重发；其他类型回 200 不处理；不需要会话与 CSRF；不存、不记录事件原文）、第 1 条（webhook 事件 livemode 为真即拒绝）与第 2 条（签名密钥未配置时不启用 Stripe），
+      以及 docs/HANDOFF.md 0.55 的落实写法（请求体上限 256 KB；未配置回 503 且不验签；livemode 为真回 400；处理中 Stripe 不可用回 503），提供 webhook 接口，处理交给 SHOP-TASK-127、128 的 handle_webhook_event。不改服务层，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，支付状态与退款。拆分：接口层（4 个允许路径）。
+```

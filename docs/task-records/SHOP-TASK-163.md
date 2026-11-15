@@ -42,3 +42,17 @@
       - docs/task-records/SHOP-TASK-163.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；继续支付、退出清除暂存、偏离、验证到什么程度，只写实际存在的测试，写明未做浏览器验收，并写明注销时的清除留给 SHOP-TASK-167）
       - 改动只落在 allowed_change_paths（不改 frontend/src/api/、RefundPage.tsx、PayPage.tsx 与 PayResultPage.tsx；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.14 提交 00f8f34 与 HANDOFF 0.63），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.13 的 P09 会员模式（待支付订单另有 account.order_pay，回到 P06 继续支付或取消）与 P06「会员的当前订单」（从 P09 进入支付页时写入暂存；会员退出时清除）与 docs/DESIGN.md 1.14「权限与资料保护」第 7 条，
+      让 frontend/src/pages/TrackOrderPage.tsx 的会员模式对待支付订单显示 account.order_pay（经 SHOP-TASK-158 写入当前订单暂存后前往 /pay），frontend/src/pages/AccountPage.tsx 的退出在清除会员订单交接的同时清除暂存。
+      SHOP-TASK-154 记下的「会员模式待支付订单本批不显示 account.order_pay」至此取消；查单模式仍显示 order.lookup_no_pay。
+      不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.14（提交 00f8f34）「权限与资料保护」第 5 条（会员仅能访问自己的订单）与第 7 条（从会员订单详情进入支付页时写入暂存、覆盖之前的值；会员退出时清除）与 HANDOFF 0.63。
+      拆分：P09 继续支付与退出清除暂存，9 个允许路径。
+```

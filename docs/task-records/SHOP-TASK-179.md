@@ -41,3 +41,15 @@
       - docs/task-records/SHOP-TASK-179.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明判定位置、日志内容、保存的返回值变化，以及偏离与取舍）
       - 改动只落在 allowed_change_paths；不改 app/services/stock_reset.py、模型与迁移、前端、.platform/、CI 与部署配置，不装依赖，不改设计
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 6 条的每日恢复库存开关与「数据模型」SiteSetting 一行，让每日库存重置的定时任务与运营者补跑命令先读开关、关闭时跳过，并在后台站点设置的读取与保存接口加入这个开关；数据库列已由 SHOP-TASK-177 加好（site_settings.daily_stock_reset_enabled，服务端默认真）。
+      运营者落实写法（HANDOFF 0.76）：开关的读取函数照 is_sms_verification_enabled 写在 app/services/site_settings.py，表里没有那一行时视为开启；判定写在 app/jobs.py 的 reset_stock_job 里，reset-stock 子命令本来就经它执行，所以一处改动同时约束定时任务与补跑命令；保存请求里的 daily_stock_reset_enabled 可省略（省略即不改，现有 A09 页面照常能保存），任一项被拒时三项都不写入；审计操作名 admin_daily_stock_reset_changed，旧值与新值为 on 或 off。
+      不做前端（A09 页面的开关另行登记），不改模型与迁移，不改 app/services/stock_reset.py，不改设计。
+      设计闸门：DESIGN 1.18（提交 5ba9796） 第 6 条与 HANDOFF 0.76，库存与站点设置。拆分：开关只有一处判定与一个字段，读取、任务与接口放在同一任务里（7 个允许路径）。
+```

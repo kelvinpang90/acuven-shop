@@ -37,3 +37,15 @@
       - docs/TODO.md 新增 SHOP-TASK-069 记录段（判定顺序、结果与记录、限流、核验、偏离、验证到什么程度，并写明接口、登录注册与认领留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/ordering.py、.platform/、CI、部署配置；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41、0.43），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「边界与原则」第 3、4 条、「失败、并发与重试」第 2 到 5 条与 docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（标准档限流）及 0.43 记录的 2026-10-09 决定（请求 ID 撞上已结束的记录按停发），
+      把 SHOP-TASK-067 的适配器、068 的每日预算与 SHOP-TASK-026 的 Redis 限流组合成发送与核验两个规则函数，并写 SHOP-TASK-012 的短信验证记录。
+      不做接口，不做登录、注册与认领（由之后的任务接上），不加表或迁移，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41、0.43（短信验证、个人资料与费用）。拆分：业务规则层（4 个允许路径）。
+```

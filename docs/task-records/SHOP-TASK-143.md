@@ -35,3 +35,16 @@
       - 由 PR 的必需 CI 检查 backend 执行 pytest（含 docker compose config 校验）并全部通过（Worker 沙箱不跑 pytest）；docs/task-records/SHOP-TASK-143.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；传入的变量、新字段与取值规则、偏离、验证到什么程度，并写明前台读取留给 SHOP-TASK-144、运营者要在服务器 .env 里填写的变量名）
       - 改动只落在 allowed_change_paths；不改 app/services/captcha.py、app/services/sms_provider.py 与其他短信规则，不改 .env.example、前端、迁移、CI、deploy/deploy.sh、.platform/ 与 docs/TODO.md；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      docker-compose.yml 的 shop_api 只传入数据库、Redis 与 Stripe 的变量，app/core/config.py 里的 Twilio Verify、Cloudflare Turnstile、短信预算与限流、WhatsApp 联系链接共 15 个变量传不进容器，
+      运营者在服务器 .env 里填了也不生效。本任务把它们传进 shop_api，并新增人机挑战的公开 site key 配置 SHOP_TURNSTILE_SITE_KEY，由 GET /api/site-settings 下发给前台的短信验证组件 V1（docs/UX.md V1 的托管人机挑战组件）。
+      不改发送、核验与限流的规则，不改前端，不改设计。
+      设计闸门：不适用（只把已有配置传进容器，新增的 site key 是公开值；短信与人机挑战的规则不变）。
+      拆分：后端配置层，6 个允许路径；前台读取由 SHOP-TASK-144 接上。
+```

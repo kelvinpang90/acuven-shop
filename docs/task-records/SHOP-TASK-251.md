@@ -55,3 +55,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_promotion_ai_api.py（以替身代替服务层或客户端，固定本模块与 admin_auth 的 _utcnow）：未配置与已配置时 status 的值；成功的响应形状；每个错误码；401、403、413、415、422 的顺序且不调用服务层；no-store。每条测试的文档字符串写明它守住的第 13 条或 UX 的哪一句
       - docs/task-records/SHOP-TASK-251.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明路由、请求与响应字段、错误码，供前台 A12 的 AI 任务引用）；改动只落在 allowed_change_paths；不改服务层、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.23「节日促销活动」第 13 条与 docs/UX.md 0.20 A12 的 AI 区（未配置时 AI 按钮禁用并说明原因），新建 app/api/admin_promotion_ai.py，把 SHOP-TASK-248 的服务接成两个后台接口。不改服务层规则、前端与数据库。
+      运营者落实写法：路径放在 /api/admin/promotion-ai/ 下，不放在 /api/admin/promotions/ 下（免得被活动 ID 的路由先匹配）。照 app/api/admin_categories.py 的会话、CSRF、请求体读取（上限 8 KB）、请求模型 extra forbid 与 strict、422 不回显（app/api/pay.py 的 _body_errors）与 _NoStoreRoute 写法。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 13 条：接口只传递与校验字段，出站内容与计数在 248 的服务层；不返回个人资料。
+      拆分：节日促销 AI 提案的第四个任务（4 个允许路径），依赖 SHOP-TASK-248。
+```

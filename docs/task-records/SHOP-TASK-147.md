@@ -48,3 +48,16 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/ForgotPasswordPage.test.tsx 验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——初始只有 V1；registered 后的新密码表单与按码点计数的按钮条件（含一个表情符号算一个字符）；提交请求带 V1 交回的 csrf_token；各提交结果（含 expired 与 csrf 回到 V1 初始状态）；not_registered 的文案与注册链接（目标路由不存在时不渲染链接）；开关关闭；页面文字（国家码选项 +60、+65 除外）全部来自字典；每条测试写明它守住的是 UX、设计或接口记录的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）；现有测试（含 router.test.tsx 的路由表断言与 LoginPage.test.tsx 里 auth.forgot 不渲染的断言）只在必要时修改，并写明原因
       - docs/task-records/SHOP-TASK-147.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；验证后的两种结果、提交、偏离、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不改 frontend/src/components/SmsVerify.tsx 与 frontend/src/api/）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.58），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.12 的 P12 忘记密码部分与 docs/DESIGN.md 1.12「权限与资料保护」第 3 条，新增路由 /forgot-password 与重设页：嵌入 SHOP-TASK-145 的 V1（用途 reset_password），
+      号码已注册时显示新密码输入并经 SHOP-TASK-144 提交重设，未注册时显示 auth.reset_not_registered 与去注册的入口。/forgot-password 进入路由表后，SHOP-TASK-146 登录页的 auth.forgot 随之出现。
+      不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）「权限与资料保护」第 3 条（重设再次短信验证；未注册号码不创建账号；开关关闭时重设暂停；密码至少 8 位）与 HANDOFF 0.58。
+      拆分：P12 忘记密码，9 个允许路径。
+```

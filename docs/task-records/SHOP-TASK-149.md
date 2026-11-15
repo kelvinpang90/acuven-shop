@@ -40,3 +40,17 @@
       - docs/task-records/SHOP-TASK-149.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；新字段与取值、预估请求的归类与显示判断、偏离、验证到什么程度，只写实际存在的测试，并写明页面显示留给 SHOP-TASK-154、155）
       - 改动只落在 allowed_change_paths（不做页面，不改路由与页头，不改 TrackOrderPage.tsx 与 RefundPage.tsx）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.13 提交 450c2fa 与 HANDOFF 0.61），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.13 的 P09（M3——下单时是会员的订单显示优惠与积分两行，游客订单与后来被认领的游客订单不显示）与 P10（M3——会员订单另见积分返还与追回），
+      让 frontend/src/api/orderLookup.ts 的 LookupOrder 另取后端查单视图已有的 placed_by_member、coupon_discount_sen 与 points_redeemed（SHOP-TASK-103），
+      并新增调用游客积分预估 POST /api/orders/refunds/points-estimate（SHOP-TASK-093，至今前端没有调用）的请求函数，供 SHOP-TASK-150、154、155 使用。
+      不做页面，不改路由与页头，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 5 条（访客仅能访问已通过查询验证的订单）与「计价、优惠、积分与库存」第 3、5、7 条（100 积分抵 RM1；退款时返还未过期的抵扣积分、追回获得积分；已有订单按快照）与 HANDOFF 0.61。
+      拆分：会员前端第二批的请求层之一，5 个允许路径（TrackOrderPage.test.tsx 与 RefundPage.test.tsx 只为补样例字段列入）。
+```

@@ -38,3 +38,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_stripe_refund.py、tests/test_stripe_refund_overdue.py、tests/test_stripe_webhook_refund.py、tests/test_stripe_refund_approval.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，在现有覆盖这些日志的情形里补断言（每个告警点以所写类别与对象调用一次；没有告警日志的结果不调用；退款申请两处的对象类别为 refund_request）；现有测试只为替换 alert 而改；每条新断言所在测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行
       - docs/task-records/SHOP-TASK-221.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改退款规则、发送机制、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 6 条表中 stripe_refund_unrefundable、stripe_refund_rejected、stripe_refund_failed_after_success、stripe_refund_mismatch、stripe_refund_unresolved、stripe_webhook_refund_rejected 六行与 stripe_refund_cap 一行的第 8 条部分，在 app/services/stripe_refund.py、stripe_refund_overdue.py、stripe_webhook.py（退款尝试的两条日志）与 refund_review.py 的现有 error 日志之后接入告警，并把六类加进 app/services/ops_alert.py 的 CATEGORIES（stripe_refund_cap 已由 SHOP-TASK-220 加入）。不改退款规则，不改发送机制，不改数据库、接口与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：每条现有的告警日志之后紧接着调用 ops_alert.alert(类别, 对象)，类别取日志里的同一个常量或变量；日志里为 attempt=<ID> 的，对象为（stripe_refund, 退款尝试 ID），为 refund_request=<ID> 的，对象为（refund_request, 退款申请 ID）；refund_review.py 的告警在调用方提交之前记日志，告警照此入队（第 2 条接受外层提交失败时多出一封）；app/api/admin_refunds.py 的 stripe_refund_submit_failed 不接（第 8 条）；六类都不以对象作去重键，窗口 3600 秒。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6 条与 HANDOFF 0.88；告警不带 Stripe 的任何 ID、金额与个人资料。
+      拆分：Stripe 一组的第三个任务（10 个允许路径），依赖 SHOP-TASK-217 与 220（沿用 220 加入的 stripe_refund_cap，app/services/stripe_webhook.py 两个任务都改）。
+```

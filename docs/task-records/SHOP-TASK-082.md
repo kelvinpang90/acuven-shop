@@ -36,3 +36,14 @@
       - docs/TODO.md 新增 SHOP-TASK-082 记录段（确认方式、检查顺序、结果与状态码、偏离、验证到什么程度，并写明前端注销入口留给之后的任务、积分与优惠券作废留给优惠券与积分账本任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；app/api/member_deletion.py 里 SHOP-TASK-081 的两个接口行为不变（模块说明可随之补充）；不改 app/services/ 下的文件、app/api/member_auth.py、tests/test_member_deletion_api.py、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41、0.45），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 3 条（注销须先以短信验证码确认；短信验证开关关闭期间改为已设密码的会员输入当前密码、未设密码的会员在已登录会话内经二次确认）与「边界与原则」第 4 条（确认注销时按当时读取的开关值判定），
+      以及 docs/HANDOFF.md 0.45 记录的 Kelvin 2026-10-10 决定（开关开启时取用注销批准；开关关闭时密码输错与密码登录共用锁定计数），在 SHOP-TASK-080 与 SHOP-TASK-081 之上提供确认注销接口。不做前端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41、0.45（会员注销与个人资料）。拆分：接口层（3 个允许路径）。
+```

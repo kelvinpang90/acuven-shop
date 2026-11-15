@@ -36,3 +36,15 @@
       - docs/task-records/SHOP-TASK-188.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明各种色彩模式的转换取舍与偏离）
       - 改动只落在 allowed_change_paths；不改模型与迁移、现有测试、前端、.platform/、CI 与部署配置，不装依赖（Pillow 已在 pyproject.toml），不改设计
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.19「计价、优惠、积分与库存」第 13 条「上传」一段里按文件内容的判断与「处理」一段，新增 app/services/image_processing.py 的 process_image，供上传（SHOP-TASK-189、190）调用。
+      运营者落实写法（HANDOFF 0.79）：同一进程同时只处理一张，用模块级的 threading.Lock 包住整个处理；PNG 文本块解压后的总量上限在模块导入时设为 1 MB（PngImagePlugin.MAX_TEXT_MEMORY，单块上限 MAX_TEXT_CHUNK 不改）；16 位灰度按除以 256 换算成 8 位；ICC 配置文件无法解析时按图片不合格处理；处理中抛出的任何异常都转成图片不合格。函数是同步函数，由调用方放进线程。
+      不做存储、数据库与接口，不改设计。
+      设计闸门：DESIGN 1.19（提交 6e8f655）第 13 条与 HANDOFF 0.79，商品图片（去掉拍摄地点等照片资料）。
+```

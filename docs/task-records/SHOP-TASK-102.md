@@ -19,3 +19,19 @@
       - docs/TODO.md 新增 SHOP-TASK-102 记录段（列表、翻页、停用、偏离、验证到什么程度，只写实际存在的测试，并写明未做浏览器验收、新建留给 SHOP-TASK-109），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths（不新增路由，不改导航，不改 frontend/src/api/adminCoupons.ts）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在 SHOP-TASK-100 的优惠券页上实现 A05 的列表、翻页与停用：经 SHOP-TASK-101 的请求模块调用 SHOP-TASK-099 的列表与停用接口，按 docs/HANDOFF.md 0.48 记录的 Kelvin 2026-10-12 决定（只新建与停用；有效期只录日期）。
+      新建表单与提交留给 SHOP-TASK-109。不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（金额规则与校验在 SHOP-TASK-098、099 的服务端，页面只显示与停用）。
+      拆分：见 SHOP-TASK-100，本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+      原 102 一并做列表、新建与停用，run 55985642 以 review_repair_exhausted 失败（2026-10-15）：三轮各卡在一处新的前端检查错误（lint 的 no-misused-promises、日期解构的类型、测试里 AdminFrameView 的状态少了 error 字段），且要求的二十来条交互测试每轮只补上几条；
+      所以拆成列表与停用（本任务）和新建（SHOP-TASK-109），并写明照库存重置页的「导出纯函数与 View、测试直接调用」写法。
+      拆分后的 run b39a313d 仍以 review_repair_exhausted 失败（2026-10-15）：页面代码已合格，三轮卡在测试写法上（Disable 是 Disabled 的子串、未带类型的 vi.fn 让 any 流出触发 lint 的 no-unsafe-return）；运营者把最后一轮的代码补上两处测试修正后本地 lint、类型检查、全部测试与构建通过，另一处是字典文字测试没有还原 &quot; 实体。
+      这三处与评审提过的停用中止列表读取、手机卡片的已用一行，写进下面的验收标准。
+```

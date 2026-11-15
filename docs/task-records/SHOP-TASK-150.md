@@ -48,3 +48,18 @@
       - docs/task-records/SHOP-TASK-150.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；五个请求、归类、提交去向、交接、偏离、验证到什么程度，只写实际存在的测试，并写明页面留给 SHOP-TASK-152、154、155）
       - 改动只落在 allowed_change_paths（不改 orderLookup.ts 与 pay.ts，只引用它们导出的内容；不做页面，不改路由与页头）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.13 提交 450c2fa 与 HANDOFF 0.61），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.13 的 P13「我的订单」与 P09、P10 的会员模式，新建前台请求模块，调用已有的会员订单接口（app/api/account_orders.py，SHOP-TASK-104、105）——
+      列表 GET /api/member/orders、详情 POST /api/member/orders/view、确认收货 POST /api/member/orders/confirm-receipt、退款申请 POST /api/member/orders/refunds 与积分预估 POST /api/member/orders/refunds/points-estimate，
+      并提供从我的订单进入订单详情时订单号的模块内存交接，供 SHOP-TASK-152、154、155 使用。
+      运营者落实写法（HANDOFF 0.61）：订单号只经本模块的变量交接，不进地址、历史状态与浏览器存储。
+      不做页面，不改路由与页头，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 3、5 条（会话到期、退出与服务端授权检查；会员仅能访问自己认领或下单的订单，确认收货与退款申请规则与查单页相同，写操作另须 CSRF 令牌）与「订单与退款状态」「失败、并发与重试」（确认收货与退款申请幂等）与 HANDOFF 0.61。
+      拆分：会员前端第二批的请求层之二，3 个允许路径。
+```

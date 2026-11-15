@@ -35,3 +35,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_catalog_promotion.py：八折与直降的活动单价（含恰好半仙进一仙、直降大于单价时为 0）、多规格的最低活动单价、买 X 享 Y 只给角标参数、按分类与按商品命中、两条规则都命中时取排序小者、sale 列表的范围与分页、没有生效活动时与现在相同；tests/test_catalog_api.py 对列表与详情的整体比较只为加上新字段（为 null）而改。每条测试的文档字符串写明它守住的第 3 或 10 条或 UX 的哪一句
       - docs/task-records/SHOP-TASK-244.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明 JSON 字段名与 sale 参数，供前台任务引用）；改动只落在 allowed_change_paths；不改计价、下单、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.23「节日促销活动」第 3、10 条与 docs/UX.md 0.20「1. 全局框架」的商品卡规则、P03 与 P15，改 app/services/catalog.py 与 app/api/catalog.py：商品列表（含首页精选所用的按 slug 取商品）与商品详情为每件商品返回命中的商品级规则，打折规则下各启用 SKU 的活动单价与列表的最低活动单价（「起」的规则照旧），买 X 享 Y 只返回角标所需的 X、Y 与百分比、不改显示单价；商品列表新增 sale 筛选，只列生效活动全部商品级规则范围内的上架商品（P15，排序与分页同默认）。不改计价、下单与前端。
+      运营者落实写法：list_products 与 get_product 新增只限关键字参数 promotion（SHOP-TASK-233 的 LoadedPromotion 或 None，默认 None，现有调用不变），list_products 另加 sale_only（默认 False；为 True 而 promotion 为 None 时返回空页）。命中规则用 233 的 rule_for_product；一件的活动单价用 SHOP-TASK-231 的 price_promotion 对数量 1 的一行算出（不另写舍入）。两个接口以 active_promotion(db, _utcnow()) 读生效活动传入；因活动价随时间变化，成功响应另加 Cache-Control no-store（只加响应头，不改用 _NoStoreRoute，现有错误格式不变）。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 3、10 条：展示的活动价与计价同一算法，不碰个人资料。
+      拆分：节日促销展示层的第二个任务（5 个允许路径，其中一个现有测试文件只为新字段改期望值），依赖 SHOP-TASK-231 与 233。
+```

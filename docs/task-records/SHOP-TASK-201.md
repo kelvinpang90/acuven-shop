@@ -63,3 +63,16 @@
       - 测试验证意图（不加测试依赖，fetch 以替身代替）——frontend/src/api/adminProductImages.test.ts 与 frontend/src/api/adminStockAdjust.test.ts：每个请求的方法、地址、请求头、no-store 与请求体（上传为原样的 Blob 与给定的 Content-Type，不是 FormData；调序与调整只有规定的字段；移除没有请求体）；响应体的合格判定（缺字段、类型不对、负数、多出字段不带进结果）；各种状态与 detail 的归类（含 413 的响应体不是 JSON 时仍为 too_large、409 stock_changed 缺当前值为 failed）；中止为 network；每条测试写明它守住的是接口记录（app/api/admin_product_images.py、app/api/admin_stock_adjust.py）、DESIGN 或 UX 0.17 A04 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-201.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；导出的类型与函数签名，供 A04 页面的任务使用；验证到什么程度，只写实际存在的测试）；改动只落在 allowed_change_paths；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：DESIGN 1.18 第 12 条，同上），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      为 A04 页面新建调用 SHOP-TASK-190 三个图片接口（上传 POST、调序 PUT /api/admin/products/{product_id}/images 与移除 DELETE /api/admin/products/{product_id}/images/{image_id}）的请求模块 frontend/src/api/adminProductImages.ts，
+      以及调用 SHOP-TASK-182 当日库存调整接口（POST /api/admin/variants/{variant_id}/available-stock）的请求模块 frontend/src/api/adminStockAdjust.ts，各带测试；不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.82）：上传的请求体为文件本身（不用多部分表单），Content-Type 为调用方给的类型；413 一律归为文件过大，不看响应体（反向代理回答的 413 不是 JSON）。
+      设计闸门：DESIGN 1.18（提交 5ba9796）第 12 条与 HANDOFF 0.82，当日可用库存调整的请求（取值与并发核对、审计在 SHOP-TASK-182 的服务端）；图片部分不碰金额与个人资料，规则在服务端，依据 DESIGN 1.19（提交 6e8f655）第 13 条；请求模块只传递与校验字段。
+      拆分：A04 的图片与库存调整请求层（5 个允许路径），两个模块各自独立，照 SHOP-TASK-198 的写法。
+```

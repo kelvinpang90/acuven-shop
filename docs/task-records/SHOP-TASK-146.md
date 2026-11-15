@@ -54,3 +54,16 @@
       - 由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）；现有测试只在必要时修改并写明原因——frontend/src/router.test.tsx 的路由表断言；frontend/src/pages/CheckoutPage.test.tsx 只改「shows the step title, label, hint and continue button but no login link」一条（/login 进入路由表后结账第 1 步出现 checkout.login_password，登记前的骨架实测确认这一条三种语言失败），改为断言该链接指向 /login，其余测试一字不改
       - docs/task-records/SHOP-TASK-146.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；页签、提交、成功后的去向、偏离、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不改 frontend/src/components/SmsVerify.tsx 与 frontend/src/api/）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.58），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.12 的 P12 登录部分与 docs/DESIGN.md 1.12「权限与资料保护」第 3 条，新增路由 /login 与登录页：密码页签经 SHOP-TASK-144 调用密码登录，短信验证码页签嵌入 SHOP-TASK-145 的 V1（用途 login）。
+      /login 进入路由表后，全站页头已有的「登录」入口（frontend/src/components/SiteFrame.tsx）与结账页的 checkout.login_password 随之出现。登录后的会员中心入口与页头切换由之后的会员中心任务接入；忘记密码与注册页分别是 SHOP-TASK-147、148。
+      不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）「权限与资料保护」第 3 条（密码登录对未设密码账号与错误密码同一失败提示；开关关闭时已设密码者仍可密码登录）与 HANDOFF 0.58。
+      拆分：P12 登录，9 个允许路径（CheckoutPage.test.tsx 只为上面那一条断言列入）。
+```

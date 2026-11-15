@@ -41,3 +41,16 @@
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖
       - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，只修订审阅文档、不实现页面），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      把 Kelvin 2026-09-30 对 docs/UX.md 与 docs/UX-COPY.md 0.2 的审阅结论写成 0.3：落实他对待决问题 Q11、Q14、Q16、Q17、Q18、Q19
+      的决定（Q16 依据已批准的 docs/DESIGN.md 1.9；决定记录见 docs/HANDOFF.md），把两份文档的依据更新为 docs/REQUIREMENTS.md 1.8 与 docs/DESIGN.md 1.9，并修正审阅中发现的文案与线框问题（注销与重设密码时的游客按钮、隐私页两条易误读的措辞、
+      「现金实付」一类术语、优惠券列出条件前后不一、忘记密码遇到未注册号码的去向，以及几处小的不一致）。
+      合并后即可登记用户可见页面的实现任务。只写文档，不碰 frontend/、后端代码、docs/DESIGN.md、docs/REQUIREMENTS.md、
+      docs/HANDOFF.md、CI 与部署配置。
+```

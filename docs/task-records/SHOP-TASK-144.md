@@ -37,3 +37,16 @@
       - docs/task-records/SHOP-TASK-144.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；五个请求、字段与归类、偏离、验证到什么程度，并写明组件与页面留给 SHOP-TASK-145 至 148）
       - 改动只落在 allowed_change_paths（不做页面与组件，不改路由与页头）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.58），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      新建前台请求模块，调用已有的发送短信验证码（POST /api/sms/send，SHOP-TASK-070）、短信登录或注册（POST /api/member/sms-login，SHOP-TASK-076）、密码登录（POST /api/member/password-login，SHOP-TASK-077）、
+      重设密码的验证与提交（POST /api/member/password-reset/verify 与 /api/member/password-reset，SHOP-TASK-079）五个接口，并让 frontend/src/api/siteSettings.ts 另取 SHOP-TASK-143 下发的 turnstile_site_key，供 SHOP-TASK-145 至 148 使用。
+      不做页面，不改路由与页头，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）「权限与资料保护」第 1、3、5 条（手机号与密码只在请求体里；规范化、白名单、限流与判定都在服务端）与 HANDOFF 0.58。
+      拆分：会员前端第一批的请求层，5 个允许路径。
+```

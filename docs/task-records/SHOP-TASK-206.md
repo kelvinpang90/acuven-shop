@@ -40,3 +40,19 @@
       - 代码结构与测试——沿用 SHOP-TASK-202 至 205 的写法（新建表单的初值、新增与去掉规格名、规格名减到零时的 SKU 表、各 (✗) 是否禁用、组成新建请求体写成导出的纯函数，View 只依赖 props）；传给事件属性的处理函数不返回 Promise；排版不在验收范围内，评审不以此要求修改；用 vitest 与 react-dom/server（不加测试依赖，以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）在 frontend/src/pages/AdminProductsPage.test.tsx 验证意图：新建表单的初值与 admin.no_options 一行、3 个规格名后 admin.add_option 禁用、各 (✗) 的禁用条件、规格名减到零时只留第一行、没有分类时先查拦下、请求体（没有规格名时 option_values 为空数组、有规格名时以 temp_id 引用）、成功后列表最前多一行并进入编辑区显示 admin.product_created、网络中断不重新读取、新建表单的未保存判定；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-206.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：DESIGN 1.18 第 11 条，同上），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在 SHOP-TASK-205 的页面上按 docs/UX.md 0.17 的 A04「新建商品」与「规格」两段，在标题旁加 common.create：打开新建表单（标题 admin.product_new），可给出 0–3 个规格名与它们的值、编辑 SKU 表，
+      以 SHOP-TASK-200 的新建提交，成功后进入该商品的编辑区，依据 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 11 条（规格名只在新建时给出，0–3 个；每个规格名 1–20 个值；1–50 个 SKU；没有规格名的商品恰有一个 SKU）。本任务不做图片与当日库存调整。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.82）：新建表单的文案全为空串，分类默认选下拉框第一项（没有可选分类时下拉框为空，页面先查拦下），上架不勾选，每单限购为 10，规格名为零个（显示 admin.no_options），SKU 表固定一行（admin.sku_code_on_save、价格与每日初始库存输入框初值空串、admin.sku_enabled 默认勾选、当日可用库存为 —，没有下拉框与 (✗)）；
+      admin.add_option 新增一个规格名（三语名称、一个空的值与 admin.add_value、(✗)），达 3 个后禁用；每行 SKU 随之多一个下拉框，写法照 SHOP-TASK-205 的新增 SKU（默认空选项）；有规格名时显示 admin.add_sku（达 50 行禁用），每行带 (✗)，只剩一行时禁用；规格名减到零个时 SKU 表只保留第一行并清除其下拉框；
+      被任一 SKU 选用的规格值的 (✗) 禁用，规格名下只剩一个值时该值的 (✗) 禁用，规格名的任一值被选用时该规格名的 (✗) 禁用；(✗) 读屏标签沿用 admin.remove；
+      页面先查在 SHOP-TASK-204、205 的基础上另查已选分类；新建成功后以返回的商品在列表最前加一行（分类名称取自分类读取结果）、进入它的编辑区并显示 admin.product_created；changed 时 admin.reload 整页重新读取，新建表单恢复为空白；403 照 204 重新读取并保留表单；网络中断只显示 common.network_check、保留表单、不自动重新读取（新建可能已经成功，商品名称不要求唯一，再次提交会多出一件商品；由管理员核对列表后把多余的下架）。
+      设计闸门：DESIGN 1.18（提交 5ba9796）第 11 条与 HANDOFF 0.82，新建商品的价格按文字换成整仙提交（取值核对、上架条件、代码生成与审计在服务端）。
+      拆分：A04 的新建一层（7 个允许路径，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
+```

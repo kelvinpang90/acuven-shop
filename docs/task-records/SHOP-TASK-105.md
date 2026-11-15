@@ -18,3 +18,14 @@
       - docs/TODO.md 新增 SHOP-TASK-105 记录段（两个接口、授权、与查单模式的异同、偏离、验证到什么程度，并写明前端 P10 会员模式留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；SHOP-TASK-104 的三个接口行为不变（模块说明可随之补充）；不改 app/services/ 下的文件、app/api/refunds.py、tests/test_account_orders_api.py、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.46），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「订单与退款状态」（会员在「我的订单」提交退款申请，规则与查单页相同）、「计价、优惠、积分与库存」第 5 条与「权限与资料保护」第 6 条，
+      以及 docs/UX.md 0.10 的 P10 会员模式（凭会员会话；会员订单另见积分返还与追回），在 SHOP-TASK-104 的路由器上提供会员模式的退款申请与积分预估接口。不做前端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46（积分）。拆分：接口层（3 个允许路径）。
+```

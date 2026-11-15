@@ -19,3 +19,14 @@
       - docs/TODO.md 新增 SHOP-TASK-099 记录段（三个接口、字段、检查顺序与错误码、偏离、验证到什么程度，并写明 A05 页面留给 SHOP-TASK-100 至 102），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、app/api/admin_auth.py、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.48），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 5 条（仅管理员维护优惠，后台单一管理员须服务端授权）与 docs/UX.md 0.10 的 A05，以及 docs/HANDOFF.md 0.48 记录的 Kelvin 2026-10-12 决定，
+      在 SHOP-TASK-098 之上提供后台优惠券的三个接口（A05 的后端）。不做页面，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.48（优惠券）。拆分：接口层（4 个允许路径）。
+```

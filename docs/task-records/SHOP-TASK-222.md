@@ -36,3 +36,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_sms_verification.py、tests/test_admin_auth_api.py、tests/test_member_delete_confirm_api.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，补每个告警点在所写时机以所写类别与对象调用一次、所列不告警的情形不调用、新日志不含电话与用户名；现有测试只为替换 alert 而改；每条测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6 条哪一行
       - docs/task-records/SHOP-TASK-222.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改短信、登录与注销规则、发送机制、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 6 条表中 sms_budget_exhausted、admin_login_locked、member_deletion_failed 三行，在 app/services/sms_verification.py、app/api/admin_auth.py 与 app/api/member_deletion.py 接入告警，并把三类加进 app/services/ops_alert.py 的 CATEGORIES。这三处现在没有 error 日志，本任务在告警点先记一条 error 日志（类别与对象 ID，日志仍是告警的权威记录），再调用 ops_alert.alert。不改短信、登录与注销规则，不改发送机制，不改数据库与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：sms_budget_exhausted 的对象为（date, 马来西亚日期的 ISO 写法），以对象作去重键、窗口 86400 秒，只在预占结果为 over_budget、停发的事务提交之后调用（unknown_cost 不调用，第 8 条）；admin_login_locked 的对象为（audit_event, admin_login_locked 审计记录 ID），在审计提交之后调用；member_deletion_failed 的对象为（member, 会员 ID），在确认注销的删除或提交抛数据库异常、回滚之后调用；后两类不以对象作去重键、窗口 3600 秒；日志写法为类别码加空格加对象类别等号 ID（如 member_deletion_failed member=<ID>），不带用户名、电话、来源地址与异常消息。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6 条与 HANDOFF 0.88；告警不带个人资料、用户名与来源地址。
+      拆分：其余三处接线一层（8 个允许路径），依赖 SHOP-TASK-217。
+```

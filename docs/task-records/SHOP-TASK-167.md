@@ -59,3 +59,18 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch、sessionStorage、计时与路由以替身代替）验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——frontend/src/components/SmsVerify.test.tsx 的注销确认用途（固定号码、没有输入与国家码、有 auth.sms_scope、没有 auth.claim_notice 与游客选项、三种未发出都为 auth.sms_not_sent_no_change、发送与核验走注销接口且带 CSRF）；frontend/src/pages/AccountSettingsPanel.test.tsx 的开关开启与关闭两种确认方式、确认框、密码错误位置、not_verified 回到起点、流程途中关闭的切换、各结果；deleted 时清除交接与暂存、重读会话、5 秒后 replace 首页；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）；现有测试只在必要时修改并写明原因（SmsVerify.test.tsx 按 PURPOSES 遍历的几条只调整用途清单，原有四种用途的期望不变；AccountPage.test.tsx 页面用到的键清单；注销部分照 UX P13 手机线框排在设置段末尾、手机的退出按钮之后，AccountSettingsPanel.test.tsx 逐项比较设置段文字的两条（未设密码、已设密码）在末尾补上注销部分初始状态的文字，「手机号在段首、退出在密码之后」那条只把以退出按钮结尾的断言改为退出按钮之后接注销部分，号码在段首与退出在密码之后的期望不变；注销确认用途另显示本账号的遮掩号码，AccountPage.test.tsx 标题行两条数遮掩号码次数的期望各增加注销确认用途在该状态下显示号码的次数（至多一次），标题行整串与设置段里号码、标题、退出按钮的先后不变；注销部分需要的站点设置（人机挑战公开 key、读取是否失败）若放进 SettingsState 或改变 loadSmsSwitch 交出的值，AccountSettingsPanel.test.tsx 的 hands over the switch when the read is %s 与 AccountPage.test.tsx 的 reads the SMS switch after the session when it is %s 只补新字段的期望，密码部分的开关取值（500、网络中断与开关不合格按开启）不变；panelProps、props、memberScreen 与 sessionStep 的结果形状只为新增的状态字段与属性补上初始值（照 SHOP-TASK-166 的写法）；AccountSettingsPanel.test.tsx 用到的键清单只增加）
       - docs/task-records/SHOP-TASK-167.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；注销确认用途、两种开关状态的确认方式、结果与去向、偏离（含手机版照桌面关闭稿、流程途中切换、站点设置失败的处理）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不改 frontend/src/api/；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.14 提交 00f8f34 与 HANDOFF 0.63），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.13 的 P13 注销与 V1 注销确认用途（号码固定为本账号；短信未发出或号码不在白名单时只显示 auth.sms_not_sent_no_change；验证通过后才出现 account.delete_confirm；开关关闭时已设密码输入当前密码、未设密码经确认框）与 docs/DESIGN.md 1.14「权限与资料保护」第 3、7 条，
+      让 frontend/src/components/SmsVerify.tsx 支持注销确认用途（发送与核验走 SHOP-TASK-164 的注销接口），frontend/src/pages/AccountSettingsPanel.tsx 加入注销部分，成功后显示 account.deleted 并回到首页。
+      运营者落实写法（HANDOFF 0.63，Kelvin 2026-10-26 决定）：注销成功后显示 account.deleted，5 秒后用 replace 前往首页 P01，同时重读会话、清除会员订单交接与当前订单暂存；403 delete_not_verified 时重读站点设置，开关开启则回到 V1 起点重新验证（开关关闭则显示 common.error_retry）；sms_disabled 与 password_required 时重读站点设置与会员会话，按开关与 hasPassword 改用开关关闭时的确认方式（会话重读得到 guest 时用 replace 进入 /login，得到 failed 时显示 common.error_retry）；503 显示 common.service_unavailable；429 显示 common.rate_limited；
+      手机版的开关关闭设置与确认框照 P13-desktop-settings-sms-off 与 P13-phone-settings（没有手机版视觉稿）。
+      不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.14（提交 00f8f34）「权限与资料保护」第 3 条（注销先以短信验证码确认；开关关闭期间已设密码输入当前密码、未设密码在已登录会话内二次确认；之后撤销会话、删除手机号与密码）、第 7 条（注销时清除暂存）与「边界与原则」第 4 条（确认注销时按当时的开关值判定）与 HANDOFF 0.63，注销。
+      拆分：注销，11 个允许路径。
+```

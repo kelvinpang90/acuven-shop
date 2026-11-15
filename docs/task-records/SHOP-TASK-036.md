@@ -37,3 +37,14 @@
       - tests/test_admin_auth_api.py 用 TestClient 与 SQLite 内存库（开启外键检查，覆盖会话依赖与 SHOP-TASK-026 的取客户端依赖，Redis 用测试文件内的内存替身）验证：正确登录 204、cookie 属性、库里一条会话与一条成功审计；用户名不存在与密码错误响应完全相同、前者不写审计；已有账号的失败在另一个数据库会话里能读到一条 admin_login_failed，第 10 次失败另有且只有一条 admin_login_locked；同一来源与用户名第 10 次失败后正确密码也 429、另一来源不受影响；Redis 未配置与替身抛连接错误时 503 且没有查账号；替身只在计失败时抛错时返回 503；取会话与退出在无 cookie、会话过期、已撤销时都 401；退出缺或错 CSRF 403 且会话仍有效，通过后会话撤销、cookie 清除、再取会话 401；非 JSON 415、超过 8 KB 413（先于其他校验）、多余字段 422，错误响应都不回显请求内容；所有响应 no-store；每条测试写明它守住的是设计里哪一句或 Kelvin 的哪一项决定；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）；docs/TODO.md 新增 SHOP-TASK-036 记录段（接口与错误码、处理顺序、cookie 属性、偏离、验证到什么程度），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表或迁移；不改 SHOP-TASK-019、026、035 已有函数的行为，它们的测试照常通过；不改前端代码；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      用 SHOP-TASK-035 的规则函数提供管理员登录、退出与取当前会话三个接口，以及之后后台业务接口共用的管理员会话依赖；
+      登录按来源与用户名锁定，Redis 不可用时拒绝。不做后台页面与业务接口，不接告警，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 docs/HANDOFF.md 记录的 Kelvin 2026-10-04 决定。拆分：接口层。
+```

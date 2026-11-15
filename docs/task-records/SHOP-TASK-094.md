@@ -24,3 +24,14 @@
       - docs/TODO.md 新增 SHOP-TASK-094 记录段（接入位置、未用券的含义、待支付订单的处理、偏离、验证到什么程度），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/points.py、app/api/member_deletion.py、tests/test_member_deletion.py、模型、迁移、.platform/、CI、部署配置；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.45、0.46），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 3 条（注销时积分余额与未用券作废，积分和券使用流水保留去标识化审计记录），把 SHOP-TASK-086 的作废函数接入 SHOP-TASK-080 的注销函数。
+      优惠券对全部会员相同、不发给个人（docs/UX.md 0.10 的 Q19），没有「持有的未用券」可作废；注销时尚未支付的订单无人可再访问，超时取消时由 SHOP-TASK-090 释放券与积分，SHOP-TASK-086 的释放对已注销会员随即作废。不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.45、0.46（会员注销与积分）。拆分：业务规则层（4 个允许路径）。
+```

@@ -60,3 +60,20 @@
       - 测试——用 vitest 与 react-dom/server（不加测试依赖，fetch 以替身代替；以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）在 frontend/src/pages/AdminStoreLogo.test.tsx 验证意图——没有标志时显示文字品牌且 admin.logo_remove 禁用；有标志时 img 的 src 与 alt；加载失败时显示文字品牌；上传前的类型与大小先查（5,242,880 字节合格、多一字节不合格）；移除确认框的文字与按钮顺序；各种结果的提示与显示的标志；操作进行中与 A08 保存进行中按钮禁用；403 只更新 CSRF 令牌与 logo。frontend/src/pages/AdminStoreDesignPage.test.tsx 只为接入补测试（表单里出现标志段、标志操作进行中 common.save 禁用、保存成功后标志沿用当前值、预览显示标志）；页面文字全部来自字典；每条测试写明它守住的是 UX 0.18、DESIGN 1.20 第 15 条或 HANDOFF 0.84 的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-215.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收、没有用真实图片与存储试过上传）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.18 的 A08 标志段，新增标志段组件 frontend/src/pages/AdminStoreLogo.tsx 并接到 A08 页面（主色之后、首页区块之前）：当前标志或文字品牌、admin.upload、admin.logo_remove 与移除确认、常显的说明，
+      经 SHOP-TASK-214 的请求各自立即生效，依据 docs/DESIGN.md 1.20「计价、优惠、积分与库存」第 15 条；A08 的预览也显示已生效的标志。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.84）：标志以 img 显示，src 为读取或上传返回的 logo，alt 为文字品牌 ACUVEN SHOP（copy.ts 的 BRAND）；没有标志或图片加载失败时显示文字品牌；标志不算在表单里，A08 的保存不提交它，保存成功后标志沿用当前值（保存的响应不含 logo）；
+      同一时间只进行一项标志操作，进行中 admin.upload 与 admin.logo_remove 都禁用；A08 保存进行中标志按钮也都禁用，标志操作进行中 common.save 禁用（两者互斥）；
+      admin.upload 是按钮，点它打开隐藏的单选文件输入框（accept 为 image/jpeg、image/png 与 image/webp），选好即先查类型与大小（同 SHOP-TASK-207：类型不是这三种显示 admin.image_type_unsupported，超过 5,242,880 字节显示 admin.image_too_large），通过才以文件本身与文件类型上传，之后清空文件输入框；有标志时上传即替换，不另确认；
+      移除确认框照 SHOP-TASK-197 的确认框写法（role dialog、aria-modal、aria-labelledby 指向 admin.logo_remove_confirm，按钮依次为 common.cancel（打开时取得焦点）与 admin.logo_remove），确认后才提交；
+      标志操作的 403 由页面重新读取装修设置，只取新的 CSRF 令牌与当前 logo，表单未保存的选择保留，显示 common.error_retry（该次读取为 none 时回到 A01，network 显示 common.network_check，其他失败显示 common.error_retry，标志保留当前显示）；网络中断显示 common.network_check，与 A04 图片和 A08 保存相同。
+      设计闸门：不适用（标志的格式、大小、像素、元数据与存放规则在 SHOP-TASK-209 至 213 的服务端，依据 DESIGN 1.20 第 15 条；页面只做格式与大小的初步检查，不碰金额与个人资料）。
+      拆分：A08 的标志一层（9 个允许路径：新组件与测试，页面与页面测试只为接入，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
+```

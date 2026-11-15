@@ -34,3 +34,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_promotion_display.py：三种语言的回退（中文缺译回退英文、空即 null）；第 8 条算例的四条规则给出的类别与参数（家居分类的名称、A 的规则 has_products 为 true）；海报模板与上传图两种模式；接口在活动生效、未开始、已结束与提前结束后的 promotion 与 server_time（固定 _utcnow）；响应不含内部名称；no-store 与 422。每条测试的文档字符串写明它守住的第 10 或 12 条哪一句
       - docs/task-records/SHOP-TASK-243.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明 JSON 字段名，供前台任务引用）；改动只落在 allowed_change_paths；不改计价、商品目录、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.23「节日促销活动」第 10、12 条，新建 app/services/promotion_display.py 与公开接口 GET /api/promotion：按当前时刻给出生效活动的展示数据——所选语言的标题、副标题、角标短语与横条文字（缺译回退英文）、装饰与海报设置、海报图地址与替代文字、实际结束时间与服务端当前时间（前台倒计时以二者之差为准）、两个同用开关，以及每条规则的类别与参数（前台按三语文案模板生成规则说明，第 10 条）。没有生效活动时 promotion 为 null。供前台全局框架、P01–P05 与 P15 使用；之后的管理员预览按活动 ID 复用同一函数。不改计价、商品目录与前端。
+      运营者落实写法：展示函数按活动 ID 组装（不判断是否生效），公开接口先以 SHOP-TASK-233 的 active_promotion(db, _utcnow()) 取生效活动的 ID 再调用它。规则的商品级范围只给分类（slug 与所选语言的名称，缺译回退英文）与「是否另选了单件商品」，不逐一列出商品（UX 0.20 P15：选中的单件商品不逐一列出）。文案为空即 null。接口照 app/api/store_design.py 用 _NoStoreRoute（第 10 条「展示接口的响应带 no-store」），lang 照 app/api/pay.py 的 LanguageDep 校验，时间带 UTC 时区输出。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 10、12 条：只给展示数据，不返回内部名称、版本与任何个人资料。
+      拆分：节日促销展示层的第一个任务（5 个允许路径），依赖 SHOP-TASK-233（active_promotion）与 240（海报图路径）。
+```

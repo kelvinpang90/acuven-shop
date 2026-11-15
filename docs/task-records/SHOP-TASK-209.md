@@ -33,3 +33,17 @@
       - docs/task-records/SHOP-TASK-209.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；各列与约束、迁移的执行顺序、偏离、验证到什么程度——pytest 不在 SQLite 上执行 0025，CI 的必需检查 backend 在 MySQL 8 上做 upgrade、downgrade 再 upgrade 的往返与 alembic check，写明这一点）
       - 改动只落在 allowed_change_paths；不改服务层、接口、前端与已有迁移；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.20 提交 a870f78 与 HANDOFF 0.84），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.20「计价、优惠、积分与库存」第 15 条「记录」一段，在装修设置的单例行 StoreDesignSetting（app/models/store_design.py）加标志的文件名、上传时的格式与展示图的宽、高、字节数五个可空列，五项同为空或同不为空，并新增迁移 0025。
+      只改结构，不写读写这些列的业务代码与接口，不改前端，不改设计。
+      运营者落实写法（HANDOFF 0.84）：列名与类型照 ProductImage 的五列加 logo_ 前缀（文件名 String(32)、格式 String(4)、其余整数），三个检查约束的文本照 ProductImage 的 metadata_all_or_none、source_format_valid、display_size_range 换成 logo_ 列名；单例行只有一行，文件名不另加唯一约束；
+      迁移照 alembic/versions/20261030_0024_admin_catalog_schema.py 的写法（不 import app、自带常量，约束名用 op.f，只在 MySQL 上执行、不要求能在 SQLite 上执行）；downgrade 先读出 logo_file_name 不为空的行数，不为零即抛 RuntimeError、库保持原样（删掉文件名会让存储桶里的标志成为孤立对象、前台失去标志）。
+      设计闸门：DESIGN 1.20（提交 a870f78）第 15 条与 HANDOFF 0.84，店铺标志图的数据结构。
+      拆分：数据库层（5 个允许路径）；图片处理与存储的参数化、服务层、接口与前端另行登记（SHOP-TASK-210 至 216）。
+```

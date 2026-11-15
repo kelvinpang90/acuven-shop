@@ -29,3 +29,15 @@
       - docs/task-records/SHOP-TASK-186.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）
       - 改动只落在 allowed_change_paths；不改服务层、模型与迁移、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 11 条与 docs/UX.md 0.17 的 A04（列表、单件编辑、新建、保存后的取值不合格与商品已被改动），把 SHOP-TASK-183 至 185 的服务层接成后台接口 GET /api/admin/products、GET /api/admin/products/{product_id}、POST /api/admin/products 与 PUT /api/admin/products/{product_id}。
+      运营者落实写法（HANDOFF 0.77）：写法照 app/api/admin_coupons.py（require_admin、CsrfDep 先于路径 ID、strict 模型、不回显的 422、no-store 路由类）；请求体按实际读到的字节逐块判断，上限 256 KB（照 app/api/admin_shipping_rates.py 的逐块读取写法）；请求体的 JSON 字段名与 SHOP-TASK-183 的请求结构同名一一对应；取值不合格回 422 product_invalid，商品已被改动回 409 product_changed，读取不存在的商品回 404 product_not_found；金额一律以整数仙收发。
+      不做前端，不改服务层与模型，不改设计。
+      设计闸门：DESIGN 1.18（提交 5ba9796） 第 11 条与 HANDOFF 0.77。拆分：接口层（4 个允许路径），页面 A04 另行登记。
+```

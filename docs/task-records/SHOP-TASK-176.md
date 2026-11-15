@@ -47,3 +47,18 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AdminShippingPage.test.tsx 验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——删除按钮只在国家与汇率行出现及其无障碍标签；删除现有行与新增行在保存内容里的差别；两种新增行的字段与可见标签；下拉选项不含 MY、不含该块已有国家、含已删除的国家、按名称排序、默认第一个；没有可选国家或收货国家列表读取失败时新增按钮禁用；币种转大写、小数位与汇率格式不对时不提交并显示 admin.rates_invalid；保存内容的顺序；ok 与重新读取后的页面；页面文字全部来自字典（国家名称、币种代码、小数位、版本号、汇率与运费的值、输入框的值、无障碍标签中拼接用的英文逗号加空格以及 → 与括号除外）；每条测试写明它守住的是 UX、设计或 HANDOFF 0.72 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）。SHOP-TASK-175 写的断言只在因本任务的删除与新增按钮、收货国家列表的读取（fetch 替身的调用次数与地址），或页面状态与 View 的 props 变化而失效时改写，并在任务记录里逐条写明
       - docs/task-records/SHOP-TASK-176.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；删除、两种新增、国家选项、保存内容与重新读取、偏离、验证到什么程度；只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.17 提交 80e3775 与 HANDOFF 0.72），不合并、不直推；不新增路由，router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在 SHOP-TASK-175 的 A06 页面上加入国家运费与演示汇率的删除与新增：每行 admin.remove，admin.add_country 与 admin.add_fx 各加一行，随整页保存提交，
+      依据 docs/UX.md 0.16 的 A06「增删」与 docs/DESIGN.md 1.17「计价、优惠、积分与库存」第 9 条。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.72）：新增行的国家下拉取 frontend/src/api/checkout.ts 的 fetchRegions 给出的地区，经 frontend/src/pages/checkoutPhone.ts 的 regionOptions 按名称排序、只显示名称，
+      不含马来西亚与该区块页面上现有的国家（已点删除的国家可再加回，保存时同一请求先删后增，设计第 9 条允许），默认选中第一个可选国家；收货国家列表读取失败或已没有可选国家时新增按钮禁用、不另加提示（UX-COPY 没有对应文案），列表在每次整页读取时一起重新取得；
+      新增汇率行的币种为三个字母（提交前转大写）、小数位为 0 到 3 的一位数字，格式不对时照 SHOP-TASK-175 不提交、显示 admin.rates_invalid；删除按钮的无障碍标签为 admin.remove 的文字、英文逗号加空格、行名（现有的国家行为国家名称，现有的汇率行同样为国家名称，两种新增行都为该行当前选中的国家名称）；新增国家行的运费输入框的无障碍标签照 SHOP-TASK-175 的运费输入框，行名为该行当前选中的国家名称；新增汇率行的国家下拉（admin.shipping_country）与三个输入框用可见标签，不另加无障碍标签；画板上 Remove, Indonesia, IDR 这类拼法不照搬。
+      设计闸门：DESIGN 1.17（提交 80e3775）第 9 条与 HANDOFF 0.72，运费与汇率行的增删（核对与审计在服务端）。
+      拆分：A06 页面的第二层（7 个允许路径，router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
+```
