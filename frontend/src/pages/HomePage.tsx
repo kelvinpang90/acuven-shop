@@ -1,9 +1,12 @@
 import { categoriesUrl, featuredBySlugsUrl, featuredProductsUrl, useCatalog } from "../api/catalog";
 import type { CategoryListItem, ProductPage, Remote } from "../api/catalog";
+import type { PromotionDisplay } from "../api/promotion";
 import ProductCard, { CatalogImage } from "../components/ProductCard";
+import { PromoCount, saleLinkPath } from "../components/PromoParts";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
 import type { CopyKey, Language } from "../i18n/copy";
 import { useCopy, useLanguage } from "../i18n/language";
+import { usePromotion } from "../promotion";
 import { Link, PRODUCTS_PATH } from "../router";
 import { useStoreDesign } from "../storeDesign";
 import type { HomeBlock, HomeBlockSetting, StoreDesignValue } from "../storeDesign";
@@ -12,9 +15,75 @@ import { categorySearch } from "./productListQuery";
 // 首页 P01（docs/UX.md P01）：★ home.demo_hint 固定在页头下方、所有区块之前，不属于任何区块、不可隐藏；
 // 其后是主视觉、演示怎么玩、按分类浏览、精选商品四个区块，顺序与显隐来自店铺装修设置（storeDesign.ts），隐藏的区块整块不渲染。
 // 区块文案全部来自字典；分类与商品来自目录接口，某个请求失败只在该区块显示 common.error_retry。
+// 有活动时（UX 0.20 P01）★ 提示之后、所有区块之前是活动海报，不属于任何区块、不受区块设置影响；没有活动或读取中时不占位。
 
 const HOW_STEPS: readonly CopyKey[] = ["home.how_1", "home.how_2", "home.how_3", "home.how_4"];
 const HERO_TILES = 3;
+
+// home_poster 的取值：centered 为居中版式，其余（split）为左文右图。
+const POSTER_CENTERED = "centered";
+// poster_mode 为 image 时用上传图；任一张缺失时按模板显示。
+const POSTER_IMAGE = "image";
+// 手机图的媒体条件，与 site.css 的手机断点相同。
+const PHONE_MEDIA = "(max-width: 767px)";
+
+// 上传图模式：桌面图与手机图以 picture 切换，替代文字为活动的 poster_alt；整图链到 P15，P15 不在路由表时为同类名的 div。
+function PosterImage({ desktop, phone, alt }: { desktop: string; phone: string; alt: string }) {
+  const sale = saleLinkPath();
+  const picture = (
+    <picture>
+      <source media={PHONE_MEDIA} srcSet={phone} />
+      <img src={desktop} alt={alt} />
+    </picture>
+  );
+  return sale === null ? (
+    <div className="acs-promo-poster-img">{picture}</div>
+  ) : (
+    <Link className="acs-promo-poster-img" to={sale}>
+      {picture}
+    </Link>
+  );
+}
+
+// 模板模式：按 home_poster 排版，标题、副标题（为空时整行不显示）、倒计时与 promo.shop_now（链到 P15）。
+function PosterTemplate({ promotion }: { promotion: PromotionDisplay }) {
+  const t = useCopy();
+  const sale = saleLinkPath();
+  const variant = promotion.home_poster === POSTER_CENTERED ? "centered" : "split";
+  return (
+    <section className={`acs-promo-poster acs-promo-poster--${variant}`} aria-label={promotion.title ?? undefined}>
+      <div className="acs-promo-poster__text">
+        <span className="acs-promo-poster__crown" aria-hidden="true">
+          <span className="acs-promo-motif" />
+          <span className="acs-promo-motif acs-promo-motif--art" />
+          <span className="acs-promo-motif" />
+        </span>
+        {promotion.title !== null && <h2 className="acs-display-l acs-promo-poster__title">{promotion.title}</h2>}
+        {promotion.subtitle !== null && promotion.subtitle !== "" && <p className="acs-promo-poster__sub">{promotion.subtitle}</p>}
+        <PromoCount />
+        {sale !== null && (
+          <Link className="acs-btn acs-btn--lg acs-btn--promo" to={sale}>
+            {t("promo.shop_now")}
+          </Link>
+        )}
+      </div>
+      <div className="acs-promo-poster__art" aria-hidden="true" />
+    </section>
+  );
+}
+
+// 活动海报：只取 usePromotion 的数据；没有活动（含读取中）时不渲染。
+function PromoPoster() {
+  const { promotion } = usePromotion();
+  if (promotion === null) {
+    return null;
+  }
+  const { poster_mode: mode, poster_desktop: desktop, poster_phone: phone } = promotion;
+  if (mode === POSTER_IMAGE && desktop !== null && desktop !== "" && phone !== null && phone !== "") {
+    return <PosterImage desktop={desktop} phone={phone} alt={promotion.poster_alt ?? ""} />;
+  }
+  return <PosterTemplate promotion={promotion} />;
+}
 
 // 主视觉：右侧三个装饰图块取精选商品的前三张图片（没有时为占位形状），不是链接，读屏忽略。
 function HeroBlock({ featured }: { featured: Remote<ProductPage> }) {
@@ -135,6 +204,7 @@ export function HomeView({ blocks, categories, featured }: HomeViewProps) {
   return (
     <main className="site-home">
       <DemoHint>{t("home.demo_hint")}</DemoHint>
+      <PromoPoster />
       {blocks
         .filter((setting) => setting.visible)
         .map((setting) => (

@@ -3225,6 +3225,16 @@ export const COPY = {
     zh: "适用：{names}",
     ms: "Untuk: {names}",
   },
+  "promo.shop_now": {
+    en: "Shop the sale",
+    zh: "去逛活动",
+    ms: "Beli-belah jualan",
+  },
+  "promo.view_all": {
+    en: "See all sale items",
+    zh: "查看全部活动商品",
+    ms: "Lihat semua item jualan",
+  },
 } as const satisfies Record<string, CopyEntry>;
 
 export type CopyKey = keyof typeof COPY;

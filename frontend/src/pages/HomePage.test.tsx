@@ -3,9 +3,13 @@ import { describe, expect, it } from "vitest";
 
 import { categoriesUrl, featuredBySlugsUrl, featuredProductsUrl } from "../api/catalog";
 import type { CategoryListItem, ProductPage, ProductSummary, Remote } from "../api/catalog";
-import { COPY } from "../i18n/copy";
-import type { CopyKey } from "../i18n/copy";
-import { LanguageProvider } from "../i18n/language";
+import type { PromotionDisplay, PromotionResponse } from "../api/promotion";
+import { saleLinkPath } from "../components/PromoParts";
+import { COPY, LANGUAGES } from "../i18n/copy";
+import type { CopyKey, Language } from "../i18n/copy";
+import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
+import { PromotionProvider } from "../promotion";
+import { countdownText } from "../promoText";
 import { RouterProvider } from "../router";
 import { DEFAULT_STORE_DESIGN, HOME_BLOCKS, STORE_DESIGN_STORAGE_KEY, StoreDesignProvider } from "../storeDesign";
 import type { HomeBlock, HomeBlockSetting, StoreDesignStorage } from "../storeDesign";
@@ -394,5 +398,178 @@ describe("home page with the store design", () => {
       expect(sectionOf(html, "home.featured")).toContain('aria-busy="true"');
       expect(html).not.toContain(COPY["common.error_retry"].en);
     }
+  });
+});
+
+const HOUR_MS = 3_600_000;
+const SERVER_TIME = "2026-11-14T04:00:00Z";
+// 服务端时间之后一小时结束：时钟替身固定为 0，倒计时文字为 countdownText(language, HOUR_MS)。
+const ENDS_AT = "2026-11-14T05:00:00Z";
+
+function sale(overrides: Partial<PromotionDisplay> = {}): PromotionDisplay {
+  return {
+    promotion_id: 7,
+    title: "Lunar New Year Sale",
+    subtitle: "20% off apparel and more",
+    badge: null,
+    strip: null,
+    pack: "cny",
+    palette: "cny",
+    ambient: "garland",
+    home_poster: "split",
+    list_strip: "band",
+    card_badge: "tag",
+    detail_ribbon: "ribbon",
+    cart_progress: "bar",
+    poster_mode: "template",
+    poster_desktop: null,
+    poster_phone: null,
+    poster_alt: null,
+    ends_at: ENDS_AT,
+    coupon_combinable: true,
+    points_combinable: true,
+    rules: [],
+    ...overrides,
+  };
+}
+
+const IMAGE_SALE: Partial<PromotionDisplay> = {
+  poster_mode: "image",
+  poster_desktop: "/media/promo/desktop.webp",
+  poster_phone: "/media/promo/phone.webp",
+  poster_alt: "Lunar New Year Sale: 20% off apparel",
+};
+
+interface PromoRenderOptions {
+  blocks?: readonly HomeBlockSetting[];
+  language?: Language;
+}
+
+// 有活动的状态以 PromotionProvider 的 initial 传入（null 即接口说没有活动）；读取替身从不返回。
+function renderPromo(display: PromotionDisplay | null, { blocks = DEFAULT_STORE_DESIGN.homeBlocks, language = "en" }: PromoRenderOptions = {}): string {
+  const storage = { getItem: (key: string) => (key === LANGUAGE_STORAGE_KEY ? language : null), setItem: () => undefined };
+  const initial: PromotionResponse = { promotion: display, server_time: SERVER_TIME };
+  return renderToStaticMarkup(
+    <LanguageProvider storage={storage}>
+      <RouterProvider initialPath="/">
+        <PromotionProvider initial={initial} fetcher={() => new Promise<PromotionResponse>(() => undefined)} clock={() => 0}>
+          <HomeView blocks={blocks} categories={loading} featured={loading} />
+        </PromotionProvider>
+      </RouterProvider>
+    </LanguageProvider>,
+  );
+}
+
+const CROWN =
+  `<span class="acs-promo-poster__crown" aria-hidden="true"><span class="acs-promo-motif"></span>` +
+  `<span class="acs-promo-motif acs-promo-motif--art"></span><span class="acs-promo-motif"></span></span>`;
+
+const CLOCK_ICON =
+  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">` +
+  `<circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l3 2M9 2h6"></path></svg>`;
+
+// promo.shop_now 按钮：P15 在路由表里时才有（按 saleLinkPath() 的返回值，不写死）。
+function shopNow(language: Language): string {
+  const path = saleLinkPath();
+  return path === null ? "" : `<a class="acs-btn acs-btn--lg acs-btn--promo" href="${path}">${COPY["promo.shop_now"][language]}</a>`;
+}
+
+function poster(html: string): string {
+  return /<section class="acs-promo-poster[\s\S]*?<\/section>/.exec(html)?.[0] ?? "";
+}
+
+// 上传图海报：P15 在路由表里时为链接，否则为同类名的 div。
+function imagePoster(html: string): string {
+  return /<(a|div) class="acs-promo-poster-img"[\s\S]*?<\/\1>/.exec(html)?.[0] ?? "";
+}
+
+describe("home promotion poster", () => {
+  // UX 0.20 P01：「模板模式按 `home_poster` 的变体排版，标题与副标题是活动文案（副标题为空时不显示该行），`{time}` 为倒计时」——
+  // 两种版式、三种语言：标题、副标题、倒计时与 promo.shop_now（P15 不在路由表时不放），右侧为装饰图。
+  it.each(LANGUAGES.flatMap((language) => ["split", "centered"].map((layout): [Language, string] => [language, layout])))(
+    "shows the %s %s template poster",
+    (language, layout) => {
+      const html = renderPromo(sale({ home_poster: layout }), { language });
+      expect(poster(html)).toBe(
+        `<section class="acs-promo-poster acs-promo-poster--${layout}" aria-label="Lunar New Year Sale">` +
+          `<div class="acs-promo-poster__text">${CROWN}` +
+          `<h2 class="acs-display-l acs-promo-poster__title">Lunar New Year Sale</h2>` +
+          `<p class="acs-promo-poster__sub">20% off apparel and more</p>` +
+          `<span class="acs-promo-count">${CLOCK_ICON}<span>${countdownText(language, HOUR_MS)}</span></span>` +
+          shopNow(language) +
+          `</div><div class="acs-promo-poster__art" aria-hidden="true"></div></section>`,
+      );
+    },
+  );
+
+  // UX 0.20 P01：「副标题为空时不显示该行」。
+  it.each([null, ""])("leaves out the subtitle line when it is empty (%j)", (subtitle) => {
+    const html = poster(renderPromo(sale({ subtitle })));
+    expect(html).toContain(`<h2 class="acs-display-l acs-promo-poster__title">Lunar New Year Sale</h2><span class="acs-promo-count">`);
+    expect(html).not.toContain("acs-promo-poster__sub");
+    expect(html).not.toContain("<p");
+  });
+
+  // UX 0.20 P01：「上传图模式桌面显示桌面图、手机显示手机图……整图是去 P15 的链接，读屏读活动的替代文字」——
+  // picture 以 767px 切换两张图，替代文字为 poster_alt；P15 不在路由表时整图为同类名的 div。
+  it.each(LANGUAGES)("shows the uploaded images with the alt text in %s", (language) => {
+    const html = renderPromo(sale(IMAGE_SALE), { language });
+    expect(html).not.toContain("acs-promo-poster--");
+    const image = imagePoster(html);
+    const path = saleLinkPath();
+    expect(image.startsWith(path === null ? `<div class="acs-promo-poster-img">` : `<a class="acs-promo-poster-img" href="${path}">`)).toBe(true);
+    expect(image).toMatch(
+      /^<(a|div) class="acs-promo-poster-img"[^>]*><picture><source media="\(max-width: 767px\)" srcset="\/media\/promo\/phone\.webp"\/?><img src="\/media\/promo\/desktop\.webp" alt="Lunar New Year Sale: 20% off apparel"\/?><\/picture><\/\1>$/i,
+    );
+    expect(html).not.toContain(COPY["promo.shop_now"][language]);
+  });
+
+  // UX 0.20 P01「模板或上传图」与落实写法「上传图缺任一张时按模板模式显示」。
+  it.each([
+    { poster_desktop: null },
+    { poster_phone: null },
+    { poster_desktop: null, poster_phone: null },
+  ])("falls back to the template poster when an uploaded image is missing (%j)", (missing) => {
+    const html = renderPromo(sale({ ...IMAGE_SALE, ...missing }));
+    expect(html).not.toContain("acs-promo-poster-img");
+    expect(html).not.toContain("<picture");
+    expect(poster(html)).toContain(`<section class="acs-promo-poster acs-promo-poster--split" aria-label="Lunar New Year Sale">`);
+  });
+
+  // UX 0.20 P01：「有活动生效时显示在 ★ 提示之后、所有区块之前，不属于任何区块，A08 的区块设置不影响它」——
+  // 任何区块顺序与显隐下都紧接在 ★ 提示之后、第一个区块之前；区块全部隐藏时照样显示。
+  it("puts the poster after the hint and before every block whatever the block settings", () => {
+    const defaults = DEFAULT_STORE_DESIGN.homeBlocks;
+    for (const blocks of [defaults, [...defaults].reverse(), shown("featured"), shown()]) {
+      for (const display of [sale(), sale(IMAGE_SALE)]) {
+        const html = renderPromo(display, { blocks });
+        const hintEnd = html.indexOf("</p>", html.indexOf(COPY["home.demo_hint"].en)) + "</p>".length;
+        const start = html.indexOf("acs-promo-poster");
+        expect(hintEnd).toBeGreaterThan(0);
+        expect(html.lastIndexOf("<", start)).toBe(hintEnd);
+        for (const setting of blocks.filter((candidate) => candidate.visible)) {
+          expect(html.indexOf(COPY[HEADINGS[setting.block]].en)).toBeGreaterThan(start);
+        }
+      }
+    }
+    expect(renderPromo(sale(), { blocks: shown() })).toMatch(/^<main class="site-home"><p class="acs-hint">[\s\S]*<\/p><section class="acs-promo-poster /);
+  });
+
+  // UX 0.20 P01：「没有生效活动时不占位」，UX 0.20「节日促销活动」「没有生效活动时各页与 0.19 完全相同」——
+  // 接口说没有活动与读取中时，首页与没有活动功能时逐字相同。
+  it("renders no promotion content without a promotion or while loading", () => {
+    const withoutProvider = render();
+    expect(renderPromo(null)).toBe(withoutProvider);
+    const whileLoading = renderToStaticMarkup(
+      <LanguageProvider storage={null}>
+        <RouterProvider initialPath="/">
+          <PromotionProvider fetcher={() => new Promise<PromotionResponse>(() => undefined)}>
+            <HomeView blocks={DEFAULT_STORE_DESIGN.homeBlocks} categories={loading} featured={loading} />
+          </PromotionProvider>
+        </RouterProvider>
+      </LanguageProvider>,
+    );
+    expect(whileLoading).toBe(withoutProvider);
+    expect(withoutProvider).not.toContain("acs-promo");
   });
 });

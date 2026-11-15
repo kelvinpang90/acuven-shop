@@ -4,9 +4,11 @@ import type { KeyboardEvent } from "react";
 import { categoriesUrl, fetchCatalog, isSortOrder, optionsUrl, productsUrl, useCatalog } from "../api/catalog";
 import type { CategoryListItem, FilterOption, ProductPage, ProductSummary, Remote, SortOrder } from "../api/catalog";
 import ProductCard from "../components/ProductCard";
+import { PromoStrip } from "../components/PromoParts";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
 import type { CopyKey } from "../i18n/copy";
 import { useCopy, useLanguage } from "../i18n/language";
+import { usePromotion } from "../promotion";
 import { Link, PRODUCTS_PATH, useRouter } from "../router";
 import {
   buildProductListSearch,
@@ -24,6 +26,7 @@ import type { ProductListQuery } from "./productListQuery";
 // 与 list.load_more 追加下一页（追加的页不写进网址）。两套控件都在页面里，由 site.css 按宽度只显示其一。
 // 清除筛选（侧栏、空结果与抽屉里的 list.filter_clear）去掉搜索词、分类与规格，保留排序，立即生效。
 // 切换语言时请求地址随语言变化而重新请求，网址里的条件不变。
+// 有活动时（UX 0.20 P02）标题下显示活动横条：文字为活动的横条文字（为空时用标题），末尾为倒计时与 promo.view_all；没有活动时不渲染。
 
 const SORT_LABELS: Readonly<Record<SortOrder, CopyKey>> = {
   newest: "list.sort_newest",
@@ -193,6 +196,7 @@ export function ProductListView({
   onLoadMore,
 }: ProductListViewProps) {
   const t = useCopy();
+  const { promotion } = usePromotion();
   const sortId = useId();
   const drawerId = useId();
   const drawerTitleId = useId();
@@ -236,6 +240,11 @@ export function ProductListView({
         <h1 className="acs-display-l">{t("list.title")}</h1>
         <DemoHint>{t("list.demo_hint")}</DemoHint>
       </div>
+      {promotion !== null && (
+        <div className="site-list__strip">
+          <PromoStrip text={promotion.strip || promotion.title || ""} viewAll />
+        </div>
+      )}
       <div className="site-list__body">
         <aside className="site-desktop-only site-list__aside">
           <h2 className="acs-display-s">{t("list.filter_title")}</h2>
