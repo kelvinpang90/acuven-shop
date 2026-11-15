@@ -1,0 +1,30 @@
+# SHOP-TASK-259 结账 P05 的活动优惠行、免运费与会员的方案说明
+
+- [x] 设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 4、6、10 条。参加与否与取哪种方案由服务端判定（游客计价 SHOP-TASK-234、会员计价 SHOP-TASK-236，类型由 SHOP-TASK-263 加好），页面只显示接口结果与显示所需的减法，不碰个人资料。依据 UX 0.20 的 P05（节日促销活动、M8、M9）、UX-COPY 0.22 与 HANDOFF 0.97 的落实写法；样式以 `P05-promo-desktop`、`P05-promo-phone` 为准。重新计价照 SHOP-TASK-258 的 generation 写法。不改后端、`.platform/`、CI 与部署配置，不装依赖，不改设计。
+- [x] `frontend/src/pages/CheckoutPage.tsx`：
+  - 纯函数 `summarySale(quote, noPromotion)`：活动优惠＝`promoDiscount`（CartPage 的 `item_discount_sen + order_discount_sen`）。没有运费报价时大于 0 即为 `cart.promo_discount`；有运费报价时 `participates` 为真且大于 0 才为 `checkout.summary_promo`；有运费报价、`participates` 为真、`shipping_waived_sen` 大于 0 时给出免去的运费。`noPromotion`（会员计价 `promotion_plan` 为 `no_promotion`）或 `promotion` 为 null 时都不给。
+  - 摘要 `SummaryAmounts`：活动优惠一行紧接 `cart.subtotal`、在会员的券与积分两行之前（桌面摘要、手机折叠明细与手机第 3 步金额三处相同，游客与会员都显示）；运费行有免去的运费时金额为 `checkout.shipping_free`（`amount` 为 `shipping_waived_sen`）。
+  - 手机 `HeadlineAmount`：没有运费报价且有活动优惠一行时为 `cart.after_promo` 与小计减活动优惠；有运费报价时照旧为合计。
+  - `CheckoutView` 由会员计价的 `promotion_plan` 得出 `noPromotion`，游客恒为否。
+  - `checkoutQuoteKey` 加可选的 `generation`（默认 0，标识末尾）；`CheckoutPage` 用 `usePromotion` 的 generation 组成游客计价标识，会员计价标识建在它上面，generation 变化即两者都重新计价，新结果返回前沿用现有写法显示上一份结果。
+- [x] `frontend/src/pages/CheckoutMember.tsx`：
+  - `schemeNote(quote)`：两个积分前应付都不为空时，`promotion` 且相等为 `checkout.scheme_promo_equal`，否则 `checkout.scheme_promo`（`other`＝`other_pre_points_total_sen`，`diff`＝它减 `promotion_pre_points_total_sen`）；`no_promotion` 为 `checkout.scheme_no_promo`（`other`＝`promotion_pre_points_total_sen`，`diff`＝它减 `other_pre_points_total_sen`）；其余为 null。
+  - `schemeNotices(quote)`：`coupon_note` 为 `not_combinable`／`below_min_after_sale` 时 `checkout.coupon_not_combinable`／`checkout.coupon_not_applied_sale`，`points_not_combinable` 为真时其后 `checkout.points_not_combinable`；不受两个积分前应付是否为空限制。
+  - `MemberPerks` 在 `checkout.points_not_shipping` 之后依次显示方案说明（`acs-alert acs-alert--info site-checkout__scheme`，带读屏忽略的 `acs-promo-motif`，`role="status"`）与上述说明（`p.acs-body-s`）。游客路径不渲染 `MemberPerks`，所以不显示。
+- [x] `frontend/src/i18n/copy.ts` 加 `checkout.summary_promo`、`checkout.shipping_free`（在 `checkout.summary_title` 之后）与 `checkout.scheme_promo`、`checkout.scheme_promo_equal`、`checkout.scheme_no_promo`、`checkout.coupon_not_combinable`、`checkout.points_not_combinable`、`checkout.coupon_not_applied_sale`（在 `checkout.points_not_shipping` 之后），三语从 UX-COPY 0.22 逐字照抄。
+- [x] `frontend/src/styles/site.css`（只写布局与尺寸，没有颜色、字体与圆角）：方案说明提示条内边距 10px 12px，活动图案 16px × 16px、下移 3px、不收缩（视觉稿的行内样式）；桌面与手机相同，没有另加媒体查询。
+- [x] 测试（`vitest` 与 `react-dom/server`，计价结果以替身给出）：
+  - `frontend/src/pages/CheckoutPage.test.tsx`：三语下选国家前 `cart.promo_discount`、选定后 `checkout.summary_promo` 与免运费（三处摘要的金额行与顺序）；`participates` 为假或缺时与没有活动逐字相同；只有免运费时不显示活动优惠行、运费行为免运费，免去 0 时照常；手机折叠摘要与底部固定栏选国家前为 `cart.after_promo` 与活动后金额、选定后恢复合计，第 1 步折叠摘要同样；没有活动或活动优惠为 0 时逐字相同；金额照接口给的数；generation 变化时标识变化、新结果返回前为等待中；有活动时文字只来自字典。`CHECKOUT_KEYS` 加入 10 个键（8 个新键与本页新用到的 `cart.promo_discount`、`cart.after_promo`）。
+  - `frontend/src/pages/CheckoutMember.test.tsx`：三语下会员取参加活动时活动优惠在小计与券之间、运费为免运费；`no_promotion` 时选国家前后都不显示活动优惠、运费照常、折叠摘要为商品小计；`checkout.scheme_promo`、`checkout.scheme_promo_equal`、`checkout.scheme_no_promo` 的位置与金额；任一积分前应付为空时不显示方案说明；三条不同用或未用券说明（含两个积分前应付为空时）；游客不显示说明而活动优惠行照显示；generation 变化时会员计价标识变化；有活动时文字只来自字典。
+  - 现有断言未改；每条新测试的注释写明它守住的 UX 0.20 P05 原句或 HANDOFF 0.97 落实写法。
+- 偏离与落实细节：
+  - 视觉稿桌面把方案说明与积分说明放在右侧摘要里（合计之后）；任务落实写法与 UX 0.20 P05 原句写明「优惠券与积分输入区下方」，这里照落实写法放在券与积分一段的末尾（桌面左栏、手机第 3 步表单里）。
+  - 视觉稿的活动优惠金额写作「−RM 48.40」，活动优惠行另有 `color: var(--promo-ink); font-weight: 600`；字典没有带负号的金额模板，这里与券、积分两行和购物车（SHOP-TASK-258）一样按 `common.price_myr` 显示、不加负号；颜色与字重 site.css 不声明，照 `.acs-row` 的默认样式，记为偏离。
+  - 视觉稿手机折叠明细在活动优惠之后另有一行 `cart.after_promo`；落实写法只要求折叠摘要的标题行与底部固定栏显示活动后金额，UX 手机线框的明细也没有这一行，这里没有加。视觉稿手机第 1 步另有底部固定栏（继续按钮）；本页底部固定栏只在第 3 步出现（现有写法），没有改。
+  - 会员计价 `promotion_plan` 为 `no_promotion` 时，选国家前的手机折叠摘要与底部固定栏也不显示 `cart.after_promo`（与活动优惠行一同不显示），以免显示一个本单不采用的活动后金额。
+  - 会员计价的方案说明与三条说明照最近一次返回的计价显示（新请求等待中时沿用上一份结果，与 `checkout.points_available` 相同）。
+  - 方案说明提示条里的活动图案用 `acs-promo-motif`，它的图样由页面外层的活动装饰（SiteFrame）给出，与购物车的提示相同。
+  - 共享读取在页面打开时从读取中变为已读取，generation 加一，结账页因此会再计价一次；这是落实写法「generation 变化时重新计价」的直接结果。
+  - 没有改 `router.tsx` 与 `App.tsx`（不需要；`PromotionProvider` 已在 `App.tsx`，本任务不新增路由）。
+- 验证到什么程度：人工逐条对照验收标准、UX 0.20 P05 的原句、UX-COPY 0.22 的八行与两张视觉稿。前端检查与全部测试由 PR 的必需 CI 检查 `frontend` 执行，结果以它的记录为准。
+- 交付：以 Draft PR 交付，设计闸门写明 DESIGN 1.23（提交 b7f9355）；不合并、不直推。

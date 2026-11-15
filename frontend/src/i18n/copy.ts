@@ -695,10 +695,50 @@ export const COPY = {
     zh: "优惠券与积分只抵商品金额，不抵运费。",
     ms: "Kupon dan mata hanya mengurangkan jumlah item, bukan kos penghantaran.",
   },
+  "checkout.scheme_promo": {
+    en: "We've applied the sale. Without it, this order would be RM {other} before points — RM {diff} more.",
+    zh: "已按参加活动计算。不参加活动时本单积分抵扣前为 RM {other}，多 RM {diff}。",
+    ms: "Kami gunakan jualan. Tanpanya, pesanan ini RM {other} sebelum mata — RM {diff} lebih.",
+  },
+  "checkout.scheme_promo_equal": {
+    en: "With or without the sale, this order comes to the same amount before points, so we've applied the sale.",
+    zh: "参加与不参加活动，本单积分抵扣前的金额相同，已按参加活动计算。",
+    ms: "Dengan atau tanpa jualan, jumlah pesanan ini sama sebelum mata, jadi kami gunakan jualan.",
+  },
+  "checkout.scheme_no_promo": {
+    en: "We've left out the sale and used what you chose, because that's better value for you. With the sale, this order would be RM {other} before points — RM {diff} more.",
+    zh: "已按不参加活动、使用你所选的优惠计算，对你更划算。参加活动时本单积分抵扣前为 RM {other}，多 RM {diff}。",
+    ms: "Kami tidak gunakan jualan dan gunakan pilihan anda kerana itu lebih jimat. Dengan jualan, pesanan ini RM {other} sebelum mata — RM {diff} lebih.",
+  },
+  "checkout.coupon_not_combinable": {
+    en: "This sale can't be combined with coupons, so your coupon wasn't used. It's still available.",
+    zh: "本活动不与优惠券同用，本单未使用该券，券仍可再用。",
+    ms: "Jualan ini tidak boleh digabung dengan kupon, jadi kupon anda tidak digunakan. Ia masih boleh digunakan.",
+  },
+  "checkout.points_not_combinable": {
+    en: "This sale can't be combined with points, so no points were used. Your points stay in your account.",
+    zh: "本活动不与积分同用，本单未使用积分，积分仍保留在你的账户。",
+    ms: "Jualan ini tidak boleh digabung dengan mata, jadi tiada mata digunakan. Mata anda kekal dalam akaun.",
+  },
+  "checkout.coupon_not_applied_sale": {
+    en: "After the sale discount, this order is below the coupon's minimum spend, so the coupon wasn't used.",
+    zh: "活动优惠后本单未达到优惠券的最低消费，未使用该券。",
+    ms: "Selepas diskaun jualan, pesanan ini di bawah perbelanjaan minimum kupon, jadi kupon tidak digunakan.",
+  },
   "checkout.summary_title": {
     en: "Order summary",
     zh: "订单摘要",
     ms: "Ringkasan pesanan",
+  },
+  "checkout.summary_promo": {
+    en: "Sale discount",
+    zh: "活动优惠",
+    ms: "Diskaun jualan",
+  },
+  "checkout.shipping_free": {
+    en: "Free (was RM {amount})",
+    zh: "免运费（原 RM {amount}）",
+    ms: "Percuma (asal RM {amount})",
   },
   "checkout.summary_coupon": {
     en: "Coupon discount",

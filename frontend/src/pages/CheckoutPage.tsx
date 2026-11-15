@@ -19,9 +19,10 @@ import type { CheckoutLeave, CheckoutSmsPhone, SmsVerified } from "../components
 import { formatMinorUnits, formatSen } from "../format";
 import type { CopyKey, Language } from "../i18n/copy";
 import { browserStorage, useCopy, useLanguage } from "../i18n/language";
+import { usePromotion } from "../promotion";
 import { isRoutePath, Link, PRODUCTS_PATH, useRouter } from "../router";
 import type { RoutePath } from "../router";
-import { hasChangedLine } from "./CartPage";
+import { hasChangedLine, promoDiscount } from "./CartPage";
 import {
   afterMemberQuote,
   applyCoupon,
@@ -78,6 +79,9 @@ import { InfoIcon, PAY_PATH } from "./PayPage";
 // 计价结果超出整单件数或金额上限时（SHOP-TASK-195，docs/UX.md 0.17 P05，HANDOFF 0.80），在 cart.item_changed 的位置任一步都显示两条上限提示。
 // 下单请求体与幂等键规则见 api/orders.ts；201 或 200 时清空本浏览器购物车并以站内导航进入 /pay（不带订单号）。
 // 电话与收货资料只在 React 状态里，不进网址、localStorage、sessionStorage 或 cookie（刷新后需重填）。
+// 节日促销活动（UX 0.20 P05「节日促销活动」、M8、M9，DESIGN 1.23「节日促销活动」第 4、6、10 条，HANDOFF 0.97，SHOP-TASK-259）：
+// 摘要在 cart.subtotal 之后、优惠券行之前显示活动优惠一行，活动免运费时运费行为 checkout.shipping_free；手机折叠摘要与底部固定栏在没有运费报价时
+// 显示活动后金额。参加与否与会员取哪种方案由服务端判定，页面只显示计价结果与显示所需的减法。共享读取活动（usePromotion）的 generation 变化时重新计价。
 
 export const CART_PATH: RoutePath = "/cart";
 const PRIVACY_PATH: RoutePath = "/privacy";
@@ -166,12 +170,13 @@ export function quoteDestination(country: string, state: string): CheckoutDestin
   return { country_code: country, state_code: null };
 }
 
-// 计价请求的标识：语言、SKU 与件数、目的地，以及 409 order_not_placeable 后重新计价的轮次。购物车为空时不请求。
-export function checkoutQuoteKey(language: Language, lines: readonly CartLine[], destination: CheckoutDestination | null, round: number): string | null {
+// 计价请求的标识：语言、SKU 与件数、目的地、409 order_not_placeable 后重新计价的轮次，以及共享读取活动的 generation
+// （活动读取完成或倒计时到 0 时变化，按现有写法重新计价，新结果返回之前显示上一份结果）。购物车为空时不请求。
+export function checkoutQuoteKey(language: Language, lines: readonly CartLine[], destination: CheckoutDestination | null, round: number, generation = 0): string | null {
   if (lines.length === 0) {
     return null;
   }
-  return [language, JSON.stringify(quoteRequestBody(lines)), destination?.country_code ?? "", destination?.state_code ?? "", String(round)].join("|");
+  return [language, JSON.stringify(quoteRequestBody(lines)), destination?.country_code ?? "", destination?.state_code ?? "", String(round), String(generation)].join("|");
 }
 
 export function summaryQuote(key: string | null, settled: SettledCheckoutQuote | null): SummaryQuote {
@@ -184,6 +189,32 @@ export function summaryQuote(key: string | null, settled: SettledCheckoutQuote |
 // 接口给了运费与合计，即已按选定的目的地计价。
 function hasDestination(quote: DestinationQuote): quote is DestinationQuote & { shipping: NonNullable<DestinationQuote["shipping"]>; total_sen: number } {
   return quote.shipping !== null && quote.total_sen !== null;
+}
+
+// 摘要里活动的显示（HANDOFF 0.97 落实写法）：discount 为活动优惠一行的标签与金额（商品级与整单级之和），waived 为运费行改为免运费时免去的运费；不显示时为 null。
+export interface SummarySale {
+  discount: { label: CopyKey; sen: number } | null;
+  waived: number | null;
+}
+
+// 没有运费报价时活动优惠大于 0 即显示 cart.promo_discount（暂算）；有运费报价时 participates 为真且大于 0 才显示 checkout.summary_promo。
+// 有运费报价、participates 为真且 shipping_waived_sen 大于 0 时运费行为免运费。noPromotion 为会员计价取不参加活动（promotion_plan 为 no_promotion）：
+// 不显示活动优惠，运费照常。
+export function summarySale(quote: DestinationQuote, noPromotion = false): SummarySale {
+  const { promotion } = quote;
+  if (promotion === null || noPromotion) {
+    return { discount: null, waived: null };
+  }
+  const sen = promoDiscount(quote);
+  if (!hasDestination(quote)) {
+    return { discount: sen > 0 ? { label: "cart.promo_discount", sen } : null, waived: null };
+  }
+  const joined = promotion.participates === true;
+  const waived = promotion.shipping_waived_sen;
+  return {
+    discount: joined && sen > 0 ? { label: "checkout.summary_promo", sen } : null,
+    waived: joined && waived !== null && waived > 0 ? waived : null,
+  };
 }
 
 // 下单请求里的收货资料：马来西亚只带州属，其他国家只带地区。
@@ -436,21 +467,29 @@ function SummaryLine({ row }: { row: QuoteLine }) {
 
 // 摘要的金额：商品小计；未选定目的地时 cart.shipping_later，选定后示例运费、合计与参考外币（或 checkout.fx_none）。
 // 游客不显示 checkout.summary_coupon 与 checkout.summary_points；会员的这两行由 discounts 给出，选定目的地后放在小计与运费之间。
-function SummaryAmounts({ quote, discounts }: { quote: DestinationQuote; discounts?: ReactNode }) {
+// 活动优惠一行（summarySale）紧接小计、在 discounts 之前，选定目的地前后都可能出现；活动免运费时运费行的金额为 checkout.shipping_free。
+function SummaryAmounts({ quote, discounts, noPromotion }: { quote: DestinationQuote; discounts?: ReactNode; noPromotion?: boolean | undefined }) {
   const t = useCopy();
   const price = usePrice();
+  const sale = summarySale(quote, noPromotion);
   return (
     <>
       <div className="acs-row site-checkout__subtotal">
         <span>{t("cart.subtotal")}</span>
         <span>{price(quote.subtotal_sen)}</span>
       </div>
+      {sale.discount !== null && (
+        <div className="acs-row">
+          <span>{t(sale.discount.label)}</span>
+          <span>{price(sale.discount.sen)}</span>
+        </div>
+      )}
       {hasDestination(quote) ? (
         <>
           {discounts}
           <div className="acs-row">
             <span>{t("checkout.summary_shipping")}</span>
-            <span>{price(quote.shipping.fee_sen)}</span>
+            <span>{sale.waived === null ? price(quote.shipping.fee_sen) : t("checkout.shipping_free", { amount: formatSen(sale.waived) })}</span>
           </div>
           <div className="acs-row acs-row--total">
             <span>{t("checkout.summary_total")}</span>
@@ -477,7 +516,7 @@ function SummaryAmounts({ quote, discounts }: { quote: DestinationQuote; discoun
   );
 }
 
-function SummaryContent({ quote, rows, discounts }: { quote: SummaryQuote; rows: readonly QuoteLine[]; discounts?: ReactNode }) {
+function SummaryContent({ quote, rows, discounts, noPromotion }: { quote: SummaryQuote; rows: readonly QuoteLine[]; discounts?: ReactNode; noPromotion?: boolean | undefined }) {
   if (quote.status === "loading") {
     return null;
   }
@@ -489,16 +528,21 @@ function SummaryContent({ quote, rows, discounts }: { quote: SummaryQuote; rows:
       {rows.map((row) => (
         <SummaryLine key={row.sku} row={row} />
       ))}
-      <SummaryAmounts quote={quote.quote} discounts={discounts} />
+      <SummaryAmounts quote={quote.quote} discounts={discounts} noPromotion={noPromotion} />
     </>
   );
 }
 
-// 手机折叠摘要与底部固定栏的一行：选定目的地前为商品小计，选定后为合计。
-function HeadlineAmount({ quote, className }: { quote: DestinationQuote; className: string }) {
+// 手机折叠摘要与底部固定栏的一行：选定目的地前为商品小计（有活动优惠一行时改为 cart.after_promo 与小计减活动优惠，M9），选定后为合计。
+function HeadlineAmount({ quote, className, noPromotion }: { quote: DestinationQuote; className: string; noPromotion?: boolean | undefined }) {
   const t = useCopy();
   const price = usePrice();
-  const [label, sen]: [CopyKey, number] = hasDestination(quote) ? ["checkout.summary_total", quote.total_sen] : ["cart.subtotal", quote.subtotal_sen];
+  const { discount } = summarySale(quote, noPromotion);
+  const [label, sen]: [CopyKey, number] = hasDestination(quote)
+    ? ["checkout.summary_total", quote.total_sen]
+    : discount === null
+      ? ["cart.subtotal", quote.subtotal_sen]
+      : ["cart.after_promo", quote.subtotal_sen - discount.sen];
   return (
     <span className={className}>
       <span>{t(label)}</span>
@@ -930,6 +974,8 @@ export function CheckoutView({ lines, reference, quote, form, actions, member, v
   const placeable = canPlaceOrder(form, quote, lines) && (member === undefined || memberPlaceable(member.form, member.quote));
   const step = { form, reference, options, actions, member, verify };
   const discounts = member === undefined || member.quote.status !== "ready" ? undefined : <MemberDiscounts quote={member.quote.quote} />;
+  // 会员计价取不参加活动时摘要不显示活动优惠，运费照常（UX 0.20 P05）。
+  const noPromotion = member !== undefined && member.quote.status === "ready" && member.quote.quote.promotion_plan === "no_promotion";
 
   return (
     <main className="site-checkout" aria-busy={busy}>
@@ -937,9 +983,9 @@ export function CheckoutView({ lines, reference, quote, form, actions, member, v
       <details className="acs-summary site-phone-only site-checkout__fold">
         <summary className="site-checkout__fold-head">
           <span>{t("checkout.summary_title")}</span>
-          {ready !== null && <HeadlineAmount quote={ready} className="acs-num site-checkout__fold-amount" />}
+          {ready !== null && <HeadlineAmount quote={ready} className="acs-num site-checkout__fold-amount" noPromotion={noPromotion} />}
         </summary>
-        <SummaryContent quote={quote} rows={rows} discounts={discounts} />
+        <SummaryContent quote={quote} rows={rows} discounts={discounts} noPromotion={noPromotion} />
       </details>
       <div className="site-checkout__body">
         <div className="site-checkout__main">
@@ -950,21 +996,21 @@ export function CheckoutView({ lines, reference, quote, form, actions, member, v
           {form.step === 3 && (
             <div className="acs-summary site-phone-only site-checkout__amounts">
               {quote.status === "error" && <ErrorNotice />}
-              {ready !== null && <SummaryAmounts quote={ready} discounts={discounts} />}
+              {ready !== null && <SummaryAmounts quote={ready} discounts={discounts} noPromotion={noPromotion} />}
             </div>
           )}
         </div>
         <aside className="site-desktop-only site-checkout__aside">
           <div className="acs-summary">
             <h2 className="acs-display-s acs-summary__title">{t("checkout.summary_title")}</h2>
-            <SummaryContent quote={quote} rows={rows} discounts={discounts} />
+            <SummaryContent quote={quote} rows={rows} discounts={discounts} noPromotion={noPromotion} />
           </div>
           {form.step === 3 && <PlaceOrder form={form} placeable={placeable} onPlaceOrder={actions.onPlaceOrder} />}
         </aside>
       </div>
       {form.step === 3 && (
         <div className="acs site-phone-only site-checkout__bar">
-          {ready !== null && <HeadlineAmount quote={ready} className="acs-row site-checkout__bar-amount" />}
+          {ready !== null && <HeadlineAmount quote={ready} className="acs-row site-checkout__bar-amount" noPromotion={noPromotion} />}
           <PlaceOrder form={form} placeable={placeable} onPlaceOrder={actions.onPlaceOrder} />
         </div>
       )}
@@ -1025,8 +1071,10 @@ export default function CheckoutPage() {
   // 离开页面时中止进行中的下单与重试。
   const lifetime = useRef<AbortController | null>(null);
 
+  // 共享读取活动的 generation：变化时游客与会员计价的标识都随之变化，即重新计价。
+  const { generation } = usePromotion();
   const destination = useMemo(() => quoteDestination(form.recipient.country, form.recipient.state), [form.recipient.country, form.recipient.state]);
-  const baseKey = checkoutQuoteKey(language, lines, destination, round);
+  const baseKey = checkoutQuoteKey(language, lines, destination, round, generation);
   // 游客计价只在不是会员时请求；会员计价经会员接口，另带所用券代码与积分数。
   const key = member === null ? baseKey : null;
   const quote = summaryQuote(key, settled);
