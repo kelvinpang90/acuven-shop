@@ -1,16 +1,32 @@
+import type { ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { fetchQuote, latestQuoter } from "../api/checkout";
-import type { CheckoutQuote, PricedQuoteLine, QuoteLine, UnavailableQuoteLine } from "../api/checkout";
+import type { CheckoutQuote, PricedQuoteLine, PromotionQuote, QuoteLine, UnavailableQuoteLine } from "../api/checkout";
+import { MemberSessionProvider } from "../api/memberSession";
+import type { MemberSessionReader, MemberSessionState } from "../api/memberSession";
+import type { PromotionDisplay, PromotionResponse, RuleDisplay } from "../api/promotion";
 import App from "../App";
 import { CART_STORAGE_KEY, readCart } from "../cart";
 import type { CartLine, CartStorage } from "../cart";
-import { BRAND, COPY, LANGUAGES } from "../i18n/copy";
-import type { CopyKey, Language } from "../i18n/copy";
+import { BRAND, COPY, LANGUAGES, translate } from "../i18n/copy";
+import type { CopyKey, CopyVars, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
+import { PromotionProvider } from "../promotion";
 import { RouterProvider } from "../router";
-import { CartView, canIncrease, changeQuantity, hasChangedLine, lineQuantityInput, quantityLimit, quoteKey, quoteState, removeFromCart } from "./CartPage";
+import {
+  CartView,
+  canIncrease,
+  cartProgress,
+  changeQuantity,
+  hasChangedLine,
+  lineQuantityInput,
+  quantityLimit,
+  quoteKey,
+  quoteState,
+  removeFromCart,
+} from "./CartPage";
 import type { QuantityDraft, QuoteState } from "./CartPage";
 
 afterEach(() => {
@@ -71,24 +87,61 @@ interface RenderOptions {
   draft?: QuantityDraft | null;
   capped?: ReadonlyMap<string, number>;
   language?: Language;
+  // 共享读取的活动（PromotionProvider 的 initial）；"loading" 为第一次读取尚未完成；不给时不包 PromotionProvider（没有活动）。
+  promotion?: PromotionResponse | "loading";
+  // 会员会话状态的替身；不给时不包 MemberSessionProvider。
+  session?: MemberSessionState;
 }
 
-function render({ lines = [], quote = { status: "loading" }, writeFailed = false, draft = null, capped = new Map(), language = "en" }: RenderOptions = {}): string {
+function sessionReader(state: MemberSessionState): MemberSessionReader {
+  return {
+    current: () => state,
+    load: () => Promise.resolve(state),
+    reload: () => Promise.resolve(state),
+    subscribe: () => () => undefined,
+  };
+}
+
+function render({
+  lines = [],
+  quote = { status: "loading" },
+  writeFailed = false,
+  draft = null,
+  capped = new Map(),
+  language = "en",
+  promotion,
+  session,
+}: RenderOptions = {}): string {
+  let view: ReactElement = (
+    <CartView
+      lines={lines}
+      quote={quote}
+      writeFailed={writeFailed}
+      draft={draft}
+      capped={capped}
+      onQuantity={() => undefined}
+      onDraft={() => undefined}
+      onQuantityInput={() => undefined}
+      onRemove={() => undefined}
+    />
+  );
+  if (promotion !== undefined) {
+    view = (
+      <PromotionProvider
+        initial={promotion === "loading" ? undefined : promotion}
+        fetcher={() => new Promise<PromotionResponse>(() => undefined)}
+        clock={() => 0}
+      >
+        {view}
+      </PromotionProvider>
+    );
+  }
+  if (session !== undefined) {
+    view = <MemberSessionProvider reader={sessionReader(session)}>{view}</MemberSessionProvider>;
+  }
   return renderToStaticMarkup(
     <LanguageProvider storage={languageStorage(language)}>
-      <RouterProvider initialPath="/cart">
-        <CartView
-          lines={lines}
-          quote={quote}
-          writeFailed={writeFailed}
-          draft={draft}
-          capped={capped}
-          onQuantity={() => undefined}
-          onDraft={() => undefined}
-          onQuantityInput={() => undefined}
-          onRemove={() => undefined}
-        />
-      </RouterProvider>
+      <RouterProvider initialPath="/cart">{view}</RouterProvider>
     </LanguageProvider>,
   );
 }
@@ -579,6 +632,401 @@ describe("writing back to the browser cart", () => {
   });
 });
 
+// 节日促销活动（SHOP-TASK-258）的夹具：数值取自视觉稿 P04-promo-desktop——两件打 8 折的行（78.00 → 62.40、89.00 → 71.20）、
+// 一件买 2 送 1 的蜡烛，商品小计 199.00，商品级优惠 33.40、满 150 减 15 的整单级优惠 15.00，下一档满 300 减 40 还差 134.40，免运费（满 120）已达。
+function ruleDisplay(rule_id: number, position: number, overrides: Partial<RuleDisplay> = {}): RuleDisplay {
+  return {
+    rule_id,
+    position,
+    kind: "item_discount",
+    discount_mode: null,
+    percent: null,
+    amount_sen: null,
+    buy_quantity: null,
+    get_quantity: null,
+    get_percent: null,
+    threshold_sen: null,
+    tiers: [],
+    categories: [],
+    has_products: false,
+    ...overrides,
+  };
+}
+
+const ITEM_RULE = ruleDisplay(11, 1, { discount_mode: "percent", percent: 20 });
+const BXGY_RULE = ruleDisplay(14, 2, { kind: "buy_x_get_y", buy_quantity: 2, get_quantity: 1, get_percent: 100 });
+const SPEND_RULE = ruleDisplay(12, 3, {
+  kind: "spend_discount",
+  tiers: [
+    { threshold_sen: 15000, amount_sen: 1500, percent: null },
+    { threshold_sen: 30000, amount_sen: 4000, percent: null },
+  ],
+});
+const SHIPPING_RULE = ruleDisplay(13, 4, { kind: "free_shipping", threshold_sen: 12000 });
+
+const SERVER_TIME = "2026-02-10T00:00:00Z";
+
+function sale(overrides: Partial<PromotionDisplay> = {}): PromotionResponse {
+  return {
+    promotion: {
+      promotion_id: 7,
+      title: "Lunar New Year Sale",
+      subtitle: null,
+      badge: "Lunar deal",
+      strip: null,
+      pack: "cny",
+      palette: "cny",
+      ambient: "none",
+      home_poster: "split",
+      list_strip: "band",
+      card_badge: "tag",
+      detail_ribbon: "ribbon",
+      cart_progress: "bar",
+      poster_mode: "template",
+      poster_desktop: null,
+      poster_phone: null,
+      poster_alt: null,
+      ends_at: null,
+      coupon_combinable: true,
+      points_combinable: true,
+      rules: [ITEM_RULE, BXGY_RULE, SPEND_RULE, SHIPPING_RULE],
+      ...overrides,
+    },
+    server_time: SERVER_TIME,
+  };
+}
+
+const NO_SALE: PromotionResponse = { promotion: null, server_time: SERVER_TIME };
+
+function promotionQuote(overrides: Partial<PromotionQuote> = {}): PromotionQuote {
+  return {
+    promotion_id: 7,
+    item_discount_sen: 3340,
+    order_discount_sen: 1500,
+    after_item_subtotal_sen: 16560,
+    spend_mode: "amount",
+    spend_tier_reached: 1,
+    spend_next_threshold_sen: 30000,
+    spend_next_value: 4000,
+    spend_next_gap_sen: 13440,
+    free_shipping_threshold_sen: 12000,
+    free_shipping_reached: true,
+    free_shipping_gap_sen: 0,
+    shipping_waived_sen: null,
+    participates: null,
+    buy_x_get_y: [],
+    ...overrides,
+  };
+}
+
+// 计价结果里没有任何活动规则（金额为 0、没有门槛）。
+const BARE: Partial<PromotionQuote> = {
+  item_discount_sen: 0,
+  order_discount_sen: 0,
+  after_item_subtotal_sen: 19900,
+  spend_mode: null,
+  spend_tier_reached: null,
+  spend_next_threshold_sen: null,
+  spend_next_value: null,
+  spend_next_gap_sen: null,
+  free_shipping_threshold_sen: null,
+  free_shipping_reached: false,
+  free_shipping_gap_sen: null,
+};
+
+const TEE = priced("tee-black-m", { quantity: 2, line_subtotal_sen: 7800, promotion_rule_id: 11, promotion_item_discount_sen: 1560 });
+const HOODIE = priced("hoodie-grey-l", {
+  product_slug: "pullover-hoodie",
+  name: text("Pullover Hoodie"),
+  unit_price_sen: 8900,
+  line_subtotal_sen: 8900,
+  promotion_rule_id: 11,
+  promotion_item_discount_sen: 1780,
+});
+const CANDLE = priced("candle", { product_slug: "candle", name: text("Soy Wax Candle"), options: [], unit_price_sen: 3200, line_subtotal_sen: 3200, promotion_rule_id: 14 });
+const SALE_ROWS: QuoteLine[] = [TEE, HOODIE, CANDLE];
+// 同一批商品在没有活动时的计价行。
+const PLAIN_ROWS: QuoteLine[] = SALE_ROWS.map((row) => (row.status === "unavailable" ? row : { ...row, promotion_rule_id: null, promotion_item_discount_sen: 0 }));
+
+interface SaleOptions {
+  // 计价结果的 promotion；不给时为 promotionQuote()。
+  quote?: PromotionQuote | null;
+  rows?: QuoteLine[];
+  // 共享读取；不给时为 sale()，null 时不包 PromotionProvider。
+  shared?: PromotionResponse | "loading" | null;
+  session?: MemberSessionState;
+  language?: Language;
+}
+
+function renderSale({ quote = promotionQuote(), rows = SALE_ROWS, shared = sale(), session, language = "en" }: SaleOptions = {}): string {
+  return render({
+    lines: cartOf(rows),
+    quote: ready(rows, 19900, { promotion: quote }),
+    language,
+    ...(shared === null ? {} : { promotion: shared }),
+    ...(session === undefined ? {} : { session }),
+  });
+}
+
+const MEMBER: MemberSessionState = { kind: "member", phoneMasked: "+60 12-*** 5678", hasPassword: false, csrfToken: "token" };
+
+const PHONE_BLOCK_START = `<div class="acs-summary site-phone-only site-cart__promo-phone">`;
+
+const aside = (html: string) => part(html, /<aside[\s\S]*?<\/aside>/);
+const phoneBlock = (html: string) => part(html, /<div class="acs-summary site-phone-only site-cart__promo-phone">[\s\S]*?(?=<div class="site-phone-only site-cart__notes">)/);
+const bottomBar = (html: string) => part(html, /<div class="acs site-phone-only site-cart__bar">[\s\S]*$/);
+
+// 金额行：标签与金额。
+function amountRows(html: string): [string, string][] {
+  return [...html.matchAll(/<div class="acs-row"><span>([^<]*)<\/span><span[^>]*>([^<]*)<\/span><\/div>/g)].map((m) => [unescapeHtml(m[1] ?? ""), m[2] ?? ""]);
+}
+
+// 凑单提示的文字，依次排列；每条前是读屏忽略的活动图案。
+function hintTexts(html: string): string[] {
+  return [...html.matchAll(/<p class="acs-promo-progress__hint"><span class="acs-promo-motif" aria-hidden="true"><\/span><span>([^<]*)<\/span><\/p>/g)].map((m) =>
+    unescapeHtml(m[1] ?? ""),
+  );
+}
+
+const PROGRESS = `<div class="acs-promo-progress">`;
+const copy = (key: CopyKey, language: Language, vars?: CopyVars) => translate(language, key, vars);
+const tag = (value: string) => `<span class="acs-promo-badge acs-promo-badge--tag"><span>${escapeHtml(value)}</span></span>`;
+const badges = (rule: string) => `<span class="acs-promo-badges">${tag("Lunar deal")}${tag(rule)}</span>`;
+const percentBadge = (language: Language) => copy("promo.badge_percent", language, { percent: 20 });
+const bxgyBadge = (language: Language) => copy("promo.badge_bxgy_free", language, { x: 2, y: 1 });
+
+describe("sale amounts", () => {
+  // UX 0.20 P04 线框「右栏依次为：[cart.subtotal] [M2] / [cart.promo_discount] [M8]（有活动优惠时）/ [cart.after_promo] [M9]（有活动优惠时）」与说明
+  // 「[cart.promo_discount] 为商品级与整单级活动优惠之和，[cart.after_promo] 为商品小计减去它」：33.40 + 15.00 = 48.40，199.00 − 48.40 = 150.60；
+  // 手机线框「底部固定栏改为显示 [cart.after_promo] [M9]」，两行在手机放在 [cart.shipping_later] 之前的一块里。
+  it.each(LANGUAGES)("shows cart.promo_discount and cart.after_promo after the subtotal in %s", (language) => {
+    const html = renderSale({ language });
+    expect(amountRows(aside(html))).toEqual([
+      [copy("cart.subtotal", language), "RM 199.00"],
+      [copy("cart.promo_discount", language), "RM 48.40"],
+      [copy("cart.after_promo", language), "RM 150.60"],
+    ]);
+    expect(amountRows(phoneBlock(html))).toEqual([
+      [copy("cart.promo_discount", language), "RM 48.40"],
+      [copy("cart.after_promo", language), "RM 150.60"],
+    ]);
+    expect(amountRows(bottomBar(html))).toEqual([[copy("cart.after_promo", language), "RM 150.60"]]);
+    expect(html.indexOf(PHONE_BLOCK_START)).toBeLessThan(html.indexOf(`<div class="site-phone-only site-cart__notes">`));
+  });
+
+  // UX 0.20 P04「为 0 时这两行都不显示」与手机线框「没有活动优惠时仍为 [cart.subtotal] [M2]」：
+  // 优惠为 0 时两行都不出现，底部固定栏照旧是商品小计（还有满额规则时提示照样显示）。
+  it.each(LANGUAGES)("hides both rows when the sale discount is 0 in %s", (language) => {
+    const html = renderSale({ language, rows: PLAIN_ROWS, quote: promotionQuote({ item_discount_sen: 0, order_discount_sen: 0 }) });
+    expect(html).not.toContain(escapeHtml(copy("cart.promo_discount", language)));
+    expect(html).not.toContain(escapeHtml(copy("cart.after_promo", language)));
+    expect(amountRows(aside(html))).toEqual([[copy("cart.subtotal", language), "RM 199.00"]]);
+    expect(amountRows(bottomBar(html))).toEqual([[copy("cart.subtotal", language), "RM 199.00"]]);
+  });
+
+  // 验收「为 0、promotion 为 null 或没有活动时与现在完全相同」（UX 0.20 P04「有活动生效时」才有这些内容）：
+  // 计价结果没有活动、或有活动而金额为 0 且没有任何门槛时，页面与不包共享读取、没有活动的渲染逐字相同。
+  it.each(LANGUAGES)("renders exactly as before without a sale in %s", (language) => {
+    const before = renderSale({ language, rows: PLAIN_ROWS, quote: null, shared: null });
+    expect(before).not.toContain("acs-promo");
+    expect(renderSale({ language, rows: PLAIN_ROWS, quote: null })).toBe(before);
+    expect(renderSale({ language, rows: PLAIN_ROWS, quote: null, shared: NO_SALE })).toBe(before);
+    expect(renderSale({ language, rows: PLAIN_ROWS, quote: promotionQuote(BARE) })).toBe(before);
+  });
+});
+
+describe("sale lines", () => {
+  // UX 0.20 P04 线框「打折的行：[M1] 处先显示划线的原价行小计，再显示活动价行小计；行下显示 <规则角标>」与 M1「打折的行另显示活动价行小计」：
+  // 行小计 78.00 减该行优惠 15.60 为 62.40，各以读屏标签开头；角标为活动的角标短语与该规则的角标（视觉稿 P04-promo-desktop 放在名称与规格之下）。
+  it.each(LANGUAGES)("shows the struck line subtotal, the sale line subtotal and the badges on a discounted line in %s", (language) => {
+    const [tee = "", hoodie = ""] = items(renderSale({ language }));
+    const prices = (was: string, now: string) =>
+      `<span class="site-cart__price"><span class="acs-prices">` +
+      `<span class="acs-price-was"><span class="acs-vh">${escapeHtml(copy("promo.a11y_original", language))}</span>${was}</span>` +
+      `<span class="acs-price-sale"><span class="acs-vh">${escapeHtml(copy("promo.a11y_sale", language))}</span>${now}</span></span></span>`;
+    expect(tee).toContain(prices("RM 78.00", "RM 62.40"));
+    expect(hoodie).toContain(prices("RM 89.00", "RM 71.20"));
+    expect(tee).toContain(`${badges(percentBadge(language))}</span><div class="acs-stepper site-cart__qty">`);
+    expect(tee).not.toContain(`<span class="acs-price site-cart__price">`);
+  });
+
+  // 同一条「打折的行」：买 X 享 Y 的行该行优惠为 0，行小计照旧不划线，名称之下仍显示活动角标与买 X 享 Y 的角标。
+  it.each(LANGUAGES)("shows the badges but no struck price on a buy-x-get-y line in %s", (language) => {
+    const [, , candle = ""] = items(renderSale({ language }));
+    expect(candle).toContain(`<span class="acs-price site-cart__price">RM 32.00</span>`);
+    expect(candle).not.toContain("acs-price-was");
+    expect(candle).toContain(badges(bxgyBadge(language)));
+  });
+
+  // UX 0.20 P04「行下显示 <规则角标>」只对共享读取里有的规则：行命中的规则不在共享读取的活动里时不显示角标，金额仍照计价结果划线。
+  it("shows no badges when the line's rule is not in the shared sale", () => {
+    const [tee = ""] = items(renderSale({ rows: [{ ...TEE, promotion_rule_id: 99 }] }));
+    expect(tee).not.toContain("acs-promo-badges");
+    expect(tee).toContain("RM 62.40");
+  });
+});
+
+describe("sale hints", () => {
+  // UX 0.20 P04「满额减或满额折还有下一档时 [cart.hint_tier_amount] 或 [cart.hint_tier_percent]（{amount} 为还差的金额，{save}、{percent} 为下一档的优惠）」
+  // 与「有免运费规则时…已达显示 [cart.free_shipping_reached]」：满额减还差 134.40 可减 40.00，免运费已达；桌面与手机各一份，每条一行。
+  it.each(LANGUAGES)("shows the next fixed-amount tier and the reached free shipping in %s", (language) => {
+    const html = renderSale({ language });
+    const expected = [copy("cart.hint_tier_amount", language, { amount: "134.40", save: "40.00" }), copy("cart.free_shipping_reached", language)];
+    expect(hintTexts(aside(html))).toEqual(expected);
+    expect(hintTexts(phoneBlock(html))).toEqual(expected);
+  });
+
+  // 同一条的满额折：spend_mode 为 percent 时用 [cart.hint_tier_percent]，{percent} 为下一档的百分比；已到最高档（没有下一档）时不显示这一条。
+  it.each(LANGUAGES)("shows the next percentage tier in %s", (language) => {
+    const percent = renderSale({ language, quote: promotionQuote({ spend_mode: "percent", spend_next_value: 10 }) });
+    expect(hintTexts(aside(percent))[0]).toBe(copy("cart.hint_tier_percent", language, { amount: "134.40", percent: 10 }));
+    const top = renderSale({ language, quote: promotionQuote({ spend_next_threshold_sen: null, spend_next_value: null, spend_next_gap_sen: null }) });
+    expect(hintTexts(aside(top))).toEqual([copy("cart.free_shipping_reached", language)]);
+  });
+
+  // UX 0.20 P04「有免运费规则时，未达门槛显示 [cart.hint_free_shipping]，已达显示 [cart.free_shipping_reached]（门槛为 0 时不显示提示）」：
+  // 未达时 {amount} 为接口返回的差额 25.00；门槛为 0 时两种都不显示。
+  it.each(LANGUAGES)("shows the free shipping hint only for a threshold above 0 in %s", (language) => {
+    const short = renderSale({ language, quote: promotionQuote({ spend_next_gap_sen: null, spend_next_threshold_sen: null, free_shipping_reached: false, free_shipping_gap_sen: 2500 }) });
+    expect(hintTexts(aside(short))).toEqual([copy("cart.hint_free_shipping", language, { amount: "25.00" })]);
+    const zero = renderSale({ language, quote: promotionQuote({ spend_next_gap_sen: null, spend_next_threshold_sen: null, free_shipping_threshold_sen: 0, free_shipping_reached: true }) });
+    expect(hintTexts(zero)).toEqual([]);
+  });
+
+  // UX 0.20 P04「每条买 X 享 Y 规则的范围内已有商品时显示 [cart.hint_bxgy]（{rule} 为该规则的角标文字，{n} 为接口返回的再加件数，{y} 为 Y）」：
+  // 范围内没有商品（units_in_scope 为 0）的规则与共享读取里找不到的规则都不显示；不包共享读取时也不显示（其余提示照计价结果显示）。
+  it.each(LANGUAGES)("shows cart.hint_bxgy only for rules with items in scope that the shared sale has in %s", (language) => {
+    const quote = promotionQuote({
+      buy_x_get_y: [
+        { rule_id: 14, buy_quantity: 2, get_quantity: 1, get_percent: 100, units_in_scope: 1, units_to_next: 2 },
+        { rule_id: 15, buy_quantity: 3, get_quantity: 1, get_percent: 50, units_in_scope: 0, units_to_next: 3 },
+        { rule_id: 16, buy_quantity: 1, get_quantity: 1, get_percent: 50, units_in_scope: 4, units_to_next: 1 },
+      ],
+    });
+    const html = renderSale({ language, quote, shared: sale({ rules: [ITEM_RULE, BXGY_RULE, ruleDisplay(15, 5, { kind: "buy_x_get_y", buy_quantity: 3, get_quantity: 1, get_percent: 50 })] }) });
+    const bxgy = copy("cart.hint_bxgy", language, { rule: bxgyBadge(language), n: 2, y: 1 });
+    expect(hintTexts(aside(html))).toEqual([copy("cart.hint_tier_amount", language, { amount: "134.40", save: "40.00" }), copy("cart.free_shipping_reached", language), bxgy]);
+    const unshared = renderSale({ language, quote, shared: null });
+    expect(hintTexts(aside(unshared))).toEqual([copy("cart.hint_tier_amount", language, { amount: "134.40", save: "40.00" }), copy("cart.free_shipping_reached", language)]);
+  });
+});
+
+describe("sale progress", () => {
+  // UX 0.20 P04「进度条按 cart_progress 的变体只画离得最近的一个门槛」与 COMPONENTS「Cart progress」的 bar 变体（__track + __fill，--progress）：
+  // 满额下一档 300.00 还差 134.40，进度 floor(16560 × 100 ÷ 30000) = 55；__labels（读屏忽略）为已达 165.60 与门槛 300.00。
+  it("draws the bar to the next tier with its labels", () => {
+    const html = aside(renderSale());
+    expect(html).toContain(
+      `${PROGRESS}<div class="acs-promo-progress__track" aria-hidden="true"><span class="acs-promo-progress__fill" style="--progress:55%"></span></div>` +
+        `<div class="acs-promo-progress__labels" aria-hidden="true"><span>RM 165.60</span><span>RM 300.00</span></div></div>`,
+    );
+    expect(phoneBlock(renderSale())).toContain(`style="--progress:55%"`);
+  });
+
+  // 同一条的 steps 变体（__steps 的十格，点亮的格带 data-on）：百分比与格数都向下取整——差 100 时 floor(29900 × 100 ÷ 30000) = 99，点亮 9 格。
+  it("lights whole steps rounded down", () => {
+    const quote = promotionQuote({ spend_next_gap_sen: 100 });
+    expect(cartProgress(quote)).toEqual({ percent: 99, labels: { reached: 29900, threshold: 30000 } });
+    const html = aside(renderSale({ quote, shared: sale({ cart_progress: "steps" }) }));
+    const steps = part(html, /<div class="acs-promo-progress__steps" aria-hidden="true">[\s\S]*?<\/div>/);
+    expect(steps.match(/<span data-on=""><\/span>/g)).toHaveLength(9);
+    expect(steps.match(/<span><\/span>/g)).toHaveLength(1);
+    expect(html).not.toContain("acs-promo-progress__track");
+    expect(html).toContain(`<div class="acs-promo-progress__labels" aria-hidden="true"><span>RM 299.00</span><span>RM 300.00</span></div>`);
+    expect(aside(renderSale({ quote }))).toContain(`style="--progress:99%"`);
+  });
+
+  // 同一条「只画离得最近的一个门槛（满额减下一档或免运费）」：免运费 120.00 差 20.00 比满额差 134.40 近，画免运费（floor(10000 × 100 ÷ 12000) = 83，8 格）；
+  // 差额相等时画满额。
+  it("draws only the nearer threshold, preferring the tier on a tie", () => {
+    const nearer = promotionQuote({ free_shipping_reached: false, free_shipping_gap_sen: 2000 });
+    expect(cartProgress(nearer)).toEqual({ percent: 83, labels: { reached: 10000, threshold: 12000 } });
+    const html = aside(renderSale({ quote: nearer, shared: sale({ cart_progress: "steps" }) }));
+    expect(html.match(/<span data-on=""><\/span>/g)).toHaveLength(8);
+    expect(html).toContain(`<span>RM 100.00</span><span>RM 120.00</span>`);
+    expect(html.match(/<div class="acs-promo-progress">/g)).toHaveLength(1);
+    const tie = promotionQuote({ spend_next_gap_sen: 2000, free_shipping_reached: false, free_shipping_gap_sen: 2000 });
+    expect(cartProgress(tie)).toEqual({ percent: 93, labels: { reached: 28000, threshold: 30000 } });
+  });
+
+  // UX 0.20 P04「已全部达到时显示满格」：没有未达的门槛而有满额规则或门槛大于 0 的免运费规则时为 100%、10 格，不显示 __labels。
+  it("shows a full bar when every threshold is reached", () => {
+    const top = { spend_next_threshold_sen: null, spend_next_value: null, spend_next_gap_sen: null };
+    for (const quote of [promotionQuote(top), promotionQuote({ ...top, free_shipping_threshold_sen: null }), promotionQuote({ ...BARE, free_shipping_threshold_sen: 12000, free_shipping_reached: true })]) {
+      expect(cartProgress(quote)).toEqual({ percent: 100, labels: null });
+    }
+    const bar = aside(renderSale({ quote: promotionQuote(top) }));
+    expect(bar).toContain(`style="--progress:100%"`);
+    expect(bar).not.toContain("acs-promo-progress__labels");
+    const steps = aside(renderSale({ quote: promotionQuote(top), shared: sale({ cart_progress: "steps" }) }));
+    expect(steps.match(/<span data-on=""><\/span>/g)).toHaveLength(10);
+  });
+
+  // 同一条「进度条…只画…门槛（满额减下一档或免运费）」：两类规则都没有（或免运费门槛为 0）时不画进度条。
+  it("draws no bar without a tier or a free shipping threshold", () => {
+    expect(cartProgress(promotionQuote(BARE))).toBeNull();
+    expect(cartProgress(promotionQuote({ ...BARE, free_shipping_threshold_sen: 0, free_shipping_reached: true }))).toBeNull();
+    expect(renderSale({ quote: promotionQuote({ ...BARE, item_discount_sen: 3340, buy_x_get_y: [] }) })).not.toContain(PROGRESS);
+  });
+
+  // 验收「进度条与行角标要用共享读取的装饰与规则，只在 usePromotion 有活动且其 promotion_id 与计价结果相同时显示」（UX 0.20 P04「有活动生效时」）：
+  // 读取中、没有活动、不包共享读取或 promotion_id 不一致时不画进度条、不显示行角标；金额行、划线价与文字提示照计价结果显示。
+  it.each([
+    ["loading", "loading"],
+    ["no sale", NO_SALE],
+    ["no provider", null],
+    ["another sale", sale({ promotion_id: 8 })],
+  ] as const)("draws no bar or badges with %s in the shared reading", (_, shared) => {
+    const html = renderSale({ shared });
+    expect(html).not.toContain(PROGRESS);
+    expect(html).not.toContain("acs-promo-badges");
+    expect(amountRows(aside(html))).toContainEqual([COPY["cart.after_promo"].en, "RM 150.60"]);
+    expect(hintTexts(aside(html))[0]).toBe(copy("cart.hint_tier_amount", "en", { amount: "134.40", save: "40.00" }));
+    expect(html).toContain("RM 62.40");
+  });
+});
+
+describe("member note", () => {
+  // UX 0.20 P04「已登录会员且有活动优惠时显示 [cart.member_scheme_note]…；游客不显示」与线框（凑单提示之后、[cart.shipping_later] 之前）：
+  // 会员看到桌面与手机各一份；游客、尚未读完与读取失败时不显示；会员而活动优惠为 0 时也不显示。
+  it.each(LANGUAGES)("shows cart.member_scheme_note to members with a sale discount only in %s", (language) => {
+    const note = `<p class="acs-body-s">${escapeHtml(copy("cart.member_scheme_note", language))}</p>`;
+    const member = renderSale({ language, session: MEMBER });
+    expect(aside(member)).toContain(`</p></div>${note}<p class="acs-body-s acs-muted">${escapeHtml(copy("cart.shipping_later", language))}</p>`);
+    expect(phoneBlock(member)).toContain(note);
+    for (const session of [{ kind: "guest" }, { kind: "unknown" }, { kind: "failed" }] as const) {
+      expect(renderSale({ language, session })).not.toContain(note);
+    }
+    expect(renderSale({ language })).not.toContain(note);
+    expect(renderSale({ language, session: MEMBER, rows: PLAIN_ROWS, quote: promotionQuote({ item_discount_sen: 0, order_discount_sen: 0 }) })).not.toContain(note);
+  });
+});
+
+describe("re-quoting when the sale changes", () => {
+  // UX 0.20 P04「活动在本页停留期间结束时，倒计时到 0 后重新计价并去掉这些内容」：共享读取的 generation 变化时请求标识随之变化（即重新计价），
+  // 新结果返回前照现有写法显示上一份结果（pending、aria-busy）；新结果没有活动时去掉全部活动内容。
+  it("re-quotes on a new generation and drops the sale when the new quote has none", () => {
+    const lines = cartOf(SALE_ROWS);
+    expect(quoteKey("en", lines, 0)).toBe(quoteKey("en", lines));
+    expect(quoteKey("en", lines, 3)).not.toBe(quoteKey("en", lines, 2));
+    const before: CheckoutQuote = { lines: SALE_ROWS, subtotal_sen: 19900, ...WITHIN_LIMITS, promotion: promotionQuote() };
+    const settled = { key: quoteKey("en", lines, 2) ?? "", outcome: { status: "ready" as const, quote: before }, last: before };
+    const pending = quoteState(quoteKey("en", lines, 3), settled);
+    expect(pending).toEqual({ status: "ready", quote: before, pending: true });
+    const waiting = render({ lines, quote: pending, promotion: NO_SALE });
+    expect(waiting).toContain(`<main class="site-cart" aria-busy="true">`);
+    expect(waiting).toContain(COPY["cart.after_promo"].en);
+
+    const after: CheckoutQuote = { lines: PLAIN_ROWS, subtotal_sen: 19900, ...WITHIN_LIMITS };
+    const html = render({ lines, quote: quoteState(quoteKey("en", lines, 3), { key: quoteKey("en", lines, 3) ?? "", outcome: { status: "ready", quote: after }, last: after }), promotion: NO_SALE, session: MEMBER });
+    expect(html).not.toContain("acs-promo");
+    expect(html).not.toContain(COPY["cart.promo_discount"].en);
+    expect(html).not.toContain(COPY["cart.after_promo"].en);
+    expect(html).not.toContain(escapeHtml(COPY["cart.member_scheme_note"].en));
+    expect(amountRows(bottomBar(html))).toEqual([[COPY["cart.subtotal"].en, "RM 199.00"]]);
+  });
+});
+
 describe("dictionary", () => {
   // SHOP-TASK-018 验收第 6 条「页面文字全部来自字典」：除接口返回的商品数据（名称、规格值、不可购买行的 SKU）、件数与金额模板外，每段文字都是当前语言的某条字典文案。
   it.each(LANGUAGES)("shows only dictionary text besides product data in %s", (language) => {
@@ -610,6 +1058,21 @@ describe("dictionary", () => {
       }
     }
   });
+
+  // 同一条，延伸到 UX 0.20 P04 的活动内容：金额行、凑单提示、会员说明与读屏标签都是字典文案；活动的角标短语是接口给的活动数据。
+  it.each(LANGUAGES)("shows only dictionary text besides product and sale data with a sale in %s", (language) => {
+    const quote = promotionQuote({
+      free_shipping_reached: false,
+      free_shipping_gap_sen: 2500,
+      buy_x_get_y: [{ rule_id: 14, buy_quantity: 2, get_quantity: 1, get_percent: 100, units_in_scope: 1, units_to_next: 2 }],
+    });
+    const data = new Set(["Crew Neck Tee", "Pullover Hoodie", "Soy Wax Candle", "Black", "M", "Lunar deal"]);
+    const patterns = [BRAND, ...Object.values(COPY).map((entry) => entry[language])].map(copyPattern);
+    for (const value of visibleTexts(renderSale({ language, quote, session: MEMBER }))) {
+      const known = data.has(value) || /^\d+$/.test(value) || patterns.some((pattern) => pattern.test(value));
+      expect(known, value).toBe(true);
+    }
+  });
 });
 
 // 键名用于类型检查：本页用到的字典键都存在。
@@ -627,6 +1090,14 @@ const CART_KEYS: readonly CopyKey[] = [
   "cart.checkout",
   "cart.continue",
   "cart.demo_hint",
+  "cart.promo_discount",
+  "cart.after_promo",
+  "cart.hint_tier_amount",
+  "cart.hint_tier_percent",
+  "cart.hint_free_shipping",
+  "cart.free_shipping_reached",
+  "cart.hint_bxgy",
+  "cart.member_scheme_note",
   "common.nav_cart",
   "common.price_myr",
   "common.error_retry",

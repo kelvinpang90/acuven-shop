@@ -470,6 +470,46 @@ export const COPY = {
     zh: "购物车只保存在本浏览器，不会扣款。",
     ms: "Troli anda disimpan dalam pelayar ini sahaja. Tiada caj dikenakan.",
   },
+  "cart.promo_discount": {
+    en: "Sale discount (estimate)",
+    zh: "活动优惠（暂算）",
+    ms: "Diskaun jualan (anggaran)",
+  },
+  "cart.after_promo": {
+    en: "After sale discount (estimate)",
+    zh: "活动后金额（暂算）",
+    ms: "Selepas diskaun jualan (anggaran)",
+  },
+  "cart.hint_tier_amount": {
+    en: "Add RM {amount} more to save RM {save}.",
+    zh: "再买 RM {amount}，可减 RM {save}。",
+    ms: "Tambah RM {amount} lagi untuk jimat RM {save}.",
+  },
+  "cart.hint_tier_percent": {
+    en: "Add RM {amount} more to get {percent}% off.",
+    zh: "再买 RM {amount}，可减 {percent}%。",
+    ms: "Tambah RM {amount} lagi untuk diskaun {percent}%.",
+  },
+  "cart.hint_free_shipping": {
+    en: "Add RM {amount} more for free sample shipping.",
+    zh: "再买 RM {amount}，免示例运费。",
+    ms: "Tambah RM {amount} lagi untuk penghantaran contoh percuma.",
+  },
+  "cart.free_shipping_reached": {
+    en: "You've unlocked free sample shipping.",
+    zh: "已达免示例运费门槛。",
+    ms: "Anda layak untuk penghantaran contoh percuma.",
+  },
+  "cart.hint_bxgy": {
+    en: "{rule}: add {n} more to get {y} more at the offer price.",
+    zh: "{rule}：再加 {n} 件，可多享 {y} 件优惠。",
+    ms: "{rule}: tambah {n} lagi untuk {y} lagi item pada harga tawaran.",
+  },
+  "cart.member_scheme_note": {
+    en: "Members: if you use a coupon or points at checkout, we'll work out the order both with and without the sale and use whichever is better for you.",
+    zh: "会员：结账时若使用优惠券或积分，系统会分别按参加与不参加活动计算，取对你更划算的一种。",
+    ms: "Ahli: jika anda guna kupon atau mata semasa pembayaran, kami akan mengira pesanan dengan dan tanpa jualan dan menggunakan yang lebih jimat untuk anda.",
+  },
   "checkout.title": {
     en: "Checkout",
     zh: "结账",
