@@ -11,6 +11,7 @@ import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 // 订单号只在页面内存与写接口的请求体里；订单查询页 /track 的订单号与电话只在页面内存与查单请求体里，
 // 订单详情 /track/order 与退款申请 /track/order/refund 凭服务端查单授权读取订单，订单号只在页面内存与写接口的请求体里）。
 // 查询参数只用于商品列表的搜索、筛选、排序与页码（pages/productListQuery.ts），也不放语言。
+// 活动专题页 /sale 不带段值，也不用查询参数：商品区的页码只在页面状态里。
 // 以 /admin 开头的是后台页（后台登录 /admin/login 的用户名、密码与 CSRF 令牌只在页面内存与请求体或请求头里；
 // 后台订单 /admin/orders 由后台框架凭服务端会话打开，CSRF 令牌同样只在页面内存与退出请求头里；
 // 订单详情 /admin/orders/:id 的段值是订单的内部 ID，订单号、收货资料与推进用的 CSRF 令牌只在页面内存与请求里，
@@ -30,6 +31,7 @@ export const ROUTE_PATHS = [
   "/",
   "/products",
   "/products/:slug",
+  "/sale",
   "/cart",
   "/checkout",
   "/pay",

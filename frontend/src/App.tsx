@@ -31,6 +31,7 @@ import ProductDetailPage from "./pages/ProductDetailPage";
 import ProductListPage from "./pages/ProductListPage";
 import RefundPage, { MemberRefundPage } from "./pages/RefundPage";
 import RegisterPage from "./pages/RegisterPage";
+import SalePage from "./pages/SalePage";
 import TrackOrderPage, { MemberOrderPage } from "./pages/TrackOrderPage";
 import TrackPage from "./pages/TrackPage";
 import { PromotionProvider } from "./promotion";
@@ -43,6 +44,7 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   "/": HomePage,
   "/products": ProductListPage,
   "/products/:slug": ProductDetailPage,
+  "/sale": SalePage,
   "/cart": CartPage,
   "/checkout": CheckoutPage,
   "/pay": PayPage,

@@ -33,11 +33,16 @@ import { STORE_MODE, useStoreDesign } from "../storeDesign";
 interface NavItem {
   path: string;
   label: CopyKey;
+  // 活动入口：只在有活动时出现，文字前有读屏忽略的活动图案（P15-desktop）。
+  promo?: boolean;
 }
 
 // 页头导航（UX「全局框架」的顺序）；只渲染路由表里已有的项，尚未实现的页面一律不出现。
+// 活动入口 promo.nav 排在 common.nav_shop 之后、链到 P15（UX 0.20「1. 全局框架」「节日促销活动」，手机 ☰ 菜单同位置），
+// 只在 usePromotion 有活动时出现；没有活动时页头与 0.19 完全相同。
 const HEADER_NAV: readonly NavItem[] = [
   { path: "/products", label: "common.nav_shop" },
+  { path: "/sale", label: "promo.nav", promo: true },
   { path: "/track", label: "common.nav_track" },
 ];
 
@@ -53,15 +58,41 @@ const LANGUAGE_LABEL: Readonly<Record<Language, CopyKey>> = {
   ms: "common.lang_ms",
 };
 
-// member 为真时最后一项是会员中心，否则是登录；两者各自按路由表判断是否渲染。
-function availableNav(member: boolean): { path: RoutePath; label: CopyKey }[] {
-  const items: { path: RoutePath; label: CopyKey }[] = [];
+interface AvailableNavItem {
+  path: RoutePath;
+  label: CopyKey;
+  promo: boolean;
+}
+
+// member 为真时最后一项是会员中心，否则是登录；两者各自按路由表判断是否渲染。promo 为假（没有活动）时不放活动入口。
+function availableNav(member: boolean, promo: boolean): AvailableNavItem[] {
+  const items: AvailableNavItem[] = [];
   for (const item of [...HEADER_NAV, member ? ACCOUNT_NAV : LOGIN_NAV]) {
+    if (item.promo === true && !promo) {
+      continue;
+    }
     if (isRoutePath(item.path)) {
-      items.push({ path: item.path, label: item.label });
+      items.push({ path: item.path, label: item.label, promo: item.promo === true });
     }
   }
   return items;
+}
+
+// 导航项：活动入口带 site-header__promo 类，文字前是读屏忽略的活动图案；其余项只有文字。
+function NavLink({ item, onClick }: { item: AvailableNavItem; onClick?: () => void }) {
+  const t = useCopy();
+  const { path } = useRouter();
+  return (
+    <Link
+      to={item.path}
+      className={item.promo ? "site-header__promo" : undefined}
+      aria-current={item.path === path ? "page" : undefined}
+      onClick={onClick}
+    >
+      {item.promo && <span className="acs-promo-motif" aria-hidden="true" />}
+      {t(item.label)}
+    </Link>
+  );
 }
 
 // 购物车页的路径；进了路由表才渲染页头的购物车入口。
@@ -223,7 +254,8 @@ function SiteHeader({ brand }: { brand: StoreBrandProps }) {
   const languageId = useId();
   // 服务端渲染与首次水合时为读取对象当前的状态（页面加载时为 unknown，即登录），挂载后读取会话。
   const session = useMemberSession();
-  const nav = availableNav(session.kind === "member");
+  const { promotion } = usePromotion();
+  const nav = availableNav(session.kind === "member", promotion !== null);
   const cart = cartPath();
   const close = () => {
     setOpenPanel(null);
@@ -272,9 +304,7 @@ function SiteHeader({ brand }: { brand: StoreBrandProps }) {
         <div className="acs-header__row site-desktop-only">
           <nav className="acs-nav">
             {nav.map((item) => (
-              <Link key={item.path} to={item.path} aria-current={item.path === path ? "page" : undefined}>
-                {t(item.label)}
-              </Link>
+              <NavLink key={item.path} item={item} />
             ))}
           </nav>
           {cart && (
@@ -287,9 +317,7 @@ function SiteHeader({ brand }: { brand: StoreBrandProps }) {
       <div id={menuId} className="site-phone-only site-header__panel" hidden={openPanel !== "menu"}>
         <nav className="acs-nav site-header__stack">
           {nav.map((item) => (
-            <Link key={item.path} to={item.path} aria-current={item.path === path ? "page" : undefined} onClick={close}>
-              {t(item.label)}
-            </Link>
+            <NavLink key={item.path} item={item} onClick={close} />
           ))}
           <Link to="/privacy" aria-current={path === "/privacy" ? "page" : undefined} onClick={close}>
             {t("common.nav_privacy")}
