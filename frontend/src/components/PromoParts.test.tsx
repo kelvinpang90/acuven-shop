@@ -10,7 +10,7 @@ import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { PromotionProvider } from "../promotion";
 import { countdownText } from "../promoText";
 import { ROUTE_PATHS, RouterProvider } from "../router";
-import { PromoBadges, PromoPrices, PromoStrip, saleLinkPath, shownRule } from "./PromoParts";
+import { PromoBadges, PromoPrices, PromoRuleList, PromoStrip, saleLinkPath, shownRule } from "./PromoParts";
 
 function render(node: ReactNode, language: Language = "en"): string {
   const storage = {
@@ -65,6 +65,30 @@ describe("PromoPrices", () => {
     );
   });
 });
+
+describe("PromoRuleList", () => {
+  const lines = ["20% off", "Spend RM 150.00, save RM 15.00", "Free sample shipping on orders from RM 120.00"];
+
+  // UX 0.20 P03 线框「· <本商品适用的商品级规则说明>」「· <整单级规则说明>（满额减各档、免运费）」：说明行按传入的顺序列成 ul；可同用时没有说明。
+  it("lists the rule texts in the given order", () => {
+    const html = render(<PromoRuleList lines={lines} couponCombinable pointsCombinable />);
+    expect(html).toBe(`<ul><li>20% off</li><li>Spend RM 150.00, save RM 15.00</li><li>Free sample shipping on orders from RM 120.00</li></ul>`);
+  });
+
+  // UX 0.20 P03「活动关闭了与优惠券或积分同用时，分别显示 [promo.coupon_not_combinable]、[promo.points_not_combinable]」。
+  it.each(LANGUAGES)("adds the not-combinable notes after the list in %s", (language) => {
+    const coupon = `<p class="acs-body-s">${escapeHtml(COPY["promo.coupon_not_combinable"][language])}</p>`;
+    const points = `<p class="acs-body-s">${escapeHtml(COPY["promo.points_not_combinable"][language])}</p>`;
+    const list = `<ul><li>20% off</li></ul>`;
+    expect(render(<PromoRuleList lines={["20% off"]} couponCombinable={false} pointsCombinable={false} />, language)).toBe(`${list}${coupon}${points}`);
+    expect(render(<PromoRuleList lines={["20% off"]} couponCombinable={false} pointsCombinable />, language)).toBe(`${list}${coupon}`);
+    expect(render(<PromoRuleList lines={["20% off"]} couponCombinable pointsCombinable={false} />, language)).toBe(`${list}${points}`);
+  });
+});
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#x27;");
+}
 
 function rule(ruleId: number): RuleDisplay {
   return {

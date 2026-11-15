@@ -1,8 +1,10 @@
-import type { ProductDetail, VariantDetail } from "../api/catalog";
+import type { CardPromotion, ProductDetail, VariantDetail } from "../api/catalog";
+import type { PromotionDisplay } from "../api/promotion";
 import { MAX_CART_UNITS, cartItemCount, isCartFullFor, parseQuantityInput, productQuantity } from "../cart";
 import type { CartLine } from "../cart";
-import type { CopyKey, CopyVars } from "../i18n/copy";
+import type { CopyKey, CopyVars, Language } from "../i18n/copy";
 import { formatSen } from "../format";
+import { KIND_FREE_SHIPPING, KIND_ITEM_DISCOUNT, KIND_SPEND_DISCOUNT, ruleTexts } from "../promoText";
 
 // 商品详情 P03 的规格选择、价格文案与加入购物车的判断（纯函数，页面与测试共用）。
 // 金额只取服务端给的整数仙并格式化，不在浏览器计算。
@@ -69,6 +71,60 @@ export function detailPriceCopy(product: Product, variant: VariantDetail | null)
   }
   const lowest = Math.min(...product.variants.map((item) => item.price_sen));
   return [product.variants.length > 1 ? "list.price_from" : "common.price_myr", { amount: formatSen(lowest) }];
+}
+
+// 价格飘带里的划线原价与活动价文案。
+export interface SalePriceCopy {
+  original: [CopyKey, CopyVars];
+  sale: [CopyKey, CopyVars];
+}
+
+// 命中打折规则时的划线原价与活动价（UX 0.20 P03，HANDOFF 0.97）；rule 为正在显示的活动里的命中规则（PromoParts 的 shownRule）。
+// 选全后为所选 SKU 的 price_sen 与 sale_price_sen，都按 common.price_myr；选全前划线价为启用 SKU 的最低单价（不加「起」），
+// 活动价为启用 SKU 中 sale_price_sen 的最小值，多于一个启用 SKU 时 list.price_from（与商品卡同理）。
+// 没有命中打折规则或接口没给活动单价时为 null，价格照 detailPriceCopy 显示。
+export function detailSalePriceCopy(
+  product: Product,
+  variant: VariantDetail | null,
+  rule: Pick<CardPromotion, "kind"> | null,
+): SalePriceCopy | null {
+  if (rule?.kind !== KIND_ITEM_DISCOUNT) {
+    return null;
+  }
+  if (variant) {
+    if (variant.sale_price_sen === null) {
+      return null;
+    }
+    return {
+      original: ["common.price_myr", { amount: formatSen(variant.price_sen) }],
+      sale: ["common.price_myr", { amount: formatSen(variant.sale_price_sen) }],
+    };
+  }
+  const salePrices = product.variants.flatMap((item) => (item.sale_price_sen === null ? [] : [item.sale_price_sen]));
+  if (salePrices.length === 0) {
+    return null;
+  }
+  const lowest = Math.min(...product.variants.map((item) => item.price_sen));
+  return {
+    original: ["common.price_myr", { amount: formatSen(lowest) }],
+    sale: [product.variants.length > 1 ? "list.price_from" : "common.price_myr", { amount: formatSen(Math.min(...salePrices)) }],
+  };
+}
+
+const ORDER_LEVEL_KINDS: readonly string[] = [KIND_SPEND_DISCOUNT, KIND_FREE_SHIPPING];
+
+// 活动规则区的说明行（UX 0.20 P03）：先列本商品命中的商品级规则（只在它属于正在显示的活动时），
+// 再按 position 列满额减或满额折的各档与免运费（promoText.ts 的 ruleTexts，不附范围）。没有活动时为空列表。
+export function detailRuleLines(language: Language, promotion: PromotionDisplay | null, rule: Pick<CardPromotion, "rule_id"> | null): string[] {
+  if (promotion === null) {
+    return [];
+  }
+  const hit =
+    rule === null ? undefined : promotion.rules.find((item) => item.rule_id === rule.rule_id && !ORDER_LEVEL_KINDS.includes(item.kind));
+  const orderLevel = promotion.rules
+    .filter((item) => ORDER_LEVEL_KINDS.includes(item.kind))
+    .sort((a, b) => a.position - b.position);
+  return [...(hit === undefined ? [] : ruleTexts(language, hit)), ...orderLevel.flatMap((item) => ruleTexts(language, item))];
 }
 
 // 加入购物车按钮的状态。
