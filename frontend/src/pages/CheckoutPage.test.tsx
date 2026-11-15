@@ -89,6 +89,8 @@ function priced(sku: string, overrides: Partial<PricedQuoteLine> = {}): PricedQu
     image: null,
     unit_price_sen: 3900,
     line_subtotal_sen: 3900,
+    promotion_rule_id: null,
+    promotion_item_discount_sen: 0,
     ...overrides,
   };
 }
@@ -111,6 +113,7 @@ function quoteOf(overrides: Partial<DestinationQuote> = {}): DestinationQuote {
     units_over_limit: false,
     amount_limit_sen: 99999999,
     amount_over_limit: false,
+    promotion: null,
     shipping: null,
     total_sen: null,
     fx_reference: null,

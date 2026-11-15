@@ -39,9 +39,47 @@ export interface PricedQuoteLine {
   // MYR 整数仙。
   unit_price_sen: number;
   line_subtotal_sen: number;
+  // 有活动时正常行命中的商品级规则 ID 与该行各件商品级折扣之和（MYR 整数仙）；其他行与没有活动时为 null 与 0。
+  promotion_rule_id: number | null;
+  promotion_item_discount_sen: number;
 }
 
 export type QuoteLine = UnavailableQuoteLine | PricedQuoteLine;
+
+// 节日促销活动的计价结果（DESIGN 1.23「节日促销活动」第 4、10 条，app/services/checkout.py，SHOP-TASK-234）。
+// 一条买 X 享 Y 规则：参数、范围内的正常件数 n 与再加几件可多享 Y 件。
+export interface BuyXGetYQuote {
+  rule_id: number;
+  buy_quantity: number;
+  get_quantity: number;
+  get_percent: number;
+  units_in_scope: number;
+  units_to_next: number;
+}
+
+// 活动对正常行的计价结果；两个门槛都按 S1（after_item_subtotal_sen）判断。金额为 MYR 整数仙，页面只格式化。
+// spend_next_threshold_sen 与 spend_next_value 为下一档的门槛与优惠（固定金额为仙、百分比为整数），已到最高档或没有满额规则时为 null；
+// 没有运费报价时 shipping_waived_sen 与 participates 为 null。
+export interface PromotionQuote {
+  promotion_id: number;
+  item_discount_sen: number;
+  order_discount_sen: number;
+  after_item_subtotal_sen: number;
+  // 满额规则的方式（amount 或 percent），没有满额规则为 null。
+  spend_mode: string | null;
+  spend_tier_reached: number | null;
+  spend_next_threshold_sen: number | null;
+  spend_next_value: number | null;
+  spend_next_gap_sen: number | null;
+  // 免运费门槛，没有免运费规则为 null。
+  free_shipping_threshold_sen: number | null;
+  free_shipping_reached: boolean;
+  free_shipping_gap_sen: number | null;
+  shipping_waived_sen: number | null;
+  participates: boolean | null;
+  // 按 rule_id 升序。
+  buy_x_get_y: BuyXGetYQuote[];
+}
 
 // 不给收货国家时 shipping、total_sen、fx_reference 都为 null，can_place_order 为 false；购物车页不用这几项。
 export interface CheckoutQuote {
@@ -54,6 +92,8 @@ export interface CheckoutQuote {
   // 整单金额上限（MYR 整数仙，恒为 99999999）；商品小计加运费（没给收货国家时只看小计）大于它时 amount_over_limit 为真。
   amount_limit_sen: number;
   amount_over_limit: boolean;
+  // 有生效活动时总是给出（没有正常行时各金额为 0、差额为门槛本身），否则为 null。
+  promotion: PromotionQuote | null;
 }
 
 // 示例运费（MYR 整数仙）与所用运费区。

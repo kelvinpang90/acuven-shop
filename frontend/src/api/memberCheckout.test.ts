@@ -68,6 +68,8 @@ const QUOTE: MemberQuote = {
       image: null,
       unit_price_sen: 3900,
       line_subtotal_sen: 7800,
+      promotion_rule_id: null,
+      promotion_item_discount_sen: 0,
     },
   ],
   subtotal_sen: 7800,
@@ -79,6 +81,7 @@ const QUOTE: MemberQuote = {
   units_over_limit: false,
   amount_limit_sen: 99999999,
   amount_over_limit: false,
+  promotion: null,
   coupon_applied: true,
   coupon_discount_sen: 300,
   points_available: 1200,
@@ -86,6 +89,11 @@ const QUOTE: MemberQuote = {
   points_accepted: true,
   points_redeemed: 500,
   points_earned: 70,
+  promotion_plan: null,
+  promotion_pre_points_total_sen: null,
+  other_pre_points_total_sen: null,
+  coupon_note: null,
+  points_not_combinable: false,
 };
 
 function json(status: number, body: unknown): Response {
@@ -176,6 +184,52 @@ describe("member quote", () => {
     expect(headersOf(fetchMock)).toEqual({ Accept: "application/json", "Content-Type": "application/json" });
     expect(bodyOf(fetchMock)).toEqual(memberQuoteBody(cart, { country_code: "GB", state_code: null }, COUPON, 500));
     expect(urlOf(fetchMock)).not.toContain(COUPON);
+  });
+
+  // DESIGN 1.23「节日促销活动」第 10 条「计价接口另返回 S1、满额减的当前档与下一档还差的金额、免运费还差的金额、每条买 X 享 Y 规则范围内的件数 n
+  // 与再加几件可多享 Y 件（(X + Y) − n mod (X + Y)），以及第 6 条的方案（没有运费报价时方案字段为空，第 4 条）」：
+  // 带活动字段与方案字段的结果（含 buy_x_get_y 列表与可空字段为 null）原样交给页面，请求体不变。
+  it("passes the promotion and plan fields through as returned", async () => {
+    const line = QUOTE.lines[0];
+    if (line === undefined || line.status === "unavailable") {
+      throw new Error("QUOTE needs a priced line");
+    }
+    const withPromotion: MemberQuote = {
+      ...QUOTE,
+      lines: [{ ...line, promotion_rule_id: 7, promotion_item_discount_sen: 1950 }],
+      total_sen: 5850,
+      promotion: {
+        promotion_id: 3,
+        item_discount_sen: 1950,
+        order_discount_sen: 0,
+        after_item_subtotal_sen: 5850,
+        spend_mode: null,
+        spend_tier_reached: null,
+        spend_next_threshold_sen: null,
+        spend_next_value: null,
+        spend_next_gap_sen: null,
+        free_shipping_threshold_sen: 5000,
+        free_shipping_reached: true,
+        free_shipping_gap_sen: 0,
+        shipping_waived_sen: 1500,
+        participates: true,
+        buy_x_get_y: [{ rule_id: 7, buy_quantity: 1, get_quantity: 1, get_percent: 50, units_in_scope: 2, units_to_next: 2 }],
+      },
+      coupon_applied: false,
+      coupon_discount_sen: 0,
+      points_max: 0,
+      points_accepted: false,
+      points_redeemed: 0,
+      points_earned: 58,
+      promotion_plan: "promotion",
+      promotion_pre_points_total_sen: 5850,
+      other_pre_points_total_sen: 9000,
+      coupon_note: "below_min_after_sale",
+      points_not_combinable: true,
+    };
+    const fetchMock = stubFetch(json(200, withPromotion));
+    await expect(fetchMemberQuote("en", cart, { country_code: "MY", state_code: "MY-10" }, COUPON, 500)).resolves.toEqual({ kind: "ok", quote: withPromotion });
+    expect(bodyOf(fetchMock)).toEqual(memberQuoteBody(cart, { country_code: "MY", state_code: "MY-10" }, COUPON, 500));
   });
 
   // 同一条「结果归为 ok、signed_out、failed（其他，含 413、415、422、429 与 503）与 network」，401 为 member_session_required。
