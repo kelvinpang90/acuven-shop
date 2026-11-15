@@ -6833,7 +6833,7 @@ tasks:
       运营者落实写法（HANDOFF 0.97）：活动内容只取 usePromotion 的数据。海报在模板模式按 home_poster（split 或 centered）排版，标题、副标题（为空时整行不显示）、PromotionCountdown 与 promo.shop_now 按钮（链到 /sale）。P15 路由在 SHOP-TASK-257 才加入路由表，所以 PromoParts.tsx 导出 saleLinkPath()：/sale 在 ROUTE_PATHS 里时返回它，否则返回 null；为 null 时按钮不渲染、整图不做成链接（a.acs-promo-poster-img 换成同类名的 div），257 合并后自动出现；本任务与 256 的测试按 saleLinkPath() 的返回值断言有无链接，不写死，257 加路由后不必改这些测试。上传图模式用 picture 元素，桌面图与手机图以 767px 的媒体条件切换（桌面 3:1、手机 4:5 的框居中裁切，object-fit 为 cover），alt 为 poster_alt。横条按 list_strip（band 或 ticket），文字为 strip、为空时用 title，末尾为倒计时与 promo.view_all（saleLinkPath() 为 null 时不渲染）；横条组件以参数接收显示的文字与是否显示 view_all（P15 传活动标题、不显示 view_all）。
       设计闸门：不适用（只显示公开接口的活动文案、图片与倒计时，不计算金额，不碰个人资料）。
       拆分：P01 与 P02 的活动内容一层（11 个允许路径：两个页面与组件各带测试，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入），依赖 SHOP-TASK-254。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-254
     acceptance_criteria:
