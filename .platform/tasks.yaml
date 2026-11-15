@@ -6867,7 +6867,7 @@ tasks:
       运营者落实写法（HANDOFF 0.97）：活动内容只在 usePromotion 有活动、且商品的 promotion.rule_id 在该活动的 rules 里时显示（规则区的整单级部分只要有活动就显示）。价格飘带按 detail_ribbon（ribbon 或 panel）：命中打折规则且选全规格时划线价为所选 SKU 的 price_sen、活动价为它的 sale_price_sen（都按 common.price_myr）；选全之前划线价为启用 SKU 的最低单价（不加「起」），活动价为启用 SKU 中 sale_price_sen 的最小值，多于一个启用 SKU 时加「起」（list.price_from），与商品卡同理；命中买 X 享 Y 时同样以 detail_ribbon 包裹，__prices 里是现有的价格文字（不划线），__meta 里是角标；角标复用 SHOP-TASK-254 的 PromoBadges。活动规则区 .acs-promo-rules 在 ★ 提示之后：标题为 promo.detail_title 加活动标题，先列本商品命中规则的说明，再按 position 列满额与免运费的说明（SHOP-TASK-252 的 ruleTexts，不附范围），coupon_combinable、points_combinable 为假时分别显示 promo.coupon_not_combinable、promo.points_not_combinable，最后是 PromotionCountdown 与 promo.view_all（SHOP-TASK-255 的 saleLinkPath() 为 null 时不渲染，测试按它的返回值断言）；两类规则都没有时整区不显示。价格与规则的选用写成导出的纯函数，放在 frontend/src/pages/productOptions.ts。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 3、10 条：只显示目录接口给的价格与公开接口的规则参数，不计算金额，不碰个人资料。
       拆分：P03 的活动内容一层（11 个允许路径：页面、价格函数与组件各带测试，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入），依赖 SHOP-TASK-255（promo.view_all、saleLinkPath，同改 PromoParts.tsx）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-255
     acceptance_criteria:
