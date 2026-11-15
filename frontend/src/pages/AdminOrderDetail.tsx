@@ -4,6 +4,7 @@ import { advanceAdminOrder, readAdminOrder } from "../api/adminOrders";
 import type { ActorType, AdminOrderDetail, AdminOrderEvent, AdminOrderLine, AdvanceTarget, DetailRead, OrderStatus } from "../api/adminOrders";
 import type { PayRecipient } from "../api/pay";
 import { AdminAlert } from "../components/AdminFrame";
+import { formatSen } from "../format";
 import type { CopyKey, Language } from "../i18n/copy";
 import { useCopy, useLanguage } from "../i18n/language";
 import { ADMIN_LOGIN_PATH, ADMIN_ORDERS_PATH, Link, useRouter } from "../router";
@@ -212,20 +213,27 @@ function ItemRow({ line }: { line: AdminOrderLine }) {
 }
 
 // 金额明细：商品小计、券折扣、积分抵扣、示例运费与合计（接口给的整数仙快照，只格式化）。
+// 活动优惠快照大于 0 时紧接小计另有 checkout.summary_promo（不加负号）；免去的运费大于 0 时运费行的金额为
+// checkout.shipping_free（amount 为免去的运费）（UX 0.20 A02 M1，DESIGN 1.23「节日促销活动」第 7 条）。只显示快照，不计算。
 function AmountRows({ order }: { order: AdminOrderDetail }) {
   const t = useCopy();
   const price = usePrice();
-  const rows: readonly [CopyKey, number][] = [
-    ["cart.subtotal", order.subtotal_sen],
-    ["checkout.summary_coupon", order.coupon_discount_sen],
-    ["checkout.summary_points", order.points_discount_sen],
-    ["checkout.summary_shipping", order.shipping_fee_sen],
-    ["checkout.summary_total", order.total_sen],
+  const promo: readonly [CopyKey, string][] = order.promotion_discount_sen > 0 ? [["checkout.summary_promo", price(order.promotion_discount_sen)]] : [];
+  const rows: readonly [CopyKey, string][] = [
+    ["cart.subtotal", price(order.subtotal_sen)],
+    ...promo,
+    ["checkout.summary_coupon", price(order.coupon_discount_sen)],
+    ["checkout.summary_points", price(order.points_discount_sen)],
+    [
+      "checkout.summary_shipping",
+      order.shipping_waived_sen > 0 ? t("checkout.shipping_free", { amount: formatSen(order.shipping_waived_sen) }) : price(order.shipping_fee_sen),
+    ],
+    ["checkout.summary_total", price(order.total_sen)],
   ];
-  return rows.map(([label, sen]) => (
+  return rows.map(([label, amount]) => (
     <div key={label} className={label === "checkout.summary_total" ? "site-admin-order__row site-admin-order__total" : "site-admin-order__row"}>
       <span>{t(label)}</span>
-      <span>{price(sen)}</span>
+      <span>{amount}</span>
     </div>
   ));
 }
@@ -323,6 +331,7 @@ function OrderDetail({ order, busy, notice, states, onMark }: ReadyProps) {
           <ItemRow key={index} line={line} />
         ))}
       </div>
+      {order.promotion_name !== null && <div>{t("admin.order_promotion", { name: order.promotion_name })}</div>}
       <div className="site-admin-order__block site-admin-order__desktop">
         <span className="acs-admin__muted">{t("order.amount_breakdown")}</span>
         <AmountRows order={order} />

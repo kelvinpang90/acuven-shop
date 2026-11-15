@@ -433,6 +433,43 @@ describe("content", () => {
     expect(tags(ready, "button").filter((tag) => attributes(tag).has("aria-pressed"))).toHaveLength(4);
   });
 
+  // UX 0.20 A08「节日促销活动」「页内显示 [admin.design_promo_note]」：取得设置后，表单区（site-admin-store-design__body）的第一项为这句说明
+  // （沿用演示说明的 p 与 class），其后紧接表单；标题与 admin.design_demo_note 照旧在表单区之前，演示说明仍是页面上第一个说明。
+  it.each(LANGUAGES)("opens the form area with the promotion note in %s", (language) => {
+    const html = render(readyState(), language);
+    const body = element(html, "div", "site-admin-store-design__body");
+    const note = `<p class="site-admin-store-design__note">${escapeHtml(COPY["admin.design_promo_note"][language])}</p>`;
+    expect(body.startsWith(`<div class="site-admin-store-design__body" aria-busy="false">${note}<form`)).toBe(true);
+    expect(body.split(note)).toHaveLength(2);
+    expect(element(html, "p", "site-admin-store-design__note")).toBe(
+      `<p class="site-admin-store-design__note">${escapeHtml(COPY["admin.design_demo_note"][language])}</p>`,
+    );
+    expect(html.indexOf(escapeHtml(COPY["admin.design_demo_note"][language]))).toBeLessThan(html.indexOf(note));
+  });
+
+  // UX 0.20 A08「页内显示 [admin.design_promo_note]」只在取得设置后的表单区：读取中（表单区为空并标 aria-busy）与读取失败（只有提示）都不显示这句。
+  it.each(LANGUAGES)("leaves the promotion note out while reading and after a read failure in %s", (language) => {
+    const text = escapeHtml(COPY["admin.design_promo_note"][language]);
+    expect(render(LOADING, language)).not.toContain(text);
+    expect(renderSignedIn(language)).not.toContain(text);
+    for (const key of ["common.network_check", "common.error_retry"] as const) {
+      expect(render({ status: "failed", error: key }, language)).not.toContain(text);
+    }
+  });
+
+  // UX 0.20 A08「本页预览不显示活动装饰，活动效果在 A12 的前台预览里看」：桌面预览栏与手机预览里都没有这句说明，缩样与没有这句时逐字相同。
+  it.each(LANGUAGES)("keeps the promotion out of both previews in %s", (language) => {
+    const html = render(readyState(), language);
+    const text = escapeHtml(COPY["admin.design_promo_note"][language]);
+    const desktop = element(html, "aside", "site-admin-store-design__aside");
+    const phone = element(html, "details", "site-admin-store-design__details");
+    expect(desktop).not.toContain(text);
+    expect(phone).not.toContain(text);
+    const props = { form: formOf(DETAIL), choices: DETAIL.choices, mode: "light" as const, onMode: noop, logo: DETAIL.logo, broken: false, onBroken: noop };
+    expect(desktop).toBe(renderToStaticMarkup(wrap(<PreviewAside {...props} />, language)));
+    expect(phone).toBe(renderToStaticMarkup(wrap(<PreviewDetails {...props} />, language)));
+  });
+
   // SHOP-TASK-064 验收第 4 条「经 SHOP-TASK-063 的请求模块」与第 7 条「不改 frontend/src/api/adminStoreDesign.ts」：本页只经
   // api/adminStoreDesign 读取与保存，不引入其他接口模块，也不直接调用 fetch。
   // SHOP-TASK-064 改动：原「makes no requests of its own」（SHOP-TASK-062 守住「页面不发起自己的请求（表单由 SHOP-TASK-064 接上）」）

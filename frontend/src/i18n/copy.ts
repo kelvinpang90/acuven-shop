@@ -2560,6 +2560,11 @@ export const COPY = {
     zh: "订单详情",
     ms: "Butiran pesanan",
   },
+  "admin.order_promotion": {
+    en: "Promotion: {name}",
+    zh: "活动：{name}",
+    ms: "Promosi: {name}",
+  },
   "admin.event_log": {
     en: "Event log",
     zh: "事件记录",
@@ -2729,6 +2734,11 @@ export const COPY = {
     en: "The demo banner and demo hints always show on the storefront and can't be turned off here.",
     zh: "前台的演示横幅与演示提示始终显示，这里不能关闭。",
     ms: "Sepanduk demo dan petunjuk demo sentiasa dipaparkan di kedai dan tidak boleh dimatikan di sini.",
+  },
+  "admin.design_promo_note": {
+    en: "While a promotion is running, its decoration is shown on top of these settings and may switch to festive colours. These settings don't change, and the storefront returns to them when it ends.",
+    zh: "活动进行期间，前台在本页设置之上叠加活动装饰，可能临时换为节日配色；本页设置不变，活动结束即恢复。",
+    ms: "Semasa promosi berjalan, hiasannya dipaparkan di atas tetapan ini dan mungkin bertukar kepada warna perayaan. Tetapan ini tidak berubah, dan kedai kembali kepadanya apabila promosi tamat.",
   },
   "admin.theme": {
     en: "Theme",

@@ -180,6 +180,8 @@ export interface AdminOrderEvent {
 
 // 订单详情：只取 SHOP-TASK-037 记录段列出的字段。recipient 为收货资料原文（没有记录时为 null）；
 // fully_refunded 为全部已退（冻结履约）；csrf_token 只用于推进的请求头。
+// SHOP-TASK-238 的活动快照：promotion_discount_sen 为活动优惠合计、shipping_waived_sen 为免去的运费（整数仙），
+// promotion_name 为订单所记活动的内部名称（没有活动时为 null）。
 export interface AdminOrderDetail {
   id: number;
   order_number: string;
@@ -192,6 +194,9 @@ export interface AdminOrderDetail {
   points_discount_sen: number;
   shipping_fee_sen: number;
   total_sen: number;
+  promotion_discount_sen: number;
+  shipping_waived_sen: number;
+  promotion_name: string | null;
   recipient: PayRecipient | null;
   events: AdminOrderEvent[];
   refunds_pending: number;
@@ -286,8 +291,11 @@ function readDetail(value: unknown): AdminOrderDetail | null {
   const body = value as Record<string, unknown>;
   const { id, order_number, status, created_at, subtotal_sen, coupon_discount_sen, points_discount_sen } = body;
   const { shipping_fee_sen, total_sen, recipient, refunds_pending, fully_refunded, csrf_token } = body;
+  const { promotion_discount_sen, shipping_waived_sen } = body;
   // 未支付时 paid_at 为 null；不为 null 时须是能解析的时间（undefined 即不合格）。
   const paid_at = body.paid_at === null || isTime(body.paid_at) ? body.paid_at : undefined;
+  // 没有活动时 promotion_name 为 null；否则须是字符串（undefined 即不合格）。
+  const promotion_name = body.promotion_name === null || typeof body.promotion_name === "string" ? body.promotion_name : undefined;
   const lines = readEach(body.lines, readLine);
   const events = readEach(body.events, readEvent);
   const shipTo = recipient === null ? null : readRecipient(recipient);
@@ -303,6 +311,9 @@ function readDetail(value: unknown): AdminOrderDetail | null {
     !isCount(points_discount_sen) ||
     !isCount(shipping_fee_sen) ||
     !isCount(total_sen) ||
+    !isCount(promotion_discount_sen) ||
+    !isCount(shipping_waived_sen) ||
+    promotion_name === undefined ||
     (recipient !== null && shipTo === null) ||
     events === null ||
     !isCount(refunds_pending) ||
@@ -323,6 +334,9 @@ function readDetail(value: unknown): AdminOrderDetail | null {
     points_discount_sen,
     shipping_fee_sen,
     total_sen,
+    promotion_discount_sen,
+    shipping_waived_sen,
+    promotion_name,
     recipient: shipTo,
     events,
     refunds_pending,

@@ -51,6 +51,10 @@ const ORDER: AdminOrderDetail = {
   points_discount_sen: 500,
   shipping_fee_sen: 800,
   total_sen: 10300,
+  // SHOP-TASK-261 改动：类型加了活动快照的三个字段；这份订单没有活动（0、0 与 null），所以其余断言不变。
+  promotion_discount_sen: 0,
+  shipping_waived_sen: 0,
+  promotion_name: null,
   recipient: {
     name: "Aina Rahman",
     phone: "+60 12-345 6789",
@@ -362,6 +366,115 @@ describe("order detail", () => {
     expect(html).toContain(COPY["admin.order_detail"].zh);
     expect(html).toContain(COPY["admin.mark_packed"].zh);
     expect(html).not.toContain(COPY["admin.mark_packed"].en);
+  });
+});
+
+describe("promotion", () => {
+  // 第 8 条首例的活动快照（tests/test_order_promotion_display.py）：活动优惠 2400、免去运费 800、实际运费 0。
+  const PROMO_NAME = "Raya 2026 (internal)";
+  const SALE: AdminOrderDetail = {
+    ...ORDER,
+    subtotal_sen: 11000,
+    promotion_discount_sen: 2400,
+    shipping_fee_sen: 0,
+    shipping_waived_sen: 800,
+    total_sen: 7100,
+    promotion_name: PROMO_NAME,
+  };
+
+  function free(sen: number, language: Language): string {
+    return translate(language, "checkout.shipping_free", { amount: formatSen(sen) });
+  }
+
+  // 金额明细的桌面区块与手机折叠里的各行。
+  function amountBlocks(html: string): [string[], string[]] {
+    return [sectionLabels(elements(html, "div", "site-admin-order__desktop")[0] ?? ""), sectionLabels(all(html, "details")[0] ?? "")];
+  }
+
+  function occurrences(html: string, text: string): number {
+    return html.split(text).length - 1;
+  }
+
+  // UX 0.20 A02 M1「订单记有活动时显示 [admin.order_promotion]（活动的内部名称）」：promotion_name 不为 null 时，商品之后、金额明细之前单独一行
+  // admin.order_promotion（{name} 为内部名称）；桌面与手机共用这一行，整页只出现一次，不在金额明细的区块或折叠里。
+  it.each(LANGUAGES)("shows the promotion name once before the amount details in %s", (language) => {
+    const html = render({ state: shown(SALE) }, language);
+    const line = `<div>${escapeHtml(translate(language, "admin.order_promotion", { name: PROMO_NAME }))}</div>`;
+    expect(occurrences(html, escapeHtml(PROMO_NAME))).toBe(1);
+    const items = element(html, "div", "site-admin-order__items");
+    const desktop = elements(html, "div", "site-admin-order__desktop")[0] ?? "";
+    expect(html.indexOf(line)).toBe(html.indexOf(items) + items.length);
+    expect(html.indexOf(desktop)).toBe(html.indexOf(line) + line.length);
+    expect(desktop).not.toContain(escapeHtml(PROMO_NAME));
+    expect(all(html, "details")[0] ?? "").not.toContain(escapeHtml(PROMO_NAME));
+  });
+
+  // UX 0.20 A02 M1「活动优惠合计大于 0 时金额明细在商品小计之后加 [checkout.summary_promo] 一行，活动免运费时运费行显示 [checkout.shipping_free]」：
+  // 桌面区块与手机折叠都依次为小计、活动优惠、券、积分、免运费（amount 为免去的运费）与合计；手机折叠标题行右端仍为合计。
+  it.each(LANGUAGES)("adds the sale discount row and the free shipping amount in %s", (language) => {
+    const html = render({ state: shown(SALE) }, language);
+    const expected = [
+      `${COPY["cart.subtotal"][language]} ${price(11000, language)}`,
+      `${COPY["checkout.summary_promo"][language]} ${price(2400, language)}`,
+      `${COPY["checkout.summary_coupon"][language]} ${price(1000, language)}`,
+      `${COPY["checkout.summary_points"][language]} ${price(500, language)}`,
+      `${COPY["checkout.summary_shipping"][language]} ${free(800, language)}`,
+      `${COPY["checkout.summary_total"][language]} ${price(7100, language)}`,
+    ];
+    expect(amountBlocks(html)).toEqual([expected, expected]);
+    expect(textNodes(all(all(html, "details")[0] ?? "", "summary")[0] ?? "")).toEqual([COPY["order.amount_breakdown"][language], price(7100, language)]);
+    expect(free(800, "en")).toBe("Free (was RM 8.00)");
+  });
+
+  // UX 0.20 A02 M1 三句各自成立（「订单记有活动时」「活动优惠合计大于 0 时」「活动免运费时」）：只有免运费时不加活动优惠一行、运费行为免运费；
+  // 只有活动优惠时运费行照常；记有活动而两项都为 0 时只有名称一行，金额明细与没有活动时相同；没有活动时没有名称一行。
+  it.each(LANGUAGES)("shows each promotion part on its own in %s", (language) => {
+    const plain = amountBlocks(render({}, language))[0];
+    const waivedOnly = amountBlocks(render({ state: shown({ ...SALE, promotion_discount_sen: 0 }) }, language))[0];
+    expect(waivedOnly).not.toContain(`${COPY["checkout.summary_promo"][language]} ${price(2400, language)}`);
+    expect(waivedOnly).toContain(`${COPY["checkout.summary_shipping"][language]} ${free(800, language)}`);
+    expect(waivedOnly).toHaveLength(5);
+    const discountOnly = amountBlocks(render({ state: shown({ ...SALE, shipping_waived_sen: 0, shipping_fee_sen: 800 }) }, language))[0];
+    expect(discountOnly[1]).toBe(`${COPY["checkout.summary_promo"][language]} ${price(2400, language)}`);
+    expect(discountOnly[4]).toBe(`${COPY["checkout.summary_shipping"][language]} ${price(800, language)}`);
+    const nameOnly = render({ state: shown({ ...ORDER, promotion_name: PROMO_NAME }) }, language);
+    expect(amountBlocks(nameOnly)[0]).toEqual(plain);
+    expect(nameOnly).toContain(escapeHtml(translate(language, "admin.order_promotion", { name: PROMO_NAME })));
+    const noName = render({ state: shown({ ...SALE, promotion_name: null }) }, language);
+    expect(noName).not.toContain(escapeHtml(PROMO_NAME));
+    expect(noName).not.toContain(escapeHtml(translate(language, "admin.order_promotion", { name: "" })));
+  });
+
+  // UX 0.20 A02 M1 的三项都没有（订单不记活动：0、0 与 null）时金额明细与 0.20 之前相同：与 0.10 A02 的五行、同一顺序，
+  // 商品之后紧接金额明细的桌面区块，整页没有 admin.order_promotion、checkout.summary_promo 与 checkout.shipping_free 的文字。
+  it.each(LANGUAGES)("stays as before when the order has no promotion in %s", (language) => {
+    const html = render({}, language);
+    const expected = (
+      [
+        ["cart.subtotal", 11000],
+        ["checkout.summary_coupon", 1000],
+        ["checkout.summary_points", 500],
+        ["checkout.summary_shipping", 800],
+        ["checkout.summary_total", 10300],
+      ] as const
+    ).map(([key, sen]) => `${COPY[key][language]} ${price(sen, language)}`);
+    expect(amountBlocks(html)).toEqual([expected, expected]);
+    const items = element(html, "div", "site-admin-order__items");
+    expect(html.indexOf(elements(html, "div", "site-admin-order__desktop")[0] ?? "")).toBe(html.indexOf(items) + items.length);
+    const prefix = translate(language, "admin.order_promotion", { name: "" }).trim();
+    expect(textNodes(html).some((text) => text.startsWith(prefix))).toBe(false);
+    expect(html).not.toContain(escapeHtml(COPY["checkout.summary_promo"][language]));
+    expect(html).not.toContain(escapeHtml(free(800, language)));
+  });
+
+  // UX 0.20 A02 M1「[admin.order_promotion]（活动的内部名称）」：名称是运营者填的数据，按纯文本显示——含标签与实体的名称被转义，不变成元素。
+  it.each(LANGUAGES)("shows the promotion name as plain text in %s", (language) => {
+    const name = `<b>Raya</b> & "Merdeka" <script>alert(1)</script>`;
+    const html = render({ state: shown({ ...SALE, promotion_name: name }) }, language);
+    expect(html).not.toContain("<b>");
+    expect(html).not.toContain("<script");
+    expect(html).toContain(`<div>${escapeHtml(translate(language, "admin.order_promotion", { name }))}</div>`);
+    expect(textNodes(html)).toContain(translate(language, "admin.order_promotion", { name }));
   });
 });
 
