@@ -37,3 +37,18 @@
       - 代码结构与测试——沿用 SHOP-TASK-203、204 的写法（新增、去掉、(✗) 是否禁用、按钮是否禁用与组成请求体写成导出的纯函数，View 只依赖 props）；传给事件属性的处理函数不返回 Promise；排版不在验收范围内，评审不以此要求修改；用 vitest 与 react-dom/server（不加测试依赖，以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）在 frontend/src/pages/AdminProductsPage.test.tsx 验证意图：20 个值与 50 个 SKU 时按钮禁用、没有规格名时不显示 admin.add_sku、下拉框的选项（空选项在前、含新增的值）、被选用的新增值的 (✗) 禁用而未选用的可去掉、未选值时先查拦下、请求体的顺序与 temp_id 引用（已有值用 id、新增值用 temp_id，临时编号不重复）、保存成功后新增行变为已有行、有新增行即算修改；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-205.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；含 (✗) 读屏标签沿用 admin.remove 的说明、偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：DESIGN 1.18 第 11 条，同上），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在 SHOP-TASK-204 的编辑区按 docs/UX.md 0.17 的 A04「规格」「SKU」两段，为已有商品加 admin.add_value 与 admin.add_sku：新增的规格值与 SKU 随 common.save 一次提交（SHOP-TASK-200 保存请求的新增形状），
+      依据 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 11 条（新增的规格值与 SKU 各带请求内的临时编号，按请求顺序排在已有的之后）。本任务不做新建商品、图片与当日库存调整。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.82）：新增规格值为一组三语名称（随内容语言显示该语言的输入框，读屏标签 admin.option_value），带 (✗)；新增 SKU 一行为每个规格名一个下拉框（读屏标签 admin.option_value；首项为值与文字都为空的空选项，默认选它；其余为该规格名下已有的与本次新增的值，文字按后台界面语言、缺译回退英文，都为空时为空文字）、admin.sku_code_on_save、价格与每日初始库存输入框（初值空串）、admin.sku_enabled 勾选框（默认勾选）、当日可用库存显示 —、(✗)；
+      (✗) 的读屏标签沿用 admin.remove（UX 没有为 A04 的 (✗) 另给读屏标签）；被本次新增的 SKU 选用的新增规格值的 (✗) 禁用；新增 SKU 任一规格名未选值时页面先查拦下、显示 admin.product_invalid；新增规格值的英文名称是否为空与重复、组合是否重复由服务端判断；
+      临时编号由页面按新增顺序生成、在一次请求里不重复（如规格值 v1、v2，SKU s1、s2），保存成功后以返回的商品为准（新增的变为已有的）。
+      设计闸门：DESIGN 1.18（提交 5ba9796）第 11 条与 HANDOFF 0.82，新增 SKU 的价格按文字换成整仙提交（取值核对、并发核对与审计在服务端）。
+      拆分：A04 的新增规格值与 SKU 一层（7 个允许路径，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
+```

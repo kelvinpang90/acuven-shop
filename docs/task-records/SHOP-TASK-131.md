@@ -36,3 +36,15 @@
       - docs/task-records/SHOP-TASK-131.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；批准后的调用、重试接口与错误码、审计、偏离、验证到什么程度，并写明 A03 页面留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；app/services/stripe_refund.py 只新增查询函数与审计常量，现有函数不改；不改 app/services/refund_review.py、app/services/admin_refunds.py、app/services/stripe_refund_overdue.py、app/jobs.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 8 条（提交后调用 Stripe 退款接口，以该记录的本站 ID 为幂等键；最新一次尝试为 failed 时管理员可手动重试，重试是新建一条尝试，受唯一约束，重复点击与并发只有一个成功，再以它的 ID 调用 Stripe；本站的批准结果不因 Stripe 退款失败而回滚）、
+      docs/HANDOFF.md 0.54 第（1）项（在批准请求里提交之后立即调用；在那之前及调用结果未知时由定时任务在下一轮发起）与 docs/UX.md 0.11 的 A03（重试成功后重新读取；被合计上限拒绝时提示），
+      在后台退款接口接入批准后的调用，并新增手动重试接口。不做前端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，退款。拆分：接口层（5 个允许路径）。
+```

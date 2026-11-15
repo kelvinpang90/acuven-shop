@@ -50,3 +50,19 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch、sessionStorage 与路由以替身代替）在 frontend/src/pages/CheckoutMember.test.tsx 与 frontend/src/pages/CheckoutPage.test.tsx 验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——打开时 member 直接到第 3 步、guest 与 failed 走游客第 1 步；会员第 3 步有可编辑电话与两句提示、没有游客专有的各键；预填（空栏才填、signed_out 回第 1 步且收货资料保留、failed 与 network 留空）；券（点按钮才带券、coupon_invalid 的显示）；积分（去掉非数字、超上限改成上限）；摘要五行的顺序与金额、游客仍不显示两行；下单的请求体（券与积分的取舍）与各回答的去向（placed 写入暂存后进入 /pay、coupon_invalid、points_unavailable、csrf、signed_out）；游客下单仍不写 sessionStorage；页面文字全部来自字典，带变量的条目按模板匹配；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）；CheckoutPage.test.tsx 游客路径的现有断言不变（含「keeps the phone and the shipping details in memory only」与游客不显示券与积分两行的几条），只在打开函数的参数变化时补替身并写明原因
       - docs/task-records/SHOP-TASK-159.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；打开与身份、预填、券与积分、摘要、下单去向、偏离（含已登录直接进入去掉已验证横幅、会话读取失败按游客、券与积分的取舍）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收，并写明第 2 步与已验证横幅留给 SHOP-TASK-160）；改动只落在 allowed_change_paths（不改 frontend/src/api/、SmsVerify.tsx 与 checkoutPhone.ts；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.14 提交 00f8f34 与 HANDOFF 0.63），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.13 的 P05（已登录会员跳过第 1、2 步，直接进入第 3 步会员表单；收货电话预填会员手机号、可改；优惠券与使用积分；摘要的券与积分两行）与 docs/DESIGN.md 1.14「权限与资料保护」第 1、2、7、8 条，
+      让 frontend/src/pages/CheckoutPage.tsx 读取会员会话（SHOP-TASK-151），已登录时以会员身份进入第 3 步，经 SHOP-TASK-157 计价、取本人号码与下单，下单成功后经 SHOP-TASK-158 写入当前订单暂存再进入 /pay。游客路径不变。
+      运营者落实写法（HANDOFF 0.63，Kelvin 2026-10-26 决定）：进入会员第 3 步时取本人完整号码预填，401 按会话失效处理，其他错误或网络中断时留空、不以遮掩号码预填；
+      积分只收 0 到本单 points_max 的整数，非数字去掉、超过上限改成上限，下单回 409 points_unavailable 时重新计价并显示 common.error_retry；点 checkout.coupon_apply 才带券重新计价，coupon_applied 为假时显示 checkout.coupon_invalid，下单回 409 coupon_invalid 时重新计价并显示 checkout.coupon_invalid；不改 UX-COPY；
+      已登录直接进入的第 3 步照 P05-desktop-3-member 与 P05-phone-3-member 去掉已验证横幅（横幅由 SHOP-TASK-160 加入）。
+      不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.14（提交 00f8f34）「权限与资料保护」第 1、2 条（已登录会员结账不再验证，收货电话默认会员手机号、可改、以收货国家补默认区号）、第 7 条（会员下单成功进入支付页时写入暂存）、第 8 条（取本人号码预填、失败时的表现、只在页面内存）、「计价、优惠、积分与库存」第 1 条与「失败、并发与重试」第 1 条（下单幂等）与 HANDOFF 0.63。
+      拆分：P05 会员第 3 步，9 个允许路径（会员表单的字段、摘要与纯函数放进新文件 CheckoutMember.tsx 以控制 CheckoutPage.tsx 体积）。
+```

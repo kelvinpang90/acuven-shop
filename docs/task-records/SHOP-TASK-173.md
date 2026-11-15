@@ -30,3 +30,16 @@
       - docs/task-records/SHOP-TASK-173.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；路由、导航变化、改动的现有测试、偏离、验证到什么程度；只写实际存在的测试，写明未做浏览器验收，请求模块与页面内容留给 SHOP-TASK-174 到 176）
       - 改动只落在 allowed_change_paths；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      为 A06 新建路由 /admin/shipping 与页面 frontend/src/pages/AdminShippingPage.tsx（用后台框架渲染，内容区只有标题），后台导航按 docs/UX.md「管理后台总体」的顺序在优惠券之后加入运费与演示汇率一项；
+      请求模块留给 SHOP-TASK-174，读取、显示与保存留给 SHOP-TASK-175，增删行留给 SHOP-TASK-176。不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只加路由、导航与标题，不碰金额与个人资料）。
+      拆分：A06 页面的框架层，照 A05 的 SHOP-TASK-100。15 个允许路径，超过拆分规则的 12 个：导航多一项后，7 个现有测试文件里按顺序列出导航项或路由表的断言必然失效
+      （运营者在登记时对 main 的导出做骨架实测，列出 22 条失败，全部在这 7 个文件里），只许改这些断言，与加导航的改动拆不开。
+```

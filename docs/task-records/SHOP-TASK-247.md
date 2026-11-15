@@ -55,3 +55,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_ai_hub.py 以替身 transport 覆盖：请求的地址、方法、两个请求头、请求体字段与 feature；200 的解析；超时、非 200、缺 usage、text 不是字符串时的异常；未配置时不调用 transport；repr 与异常信息里没有密钥；tests/test_compose_env.py 的现有核对（每个 Settings 字段都传给 api）因新字段需要的期望值照现有写法更新。每条测试的文档字符串写明它守住的第 13 条哪一句
       - docs/task-records/SHOP-TASK-247.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明五个变量名、类与异常名，并列出上线前 Kelvin 要在服务器私有配置里设置的变量）；改动只落在 allowed_change_paths；除 docker-compose.yml 的这五个变量外不改部署配置、CI 与 .platform/，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.23「节日促销活动」第 13 条「链路」与「限制」两段，加本项目调用 ai_billing_hub 的 POST /v1/messages 所需的私有配置与一个只用标准库的客户端：接口地址、客户端 ID、项目密钥与模型名经私有配置注入（仓库只记变量名），未配置时视为 AI 不可用；单次调用 60 秒超时、不自动重试。只做配置与客户端；提示词、计数与校验见 SHOP-TASK-248。
+      运营者落实写法：Settings 加 ai_hub_base_url、ai_hub_client_id、ai_hub_access_secret、ai_model（都是 str，默认空串，空串即未配置）与 ai_daily_call_limit（int，默认 50），注释照现有写法说明用途与「空串即未配置」；四个字符串都不为空、且地址以 https 加冒号加两个斜杠开头才算已配置（照 sms_provider 的 configured）。新文件 app/services/ai_hub.py 照 app/services/sms_provider.py 的写法：HttpRequest、HttpResponse、可注入的 transport、禁止重定向、响应最多读 64 KB；请求为 JSON（Content-Type application/json），带请求头 X-Acuven-Client-Id 与 Authorization（Bearer 加项目密钥）；请求体字段为 feature（固定为 shop.promotion_proposal）、model、system、messages（只有一条，形如 role 为 user、content 为字符串）、max_tokens 与可选的 output_config（形如 format 为对象 {type 为 json_schema, schema 为 JSON Schema 对象}），照 Billing Hub 的 POST /v1/messages 约定（ai_billing_hub 仓库 docs/api.md：请求体严格、未知字段 422；成功 200 的响应有字符串 text 与 usage 的 input_tokens、output_tokens）；超时 60 秒，即 urllib 的 timeout 参数（连接与每次读取各自的套接字超时，与 sms_provider 相同的含义）；socket 超时（TimeoutError，含被 URLError 包着的）算 AiTimeout，其余失败算 AiUnavailable。密钥与请求内容不进 repr 与日志。docker-compose.yml 只为把这五个变量传给 shop_api 而改（照现有 SHOP_ 变量的写法，默认值与 Settings 相同），tests/test_compose_env.py 照现有写法核对。.env.example 的五个变量名与占位值已由运营者在登记 PR 里加好（控制面不许 run 改 .env 开头的文件），本任务不改它，变量名照它。生产环境的取值由 Kelvin 在服务器的私有配置里设置；在 Billing Hub 为本项目开通身份与签发密钥另在 ai_billing_hub 的会话里做。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 13 条：出站调用只带管理员的描述与活动的规则参数等（由 248 组装），客户端本身不读订单、会员与收货资料；密钥只在私有配置。
+      拆分：节日促销 AI 提案的第二个任务（6 个允许路径），与 SHOP-TASK-246 互不依赖。
+```

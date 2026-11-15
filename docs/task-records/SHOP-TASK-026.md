@@ -37,3 +37,14 @@
       - 改动只落在 allowed_change_paths；不改 .platform/、CI 工作流、Dockerfile 与部署脚本；不加接口、不改 app/main.py、不加表或迁移、不改前端代码
       - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      接入共享 Redis 里分给本项目的独立库：加 Redis 客户端依赖与连接配置，提供按来源或标识计数的固定窗口限流函数，
+      以及取访客来源的函数；连接串未配置、连不上或超时一律视为不可用，由调用方拒绝请求（fail closed）。
+      不接入任何接口，不定具体阈值，不加表，不做页面，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）。
+```

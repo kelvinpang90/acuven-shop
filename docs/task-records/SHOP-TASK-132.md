@@ -34,3 +34,16 @@
       - frontend/src/pages/PayPage.test.tsx 与 frontend/src/pages/PayResultPage.test.tsx 只许在各自的 payOrder 夹具默认值里补上三个新字段（payment_route 为 "simulated"、stripe_state 为 null、stripe_refunded 为 false），其余一字不改；frontend/src/api/pay.test.ts 的夹具同样补上；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-132.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；三个字段、两个接口与归类、两种新的写接口回答、交接、偏离、验证到什么程度，并写明会员接口与页面留给之后的任务）；改动只落在 allowed_change_paths（不改页面与路由）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 2、3、4、5、9 条与 docs/UX.md 0.11 的 P06、P07，以及 docs/HANDOFF.md 0.54、0.55 的落实写法，
+      在 frontend/src/api/pay.ts 接上 SHOP-TASK-119 给支付页视图加的三个字段、SHOP-TASK-120 的游客 Stripe 发起与确认接口，以及 SHOP-TASK-118 给现有支付与取消接口加的 409 method_changed 与 503 stripe_unavailable，
+      并提供 P06 把「取消时会话已付款」交给 P07 的内存交接。只做游客接口（前端还没有会员支付页，会员的两个接口留给会员支付页的任务）；不改页面，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，支付状态的请求与归类（金额与状态的判定都在服务端）。
+      拆分：P06、P07 的请求层（5 个允许路径；两个页面测试只为补夹具字段列入）。
+```

@@ -59,3 +59,18 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——frontend/src/pages/checkoutPhone.test.ts 的马新号码在开关开启时进入验证；frontend/src/components/SmsVerify.test.tsx 的 checkout 用途（没有号码输入、国家码与 auth.sms_scope，有 auth.claim_notice；以 checkout 发送与核验；各回答的提示与回调）；frontend/src/pages/CheckoutPage.test.tsx 的第 2 步内容、checkout.phone_change、降级与 not_whitelisted 进入游客第 3 步、disabled 回第 1 步、验证码错误不降级、通过后重读会话与两种横幅、sms_required 回第 1 步；页面文字全部来自字典，带变量的条目按模板匹配；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）；现有测试只在必要时修改并写明原因——checkoutPhone.test.ts「stops at step 1 with SMS on」一条，CheckoutPage.test.tsx「stays on step 1 with SMS on」「shows common.service_unavailable on step 1」与「returns to step 1 and decides again with SMS on after sms_verification_required」三条（改为过渡规则取消后的期望），以及「shows only dictionary text besides product and region data」状态表里 phoneError 为 unavailable 的一项（随过渡提示取消删去或改为第 2 步的状态），SmsVerify.test.tsx 按 PURPOSES 遍历的几条只在加入新用途后需要时调整用途清单，三种原有用途的期望不变
       - docs/task-records/SHOP-TASK-160.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；判定、第 2 步、各种回答、验证通过、偏离（含 auth.code_too_many 不用、not_whitelisted 与没有公开 key 的处理、重读失败回第 1 步、checkout 用途不显示 auth.sms_scope）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不改 frontend/src/api/ 与 CheckoutMember.tsx；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.14 提交 00f8f34 与 HANDOFF 0.63），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.13 的 V1（结账验证用途）与 P05 第 2 步（马来西亚、新加坡号码经人机挑战与短信验证后注册或登录，再以会员身份进入第 3 步；短信无法送达或停发时可改为游客；验证码错误不降级），
+      让 frontend/src/components/SmsVerify.tsx 支持 checkout 用途，frontend/src/pages/CheckoutPage.tsx 在短信验证开关开启时把马新号码带入第 2 步，取代 frontend/src/pages/checkoutPhone.ts 的过渡规则（停在第 1 步显示 common.service_unavailable，HANDOFF 0.25），
+      验证通过后重读会话、页头随之切换，显示 checkout.verified_member 或 checkout.verified_new 并进入 SHOP-TASK-159 的会员第 3 步。
+      运营者落实写法（HANDOFF 0.63）：后端没有「尝试次数过多」的独立错误码（过期与不存在都是 code_expired），auth.code_too_many 不用；服务端答号码不在白名单时以游客进入第 3 步并显示 checkout.guest_other_country；没有人机挑战公开 key 时显示 common.service_unavailable、不给游客选项（服务端只在该号码 30 分钟内的结账短信发送结果为无法送达或停发时放行游客单）。
+      不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.14（提交 00f8f34）「边界与原则」第 3、4 条（白名单号码须验证；无法送达或停发时允许改为游客；短信验证开关与流程途中的切换）、「权限与资料保护」第 1、3 条（结账身份；注册、短信登录与结账验证是同一流程，验证后认领游客订单）与「失败、并发与重试」（短信失败不创建已验证账号）与 HANDOFF 0.63。
+      拆分：V1 结账用途与 P05 第 2 步，11 个允许路径。
+```

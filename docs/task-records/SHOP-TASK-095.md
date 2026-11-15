@@ -18,3 +18,14 @@
       - docs/TODO.md 新增 SHOP-TASK-095 记录段（概览、明细的合并规则与显示类型对应、偏离、验证到什么程度，并写明两个接口留给 SHOP-TASK-108、前端 P13 留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/coupons.py、app/services/points.py、app/services/points_refund.py、app/api/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.46），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「计价、优惠、积分与库存」第 3、5 条（积分批次 12 个月到期；待抵扣积分以后获得积分先偿还）与「权限与资料保护」第 6 条（会员仅能访问自己的资料），
+      以及 docs/UX.md 0.10 P13 与 docs/UX-COPY.md 0.10（我的积分：余额、退款后尚欠积分、最近到期、积分明细的五种类型），在 SHOP-TASK-085 至 087 之上实现会员中心「我的积分」用到的两个只读查询函数。不做接口与页面，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46（积分）。拆分：查询层（3 个允许路径）；接口留给 SHOP-TASK-108（原 095 一并做查询与接口，三个 run 都以 checks_failed 失败，2026-10-13 拆开）。拆开后的 run 1c09b0b0 以 review_repair_exhausted 失败（2026-10-14）：三轮评审都认为查询实现正确，每轮都卡在综合测试手算的余额、尚欠与明细期望值（退款先返还、再从余额追回、不足的记入待抵扣，之后获得的积分先偿还待抵扣），所以综合测试改为照登记写明的流水与期望值编写。之后的 run f04fa2e1 以 checks_failed 失败（2026-10-14）：查询实现正确，backend 卡在两条测试自身的错误（概览测试手算的到期日期晚了一天；只读测试的 before_cursor_execute 监听把游标当成了语句），所以这两条也改为照登记写明的数据与写法编写。
+```

@@ -31,3 +31,19 @@
       - docs/task-records/SHOP-TASK-177.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；各列与约束、迁移的执行顺序、偏离、验证到什么程度——pytest 不在 SQLite 上执行 0024，CI 的必需检查 backend 在 MySQL 8 上做 upgrade、downgrade 再 upgrade 的往返与 alembic check，写明这一点）
       - 改动只落在 allowed_change_paths；不改服务层、接口、计价与下单、定时任务、前端与已有迁移；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 与 HANDOFF 0.74），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.18「数据模型」Product / Variant 与 SiteSetting 两行，以及「计价、优惠、积分与库存」第 6、8、11、13、14 条的数据部分，改模型并新增迁移 0024：
+      商品与分类各加版本号；每单限购的检查约束由 1–99 改为 1–1000；商品图片加文件名、上传时的格式与展示图的宽、高、字节数五列；站点设置加每日恢复库存开关（默认开启）。
+      只改结构，不写读写这些列的业务代码与接口，不改计价与下单（另成 SHOP-TASK-178），不改前端，不改设计。
+      运营者落实写法（HANDOFF 0.74）：迁移照 alembic/versions/20261028_0023_my_shipping_tiers.py 的写法（不 import app、自带常量，约束名用 op.f，改检查约束先 drop 再 create），
+      只在 MySQL 上执行、不要求能在 SQLite 上执行（CI 的 backend 在 MySQL 8 上做迁移往返与 alembic check）；新增的非空列都带服务端默认值，已有的行由默认值填好，不另写数据；
+      downgrade 先读出每单限购大于 99 的商品数与已有文件名的图片行数，任一不为零即抛 RuntimeError、库保持原样（改约束在 MySQL 上不随事务回滚），再先删约束、后删列、恢复 1–99 的约束。
+      设计闸门：DESIGN 1.18（提交 5ba9796）与 HANDOFF 0.74，商品、分类、图片与站点设置的数据结构。
+      拆分：数据库层（7 个允许路径）；计价与下单上限另成 SHOP-TASK-178，后台维护的服务层与接口、每日恢复库存开关的定时任务与站点设置接口另行登记。
+```

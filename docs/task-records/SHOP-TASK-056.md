@@ -45,3 +45,15 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/api/adminRefunds.test.ts 与 frontend/src/pages/AdminRefundsPage.test.tsx 验证意图——请求体字段与 lang、响应体不合格算失败；六个表头的顺序、商品与件数逐行对应、卡片、时间、金额与状态标签；状态筛选与翻页回到第 1 页的规则；按订单筛选的请求体、筛选标签与清除链接、不合法 ID；401、网络中断与其他失败；导航只含订单与退款且顺序正确；页面文字全部来自字典；每条测试写明它守住的是 UX、DESIGN 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/TODO.md 新增 SHOP-TASK-056 记录段（路由、请求、筛选与翻页、导航变化、偏离、验证到什么程度，并写明未做浏览器验收、详情与审核及 A02 待审退款数链接留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]；改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      实现 A03 的退款申请列表：路由 /admin/refunds 与按订单筛选的 /admin/refunds/order/:orderId，按状态筛选与翻页，桌面为表格、手机为卡片，调用 SHOP-TASK-041 的列表接口与 SHOP-TASK-046 的订单筛选；
+      后台导航按 UX 顺序加上退款。不做退款详情与审核，A02 的待审退款数暂不改链接，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只调用已登记的列表接口显示申请金额快照，不改退款规则，不显示收货资料与理由）。
+      拆分：列表与详情、审核分开（详情与审核由 SHOP-TASK-057 接上），本任务 12 个允许路径。
+```

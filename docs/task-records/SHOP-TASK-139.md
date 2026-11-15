@@ -35,3 +35,16 @@
       - SHOP-TASK-137 在 AdminSiteSettingsPage.test.tsx 写的测试中，后台框架与导航两条一字不改；内容区只有标题的逐字断言因加入表单而失效，只改为断言内容区以原样的 h1 开头，并在测试注释写明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-139.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；表单、读取、保存、偏离（含短信验证段不做）、验证到什么程度，只写实际存在的测试，并写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由，不改导航，不改 frontend/src/api/adminSiteSettings.ts）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在 SHOP-TASK-137 的站点设置页上实现 A09 的支付方式两项与保存：经 SHOP-TASK-138 的请求模块调用 SHOP-TASK-122 的读取与保存接口，
+      按 docs/UX.md 0.11 的 A09（凭据未配置时 Stripe 选项禁用并说明；当前已是 Stripe 测试而凭据失效时仍可切回模拟；保存被拒时说明；不加确认框）与 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 2 条。
+      按 Kelvin 2026-10-07 与 2026-10-15 的决定不做短信验证开关。不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，支付方式开关的显示与提交（凭据检查与审计在服务端）。
+      拆分：见 SHOP-TASK-137，本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+```

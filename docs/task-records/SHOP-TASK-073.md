@@ -25,3 +25,15 @@
       - docs/TODO.md 新增 SHOP-TASK-073 记录段（配置项、字段与校验、改动的现有测试、偏离、验证到什么程度，并写明前台显示留给 SHOP-TASK-074、真实链接由运营者在服务器私有配置填写），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「上线依赖与设计闸门」（配置 WhatsApp 联系方式，仓库只记录变量名）与 docs/UX.md 0.10 待决问题 Q10（配置缺失时隐藏），
+      在 app/core/config.py 加 WhatsApp 联系链接的配置项，并由 SHOP-TASK-022 的公开接口 GET /api/site-settings 一并返回，供前台决定是否显示联系入口。
+      不改短信验证开关的读取与判定，不加表或迁移，不改前端，不改设计。
+      设计闸门：不适用（公司公开的联系链接，不涉及金额计算与访客个人资料）。拆分：接口层（4 个允许路径）。
+```

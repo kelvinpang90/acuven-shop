@@ -35,3 +35,15 @@
       - docs/task-records/SHOP-TASK-184.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明偏离取舍）
       - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/catalog.py、app/services/checkout.py、app/services/admin_codes.py、现有测试（含 tests/test_admin_products.py）、前端、.platform/、CI 与部署配置，不装依赖，不改设计
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 11 条（保存一件已有商品的全部可改内容：不能删除、规格名不能增减、已有 SKU 的组合不能改；核对的三步；有改动才加版本；逐项审计；生效），在 SHOP-TASK-183 的 app/services/admin_products.py 上新增 save_product，本任务只处理已有行的修改，保存时新增规格值与 SKU 由 SHOP-TASK-185 接上。
+      运营者落实写法（HANDOFF 0.77）：加锁顺序为商品行、该商品的 SKU 行（按 id 从小到大，与下单扣减、每日重置一致）、分类行的共享锁；第二步核对版本号与行 ID，不通过回 ProductChanged；第三步查库的取值不通过回 ProductInvalid；审计操作名 admin_product_changed、admin_product_option_changed、admin_product_option_value_changed、admin_product_variant_changed，旧值与新值写成「字段 值」。
+      不做接口与前端，不改模型与迁移，不改设计。
+      设计闸门：DESIGN 1.18（提交 5ba9796） 第 11 条与 HANDOFF 0.77，商品与价格。拆分：已有行的保存（3 个允许路径；登记时的审查估计连同新增会超过约 1500 行，故把新增拆给 SHOP-TASK-185）。
+```

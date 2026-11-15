@@ -70,3 +70,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_promotions_api.py 照 tests/test_admin_categories_api.py 的写法（固定本模块与 admin_auth 的 _utcnow）：每个路由的成功响应形状；路由清单的断言只列本文件 router 上的路由（不按 /api/admin/promotions 前缀扫描应用的全部路由——之后 SHOP-TASK-250 与 245 会在同一前缀下加海报与预览的路由）；401、403、413、415、422 的顺序且不调用服务层；六种服务层异常的映射与响应体；20 条规则各带 200 件商品与 30 个分类 ID 的请求能通过请求体大小与结构校验并传给服务层（这一条以替身代替服务层，只验证 64 KB 上限够用，不建这么多数据）；no-store。每条测试的文档字符串写明它守住的 UX 或设计句子
       - docs/task-records/SHOP-TASK-242.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明路由、请求与响应字段、错误码，供前台 A12 任务引用）；改动只落在 allowed_change_paths；不改服务层、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.20 的 A12 与 docs/DESIGN.md 1.23「节日促销活动」第 1–3、12 条，新建 app/api/admin_promotions.py，把 SHOP-TASK-239、249 与 241 的服务层接成后台接口，供 A12 页面使用。不改服务层的规则，不改前端与数据库。
+      运营者落实写法：照 app/api/admin_categories.py 的写法（_NoStoreRoute、AdminDep、CsrfDep、WriteBodyDep 读请求体但上限另设为 64 KB——规则可带 20 × 230 个商品与分类 ID，8 KB 不够；请求模型 extra forbid 与 strict；422 照 app/api/pay.py 的 _body_errors 不回显输入；路径 ID 照 _category_id 校验；读取接口带 csrf_token）。时间以马来西亚本地「YYYY-MM-DDTHH:MM」字符串或 null 收发，与服务层相同。错误映射：PromotionInvalid 为 422 promotion_invalid，响应体 detail 为 {"code": "promotion_invalid", "problems": [...]}（每项 code、field、product_id、product_name）；PromotionOverlap 为 409，detail 为 {"code": "promotion_overlap", "name": 对方内部名称}；PromotionChanged 为 409 promotion_changed；PromotionNotFound 为 404 promotion_not_found；PromotionStateInvalid 为 409，detail 为 {"code": "promotion_state_invalid", "state": 当前状态}；PromotionEnded 为 409 promotion_ended。列表响应为 promotions（PromotionSummary 的列表）与 csrf_token 两个字段；删除成功为 204、没有响应体。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 1–3、12 条：后台接口只传递与校验字段，规则、核对与审计在 SHOP-TASK-239、249 与 241 的服务层；不返回个人资料。
+      拆分：节日促销后台层的第六个任务（4 个允许路径），依赖 SHOP-TASK-249 与 241。
+```

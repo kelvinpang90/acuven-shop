@@ -41,3 +41,17 @@
       - docs/task-records/SHOP-TASK-153.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；切换规则、挂载、重读时机、偏离（含入口位置）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收，并写明结账页 P05 短信验证通过后的重读留给会员结账任务）
       - 改动只落在 allowed_change_paths（不改 frontend/src/api/ 与 frontend/src/pages/AccountPage.tsx；router.tsx、copy.ts 与 site.css 不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.13 提交 450c2fa 与 HANDOFF 0.61），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.13 的「全局框架」（页头与 ☰ 菜单为 common.nav_login 或 common.nav_account）与 P13 入口（页头「My account」；P11、P12 登录成功），
+      让全站页头 frontend/src/components/SiteFrame.tsx 按 SHOP-TASK-151 的会员会话状态显示：已登录时把 common.nav_login 换成去 /account 的 common.nav_account，未登录、未知或读取失败时仍为 common.nav_login；
+      frontend/src/App.tsx 挂载会话的 Provider；登录与注册成功后要求重读会话，使页头随之切换（P13 退出后的重读已由 SHOP-TASK-152 完成）。
+      不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 3 条（会话到期、退出与服务端授权检查；页头显示不是授权依据）与 HANDOFF 0.61。
+      拆分：页头切换，11 个允许路径（router.tsx、copy.ts 与 site.css 按页面任务的固定写法列入，不需要时不改）。
+```

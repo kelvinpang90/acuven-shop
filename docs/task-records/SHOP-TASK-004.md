@@ -33,3 +33,15 @@
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加 API、会话或种子数据
       - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.8，提交 2b68ad0），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.8「数据模型」的 Product / Variant 一行，建立本项目第一批表：SQLAlchemy 声明式基类与
+      约束命名约定、分类、商品、商品图片引用、规格名与规格值、SKU 规格及其价格与库存字段，并写对应的 Alembic 迁移。
+      金额一律整数仙。不加数据库会话、API、种子数据、库存预留或每日重置逻辑，不碰订单、会员与个人资料，不改设计。
+      设计闸门：DESIGN 1.8（提交 2b68ad0）。
+```

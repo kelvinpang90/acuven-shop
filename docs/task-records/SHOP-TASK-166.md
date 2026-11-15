@@ -60,3 +60,17 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AccountSettingsPanel.test.tsx 与 frontend/src/pages/AccountPage.test.tsx 验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——段表四项；未设与已设密码两种内容、开关关闭时的 account.sms_paused_set_password、站点设置读取失败按开启；提交前的长度检查不发请求；提交的各结果（done 后重读会话、already_set、too_short、unavailable、signed_out、csrf、failed、network）；手机版设置段有遮掩号码与退出、标题行的二者只在桌面；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）；现有测试只在必要时修改并写明原因——AccountPage.test.tsx 的标题行整串（号码与退出加桌面限定）与「title row」里遮掩号码出现次数的断言（设置段另有一份，由一次改为两次）、段表与标签数量、memberScreen 与 sessionStep 结果形状（加 hasPassword，以及设置段放进 member 状态的字段；memberScreen 默认 hasPassword 为 false，与 memberReply 的 has_password 一致）、页面用到的键清单、「opening the page」里按请求清单、请求下标或 events 整体断言的几条，以及「points and coupons sections」里按 update 次数断言的 rereads the session once and goes to /login when %s says signed out，只为多出的站点设置读取补替身与期望；「logging out」里按类名查找唯一退出按钮的几条（如 disables the button while logging out）随标题行的退出按钮加桌面限定、手机版设置段另有一个退出按钮而调整查找方式，期望的禁用条件与退出去向不变；其他把 member 状态整体比较的断言（如 points and coupons sections 里的 reads both sections together with my orders）只补 hasPassword 与设置段放进 member 状态的字段（取其初始值）
       - docs/task-records/SHOP-TASK-166.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；段表、密码两种内容、首次设置的各结果、手机版的号码与退出、偏离（含站点设置失败按开启、设置成功后的显示）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收，并写明注销留给 SHOP-TASK-167）；改动只落在 allowed_change_paths（不改 frontend/src/api/；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.14 提交 00f8f34 与 HANDOFF 0.63），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.13 的 P13 设置段（未设密码时首次设置密码；已设密码时 account.password_exists 与去 P12 忘记密码流程的 account.password_change；短信验证开关关闭且未设密码时 account.sms_paused_set_password；手机版的遮掩号码与退出在设置段）与 docs/DESIGN.md 1.14「权限与资料保护」第 3 条，
+      在 frontend/src/pages/AccountPage.tsx 的段表加入设置段（新文件 AccountSettingsPanel.tsx），经 SHOP-TASK-164 首次设置密码；AccountScreen 另带会话的 hasPassword；手机版的遮掩号码与 common.nav_logout 从标题之下移入设置段（SHOP-TASK-152 的暂放至此取消），桌面仍在标题行。
+      运营者落实写法（HANDOFF 0.63，Kelvin 2026-10-26 决定）：提交前按 auth.password_rule 检查长度不少于 8；409 password_already_set 时重读会话（转为 account.password_exists）；422 password_too_short 时以 auth.password_rule 作错误提示；503 显示 common.service_unavailable；站点设置读取完成前与读取失败时都按开关开启处理（不显示 account.sms_paused_set_password）；设置成功后显示 account.password_set_done 并重读会话。
+      注销部分由 SHOP-TASK-167 加入。不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.14（提交 00f8f34）「权限与资料保护」第 3 条（首次设置密码在已登录会话内进行、至少 8 位；已有密码的重设再次短信验证；开关关闭期间首次设置密码不受影响）与第 5 条（写操作另须 CSRF 令牌；手机号部分遮盖显示）与 HANDOFF 0.63。
+      拆分：设置段，9 个允许路径。
+```

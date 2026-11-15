@@ -34,3 +34,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_guest_order_promotion.py 以第 8 条算例的商品与规则下游客订单（西马运费 800，免运费）：订单商品级 1900、整单级 500、实际运费 0、免去 800、应付 5900；五件的活动优惠 656、656、94、94、900，现金实付 1844、1844、1106、1106、0，命中规则依次为 A 的打折规则、A 的打折规则、家居的买 X 享 Y、同前、同前；没有生效活动、活动未开始与已结束、所有规则都没带来优惠时订单不记活动且金额与现在相同；计价后活动提前结束则下单不记活动；重放原订单返回原快照。每条测试的文档字符串写明它守住的第几条哪一句
       - docs/task-records/SHOP-TASK-235.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改接口、会员下单、计价服务、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.23「节日促销活动」第 4、7、14 条，改 app/services/ordering.py 的 place_guest_order：下单事务里读当时生效的活动，本单参加活动时按活动后的金额与实际运费写订单，并在订单与逐件快照里记活动、商品级与整单级活动优惠、免去的运费、每件的活动优惠与命中的规则。不改接口、前端与数据库；按幂等键重放原订单、库存、支付与取消的规则不变（第 14 条）。
+      运营者落实写法：在调用 quote_cart 之前以 active_promotion(db, now, share_lock=True) 读生效活动（共享锁，与后台撤回互相等待，SHOP-TASK-233）并传入（SHOP-TASK-234 的 promotion 参数）；本单参加活动（quote 的 promotion 不为 None 且 participates 为 True）时，以 SHOP-TASK-233 的 price_lines 取每件的活动优惠，按展开顺序传给 price_order 的 promotion_discounts（SHOP-TASK-232），订单的 shipping_fee_sen 写实际运费（运费报价减免去的运费），shipping_waived_sen 写免去的运费；不参加活动时与现在相同，活动列取 0 与空。游客没有券与积分，不做第 6 条的比较。请求指纹不变。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 4、7、14 条：订单金额快照与逐件分摊，不改收货资料的处理。
+      拆分：节日促销服务层的第三个任务（3 个允许路径），依赖 SHOP-TASK-230（订单列）、232（price_order 的活动参数）与 234（quote_cart 的活动参数）。
+```

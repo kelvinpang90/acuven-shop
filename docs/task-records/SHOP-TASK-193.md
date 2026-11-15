@@ -43,3 +43,17 @@
       - 现有测试只在必要时修改并写明原因——cart.test.ts 里以 99 为每行上限的三条断言改为 1000；ProductDetailPage.test.tsx 里以 output 显示件数的断言改为输入框；其余期望不变
       - docs/task-records/SHOP-TASK-193.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 P04 与 P05 页面；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 第 8 条与 HANDOFF 0.80），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 8 条（每行 1–1000 件、整单所有行合计不超过 2,000 件）与 docs/UX.md 0.17 的 P03「整单件数上限」「数量可直接输入」两段，
+      把浏览器购物车 frontend/src/cart.ts 的每行上限由 99 改为 1000、新增整单 2,000 件上限，并在 P03 加入整单已满的禁用与 detail.cart_units_full、数量的直接输入与 common.qty_capped。
+      P04 的数量输入与整单提示留给 SHOP-TASK-194，P05 留给 SHOP-TASK-195。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.80）：整单上限只在加入时约束（addToCart 合并或新增后全部行合计超过 2,000 即不加入），读取时的清洗不按整单合计丢行（服务端计价再判断）；P03 的可加入件数为「限购件数减去购物车中该商品已有件数」与「2,000 减去购物车全部行件数」中较小的、不小于 0；{count} 照现有 detail.cart_full 直接传数字。
+      设计闸门：DESIGN 1.18（提交 5ba9796）第 8 条与 HANDOFF 0.80，购物车件数上限的提示与禁用（下单时由服务端再次校验）。
+      拆分：购物车模块与 P03 一层（10 个允许路径，router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）；P04、P05 各自另成任务。
+```

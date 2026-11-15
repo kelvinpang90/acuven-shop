@@ -39,3 +39,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，含 MySQL 8 上的迁移往返与 alembic check；Worker 沙箱不跑后端测试）——新文件 tests/test_promotion_ai_models.py 照 tests/test_promotion_models.py 用 SQLite 内存库：同一日期不能有两行；每条检查约束的正例与只让它不成立的反例；token 数可空；经 importlib 载入迁移核对 revision、down_revision 与约束常量和模型逐字相同。每条测试的文档字符串写明它守住的第 13 条哪一句
       - docs/task-records/SHOP-TASK-246.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明表名、模型名与常量名，供 SHOP-TASK-248 引用）；改动只落在 allowed_change_paths；不改服务、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.23「节日促销活动」第 13 条「限制」一段，新建 app/models/promotion_ai.py 与迁移 0029：每日调用计数表（以马来西亚日期为主键，每天至多一行）与每次调用的记录表（时间、结果类别、输入与输出 token 数，不记描述原文与模型回答原文）。只建表与约束；计数与调用的服务见 SHOP-TASK-248。
+      运营者落实写法：计数表 promotion_ai_daily_usage（模型 PromotionAiDailyUsage）：usage_date 为 Date 主键（第 13 条「计数表以马来西亚日期为主键」，不另设 id 列）、call_count 非空 Integer（>= 0，检查约束 call_count_non_negative）。记录表 promotion_ai_calls（模型 PromotionAiCall）：id 主键、called_at 不带时区的 DateTime、result String(16) 取 ok、invalid、timeout、error（检查约束 result_valid；ok 为合格的提案，invalid 为模型回答不合格，timeout 为超时，error 为其余失败含 Billing Hub 拒绝）、input_tokens 与 output_tokens 为可空 Integer（>= 0，没拿到用量时为空）。不建外键（记录不关联活动与管理员，第 13 条只要求时间、结果类别与用量）。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 13 条：只记调用次数与用量，不存描述与回答原文，不碰个人资料与金额。
+      拆分：节日促销 AI 提案的第一个任务（5 个允许路径），依赖 SHOP-TASK-230（迁移 0028 为它的 down_revision）。
+```

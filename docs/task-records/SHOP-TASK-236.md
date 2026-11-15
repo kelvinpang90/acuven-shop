@@ -43,3 +43,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_member_promotion_quote.py 照第 8 条：首例（两个开关都打开，10% 券最低消费 RM50，1000 积分，西马）取甲，两个积分前应付为 5310 与 8270，券 590、积分 1000、合计 4310；关闭券同用时取甲、coupon_note 为 not_combinable、合计 4900；D 例取乙；第三例取乙且合计 5800；只关闭积分同用时 points_not_combinable 为 True；没有运费报价时 promotion_plan 为 None 而 promotion 有暂算值；check_coupon 与 reserve_coupon 在券可用时给出 min_subtotal_sen。接口层固定 _utcnow 后响应带上这些字段（MemberQuoteOut 在路由里逐字段构造，新字段同样逐个传入）；tests/test_member_orders_api.py 的 MEMBER_QUOTE_FIELDS 只为加上新字段而改。每条测试的文档字符串写明它守住的第几条哪一句
       - docs/task-records/SHOP-TASK-236.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明方案判定函数的名称与签名、新字段与 JSON 字段名）；改动只落在 allowed_change_paths；不改下单、游客计价、展示、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.23「节日促销活动」第 4、6、10 条与「计价、优惠、积分与库存」第 1、2 条，改 app/services/member_ordering.py 的 quote_member_cart 与 app/api/member_orders.py 的 POST /api/member/checkout/quote：会员计价读生效活动；本单参加活动且会员选了券或填了积分时，用 SHOP-TASK-232 的 choose_promotion_plan 比较甲乙两种方案，按所取方案给出券、积分与合计，并返回 P05「取更优」说明所需的两种方案的积分前应付与未用券、未用积分的原因。券的最低消费在甲方案按活动后的金额判断（第 2 条）。不改下单、前端与数据库。
+      运营者落实写法：quote_member_cart 以 active_promotion(db, now) 读生效活动传给 quote_cart。app/services/coupons.py 的 CouponCheck 末尾加 min_subtotal_sen（int 或 None，默认 None），check_coupon 与 reserve_coupon 在券可用时填上该券的最低消费，供组成 CouponTerms；券的其他判定不变。查券用原价小计调用一次 check_coupon：可用即两种方案都有这张券（各自是否够得上最低消费由 choose_promotion_plan 判断），不可用（含原价就不够最低消费）即两种方案都不用券。每件的活动优惠照 SHOP-TASK-235 的写法：以 purchasable 取各 SKU 的商品与分类 ID，用 233 的 price_lines 算出（quote_cart 的 PromotionQuote 只有合计）。方案判定写成本文件里的一个函数（名称写进任务记录），SHOP-TASK-237 下单时复用它，计价与下单得到同一结果。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 4、6、10 条与「计价、优惠、积分与库存」第 1、2 条：券、积分与活动叠加的金额与取更优，不碰个人资料。
+      拆分：节日促销服务层的第四个任务（6 个允许路径），依赖 SHOP-TASK-232（choose_promotion_plan）、233（price_lines）、234（quote_cart 的活动参数与 PromotionQuote）与 235（取每件活动优惠的写法）。
+```

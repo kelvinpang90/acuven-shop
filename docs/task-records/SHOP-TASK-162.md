@@ -47,3 +47,17 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch、sessionStorage 与路由以替身代替）在 frontend/src/pages/PayResultPage.test.tsx 验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——会员打开的各分支；会员 Stripe 确认的地址与令牌、确认后的会员重读、各结果去向；结果确定时清除暂存，失败、确认中与尚未付款不清除；会员成功页有 result.points_earned（含 0）与指向 /account/order 的 result.track、点击时先交出订单号，没有 result.guest_next 与 result.guest_register；页面文字全部来自字典，带变量的条目按模板匹配；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）；现有测试只在必要时修改并写明原因——「has the register link but no order detail or points」对游客结果页仍成立、不改，打开函数多了会话读取与暂存参数的几条只补替身，游客的期望不变
       - docs/task-records/SHOP-TASK-162.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；打开、会员确认、清除暂存、成功页、偏离（含手机版照游客加两项、获得积分为 0 也显示）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不改 frontend/src/api/、PayPage.tsx 与 TrackOrderPage.tsx；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.14 提交 00f8f34 与 HANDOFF 0.63），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.13 的 P07（会员成功后显示 result.points_earned 与进入 P09 会员模式的 result.track；会员按当前订单取单，从 Stripe 成功返回时以暂存的订单号确认，结果确定后清除暂存；找不到订单时 pay.member_reopen）与 docs/DESIGN.md 1.14「权限与资料保护」第 7 条，
+      让 frontend/src/pages/PayResultPage.tsx 按 SHOP-TASK-161 导出的判定顺序 ①② 取单，会员经 SHOP-TASK-158 的会员接口确认 Stripe 付款与重读；result.track 经 frontend/src/api/memberOrders.ts 的 handOffMemberOrder 交出订单号后进入 /account/order。
+      运营者落实写法（HANDOFF 0.63）：P07 会员手机版照 P07-phone-guest 加 result.points_earned 与 result.track 两项（没有会员手机版视觉稿）；会员成功页的 result.points_earned 为 0 时也显示。
+      不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.14（提交 00f8f34）「权限与资料保护」第 5、7 条（会员仅能访问自己的订单；暂存在结果确定后清除，失败与确认中不清除）、「Stripe 测试环境支付」第 4 条（凭授权向 Stripe 查询确认）与「计价、优惠、积分与库存」第 3 条（获得积分）与 HANDOFF 0.63。
+      拆分：P07 会员模式，7 个允许路径。
+```

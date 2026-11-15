@@ -27,3 +27,15 @@
       - docs/task-records/SHOP-TASK-138.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；请求、字段与归类、偏离、验证到什么程度，并写明页面留给 SHOP-TASK-139）
       - 改动只落在 allowed_change_paths（不改页面、路由与导航）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      为 A09 页面新建调用 SHOP-TASK-122 两个接口（GET 与 PUT /api/admin/site-settings）的请求模块与测试，供 SHOP-TASK-139 使用；只有支付方式，不含短信验证开关。
+      不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（支付方式的凭据检查与审计在 SHOP-TASK-122 的服务端，请求模块只传递与校验字段）。
+      拆分：A09 页面的请求层（3 个允许路径）。
+```

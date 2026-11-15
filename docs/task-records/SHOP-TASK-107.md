@@ -25,3 +25,15 @@
       - docs/TODO.md 新增 SHOP-TASK-107 记录段（字段、显示条件、偏离、验证到什么程度，并写明未做浏览器验收），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths（不新增路由，不改导航）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.10 的 A03（详情在退款金额之下显示 admin.refund_points；首版不显示这一行，待积分字段接入时加回，Kelvin 2026-10-06 决定）与 docs/UX-COPY.md 0.11，在后台退款详情页显示 SHOP-TASK-106 给出的积分返还与追回。
+      不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（金额与积分由服务端按快照与流水算出，页面只显示）。
+      拆分：A03 页面的一行显示（9 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
+```

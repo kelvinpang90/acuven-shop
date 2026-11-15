@@ -40,3 +40,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_stripe_late_refund_retry.py 覆盖重试的每一步（不存在、没有尝试、最新不是 failed、合计超额的日志与告警调用、唯一约束冲突、成功时新尝试的字段）并以 monkeypatch 替换 app.services.ops_alert.alert 记录调用；新文件 tests/test_admin_stripe_pending.py 覆盖两类列表的进入与退出条件（结账记录告警时间为空、已 expired、订单已不是待支付时不列出；退款最新一次已不是 failed 时不列出，记录已 expired 或订单已取消时仍列出）、排序与不含收货资料和 Stripe ID；每条测试的文档字符串写明它守住的 DESIGN 1.22 第 11 条哪一句
       - docs/task-records/SHOP-TASK-224.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，偏离里写明 attempted_at 代替设计的失败时间）；改动只落在 allowed_change_paths；不改接口、前端、数据库与迁移、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.22 提交 ffb043e），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.22「Stripe 测试环境支付」第 11 条第（2）项，在 app/services/stripe_refund.py 新增 retry_checkout_attempt(db, checkout_id, now)：来源为会话（第 6 条迟到与不符的付款）、最新一次尝试为 failed 时新建一条 pending 尝试；并按第 11 条的两类列表与各自的退出条件，新增 app/services/admin_stripe_pending.py 提供只读查询 stripe_pending(db)。只做服务层，不改接口、前端、数据库与设计，不加依赖。
+      运营者落实写法：retry_checkout_attempt 照 retry_request_attempt 的写法只 flush、不提交，由之后的接口写审计、提交并调用 submit_refund_attempt；付款金额取该来源原尝试的金额（第 6 条写入时等于会话的 amount_total）；stripe_refund_cap 的日志写法为 stripe_refund_cap checkout=<结账记录 ID>，告警对象为（stripe_checkout, 结账记录 ID），对象类别取 app/services/stripe_checkout.py 的 ALERT_TARGET_KIND。第 11 条写的「失败时间」在数据模型里没有对应字段（StripeRefund 只有创建、成功与上次复查时间），列表给出最新一次尝试的创建时间（字段名 attempted_at），不加字段、不改设计（Kelvin 2026-11-08 认可，HANDOFF 0.90；偏离记入任务记录）。
+      设计闸门：DESIGN 1.22（提交 ffb043e）「Stripe 测试环境支付」第 11 条第（2）项与第 8 条；列表只给对账字段与订单号，不给收货资料、Stripe 的任何 ID 与客户资料。
+      拆分：人工处置的服务层第二个任务（5 个允许路径），与 SHOP-TASK-223 互不依赖；接口见 SHOP-TASK-225。
+```

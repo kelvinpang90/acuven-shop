@@ -50,3 +50,18 @@
       - docs/task-records/SHOP-TASK-158.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；新字段、五个请求、归类、写操作去向、暂存规则、偏离（含不加 lines、新文件而不并入 pay.ts 的理由）、验证到什么程度，只写实际存在的测试，并写明页面留给 SHOP-TASK-159、161 至 163 与 167）
       - 改动只落在 allowed_change_paths（不改 PayPage.tsx、PayResultPage.tsx、memberOrders.ts 与 memberSession.ts；不做页面，不改路由与页头）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.14 提交 00f8f34 与 HANDOFF 0.63），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.13 的 P06「会员的当前订单」与 P07（会员凭会话；成功后显示本单获得积分）与 docs/DESIGN.md 1.14「权限与资料保护」第 7 条，新建前台请求模块 frontend/src/api/memberPay.ts，
+      调用已有的会员支付接口（app/api/member_pay.py）——读取 POST /api/member/pay/order、支付 POST /api/member/pay/attempts、取消 POST /api/member/pay/cancel、Stripe 发起 POST /api/member/pay/stripe/start 与确认 POST /api/member/pay/stripe/confirm，
+      并提供当前这一笔会员订单号的写入、读取与清除（模块变量与本标签页 sessionStorage），供 SHOP-TASK-159、161 至 163 与 167 使用；frontend/src/api/pay.ts 的 PayOrder 补上后端已有的三个快照字段。
+      运营者落实写法（HANDOFF 0.63）：会员接口另立新文件，不改 pay.ts 游客流程的行为，pay.ts 只补字段与导出现有内部函数，使 frontend/src/api/pay.test.ts「browser storage and addresses」（游客不写任何浏览器存储）照常成立；不加 lines（P06、P07 视觉稿与 UX 都不显示商品行）。
+      不做页面，不改路由与页头，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.14（提交 00f8f34）「权限与资料保护」第 5 条（会员仅能访问自己的订单，支付、取消等写操作另须 CSRF 令牌）、第 7 条（会员支付页与结果页的当前订单——只存订单号这一个值，只有会员流程写入，写入与清除的时机，不进地址、localStorage、cookie）与「Stripe 测试环境支付」第 3、4 条与 HANDOFF 0.63。
+      拆分：会员前端第三批的请求层之二，7 个允许路径（三个测试文件只为补样例字段列入）。
+```

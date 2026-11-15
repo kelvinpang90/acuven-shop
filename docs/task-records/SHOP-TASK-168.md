@@ -38,3 +38,16 @@
       - docs/task-records/SHOP-TASK-168.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；两个接口的变化、短信服务可用的五类判定、两种拒绝的先后、审计、偏离、验证到什么程度，并写明页面留给 SHOP-TASK-169）
       - 改动只落在 allowed_change_paths；公开的 GET /api/site-settings 与 tests/test_site_settings.py 不变，短信发送、核验与注销的现有判定不变；不改模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.15 提交 1c668e6 与 HANDOFF 0.65），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.15「边界与原则」短信验证开关一条（管理员保存「开启」时服务端检查五类短信服务配置，缺一或不合格即拒绝，同一次保存里的其他设置也不生效，当前已开启也一样；保存「关闭」不检查；检查只看配置，不联网）、「数据模型」SiteSetting 一行（每次从数据库读取，后台修改写入 AuditEvent）
+      与 docs/UX.md 0.14 的 A09（页面读取时返回开关当前值与短信服务是否可用；保存一次提交两项，任一项被拒两项都不写入），在 SHOP-TASK-122 的后台站点设置读取与保存接口上加入短信验证开关。
+      运营者落实写法（HANDOFF 0.65）：保存请求的 sms_verification_enabled 可省略，省略时不检查短信配置、不改开关（现有只提交支付方式的页面在 SHOP-TASK-169 合并之前照常可用）；两项检查都在写入之前，先查支付方式再查短信；短信开关的审计操作名为 admin_sms_verification_changed，旧值与新值为 on 或 off；
+      短信服务是否可用的判定写在 app/api/admin_site_settings.py（服务层引用 app/api/site_settings.py 会循环导入）。不做前端，不改模型与迁移，不改设计。
+      设计闸门：DESIGN 1.15（提交 1c668e6）与 HANDOFF 0.65，短信验证开关。拆分：接口层（4 个允许路径），页面由 SHOP-TASK-169 接上。
+```

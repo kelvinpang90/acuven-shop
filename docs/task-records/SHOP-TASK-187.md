@@ -33,3 +33,15 @@
       - docs/task-records/SHOP-TASK-187.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明函数签名、两个 client 的取舍与偏离）
       - 改动只落在 allowed_change_paths；不改 .env.example 与 docker-compose.yml（四项配置已由运营者的部署 PR 加上）、模型与迁移、现有测试（tests/test_compose_env.py 除上面允许的一处）、前端、.platform/、CI 与部署配置，不装依赖（boto3 已在 pyproject.toml），不改设计
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.19「计价、优惠、积分与库存」第 13 条开头一段（R2 私有存储桶、四项配置、共用 client、超时与尝试次数、R2 调用失败的日志约束、存储不可用），新增 app/services/image_store.py，供之后的上传、提供与移除（SHOP-TASK-189 至 191）调用。
+      运营者落实写法（HANDOFF 0.79）：四项配置加到 app/core/config.py 的 Settings，以 validation_alias 读取不带 SHOP_ 前缀的原名；botocore 的尝试次数按 client 设定、不能逐次调用设定，所以写入与读取共用一个 client（至多 3 次尝试），删除共用另一个 client（只尝试 1 次），两者其余配置相同，都在首次使用时创建、之后不再新建；本模块的函数都是同步函数，由调用方放进线程。
+      不做图片校验与处理、数据库与接口，不改设计。
+      设计闸门：DESIGN 1.19（提交 6e8f655）第 13 条与 HANDOFF 0.79，商品图片的存放。
+```

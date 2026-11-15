@@ -28,3 +28,14 @@
       - docs/TODO.md 新增 SHOP-TASK-071 记录段（会话、CSRF、密码校验、锁定、偏离、验证到什么程度，并写明 cookie 与接口留给会员登录接口任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/admin_auth.py、.platform/、CI、部署配置；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 3 条（会话到期、退出与服务端授权检查；未设密码与密码错误返回相同的通用失败）与 docs/HANDOFF.md 0.41 记录的 Kelvin 2026-10-08 决定（会话 30 天不续期、同一号码加来源 15 分钟内失败 5 次锁 15 分钟），
+      仿照 app/services/admin_auth.py 实现会员会话的签发、校验、撤销、CSRF 与密码登录锁定规则函数，在 SHOP-TASK-012 的 MemberSession 表上。不做接口与 cookie，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41（会员登录与个人资料）。拆分：业务规则层（3 个允许路径）。
+```

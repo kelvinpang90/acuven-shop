@@ -37,3 +37,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_admin_promotion_preview_api.py（固定本模块与 admin_auth 的 _utcnow）：草稿与未开始活动的四个预览路由给出活动价、角标、sale 列表与第 8 条的计价（游客，西马 800 时 total_sen 5900）；进行中、已结束、草稿缺时间、结束已过时 409；不存在 404；没有会话 401；POST 没有 CSRF 403；公开接口同时为 null。每条测试的文档字符串写明它守住的第 11 条或 UX 的哪一句
       - docs/task-records/SHOP-TASK-245.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明路由与错误码，供前台 A12 预览任务引用）；改动只落在 allowed_change_paths；不改服务层、公开接口、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.23「节日促销活动」第 11 条与 docs/UX.md 0.20 A12 的前台预览，新建后台接口 app/api/admin_promotion_preview.py：管理员凭后台会话，以预览方式取草稿或未开始活动的展示数据、商品列表与详情（含活动价与角标、sale 列表）与购物车计价，看到的如同该活动正在生效。公开接口不接受任何预览参数；预览不改变访客看到的内容，也不产生订单（预览没有下单接口）。不改服务层规则与前端。
+      运营者落实写法：可预览的条件照 UX 0.20 A12：活动为 draft 或 scheduled，已保存的开始与结束时间都有，且结束晚于当前时刻；不满足即 409 promotion_preview_unavailable，不存在为 404 promotion_not_found。数据分别复用 SHOP-TASK-243 的 promotion_display、244 的 list_products 与 get_product、234 的 quote_cart，promotion 参数传 233 的 load_promotion 读出的该活动（不看是否生效）。路由照 app/api/admin_categories.py 用 _NoStoreRoute 与 AdminDep；计价是 POST，照后台写操作要 CSRF，请求体与游客计价接口 POST /api/checkout/quote 相同（复用其请求模型）。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 11 条：预览只经后台接口，不改公开接口，不产生订单，不碰个人资料。
+      拆分：节日促销展示层的第三个任务（4 个允许路径），依赖 SHOP-TASK-234、243 与 244。
+```

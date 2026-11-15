@@ -49,3 +49,17 @@
       - 测试——用 vitest 与 react-dom/server（不加测试依赖，fetch 以替身代替；以 renderToStaticMarkup 渲染、直接调用导出的函数，不模拟点击）验证意图——frontend/src/storeDesign.test.ts 补 logo 的解析（null、合格路径、缺少、不合格时按没有标志处理且主题等照常取用）、初始值与读取失败时保持当前值、记住的值里没有 logo；frontend/src/components/SiteFrame.test.tsx 补品牌组件在有标志、没有标志与加载失败三种情形下的输出（img 的 src 与 alt、文字品牌），以及页头与页脚都用它；现有测试只为 logo 字段补值；每条测试写明它守住的是 UX 0.18「店铺装修」、DESIGN 1.20 第 15 条或 HANDOFF 0.84 的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-216.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收、没有用真实标志在各主题与深色模式下看过）；改动只落在 allowed_change_paths（不新增路由；router.tsx、App.tsx 与 copy.ts 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.18「店铺装修」一条（管理员上传标志图后，页头与页脚的品牌 ACUVEN SHOP 显示为该图，读屏文字仍为 ACUVEN SHOP；未上传或标志图加载失败时显示文字）与 docs/DESIGN.md 1.20「计价、优惠、积分与库存」第 15 条「读取与显示」，
+      让 frontend/src/storeDesign.ts 取出公开读取 GET /api/store-design 新增的 logo（SHOP-TASK-213），frontend/src/components/SiteFrame.tsx 的页头与页脚在有标志时显示该图。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.84）：logo 与精选商品一样放在 StoreDesignResponse 与 StoreDesignValue，不放进 StoreDesign、不记在本浏览器（记住的形状与 parseStoreDesign 不变，打开页面时先显示文字品牌，读取返回后才换成标志）；logo 为 SHOP-TASK-214 的 isStoreLogoPath 为真的字符串时取用，否则（null、缺少、其他值）按没有标志处理，不影响主题等其余设置；读取失败时保持当前显示；
+      标志以 img 显示，alt 为 BRAND（ACUVEN SHOP），页头仍在链到首页的链接里；加载失败（含 503）时页头与页脚都退回文字品牌，logo 换成另一个路径时重新尝试显示；尺寸照画板 P-logo-header-footer（桌面高 40 像素、宽按比例且至多 240 像素，手机高 28 像素、宽按比例且至多 160 像素，页脚同页头），按比例显示、不拉伸变形（object-fit 设为 contain）；标志按原图显示，不随主题与深浅色改色（Kelvin 2026-11-05 决定）。
+      设计闸门：不适用（只显示公开接口给的图片，不碰金额与个人资料；标志的规则在服务端）。
+      拆分：前台全局框架一层（9 个允许路径：读取模块与测试、框架与测试，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
+```

@@ -67,3 +67,16 @@
       - 测试验证意图（不加测试依赖，fetch 以替身代替）——frontend/src/api/adminProducts.test.ts：四个请求的方法、地址、请求头、no-store 与请求体只有规定的字段（含已有与新增两种形状各自的字段）；列表与单件的合格判定（缺字段、类型不对、负数、非整数、option_value_ids 个数不对或引用别的规格名的值、多出字段不带进结果、空 csrf_token）；新建与保存的各种状态与 detail 的归类；中止为 network；每条测试写明它守住的是接口记录（SHOP-TASK-186 的 app/api/admin_products.py）、DESIGN 1.18 第 11 条或 UX 0.17 A04 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-200.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；导出的类型与函数签名，供 A04 页面的任务使用；验证到什么程度，只写实际存在的测试）；改动只落在 allowed_change_paths；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：DESIGN 1.18 第 11 条，同上），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      为 A04 页面新建调用 SHOP-TASK-186 四个接口（列表 GET /api/admin/products、单件 GET /api/admin/products/{product_id}、新建 POST /api/admin/products 与保存 PUT /api/admin/products/{product_id}）的请求模块 frontend/src/api/adminProducts.ts 与测试，供 A04 页面的任务使用；
+      不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.82）：请求类型以「已有（带 id）」与「新增（带 temp_id）」两种形状区分规格值与 SKU，序列化时只写出该形状的字段；价格以整仙收发，模块不做换算。
+      设计闸门：DESIGN 1.18（提交 5ba9796）第 11 条与 HANDOFF 0.82，商品价格以整仙收发（取值规则、上架条件、并发核对与审计在 SHOP-TASK-183 至 186 的服务端；请求模块只传递与校验字段，不换算金额，不碰个人资料）。
+      拆分：A04 的商品请求层（3 个允许路径），照 SHOP-TASK-198。
+```

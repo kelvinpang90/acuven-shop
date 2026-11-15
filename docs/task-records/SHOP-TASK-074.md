@@ -34,3 +34,15 @@
       - docs/TODO.md 新增 SHOP-TASK-074 记录段（读取、页脚、P14、改动的现有测试、偏离、验证到什么程度，并写明未做浏览器验收、真实链接由运营者配置），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths（不新增路由）；不改 .platform/、CI、部署配置与后端；不装依赖（不改 package.json 与 package-lock.json）；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.10「全局框架」的页脚、P14 的「联系」段与待决问题 Q10（配置缺失时整个按钮或整段隐藏，不显示占位文字），
+      前台读取 SHOP-TASK-073 在 GET /api/site-settings 返回的 whatsapp_contact_url，已配置时在每页页脚显示 common.whatsapp_cta 按钮、在 P14 显示「联系」段。不改后端，不装依赖，不改设计。
+      设计闸门：不适用（显示公司公开的联系链接，不涉及金额计算与访客个人资料）。
+      拆分：前端显示层（11 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
+```

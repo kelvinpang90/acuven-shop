@@ -24,3 +24,15 @@
       - docs/task-records/SHOP-TASK-191.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明偏离取舍）
       - 改动只落在 allowed_change_paths；不改服务层、模型与迁移、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.19「计价、优惠、积分与库存」第 13 条「提供」一段，新增 GET /api/product-images/<文件名>.webp（路由写成 /api/product-images/{name}，name 取整段文件名、含扩展名，任何扩展名都进处理函数、由它校验），经 SHOP-TASK-187 的存储按数据库记录读取展示图并提供给前台与后台，不要求会话。
+      运营者落实写法（HANDOFF 0.79）：错误的 detail 为 image_not_found（404）与 image_store_unavailable（503），都带 Cache-Control no-store；成功的响应带长期缓存，所以不用 _NoStoreRoute 路由类，错误响应自行加 no-store；存储经 image_store 模块属性调用（测试替换模块属性）；处理函数为同步函数，R2 读取在线程池里执行。
+      不做前端，不改服务层与模型，不改设计。
+      设计闸门：DESIGN 1.19（提交 6e8f655）第 13 条与 HANDOFF 0.79。拆分：提供接口（4 个允许路径）。
+```

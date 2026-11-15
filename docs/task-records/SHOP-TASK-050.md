@@ -22,3 +22,15 @@
       - 由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）；docs/TODO.md 新增 SHOP-TASK-050 记录段（改动、偏离、验证到什么程度，并写明未做浏览器验收），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；不新增路由；不改生成的 frontend/src/styles/acuven-shop.css；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.10 与 docs/UX-COPY.md 0.10，把后台登录页 A01 的登录名输入框改为邮箱：标签用 admin.email，手机弹出邮箱键盘，
+      其余登录流程、错误处理、语言切换与登录后进入 A02 不变。不改后端，不装依赖，不改设计。
+      设计闸门：不适用（只改输入框的标签与键盘类型，提交的内容与 SHOP-TASK-049 的接口不变；邮箱的存储与处理见 docs/HANDOFF.md 0.37）。
+      拆分：不拆（7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入，预计不改）。
+```

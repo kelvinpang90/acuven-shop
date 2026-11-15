@@ -27,3 +27,15 @@
       - docs/task-records/SHOP-TASK-182.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）
       - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/stock_reset.py、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 12 条（管理员把某个 SKU（含停用的）的当日可用库存直接改为 0–9,999 的整数，不改每日初始库存；请求带调整前页面显示的值，以一条带条件的更新写入，不等即回答「库存已变动」并返回当前值；先比调整前的值，相等后新值与当前相同时照常成功、不写入不记审计；不改预留、订单与商品版本号；每次写入一条审计）与 docs/UX.md 0.17 A04「当日库存调整」，新增服务层与后台接口 POST /api/admin/variants/{variant_id}/available-stock。
+      运营者落实写法（HANDOFF 0.76）：规则只有一条带条件的更新，服务层与接口放在同一任务；库存已变动回 409 {"detail":"stock_changed", "available_stock":当前值}，取值不合格回 422 stock_invalid，SKU 不存在回 404 variant_not_found；审计操作名 admin_variant_stock_adjusted，对象为该 SKU，旧值与新值写成「SKU 代码 available_stock 值」。
+      不做前端，不改模型与迁移，不改设计。
+      设计闸门：DESIGN 1.18（提交 5ba9796） 第 12 条与 HANDOFF 0.76，库存。拆分：一条规则的服务层与接口（6 个允许路径），A04 页面另行登记。
+```

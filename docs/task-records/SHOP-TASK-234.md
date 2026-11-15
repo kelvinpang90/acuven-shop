@@ -50,3 +50,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_checkout_promotion_quote.py：服务层以第 8 条算例的商品与规则（游客，不用券）给出每行的规则与商品级折扣（A 行 1000、B 行 0、C 行 900）、商品级 1900 与整单级 500 等各字段（S1 6400、距下一档 3600、下一档为 RM100 减 RM12、免运费门槛 6000 已达）、西马运费 800 时 total_sen 5900、没有运费报价时 participates 与 shipping_waived_sen 为 None、total_sen 为 None；超出限购与库存不足的行不计入活动；所有规则都没带来优惠时 participates 为 False 且 total_sen 照旧；不传 promotion 时各字段与改动前相同。tests/test_checkout_quote.py 的 test_ok_line_has_exactly_the_public_fields 与 _red_line 按响应逐字段整体比较，tests/test_member_orders_api.py 对会员计价响应里各行的比较若因行的两个新字段失败，只为加上它们而改（它的 GUEST_QUOTE_FIELDS 是会员计价的顶层字段，本任务不改会员计价，不改它）：这两个文件只为把新字段（没有活动时 promotion 为 null、两个行字段为默认值）加进期望值而改，其余断言不动。接口层固定 _utcnow 后，有生效活动、活动未开始与已结束三种情况下 promotion 字段分别为有值、null、null。每条测试的文档字符串写明它守住的第几条哪一句
       - docs/task-records/SHOP-TASK-234.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明新字段与 JSON 字段名，供会员计价与前台任务引用）；改动只落在 allowed_change_paths；不改下单、会员计价、展示的服务与接口、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.23「节日促销活动」第 4、10 条与「计价、优惠、积分与库存」第 1、8 条，改 app/services/checkout.py 的 quote_cart 与 app/api/checkout.py 的 POST /api/checkout/quote：有生效活动时对正常行算出商品级与整单级活动优惠、免运费、凑单提示所需的差额与件数，放进计价结果；有运费报价且本单参加活动时，合计按活动后的金额与实际运费给出。游客不能用券与积分，所以没有第 6 条的方案比较。供 P04、P05 与之后的会员计价、游客下单任务使用。
+      运营者落实写法：quote_cart 新增只限关键字参数 promotion（SHOP-TASK-233 的 LoadedPromotion 或 None，默认 None 即没有活动），由调用方读出后传入——计价接口传 active_promotion(db, 当前时刻)，之后的管理员预览传要预览的活动；现有调用不传，结果与现在逐字段相同（新字段取默认值）。活动只算 status 为 ok 的行（第 4 条），用 233 的 price_lines，行的商品 ID 与分类 ID 取自 quote_cart 内部已查到的商品。计价接口在 app/api/checkout.py 新增模块级的 _utcnow()（不带时区的 UTC，照 app/api/member_orders.py），测试替换它来固定时钟。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 4、10 条与「计价、优惠、积分与库存」第 1、8 条：计价结果的金额与凑单提示，不碰个人资料。
+      拆分：节日促销服务层的第二个任务（6 个允许路径，其中两个现有测试文件只为新字段改期望值），依赖 SHOP-TASK-233。
+```

@@ -26,3 +26,14 @@
       - docs/TODO.md 新增 SHOP-TASK-106 记录段（字段、三种状态的取值、偏离、验证到什么程度，并写明 A03 页面显示留给 SHOP-TASK-107），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/points.py、app/services/points_refund.py、app/services/refund_review.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.46），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「计价、优惠、积分与库存」第 5 条（退款批准时返还未过期的抵扣积分并追回获得积分，余额不足记待抵扣）与 docs/UX.md 0.10 的 A03（详情显示 admin.refund_points；首版不显示这一行由 Kelvin 2026-10-06 决定，待会员与积分账本任务接入积分字段时加回），
+      在后台退款详情接口加入积分返还与追回。不做前端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46（积分）。拆分：业务规则层与接口（5 个允许路径）。
+```

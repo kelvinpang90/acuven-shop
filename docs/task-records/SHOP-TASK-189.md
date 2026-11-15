@@ -36,3 +36,15 @@
       - docs/task-records/SHOP-TASK-189.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明函数签名、审计写法与偏离取舍）
       - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/admin_products.py、app/services/image_store.py、app/services/image_processing.py、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.19「计价、优惠、积分与库存」第 13 条「存放」「排列与移除」两段与上传的「图片已满」，新增 app/services/admin_product_images.py，把 SHOP-TASK-188 的处理结果经 SHOP-TASK-187 的存储写入 R2 并记入 ProductImage，另做调序与移除。
+      运营者落实写法（HANDOFF 0.79）：三个改动函数都先回滚此前的事务，再以 SHOP-TASK-184 的 lock_product_statement 锁商品行；存储经 image_store 模块属性调用（image_store.put_image 等，测试替换模块属性）；审计对象类别为 product、以商品 ID 记录，操作名 admin_product_image_added（新值为图片 ID）、admin_product_images_reordered（旧值与新值为英文逗号分隔、不带空格的图片 ID 序列）、admin_product_image_removed（旧值为图片 ID）；调序时顺序未变不写库、不写审计；移除或调序时请求的图片不属于该商品即「图片已被改动」；移除后其余图片的排列序号不重排（第一张仍按排列序号最小者）。
+      不做接口与前端，不改模型与迁移，不改设计。
+      设计闸门：DESIGN 1.19（提交 6e8f655）第 13 条与 HANDOFF 0.79，商品图片。
+```

@@ -40,3 +40,16 @@
       - docs/task-records/SHOP-TASK-171.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；两个接口、请求体格式、检查顺序与回答、偏离、验证到什么程度，并写明 A06 页面待视觉稿补齐后另行登记）
       - 改动只落在 allowed_change_paths；app/services/admin_shipping_rates.py、模型与迁移不变，现有接口与测试不变；不改 .platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.16（提交 e9a1c93）与 HANDOFF 0.67），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.16「计价、优惠、积分与库存」第 9 条与 docs/UX.md 0.15 的 A06（读取整页；整页一次保存；取值不合格与数据已被改动两种拒绝，整次保存不生效），新增 app/api/admin_shipping_rates.py 的 GET /api/admin/shipping-rates 与 PUT /api/admin/shipping-rates，
+      调用 SHOP-TASK-170 的 load_admin_rates 与 save_admin_rates（管理员 ID 在调用前取出，照 app/api/admin_site_settings.py），并在 app/main.py 注册路由。
+      运营者落实写法（HANDOFF 0.67）：写法照 app/api/admin_site_settings.py（require_admin、require_admin_csrf、_NoStoreRoute、_body_errors）；请求体上限 64 KB，在本文件里照 app/api/pay.py 的 _json_body 逐块读取（它的上限固定为 8 KB，整页的国家与汇率行可能超过）；
+      取值不合格回 422 {"detail":"rates_invalid"}，数据已被改动回 409 {"detail":"rates_changed"}。不做前端，不改服务层的规则、模型与迁移，不改设计。
+      设计闸门：DESIGN 1.16（提交 e9a1c93）与 HANDOFF 0.67，运费与演示汇率的后台维护。拆分：接口层（4 个允许路径），页面待视觉稿补齐后另行登记。
+```

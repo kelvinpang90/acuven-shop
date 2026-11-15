@@ -29,3 +29,14 @@
       - docs/TODO.md 新增 SHOP-TASK-075 记录段（用途、核验、登录或注册、认领、签发与事务、偏离、验证到什么程度，并写明接口与会话 cookie 留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/sms_verification.py、app/services/member_auth.py、.platform/、CI、部署配置；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 1、2、3 条（注册、短信登录与结账验证是同一个短信验证流程：验证通过后号码已注册则登录，未注册则创建无密码会员并登录，随后自动认领该号码近 30 天、未认领的游客订单；每个游客订单只能认领一次）
+      与「计价、优惠、积分与库存」第 3 条（认领过去游客订单不追发积分），在 SHOP-TASK-069 的核验函数与 SHOP-TASK-071 的会话签发之上实现规则函数。不做接口与 cookie，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41（会员注册登录与个人资料）。拆分：业务规则层（3 个允许路径）；接口与会话 cookie 留给之后单独登记的任务。
+```

@@ -43,3 +43,17 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AdminShippingPage.test.tsx 验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——三块运费与汇率的顺序、文字与初值（含 fee_sen 为 0、5、800、99999 的初值文字）、两档按代码取文案、国家名称、无障碍标签；运费文字换成整仙（含 0.1、0.10、8、8.5、9999.99 与不合格的 8.、.5、8.123、负号、空白、空字符串）与汇率格式；格式不合格不发请求并显示 admin.rates_invalid；保存内容的行、种类与顺序；各保存结果的显示、输入保留与改值后收起、403 后表单上方的 common.error_retry、重新读取与保存中禁用；页面文字全部来自字典（国家名称、币种代码、小数位、版本号、汇率与运费的值、输入框的值、无障碍标签中拼接用的英文逗号加空格以及 → 与括号除外）；每条测试写明它守住的是 UX、设计或 HANDOFF 0.72 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）。SHOP-TASK-173 写的断言只在内容区改变时随之改写，后台框架与导航的期望不变
       - docs/task-records/SHOP-TASK-175.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；读取、显示、格式与换算、保存与各结果、偏离、验证到什么程度；只写实际存在的测试，写明未做浏览器验收，增删行留给 SHOP-TASK-176）；改动只落在 allowed_change_paths；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.17 提交 80e3775 与 HANDOFF 0.72），不合并、不直推；不新增路由，router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在 SHOP-TASK-173 的 A06 页面上接 SHOP-TASK-174 的请求模块：读取整页，按 docs/UX.md 0.16 的 A06 显示马来西亚两档、按国家、其他国家三块运费与演示汇率，可改运费与汇率并整页保存，
+      显示保存中与保存后的状态（成功、取值不合格、数据已被改动与重新读取、其他失败）与 docs/DESIGN.md 1.17「计价、优惠、积分与库存」第 9、10 条的页面部分。删除与新增行留给 SHOP-TASK-176。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.72）：运费输入为一到九位数字、可再跟小数点与一到两位数字，按文字换成整仙（整数部分乘 100 加补足两位的小数部分，不经浮点数相乘）；汇率输入为数字、可再跟小数点与数字，原样提交；
+      格式不对时页面不提交、显示 admin.rates_invalid，取值范围以服务端为准；读取与保存的 401、403 与网络中断照 A09 页面现有写法（401 回到 A01、保存 403 重新读取、网络中断 common.network_check）；改任何输入后收起保存按钮下方的全部提示（admin.rates_saved、admin.rates_invalid、admin.rates_changed 连同 admin.reload、common.error_retry 与 common.network_check），比 A09 多收起失败提示，表单上方 403 后的提示照 A09 不随改值收起；无障碍标签的拼法见验收标准。
+      设计闸门：DESIGN 1.17（提交 80e3775）第 9、10 条与 HANDOFF 0.72，运费与汇率的显示与提交（取值核对、并发核对与审计在服务端）。
+      拆分：A06 页面的第一层（7 个允许路径，router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）；增删行另成 SHOP-TASK-176。
+```

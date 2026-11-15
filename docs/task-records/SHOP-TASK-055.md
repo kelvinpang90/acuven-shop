@@ -47,3 +47,16 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/api/adminOrders.test.ts、frontend/src/pages/AdminOrderDetail.test.tsx 与 frontend/src/pages/AdminOrdersPage.test.tsx 验证意图——详情字段与金额、收货资料与审计提示、recipient 为 null、事件记录；两个按钮在各状态下的可用性与冻结提示；推进请求体与 CSRF 请求头、200 后重取、409、403、401 与网络中断；404 与不合法 ID；列表链接与 aria-selected、查询条件在切换时保留；订单号、收货资料与令牌不进网址或浏览器存储；页面文字全部来自字典；每条测试写明它守住的是 UX、DESIGN 或 Kelvin 决定的哪一句；现有测试只按需要改并写明原因；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - 详情部分可放在新文件 frontend/src/pages/AdminOrderDetail.tsx；docs/TODO.md 新增 SHOP-TASK-055 记录段（路由与布局、请求与错误处理、推进与冻结、偏离、验证到什么程度，并写明未做浏览器验收、待审退款数链接留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]；改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11 与 UX A02 的 P1，同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在 SHOP-TASK-048 的订单列表上实现 A02 的订单详情与模拟发货：路由 /admin/orders/:id，桌面列表在左、详情在右，手机只显示详情；
+      详情显示商品、金额明细、原始收货资料与事件记录，可推进打包与发货，全部已退时冻结。调用 SHOP-TASK-037 的详情与推进接口。
+      不做退款审核页面，待审退款数仍为文字，不装依赖，不改后端，不改设计。
+      设计闸门：docs/DESIGN.md 1.11（提交 2d13250）「权限与资料保护」（仅管理员可见所有订单原始资料，查看留审计）与已审阅的 docs/UX.md A02 的 P1，与 SHOP-TASK-037 相同；本任务只调用已登记的接口，不改金额、状态机与个人资料的规则，收货资料只在页面内存里。
+      拆分：不拆（12 个允许路径，详情与推进同属 A02 详情一处）。
+```

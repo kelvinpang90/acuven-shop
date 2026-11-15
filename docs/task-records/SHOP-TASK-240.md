@@ -37,3 +37,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_promotion_poster.py（以替身代替存储）：宽 1199 与 1200 的桌面图、宽 599 与 600 的手机图；替换后旧对象被删；移除；不改活动的 version；ended、不存在与已发布上传图模式的移除；审计写法；process_image 不传 min_width 时与现在相同。每条测试的文档字符串写明它守住的设计句子、HANDOFF 0.93 的那一点或本任务的落实写法
       - docs/task-records/SHOP-TASK-240.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明函数签名与异常，供 250 引用）；改动只落在 allowed_change_paths；app/services/admin_promotions.py 只为加 PromotionEnded 而改；不改接口、计价、下单、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.23「节日促销活动」第 12 条（海报图沿用「计价、优惠、积分与库存」第 13 条的格式、文件大小与存储规则，另用自己的存储键前缀；像素尺寸为桌面图宽至少 1,200、手机图宽至少 600；上传即替换该位置的图，存放与替换的顺序照第 15 条）与 HANDOFF 0.93 确认的一点（海报图的上传与替换立即生效、不随保存提交、不改活动的版本号，每次上传与替换写后台审计），照店铺标志的服务层（app/services/store_logo.py）做活动海报图的替换与移除。接口见 SHOP-TASK-250。不改前端与数据库。
+      运营者落实写法：app/services/image_processing.py 的 process_image 加只限关键字参数 min_width（默认 0，即不另限宽度），海报传桌面 1200、手机 600，其余检查照商品图片（宽与高各 200–4,000）；宽度下限按上传的原图判断（第 12 条写的是上传图的宽），之后照常把长边缩到 1,600，展示图的宽可能小于下限，接受（前台按比例居中裁切显示）。app/services/image_store.py 加 POSTER_KEY_PREFIX（promotion-posters/）。上传与移除只对存在且不是 ended 的活动（状态用 SHOP-TASK-239 的 promotion_state），锁活动行后改装饰行该位置的五列与装饰行的 updated_at、写审计并提交，不改活动的 version 与 updated_at（海报不随保存提交，HANDOFF 0.93）；替换与移除后删除旧对象（只尝试 1 次，失败只记日志）。已发布（scheduled 或 running）且海报为上传图模式的活动不能移除图（第 2 条的发布条件要求两张图都有，与 SHOP-TASK-249 保存时守住的一致）。位置 slot 为 desktop 或 phone。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 12 条与「计价、优惠、积分与库存」第 13、15 条：图片的校验与存储，不碰金额与个人资料。
+      拆分：节日促销后台层的第三个任务（7 个允许路径），依赖 SHOP-TASK-229 与 249（PromotionNotFound 与读取）。原登记稿把服务与接口合在一个任务，预审报 TOO_LARGE，接口拆到 250。
+```

@@ -42,3 +42,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——新文件 frontend/src/api/adminStripePending.test.ts 以 fetch 替身覆盖每个函数的请求（方法、路径、请求头、请求体）、每种回答到返回值的映射与字段校验的每一种不合格；每条测试的注释写明它守住的 UX 0.19 A11 或 SHOP-TASK-225 契约的哪一句
       - docs/task-records/SHOP-TASK-227.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改页面、路由、后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明不适用及理由），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      为 A11 页面新建调用 SHOP-TASK-225 三个接口（GET /api/admin/stripe-pending、POST /api/admin/stripe-pending/checkouts/{结账记录 ID}/void 与 …/refund-retry）的请求模块与测试，供 SHOP-TASK-228 使用；不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
+      运营者落实写法：照 frontend/src/api/adminRefunds.ts 的 retryStripeRefund 与 frontend/src/api/adminStockResets.ts 的写法（同源 cookie、不缓存、Accept 为 application/json，写操作带框架的 CSRF 请求头，路径 ID 不合法时不发请求）；记录不存在（404）与 changed 一样回给页面已变化（UX 0.19 A11）。
+      设计闸门：不适用（作废与重试的规则、核对与审计在 SHOP-TASK-223 至 225 的服务端，依据 DESIGN 1.22 第 11 条；请求模块只传递与校验字段）。
+      拆分：A11 页面的请求层（3 个允许路径），照 A06 的 SHOP-TASK-174。
+```

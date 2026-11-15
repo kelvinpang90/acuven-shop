@@ -50,3 +50,17 @@
       - docs/task-records/SHOP-TASK-134.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；途径与各状态、跳转、途径已改变、complete 交给 P07、偏离、验证到什么程度，并写明未做浏览器验收、取消的 Stripe 处理留给 SHOP-TASK-135）
       - 改动只落在 allowed_change_paths（不新增路由，不改 frontend/src/api/pay.ts 与 frontend/src/pages/PayResultPage.tsx，取消的现有行为不变）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.11 的「P06 Stripe 测试」与 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 1、2、3、9、10 条，以及 docs/HANDOFF.md 0.54、0.55 的落实写法，
+      在 frontend/src/pages/PayPage.tsx 按服务端给出的支付途径显示 Stripe 测试的标题、提示、测试卡号与各状态，经 SHOP-TASK-132 的 startStripe 跳转到服务端返回的付款页地址，
+      并在两种途径上处理「支付途径已改变」。打开时已有付款完成的会话（stripe_state 为 complete）直接换成 P07，由 SHOP-TASK-133 的确认处理（HANDOFF 0.54「由前端调用确认接口」由 P07 完成，P06 不重复）。
+      取消的 Stripe 处理留给 SHOP-TASK-135。不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，支付状态的显示与发起（途径判定与会话创建都在服务端）。
+      拆分：P06 拆成显示与跳转（本任务）和取消（SHOP-TASK-135）：两部分各有一组状态与测试，合在一起预计接近 1500 行，前端页面任务此前因一轮要补的交互测试太多而耗尽修复轮数（SHOP-TASK-102）；本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+```

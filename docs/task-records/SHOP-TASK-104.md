@@ -18,3 +18,14 @@
       - docs/TODO.md 新增 SHOP-TASK-104 记录段（三个接口、授权、字段、偏离、验证到什么程度，并写明退款接口留给 SHOP-TASK-105、前端 P13 与 P09 会员模式留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、app/api/order_lookup.py、app/api/member_auth.py、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 6 条（会员仅能访问自己认领或下单的订单，可在「我的订单」对这些订单确认收货，规则与查单页相同；写操作另须 CSRF 令牌）与「订单与退款状态」，
+      以及 docs/UX.md 0.10 的 P13「我的订单」与 P09 会员模式，在 SHOP-TASK-103 之上提供我的订单列表、订单详情与确认收货三个接口。不做前端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250），会员访问订单与个人资料（收货资料）。拆分：接口层（4 个允许路径）。
+```

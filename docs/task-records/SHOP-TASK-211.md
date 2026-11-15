@@ -37,3 +37,17 @@
       - docs/task-records/SHOP-TASK-211.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明函数签名、审计写法与偏离取舍，供 SHOP-TASK-212、213 使用）
       - 改动只落在 allowed_change_paths；不改模型与迁移、app/services/image_store.py、app/services/image_processing.py、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.20 提交 a870f78 与 HANDOFF 0.84），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.20「计价、优惠、积分与库存」第 15 条「存放与替换」「移除」「审计」三段与「读取与显示」一段的读取部分，新增 app/services/store_logo.py，把处理好的展示图经 SHOP-TASK-210 的存储（键前缀 store-logos/）写入 R2 并记入装修设置单例行（SHOP-TASK-209 的五列），另做移除；并让 app/services/store_design.py 的公开与后台读取带上当前标志的提供路径。
+      运营者落实写法（HANDOFF 0.84）：两个改动函数都先回滚此前的事务，再以 app/services/store_design.py 的 _lock_setting 锁定单例行（锁定是新事务的第一条语句，单例行不存在时它按默认值插入后再锁定，同 A08 的保存）；存储经 image_store 模块属性调用（测试替换模块属性），一律传 prefix=image_store.LOGO_KEY_PREFIX；
+      审计对象类别为 store_design（AUDIT_TARGET_STORE_DESIGN）、以单例行 ID 记录，操作名 admin_store_logo_uploaded（旧值为原有文件名、原来没有标志时为空，新值为新文件名）与 admin_store_logo_removed（旧值为原有文件名，新值为空）；提供路径为 /api/store-logos/<文件名>.webp；A08 的保存（save_store_design）不读写标志五列、它的审计值不变。
+      不做接口与前端，不改模型与迁移，不改设计。
+      设计闸门：DESIGN 1.20（提交 a870f78）第 15 条与 HANDOFF 0.84，店铺标志图的存放、替换、移除与审计。
+      拆分：服务层（5 个允许路径），接口为 SHOP-TASK-212、213。
+```

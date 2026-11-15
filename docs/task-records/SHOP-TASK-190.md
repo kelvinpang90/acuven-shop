@@ -32,3 +32,15 @@
       - docs/task-records/SHOP-TASK-190.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明各接口的检查顺序与偏离取舍）
       - 改动只落在 allowed_change_paths；tests/test_admin_products_api.py 的 test_routes_are_the_four_endpoints 断言该前缀下只有四个路由，只为此改它——路径筛选排除以 /images 结尾与 /images/ 之下的路径，四个期望路由不变，该文件其他测试不改；不改服务层（含 app/services/admin_product_images.py、image_store.py、image_processing.py）、模型与迁移、其他现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.19「计价、优惠、积分与库存」第 13 条「上传」的检查顺序与 docs/UX.md 0.17 的 A04 图片部分（上传、排序与移除各自立即生效，成功后显示服务端返回的图片列表，被拒时按服务端的回答显示），把 SHOP-TASK-188、189 接成后台接口 POST 与 PUT /api/admin/products/{product_id}/images、DELETE /api/admin/products/{product_id}/images/{image_id}。
+      运营者落实写法（HANDOFF 0.79）：上传路径须与反向代理放宽到 6m 的路径一致（只有这一条路径放宽）；错误的 detail 与 UX-COPY 0.18 的键同名——415 image_type_unsupported、413 image_too_large、409 images_full、422 image_invalid、409 images_changed，另有 404 product_not_found 与 503 image_store_unavailable（页面照其他失败显示）；5 MB 指 5,242,880 字节；三个接口成功都回答 images（load_product_images 的列表，每项 id 与 storage_ref）；处理函数为同步函数，FastAPI 在线程池里执行，图片处理与 R2 调用不阻塞事件循环。
+      不做前端，不改服务层与模型，不改设计。
+      设计闸门：DESIGN 1.19（提交 6e8f655）第 13 条与 HANDOFF 0.79。拆分：后台接口层（4 个允许路径），提供接口为 SHOP-TASK-191，页面 A04 另行登记。
+```

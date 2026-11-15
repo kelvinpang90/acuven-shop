@@ -32,3 +32,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_order_promotion_display.py 用直接写入的订单快照（第 8 条首例：商品级 1900、整单级 500、免去 800）断言两处详情给出 2400 与 800、后台给出活动内部名称，没有活动的订单为 0、0 与 None；接口层断言游客订单查询、会员订单详情与后台订单详情的响应带上这些字段。tests/test_order_lookup.py 的 ORDER_FIELDS 与 tests/test_admin_orders.py 对后台详情的整体比较会因新字段失败，这两个文件只为加上新字段而改。每条测试的文档字符串写明它守住的设计或 UX 句子
       - docs/task-records/SHOP-TASK-238.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明新字段与 JSON 字段名，供前台任务引用）；改动只落在 allowed_change_paths；不改下单、计价、退款、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.23「节日促销活动」第 7 条与 docs/UX.md 0.20 的 P09 与 A02「金额明细」（活动优惠合计大于 0 时加 checkout.summary_promo 一行，活动免运费时运费行显示免运费；A02 另显示订单所用活动的内部名称），在两处订单详情的数据里加上订单快照中的活动优惠与免去的运费，后台详情另加活动的内部名称。只读订单快照，不重算；不改前端、下单与退款。
+      运营者落实写法：app/services/order_lookup.py 的 LookupOrder（P09 的游客订单查询与会员的订单详情都用它）与 app/services/admin_orders.py 的 AdminOrderDetail 各加 promotion_discount_sen（订单的商品级与整单级活动优惠之和）与 shipping_waived_sen；AdminOrderDetail 另加 promotion_name（订单记有活动时为该活动的内部名称，否则为 None）。现有字段与接口路径不变；JSON 照模型原样输出。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 7 条：只显示订单金额快照，不新增个人资料的输出。
+      拆分：节日促销服务层的第六个任务（6 个允许路径，其中两个现有测试文件只为新字段改期望值），依赖 SHOP-TASK-230（订单列）。
+```

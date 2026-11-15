@@ -30,3 +30,16 @@
       - 代码结构沿用 CheckoutPage.tsx 现有写法（显示条件写成导出的纯函数或沿用 View 的 props）；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；用 vitest 与 react-dom/server（不加测试依赖，fetch 与存储以替身代替）验证意图（以 renderToStaticMarkup 渲染、直接调用导出的函数，不模拟点击）——frontend/src/pages/CheckoutPage.test.tsx 的件数超出、金额超出与两者同时的提示与先后、与 cart.item_changed 同时出现时只有一个回购物车链接、未超出时不显示、第 1 步与第 3 步都显示、超出时下单按钮禁用；会员路径在 frontend/src/pages/CheckoutMember.test.tsx 加一条同一提示的断言；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - 现有测试只在必要时修改并写明原因；docs/task-records/SHOP-TASK-195.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；含「任一步都显示」的落实写法、偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门写明 DESIGN 1.18 提交 5ba9796 第 8 条与 HANDOFF 0.80），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 8 条与 docs/UX.md 0.17 的 P05「整单上限」一段，计价结果的 units_over_limit 或 amount_over_limit 为真时，在 cart.item_changed 的位置（各步内容之前）显示 cart.units_over_limit、cart.amount_over_limit 与回购物车的链接；
+      下单按钮照现有写法由接口的 can_place_order 禁用（超出时服务端给 false），游客与会员共用同一个视图。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.80）：UX 写「第 3 步」显示，而件数上限在第 1 步的计价里就能判断，提示照现有 cart.item_changed 的写法在任一步都显示（同一位置、同一回购物车链接），不只限第 3 步；有非正常行与超出上限同时出现时，三条提示依次为 cart.item_changed、cart.units_over_limit、cart.amount_over_limit，下面只有一个回购物车的链接。
+      设计闸门：DESIGN 1.18（提交 5ba9796）第 8 条与 HANDOFF 0.80，整单上限的提示（判定与下单校验在服务端）。
+      拆分：P05 一层（8 个允许路径，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
+```

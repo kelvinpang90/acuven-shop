@@ -42,3 +42,14 @@
       - docs/TODO.md 新增 SHOP-TASK-079 记录段（接口、cookie、字段、检查顺序、结果与状态码、偏离、验证到什么程度，并写明前端忘记密码页留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、app/api/member_auth.py、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41、0.44），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 3 条与「边界与原则」第 4 条（短信验证开关关闭时密码重设暂停；开关在流程途中被关闭后不重设密码）、docs/UX.md 0.10 P12 忘记密码（验证通过后号码已注册才显示新密码输入，未注册不创建账号），
+      以及 docs/HANDOFF.md 0.44 记录的 Kelvin 2026-10-10 决定，在 SHOP-TASK-069 的核验函数与 SHOP-TASK-078 的规则函数之上提供重设密码的验证与提交两个接口。不做前端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41、0.44（会员密码与个人资料）。拆分：接口层（4 个允许路径）。
+```

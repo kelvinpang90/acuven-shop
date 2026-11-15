@@ -44,3 +44,17 @@
       - docs/task-records/SHOP-TASK-151.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；两个请求、归类、共享状态的读取与重读规则、偏离、验证到什么程度，只写实际存在的测试，并写明挂载与页头留给 SHOP-TASK-153、页面留给 SHOP-TASK-152、154、155）
       - 改动只落在 allowed_change_paths（不挂载 Provider，不改页面、页头、路由与 memberAuth.ts）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.13 提交 450c2fa 与 HANDOFF 0.61），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.13 的 P13（页头「My account」入口、遮掩后的手机号与退出登录）与 docs/DESIGN.md 1.13「权限与资料保护」第 3 条，新建前台请求模块，
+      调用已有的读取会话 GET /api/member/session 与退出 POST /api/member/logout（app/api/member_auth.py，SHOP-TASK-076），
+      并提供一个跨页共享的会员会话状态，供 SHOP-TASK-152 至 155 取得登录状态、遮掩后的手机号与会员写操作所需的 CSRF 令牌（会员 CSRF 令牌只能从读取会话取得）。
+      本任务不挂载到 App、不改页面与页头（挂载与页头切换由 SHOP-TASK-153 完成）。不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 3、5 条（会话到期、退出与服务端授权检查；会话 cookie 不交给页面脚本，写操作另须 CSRF 令牌）与 HANDOFF 0.61。
+      拆分：会员前端第二批的请求层之三，3 个允许路径。
+```

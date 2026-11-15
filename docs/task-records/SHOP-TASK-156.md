@@ -39,3 +39,16 @@
       - docs/task-records/SHOP-TASK-156.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；接口、授权与错误、响应字段、偏离、验证到什么程度，只写实际存在的测试，未在真实 MySQL 上验证的如实写明，并写明前端预填留给 SHOP-TASK-157、159）
       - 改动只落在 allowed_change_paths；不改 app/main.py（会员路由器已注册）、模型、迁移、服务层、.platform/、docs/TODO.md、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.14 提交 00f8f34 与 HANDOFF 0.63），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.14「权限与资料保护」第 8 条（会员结账预填本人手机号）与 docs/UX.md 0.13 的 P05 第 3 步（会员收货电话预填会员手机号，可改为其他号码或虚构号码），
+      在 app/api/member_auth.py 的会员路由器上新增只读接口 GET /api/member/phone，返回当前会员本人完整的 E.164 手机号，供 SHOP-TASK-157、159 预填结账第 3 步的收货电话；
+      读取会话 GET /api/member/session 仍只给遮掩号码。不做前端，不改模型与迁移，不改设计。
+      设计闸门：DESIGN 1.14（提交 00f8f34）「权限与资料保护」第 8 条（只认会员会话、GET、不要求 CSRF、只返回这一个值；会话不通过 401 且不返回号码；不受短信验证开关影响；不另设限流与审计；no-store；号码不进日志、监控、分析事件或错误回显）与 HANDOFF 0.63，个人资料（手机号）。
+      拆分：接口层（3 个允许路径）。
+```

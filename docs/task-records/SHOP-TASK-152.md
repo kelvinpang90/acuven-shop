@@ -67,3 +67,19 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/AccountPage.test.tsx 验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——打开时重读会话与三种结果（guest 的 replace 去向、failed、member 的标题行）；导航与标签只有我的订单一项；列表各项的内容与顺序、状态标签样式、空列表与各读取结果；查看链接在 props 给出去向时渲染、没有时不渲染，点击时先交出订单号（测试不断言 /account/order 不在路由表，以免 SHOP-TASK-154 加路由后失败）；退出的各结果与去向；页面文字全部来自字典，带变量的条目按模板匹配（照 frontend/src/pages/AdminRefundDetail.test.tsx 的 visibleTexts、textNodes 与 unescapeHtml）；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）；现有测试只在必要时修改并写明原因——frontend/src/router.test.tsx 的路由表断言与 verifiedPath 没有来源及来源不能作来源（后台页、登录页）时的期望（改为 /account）；frontend/src/pages/LoginPage.test.tsx 与 frontend/src/pages/RegisterPage.test.tsx 里没有来源、来源为后台页或登录页时去向为首页的几组期望（改为 /account）；frontend/src/pages/TrackOrderPage.test.tsx「renders no member-mode links」一条只删去断言 /account 不在路由表的那一行，其余断言（查单模式没有 My orders、Continue payment 与指向 /account 的链接）不变
       - docs/task-records/SHOP-TASK-152.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；会话判断、导航与段表、我的订单、退出、登录后去向、偏离（含不翻页、手机标题下的手机号与退出、视觉稿未搬的颜色与字重）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不改 frontend/src/components/SiteFrame.tsx、frontend/src/api/ 与 TrackOrderPage.tsx）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.13 提交 450c2fa 与 HANDOFF 0.61），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.13 的 P13 与 docs/DESIGN.md 1.13「权限与资料保护」第 3、5 条，新增路由 /account 与会员中心页：标题行（common.nav_account、遮掩后的手机号与 common.nav_logout）、
+      桌面左侧导航与手机分段标签、★ account.demo_hint 与「我的订单」段，经 SHOP-TASK-150 读取本人订单、经 SHOP-TASK-151 读取会话与退出；登录与注册成功而没有来源时改去 /account。
+      积分、优惠券与设置三段由之后的任务各自加入；页头的会员中心入口由 SHOP-TASK-153 接入；订单详情的会员模式由 SHOP-TASK-154 加入路由表，在那之前我的订单不渲染查看入口。
+      运营者落实写法（HANDOFF 0.61）：未登录时用路由的 replace 进入 /login；我的订单不翻页，只显示第一页（最多 20 张）；导航只显示已实现的段；
+      手机的遮掩手机号与退出暂放在标题之下（UX 放在设置段，设置段由之后的任务加入时移过去）。
+      不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 3、5 条（会话到期、退出与服务端授权检查；会员仅能访问自己认领或下单的订单；手机号部分遮盖显示）与 HANDOFF 0.61。
+      拆分：P13 框架与我的订单，11 个允许路径（LoginPage.test.tsx、RegisterPage.test.tsx 与 TrackOrderPage.test.tsx 只为下面写明的断言列入）。
+```

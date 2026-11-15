@@ -60,3 +60,19 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/pages/TrackOrderPage.test.tsx 验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）——会员模式打开时的各分支（guest、没有订单号、not_found、signed_out 的去向，submittedRefundOrder 优先于交接，读取后即清除，之后从 P13 交出别的订单号时取交接的值）；会员模式有 account.orders、没有 order.lookup_access、order.lookup_another、order.lookup_no_pay 与 account.order_pay；退款入口在 props 给出去向时指向 /account/order/refund、没有时不渲染（测试不断言该路径不在路由表，以免 SHOP-TASK-155 加路由后失败）；确认收货各结果；两种模式下会员下单订单的五行顺序与金额、游客订单仍为三行；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）；现有测试只在必要时修改并写明原因——frontend/src/router.test.tsx 的路由表断言；frontend/src/pages/PayResultPage.test.tsx「has the register link but no order detail or points」一条只删去断言 /account/order 不在路由表的那一行（游客结果页仍没有 result.track），其余不改；TrackOrderPage.test.tsx 查单模式的现有断言不变
       - docs/task-records/SHOP-TASK-154.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；会员模式的打开、内容、确认收货、券与积分两行、偏离（含待支付订单本批不显示 account.order_pay、result.track 留给会员结账任务）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不改 frontend/src/api/、RefundPage.tsx 与 PayResultPage.tsx）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.13 提交 450c2fa 与 HANDOFF 0.61），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.13 的 P09（会员模式；M3——下单时是会员的订单显示优惠与积分两行，游客订单与后来被认领的游客订单不显示，查单模式与会员模式相同），新增路由 /account/order：
+      frontend/src/pages/TrackOrderPage.tsx 支持会员模式——经 SHOP-TASK-150 取单与确认收货，CSRF 令牌取自 SHOP-TASK-151 的会话，以 account.orders 返回 /account；
+      两种模式下 placed_by_member 为真的订单在金额明细显示 checkout.summary_coupon 与 checkout.summary_points 两行。
+      运营者落实写法（HANDOFF 0.61）：订单号只经 SHOP-TASK-150 的模块内存交接，刷新后没有订单号时用路由的 replace 回到 /account（Kelvin 2026-10-24 决定）；未登录时用 replace 进入 /login；
+      会员模式的待支付订单本批不显示 account.order_pay（由结账会员路径的任务加入），也不显示查单模式的 order.lookup_no_pay；从 P07 的 result.track 进入会员模式也留给那个任务。
+      退款入口指向 /account/order/refund，在 SHOP-TASK-155 把它加进路由表之前不渲染。不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.13（提交 450c2fa）「权限与资料保护」第 3、5 条（会话到期与服务端授权检查；会员仅能访问自己认领或下单的订单，确认收货规则与查单页相同，写操作另须 CSRF 令牌）、「订单与退款状态」「失败、并发与重试」（确认收货幂等）与「计价、优惠、积分与库存」第 3、7 条（100 积分抵 RM1；已有订单按快照）与 HANDOFF 0.61。
+      拆分：P09 会员模式，9 个允许路径（PayResultPage.test.tsx 只为下面那一条断言列入）。
+```

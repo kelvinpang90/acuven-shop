@@ -51,3 +51,17 @@
       - 现有测试只在必要时修改并写明原因——AccountPage.test.tsx 的段表只有一项、导航只有一项、只有一个标签与一个 tabpanel、demo_hint 位置顺序、memberScreen 与 sessionStep 结果形状这几处随段表与状态扩展修改；「opening the page」与「my orders」里按请求清单、请求下标或 events 整体断言的几条（如 rereads the session instead of using the earlier shared state、stops after leaving the page while the shared reread still settles、ignores later changes of the shared session）只为多出的积分与优惠券两个读取补替身与期望，期望的会话、我的订单与跳转去向不变；我的订单、标题行与退出的断言不变
       - docs/task-records/SHOP-TASK-165.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；段表、两段的读取与显示、偏离（含空明细、到期与最低消费的显示条件）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不改 frontend/src/api/；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.14 提交 00f8f34 与 HANDOFF 0.63），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.13 的 P13（我的积分——余额、退款后尚欠、即将到期与明细；我的优惠券——全体会员相同的可用券与本人使用记录，Q19）与 docs/DESIGN.md 1.14「权限与资料保护」第 3、5 条，
+      在 frontend/src/pages/AccountPage.tsx 的段表加入积分与优惠券两段（桌面左侧导航与手机分段标签），经 SHOP-TASK-164 读取；两段的状态类型、纯函数与 View 各放一个新文件以控制 AccountPage.tsx 体积。
+      运营者落实写法（HANDOFF 0.63）：积分明细为空时只显示 account.points_history 标题（UX-COPY 没有空明细的键）；没有即将到期的积分时不显示 account.points_expiry；最低消费为 0 的券不显示 account.coupon_min_spend；退款后尚欠积分大于 0 才显示 account.points_pending（UX 线框）。
+      不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.14（提交 00f8f34）「权限与资料保护」第 3、5 条（会话到期与服务端授权检查；会员仅能访问自己的资料）与「计价、优惠、积分与库存」第 3、5 条（获得积分、退款返还与追回、待抵扣）与 HANDOFF 0.63。
+      拆分：积分与优惠券两段，11 个允许路径。
+```

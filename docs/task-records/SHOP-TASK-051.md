@@ -32,3 +32,14 @@
       - tests/test_admin_store_design.py 用 TestClient 与 SQLite 内存库（开启外键检查，覆盖会话依赖）自建管理员、后台会话与商品（含已下架或不满足 published() 的商品），每条测试写明它守住的是需求或 UX 的哪一句，验证——无会话时两个接口都 401；GET 的字段、默认值、已下架精选商品的 published 为 false、choices 只含可上架商品；PUT 成功改写并在另一会话里读到、写一条审计（old 与 new 符合上述数组格式，取最长合法值时也不超过 255 个字符，且不含商品名称）、区块与精选重排（含交换位置）成功、公开接口 GET /api/store-design 随之改变；相同设置 200 且不写审计；theme_invalid、accent_invalid（含属于别的主题的主色）、featured_unavailable（不存在、已下架）、区块不是排列、精选超过 4 件或重复时 422 且数据不变；缺或错 CSRF 403 且数据不变；非 JSON 415、超过 8 KB 413、多余字段 422 不回显；所有响应 no-store；用 MySQL 方言编译锁定查询含 FOR UPDATE；由 PR 的必需 CI 检查 backend 执行并全部通过（Worker 沙箱不跑 pytest）
       - docs/TODO.md 新增 SHOP-TASK-051 记录段（接口与字段、校验与错误码、锁定与事务、审计、偏离、验证到什么程度，并写明标志图与 A08 页面留给之后的任务）；不改 planning-v1 块；复选框只允许 [ ] / [x]；改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加表或迁移；不改前端代码；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      给管理员提供店铺装修设置的读取与保存两个接口（A08 的后端）：主题、主色、首页四个区块的顺序与显隐、最多 4 件精选商品及顺序，保存时校验并写审计记录。
+      不含标志图，不做页面，不改前台读取接口与前台，不加表或迁移，不改设计。
+      设计闸门：不适用（只改前台外观设置，不涉及金额计算与个人资料，见 docs/HANDOFF.md 2026-09-30 关于 REQUIREMENTS 1.9 的记录）。拆分：接口层，不拆（5 个允许路径）。
+```

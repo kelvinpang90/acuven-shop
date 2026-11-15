@@ -21,3 +21,30 @@
   - 视觉稿 PROMO-slots、PROMO-packs-light、PROMO-packs-dark 的并排多套主题、浅深色对照与 `acs--phone` 手机框是视觉稿的展示方式，前台不照做；装饰本身全部来自 `acuven-shop.css` 的 `.acs-promo`、`[data-promo-*]` 与 `.acs-promo-garland`，site.css 只补包裹元素的布局，没有写不了的部分。
 - 验证到什么程度：人工逐条对照验收标准、HANDOFF 0.97 的落实写法、COMPONENTS「FestivalPromotion」与 `acuven-shop.css` 的 `.acs-promo` 规则；测试里的期望时刻按 `ends_at − server_time` 手算（一小时 = 3 600 000 毫秒，上限加 10 秒的分段）。前端检查与全部测试由 PR 的必需 CI 检查 `frontend` 执行，结果以它的记录为准。
 - 交付：以 Draft PR 交付，设计闸门写明不适用及理由；不合并、不直推。
+
+## 登记时的验收标准（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    acceptance_criteria:
+      - 共享读取——frontend/src/promotion.tsx 导出 PromotionProvider、usePromotion 与 PromotionCountdown，行为照 purpose 的落实写法；在 Provider 之外调用 usePromotion 时返回 ready、promotion 为 null（后台页与测试不受影响）；离开页面或语言变化时中止未完成的读取，旧读取的结果不再更新
+      - 倒计时——剩余时间照落实写法计算，与访客设备时钟的绝对值无关；剩余到 0 时立即去掉活动内容并只重新读取一次，新读取返回另一个活动时页面随之更新；长于 setTimeout 上限的等待不会立即触发；传入 initial 时首次渲染即显示该活动、不发读取
+      - 框架——frontend/src/components/SiteFrame.tsx 照落实写法渲染包裹元素与花边；装饰元素读屏忽略，不遮挡演示横幅与页头；没有活动时包裹元素不带 acs-promo 类与 data-promo-* 属性、不渲染花边；frontend/src/App.tsx 只在前台页加 PromotionProvider，后台页不读取活动
+      - 样式——包裹元素与花边的布局写在 frontend/src/styles/site.css（只写布局、显隐与媒体查询，固定间距与尺寸写像素值，不声明颜色、字体、圆角属性；图案、配色与飘落动画由生成的 acuven-shop.css 提供，不改它）；视觉稿 docs/design/pages/PROMO-slots、PROMO-packs-light、PROMO-packs-dark 里 site.css 写不了的记入任务记录的偏离，评审不以此要求修改
+      - 测试验证意图（前端检查与全部测试由 PR 的必需 CI 检查 frontend 执行并全部通过，Worker 沙箱不跑前端检查）——新文件 frontend/src/promotion.test.tsx 用 vitest 与 react-dom（不加测试依赖，读取函数与 performance.now 以替身代替，用 vitest 的假计时器）覆盖读取成功、失败按没有活动、语言变化重新读取、剩余时间不受设备时钟改变影响、到 0 时立即没有活动并重新读取一次、generation 的变化、读取结果已到期时不再读取、initial 的首次渲染、超过 setTimeout 上限的分段等待、倒计时文字每秒更新且没有 aria-live；frontend/src/components/SiteFrame.test.tsx 补充有活动时包裹元素的类与三种属性、garland 与 none、palette 为 theme 时不带 data-promo-palette、没有活动时不带这些属性；现有断言不改
+      - docs/task-records/SHOP-TASK-253.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 copy.ts 按页面任务的惯例列入，不需要时不改）；不改后端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明不适用及理由），不合并、不直推
+```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.20「1. 全局框架」「节日促销活动」、docs/DESIGN.md 1.23「节日促销活动」第 10、12 条与 docs/design/COMPONENTS.md「FestivalPromotion」，新建 frontend/src/promotion.tsx：前台各页共享的活动读取（PromotionProvider 与 usePromotion）、以服务端时间为准的倒计时（PromotionCountdown），并让 frontend/src/components/SiteFrame.tsx 在活动生效时加上装饰包裹元素与页头花边。页头的活动入口随 P15 路由在 SHOP-TASK-257 加；各页的活动内容见 254 起的任务。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.97）：PromotionProvider 在 frontend/src/App.tsx 里只包前台页（与 StoreDesignProvider 同处），打开页面与切换语言时以 SHOP-TASK-252 的 fetchPromotion 读取一次（可由参数换成替身），读取失败按没有活动处理、不显示提示、不自动重试；切换语言重新读取期间继续显示原来的活动（状态仍为 ready），新结果到达后再替换，被中止的读取不改任何状态；usePromotion() 返回读取状态（loading 或 ready）、promotion 与每次读取完成（成功或失败，不含被中止的）就加一的 generation（供购物车与结账在活动变化时重新计价）。剩余时间＝ends_at 减 server_time，再减去收到响应后本机经过的时间（以 performance.now 计，不读设备时钟的绝对时间）；剩余到 0 时立即按没有活动处理（promotion 置为 null，generation 加一），再重新读取一次；读取返回的活动剩余时间不大于 0 时按没有活动处理、不再读取；等待超过 setTimeout 上限（2147483647 毫秒）时分段等待；ends_at 为 null 时不计时。PromotionProvider 可传入 initial（一次读取的结果，即 PromotionResponse）：传入时一开始就是 ready 并用它计时、挂载后不读取，之后到 0 与切换语言时的行为与不传时相同（前台预览需要的「停在 0、不重新读取」留给预览任务另加）（供页面测试以 renderToStaticMarkup 渲染有活动的状态，A12 的前台预览也可沿用）；不传时照上面的写法读取。PromotionCountdown 只渲染 SHOP-TASK-252 countdownText 的文字，自己每秒更新，不设 aria-live。
+      包裹元素始终渲染为 div.site__promo（site.css 只写与 .site 一致的纵向弹性布局，没有活动时页面外观与 0.19 相同，也避免活动开始或结束时页面状态被重建）；活动生效时另加 acs-promo 类与 data-promo-pack，palette 不为 theme 时加 data-promo-palette，ambient 为 corners 或 fall 时加 data-promo-ambient，为 garland 时在页头之后放 div.acs-promo-garland（aria-hidden 为 true），为 none 时什么都不画；包裹元素在 .acs 根元素之内、包住演示横幅、页头、页面与页脚。
+      设计闸门：不适用（只显示公开接口的活动与倒计时，不计算金额，不碰个人资料）。
+      拆分：前台全局框架一层（9 个允许路径：共享读取与测试、框架与测试，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入），依赖 SHOP-TASK-252。
+```

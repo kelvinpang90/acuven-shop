@@ -39,3 +39,15 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与路由以替身代替）在 frontend/src/api/adminOrders.test.ts 与 frontend/src/pages/AdminOrdersPage.test.tsx 验证意图：请求体只有订单号、状态与页码且订单号不进网址或浏览器存储；响应体不合格算失败；表格列头与卡片内容；日期、合计、状态与待审数（为 0 时桌面显示 —、手机不显示）；搜索与筛选回到第 1 页；翻页按钮的禁用与页码；401 进入 /admin/login，网络中断与其他失败的提示；旧请求结果不覆盖新查询；页面文字全部来自字典；每条测试写明它守住的是 UX、DESIGN 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/TODO.md 新增 SHOP-TASK-048 记录段（请求与字段、搜索与筛选、翻页、错误处理、偏离、验证到什么程度，并写明未做浏览器验收、订单详情与发货、待审退款数链接留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]；改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在 SHOP-TASK-047 的 /admin/orders 上实现 A02 的订单列表：按订单号搜索、按状态筛选与翻页，桌面为表格、手机为卡片列表，调用 SHOP-TASK-037 的订单列表接口。
+      不做订单详情、收货资料与模拟发货，待审退款数暂不链接到 A03（随 A03 页面任务加上），不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只调用已登记的列表接口显示订单号、日期、状态与金额快照，不计算金额，不显示收货资料）。
+      拆分：列表与详情、发货分开，本任务 10 个允许路径。
+```

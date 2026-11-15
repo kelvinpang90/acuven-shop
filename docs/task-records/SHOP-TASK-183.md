@@ -48,3 +48,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新增 tests/test_admin_products.py（SQLite 内存库按模型建表，数据照迁移 0003（alembic/versions/20260930_0003_demo_catalog.py）的示例商品写法造），只经 create_product 与两个 load 函数调用，不直接测共用检查的内部写法，每条测试的文档字符串写明它守住的 DESIGN 1.18 第 11 条原句——列表排序与含未上架的商品、单件读取的各项与排序、不存在为 None、读取只发 SELECT；第一步每类不合格（各上限两端、布尔值当整数、组合重复、英文名称大小写不同也算重复、缺英文名称、上架条件、没有规格名却有两个 SKU、temp_id 重复或引用无效、新建请求带 id）都不发 SQL；分类停用或缺英文名称被拒；Colour 沿用 color、1 m 沿用 1m、同一商品先 Color 后 Colour 得 color 与 color-2、没有规格名的 SKU 为 slug-std、slug 与 SKU 去重加后缀；新 SKU 的当日可用库存等于每日初始库存；审计条数与写法；新建的已上架商品出现在 app/services/catalog.py 的前台商品列表，未上架的不出现
       - docs/task-records/SHOP-TASK-183.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明函数签名与偏离取舍）；改动只落在 allowed_change_paths，不改模型与迁移、app/services/catalog.py、app/services/admin_codes.py、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 11 条（后台维护商品：查看全部商品、新建商品的范围、结构与上限、代码生成与沿用、取值、上架条件、新建时的核对、审计与生效），新增服务层 app/services/admin_products.py 的请求结构、共用检查、读取与新建，供之后的保存任务与接口任务调用。
+      运营者落实写法（HANDOFF 0.77）：请求结构写死在契约里，保存与接口照用；第一步（只看请求）的检查写成新建与保存共用的函数；代码沿用 SHOP-TASK-180 的 app/services/admin_codes.py，沿用的代码同样去重；读取单件商品时一并返回它的图片（只读）；审计操作名 admin_product_created、admin_product_option_created、admin_product_option_value_created、admin_product_variant_created。
+      不做接口与前端，不改模型与迁移（版本号列已由 SHOP-TASK-177 加好），不改 app/services/catalog.py，不改设计。
+      设计闸门：DESIGN 1.18（提交 5ba9796） 第 11 条与 HANDOFF 0.77，商品与价格。拆分：读取与新建（3 个允许路径），已有行的保存由 SHOP-TASK-184、保存时的新增由 185、接口由 186 接上，页面 A04 另行登记。
+```

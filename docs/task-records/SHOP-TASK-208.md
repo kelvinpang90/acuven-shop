@@ -40,3 +40,18 @@
       - 代码结构与测试——组件写法沿用 frontend/src/pages/AdminShippingPage.tsx（导出把调整结果变成状态的纯函数、接收 AbortSignal 与回调的异步函数、只依赖 props 的 View；新值的先查写成导出的纯函数）；传给事件属性的处理函数不返回 Promise；排版不在验收范围内，评审不以此要求修改；用 vitest 与 react-dom/server（不加测试依赖，fetch 以替身代替；以 renderToStaticMarkup 渲染 View、直接调用导出的函数，不模拟点击）在 frontend/src/pages/AdminStockAdjust.test.tsx 验证意图：展开区的文字与 {sku}、{count}、新值先查（0 与 9999 合格，10000、-1、1.5、空串与带空白不合格）、请求带页面显示的值、四种结果（含 changed 后显示当前值且输入框保留）、提交中按钮禁用；frontend/src/pages/AdminProductsPage.test.tsx 只为接入补测试（只有已有 SKU 有按钮、同时只展开一个、调整后未保存判定不变）；页面文字全部来自字典；每条测试写明它守住的是 UX、设计或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-208.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；偏离与验证到什么程度，只写实际存在的测试，写明未做浏览器验收）；改动只落在 allowed_change_paths（不新增路由；router.tsx 与 App.tsx 按页面任务的固定写法列入，不需要时不改）；不改后台框架与路由的拦截；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：DESIGN 1.18 第 12 条，同上），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.17 的 A04「当日库存调整」一段，新增调整区组件 frontend/src/pages/AdminStockAdjust.tsx 并接到 A04 编辑区的每个已有 SKU：点 admin.adjust_today 展开，输入新值后以 SHOP-TASK-201 的当日库存调整立即提交，
+      依据 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 12 条（请求带页面显示的值，不等即「库存已变动」，不写入；下一次每日重置时被覆盖）。不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.82）：同时只展开一个 SKU，展开另一个或点 common.cancel 时收起并丢弃所填的新值（不经确认）；展开区在桌面为该行下方的整行，在手机为该 SKU 卡片内（照视觉稿 A04-images-stock 与 A04-phone-edit）；新值输入框初值为空串；
+      成功后展开区保持打开、admin.adjust_shown 与该行的 admin.available_today 改为返回的值；当日可用库存不算在未保存的修改里，调整不改商品的版本号与编辑区已填的值；商品保存成功后以返回的商品为准；
+      调整的 403 由页面重新读取列表与分类取得新的 CSRF 令牌（编辑区与已填的值、展开区所填的新值保留），显示 common.error_retry；网络中断显示 common.network_check、保留所填的新值。
+      设计闸门：DESIGN 1.18（提交 5ba9796）第 12 条与 HANDOFF 0.82，当日可用库存的调整（取值核对与并发核对、审计在 SHOP-TASK-182 的服务端）。
+      拆分：A04 的当日库存调整一层（9 个允许路径：新组件与测试，页面与页面测试只为接入，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入）。
+```

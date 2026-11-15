@@ -53,3 +53,14 @@
       - docs/TODO.md 新增 SHOP-TASK-081 记录段（接口、字段、检查顺序、结果与状态码、偏离、验证到什么程度，并写明确认注销留给 SHOP-TASK-082、前端留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、app/api/sms.py、app/api/member_auth.py、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.41、0.45），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「权限与资料保护」第 3 条（账号注销须先以短信验证码确认）与「失败、并发与重试」、docs/UX.md 0.10 P13（V1 用途「注销确认」，号码固定为本账号；验证通过后才出现确认注销），
+      以及 docs/HANDOFF.md 0.45 记录的 Kelvin 2026-10-10 决定，在 SHOP-TASK-069 的发送与核验函数、SHOP-TASK-076 的会员会话依赖与 SHOP-TASK-080 的注销批准之上提供发送与核验注销验证码两个接口。不做确认注销与前端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.41、0.45（会员注销与个人资料）。拆分：接口层（4 个允许路径）；确认注销留给 SHOP-TASK-082。
+```

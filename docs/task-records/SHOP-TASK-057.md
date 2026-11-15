@@ -49,3 +49,16 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch、crypto 与路由以替身代替）在 frontend/src/api/adminRefunds.test.ts、frontend/src/pages/AdminRefundDetail.test.tsx 与 frontend/src/pages/AdminRefundsPage.test.tsx 验证意图——详情字段与金额、没有积分行、订单号链接；拒绝在理由为空时禁用、批准不要求理由；请求体与两个请求头、幂等键在网络中断重试时沿用而改理由后更换；200 重取、409 两种、403、422、401 与网络中断；已审核只读与 admin.reviewed_by、有无理由；404 与不合法 ID；列表链接、aria-selected 与返回链接；理由、审核人邮箱与令牌不进网址或浏览器存储，也不交给 console（以替身断言 console 的各方法都没有收到它们）；页面文字全部来自字典；每条测试写明它守住的是 UX、DESIGN 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - 详情部分可放在新文件 frontend/src/pages/AdminRefundDetail.tsx；docs/TODO.md 新增 SHOP-TASK-057 记录段（路由与布局、请求、审核与幂等、已审核只读、偏离、验证到什么程度，并写明未做浏览器验收与积分行留给会员与积分账本任务），不改 planning-v1 块，复选框只允许 [ ] / [x]；改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在 SHOP-TASK-056 的退款列表上实现 A03 的详情与审核：路由 /admin/refunds/:id，桌面列表在左、详情在右，手机只显示详情；
+      审核中的申请可批准或拒绝（拒绝须填理由），已审核的申请只读并显示审核人与时间。调用 SHOP-TASK-041 的详情、批准与拒绝接口。
+      不显示积分行，不装依赖，不改后端，不改设计。
+      设计闸门：SHOP-TASK-041 的设计闸门（docs/DESIGN.md 1.11 与 docs/HANDOFF.md 0.33）；本任务只调用已登记的接口，不改退款金额与审核规则，理由只在页面内存与请求体里。
+      拆分：不拆（12 个允许路径，详情与审核同属 A03 详情一处）。
+```

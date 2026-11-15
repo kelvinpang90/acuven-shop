@@ -63,3 +63,16 @@
       - frontend/src/pages/AdminStoreDesignPage.test.tsx 只为后台读取新增的 logo 而改——常量 DETAIL 补 logo 为 null（PICKING 与各处 fresh 由它展开，随之带上）；测试 updates the form from the saved design 里期望的 base 补 logo，取 DETAIL.logo（saveStep 以读到的设置展开保存结果，保存后仍保留读到的 logo）；该文件其他测试与断言不增不删不改，frontend/src/pages/AdminStoreDesignPage.tsx 不改；这是本任务接入后该文件仅有的两处失效（运营者在 main 的导出上实测，类型检查只报 DETAIL 缺 logo，测试只有这条保存测试的三种语言失败）
       - docs/task-records/SHOP-TASK-214.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；导出的类型与函数签名，供 SHOP-TASK-215、216 使用；验证到什么程度，只写实际存在的测试）；改动只落在 allowed_change_paths；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：DESIGN 1.20 第 15 条，同上），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      为 A08 页面新建调用 SHOP-TASK-212 两个接口（上传 PUT 与移除 DELETE /api/admin/store-design/logo）的请求模块 frontend/src/api/adminStoreLogo.ts，并让 frontend/src/api/adminStoreDesign.ts 的后台读取取出新增的 logo 字段，各带测试；提供路径的格式判断写在 frontend/src/storeDesign.ts，供本任务与页头页脚（SHOP-TASK-216）共用。
+      不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
+      运营者落实写法（HANDOFF 0.84）：上传的请求体为文件本身（不用多部分表单），Content-Type 为调用方给的类型；413 一律归为文件过大，不看响应体（反向代理回答的 413 不是 JSON）；logo 只认 /api/store-logos/ 加 32 位小写十六进制加 .webp 的字符串或 null；A08 保存的响应不含 logo，保存结果的类型不变。
+      设计闸门：DESIGN 1.20（提交 a870f78）第 15 条与 HANDOFF 0.84，标志的规则在服务端，请求模块只传递与校验字段，不碰金额与个人资料。
+      拆分：A08 标志的请求层（8 个允许路径），照 SHOP-TASK-201 的写法。
+```

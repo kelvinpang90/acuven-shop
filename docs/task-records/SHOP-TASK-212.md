@@ -32,3 +32,17 @@
       - docs/task-records/SHOP-TASK-212.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；写明请求与响应的形状，供 SHOP-TASK-214 使用；偏离取舍）
       - 改动只落在 allowed_change_paths；不改服务层、模型与迁移、app/api/admin_product_images.py、前端、.platform/、CI 与部署配置（反向代理的放宽不在仓库里），不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.20 提交 a870f78 与 HANDOFF 0.84），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.20「计价、优惠、积分与库存」第 15 条「上传」的检查顺序、「移除」与「读取与显示」一段的后台读取部分，以及 docs/UX.md 0.18 的 A08 标志段（上传即替换、移除即恢复文字品牌，都立即生效，被拒时按服务端的回答显示），
+      新增后台接口 PUT 与 DELETE /api/admin/store-design/logo（app/api/admin_store_logo.py），把 SHOP-TASK-210 的处理与 SHOP-TASK-211 的服务层接起来，并在后台装修读取 GET /api/admin/store-design 的响应里加上 logo。
+      运营者落实写法（HANDOFF 0.84）：上传路径须与反向代理放宽到 6m 的路径一致（运营者上线前在共享反向代理另行放宽）；错误的 detail 与 UX-COPY 的键同名——415 image_type_unsupported、413 image_too_large、422 logo_invalid，另有 503 image_store_unavailable（页面照其他失败显示）；5 MB 指 5,242,880 字节；
+      读请求体之前的 Content-Type 与声明长度判断、逐块读请求体沿用 app/api/admin_product_images.py 的 _is_image_type、_declared_too_large 与 _image_body；两个接口成功都是 200，响应体只有 logo（上传为新的提供路径，移除为 null）；A08 保存（PUT /api/admin/store-design）的响应不加 logo（第 15 条：A08 的保存不读写标志）；处理函数为同步函数，FastAPI 在线程池里执行。
+      不做前端，不改服务层与模型，不改设计。
+      设计闸门：DESIGN 1.20（提交 a870f78）第 15 条与 HANDOFF 0.84。拆分：后台接口层（6 个允许路径），提供接口与公开读取为 SHOP-TASK-213，页面另成 SHOP-TASK-214 至 216。
+```

@@ -36,3 +36,15 @@
       - docs/TODO.md 新增 SHOP-TASK-116 记录段（定时处理的各情形、告警、任务顺序、手动补跑、偏离、验证到什么程度，并写明 webhook 的 async_payment_failed 留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/payment.py、app/services/stripe_checkout.py、app/services/stripe_confirm.py、app/api/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 3 条（创建结果未定时由之后的发起或定时任务以同一幂等键重试，到期后对账，24 小时内无法确定就告警由人工核对，订单在此期间不取消、库存继续预留）、
+      第 4 条（付款方式类型读不到时由定时任务向 Stripe 重查补齐）与第 5 条（有 Stripe 记录的订单由定时任务按会话的实际状态处理；Stripe 不可用时留到下一轮；会话完成 24 小时后仍无结果就告警；24 小时仍无法查询就告警，订单不自动取消），
+      在 SHOP-TASK-112 至 114 与 117 之上加 Stripe 会话的定时处理并接入定时任务进程。人工核对在 Stripe 后台进行；本任务不提供处置入口，手动补跑不能解除已转人工的记录（SHOP-TASK-112 对创建满 24 小时的记录不再调用 Stripe）；处置手段另行登记（见计划块），它涉及支付状态，登记前须按设计闸门写明核实条件并经 Kelvin 批准。不加接口；不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e），订单状态、库存、券与积分的释放。拆分：定时任务层（7 个允许路径），2026-10-15 由原 SHOP-TASK-114 拆出。
+```

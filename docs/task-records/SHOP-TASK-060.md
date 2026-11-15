@@ -39,3 +39,15 @@
       - docs/TODO.md 新增 SHOP-TASK-060 记录段（请求、列表与展开、偏离、验证到什么程度，并写明未做浏览器验收），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths（不新增路由，不改导航）；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      在 SHOP-TASK-059 的库存重置页上实现 A07 的列表与明细：按日期列出每天的重置结果与 SKU 数，展开某一天显示各 SKU 的初始库存、有效预留与当日可用，
+      调用 SHOP-TASK-052 的列表与明细接口。不改路由与导航，不改库存重置本身，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只读显示演示库存的重置记录）。
+      拆分：见 SHOP-TASK-059（路由与导航先交付），本任务 9 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+```

@@ -30,3 +30,14 @@
       - docs/task-records/SHOP-TASK-128.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；找尝试、先查询再写入、事件记录与写入同一事务、告警时机、偏离、验证到什么程度，并写明接口留给 SHOP-TASK-129），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/stripe_refund.py、app/services/stripe_gateway.py、app/services/stripe_confirm.py、app/services/payment.py、app/api/、app/jobs.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 7 条（事件 ID 的去重记录与它引起的退款改动在同一个数据库事务里提交；业务动作另按对象去重，第 8 条按退款记录）与第 8 条（Stripe 退款 ID、调用结果与之后的退款事件（按 Stripe 退款 ID 或元数据里的记录 ID 关联）更新记录状态；退款事件只作触发，收到后先查询再更新，不按事件里的快照改，所以先后颠倒送达的事件不会让状态倒退；退款接口的响应、webhook 与定时查询共用同一写入规则），
+      以及 docs/HANDOFF.md 0.55 的落实写法（处理 refund.created、refund.updated、refund.failed 三种事件，data.object 都是退款对象），在 SHOP-TASK-127 的 handle_webhook_event 里接入退款事件，写入沿用 SHOP-TASK-124 的 apply_refund_object。不加接口，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，退款。拆分：业务规则层（3 个允许路径）。
+```

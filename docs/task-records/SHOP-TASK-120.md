@@ -33,3 +33,14 @@
       - docs/task-records/SHOP-TASK-120.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；两个接口、结果映射、偏离、验证到什么程度，并写明会员接口与 P06、P07 页面留给之后的任务），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/api/pay.py、app/api/member_pay.py、app/services/ 下的文件、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.54），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 3 条（访客在支付页按现有授权与 CSRF 校验后发起；服务端只把 Stripe 返回的付款页地址交给前台跳转）、第 4 条（访客从 Stripe 返回后前台调用本站接口，服务端按授权找到该单的会话向 Stripe 查询一次）与第 9 条，
+      以及 docs/UX.md 0.11 的 P06、P07 与 docs/HANDOFF.md 0.54 的落实写法，给游客（订单访问 cookie）提供 Stripe 发起与确认接口。会员接口由之后的任务做；不做前端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.54，支付状态。拆分：接口层（4 个允许路径）。
+```

@@ -38,3 +38,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——新文件 tests/test_promotion_poster_api.py 照 tests/test_admin_store_logo_api.py 与 tests/test_store_logos_api.py 的写法（固定本模块与 admin_auth 的 _utcnow，以替身代替存储）：检查顺序（不存在与 ended 先于存储与请求体的检查，不读请求体）；上传、替换、移除的响应；图片不合格 422；已发布上传图模式移除 409；公开提供被引用与未被引用的文件名、存储不可用 503。每条测试的文档字符串写明它守住的设计句子或本任务的落实写法
       - docs/task-records/SHOP-TASK-250.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条，写明路径与错误码，供前台 A12 任务引用）；改动只落在 allowed_change_paths；不改服务层、数据库、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.23 提交 b7f9355），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.23「节日促销活动」第 12 条与「计价、优惠、积分与库存」第 13、15 条，照店铺标志的接口（app/api/admin_store_logo.py 与 app/api/store_logos.py）把 SHOP-TASK-240 的海报服务接成后台上传与移除接口，并新建海报图的公开提供接口。不改服务层规则、前端与数据库。
+      运营者落实写法：两个方法都先查会话（401 admin_session_required）、CSRF（403 csrf_failed）、路径（活动 ID 照 app/api/admin_categories.py 的 _category_id 校验，slot 不是 desktop 或 phone，都为 422），再以普通读取看活动（不存在 404 promotion_not_found，ended 409 promotion_ended）。PUT 接着查存储是否配置（503）、Content-Type（415）、声明长度（413）、读请求体与处理（422 poster_invalid），最后调用服务（锁内再核一次）；DELETE 没有请求体、不查存储配置，直接调用移除服务——照 remove_logo，存储未配置时照常清空记录并提交，只记日志、不调用存储。公开提供只认 240 的 poster_file_names 里的文件名（草稿的也提供，供管理员预览）。上线前反向代理须为海报上传路径放行至少 5 MB 的请求体，记入 HANDOFF 的上线依赖。
+      设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 12 条：图片的上传与提供，不碰金额与个人资料。
+      拆分：节日促销后台层的第四个任务（5 个允许路径），依赖 SHOP-TASK-240。
+```

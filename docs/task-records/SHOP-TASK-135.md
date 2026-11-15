@@ -32,3 +32,15 @@
       - docs/task-records/SHOP-TASK-135.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；确认框补句、取消未成、取消时已付款的交接、偏离、验证到什么程度，并写明未做浏览器验收）
       - 改动只落在 allowed_change_paths（不新增路由，不改 frontend/src/api/pay.ts 与 frontend/src/pages/PayResultPage.tsx）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.11 的「P06 Stripe 测试」（取消确认框的补句、取消时 Stripe 暂不可用、取消时会话已付款）与 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 5 条，以及 docs/HANDOFF.md 0.55 的落实写法，
+      在 SHOP-TASK-134 的 P06 上接上取消的 Stripe 处理；会话已付款时经 SHOP-TASK-132 的内存交接让 SHOP-TASK-133 的 P07 显示 result.paid_not_cancelled。不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，取消订单的显示（取消规则在服务端）。
+      拆分：见 SHOP-TASK-134，本任务 7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入。
+```

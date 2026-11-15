@@ -38,3 +38,16 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch、matchMedia、存储与路由以替身代替）在 frontend/src/components/AdminFrame.test.tsx 验证意图：首次渲染即有横幅、只含订单一项的导航（不含其他 admin.nav_*）、语言切换与禁用的退出按钮；会话 200 显示内容，401 进入 /admin/login，其他显示 common.error_retry；退出带 CSRF 令牌，204 与 401 进入 /admin/login，403 重取会话，网络中断有提示；手机 ☰ 的 aria-expanded 与菜单内容；data-mode 随 prefers-color-scheme；页面文字全部来自字典；每条测试写明它守住的是 UX 或 Kelvin 决定的哪一句；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/TODO.md 新增 SHOP-TASK-047 记录段（框架结构、会话与退出处理、导航只含已上线页面、A01 去向的变化、偏离、验证到什么程度，并写明未做浏览器验收、A02 订单列表留给 SHOP-TASK-048），不改 planning-v1 块，复选框只允许 [ ] / [x]；改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：不适用，理由同目的），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      实现后台页面共用的框架（演示横幅、右上角退出、桌面左侧导航与语言切换、手机顶栏 ☰ 菜单），新增路由 /admin/orders 用框架渲染 A02 的标题，
+      并让 A01 登录后进入 A02、取消 A01 的过渡规则。导航只显示已上线页面的项（Kelvin 2026-10-06 决定，目前只有订单）。
+      不做订单列表、详情与发货，不做其他后台页面，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（只调用已登记的会话与退出接口，不碰金额，不收集或显示个人资料）。
+      拆分：框架与 A02 订单列表分开（列表由 SHOP-TASK-048 接上），本任务 11 个允许路径。
+```

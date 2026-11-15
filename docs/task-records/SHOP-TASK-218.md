@@ -36,3 +36,15 @@
       - 测试验证意图（由 PR 的必需 CI 检查 backend 执行并全部通过，Worker 沙箱不跑后端测试）——tests/test_jobs.py 以 monkeypatch 替换 app.services.ops_alert.alert 记录调用，补连续失败满 10 分钟告警一次、未满不告警、同一段失败不重复、成功后清零再满 10 分钟再告警、数据库未配置时每个任务名各一次且 error_class 为 database_not_configured、库存重置失败在常驻循环告警一次而 reset-stock 子命令不告警、跳过时不告警；每条测试的文档字符串写明它守住的 DESIGN 1.21「运营告警邮件」第 6、7 条哪一句
       - docs/task-records/SHOP-TASK-218.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）；改动只落在 allowed_change_paths；不改发送机制、数据库、接口、前端、.platform/、CI 与部署配置，不装依赖，不改设计；以 Draft PR 交付（设计闸门写明 DESIGN 1.21 提交 5be346e 与 HANDOFF 0.88），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.21「运营告警邮件」第 6 条表中 job_failing 与 stock_reset_failed 两行和第 7 条，在 app/jobs.py 的常驻循环里接入这两类告警，并把两类加进 app/services/ops_alert.py 的 CATEGORIES。心跳与容器不健康的规则不变。不改发送机制，不改数据库、接口与前端，不改设计。
+      运营者落实写法（HANDOFF 0.88）：两类都以对象作去重键；job_failing 的对象为（job, 任务名），窗口 3600 秒，error_class 为最后一次失败的异常类名，数据库未配置时为 database_not_configured；stock_reset_failed 的对象为（date, 马来西亚营业日期的 ISO 写法），窗口 86400 秒，error_class 为异常类名；reset_stock_job 加只限关键字的参数决定失败时是否告警，常驻循环告警、reset-stock 补跑命令不告警（第 7 条：补跑命令本身失败不发告警）。
+      设计闸门：DESIGN 1.21（提交 5be346e）「运营告警邮件」第 6、7 条与 HANDOFF 0.88。
+      拆分：定时任务接线一层（4 个允许路径），依赖 SHOP-TASK-217。
+```

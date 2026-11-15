@@ -29,3 +29,14 @@
       - docs/task-records/SHOP-TASK-127.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；事件解析、record_event 的提交时机、Checkout 事件的找回与分派、结果映射、偏离、验证到什么程度，并写明退款事件与接口留给 SHOP-TASK-128、129），不改 docs/TODO.md，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/api/、app/jobs.py、app/services/stripe_refund.py、app/services/stripe_overdue.py、模型、迁移、.platform/、CI、部署配置与前端；不装依赖；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 7 条（事件 ID 的去重记录与它引起的订单、积分或退款改动在同一个数据库事务里提交；已提交过的事件直接回 200；处理失败整个事务回滚；业务动作另按对象去重；只处理第 4、5 条的 Checkout 事件与 Stripe 退款状态事件，其他类型回 200 不处理；不存、不记录事件原文）、第 1 条（webhook 事件 livemode 为真即拒绝）、第 3 条末句（本站没记下会话 ID 的会话被付款，其 webhook 按元数据里的创建幂等键与订单 ID 对上这条记录）、第 4 条（确认的两个来源走同一个幂等处理）与第 5 条（complete 而付款未定时等 async_payment_succeeded 确认，或 async_payment_failed 后按现有规则取消），
+      以及 docs/HANDOFF.md 0.55 的落实写法（处理的事件类型；checkout.session.expired 不处理、由定时任务查询；事件只作触发，按向 Stripe 查询到的会话分派），加事件解析与 Checkout 事件的处理函数，并让现有的确认与取消函数能把事件去重记录放进它们自己的提交里。退款事件由 SHOP-TASK-128、webhook 接口由 SHOP-TASK-129 做；不加接口，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，支付状态与取消。拆分：业务规则层（6 个允许路径）。
+```

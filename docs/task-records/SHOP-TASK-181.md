@@ -26,3 +26,15 @@
       - docs/task-records/SHOP-TASK-181.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条）
       - 改动只落在 allowed_change_paths；不改服务层、模型与迁移、现有测试、前端、.platform/、CI 与部署配置，不装依赖，不改设计
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.18「计价、优惠、积分与库存」第 14 条与 docs/UX.md 0.17 的 A10（列表与各分类的前台可见商品件数、新建、逐个保存、取值不合格与分类已被改动两种结果），把 SHOP-TASK-180 的服务层接成后台接口 GET /api/admin/categories、POST /api/admin/categories 与 PUT /api/admin/categories/{category_id}。
+      运营者落实写法（HANDOFF 0.76）：写法照 app/api/admin_site_settings.py 与 app/api/admin_coupons.py（require_admin、CSRF、请求体 8 KB 上限、strict 模型、不回显的 422、no-store 路由类）；取值不合格回 422 category_invalid，分类已被改动回 409 category_changed，路径里的分类 ID 照 app/api/admin_orders.py 的订单 ID 写法校验，不存在的分类按已被改动回 409。
+      不做前端，不改服务层与模型，不改设计。
+      设计闸门：DESIGN 1.18（提交 5ba9796） 第 14 条与 HANDOFF 0.76。拆分：接口层（4 个允许路径），页面 A10 另行登记。
+```

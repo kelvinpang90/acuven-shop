@@ -37,3 +37,14 @@
       - 改动只落在 allowed_change_paths；不改 .platform/、CI、部署配置；不装依赖；不加接口、不改 app/main.py、不改已有迁移、不改前端代码
       - allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门：DESIGN 1.11，提交 2d13250），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「数据模型」RefundRequest 一行与「失败、并发与重试」第 1 条（退款审核使用幂等键和数据库唯一约束）给退款申请表加审核人、审核理由、审核幂等键与审核请求指纹四列，写对应的 Alembic 迁移。
+      只加列与约束；不写批准、拒绝、冻结或接口逻辑，不做页面，不改设计。设计闸门：DESIGN 1.11（提交 2d13250）。
+      拆分：数据层，规则与接口分别由 SHOP-TASK-040、041 交付。
+```

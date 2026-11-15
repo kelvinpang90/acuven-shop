@@ -30,3 +30,14 @@
       - docs/TODO.md 新增 SHOP-TASK-089 记录段（两个接口、检查顺序、字段、错误码、偏离、验证到什么程度，并写明前端会员表单留给之后的任务），不改 planning-v1 块，复选框只允许 [ ] / [x]
       - 改动只落在 allowed_change_paths；不改 app/services/ 下的文件、app/api/orders.py、app/api/checkout.py、app/api/member_auth.py、.platform/、CI、部署配置与前端；不装依赖；不加表或迁移；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.11 提交 2d13250 与 HANDOFF 0.46、0.47），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/DESIGN.md 1.11「计价、优惠、积分与库存」第 1 条、「失败、并发与重试」第 1 条、「权限与资料保护」第 1、2 条（已登录会员结账不再验证，收货电话默认为会员手机号、可改为其他号码或虚构号码；会员改填的收货电话以收货国家作为默认区号解析，明确输入加号国家码时以该号码为准，只检查格式）
+      与 docs/UX.md 0.10 P05（会员表单：优惠券代码与使用积分，摘要显示券与积分两行），以及 docs/HANDOFF.md 0.47 记录的 Kelvin 2026-10-11 决定，在 SHOP-TASK-088 之上提供会员计价与下单接口。不做前端，不改设计。
+      设计闸门：DESIGN 1.11（提交 2d13250）与 HANDOFF 0.46、0.47（优惠券与积分）。拆分：接口层（4 个允许路径）。
+```

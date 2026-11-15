@@ -43,3 +43,16 @@
       - 用 vitest 与 react-dom/server（不加测试依赖，fetch 与人机挑战以替身代替）在 frontend/src/components/SmsVerify.test.tsx 验证意图（以 renderToStaticMarkup 渲染 View、直接调用导出的纯函数与异步函数，不模拟点击）——三种用途的初始状态（国家码只有两项、claim_notice 只在注册与登录）；公开 key 为 null 与开关关闭时的整体替换；验证码为空时按钮禁用；验证通过后的已验证状态（没有可点的按钮）；发送的请求体与各结果的提示（含两种用途对 not_whitelisted、undeliverable 的不同显示与 continue_guest 的出现条件）；{phoneMasked} 的遮掩；验证的各结果与回调收到的值；中止后不再更新；页面文字（国家码选项 +60、+65 除外）全部来自字典，带变量的条目按模板匹配（照 frontend/src/pages/AdminRefundDetail.test.tsx 的 visibleTexts、textNodes 与 unescapeHtml）；每条测试写明它守住的是 UX、设计或接口记录的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-145.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；用途、状态与提示、人机挑战的接法、偏离（含 auth.code_too_many 不使用）、验证到什么程度，只写实际存在的测试，写明未做浏览器验收，并写明嵌入页面留给 SHOP-TASK-146 至 148、结账与注销用途留给之后的任务）；改动只落在 allowed_change_paths（不新增路由，不改页头，不改 frontend/src/api/）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.58），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.12 的 V1 与 docs/DESIGN.md 1.12「权限与资料保护」「失败、并发与重试」，新建短信验证组件，先实现「注册 / 短信登录」与「重设密码」两种用途（结账验证与注销确认由之后会员结账与会员中心的任务加入），
+      含国家码选择（+60、+65）、托管人机挑战（Cloudflare Turnstile）、发送与重发、验证码提交、错误提示与开关关闭时的暂停提示，经 SHOP-TASK-144 的请求函数调用后端。组件只在之后的 P11、P12 任务里嵌入页面，本任务不新增路由。
+      不改页头，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）「权限与资料保护」第 1、3 条与「失败、并发与重试」（手机号的收集与短信验证流程；规范化、白名单、限流、能否降级都由服务端判定）与 HANDOFF 0.58。
+      拆分：V1 组件层，6 个允许路径；嵌入页面由 SHOP-TASK-146 至 148 完成。
+```

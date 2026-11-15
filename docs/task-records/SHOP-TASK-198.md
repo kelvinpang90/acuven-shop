@@ -37,3 +37,15 @@
       - 测试验证意图（不加测试依赖，fetch 以替身代替）——frontend/src/api/adminCategories.test.ts：三个请求的方法、地址、请求头、no-store 与请求体只有规定的字段；读取的合格判定（缺字段、类型不对、负数、非整数、多出字段不带进结果、空 csrf_token）；新建与保存的各种状态与 detail 的归类；中止为 network；每条测试写明它守住的是接口记录、DESIGN 1.18 第 14 条或 UX 0.17 A10 的哪一句；fetch 替身写成参数带类型的 vi.fn((input, init) => …)，从 mock.calls 取值时用 String(…) 收窄，不让 any 流出；由 PR 的必需 CI 检查 frontend 执行 lint、类型检查、测试、构建与镜像构建并全部通过（Worker 沙箱不跑前端检查）
       - docs/task-records/SHOP-TASK-198.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；导出的类型与函数签名，供 199 使用；验证到什么程度，只写实际存在的测试）；改动只落在 allowed_change_paths；排版（换行、空行、一行写多长）不在验收范围内，前端没有格式化工具，评审不以此要求修改；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖；不改后端；以 Draft PR 交付（设计闸门：不适用，理由同上），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      为 A10 页面新建调用 SHOP-TASK-181 三个接口（读取 GET、新建 POST /api/admin/categories 与保存 PUT /api/admin/categories/{category_id}）的请求模块 frontend/src/api/adminCategories.ts 与测试，供 SHOP-TASK-199 使用；
+      不做页面，不改路由与导航，不装依赖，不改后端，不改设计。
+      设计闸门：不适用（分类的取值规则、核对与审计在 SHOP-TASK-180、181 的服务端，依据 DESIGN 1.18 第 14 条；请求模块只传递与校验字段，不碰金额与个人资料）。
+      拆分：A10 页面的请求层（3 个允许路径），照 A06 的 SHOP-TASK-174。
+```

@@ -46,3 +46,16 @@
       - docs/task-records/SHOP-TASK-133.md 新增本任务记录（格式照 docs/TODO.md 约定第 3 条；判定、确认中与重查、迟到退款、取消时已付款、偏离、验证到什么程度，并写明未做浏览器验收、P06 留给 SHOP-TASK-134、135）
       - 改动只落在 allowed_change_paths（不新增路由，不改 frontend/src/pages/PayPage.tsx 与 frontend/src/api/pay.ts）；不改 docs/TODO.md、.platform/、CI、部署配置；不装依赖（不改 package.json 与 package-lock.json）；不改后端；allowed_commands 里的检查全部零退出，skipped 如实报告且不算 passed；以 Draft PR 交付（设计闸门写明 DESIGN 1.12 提交 acf576e 与 HANDOFF 0.55），不合并、不直推
 ```
+
+## 登记时的目的（原文）
+
+2026-11-15 从 `.platform/tasks.yaml` 原样移来，任务已交付；那里只留一行指向本文件。
+
+```yaml
+    purpose: >-
+      按 docs/UX.md 0.11 的「P07 Stripe 测试」与 docs/DESIGN.md 1.12「Stripe 测试环境支付」第 4、5、6 条，以及 docs/HANDOFF.md 0.54、0.55 的落实写法，
+      在 frontend/src/pages/PayResultPage.tsx 接上 Stripe 途径——订单仍待支付且有 Stripe 记录时调用 SHOP-TASK-132 的 confirmStripe，按结果显示成功、确认中（每 5 秒自动重查，最多 12 次，之后手动再查）、尚未付款或迟到付款的退款说明；
+      取消时会话已付款进入的成功区另显示一句。P06 打开即为 complete 时转到本页由本页确认（SHOP-TASK-134），所以本任务先于 P06 的任务。不改 P06，不装依赖，不改后端，不改设计。
+      设计闸门：DESIGN 1.12（提交 acf576e）与 HANDOFF 0.55，支付状态的显示（确认与退款都在服务端）。
+      拆分：P07 的显示层（7 个允许路径，其中 router.tsx、App.tsx 与 site.css 按页面任务的惯例列入）。
+```
