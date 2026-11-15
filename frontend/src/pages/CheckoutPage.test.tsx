@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CheckoutRegions, DestinationQuote, PricedQuoteLine, QuoteLine } from "../api/checkout";
+import type { CheckoutRegions, DestinationQuote, PricedQuoteLine, PromotionQuote, QuoteLine } from "../api/checkout";
 import { SMS_LOGIN_URL } from "../api/memberAuth";
 import { createMemberSessionReader, MEMBER_SESSION_URL } from "../api/memberSession";
 import { guestOrderBody, orderAttemptFor, runGuestOrder } from "../api/orders";
@@ -39,6 +39,7 @@ import {
   replyEffects,
   settleVerified,
   summaryQuote,
+  summarySale,
   verifiedButSignedOut,
 } from "./CheckoutPage";
 import type { CheckoutActions, CheckoutForm, CheckoutVerified, Reference, SummaryQuote } from "./CheckoutPage";
@@ -1326,6 +1327,178 @@ describe("the guest path next to the member path (SHOP-TASK-159)", () => {
   });
 });
 
+// ---- 节日促销活动（SHOP-TASK-259） ----
+
+// 计价结果里的活动：商品级 RM 15.60 与整单级 RM 10.00，活动优惠合计 RM 25.60；没有运费报价时 participates 与 shipping_waived_sen 为 null。
+function saleOf(overrides: Partial<PromotionQuote> = {}): PromotionQuote {
+  return {
+    promotion_id: 7,
+    item_discount_sen: 1560,
+    order_discount_sen: 1000,
+    after_item_subtotal_sen: 9440,
+    spend_mode: "amount",
+    spend_tier_reached: 1,
+    spend_next_threshold_sen: null,
+    spend_next_value: null,
+    spend_next_gap_sen: null,
+    free_shipping_threshold_sen: 8000,
+    free_shipping_reached: true,
+    free_shipping_gap_sen: 0,
+    shipping_waived_sen: null,
+    participates: null,
+    buy_x_get_y: [],
+    ...overrides,
+  };
+}
+
+// 选国家之前（商品小计 RM 110.00，活动后 RM 84.40）与选定雪兰莪之后（参加活动、免去 RM 8.00 运费，合计 RM 84.40）。
+const SALE_NO_COUNTRY = quoteOf({ promotion: saleOf() });
+const SALE_SELANGOR = quoteOf({ ...TO_SELANGOR, promotion: saleOf({ participates: true, shipping_waived_sen: 800 }), total_sen: 8440 });
+const NO_COUNTRY_FORM = step3({ recipient: { ...SELANGOR_FORM.recipient, country: "", state: "" } });
+
+// 带变量的字典条目：变量换成给定的值（HTML 转义后）。
+function filled(key: CopyKey, values: Record<string, string>, language: Language = "en"): string {
+  let template: string = COPY[key][language];
+  for (const [name, value] of Object.entries(values)) {
+    template = template.replace(`{${name}}`, value);
+  }
+  return escapeHtml(template);
+}
+
+// 摘要里的金额行（标签与金额，按页面顺序）；商品行带 site-checkout__item，不在其中。
+function amountRows(html: string): [string, string][] {
+  return [...html.matchAll(/<div class="acs-row(?: [^"]*)?"><span>([^<]*)<\/span><span>([^<]*)<\/span><\/div>/g)].map((m) => [m[1] ?? "", m[2] ?? ""]);
+}
+
+// 桌面摘要、手机顶部折叠明细与手机第 3 步的金额（三处的金额行相同）。
+function summaryParts(html: string): string[] {
+  const parts = [part(html, /<aside[\s\S]*?<\/aside>/), part(html, /<details[\s\S]*?<\/details>/)];
+  const amounts = /<div class="acs-summary site-phone-only site-checkout__amounts">[\s\S]*?<\/div><\/div>/.exec(html)?.[0];
+  return amounts === undefined ? parts : [...parts, amounts];
+}
+
+const foldHead = (html: string) => part(html, /<summary class="site-checkout__fold-head">[\s\S]*?<\/summary>/);
+const barAmount = (html: string) => part(html, /<div class="acs site-phone-only site-checkout__bar">[\s\S]*?<button/);
+
+describe("the festival sale in the summary (SHOP-TASK-259)", () => {
+  // UX 0.20 P05「本单参加活动、且活动优惠合计大于 0 时，摘要在 [cart.subtotal] 之后、[checkout.summary_coupon] 之前加一行 [checkout.summary_promo] [M8]（桌面与手机相同），游客与会员都显示」
+  // 与「还没有选定收货国家（没有运费报价）时，这一行改用 [cart.promo_discount]（暂算），选定后按服务端判定的结果显示」：选国家前后两种标签，金额为商品级与整单级之和。
+  it.each(LANGUAGES)("labels the sale row before and after a country is chosen in %s", (language) => {
+    const before = render({ form: NO_COUNTRY_FORM, quote: readyQuote(SALE_NO_COUNTRY), language });
+    for (const summary of summaryParts(before)) {
+      expect(amountRows(summary)).toEqual([
+        [copy("cart.subtotal", language), "RM 110.00"],
+        [copy("cart.promo_discount", language), "RM 25.60"],
+      ]);
+      expect(summary).toContain(copy("cart.shipping_later", language));
+    }
+    const after = render({ form: SELANGOR_FORM, quote: readyQuote(SALE_SELANGOR), language });
+    for (const summary of summaryParts(after)) {
+      expect(amountRows(summary)).toEqual([
+        [copy("cart.subtotal", language), "RM 110.00"],
+        [copy("checkout.summary_promo", language), "RM 25.60"],
+        [copy("checkout.summary_shipping", language), filled("checkout.shipping_free", { amount: "8.00" }, language)],
+        [copy("checkout.summary_total", language), "RM 84.40"],
+      ]);
+    }
+    expect(after).not.toContain(copy("cart.promo_discount", language));
+  });
+
+  // UX 0.20 P05「本单参加活动、且活动优惠合计大于 0 时」与 M8「选定收货国家前为暂算」：选定之后 participates 为假（或缺）时不显示活动优惠，运费照常，与没有活动时相同。
+  it.each(LANGUAGES)("drops the sale row when the order does not take part in %s", (language) => {
+    for (const participates of [false, null]) {
+      const quote = quoteOf({ ...TO_SELANGOR, promotion: saleOf({ participates, shipping_waived_sen: 800 }) });
+      const html = render({ form: SELANGOR_FORM, quote: readyQuote(quote), language });
+      expect(html).toBe(render({ form: SELANGOR_FORM, quote: readyQuote(TO_SELANGOR), language }));
+      expect(html).not.toContain(copy("checkout.summary_promo", language));
+      expect(amountRows(part(html, /<aside[\s\S]*?<\/aside>/))).toContainEqual([copy("checkout.summary_shipping", language), "RM 8.00"]);
+    }
+  });
+
+  // UX 0.20 P05「活动只带来免运费（优惠合计为 0）时不显示这一行，只在运费行显示免运费」与「活动免运费时 [checkout.summary_shipping] 一行的金额改为 [checkout.shipping_free]（{amount} 为免去的运费）」。
+  it.each(LANGUAGES)("shows only free shipping when the sale gives no discount in %s", (language) => {
+    const quote = quoteOf({ ...TO_SELANGOR, promotion: saleOf({ item_discount_sen: 0, order_discount_sen: 0, participates: true, shipping_waived_sen: 800 }), total_sen: 11000 });
+    const html = render({ form: SELANGOR_FORM, quote: readyQuote(quote), language });
+    for (const summary of summaryParts(html)) {
+      expect(amountRows(summary)).toEqual([
+        [copy("cart.subtotal", language), "RM 110.00"],
+        [copy("checkout.summary_shipping", language), filled("checkout.shipping_free", { amount: "8.00" }, language)],
+        [copy("checkout.summary_total", language), "RM 110.00"],
+      ]);
+    }
+    expect(html).not.toContain(copy("checkout.summary_promo", language));
+    // 免去的运费为 0 时运费行照常。
+    const none = quoteOf({ ...TO_SELANGOR, promotion: saleOf({ item_discount_sen: 0, order_discount_sen: 0, participates: true, shipping_waived_sen: 0 }) });
+    expect(render({ form: SELANGOR_FORM, quote: readyQuote(none), language })).toBe(render({ form: SELANGOR_FORM, quote: readyQuote(TO_SELANGOR), language }));
+  });
+
+  // UX 0.20 P05 手机「未选收货国家：[cart.subtotal] [M2]（有活动优惠时改为 [cart.after_promo] [M9]）」「底部固定：…（有活动优惠时 [cart.after_promo] [M9]），选定后 [checkout.summary_total] [M6]」
+  // 与 M9「活动后金额（暂算）＝ M2 − M8」：选国家前折叠摘要与底部固定栏为活动后金额，选定后恢复为合计。
+  it.each(LANGUAGES)("shows the amount after the sale in the phone summary and bar until a country is chosen in %s", (language) => {
+    const before = render({ form: NO_COUNTRY_FORM, quote: readyQuote(SALE_NO_COUNTRY), language });
+    expect(foldHead(before)).toContain(`<span class="acs-num site-checkout__fold-amount"><span>${copy("cart.after_promo", language)}</span><span class="acs-price">RM 84.40</span></span>`);
+    expect(barAmount(before)).toContain(`<span class="acs-row site-checkout__bar-amount"><span>${copy("cart.after_promo", language)}</span><span class="acs-price">RM 84.40</span></span>`);
+    expect(foldHead(before)).not.toContain(copy("cart.subtotal", language));
+    const after = render({ form: SELANGOR_FORM, quote: readyQuote(SALE_SELANGOR), language });
+    expect(foldHead(after)).toContain(`<span class="acs-num site-checkout__fold-amount"><span>${copy("checkout.summary_total", language)}</span><span class="acs-price">RM 84.40</span></span>`);
+    expect(barAmount(after)).toContain(`<span class="acs-row site-checkout__bar-amount"><span>${copy("checkout.summary_total", language)}</span><span class="acs-price">RM 84.40</span></span>`);
+    expect(after).not.toContain(copy("cart.after_promo", language));
+    // 第 1 步的折叠摘要同样显示活动后金额（第 1 步没有底部固定栏）。
+    expect(foldHead(render({ quote: readyQuote(SALE_NO_COUNTRY), language }))).toContain(copy("cart.after_promo", language));
+  });
+
+  // UX 0.20 修订要点「没有生效活动时各页与 0.19 完全相同」：promotion 为 null，或活动优惠为 0、不免运费时，选国家前后的页面与没有活动时逐字相同。
+  it.each(LANGUAGES)("is unchanged without a sale in %s", (language) => {
+    const zero = saleOf({ item_discount_sen: 0, order_discount_sen: 0 });
+    expect(render({ form: NO_COUNTRY_FORM, quote: readyQuote(quoteOf({ promotion: zero })), language })).toBe(render({ form: NO_COUNTRY_FORM, quote: readyQuote(NO_COUNTRY), language }));
+    const joined = quoteOf({ ...TO_SELANGOR, promotion: { ...zero, participates: true, shipping_waived_sen: null } });
+    expect(render({ form: SELANGOR_FORM, quote: readyQuote(joined), language })).toBe(render({ form: SELANGOR_FORM, quote: readyQuote(TO_SELANGOR), language }));
+    expect(summarySale(TO_SELANGOR)).toEqual({ discount: null, waived: null });
+  });
+
+  // UX 0.20 P05「游客与会员都显示」与「页面只显示接口结果与显示所需的加减」：游客摘要也有这一行，金额照接口给的数，不在浏览器重算合计。
+  it("shows the sale to guests with the amounts as returned", () => {
+    const odd = quoteOf({ ...TO_SELANGOR, promotion: saleOf({ item_discount_sen: 1, order_discount_sen: 2, participates: true }), total_sen: 99999 });
+    const rows = amountRows(part(render({ form: SELANGOR_FORM, quote: readyQuote(odd) }), /<aside[\s\S]*?<\/aside>/));
+    expect(rows).toContainEqual([copy("checkout.summary_promo"), "RM 0.03"]);
+    expect(rows).toContainEqual([copy("checkout.summary_shipping"), "RM 8.00"]);
+    expect(rows).toContainEqual([copy("checkout.summary_total"), "RM 999.99"]);
+    expect(rows.map(([label]) => label)).not.toContain(copy("checkout.summary_coupon"));
+  });
+
+  // HANDOFF 0.97 落实写法「usePromotion 的 generation 变化时重新计价」（UX 0.20「到 0 时页面重新读取活动数据」）：generation 变了请求标识就变（即重新计价），
+  // 不给时与 generation 0 相同；新结果返回前显示上一份结果并标为等待中。
+  it("re-quotes on a new generation", () => {
+    const destination = quoteDestination("MY", "MY-10");
+    const first = checkoutQuoteKey("en", CART, destination, 0, 1);
+    const second = checkoutQuoteKey("en", CART, destination, 0, 2);
+    expect(second).not.toBe(first);
+    expect(checkoutQuoteKey("en", CART, destination, 0)).toBe(checkoutQuoteKey("en", CART, destination, 0, 0));
+    expect(checkoutQuoteKey("en", [], destination, 0, 2)).toBeNull();
+    const settled = { key: first ?? "", outcome: { status: "ready" as const, quote: SALE_SELANGOR }, last: SALE_SELANGOR };
+    expect(summaryQuote(second, settled)).toEqual(readyQuote(SALE_SELANGOR, true));
+    expect(summaryQuote(second, { key: second ?? "", outcome: { status: "ready", quote: TO_SELANGOR }, last: TO_SELANGOR })).toEqual(readyQuote(TO_SELANGOR));
+  });
+
+  // UX 0.20 修订要点「三语文案见 UX-COPY.md 0.22」与 SHOP-TASK-025 验收第 10 条「页面文字全部来自字典」：有活动的各状态下文字仍只有字典文案与商品、地区数据。
+  it.each(LANGUAGES)("shows only dictionary text with a sale in %s", (language) => {
+    const names = countryNames(language);
+    const regionNames = new Set(REGIONS.regions.flatMap((region) => [names(region.code), `${names(region.code)} +${String(region.calling_code)}`]));
+    const data = new Set(["Crew Neck Tee", "Soy Wax Candle", "Black", "M", ...REGIONS.my_states.map((state) => state.name), ...regionNames]);
+    const patterns = [BRAND, ...Object.values(COPY).map((entry) => entry[language])].map(copyPattern);
+    const states: RenderOptions[] = [
+      { language, quote: readyQuote(SALE_NO_COUNTRY) },
+      { language, form: NO_COUNTRY_FORM, quote: readyQuote(SALE_NO_COUNTRY) },
+      { language, form: SELANGOR_FORM, quote: readyQuote(SALE_SELANGOR) },
+    ];
+    for (const state of states) {
+      for (const value of visibleTexts(render(state))) {
+        expect(data.has(value) || /^× \d+$/.test(value) || patterns.some((pattern) => pattern.test(value)), value).toBe(true);
+      }
+    }
+  });
+});
+
 describe("dictionary", () => {
   // SHOP-TASK-025 验收第 10 条「页面文字全部来自字典」：除接口返回的商品数据（名称、规格值、不可购买行的 SKU）、件数（× n）、
   // 地区名称（按 Intl.DisplayNames，带或不带 +呼叫码）与州属名称外，各状态下每段文字都是当前语言的某条字典文案（带变量的按模板匹配）。
@@ -1431,6 +1604,17 @@ const CHECKOUT_KEYS: readonly CopyKey[] = [
   "cart.amount_over_limit",
   "cart.empty",
   "cart.continue",
+  // SHOP-TASK-259：P05 的活动内容（UX-COPY 0.22），cart.promo_discount 与 cart.after_promo 由 SHOP-TASK-258 加入字典。
+  "cart.promo_discount",
+  "cart.after_promo",
+  "checkout.summary_promo",
+  "checkout.shipping_free",
+  "checkout.scheme_promo",
+  "checkout.scheme_promo_equal",
+  "checkout.scheme_no_promo",
+  "checkout.coupon_not_combinable",
+  "checkout.points_not_combinable",
+  "checkout.coupon_not_applied_sale",
 ];
 
 describe("dictionary keys", () => {

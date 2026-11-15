@@ -9,6 +9,7 @@ import { clearCart } from "../cart";
 import type { CartStorage } from "../cart";
 import { ErrorNotice } from "../components/SiteFrame";
 import { formatSen } from "../format";
+import type { CopyKey, CopyVars } from "../i18n/copy";
 import { useCopy } from "../i18n/language";
 import type { RoutePath } from "../router";
 import type { CheckoutForm } from "./CheckoutPage";
@@ -20,6 +21,8 @@ import { PAY_PATH } from "./PayPage";
 // 积分（只收 0 到本单 points_max 的整数），摘要另有券与积分两行；下单带最近一次计价接受的券与积分，成功后写入当前订单暂存再进入 /pay。
 // 本人号码、收货电话、券代码与 CSRF 令牌只在页面状态里，不写入任何浏览器存储、地址、查询参数或历史状态；只有订单号写入暂存（api/memberPay.ts）。
 // 第 3 步顶部的提示区与游客路径由 CheckoutPage.tsx 渲染；本文件只有会员的状态、纯函数、请求流程与收货电话、券、积分和摘要两行。
+// 节日促销活动（UX 0.20 P05，DESIGN 1.23「节日促销活动」第 6、10 条，HANDOFF 0.97，SHOP-TASK-259）：券与积分输入区下方按会员计价返回的方案显示说明，
+// 以及不同用或未用券的说明；取哪种方案由服务端判定，页面只做差额的减法。
 
 // 打开时的身份：member 带会话里的 CSRF 令牌；guest 为未登录，读取失败也按游客（HANDOFF 0.63 第（3）项，不另加提示）。
 export type CheckoutIdentity = { kind: "member"; csrfToken: string } | { kind: "guest" };
@@ -153,6 +156,39 @@ export function afterMemberQuote(member: MemberForm, quote: MemberQuote | null):
 // checkout.coupon_invalid：下单回 coupon_invalid 之后到下一次计价返回之前，或最近一次返回的计价 coupon_applied 为假时显示。
 export function couponInvalid(member: MemberForm, quote: MemberSummary): boolean {
   return member.orderNotice === "coupon_invalid" || (quote.status === "ready" && quote.quote.coupon_applied === false);
+}
+
+// 方案说明（HANDOFF 0.97 落实写法）：只在两个积分前应付都不为空时给出。promotion 时两者相等为 checkout.scheme_promo_equal，否则 checkout.scheme_promo
+// （other 为不参加活动的积分前应付，diff 为它减参加活动的）；no_promotion 时 checkout.scheme_no_promo（other 为参加活动的积分前应付，diff 为它减不参加活动的）。
+export function schemeNote(quote: MemberQuote): [CopyKey, CopyVars] | null {
+  const promo = quote.promotion_pre_points_total_sen;
+  const other = quote.other_pre_points_total_sen;
+  if (promo === null || other === null) {
+    return null;
+  }
+  switch (quote.promotion_plan) {
+    case "promotion":
+      return promo === other ? ["checkout.scheme_promo_equal", {}] : ["checkout.scheme_promo", { other: formatSen(other), diff: formatSen(other - promo) }];
+    case "no_promotion":
+      return ["checkout.scheme_no_promo", { other: formatSen(promo), diff: formatSen(promo - other) }];
+    case null:
+      return null;
+  }
+}
+
+// 不同用或未用券的说明，依次为券（coupon_note 为 not_combinable 时 checkout.coupon_not_combinable、below_min_after_sale 时 checkout.coupon_not_applied_sale）
+// 与积分（points_not_combinable 为真时 checkout.points_not_combinable）；不受两个积分前应付是否为空限制。
+export function schemeNotices(quote: MemberQuote): CopyKey[] {
+  const notices: CopyKey[] = [];
+  if (quote.coupon_note === "not_combinable") {
+    notices.push("checkout.coupon_not_combinable");
+  } else if (quote.coupon_note === "below_min_after_sale") {
+    notices.push("checkout.coupon_not_applied_sale");
+  }
+  if (quote.points_not_combinable) {
+    notices.push("checkout.points_not_combinable");
+  }
+  return notices;
 }
 
 // 会员另加的下单条件：电话栏非空，且当前请求的计价已返回、所用的券代码与积分数就是最近一次点 checkout.coupon_apply 时的代码与积分栏当前的积分数。
@@ -409,6 +445,7 @@ export function MemberPhoneField({ member, submitting }: MemberFieldProps) {
 
 // 优惠券与积分（同两张视觉稿与 P05-states 的 checkout.coupon_invalid）：券输入框与 checkout.coupon_apply；积分栏，其后为 checkout.points_available
 // （最近一次返回的计价的可用积分）与下单回 points_unavailable 后的 common.error_retry；最后是 checkout.points_not_shipping。
+// 其下为活动的方案说明（schemeNote，提示条带活动图案，视觉稿 P05-promo-desktop）与不同用或未用券的说明（schemeNotices）。
 export function MemberPerks({ member, submitting }: MemberFieldProps) {
   const t = useCopy();
   const couponId = useId();
@@ -418,6 +455,8 @@ export function MemberPerks({ member, submitting }: MemberFieldProps) {
   const { form, quote, actions } = member;
   const shown = quote.status === "ready" ? quote.quote : null;
   const invalid = couponInvalid(form, quote);
+  const scheme = shown === null ? null : schemeNote(shown);
+  const notices = shown === null ? [] : schemeNotices(shown);
   return (
     <div className="site-checkout__perks">
       <div className={invalid ? "acs-field acs-field--invalid" : "acs-field"}>
@@ -472,6 +511,17 @@ export function MemberPerks({ member, submitting }: MemberFieldProps) {
         {form.orderNotice === "points_unavailable" && <ErrorNotice />}
       </div>
       <p className="acs-body-s acs-muted">{t("checkout.points_not_shipping")}</p>
+      {scheme !== null && (
+        <div className="acs-alert acs-alert--info site-checkout__scheme" role="status">
+          <span className="acs-promo-motif" aria-hidden="true" />
+          <span>{t(...scheme)}</span>
+        </div>
+      )}
+      {notices.map((key) => (
+        <p key={key} className="acs-body-s">
+          {t(key)}
+        </p>
+      ))}
     </div>
   );
 }

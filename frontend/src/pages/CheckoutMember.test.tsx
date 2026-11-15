@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { CheckoutRegions, PricedQuoteLine, QuoteLine } from "../api/checkout";
+import type { CheckoutRegions, PricedQuoteLine, PromotionQuote, QuoteLine } from "../api/checkout";
 import { MEMBER_ORDER_URL, MEMBER_PHONE_URL, memberOrderBody, memberQuoteUrl } from "../api/memberCheckout";
 import type { MemberQuote } from "../api/memberCheckout";
 import { clearMemberPayOrder, MEMBER_PAY_ORDER_KEY, stashedMemberPayOrder } from "../api/memberPay";
@@ -41,13 +41,15 @@ import {
   prefillPhone,
   renewMember,
   retryNotice,
+  schemeNote,
+  schemeNotices,
   settleCsrf,
   settleMemberQuote,
   settleSignedOut,
   submitMemberCheckout,
 } from "./CheckoutMember";
 import type { CheckoutIdentity, MemberActions, MemberForm, MemberOrderAnswer, MemberSummary, OrderMoves, PhoneMoves } from "./CheckoutMember";
-import { canPlaceOrder, CheckoutView, guestRecipient, INITIAL_FORM } from "./CheckoutPage";
+import { canPlaceOrder, checkoutQuoteKey, CheckoutView, guestRecipient, INITIAL_FORM, quoteDestination } from "./CheckoutPage";
 import type { CheckoutActions, CheckoutForm, Reference } from "./CheckoutPage";
 import { countryNames } from "./checkoutPhone";
 
@@ -786,6 +788,199 @@ describe("the summary", () => {
   // 验收「计价键另含所用券代码与积分数」与 api/memberCheckout.ts 的请求体：会员计价的地址带语言，请求体带最近一次点应用的券与积分数（为同一模块的函数，此处只核对地址）。
   it("quotes members through the member endpoint", () => {
     expect(memberQuoteUrl("zh")).toBe("/api/member/checkout/quote?lang=zh");
+  });
+});
+
+// ---- 节日促销活动（SHOP-TASK-259） ----
+
+// 计价结果里的活动：商品级 RM 15.60 与整单级 RM 10.00，活动优惠合计 RM 25.60。
+function saleOf(overrides: Partial<PromotionQuote> = {}): PromotionQuote {
+  return {
+    promotion_id: 7,
+    item_discount_sen: 1560,
+    order_discount_sen: 1000,
+    after_item_subtotal_sen: 9440,
+    spend_mode: "amount",
+    spend_tier_reached: 1,
+    spend_next_threshold_sen: null,
+    spend_next_value: null,
+    spend_next_gap_sen: null,
+    free_shipping_threshold_sen: 8000,
+    free_shipping_reached: true,
+    free_shipping_gap_sen: 0,
+    shipping_waived_sen: 800,
+    participates: true,
+    buy_x_get_y: [],
+    ...overrides,
+  };
+}
+
+// 取参加活动：用券 RM 10.00，活动不与积分同用；参加活动积分前应付 RM 74.40，不参加 RM 108.00（多 RM 33.60）；免去 RM 8.00 运费。
+const JOINED = memberQuoteOf({
+  promotion: saleOf(),
+  promotion_plan: "promotion",
+  promotion_pre_points_total_sen: 7440,
+  other_pre_points_total_sen: 10800,
+  points_accepted: false,
+  points_redeemed: 0,
+  points_not_combinable: true,
+  total_sen: 7440,
+});
+
+// 取不参加活动：参加活动积分前应付 RM 84.40，不参加（用券 RM 30.00）RM 80.00（参加多 RM 4.40）；运费照常。
+const LEFT_OUT = memberQuoteOf({
+  promotion: saleOf(),
+  promotion_plan: "no_promotion",
+  promotion_pre_points_total_sen: 8440,
+  other_pre_points_total_sen: 8000,
+  coupon_discount_sen: 3000,
+  points_redeemed: 0,
+  total_sen: 8000,
+});
+
+// 会员第 3 步券与积分一段的末尾：checkout.points_not_shipping 之后到这一段结束（其后紧接手机第 3 步的金额）之间的内容。
+function perksTail(html: string, language: Language): string {
+  const found = new RegExp(`${escapeRegExp(copy("checkout.points_not_shipping", language))}</p>([\\s\\S]*?)</div><div class="acs-summary site-phone-only site-checkout__amounts">`).exec(html);
+  if (found === null) {
+    throw new Error("end of the coupon and points section not found");
+  }
+  return found[1] ?? "";
+}
+
+function schemeAlert(text: string): string {
+  return `<div class="acs-alert acs-alert--info site-checkout__scheme" role="status"><span class="acs-promo-motif" aria-hidden="true"></span><span>${text}</span></div>`;
+}
+
+describe("the festival sale for members (SHOP-TASK-259)", () => {
+  // UX 0.20 P05「本单参加活动、且活动优惠合计大于 0 时，摘要在 [cart.subtotal] 之后、[checkout.summary_coupon] 之前加一行 [checkout.summary_promo] [M8]（桌面与手机相同），游客与会员都显示」
+  // 与「活动免运费时 [checkout.summary_shipping] 一行的金额改为 [checkout.shipping_free]」：会员取参加活动时三处摘要依次为小计、活动优惠、券、积分、免运费与合计。
+  it.each(LANGUAGES)("puts the sale row between the subtotal and the coupon in %s", (language) => {
+    const html = render({ quote: readyMember(JOINED, false, "DEMO10", 0), member: { ...MEMBER, points: "" }, language });
+    const expected: [string, string][] = [
+      [copy("cart.subtotal", language), "RM 110.00"],
+      [copy("checkout.summary_promo", language), "RM 25.60"],
+      [copy("checkout.summary_coupon", language), "RM 10.00"],
+      [copy("checkout.summary_points", language), "RM 0.00"],
+      [copy("checkout.summary_shipping", language), filled("checkout.shipping_free", { amount: "8.00" }, language)],
+      [copy("checkout.summary_total", language), "RM 74.40"],
+    ];
+    expect(amountRows(part(html, /<aside[\s\S]*?<\/aside>/))).toEqual(expected);
+    expect(amountRows(part(html, /<details[\s\S]*?<\/details>/))).toEqual(expected);
+    expect(amountRows(part(html, /<div class="acs-summary site-phone-only site-checkout__amounts">[\s\S]*?<\/div><\/div>/))).toEqual(expected);
+  });
+
+  // UX 0.20 P05「取不参加活动时为 [checkout.scheme_no_promo]…，摘要不显示 [checkout.summary_promo]，运费照常」与 M8「取不参加活动时不显示」：选国家前后都不显示活动优惠，
+  // 运费为 RM 8.00，手机折叠摘要选国家前为商品小计。
+  it.each(LANGUAGES)("shows no sale row and normal shipping when the sale is left out in %s", (language) => {
+    const html = render({ quote: readyMember(LEFT_OUT), language });
+    const aside = amountRows(part(html, /<aside[\s\S]*?<\/aside>/));
+    expect(aside).toContainEqual([copy("checkout.summary_shipping", language), "RM 8.00"]);
+    expect(aside.map(([label]) => label)).toEqual([
+      copy("cart.subtotal", language),
+      copy("checkout.summary_coupon", language),
+      copy("checkout.summary_points", language),
+      copy("checkout.summary_shipping", language),
+      copy("checkout.summary_total", language),
+    ]);
+    expect(html).not.toContain(copy("checkout.summary_promo", language));
+    const early = memberQuoteOf({ ...NO_DESTINATION, promotion: saleOf({ shipping_waived_sen: null, participates: null }), promotion_plan: "no_promotion" });
+    const before = render({ form: { ...MEMBER_STEP, recipient: { ...RECIPIENT, country: "", state: "" } }, quote: readyMember(early), language });
+    expect(before).not.toContain(copy("cart.promo_discount", language));
+    expect(before).not.toContain(copy("cart.after_promo", language));
+    expect(part(before, /<summary[\s\S]*?<\/summary>/)).toContain(`<span>${copy("cart.subtotal", language)}</span><span class="acs-price">RM 110.00</span>`);
+  });
+
+  // UX 0.20 P05「会员用券或积分时，优惠券与积分输入区下方按计价接口返回的方案显示一条说明：取参加活动时为 [checkout.scheme_promo]（{other} 为不参加活动的积分前应付，{diff} 为两者之差）」
+  // 与「活动不与积分同用而会员填了积分时另显示 [checkout.points_not_combinable]」：说明在 checkout.points_not_shipping 之后，其后为积分不同用的说明。
+  it.each(LANGUAGES)("explains the sale was applied in %s", (language) => {
+    const tail = perksTail(render({ quote: readyMember(JOINED, false, "DEMO10", 0), member: { ...MEMBER, points: "" }, language }), language);
+    expect(tail).toBe(
+      schemeAlert(filled("checkout.scheme_promo", { other: "108.00", diff: "33.60" }, language)) + `<p class="acs-body-s">${copy("checkout.points_not_combinable", language)}</p>`,
+    );
+  });
+
+  // UX 0.20 P05「两者相同时改为 [checkout.scheme_promo_equal]」。
+  it.each(LANGUAGES)("says the two ways come to the same in %s", (language) => {
+    const equal = memberQuoteOf({ ...JOINED, other_pre_points_total_sen: 7440, points_not_combinable: false });
+    const tail = perksTail(render({ quote: readyMember(equal), language }), language);
+    expect(tail).toBe(schemeAlert(copy("checkout.scheme_promo_equal", language)));
+    expect(schemeNote(equal)).toEqual(["checkout.scheme_promo_equal", {}]);
+  });
+
+  // UX 0.20 P05「取不参加活动时为 [checkout.scheme_no_promo]（{other} 为参加活动的积分前应付，{diff} 为两者之差）」。
+  it.each(LANGUAGES)("explains the sale was left out in %s", (language) => {
+    const tail = perksTail(render({ quote: readyMember(LEFT_OUT), language }), language);
+    expect(tail).toBe(schemeAlert(filled("checkout.scheme_no_promo", { other: "84.40", diff: "4.40" }, language)));
+  });
+
+  // HANDOFF 0.97 落实写法「只在两个积分前应付都不为空时显示」（UX 0.20 P05「会员用券或积分时…显示一条说明」）：任一为空（没有比较）时不显示方案说明；没有活动时这一段与现在相同。
+  it.each(LANGUAGES)("shows no scheme note without both pre-points totals in %s", (language) => {
+    for (const quote of [
+      memberQuoteOf({ ...JOINED, promotion_pre_points_total_sen: null, points_not_combinable: false }),
+      memberQuoteOf({ ...JOINED, other_pre_points_total_sen: null, points_not_combinable: false }),
+      memberQuoteOf({ ...LEFT_OUT, promotion_pre_points_total_sen: null, other_pre_points_total_sen: null }),
+    ]) {
+      const html = render({ quote: readyMember(quote), language });
+      expect(html).not.toContain("site-checkout__scheme");
+      expect(perksTail(html, language)).toBe("");
+      expect(schemeNote(quote)).toBeNull();
+    }
+    expect(schemeNote(memberQuoteOf())).toBeNull();
+    expect(perksTail(render({ language }), language)).toBe("");
+  });
+
+  // UX 0.20 P05「活动不与优惠券同用而会员选了券时另显示 [checkout.coupon_not_combinable]」「活动不与积分同用而会员填了积分时另显示 [checkout.points_not_combinable]」
+  // 「券因活动后的金额够不到最低消费而没用时另显示 [checkout.coupon_not_applied_sale]」：按 coupon_note 与 points_not_combinable 依次显示，两个积分前应付为空时也显示。
+  it.each(LANGUAGES)("shows why the coupon or points were not used in %s", (language) => {
+    const cases: [Partial<MemberQuote>, CopyKey[]][] = [
+      [{ coupon_note: "not_combinable" }, ["checkout.coupon_not_combinable"]],
+      [{ coupon_note: "below_min_after_sale" }, ["checkout.coupon_not_applied_sale"]],
+      [{ points_not_combinable: true }, ["checkout.points_not_combinable"]],
+      [{ coupon_note: "not_combinable", points_not_combinable: true }, ["checkout.coupon_not_combinable", "checkout.points_not_combinable"]],
+    ];
+    for (const [overrides, keys] of cases) {
+      const quote = memberQuoteOf({ ...JOINED, promotion_pre_points_total_sen: null, other_pre_points_total_sen: null, points_not_combinable: false, ...overrides });
+      expect(schemeNotices(quote)).toEqual(keys);
+      const notes = keys.map((key) => `<p class="acs-body-s">${copy(key, language)}</p>`).join("");
+      expect(perksTail(render({ quote: readyMember(quote), language }), language)).toBe(notes);
+    }
+    expect(schemeNotices(memberQuoteOf())).toEqual([]);
+  });
+
+  // 任务验收「游客不显示」与 UX 0.20 P05「会员用券或积分时…显示一条说明」：同一计价交给游客的 View（不给 member）时没有方案说明与三条说明，活动优惠一行照显示（游客与会员都显示）。
+  it.each(LANGUAGES)("shows no scheme notes to guests in %s", (language) => {
+    const quote = memberQuoteOf({ ...JOINED, coupon_note: "below_min_after_sale" });
+    const html = render({ member: null, form: { ...MEMBER_STEP, guestNotice: "checkout.guest_other_country" }, quote: readyMember(quote), language });
+    for (const key of ["checkout.scheme_promo", "checkout.coupon_not_applied_sale", "checkout.points_not_combinable"] as const) {
+      expect(html).not.toContain(escapeHtml(COPY[key][language].split("{")[0] ?? ""));
+    }
+    expect(html).not.toContain("site-checkout__scheme");
+    expect(amountRows(part(html, /<aside[\s\S]*?<\/aside>/))).toContainEqual([copy("checkout.summary_promo", language), "RM 25.60"]);
+  });
+
+  // HANDOFF 0.97 落实写法「usePromotion 的 generation 变化时重新计价」：会员计价的标识建在游客计价的标识上，generation 变了它也变（即重新计价）。
+  it("re-quotes members on a new generation", () => {
+    const destination = quoteDestination("MY", "MY-10");
+    const first = memberQuoteKey(checkoutQuoteKey("en", CART, destination, 0, 1), MEMBER);
+    const second = memberQuoteKey(checkoutQuoteKey("en", CART, destination, 0, 2), MEMBER);
+    expect(first).not.toBeNull();
+    expect(second).not.toBe(first);
+    const settled = settleMemberQuote(null, first ?? "", "DEMO10", 500, { status: "ready", quote: JOINED });
+    expect(memberSummary(second, settled)).toEqual(readyMember(JOINED, true));
+  });
+
+  // UX 0.20 修订要点「三语文案见 UX-COPY.md 0.22」与验收「页面文字全部来自字典」：有活动的会员各状态下文字仍只有字典文案与商品、地区数据。
+  it.each(LANGUAGES)("shows only dictionary text with a sale in %s", (language) => {
+    const names = countryNames(language);
+    const regionNames = new Set(REGIONS.regions.flatMap((region) => [names(region.code), `${names(region.code)} +${String(region.calling_code)}`]));
+    const data = new Set(["Crew Neck Tee", "Soy Wax Candle", "Black", "M", ...REGIONS.my_states.map((state) => state.name), ...regionNames]);
+    const patterns = [BRAND, ...Object.values(COPY).map((entry) => entry[language])].map(copyPattern);
+    const equal = memberQuoteOf({ ...JOINED, other_pre_points_total_sen: 7440, coupon_note: "not_combinable" });
+    for (const quote of [JOINED, LEFT_OUT, equal, memberQuoteOf({ ...JOINED, coupon_note: "below_min_after_sale" })]) {
+      for (const value of visibleTexts(render({ quote: readyMember(quote), language }))) {
+        expect(data.has(value) || /^× \d+$/.test(value) || patterns.some((pattern) => pattern.test(value)), value).toBe(true);
+      }
+    }
   });
 });
 

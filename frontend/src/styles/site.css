@@ -210,6 +210,10 @@ body { margin: 0; }
 .site-checkout__verify .site-sms { gap: 22px; }
 .site-checkout__number { display: flex; gap: 12px; align-items: center; }
 .site-checkout__verified { display: grid; gap: 12px; padding-bottom: 28px; border-bottom: 1px solid var(--rule); }
+/* 结账的活动内容（SHOP-TASK-259，P05-promo-desktop、P05-promo-phone）：活动优惠一行与免运费沿用摘要的 .acs-row；会员的方案说明在券与积分一段的末尾，
+   提示条内边距 10px 12px，活动图案 16px、下移 3px、不随文字收缩（视觉稿）；桌面与手机相同 */
+.site-checkout__scheme { padding: 10px 12px; }
+.site-checkout__scheme > .acs-promo-motif { flex-shrink: 0; width: 16px; height: 16px; margin-top: 3px; }
 
 /* 模拟支付 P06 与结果 P07：居中 880px 单列 */
 .site-pay { box-sizing: border-box; width: min(880px, calc(100% - 2 * var(--gutter))); margin: 0 auto; display: grid; gap: 28px; align-content: start; padding: 56px 0 96px; }
