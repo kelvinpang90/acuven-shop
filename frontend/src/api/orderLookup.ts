@@ -6,6 +6,7 @@ import type { PayRecipient } from "./pay";
 // app/api/refunds.py，SHOP-TASK-029）：POST /api/orders/lookup、GET /api/orders/lookup、POST /api/orders/confirm-receipt、
 // POST /api/orders/refunds；以及退款积分预估 POST /api/orders/refunds/points-estimate（SHOP-TASK-093）。
 // 订单另带下单时是否为会员与优惠券、积分抵扣快照（SHOP-TASK-103）；只有下单时是会员的订单才显示这两项（UX P09 M3）。
+// 以及活动优惠与活动免去的运费快照（SHOP-TASK-238），游客订单也显示（UX 0.20 P09 M3）。
 // 查单授权凭本浏览器的订单访问 cookie（服务端发的 HttpOnly cookie，页面脚本读不到也不写）；订单号与电话只放在请求体里，
 // CSRF 令牌只放在请求头里，三者都只在页面内存中，不进路径、查询参数、localStorage、sessionStorage 或 cookie（UX「阅读说明」）。
 // 金额是服务端算好的整数仙，页面只格式化，不计算；预计退款只把接口给的各行金额相加。
@@ -68,7 +69,11 @@ export interface LookupOrder {
   coupon_discount_sen: number;
   // 下单时抵扣的积分数，非负整数；100 积分抵 RM1，即 1 积分抵 1 仙，这个数同时是抵扣金额的仙数。
   points_redeemed: number;
+  // 订单快照的活动优惠（商品级与整单级之和，SHOP-TASK-238），非负整数仙；没有活动为 0。游客订单也显示（UX 0.20 P09 M3）。
+  promotion_discount_sen: number;
+  // 实际运费（活动免运费时为 0）与免去的运费（未免为 0），都是非负整数仙。
   shipping_fee_sen: number;
+  shipping_waived_sen: number;
   total_sen: number;
   recipient: PayRecipient | null;
   // 退款截止时间；未支付为空。
