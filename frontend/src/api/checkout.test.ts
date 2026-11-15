@@ -15,7 +15,7 @@ const cart: CartLine[] = [
 ];
 
 function quote(subtotal_sen: number): CheckoutQuote {
-  return { lines: [], subtotal_sen, unit_limit: 2000, units_over_limit: false, amount_limit_sen: 99999999, amount_over_limit: false };
+  return { lines: [], subtotal_sen, unit_limit: 2000, units_over_limit: false, amount_limit_sen: 99999999, amount_over_limit: false, promotion: null };
 }
 
 function okResponse(body: unknown) {
@@ -162,6 +162,7 @@ function destinationQuote(overrides: Partial<DestinationQuote> = {}): Destinatio
     units_over_limit: false,
     amount_limit_sen: 99999999,
     amount_over_limit: false,
+    promotion: null,
     shipping: null,
     total_sen: null,
     fx_reference: null,
@@ -197,6 +198,53 @@ describe("checkout quote with a destination", () => {
     expect(url).toBe("/api/checkout/quote?lang=ms");
     expect(init.credentials).toBe("omit");
     expect(JSON.parse(init.body as string)).toEqual({ ...quoteRequestBody(cart), country_code: "GB" });
+  });
+
+  // DESIGN 1.23「节日促销活动」第 10 条「计价接口另返回 S1、满额减的当前档与下一档还差的金额、免运费还差的金额、每条买 X 享 Y 规则范围内的件数 n
+  // 与再加几件可多享 Y 件（(X + Y) − n mod (X + Y)），以及第 6 条的方案（没有运费报价时方案字段为空，第 4 条）」：
+  // 带活动字段的结果（含 buy_x_get_y 列表、行的命中规则与可空字段为 null）原样交给页面，请求体不变。
+  it("passes the promotion fields through as returned", async () => {
+    const answer = destinationQuote({
+      lines: [
+        {
+          sku: "tee-black-m",
+          quantity: 2,
+          status: "ok",
+          available_stock: null,
+          max_per_order: 10,
+          product_slug: "crew-neck-tee",
+          name: { text: "Crew Neck Tee", english_fallback: false },
+          options: [],
+          image: null,
+          unit_price_sen: 5500,
+          line_subtotal_sen: 11000,
+          promotion_rule_id: 7,
+          promotion_item_discount_sen: 2750,
+        },
+      ],
+      promotion: {
+        promotion_id: 3,
+        item_discount_sen: 2750,
+        order_discount_sen: 0,
+        after_item_subtotal_sen: 8250,
+        spend_mode: null,
+        spend_tier_reached: null,
+        spend_next_threshold_sen: null,
+        spend_next_value: null,
+        spend_next_gap_sen: null,
+        free_shipping_threshold_sen: 10000,
+        free_shipping_reached: false,
+        free_shipping_gap_sen: 1750,
+        shipping_waived_sen: null,
+        participates: null,
+        buy_x_get_y: [{ rule_id: 7, buy_quantity: 1, get_quantity: 1, get_percent: 50, units_in_scope: 2, units_to_next: 2 }],
+      },
+    });
+    const fetchMock = vi.fn<(url: string, init: RequestInit) => Promise<ReturnType<typeof okResponse>>>(() => Promise.resolve(okResponse(answer)));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchCheckoutQuote("en", cart, null)).resolves.toEqual(answer);
+    const [, init]: [string, RequestInit] = fetchMock.mock.calls[0] ?? ["", {}];
+    expect(JSON.parse(init.body as string)).toEqual(quoteRequestBody(cart));
   });
 });
 

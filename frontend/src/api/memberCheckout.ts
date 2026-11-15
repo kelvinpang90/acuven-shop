@@ -26,6 +26,13 @@ export interface MemberQuote extends DestinationQuote {
   points_accepted: boolean;
   points_redeemed: number;
   points_earned: number;
+  // DESIGN 1.23「节日促销活动」第 6、10 条（app/api/member_orders.py，SHOP-TASK-236）：所取方案（promotion 或 no_promotion，
+  // 不比较也不参加时为 null）、参加与不参加活动两种方案的积分前应付（比较过才有）、参加活动时不用可用券的原因与活动不同用积分的标记。
+  promotion_plan: "promotion" | "no_promotion" | null;
+  promotion_pre_points_total_sen: number | null;
+  other_pre_points_total_sen: number | null;
+  coupon_note: "not_combinable" | "below_min_after_sale" | null;
+  points_not_combinable: boolean;
 }
 
 export interface MemberQuoteBody {

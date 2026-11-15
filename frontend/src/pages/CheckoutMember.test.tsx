@@ -98,6 +98,8 @@ function priced(sku: string, overrides: Partial<PricedQuoteLine> = {}): PricedQu
     image: null,
     unit_price_sen: 3900,
     line_subtotal_sen: 3900,
+    promotion_rule_id: null,
+    promotion_item_discount_sen: 0,
     ...overrides,
   };
 }
@@ -132,6 +134,12 @@ function memberQuoteOf(overrides: Partial<MemberQuote> = {}): MemberQuote {
     points_accepted: true,
     points_redeemed: 500,
     points_earned: 103,
+    promotion: null,
+    promotion_plan: null,
+    promotion_pre_points_total_sen: null,
+    other_pre_points_total_sen: null,
+    coupon_note: null,
+    points_not_combinable: false,
     ...overrides,
   };
 }
