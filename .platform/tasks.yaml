@@ -7098,7 +7098,7 @@ tasks:
       运营者落实写法（HANDOFF 0.97）：checkout.ts 新增 BuyXGetYQuote（rule_id、buy_quantity、get_quantity、get_percent、units_in_scope、units_to_next）与 PromotionQuote（promotion_id、item_discount_sen、order_discount_sen、after_item_subtotal_sen、spend_mode、spend_tier_reached、spend_next_threshold_sen、spend_next_value、spend_next_gap_sen、free_shipping_threshold_sen、free_shipping_reached、free_shipping_gap_sen、shipping_waived_sen、participates、buy_x_get_y），类型与可空性同 app/services/checkout.py；PricedQuoteLine 加 promotion_rule_id（数或 null）与 promotion_item_discount_sen（数），CheckoutQuote 加 promotion（PromotionQuote 或 null）。memberCheckout.ts 的 MemberQuote 加 promotion_plan（promotion、no_promotion 或 null）、promotion_pre_points_total_sen 与 other_pre_points_total_sen（数或 null）、coupon_note（not_combinable、below_min_after_sale 或 null）与 points_not_combinable（布尔），同 app/api/member_orders.py。新字段都写成必填（接口总会给出）；照现有写法不做逐字段校验，请求不变。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 4、6、10 条：只加读取计价结果的类型，不计算金额，不碰个人资料。
       拆分：前台计价模块一层（8 个允许路径：两个计价模块各带测试、3 个只补替身字段的页面测试与任务记录）。运营者登记时把字段按必填加进类型，在 main 的导出上跑类型检查，报错的只有两个模块的测试与这 3 个页面测试，所以与类型一起改、只补字段。依赖 SHOP-TASK-234（游客计价）与 236（会员计价）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-234
       - SHOP-TASK-236
