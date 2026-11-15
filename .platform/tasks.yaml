@@ -6901,7 +6901,7 @@ tasks:
       运营者落实写法（HANDOFF 0.97）：活动内容只取 usePromotion 的数据，读取中只显示 ★ promo.demo_hint；没有活动（含倒计时到 0 后重新读取的结果）时显示 promo.ended 与 promo.browse_all（链到 /products）。有活动时依次为 ★ promo.demo_hint、SHOP-TASK-255 的 PromoStrip（不显示 view_all）、副标题（为空不显示）、promo.rules_title 与 SHOP-TASK-256 的 PromoRuleList（规则按 position：商品级规则的说明后附 SHOP-TASK-252 scopeText 的结果，再列整单级规则），然后是 promo.products_title、list.results_count 与商品卡网格（以 SHOP-TASK-262 的 sale 参数读取目录，默认排序与每页条数同 P02）；P02 的分页组件写死 /products 的地址，P15 不复用它：页码只放在页面状态里、不进地址（路由的查询参数只给商品列表用），桌面的分页控件为按钮，手机为 list.load_more，样式与显隐照 P02；商品级规则范围内没有上架商品（目录返回 0 件）时显示 list.results_count 与 list.empty（不显示 list.filter_clear）；只有整单级规则时商品区换成 promo.order_level_only 与 promo.browse_all。generation 变化且活动换了（promotion_id 不同或变为没有活动）时、以及切换语言时，回到第 1 页重新读取商品。商品读取失败时照 P02：首次读取与桌面翻页失败显示 ErrorNotice，手机加载更多失败照 P02 加载更多的失败状态。页头入口只在有活动时显示。
       设计闸门：不适用（只显示公开接口的活动与目录数据，不计算金额，不碰个人资料）。
       拆分：P15 页面一层（10 个允许路径：页面与测试、框架与测试、router.tsx 与 router.test.tsx（新路由必然改路由表断言）、App.tsx、copy.ts、site.css 与任务记录），依赖 SHOP-TASK-255（横条）与 256（规则列表）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-255
       - SHOP-TASK-256
