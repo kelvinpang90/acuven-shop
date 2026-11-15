@@ -651,3 +651,93 @@ describe("promotion decoration", () => {
     }
   });
 });
+
+describe("promotion entry", () => {
+  const SALE: PromotionDisplay = {
+    promotion_id: 7,
+    title: "Deepavali Sale",
+    subtitle: null,
+    badge: null,
+    strip: null,
+    pack: "deepavali",
+    palette: "deepavali",
+    ambient: "none",
+    home_poster: "split",
+    list_strip: "band",
+    card_badge: "tag",
+    detail_ribbon: "ribbon",
+    cart_progress: "bar",
+    poster_mode: "template",
+    poster_desktop: null,
+    poster_phone: null,
+    poster_alt: null,
+    ends_at: "2026-11-14T05:00:00Z",
+    coupon_combinable: true,
+    points_combinable: true,
+    rules: [],
+  };
+
+  // 以给定的一次读取结果渲染全站框架（undefined 即读取中：读取替身从不返回）；不给店铺装修与会员会话，即默认设置与登录入口。
+  function renderEntry(display: PromotionDisplay | null | undefined, path = "/", language: Language = "en"): string {
+    const storage = {
+      getItem: (key: string) => (key === LANGUAGE_STORAGE_KEY ? language : null),
+      setItem: () => undefined,
+    };
+    const initial: PromotionResponse | undefined = display === undefined ? undefined : { promotion: display, server_time: "2026-11-14T04:00:00Z" };
+    return renderToStaticMarkup(
+      <LanguageProvider storage={storage}>
+        <RouterProvider initialPath={path}>
+          <PromotionProvider initial={initial} fetcher={() => new Promise<PromotionResponse>(() => undefined)} clock={() => 0}>
+            <SiteFrame>
+              <main />
+            </SiteFrame>
+          </PromotionProvider>
+        </RouterProvider>
+      </LanguageProvider>,
+    );
+  }
+
+  // 桌面导航行左侧与手机 ☰ 菜单（菜单最后另有隐私说明）的期望；between 放在 common.nav_shop 与 common.nav_track 之间。
+  function expectedNavs(language: Language, between: string): { desktop: string; phone: string } {
+    const items =
+      `<a href="/products">${COPY["common.nav_shop"][language]}</a>${between}` +
+      `<a href="/track">${COPY["common.nav_track"][language]}</a><a href="/login">${COPY["common.nav_login"][language]}</a>`;
+    return {
+      desktop: `<div class="acs-header__row site-desktop-only"><nav class="acs-nav">${items}</nav>`,
+      phone: `<nav class="acs-nav site-header__stack">${items}<a href="/privacy">${COPY["common.nav_privacy"][language]}</a></nav>`,
+    };
+  }
+
+  // UX 0.20「1. 全局框架」「节日促销活动」：「页头导航在 [common.nav_shop] 之后加 [promo.nav] → P15（手机 ☰ 菜单同位置）」，
+  // 与 UX-COPY promo.nav「页头导航，只在有活动生效时显示，排在 common.nav_shop 之后」：有活动时桌面导航与手机菜单都在商品之后、查询订单之前
+  // 有去 /sale 的 promo.nav，文字前是读屏忽略的活动图案（P15-desktop）。
+  it.each(languages)("puts promo.nav right after common.nav_shop in the desktop nav and the phone menu in %s", (language) => {
+    const html = renderEntry(SALE, "/", language);
+    const entry = `<a class="site-header__promo" href="/sale"><span class="acs-promo-motif" aria-hidden="true"></span>${COPY["promo.nav"][language]}</a>`;
+    const expected = expectedNavs(language, entry);
+    expect(desktopNav(html)).toBe(expected.desktop);
+    expect(phoneNav(html)).toBe(expected.phone);
+    expect(header(html).match(/href="\/sale"/g)).toHaveLength(2);
+  });
+
+  // 同一条「[promo.nav] → P15」：在 P15 上两处入口都标为当前，与其他导航项相同。
+  it("marks promo.nav as current on /sale", () => {
+    const head = header(renderEntry(SALE, "/sale"));
+    expect(head.match(/<a class="site-header__promo" aria-current="page" href="\/sale">/g)).toHaveLength(2);
+  });
+
+  // UX 0.20「1. 全局框架」「节日促销活动」：「没有生效活动时各页与 0.19 完全相同」——接口说没有活动与读取中时，
+  // 桌面导航与手机菜单与加入活动入口之前逐字相同，导航里没有去 /sale 的链接，页头没有 promo.nav。
+  // 在 /sale 上渲染时，页头的语言切换链接本来就指向当前路径（href="/sale"），所以去 /sale 的检查只看两处导航。
+  it.each(languages)("leaves the header as before without a sale in %s", (language) => {
+    const expected = expectedNavs(language, "");
+    for (const html of [renderEntry(null, "/", language), renderEntry(undefined, "/", language), render("/sale", language)]) {
+      expect(desktopNav(html)).toBe(expected.desktop);
+      expect(phoneNav(html)).toBe(expected.phone);
+      expect(desktopNav(html)).not.toContain(`href="/sale"`);
+      expect(phoneNav(html)).not.toContain(`href="/sale"`);
+      expect(header(html)).not.toContain(`>${COPY["promo.nav"][language]}<`);
+      expect(header(html)).not.toContain("site-header__promo");
+    }
+  });
+});

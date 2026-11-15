@@ -3250,6 +3250,41 @@ export const COPY = {
     zh: "本活动不与积分同用。",
     ms: "Jualan ini tidak boleh digabung dengan mata.",
   },
+  "promo.nav": {
+    en: "Sale",
+    zh: "活动",
+    ms: "Jualan",
+  },
+  "promo.demo_hint": {
+    en: "This is a demo sale. Prices and discounts are examples; no real money is charged.",
+    zh: "这是演示活动，价格与优惠都是示例，不会真实扣款。",
+    ms: "Ini jualan demo. Harga dan diskaun hanyalah contoh; tiada wang sebenar dicaj.",
+  },
+  "promo.rules_title": {
+    en: "Offers",
+    zh: "活动规则",
+    ms: "Tawaran",
+  },
+  "promo.products_title": {
+    en: "Sale items",
+    zh: "活动商品",
+    ms: "Item jualan",
+  },
+  "promo.order_level_only": {
+    en: "This sale applies to your whole order, so every product counts.",
+    zh: "本活动按整单计算，全部商品都适用。",
+    ms: "Jualan ini dikira untuk keseluruhan pesanan, jadi semua produk layak.",
+  },
+  "promo.browse_all": {
+    en: "Browse all products",
+    zh: "浏览全部商品",
+    ms: "Lihat semua produk",
+  },
+  "promo.ended": {
+    en: "There's no sale running right now.",
+    zh: "目前没有进行中的活动。",
+    ms: "Tiada jualan sedang berjalan sekarang.",
+  },
 } as const satisfies Record<string, CopyEntry>;
 
 export type CopyKey = keyof typeof COPY;

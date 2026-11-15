@@ -29,6 +29,9 @@ body { margin: 0; }
 /* 页头 */
 .site-header__end { margin-left: auto; }
 .site-header__stack { flex-direction: column; align-items: flex-start; gap: 16px; }
+/* 活动入口 promo.nav（SHOP-TASK-257，P15-desktop）：活动图案 16px 在文字之前，间距 6px */
+.site-header__promo { display: inline-flex; align-items: center; gap: 6px; }
+.site-header__promo .acs-promo-motif { width: 16px; height: 16px; }
 
 /* 页脚 */
 .site-footer { margin-top: auto; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: center; }
@@ -98,6 +101,17 @@ body { margin: 0; }
 .site-list__pages { display: flex; justify-content: center; align-items: center; gap: 8px; padding-top: 24px; }
 .site-list__empty { display: grid; gap: 16px; justify-items: start; }
 .site-list__empty p { margin: 0; }
+
+/* 活动专题页 P15（SHOP-TASK-257，P15-desktop、P15-states）：★ 提示、横条与副标题、规则区、商品区依次排列；
+   商品网格、页码与加载更多沿用 P02 的 site-list__* 类。横条、规则区与提示框的版式与配色来自 acuven-shop.css */
+.site-sale p { margin: 0; }
+.site-sale > .acs-hint { margin: 24px var(--gutter) 0; }
+.site-sale__intro { display: grid; gap: 12px; padding: 20px var(--gutter) 0; }
+.site-sale__rules { padding: 32px var(--gutter) 0; }
+.site-sale__products { display: grid; gap: 24px; align-content: start; padding: 56px var(--gutter) 96px; }
+.site-sale__products-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.site-sale__note { display: grid; gap: 16px; justify-items: start; margin: 20px var(--gutter) 96px; }
+.site-sale__ended { display: grid; gap: 16px; justify-items: start; margin: 32px var(--gutter) 72px; padding: 40px; }
 
 .site-filter { margin: 0; padding: 0; border: 0; display: grid; gap: 10px; }
 .site-filter legend { margin-bottom: 10px; padding: 0; }
@@ -890,6 +904,15 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-home .acs-pgrid .acs-pcard, .site-list__grid .acs-pcard { display: flex; }
   .site-list__more { display: flex; }
   .site-list__more-error { display: block; }
+
+  /* 活动专题页 P15（P15-phone）：各段间距收窄；商品区标题与结果数上下排列 */
+  .site-sale > .acs-hint { margin: 16px var(--gutter) 0; }
+  .site-sale__intro { gap: 10px; padding: 14px var(--gutter) 0; }
+  .site-sale__rules { padding: 20px var(--gutter) 0; }
+  .site-sale__products { gap: 16px; padding: 36px var(--gutter) 56px; }
+  .site-sale__products-head { flex-direction: column; align-items: flex-start; }
+  .site-sale__note { margin: 16px var(--gutter) 56px; }
+  .site-sale__ended { margin: 16px var(--gutter) 56px; padding: 24px; }
 
   /* 全屏筛选抽屉 */
   .site-drawer:not([hidden]) { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; position: fixed; inset: 0; z-index: 10; }
