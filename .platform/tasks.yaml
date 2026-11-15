@@ -7033,7 +7033,7 @@ tasks:
       运营者落实写法（HANDOFF 0.97）：frontend/src/api/adminOrders.ts 的 AdminOrderDetail 加 promotion_discount_sen、shipping_waived_sen（非负整数）与 promotion_name（字符串或 null），按现有逐字段校验的写法校验，不合格按现有写法返回失败。frontend/src/pages/AdminOrderDetail.tsx：promotion_name 不为 null 时在金额明细之前单独一行显示 admin.order_promotion（name 为内部名称，按纯文本显示；桌面与手机都只显示这一次）；promotion_discount_sen 大于 0 时金额明细在商品小计之后加 checkout.summary_promo 一行；shipping_waived_sen 大于 0 时运费行金额为 checkout.shipping_free（amount 为 shipping_waived_sen）。frontend/src/pages/AdminStoreDesignPage.tsx 在读取完成后的表单区开头（site-admin-store-design__body 里的第一项）显示 admin.design_promo_note，读取中不显示（UX 0.20 A08 只说页内显示、没有线框位置；放在表单区里，标题、admin.design_demo_note 与读取中的现有断言不受影响），预览不显示活动装饰。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 7 条：只显示订单金额快照，不计算金额；不增加个人资料的显示。
       拆分：后台两处显示一层（11 个允许路径：后台订单模块、订单详情与店铺装修页各带测试，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入），依赖 SHOP-TASK-238（后台字段）与 259（文案键）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-238
       - SHOP-TASK-259

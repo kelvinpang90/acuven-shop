@@ -27,7 +27,6 @@
 
 <!-- openclaw:planning-v1:begin -->
 ### 当前计划
-1. `SHOP-TASK-261` 后台订单 A02 的活动行与店铺装修 A08 的活动说明
 
 ### 已阻塞
 
