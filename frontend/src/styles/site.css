@@ -72,6 +72,10 @@ body { margin: 0; }
 .site-home .acs-pgrid .acs-pcard > *, .site-list__grid .acs-pcard > * { grid-column: 2; }
 .site-home .acs-pgrid .acs-pcard__img, .site-list__grid .acs-pcard__img { grid-column: 1; grid-row: 1 / span 4; }
 
+/* 商品卡的活动角标与价格（SHOP-TASK-254，COMPONENTS「FestivalPromotion」，P02-promo-desktop 与 P02-promo-phone）：
+   角标框贴在图块左上角、角标与价格的样式都来自 acuven-shop.css；这里只让角标里的长短语在窄图块里换行，不撑出图块。 */
+.acs-pcard__img .acs-promo-badge > span { min-width: 0; overflow-wrap: anywhere; }
+
 /* 商品列表 P02 */
 .site-list__head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 56px var(--gutter) 32px; }
 .site-list__body { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 48px; padding: 0 var(--gutter) 96px; }

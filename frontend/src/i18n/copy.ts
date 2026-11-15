@@ -3130,6 +3130,16 @@ export const COPY = {
     zh: "已建立新的退款尝试，会发送到 Stripe；结果请到 Stripe 后台核对。",
     ms: "Cubaan bayaran balik baharu telah dibuat dan akan dihantar ke Stripe. Semak keputusannya di papan pemuka Stripe.",
   },
+  "promo.a11y_original": {
+    en: "Original price",
+    zh: "原价",
+    ms: "Harga asal",
+  },
+  "promo.a11y_sale": {
+    en: "Sale price",
+    zh: "活动价",
+    ms: "Harga jualan",
+  },
   "promo.badge_percent": {
     en: "−{percent}%",
     zh: "−{percent}%",

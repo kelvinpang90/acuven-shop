@@ -1,10 +1,13 @@
 import type { ProductSummary } from "../api/catalog";
 import type { CopyKey, CopyVars } from "../i18n/copy";
-import { useCopy } from "../i18n/language";
+import { useCopy, useLanguage } from "../i18n/language";
 import { formatSen } from "../format";
+import { badgeText, KIND_ITEM_DISCOUNT } from "../promoText";
+import { usePromotion } from "../promotion";
 import { Link, productPath } from "../router";
+import { PromoBadges, PromoPrices, shownRule } from "./PromoParts";
 
-// 商品卡（P01「精选商品」与 P02 共用）：首张图片、名称、价格，当日售罄时加 list.out_of_stock。
+// 商品卡（P01「精选商品」、P02 与 P15 共用）：首张图片、名称、价格，当日售罄时加 list.out_of_stock；命中活动的商品级规则时加角标与活动价。
 // 价格只显示 MYR，不显示参考外币（UX Q9）。整张卡片链到商品详情 P03（/products/<slug>）。
 
 // 图片为空时的占位形状：取自视觉稿 P01「按分类浏览」的图形，读屏忽略。
@@ -28,18 +31,38 @@ export function priceCopy(product: Pick<ProductSummary, "min_price_sen" | "has_m
   return [product.has_multiple_variants ? "list.price_from" : "common.price_myr", { amount }];
 }
 
+// UX 0.20「商品卡价格与角标」：命中打折规则时划线原价取 min_price_sen、按 common.price_myr 不加「起」
+// （打折规则下活动单价随原价单调不减，活动价最低且原价最低的 SKU 就是原价最低的 SKU）；活动价取接口给的 min_sale_price_sen，照原规则加「起」。
+// 命中买 X 享 Y 时只显示角标、价格照旧；规则不在正在显示的活动里时与没有活动相同。
 export default function ProductCard({ product }: { product: ProductSummary }) {
   const t = useCopy();
+  const { language } = useLanguage();
+  const { promotion } = usePromotion();
+  const rule = shownRule(promotion, product.promotion);
+  const salePriceSen = rule?.kind === KIND_ITEM_DISCOUNT ? product.min_sale_price_sen : null;
   const [priceKey, priceVars] = priceCopy(product);
+  let price = <span className="acs-pcard__price">{t(priceKey, priceVars)}</span>;
+  if (salePriceSen !== null) {
+    const [saleKey, saleVars] = priceCopy({ min_price_sen: salePriceSen, has_multiple_variants: product.has_multiple_variants });
+    price = (
+      <PromoPrices
+        original={t("common.price_myr", { amount: formatSen(product.min_price_sen) })}
+        sale={t(saleKey, saleVars)}
+      />
+    );
+  }
   return (
     <Link className={product.sold_out_today ? "acs-pcard acs-pcard--oos" : "acs-pcard"} to={productPath(product.slug)}>
       <span className="acs-pcard__img">
+        {promotion !== null && rule !== null && (
+          <PromoBadges phrase={promotion.badge} rule={badgeText(language, rule)} style={promotion.card_badge} />
+        )}
         <CatalogImage src={product.image} />
       </span>
       <span className="acs-pcard__name" lang={product.name.english_fallback ? "en" : undefined}>
         {product.name.text}
       </span>
-      <span className="acs-pcard__price">{t(priceKey, priceVars)}</span>
+      {price}
       {product.sold_out_today && (
         <span>
           <span className="acs-tag acs-tag--neutral">{t("list.out_of_stock")}</span>
