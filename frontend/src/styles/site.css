@@ -170,6 +170,12 @@ body { margin: 0; }
 .site-cart__summary .site-cart__checkout { margin-top: 8px; }
 .site-cart__continue { justify-self: center; }
 .site-cart__empty { display: grid; gap: 16px; justify-items: start; padding: 0 var(--gutter); }
+/* 购物车的活动内容（SHOP-TASK-258，P04-promo-desktop、P04-promo-phone）：进度条、提示与角标的版式与配色来自 acuven-shop.css；
+   角标框在商品卡里贴图块定位，行里改为随名称与规格排列；打折行的划线行小计与活动价行小计上下排列、靠右；
+   桌面的进度条与提示一组，上下留 14px，组内间距 10px（视觉稿）；手机另有一块放在运费说明之前，只在手机显示 */
+.site-cart__info > .acs-promo-badges { position: static; margin-top: 2px; }
+.site-cart__price > .acs-prices { display: grid; justify-items: end; gap: 2px; }
+.site-cart__promo { display: grid; gap: 10px; padding: 14px 0; }
 
 /* 结账 P05：左侧步骤内容（最宽 680px），右侧 420px 摘要与下单；收货资料两列，姓名、地址与电话占满两列 */
 .site-checkout { padding: 0 0 96px; }
@@ -950,6 +956,9 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-cart__note { margin-left: 102px; }
   .site-cart__notes { display: grid; gap: 16px; }
   .site-cart__bar { display: grid; gap: 10px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; padding: 14px var(--gutter) 20px; border-top: 1px solid var(--rule); }
+  /* 活动内容：进度条、提示、活动优惠、活动后金额与会员说明在各行之后的一块里（内边距 18px，视觉稿 P04-promo-phone）；打折行的两个行小计间距为 0 */
+  .site-cart__promo-phone { display: grid; padding: 18px; }
+  .site-cart__price > .acs-prices { gap: 0; }
 
   /* 结账：单列；摘要折叠在顶部（未选定收货国家时显示商品小计，选定后显示合计）；收货资料一列；
      第 3 步的金额在表单之后，合计与下单按钮、◆ 提示固定在底部，页面底部留出它的高度 */
