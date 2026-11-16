@@ -45,6 +45,7 @@ const NAV_PATHS = [
   "/admin/products",
   "/admin/categories",
   "/admin/coupons",
+  "/admin/promotions",
   "/admin/shipping",
   "/admin/stock-resets",
   "/admin/store-design",
@@ -57,6 +58,7 @@ const NAV_KEYS = [
   "admin.nav_products",
   "admin.nav_categories",
   "admin.nav_coupons",
+  "admin.nav_promotions",
   "admin.nav_shipping",
   "admin.nav_stock_resets",
   "admin.nav_store_design",
@@ -327,6 +329,8 @@ describe("AdminStripePendingPage", () => {
   // UX 0.19「管理后台总体」「导航项依次为 [admin.nav_orders]、[admin.nav_refunds]、[admin.nav_stripe_pending]（0.19）、[admin.nav_products]、…」
   // 与 A11「入口：后台导航 [admin.nav_stripe_pending]（排在 [admin.nav_refunds] 之后）」：经路由打开本页，桌面导航与 ☰ 菜单都依次为这十项，
   // Stripe 待处理排在退款之后、商品之前并标 aria-current="page"，其他项不标；各项文字为字典里当前语言的文案。
+  // SHOP-TASK-268 改动：按 UX 0.20「管理后台总体」「导航项依次为 …、[admin.nav_coupons]、[admin.nav_promotions]（0.20）、[admin.nav_shipping]、…」，
+  // NAV_PATHS、NAV_KEYS、aria-current 的期望与按项数截取的 slice 在优惠券之后加入促销活动，改为十一项（当前项仍为 Stripe 待处理）。
   it.each(LANGUAGES)("marks Stripe follow-ups current, after refunds and before products, in both navigation menus in %s", (language) => {
     for (const html of [renderApp(language), renderToStaticMarkup(wrap(<AdminStripePendingPage />, language)), renderSignedIn(language, true)]) {
       for (const nav of [element(html, "nav", "site-admin__nav"), element(html, "nav", "site-admin__menu-nav")]) {
@@ -343,8 +347,9 @@ describe("AdminStripePendingPage", () => {
           undefined,
           undefined,
           undefined,
+          undefined,
         ]);
-        const labels = textNodes(nav).slice(0, 10);
+        const labels = textNodes(nav).slice(0, 11);
         expect(labels).toEqual(NAV_KEYS.map((key) => COPY[key][language]));
         expect(labels.indexOf(COPY["admin.nav_refunds"][language])).toBeLessThan(labels.indexOf(COPY["admin.nav_stripe_pending"][language]));
         expect(labels.indexOf(COPY["admin.nav_stripe_pending"][language])).toBeLessThan(labels.indexOf(COPY["admin.nav_products"][language]));

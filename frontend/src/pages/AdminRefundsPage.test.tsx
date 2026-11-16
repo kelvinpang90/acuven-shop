@@ -843,6 +843,8 @@ describe("navigation", () => {
   // href/aria-current 与导航文字的期望改为九项；当前项与手机顶栏名称不变。
   // SHOP-TASK-226 改动：按 UX 0.19「管理后台总体」「导航项依次为 [admin.nav_orders]、[admin.nav_refunds]、[admin.nav_stripe_pending]（0.19）、…」，
   // 在退款之后加入 Stripe 待处理（/admin/stripe-pending），href/aria-current 与导航文字的期望改为十项；当前项与手机顶栏名称不变。
+  // SHOP-TASK-268 改动：按 UX 0.20「管理后台总体」「导航项依次为 …、[admin.nav_coupons]、[admin.nav_promotions]（0.20）、[admin.nav_shipping]、…」，
+  // 在优惠券之后加入促销活动（/admin/promotions），href/aria-current 与导航文字的期望改为十一项；当前项与手机顶栏名称不变。
   it.each(LANGUAGES)("marks the refunds item as current in %s", (language) => {
     for (const path of [REFUNDS_PATH, "/admin/refunds/order/42"]) {
       const html = renderApp(path, language);
@@ -855,6 +857,7 @@ describe("navigation", () => {
             ["/admin/products", undefined],
             ["/admin/categories", undefined],
             ["/admin/coupons", undefined],
+            ["/admin/promotions", undefined],
             ["/admin/shipping", undefined],
             ["/admin/stock-resets", undefined],
           ["/admin/store-design", undefined],
@@ -867,6 +870,7 @@ describe("navigation", () => {
             COPY["admin.nav_products"][language],
             COPY["admin.nav_categories"][language],
             COPY["admin.nav_coupons"][language],
+            COPY["admin.nav_promotions"][language],
             COPY["admin.nav_shipping"][language],
             COPY["admin.nav_stock_resets"][language],
           COPY["admin.nav_store_design"][language],

@@ -50,6 +50,7 @@ const HTML_LANG = { en: "en", zh: "zh-Hans", ms: "ms" } as const;
 // 之外的都是尚未上线页面的项）。
 // SHOP-TASK-196 改动：LIVE_NAV_KEYS 在退款之后加入商品与分类，UX-COPY 的导航项至此全部上线。
 // SHOP-TASK-226 改动：LIVE_NAV_KEYS 在退款之后加入 Stripe 待处理（UX 0.19「管理后台总体」），UX-COPY 的导航项再次全部上线。
+// SHOP-TASK-268 改动：LIVE_NAV_KEYS 在优惠券之后加入促销活动（UX 0.20「管理后台总体」），UX-COPY 的导航项再次全部上线。
 const DOC_NAV_KEYS = [...uxCopy.matchAll(/^\| `(admin\.nav_[a-z_]+)` \|/gm)].map((m) => m[1] ?? "");
 const LIVE_NAV_KEYS = [
   "admin.nav_orders",
@@ -58,6 +59,7 @@ const LIVE_NAV_KEYS = [
   "admin.nav_products",
   "admin.nav_categories",
   "admin.nav_coupons",
+  "admin.nav_promotions",
   "admin.nav_shipping",
   "admin.nav_stock_resets",
   "admin.nav_store_design",
@@ -66,6 +68,7 @@ const LIVE_NAV_KEYS = [
 const STOCK_RESETS_PATH = "/admin/stock-resets";
 const STORE_DESIGN_PATH = "/admin/store-design";
 const COUPONS_PATH = "/admin/coupons";
+const PROMOTIONS_PATH = "/admin/promotions";
 const SHIPPING_PATH = "/admin/shipping";
 const SETTINGS_PATH = "/admin/settings";
 const PRODUCTS_PATH = "/admin/products";
@@ -346,10 +349,14 @@ describe("first render", () => {
   // 十项即 UX-COPY 的全部导航项，「UX-COPY 的导航项多于已上线项」改回两者相同（DOC_NAV_KEYS 与 LIVE_NAV_KEYS 相等）。
   // UX-COPY 0.22 改动（运营者 PR）：UX-COPY 新增尚未上线的 A12 导航项 admin.nav_promotions（UX 0.20），恢复「UX-COPY 的导航项多于已上线项」的断言；
   // A12 前端任务上线该项时把它加进 LIVE_NAV_KEYS，再改回两者相同。UX 0.20「管理后台总体」把它排在 [admin.nav_coupons] 之后，UX-COPY 的导航键照此排列。
-  it.each(LANGUAGES)("lists only the orders, refunds, Stripe follow-ups, products, categories, coupons, shipping, stock resets, store design and site settings items in UX order in the navigation in %s", (language) => {
-    expect(ADMIN_NAV).toEqual(["orders", "refunds", "stripePending", "products", "categories", "coupons", "shipping", "stockResets", "storeDesign", "settings"]);
+  // SHOP-TASK-268 改动：按 UX 0.20「管理后台总体」「导航项依次为 …、[admin.nav_coupons]、[admin.nav_promotions]（0.20）、[admin.nav_shipping]、…」
+  // 与 A12「入口：后台导航 [admin.nav_promotions]（排在 [admin.nav_coupons] 之后）」，在优惠券之后加入促销活动（/admin/promotions），
+  // ADMIN_NAV、href 与 aria-current 的期望改为十一项，加该项的文字断言与优惠券 < 促销活动 < 运费的顺序断言（原来优惠券 < 运费的一条换成这两条）；
+  // 十一项即 UX-COPY 的全部导航项，「UX-COPY 的导航项多于已上线项」改回两者相同（DOC_NAV_KEYS 与 LIVE_NAV_KEYS 相等）。
+  it.each(LANGUAGES)("lists only the orders, refunds, Stripe follow-ups, products, categories, coupons, promotions, shipping, stock resets, store design and site settings items in UX order in the navigation in %s", (language) => {
+    expect(ADMIN_NAV).toEqual(["orders", "refunds", "stripePending", "products", "categories", "coupons", "promotions", "shipping", "stockResets", "storeDesign", "settings"]);
     expect(DOC_NAV_KEYS.filter((key) => LIVE_NAV_KEYS.includes(key))).toEqual(LIVE_NAV_KEYS);
-    expect(DOC_NAV_KEYS.length).toBeGreaterThan(LIVE_NAV_KEYS.length);
+    expect(DOC_NAV_KEYS).toEqual(LIVE_NAV_KEYS);
     expect(DOC_NAV_KEYS.indexOf("admin.nav_promotions")).toBe(DOC_NAV_KEYS.indexOf("admin.nav_coupons") + 1);
     for (const html of [renderApp(ORDERS_PATH, language), render({}, language), render({ menuOpen: true }, language)]) {
       const nav = element(html, "nav", "site-admin__nav");
@@ -361,6 +368,7 @@ describe("first render", () => {
         PRODUCTS_PATH,
         CATEGORIES_PATH,
         COUPONS_PATH,
+        PROMOTIONS_PATH,
         SHIPPING_PATH,
         STOCK_RESETS_PATH,
         STORE_DESIGN_PATH,
@@ -377,6 +385,7 @@ describe("first render", () => {
         undefined,
         undefined,
         undefined,
+        undefined,
       ]);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_orders"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_refunds"][language])}</a>`);
@@ -384,6 +393,7 @@ describe("first render", () => {
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_products"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_categories"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_coupons"][language])}</a>`);
+      expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_promotions"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_shipping"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_stock_resets"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_store_design"][language])}</a>`);
@@ -398,6 +408,9 @@ describe("first render", () => {
       expect(nav.indexOf(escapeHtml(COPY["admin.nav_products"][language]))).toBeLessThan(nav.indexOf(escapeHtml(COPY["admin.nav_categories"][language])));
       expect(nav.indexOf(escapeHtml(COPY["admin.nav_categories"][language]))).toBeLessThan(nav.indexOf(escapeHtml(COPY["admin.nav_coupons"][language])));
       expect(nav.indexOf(escapeHtml(COPY["admin.nav_coupons"][language]))).toBeLessThan(
+        nav.indexOf(escapeHtml(COPY["admin.nav_promotions"][language])),
+      );
+      expect(nav.indexOf(escapeHtml(COPY["admin.nav_promotions"][language]))).toBeLessThan(
         nav.indexOf(escapeHtml(COPY["admin.nav_shipping"][language])),
       );
       expect(nav.indexOf(escapeHtml(COPY["admin.nav_shipping"][language]))).toBeLessThan(
@@ -473,6 +486,8 @@ describe("phone menu", () => {
   // 改为九项，并加两项的文字断言。
   // SHOP-TASK-226 改动：按 UX 0.19「管理后台总体」的导航顺序与 A11「导航项 [admin.nav_stripe_pending] 排在 [admin.nav_refunds] 之后」，
   // 在退款之后加入 Stripe 待处理，改为十项，并加该项的文字断言。
+  // SHOP-TASK-268 改动：按 UX 0.20「管理后台总体」「导航项依次为 …、[admin.nav_coupons]、[admin.nav_promotions]（0.20）、[admin.nav_shipping]、…」，
+  // 在优惠券之后加入促销活动，改为十一项，并加该项的文字断言。
   it.each(LANGUAGES)("opens the menu with the navigation, the languages and the logout button in %s", (language) => {
     const html = render({ menuOpen: true }, language);
     const bar = element(html, "div", "site-admin__bar");
@@ -492,6 +507,7 @@ describe("phone menu", () => {
         [PRODUCTS_PATH, undefined],
         [CATEGORIES_PATH, undefined],
         [COUPONS_PATH, undefined],
+        [PROMOTIONS_PATH, undefined],
         [SHIPPING_PATH, undefined],
         [STOCK_RESETS_PATH, undefined],
       [STORE_DESIGN_PATH, undefined],
@@ -503,6 +519,7 @@ describe("phone menu", () => {
     expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_products"][language])}</a>`);
     expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_categories"][language])}</a>`);
       expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_coupons"][language])}</a>`);
+    expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_promotions"][language])}</a>`);
     expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_shipping"][language])}</a>`);
     expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_stock_resets"][language])}</a>`);
     expect(nav).toContain(`>${escapeHtml(COPY["admin.nav_store_design"][language])}</a>`);
