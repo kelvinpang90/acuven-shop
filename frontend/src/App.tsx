@@ -13,6 +13,8 @@ import AdminCategoriesPage from "./pages/AdminCategoriesPage";
 import AdminCouponsPage from "./pages/AdminCouponsPage";
 import AdminOrdersPage from "./pages/AdminOrdersPage";
 import AdminProductsPage from "./pages/AdminProductsPage";
+import AdminPromotionEditPage from "./pages/AdminPromotionEditPage";
+import AdminPromotionsPage from "./pages/AdminPromotionsPage";
 import AdminRefundsPage from "./pages/AdminRefundsPage";
 import AdminShippingPage from "./pages/AdminShippingPage";
 import AdminSiteSettingsPage from "./pages/AdminSiteSettingsPage";
@@ -74,6 +76,10 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   "/admin/products": AdminProductsPage,
   "/admin/categories": AdminCategoriesPage,
   "/admin/coupons": AdminCouponsPage,
+  "/admin/promotions": AdminPromotionsPage,
+  // 新建与编辑是同一页（前者没有活动 ID，后者的段值为活动的内部 ID）。
+  "/admin/promotions/new": AdminPromotionEditPage,
+  "/admin/promotions/:id": AdminPromotionEditPage,
   "/admin/shipping": AdminShippingPage,
   "/admin/stock-resets": AdminStockResetsPage,
   "/admin/store-design": AdminStoreDesignPage,

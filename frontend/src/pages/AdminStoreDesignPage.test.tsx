@@ -338,7 +338,10 @@ describe("navigation", () => {
   // SHOP-TASK-226 改动：按 UX 0.19「管理后台总体」「导航项依次为 [admin.nav_orders]、[admin.nav_refunds]、[admin.nav_stripe_pending]（0.19）、…」，
   // 在退款之后加入 Stripe 待处理（/admin/stripe-pending），href/aria-current 与导航文字的期望改为十项（按项数截取的文字随之取前十个），
   // 测试标题的「after …」随之改为前面的八项；当前项仍为店铺装修，手机顶栏名称不变（下一条）。
-  it.each(LANGUAGES)("marks the store design item as current, after the other eight before it, in %s", (language) => {
+  // SHOP-TASK-268 改动：按 UX 0.20「管理后台总体」「导航项依次为 …、[admin.nav_coupons]、[admin.nav_promotions]（0.20）、[admin.nav_shipping]、…」，
+  // 在优惠券之后加入促销活动（/admin/promotions），href/aria-current 与导航文字的期望改为十一项（按项数截取的文字随之取前十一个），
+  // 测试标题的「after …」随之改为前面的九项；当前项仍为店铺装修，手机顶栏名称不变（下一条）。
+  it.each(LANGUAGES)("marks the store design item as current, after the other nine before it, in %s", (language) => {
     const html = renderApp(STORE_DESIGN_PATH, language);
     for (const nav of [element(html, "nav", "site-admin__nav"), element(html, "nav", "site-admin__menu-nav")]) {
       const items = tags(nav, "a").filter((tag) => !attributes(tag).has("lang"));
@@ -349,18 +352,20 @@ describe("navigation", () => {
           ["/admin/products", undefined],
           ["/admin/categories", undefined],
           ["/admin/coupons", undefined],
+          ["/admin/promotions", undefined],
           ["/admin/shipping", undefined],
           [STOCK_RESETS_PATH, undefined],
         [STORE_DESIGN_PATH, "page"],
         ["/admin/settings", undefined],
       ]);
-        expect(textNodes(nav).slice(0, 10)).toEqual([
+        expect(textNodes(nav).slice(0, 11)).toEqual([
           COPY["admin.nav_orders"][language],
           COPY["admin.nav_refunds"][language],
           COPY["admin.nav_stripe_pending"][language],
           COPY["admin.nav_products"][language],
           COPY["admin.nav_categories"][language],
           COPY["admin.nav_coupons"][language],
+          COPY["admin.nav_promotions"][language],
           COPY["admin.nav_shipping"][language],
           COPY["admin.nav_stock_resets"][language],
         COPY["admin.nav_store_design"][language],

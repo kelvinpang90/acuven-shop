@@ -1,0 +1,24 @@
+# SHOP-TASK-268 后台促销活动的路由与导航 A12
+
+- [x] 路由：按 `docs/UX.md` 0.20 页面地图（「A12 | 后台促销活动 | `/admin/promotions`、`/admin/promotions/<活动 ID>`、…」）与 A12「编辑区（…新建时同一版式）」，`frontend/src/router.tsx` 的路由表在 `/admin/coupons` 之后依次加 `/admin/promotions`、`/admin/promotions/new`、`/admin/promotions/:id`（照 HANDOFF 0.98 落实写法，新建排在 `:id` 之前，路由按表的顺序取第一个匹配，`new` 不当作活动 ID）；导出 `ADMIN_PROMOTIONS_PATH`、`ADMIN_PROMOTION_NEW_PATH` 与 `adminPromotionPath(活动 ID)`；文件开头说明后台路径的注释写明列表不带段值、`new` 是固定段、编辑页的段值是活动的内部 ID，三个地址都不带查询参数。`frontend/src/App.tsx` 的页面表加 `"/admin/promotions": AdminPromotionsPage`，`"/admin/promotions/new"` 与 `"/admin/promotions/:id"` 都是 `AdminPromotionEditPage`。不合法的段值（如 `abc`、`0`）照路由的通用规则仍匹配 `:id` 并渲染编辑页（由 SHOP-TASK-270 处理）；未知路径（如 `/admin/promotions/7/edit`）仍落到首页。前台预览 `/admin/promotions/:id/preview` 未加（SHOP-TASK-280）。
+- [x] 页面：新文件 `frontend/src/pages/AdminPromotionsPage.tsx` 与 `frontend/src/pages/AdminPromotionEditPage.tsx` 用后台框架渲染（`AdminFrame` 的 `current` 为 `promotions`），内容区分别由另导出的 `AdminPromotionsContent` 与 `AdminPromotionEditContent` 渲染，只有 `<h1 class="acs-admin__h">` `admin.nav_promotions`；手机顶栏名称随框架为 `admin.nav_promotions`。两页都不发请求，没有加其他文案键。
+- [x] 文案：`frontend/src/i18n/copy.ts` 在 `admin.nav_coupons` 之后加 `admin.nav_promotions`，三语按 UX-COPY 0.22 第 10 节逐字为 `Promotions`、`促销活动`、`Promosi`。
+- [x] 导航变化：`frontend/src/components/AdminFrame.tsx` 的 `AdminNavItem`、`ADMIN_NAV` 与 `NAV_ENTRY` 在 `coupons` 之后加入 `promotions`（指向 `ADMIN_PROMOTIONS_PATH`，文字 `admin.nav_promotions`），文件头注释的导航顺序随之更新；桌面导航与 ☰ 菜单都依次为订单、退款、Stripe 待处理、商品、分类、优惠券、促销活动、运费与演示汇率、库存重置、店铺装修、站点设置十一项，即 UX 0.20「管理后台总体」与 UX-COPY 0.22 第 10 节的全部导航项。三个促销活动路由上该项都标 `aria-current="page"`（当前项由页面传给框架，不看路径）。
+- [x] 改动的现有测试（只改按顺序列出导航项或路由表的断言及其测试名，其余断言不动；原因都是导航或路由表多了一项或三项）。各改动处的测试注释加了一段「SHOP-TASK-268 改动」，引 UX 0.20「管理后台总体」的导航顺序原句：
+  - `frontend/src/components/AdminFrame.test.tsx`：`LIVE_NAV_KEYS` 在 `admin.nav_coupons` 之后加 `admin.nav_promotions`，另加常量 `PROMOTIONS_PATH`；「lists only … in the navigation」一条照该测试注释把「UX-COPY 的导航项多于已上线项」（`length` 大于）改回两者相同（`DOC_NAV_KEYS` 与 `LIVE_NAV_KEYS` 相等），`ADMIN_NAV`、桌面导航 href 与 aria-current 的期望改为十一项，加 `admin.nav_promotions` 的文字断言，原来优惠券 < 运费的顺序断言换成优惠券 < 促销活动 < 运费，测试名加入 promotions；「opens the menu …」一条的手机菜单 href/aria-current 期望加入 `/admin/promotions`，并加该项的文字断言。`otherNavLabels` 随之为空表。
+  - `frontend/src/router.test.tsx`：路由表断言在 `/admin/coupons` 之后加三条路径。
+  - `frontend/src/pages/AdminCategoriesPage.test.tsx`、`AdminProductsPage.test.tsx`、`AdminSiteSettingsPage.test.tsx`、`AdminStripePendingPage.test.tsx`：文件顶部 `NAV_PATHS` 与 `NAV_KEYS` 在优惠券之后加促销活动；aria-current 期望改为十一项、`slice(0, 10)` 改为 `slice(0, 11)`（当前项不变）。
+  - `frontend/src/pages/AdminShippingPage.test.tsx`：同上；运费不再紧跟优惠券，测试名的「after coupons」改为「after promotions」。
+  - `frontend/src/pages/AdminCouponsPage.test.tsx`：文件顶部 `NAV_PATHS` 加 `/admin/promotions`；aria-current 期望改为十一项（当前项仍为优惠券）。
+  - `frontend/src/pages/AdminRefundsPage.test.tsx`：href/aria-current 与导航文字期望在优惠券之后加入促销活动。
+  - `frontend/src/pages/AdminStockResetsPage.test.tsx`：同上、`slice` 改为前十一个，测试名的「after …」加入 promotions。
+  - `frontend/src/pages/AdminStoreDesignPage.test.tsx`：同上，测试名「after the other eight before it」改为「after the other nine before it」。
+  - 各文件的手机顶栏名称断言未改。
+- [x] 新增测试（vitest 与 react-dom/server，路由用 `RouterProvider` 或 `App` 的 `initialPath`）：
+  - `frontend/src/pages/AdminPromotionsPage.test.tsx`：经路由打开 `/admin/promotions` 渲染后台框架、不套前台框架，路径不带段值；三种语言下桌面导航与 ☰ 菜单的十一项顺序、促销活动在优惠券之后与运费之前、只有它标 `aria-current="page"`；手机顶栏名称 `admin.nav_promotions`；已登录时内容区只有 h1 `admin.nav_promotions`，会话返回前内容区没有 h1；渲染不调用 fetch；页面文字全部来自字典。
+  - `frontend/src/pages/AdminPromotionEditPage.test.tsx`：`/admin/promotions/new` 匹配新建模式（排在 `:id` 之前）、`adminPromotionPath(7)` 为 `/admin/promotions/7` 并匹配 `:id`；不合法的段值（`abc`、`0`、`-1`）仍渲染编辑页，多一段的地址落到首页；新建与编辑两条路径上同上的框架、导航、手机顶栏、标题、不发请求与字典断言。
+  - 每条测试注释写明守住的 UX 0.20「管理后台总体」、页面地图或 A12 的原句（或任务目的）。
+- 偏离：无。内容区只有标题，`frontend/src/styles/site.css` 未改动。
+- 设计闸门：不适用（只加路由、导航与标题，不碰金额与个人资料）。
+- 留给之后的任务：请求模块已由 SHOP-TASK-266 实现；列表内容由 SHOP-TASK-269、编辑区（含不合法段值的处理）由 SHOP-TASK-270 起实现；前台预览路由由 SHOP-TASK-280 加入。未做浏览器验收。
+- 验证到什么程度：人工逐条对照 UX 0.20「管理后台总体」的导航顺序、页面地图的 A12 路径、A12 的入口与线框，以及 UX-COPY 0.22 第 10 节的 `admin.nav_promotions` 一行；上述测试为本次新增或修改的测试代码，前端检查由 PR 的必需 CI 检查 `frontend` 执行。

@@ -18,7 +18,8 @@ import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 // 列表的搜索、筛选与页码只在页面模块的内存里；退款申请列表 /admin/refunds 的状态筛选与页码只在页面内存里，
 // 按订单筛选 /admin/refunds/order/:orderId 的段值是订单的内部 ID，订单号只在页面内存里；
 // 退款详情 /admin/refunds/:id 的段值是申请的内部 ID，订单号、理由、审核人邮箱、令牌与幂等键只在页面内存与请求里，
-// 列表的筛选与页码只在页面模块的内存里；Stripe 待处理 /admin/stripe-pending、后台商品 /admin/products、后台分类 /admin/categories、运费与演示汇率 /admin/shipping、库存重置结果 /admin/stock-resets、店铺装修 /admin/store-design 与站点设置 /admin/settings 不带段值）：
+// 列表的筛选与页码只在页面模块的内存里；促销活动列表 /admin/promotions 不带段值，新建 /admin/promotions/new 的 new 是固定段，
+// 活动编辑 /admin/promotions/:id 的段值是活动的内部 ID，这三个地址里都不带查询参数；Stripe 待处理 /admin/stripe-pending、后台商品 /admin/products、后台分类 /admin/categories、运费与演示汇率 /admin/shipping、库存重置结果 /admin/stock-resets、店铺装修 /admin/store-design 与站点设置 /admin/settings 不带段值）：
 // App.tsx 不给它们套前台框架，前台页头、菜单与页脚也没有指向它们的入口（UX A01「前台不放入口链接」）。
 // 会员登录 /login 的号码与密码只在页面内存与请求体里；登录成功后回到的来源页只记在路由的内存里（见下方「来源页」）。
 // 忘记密码 /forgot-password 的号码、验证码、新密码与 CSRF 令牌只在页面内存与请求里。
@@ -56,6 +57,10 @@ export const ROUTE_PATHS = [
   "/admin/products",
   "/admin/categories",
   "/admin/coupons",
+  // 新建排在编辑之前：路由按表的顺序取第一个匹配，/admin/promotions/new 不当作活动 ID。
+  "/admin/promotions",
+  "/admin/promotions/new",
+  "/admin/promotions/:id",
   "/admin/shipping",
   "/admin/stock-resets",
   "/admin/store-design",
@@ -77,6 +82,8 @@ export const ADMIN_STRIPE_PENDING_PATH: RoutePath = "/admin/stripe-pending";
 export const ADMIN_PRODUCTS_PATH: RoutePath = "/admin/products";
 export const ADMIN_CATEGORIES_PATH: RoutePath = "/admin/categories";
 export const ADMIN_COUPONS_PATH: RoutePath = "/admin/coupons";
+export const ADMIN_PROMOTIONS_PATH: RoutePath = "/admin/promotions";
+export const ADMIN_PROMOTION_NEW_PATH: RoutePath = "/admin/promotions/new";
 export const ADMIN_SHIPPING_PATH: RoutePath = "/admin/shipping";
 export const ADMIN_STOCK_RESETS_PATH: RoutePath = "/admin/stock-resets";
 export const ADMIN_STORE_DESIGN_PATH: RoutePath = "/admin/store-design";
@@ -158,6 +165,11 @@ export function adminRefundPath(id: number): RoutePath {
 // 只含某张订单申请的退款列表的实际路径：段值为订单的内部 ID（订单号不进网址）。
 export function adminRefundsOrderPath(orderId: number): RoutePath {
   return `/admin/refunds/order/${String(orderId)}`;
+}
+
+// 后台促销活动编辑区的实际路径：段值为活动的内部 ID。
+export function adminPromotionPath(id: number): RoutePath {
+  return `/admin/promotions/${String(id)}`;
 }
 
 // 未知路径落到首页。

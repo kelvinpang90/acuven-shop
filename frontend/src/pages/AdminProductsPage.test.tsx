@@ -108,6 +108,7 @@ const NAV_PATHS = [
   PRODUCTS_PATH,
   "/admin/categories",
   "/admin/coupons",
+  "/admin/promotions",
   "/admin/shipping",
   "/admin/stock-resets",
   "/admin/store-design",
@@ -120,6 +121,7 @@ const NAV_KEYS = [
   "admin.nav_products",
   "admin.nav_categories",
   "admin.nav_coupons",
+  "admin.nav_promotions",
   "admin.nav_shipping",
   "admin.nav_stock_resets",
   "admin.nav_store_design",
@@ -574,6 +576,8 @@ describe("AdminProductsPage", () => {
   // SHOP-TASK-226 改动：按 UX 0.19「管理后台总体」「导航项依次为 [admin.nav_orders]、[admin.nav_refunds]、[admin.nav_stripe_pending]（0.19）、
   // [admin.nav_products]、…」，NAV_PATHS、NAV_KEYS、aria-current 的期望与按项数截取的 slice 在退款之后加入 Stripe 待处理，改为十项，
   // 商品改为排在 Stripe 待处理之后（测试名随之改动；当前项仍为商品）。
+  // SHOP-TASK-268 改动：按 UX 0.20「管理后台总体」「导航项依次为 …、[admin.nav_coupons]、[admin.nav_promotions]（0.20）、[admin.nav_shipping]、…」，
+  // NAV_PATHS、NAV_KEYS、aria-current 的期望与按项数截取的 slice 在优惠券之后加入促销活动，改为十一项（当前项仍为商品）。
   it.each(LANGUAGES)("marks products current, after Stripe follow-ups, in both navigation menus in %s", (language) => {
     for (const html of [renderApp(language), renderSignedIn(language, LOADING)]) {
       for (const nav of [element(html, "nav", "site-admin__nav"), element(html, "nav", "site-admin__menu-nav")]) {
@@ -590,8 +594,9 @@ describe("AdminProductsPage", () => {
           undefined,
           undefined,
           undefined,
+          undefined,
         ]);
-        expect(textNodes(nav).slice(0, 10)).toEqual(NAV_KEYS.map((key) => COPY[key][language]));
+        expect(textNodes(nav).slice(0, 11)).toEqual(NAV_KEYS.map((key) => COPY[key][language]));
       }
     }
   });

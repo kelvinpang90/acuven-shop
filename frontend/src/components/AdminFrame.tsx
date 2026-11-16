@@ -12,6 +12,7 @@ import {
   ADMIN_COUPONS_PATH,
   ADMIN_ORDERS_PATH,
   ADMIN_PRODUCTS_PATH,
+  ADMIN_PROMOTIONS_PATH,
   ADMIN_REFUNDS_PATH,
   ADMIN_SHIPPING_PATH,
   ADMIN_SITE_SETTINGS_PATH,
@@ -26,7 +27,7 @@ import type { RoutePath } from "../router";
 // 后台框架（docs/UX.md「管理后台总体」，视觉稿 A02-desktop、A02-phone-list 与 A00-phone-menu 的框架部分）：A01 以外的后台页共用。
 // 顶部常驻演示横幅；admin.logout 桌面在横幅右侧、手机在顶栏右端；桌面左侧导航（底部为语言切换）+ 右侧内容；
 // 手机顶栏为 ☰ 与当前导航项名称，点开后列出导航项与语言切换。桌面与手机两套都渲染，由 site.css 按宽度显隐。
-// 导航只列已上线的页面（Kelvin 2026-10-06，docs/HANDOFF.md）：目前依次为订单、退款、Stripe 待处理、商品、分类、优惠券、运费与演示汇率、库存重置、店铺装修与站点设置，
+// 导航只列已上线的页面（Kelvin 2026-10-06，docs/HANDOFF.md）：目前依次为订单、退款、Stripe 待处理、商品、分类、优惠券、促销活动、运费与演示汇率、库存重置、店铺装修与站点设置，
 // 即 UX「管理后台总体」的全部导航项。
 // 打开时读后台会话：200 才显示页面内容，401 换成登录页 A01；CSRF 令牌只在 React 状态与退出请求头里。
 // 根元素为 acs-admin，深浅色随管理员设备设置：服务端渲染与首次客户端渲染都是浅色，挂载后才读 prefers-color-scheme。
@@ -118,6 +119,7 @@ export type AdminNavItem =
   | "products"
   | "categories"
   | "coupons"
+  | "promotions"
   | "shipping"
   | "stockResets"
   | "storeDesign"
@@ -130,6 +132,7 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
   "products",
   "categories",
   "coupons",
+  "promotions",
   "shipping",
   "stockResets",
   "storeDesign",
@@ -143,6 +146,7 @@ const NAV_ENTRY: Readonly<Record<AdminNavItem, { path: RoutePath; label: CopyKey
   products: { path: ADMIN_PRODUCTS_PATH, label: "admin.nav_products" },
   categories: { path: ADMIN_CATEGORIES_PATH, label: "admin.nav_categories" },
   coupons: { path: ADMIN_COUPONS_PATH, label: "admin.nav_coupons" },
+  promotions: { path: ADMIN_PROMOTIONS_PATH, label: "admin.nav_promotions" },
   shipping: { path: ADMIN_SHIPPING_PATH, label: "admin.nav_shipping" },
   stockResets: { path: ADMIN_STOCK_RESETS_PATH, label: "admin.nav_stock_resets" },
   storeDesign: { path: ADMIN_STORE_DESIGN_PATH, label: "admin.nav_store_design" },

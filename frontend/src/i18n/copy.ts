@@ -1900,6 +1900,11 @@ export const COPY = {
     zh: "优惠券",
     ms: "Kupon",
   },
+  "admin.nav_promotions": {
+    en: "Promotions",
+    zh: "促销活动",
+    ms: "Promosi",
+  },
   "admin.coupon_listed_note": {
     en: 'All active coupons within their valid dates are listed under "My coupons", the same for every member, regardless of total or per-member usage limits.',
     zh: "所有启用中且在有效期内的优惠券都会列在会员中心「我的优惠券」中，对全部会员相同，不因总次数或每会员次数上限而不列出。",
