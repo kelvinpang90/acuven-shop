@@ -5963,7 +5963,7 @@ tasks:
       结果：读取列表为 ok（promotions 与 csrf_token）、none（401）、failed、network；读取一个为 ok（promotion 与 csrf_token）、none（401）、missing（404 或路径 ID 不合法）、failed、network；新建、保存、发布、撤回、提前结束与复制为 ok（promotion）、none（401）、csrf（403）、invalid（422 且 detail.code 为 promotion_invalid，带 problems，每项 code、field、product_id、product_name）、overlap（409 且 detail.code 为 promotion_overlap，带 name）、changed（409 promotion_changed）、state（409 且 detail.code 为 promotion_state_invalid，带 state）、ended（409 promotion_ended）、missing（404）、failed（其他，含 413、415、其他 422 与响应体不合格）、network；删除成功为 204 的 ok（没有响应体），其余同上。时间按马来西亚本地 YYYY-MM-DDTHH:MM 字符串或 null 原样收发，不换算。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 1–3、12 条：请求模块只传递与校验字段，规则、核对与审计在服务端（SHOP-TASK-239、241、242、249）。
       拆分：A12 的请求层（3 个允许路径），照 A11 的 SHOP-TASK-227。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 模块——frontend/src/api/adminPromotions.ts 照落实写法导出九个接口的请求函数、类型与结果；请求的方法、路径、请求头与请求体逐项与 app/api/admin_promotions.py 一致，复制不带请求体，删除、发布、撤回与提前结束的请求体只有 version
