@@ -718,7 +718,8 @@ describe("AdminPromotionEditPage reading", () => {
     expect(editor.form).toBe(editor.base);
   });
 
-  // 离开页面（中止）之后的读取结果不再更新页面。
+  // UX A12 说明「前台预览」末句「离开有未保存修改的编辑区时沿用 A04、A10 的离开确认」与落实写法第（3）（8）点（已有活动以 readAdminPromotion 读取；离开照 A10）：
+  // 离开之后（读取被中止）读到的结果不再更新页面，也不回到 A01。
   it("ignores a read that finishes after leaving the page", async () => {
     const controller = new AbortController();
     const record = recorder();
@@ -947,7 +948,8 @@ describe("AdminPromotionEditPage saving", () => {
     expect(csrfStep({ kind: "none" })).toBe("login");
   });
 
-  // 离开页面（中止）或重新读取之后，保存的结果不覆盖新的页面。
+  // UX A12 说明「规则」中「版本不符为 [admin.promo_changed] 与 ( [admin.reload] )，不自动合并」与落实写法第（4）点「admin.reload（重新读取并丢掉本页修改，不自动合并）」：
+  // 点 admin.reload 重新读取（或离开、读取被中止）之后，先前那次保存的结果不覆盖重新读取的页面。
   it("ignores a save result once the editor is no longer saving", () => {
     const step = saveStep({ kind: "network" }, false);
     if (step.kind !== "change") {
