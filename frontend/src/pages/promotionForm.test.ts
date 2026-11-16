@@ -66,7 +66,7 @@ const COPY: PromotionCopy = {
   badge_ms: null,
   strip_en: "Free shipping over RM 100",
   strip_zh: null,
-  strip_ms: "﻿",
+  strip_ms: "\u{feff}",
   poster_alt_en: "Green festive poster",
   poster_alt_zh: null,
   poster_alt_ms: null,
@@ -200,7 +200,7 @@ describe("round trip", () => {
       copy: PROMOTION.copy,
     });
     // 只有 U+FEFF 的文案：Python 的 str.strip() 不去掉它，服务端照存，所以原样保留、不变成 null。
-    expect(input.copy.strip_ms).toBe("﻿");
+    expect(input.copy.strip_ms).toBe("\u{feff}");
   });
 
   // 落实写法（1）「copy 为 15 个文案字段的字符串，null 读成空串」与「starts_at 与 ends_at 为空即未填」。
@@ -210,7 +210,7 @@ describe("round trip", () => {
     expect(form.ends_at).toBe("");
     expect(form.copy.title_ms).toBe("");
     expect(form.copy.title_zh).toBe("开斋节特卖");
-    expect(form.copy.strip_ms).toBe("﻿");
+    expect(form.copy.strip_ms).toBe("\u{feff}");
     const input = promotionInput(form);
     expect(input.starts_at).toBeNull();
     expect(input.ends_at).toBeNull();
@@ -287,10 +287,10 @@ describe("pyStrip and copyLength", () => {
 
   // 同上：只去首尾，中间的空白保留；U+FEFF 与零宽空格 U+200B 不算空白（Python 的 str.isspace() 对它们为假）。
   it("strips only the ends", () => {
-    expect(pyStrip(" \t　a b \u0085\u001c")).toBe("a b");
-    expect(pyStrip("       x\u000b\u000c\r\n")).toBe("x");
-    expect(pyStrip("﻿ a ﻿")).toBe("﻿ a ﻿");
-    expect(pyStrip("​")).toBe("​");
+    expect(pyStrip(" \t\u{3000}a b\u{a0}\u0085\u001c")).toBe("a b");
+    expect(pyStrip("\u{2028}\u{2029}\u{202f}\u{205f}\u{1680}\u{2000}\u{200a}x\u000b\u000c\r\n")).toBe("x");
+    expect(pyStrip("\u{feff} a \u{feff}")).toBe("\u{feff} a \u{feff}");
+    expect(pyStrip("\u{200b}")).toBe("\u{200b}");
     expect(pyStrip("")).toBe("");
   });
 
@@ -299,8 +299,8 @@ describe("pyStrip and copyLength", () => {
     expect(copyLength("  ab  ")).toBe(2);
     expect(copyLength("😀🎉")).toBe(2);
     expect(copyLength("开斋节")).toBe(3);
-    expect(copyLength(" 　 ")).toBe(0);
-    expect(copyLength("﻿")).toBe(1);
+    expect(copyLength("\u{a0}\u{3000} ")).toBe(0);
+    expect(copyLength("\u{feff}")).toBe(1);
   });
 });
 
@@ -316,10 +316,10 @@ describe("submitted values", () => {
   it.each([
     ["", null],
     ["   ", null],
-    ["　 ", null],
+    ["\u{3000}\u{a0}", null],
     ["\u001c\u0085", null],
     [" Raya ", " Raya "],
-    ["﻿", "﻿"],
+    ["\u{feff}", "\u{feff}"],
     ["开斋节", "开斋节"],
   ])("submits copy %j as %j", (text, expected) => {
     expect(promotionInput(withCopy("subtitle_zh", text)).copy.subtitle_zh).toBe(expected);
@@ -336,11 +336,11 @@ describe("name check", () => {
   it.each([
     ["a", true],
     ["a".repeat(100), true],
-    [` ${"a".repeat(100)}　`, true],
+    [`\u{a0}${"a".repeat(100)}\u{3000}`, true],
     ["😀".repeat(100), true],
     ["", false],
     ["   ", false],
-    ["　", false],
+    ["\u{3000}", false],
     ["a".repeat(101), false],
     ["😀".repeat(101), false],
   ])("name %j is valid: %s", (name, valid) => {
@@ -364,11 +364,11 @@ describe("name check", () => {
     ["a\u009f", false],
     ["a\u001c", false],
     ["\u001fa", false],
-    ["a b", false],
-    ["a b", false],
-    ["👨‍👩", true],
-    ["﻿a", true],
-    ["a b", true],
+    ["a\u{2028}b", false],
+    ["a\u{2029}b", false],
+    ["\u{1f468}\u{200d}\u{1f469}", true],
+    ["\u{feff}a", true],
+    ["a\u{a0}b", true],
   ])("name %j is valid: %s", (name, valid) => {
     expect(formProblems(validForm({ name }))).toEqual(valid ? [] : [{ code: "name", field: "name" }]);
   });
@@ -498,19 +498,19 @@ describe("copy check", () => {
     const problem = [{ code: "copy", field: `copy.${field}` }];
     expect(formProblems(withCopy(field, ""))).toEqual([]);
     expect(formProblems(withCopy(field, "a".repeat(maximum)))).toEqual([]);
-    expect(formProblems(withCopy(field, ` ${"字".repeat(maximum)}　`))).toEqual([]);
+    expect(formProblems(withCopy(field, `\u{a0}${"字".repeat(maximum)}\u{3000}`))).toEqual([]);
     expect(formProblems(withCopy(field, "😀".repeat(maximum)))).toEqual([]);
     expect(formProblems(withCopy(field, "a".repeat(maximum + 1)))).toEqual(problem);
     expect(formProblems(withCopy(field, "😀".repeat(maximum + 1)))).toEqual(problem);
   });
 
   // check_copy「不含换行与控制字符」与 UX 0.20 A12「不能输入换行」：_text_ok 查原文，只有空白控制字符的文案也不合格。
-  it.each(["a\nb", "\n", "a\r", "a\t", "a\u0000", "a\u0085", "\u001c", "a ", "a "])("rejects copy %j", (text) => {
+  it.each(["a\nb", "\n", "a\r", "a\t", "a\u0000", "a\u0085", "\u001c", "a\u{2028}", "a\u{2029}"])("rejects copy %j", (text) => {
     expect(formProblems(withCopy("badge_ms", text))).toEqual([{ code: "copy", field: "copy.badge_ms" }]);
   });
 
   // has_forbidden_char「零宽连接符等 Cf 类允许（emoji 要用）」：U+200D、U+FEFF 与不换行空格允许。
-  it.each(["👨‍👩", "﻿", "a b"])("accepts copy %j", (text) => {
+  it.each(["\u{1f468}\u{200d}\u{1f469}", "\u{feff}", "a\u{a0}b"])("accepts copy %j", (text) => {
     expect(formProblems(withCopy("badge_ms", text))).toEqual([]);
   });
 
@@ -584,7 +584,7 @@ describe("isDirty", () => {
   it("ignores differences that are not submitted", () => {
     const base = formFromPromotion(PROMOTION);
     const form = formFromPromotion(PROMOTION);
-    form.copy.title_ms = " 　";
+    form.copy.title_ms = "\u{a0}\u{3000}";
     ruleAt(form, 0).products = [];
     delete ruleAt(form, 0).rule_id;
     expect(isDirty(form, base)).toBe(false);

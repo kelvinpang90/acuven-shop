@@ -70,7 +70,7 @@ const PY_WHITESPACE: ReadonlySet<number> = new Set([
 ]);
 
 // 换行与控制字符（同服务端 has_forbidden_char）：Unicode 类别 Cc，以及 U+2028、U+2029。
-const FORBIDDEN_CHAR = /[\p{Cc}  ]/u;
+const FORBIDDEN_CHAR = /[\p{Cc}\u{2028}\u{2029}]/u;
 
 // 服务端 to_utc 收的格式；只认 ASCII 数字。
 const LOCAL_TIME = /^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2})$/;
