@@ -28,7 +28,10 @@ app/services/promotion_ai.py；本文件只做请求格式、会话与 CSRF 的�
 服务层的拒绝（说明文字不回给调用方）：
 - PromotionInvalid：422 {"code": "promotion_invalid", "problems": [...]}，
   每项 code、field、product_id、product_name（写法同 SHOP-TASK-242）；
-- AiNotConfigured：503 ai_not_configured；AiDailyLimit：429 ai_daily_limit；
+- AiNotConfigured：503 ai_not_configured；
+- AiDailyLimit：429 {"code": "ai_daily_limit", "limit": 配置的
+  ai_daily_call_limit}（SHOP-TASK-265，供 A12 的 admin.ai_daily_limit
+  填 {count}）；
 - AiUnavailable：503 ai_unavailable；AiResultInvalid：502 ai_result_invalid。
 
 两个接口的处理函数与依赖产生的全部响应（含错误）都带
@@ -186,7 +189,7 @@ _Rejection = (
 )
 
 
-def _rejected(session: Session, exc: Exception) -> HTTPException:
+def _rejected(session: Session, exc: Exception, settings: Settings) -> HTTPException:
     # 描述与规则不合格时服务层还没有回滚；说明文字不回给调用方。
     session.rollback()
     if isinstance(exc, PromotionInvalid):
@@ -197,7 +200,11 @@ def _rejected(session: Session, exc: Exception) -> HTTPException:
     if isinstance(exc, AiNotConfigured):
         return HTTPException(status_code=503, detail="ai_not_configured")
     if isinstance(exc, AiDailyLimit):
-        return HTTPException(status_code=429, detail="ai_daily_limit")
+        # limit 供 A12 的 admin.ai_daily_limit 填 {count}（SHOP-TASK-265）。
+        return HTTPException(
+            status_code=429,
+            detail={"code": "ai_daily_limit", "limit": settings.ai_daily_call_limit},
+        )
     if isinstance(exc, AiResultInvalid):
         return HTTPException(status_code=502, detail="ai_result_invalid")
     return HTTPException(status_code=503, detail="ai_unavailable")
@@ -232,5 +239,5 @@ def proposal(
             session, _client(settings), settings, body.description, rules, _utcnow()
         )
     except _Rejection as exc:
-        raise _rejected(session, exc) from None
+        raise _rejected(session, exc, settings) from None
     return _proposal_out(result)
