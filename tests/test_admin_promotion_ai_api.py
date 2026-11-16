@@ -493,7 +493,6 @@ def test_body_at_the_size_limit_is_accepted(
     ("exc", "status_code", "detail"),
     [
         pytest.param(AiNotConfigured(), 503, "ai_not_configured", id="not_configured"),
-        pytest.param(AiDailyLimit(), 429, "ai_daily_limit", id="daily_limit"),
         pytest.param(AiUnavailable(), 503, "ai_unavailable", id="unavailable"),
         pytest.param(AiResultInvalid(), 502, "ai_result_invalid", id="result_invalid"),
     ],
@@ -507,17 +506,42 @@ def test_service_errors_map_to_fixed_codes(
     status_code: int,
     detail: str,
 ) -> None:
-    """第 13 条「未配置时后台的 AI 按钮禁用并说明原因」「已达上限即拒绝并
-    说明」「不合格即整份不用，回答『AI 结果不合格』」；A12「失败：
-    [admin.ai_invalid] / [admin.ai_unavailable] / [admin.ai_daily_limit]」；
-    验收的错误码：AiNotConfigured 503 ai_not_configured、AiDailyLimit 429
-    ai_daily_limit、AiUnavailable 503 ai_unavailable、AiResultInvalid 502
-    ai_result_invalid，只有固定的 detail，不带异常消息。"""
+    """第 13 条「未配置时后台的 AI 按钮禁用并说明原因」「不合格即整份不用，
+    回答『AI 结果不合格』」；A12「失败：[admin.ai_invalid] /
+    [admin.ai_unavailable]」；验收的错误码：AiNotConfigured 503
+    ai_not_configured、AiUnavailable 503 ai_unavailable、AiResultInvalid 502
+    ai_result_invalid，只有固定的 detail，不带异常消息（AiDailyLimit 的 429
+    带上限，见下一条测试）。"""
     service.outcome = exc
 
     response = _post(client, token)
 
     _assert_error(response, status_code, {"detail": detail})
+    assert str(exc) not in response.text
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("limit", [3, 120])
+def test_daily_limit_reports_the_configured_limit(
+    engine: Engine,
+    token: str,
+    calls: list[dict[str, Any]],
+    service: RecordingService,
+    limit: int,
+) -> None:
+    """第 13 条「已达上限即拒绝并说明」；A12「失败：[admin.ai_daily_limit]」，
+    其文案「今天的 AI 次数（{count} 次）已用完」的 {count} 即今天的调用上限；
+    SHOP-TASK-265 验收：AiDailyLimit 为 429，detail 只有 code 与 limit，
+    code 为 ai_daily_limit，limit 等于本应用配置的 ai_daily_call_limit——
+    以两个不同的配置各请求一次，limit 随之变化（取自配置，不是写死），
+    不带异常消息。"""
+    client = _client_for(engine, **AI_CONFIG, ai_daily_call_limit=limit)
+    exc = AiDailyLimit()
+    service.outcome = exc
+
+    response = _post(client, token)
+
+    _assert_error(response, 429, {"detail": {"code": "ai_daily_limit", "limit": limit}})
     assert str(exc) not in response.text
     assert len(calls) == 1
 
