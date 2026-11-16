@@ -641,6 +641,37 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-promotions__cards { display: none; margin: 0; padding: 0; list-style: none; }
 .site-admin-promotions__empty { margin: 0; padding: 20px; }
 
+/* 后台促销活动编辑区 A12（A12-editor-desktop、A12-states，SHOP-TASK-270）：内容最宽 1180px，各块上下排列（间距 14px）；标题行为 admin.promo_back、
+   内部名称与状态标签一行（垂直居中，间距 12px，可换行）。操作栏贴在内容区顶部（sticky，内边距 10px 12px，按钮间距 8px）；结果提示、状态说明与演示说明
+   内边距 10px 12px，admin.promo_changed 与 admin.reload 两端对齐、admin.promo_invalid 之下逐条列出（间距 6px，列表缩进 20px）。区块为 details
+   （内边距 18px 20px，区块内各项间距 14px）；内部名称最宽 420px，开始与结束各 200px 并排（间距 20px）；两个勾选框并排（间距 24px，框与文字 6px）；
+   文案三语各一组并排成三列（间距 14px，组内边距 10px、各项间距 10px），标签与已用字数分列两端。说明框与操作栏的底色、标签与 summary 的字重、
+   说明与提示的字号、字段提示的颜色与输入框的红框、文案组的边框颜色与圆角 site.css 写不了，记在任务记录的偏离里 */
+.site-admin-promo-edit { display: grid; gap: 14px; max-width: 1180px; min-width: 0; }
+.site-admin-promo-edit__title, .site-admin-promo-edit__heading { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; min-width: 0; }
+.site-admin-promo-edit__heading { overflow-wrap: anywhere; }
+.site-admin-promo-edit__actions { display: flex; flex-wrap: wrap; gap: 8px; position: sticky; top: 0; z-index: 2; padding: 10px 12px; }
+.site-admin-promo-edit__done, .site-admin-promo-edit__state, .site-admin-promo-edit__note { margin: 0; padding: 10px 12px; }
+.site-admin-promo-edit__changed { justify-content: space-between; align-items: center; }
+.site-admin-promo-edit__changed .acs-admin__btn { flex-shrink: 0; }
+.site-admin-promo-edit__invalid { display: grid; gap: 6px; overflow-wrap: anywhere; }
+.site-admin-promo-edit__invalid p, .site-admin-promo-edit__invalid ul { margin: 0; }
+.site-admin-promo-edit__invalid ul { padding-left: 20px; }
+.site-admin-promo-edit__panel { padding: 18px 20px; min-width: 0; }
+.site-admin-promo-edit__panel > summary { cursor: pointer; }
+.site-admin-promo-edit__body { display: grid; gap: 14px; padding-top: 14px; min-width: 0; }
+.site-admin-promo-edit__field { display: grid; gap: 6px; min-width: 0; }
+.site-admin-promo-edit__field .acs-admin__input { box-sizing: border-box; width: 100%; min-width: 0; }
+.site-admin-promo-edit__name { max-width: 420px; }
+.site-admin-promo-edit__times { display: flex; flex-wrap: wrap; gap: 20px; }
+.site-admin-promo-edit__times > .site-admin-promo-edit__field { width: 200px; }
+.site-admin-promo-edit__checks { display: flex; flex-wrap: wrap; gap: 24px; }
+.site-admin-promo-edit__check { display: inline-flex; gap: 6px; align-items: center; }
+.site-admin-promo-edit__langs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.site-admin-promo-edit__lang { display: grid; gap: 10px; align-content: start; min-width: 0; margin: 0; padding: 10px; }
+.site-admin-promo-edit__lang > legend { padding: 0 4px; }
+.site-admin-promo-edit__copy-label { display: flex; justify-content: space-between; gap: 8px; }
+
 /* 后台店铺装修 A08 的页头（A08-desktop）：标题与演示说明上下排列（间距 16px）；说明内边距 10px 12px。
    说明的底色、文字颜色、字号、圆角与 ★ 图形 site.css 写不了，记在 docs/TODO.md 的偏离里 */
 .site-admin-store-design { display: grid; gap: 16px; }
@@ -1339,6 +1370,28 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-promotions__card { display: grid; gap: 8px; padding: 12px; }
   .site-admin-promotions__card-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; }
   .site-admin-promotions__card .acs-admin__btn { min-height: 44px; }
+
+  /* 后台促销活动编辑区 A12（A12-phone）：单列，各块间距 12px；admin.promo_back 独占一行，其下内部名称与状态标签（间距 8px）；
+     操作栏固定在屏幕底部（内边距 10px 14px），common.save 占满余下宽度、至少 44px 高，内容区底部留出 80px 不被它遮住；说明内边距 8px 10px；
+     区块内边距 12px 14px、区块内间距 10px；开始与结束、两个勾选框上下排列（间距 10px）；文案三组上下排列（间距 10px，组内间距 8px）；
+     输入框与勾选行至少 44px 高。h1 的字号 site.css 写不了，记在任务记录的偏离里 */
+  .site-admin-promo-edit { gap: 12px; padding-bottom: 80px; }
+  .site-admin-promo-edit__title { display: grid; gap: 12px; justify-items: start; }
+  .site-admin-promo-edit__heading { gap: 8px; }
+  .site-admin-promo-edit__actions { position: fixed; top: auto; left: 0; right: 0; bottom: 0; z-index: 5; padding: 10px 14px; }
+  .site-admin-promo-edit__actions .acs-admin__btn { flex-grow: 1; justify-content: center; min-height: 44px; }
+  .site-admin-promo-edit__note { padding: 8px 10px; }
+  .site-admin-promo-edit__changed { flex-wrap: wrap; }
+  .site-admin-promo-edit__changed .acs-admin__btn { min-height: 44px; }
+  .site-admin-promo-edit__panel { padding: 12px 14px; }
+  .site-admin-promo-edit__body { gap: 10px; padding-top: 10px; }
+  .site-admin-promo-edit__name { max-width: none; }
+  .site-admin-promo-edit__times, .site-admin-promo-edit__checks { display: grid; gap: 10px; }
+  .site-admin-promo-edit__times > .site-admin-promo-edit__field { width: auto; }
+  .site-admin-promo-edit__check { min-height: 44px; }
+  .site-admin-promo-edit__langs { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .site-admin-promo-edit__lang { gap: 8px; }
+  .site-admin-promo-edit .acs-admin__input { min-height: 44px; }
 
   /* 后台店铺装修的页头（A08-phone 与 UX A08 手机线框）：顶栏已是 admin.nav_store_design，页面里不显示标题，h1 只留给读屏；
      演示说明在内容区最上方，与之后各块间距 14px */

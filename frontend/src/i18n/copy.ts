@@ -2795,6 +2795,131 @@ export const COPY = {
     zh: "还没有促销活动。",
     ms: "Belum ada promosi.",
   },
+  "admin.promo_back": {
+    en: "All promotions",
+    zh: "全部活动",
+    ms: "Semua promosi",
+  },
+  "admin.promo_saved": {
+    en: "Saved.",
+    zh: "已保存。",
+    ms: "Disimpan.",
+  },
+  "admin.promo_changed": {
+    en: "This promotion was changed elsewhere. Reload to see the latest version; your edits here weren't saved.",
+    zh: "这个活动已在别处被修改。请重新读取最新版本；本页的修改未保存。",
+    ms: "Promosi ini telah diubah di tempat lain. Muat semula untuk melihat versi terkini; suntingan anda di sini tidak disimpan.",
+  },
+  "admin.promo_field_invalid": {
+    en: "This value isn't allowed. See the note under this field.",
+    zh: "这个值不合规定，请看本栏下方的说明。",
+    ms: "Nilai ini tidak dibenarkan. Lihat nota di bawah ruangan ini.",
+  },
+  "admin.promo_invalid_other": {
+    en: "Some values weren't accepted. Check the dates, numbers and text lengths, then try again.",
+    zh: "有取值未被接受，请检查日期、数字与文字长度后重试。",
+    ms: "Sesetengah nilai tidak diterima. Semak tarikh, nombor dan panjang teks, kemudian cuba lagi.",
+  },
+  "admin.promo_invalid": {
+    en: "Not saved. Please fix:",
+    zh: "未保存，请修正：",
+    ms: "Tidak disimpan. Sila betulkan:",
+  },
+  "admin.promo_overlap": {
+    en: "The time overlaps another published promotion: {name}.",
+    zh: "时间与另一个已发布的活动重叠：{name}。",
+    ms: "Masa bertindih dengan promosi lain yang diterbitkan: {name}.",
+  },
+  "admin.promo_scope_overlap": {
+    en: "{product} is in more than one item rule.",
+    zh: "{product} 同时属于多条商品级规则。",
+    ms: "{product} berada dalam lebih daripada satu peraturan item.",
+  },
+  "admin.promo_publish_missing": {
+    en: "To publish, add at least one rule, an English title, a start time (it may already have passed) and an end time that's still ahead; with an image poster, also both images and English alt text.",
+    zh: "发布需要至少一条规则、英文标题、开始时间与晚于现在的结束时间；海报为上传图时还需两张图与英文替代文字。",
+    ms: "Untuk menerbitkan, tambah sekurang-kurangnya satu peraturan, tajuk Inggeris, masa mula (boleh sudah berlalu) dan masa tamat yang belum berlalu; untuk poster imej, tambah juga kedua-dua imej dan teks alternatif Inggeris.",
+  },
+  "admin.promo_ended_readonly": {
+    en: "This promotion has ended. It can only be copied.",
+    zh: "这个活动已结束，只能复制。",
+    ms: "Promosi ini telah tamat. Ia hanya boleh disalin.",
+  },
+  "admin.promo_basic": {
+    en: "Basics",
+    zh: "基本信息",
+    ms: "Asas",
+  },
+  "admin.promo_start": {
+    en: "Starts",
+    zh: "开始",
+    ms: "Mula",
+  },
+  "admin.promo_end": {
+    en: "Ends",
+    zh: "结束",
+    ms: "Tamat",
+  },
+  "admin.promo_time_note": {
+    en: "Malaysia time (UTC+8), to the minute. It must end after it starts, and last up to 92 days.",
+    zh: "马来西亚时间（UTC+8），精确到分钟；结束须晚于开始，最长 92 天。",
+    ms: "Masa Malaysia (UTC+8), hingga minit. Ia mesti tamat selepas bermula, dan berlangsung sehingga 92 hari.",
+  },
+  "admin.promo_rules_locked": {
+    en: "This promotion has started, so its time, rules and combining options can't be changed. You can still edit its text and decoration.",
+    zh: "活动已开始，时间、规则与同用开关不能再改；文案与装饰仍可修改。",
+    ms: "Promosi ini telah bermula, jadi masa, peraturan dan pilihan gabungannya tidak boleh diubah. Anda masih boleh menyunting teks dan hiasannya.",
+  },
+  "admin.promo_combine": {
+    en: "Combining with coupons and points",
+    zh: "与优惠券、积分同用",
+    ms: "Gabungan dengan kupon dan mata",
+  },
+  "admin.promo_allow_coupon": {
+    en: "Can be combined with coupons",
+    zh: "可与优惠券同用",
+    ms: "Boleh digabung dengan kupon",
+  },
+  "admin.promo_allow_points": {
+    en: "Can be combined with points",
+    zh: "可与积分同用",
+    ms: "Boleh digabung dengan mata",
+  },
+  "admin.promo_combine_hint": {
+    en: "When a member uses a coupon or points, the system compares the order with and without the sale and uses whichever is better for them. Unticked options can't be used together with the sale.",
+    zh: "会员使用优惠券或积分时，系统会比较参加与不参加活动两种算法，取对会员更划算的一种；未勾选的一项不能与活动同时使用。",
+    ms: "Apabila ahli menggunakan kupon atau mata, sistem membandingkan pesanan dengan dan tanpa jualan dan menggunakan yang lebih jimat untuk mereka. Pilihan yang tidak ditanda tidak boleh digunakan bersama jualan.",
+  },
+  "admin.promo_texts": {
+    en: "Sale text",
+    zh: "活动文案",
+    ms: "Teks jualan",
+  },
+  "admin.copy_title": {
+    en: "Title",
+    zh: "标题",
+    ms: "Tajuk",
+  },
+  "admin.copy_subtitle": {
+    en: "Subtitle",
+    zh: "副标题",
+    ms: "Subtajuk",
+  },
+  "admin.copy_badge": {
+    en: "Badge phrase",
+    zh: "角标短语",
+    ms: "Frasa lencana",
+  },
+  "admin.copy_strip": {
+    en: "Banner text",
+    zh: "横条文字",
+    ms: "Teks sepanduk",
+  },
+  "admin.copy_fallback": {
+    en: "An English title is needed to publish. Empty Chinese or Malay text shows the English version.",
+    zh: "发布前须填英文标题；中文或马来文留空时显示英文。",
+    ms: "Tajuk Inggeris diperlukan untuk menerbitkan. Teks Cina atau Melayu yang kosong akan memaparkan versi Inggeris.",
+  },
   "admin.theme": {
     en: "Theme",
     zh: "主题",
