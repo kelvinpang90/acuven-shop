@@ -6012,7 +6012,7 @@ tasks:
       运营者落实写法（HANDOFF 0.98）：路由表里 /admin/promotions/new 排在 /admin/promotions/:id 之前（路由按表的顺序取第一个匹配）；router.tsx 导出 ADMIN_PROMOTIONS_PATH、ADMIN_PROMOTION_NEW_PATH 与 adminPromotionPath(活动 ID)，并在文件开头说明后台路径的注释里写明这两页的段值与地址里不带查询参数；AdminFrame 的 AdminNavItem 加 promotions，ADMIN_NAV 在 coupons 之后（与 UX-COPY 0.22 第 10 节导航项的顺序一致）。
       设计闸门：不适用（只加路由、导航与标题，不碰金额与个人资料）。
       拆分：A12 页面的框架层，照 A11 的 SHOP-TASK-226。21 个允许路径，超过拆分规则的 12 个：导航多一项后，现有测试里按顺序列出导航项或路由表的断言必然失效（运营者登记时对 main 的导出做骨架实测，加路由、导航项与只有标题的页面后类型检查通过，失败的全部在 AdminFrame.test.tsx 的导航顺序与手机菜单、router.test.tsx 的路由表与 9 个后台页面测试里的导航断言），只许改这些断言，与加导航的改动拆不开；路由、页面表与导航项的类型互相依赖，也拆不开。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 路由——frontend/src/router.tsx 的路由表加 /admin/promotions、/admin/promotions/new、/admin/promotions/:id（顺序照落实写法），frontend/src/App.tsx 的页面表三项都有页面；不合法的段值也渲染编辑页（由 SHOP-TASK-270 处理），未知路径仍落到首页
