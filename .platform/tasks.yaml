@@ -5940,7 +5940,7 @@ tasks:
       运营者落实写法（HANDOFF 0.98）：只改 app/api/admin_promotion_ai.py 的拒绝映射，AiDailyLimit 时 429 的 detail 由字符串 ai_daily_limit 改为对象，键为 code（值 ai_daily_limit）与 limit（值为 request.app.state.settings 的 ai_daily_call_limit，整数），写法同同文件 promotion_invalid 的对象；其他错误码、状态码、响应体与检查顺序不变。不改服务层、配置、数据库与前端。
       设计闸门：不适用（只改一个错误响应体的形状，不碰金额与个人资料，不改数据库结构）。
       拆分：接口一层（3 个允许路径），前端 A12 的 AI 区（SHOP-TASK-276）经 SHOP-TASK-267 的请求模块读取它。
-    status: ready
+    status: done
     depends_on: []
     acceptance_criteria:
       - 429——服务层抛 AiDailyLimit 时响应为 429，detail 为只有 code 与 limit 两个键的对象，code 为 ai_daily_limit，limit 等于应用配置的 ai_daily_call_limit；其余错误码、状态码与响应体逐字不变，所有响应仍带 Cache-Control 的 no-store
