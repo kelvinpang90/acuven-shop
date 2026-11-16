@@ -1,0 +1,36 @@
+# SHOP-TASK-281 后台促销活动 A12 编辑表单的纯函数模块（默认值、读取与提交的换算、字段检查）
+
+- [x] 新增 `frontend/src/pages/promotionForm.ts` 与 `frontend/src/pages/promotionForm.test.ts`：A12 编辑区（SHOP-TASK-270 起）的表单类型与纯函数，照 HANDOFF 0.98 的落实写法（1）（2）与 docs/UX.md 0.20 A12 的「时间」「文案」两条、「提交前页面先按 DESIGN 1.23 第 1–3、12 条的取值范围逐项检查」一句；范围照 `app/services/admin_promotions.py` 的 `check_promotion_input`、`_text_ok`、`has_forbidden_char`、`check_copy`、`_time_problems`、`to_utc` 与 `app/models/promotion.py` 的常量。改动只在这两个文件与本文件；不做页面，不改后端、路由、设计、`.platform/`、CI 与部署配置，未装依赖。设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 1–3、12 条——只是页面提交前的检查与换算，取值、核对、版本与审计在服务端；不碰个人资料。
+- 导出的常量（与服务端相同）：
+  - `NAME_MAX_LENGTH`（100）、`COPY_MAX_LENGTHS`（title 40、subtitle 80、badge 12、strip 60、poster_alt 150）、`MAX_DURATION_MINUTES`（92 天的分钟数）。
+  - `COPY_FIELDS`：十五个文案字段名，顺序同 `CopyInput`（title、subtitle、badge、strip、poster_alt 各 `_en`、`_zh`、`_ms`）。
+- 导出的类型：
+  - `CopyField`（十五个文案字段名之一）、`PromotionFormCopy`（十五项都为字符串，空串即未填）。
+  - `PromotionFormRule`：SHOP-TASK-266 的 `PromotionRuleInput` 另加可选的 `rule_id` 与 `products`（读回的规则带着，供页面显示所选商品；新加的规则没有）。
+  - `PromotionForm`（name；starts_at、ends_at 为 datetime-local 字符串，空串即未填；coupon_combinable、points_combinable；rules 为 `PromotionFormRule[]`；decoration 为 266 的 `PromotionDecoration`；copy 为 `PromotionFormCopy`）。
+  - `PromotionFormProblem`（code 为 `name`、`time`、`duration`、`copy` 之一，field 为 `name`、`starts_at`、`ends_at`、`copy.<字段>`，写法同服务端 `PromotionProblem`）。
+- 导出的函数（都是纯函数，不改参数，返回新对象）：
+  - `newPromotionForm()`：名称与时间为空、两个开关不勾、没有规则；装饰 pack `generic`、palette `theme`、ambient `garland`、home_poster `split`、list_strip `band`、card_badge `tag`、detail_ribbon `ribbon`、cart_progress `bar`（docs/design/tokens/promotions.json 各装饰位的第一个变体）、poster_mode `template`；文案全空。
+  - `formFromPromotion(promotion)`：266 的 `AdminPromotion` → 表单；时间与文案的 null 读成空串，规则（含 rule_id 与 products）、满额档与装饰逐层复制，不与读取结果共用对象。
+  - `promotionInput(form)`：表单 → 266 的 `PromotionInput`；时间空串提交 null；文案 `pyStrip` 后为空提交 null，否则原样提交；名称原样提交；规则去掉 rule_id 与 products、满额档每项恰为 threshold_sen、amount_sen、percent 三个键；装饰恰为九个键。规则与装饰提交表单里当前的值，之后的任务只改表单里的值。
+  - `isDirty(form, base)`：两者的 `promotionInput` 是否不同（按固定键序构造，比较 JSON 文本）。
+  - `formProblems(form)`：按名称、开始、结束、文案字段的顺序列出全部问题。名称与文案先查原文不含 Unicode 类别 Cc 与 U+2028、U+2029，再按 `pyStrip` 后的码点数查范围（名称 1 至 100，文案 0 至各自上限）；时间空串不查，填了须为 `YYYY-MM-DDTHH:MM`（ASCII 数字、整串匹配），年 0001–9999、月 01–12、日不超过该月天数（公历闰年）、时 00–23、分 00–59，按分量判断、不经 `Date`，且不早于 0001-01-01T08:00（服务端减 8 小时会溢出）；两端都合格时结束不晚于开始为 `time`、时长超过 92 天为 `duration`，都报在 `ends_at`。
+  - `pyStrip(text)`：去掉首尾空白，空白集同 Python `str.strip()`（JS `\s` 去掉 U+FEFF，再加 U+001C–U+001F 与 U+0085）。
+  - `copyLength(text)`：`pyStrip` 后的码点数，供页面显示已用字数。
+  - `copyMaxLength(field)`：文案字段的字符数上限。
+- 偏离与取舍，请审阅（未改设计，未发现须停下的设计问题）：
+  - 落实写法写「rules 为 SHOP-TASK-266 的类型」：266 有 `PromotionRuleInput`（没有 rule_id）与 `AdminPromotionRule`（必有 rule_id 与 products）两种。前者会让页面拿不到读回规则的所选商品，后者容不下新加的规则，所以用两者之间的 `PromotionFormRule`（rule_id 与 products 可选），`AdminPromotionRule` 与 `PromotionRuleInput` 都可直接放进表单。
+  - 问题项在 field 之外另带 code（同服务端问题码），供页面区分「结束不晚于开始」与「超过 92 天」；页面只用 field 也可以。
+  - 另导出了上列常量、`COPY_FIELDS`、`CopyField`、`PromotionFormCopy`、`copyMaxLength`（页面显示「<已用>/<上限>」要用）；落实写法没有列出，属于便利导出。
+  - 新表单的装饰默认值按落实写法写成字面值，没有在运行时读 promotions.json（应用 tsconfig 只含 `src`）；测试逐项断言这些字面值。
+  - 名称与文案按落实写法「先查原文」：只含 `\n` 或 U+001C 这类空白控制字符的文案，`promotionInput` 会提交 null，但 `formProblems` 仍报 copy 问题、页面不提交。这与服务端 `_text_ok` 对原文的判断一致（同一原文提交给服务端也是不合格），只是比「提交 null」更严。
+  - `isDirty` 照落实写法只比提交内容：只含空白的文案与空串、规则的 rule_id 与 products 不同都不算改动；名称首尾多一个空格算改动（名称原样提交）。
+- 留给之后：编辑区页面与提交（SHOP-TASK-270 起）、规则的表单换算与检查（SHOP-TASK-282）、规则区（SHOP-TASK-271）、装饰区（SHOP-TASK-273）、海报区（SHOP-TASK-275）。
+- 验证到什么程度：人工逐条对照 `app/services/admin_promotions.py` 的上列函数、`app/models/promotion.py` 的常量、docs/design/tokens/promotions.json 与 UX 0.20 A12 自查。`frontend/src/pages/promotionForm.test.ts`（vitest）覆盖：
+  - 新表单的默认值（含每次返回新对象）与新表单的提交内容。
+  - 往返：读取结果经 `formFromPromotion` 再经 `promotionInput` 的 decoration、copy（空串与 null 互换，只有 U+FEFF 的文案原样保留）与读取时相同，rules 与读取时去掉 rule_id 与 products 后相同；规则与满额档恰为规定的键；新加规则、排序与装饰照表单提交；表单不与读取结果共用对象。
+  - `pyStrip` 的空白集（逐个比对基本多文种平面的全部码点）、只去首尾、`copyLength` 按码点计数。
+  - 时间与文案的提交换算、名称原样提交。
+  - 每条字段检查的边界：名称长度（含首尾空白不计、按码点）与换行、Cc、U+2028、U+2029（含首尾的 U+001C–U+001F 与 U+0085）；时间格式、不存在的日期（2 月 29 日在 1900、2000、2024、2026、2100 年等）、24:00 与第 60 分钟、1999 年与 0099 年合格、0001-01-01T07:59 不合格与 08:00 合格；结束不晚于开始；恰好 92 天与多一分钟（含跨闰日、跨世纪与跨年）；一端不合格时不比较；各文案字段上限按码点、换行与控制字符；问题的顺序。
+  - `isDirty`：刚读出没有改动，每类字段的改动算改动，不提交的差异不算。
+  - 每条测试的注释写明它守住的 UX 0.20 A12、落实写法或服务端检查函数的原句。前端检查交由 PR 的必需 CI 检查 frontend 执行（Worker 沙箱不跑前端检查），检查命令结果由 Worker 另行记录。本任务不做浏览器验收。
