@@ -6055,7 +6055,7 @@ tasks:
       运营者落实写法（HANDOFF 0.98）：标题行为 admin.nav_promotions 与 common.create 按钮（Link 到 ADMIN_PROMOTION_NEW_PATH），其下为 admin.demo_banner 之外的 admin.promo_demo_note 与 admin.rules_apply_new；桌面为表格（列头 admin.promo_name、admin.filter_status、admin.promo_time、admin.promo_rule_count 与操作列），手机为卡片（内部名称、状态、时间与 admin.promo_open），两套都渲染，由 site.css 按宽度显隐（照 A07、A11）。行的顺序照接口返回（服务端已按进行中、未开始、草稿、已结束排好），不在页面重排。状态标签按 state 用 admin.promo_running、admin.promo_scheduled、admin.promo_draft、admin.promo_ended，类名照视觉稿（acs-tag--success、--outline、--neutral、--muted）；状态到文案键与类名的映射从本页模块导出，供编辑区（SHOP-TASK-270）沿用。时间列为开始与结束，接口给的是马来西亚本地时间字符串，照 frontend/src/pages/AdminCouponsPage.tsx 的 formatCouponDate 只格式化、不按浏览器时区换算（把年月日时分按 Date.UTC 构造，以 timeZone 为 UTC、dateStyle 为 medium、timeStyle 为 short 按当前语言格式化，新函数导出供编辑区沿用）；两端都有时为「开始 – 结束」；只有一端时只显示那一端、不显示分隔符；两端都为 null 时整格为空。admin.promo_open 为 Link 到 adminPromotionPath(id)。没有活动时只显示 admin.promo_empty。读取中、401 回到 A01、网络中断 common.network_check、其他失败 common.error_retry，照 A07 现有写法。内部名称按纯文本显示。视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离，不借用其他组件的类来取颜色，评审不以此要求修改。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 1、2 条的列表呈现（只显示内部名称、状态、时间与规则条数，不碰金额计算与个人资料）。
       拆分：A12 列表的内容层（7 个允许路径，router.tsx、App.tsx 与 site.css 按页面任务的惯例列入），依赖 SHOP-TASK-266（请求模块）与 268（页面）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-266
       - SHOP-TASK-268
