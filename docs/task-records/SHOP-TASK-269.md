@@ -1,0 +1,26 @@
+# SHOP-TASK-269 后台促销活动 A12 的列表
+
+- [x] 列表：`frontend/src/pages/AdminPromotionsPage.tsx` 的 `AdminPromotionsContent` 挂载即用 SHOP-TASK-266 的 `readAdminPromotions` 读取一次（离开页面时中止，之后的结果不再更新页面），由导出的 `AdminPromotionsView` 按 `docs/UX.md` 0.20 A12「列表」与视觉稿 A12-desktop、A12-phone 渲染（照 HANDOFF 0.98 落实写法）：
+  - 标题行为 h1 `admin.nav_promotions`（class `acs-admin__h`）与 `common.create`（`Link` 到 `ADMIN_PROMOTION_NEW_PATH`，即 `/admin/promotions/new`，class `acs-admin__btn`），其下一段说明依次为 `admin.promo_demo_note` 与 `admin.rules_apply_new`（`admin.demo_banner` 仍由后台框架常驻）。
+  - 桌面表格列头依次为 `admin.promo_name`、`admin.filter_status`、`admin.promo_time`、`admin.promo_rule_count` 与空的操作列；每行为内部名称（纯文本）、状态标签、时间、规则条数与 `admin.promo_open`（`Link` 到 `adminPromotionPath(id)`，靠右）。
+  - 手机卡片：第一行内部名称与状态标签分列两端，其下为时间（两端都为 null 时不显示）与 `admin.promo_open`；照 UX「<内部名称>、<状态>、<开始>–<结束>、( [admin.promo_open] )」不含规则条数。表格与卡片两套都渲染，由 `site.css` 按宽度显隐（照 A07、A11）。
+  - 行的顺序照接口返回，不在页面重排。没有活动时列表区只有 `admin.promo_empty`（不显示表格与卡片）。
+  - 状态标签：导出 `PROMOTION_STATE_LABEL`（`running`→`admin.promo_running`、`scheduled`→`admin.promo_scheduled`、`draft`→`admin.promo_draft`、`ended`→`admin.promo_ended`）与 `PROMOTION_STATE_CLASS`（`acs-tag acs-tag--success`、`--outline`、`--neutral`、`--muted`），供编辑区（SHOP-TASK-270）沿用。
+  - 时间：导出 `formatPromotionTime`，照 `AdminCouponsPage.tsx` 的 `formatCouponDate` 把「YYYY-MM-DDTHH:MM」的年月日时分按 `Date.UTC` 构造，以 `timeZone: "UTC"`、`dateStyle: "medium"`、`timeStyle: "short"` 按当前语言格式化，只格式化、不按浏览器时区换算；导出 `promotionTimeText`：两端都有时为「开始 – 结束」，只有一端时只显示那一端、没有分隔符，两端都为 null 时为空（表格的时间格为空）。
+  - 读取状态（照 A07）：读取中列表区标 `aria-busy`、没有其他内容；401 用路由的 `replace` 换成 A01；网络中断显示 `common.network_check`，其他失败显示 `common.error_retry`（`AdminAlert`，没有表格与卡片）。读取逻辑在导出的 `listStep` 与 `loadPromotions`（读取函数可由测试以替身传入）。
+- [x] 文案：`frontend/src/i18n/copy.ts` 在 `admin.design_promo_note` 之后加 `admin.promo_demo_note`、`admin.promo_name`、`admin.promo_time`、`admin.promo_rule_count`、`admin.promo_draft`、`admin.promo_scheduled`、`admin.promo_running`、`admin.promo_ended`、`admin.promo_open`、`admin.promo_empty`，三语照 `docs/UX-COPY.md` 0.22 逐字抄录。
+- [x] 样式：`frontend/src/styles/site.css` 加 `.site-admin-promotions*`：桌面内容最宽 1180px、各块间距 16px，标题行两端对齐、垂直居中、可换行（间距 12px），说明内边距 10px 12px，表格面板可横向滚动、操作列靠右，卡片隐藏，空提示面板内边距 20px；手机（`max-width: 767px` 块内）各块间距 12px、说明内边距 8px 10px，表格隐藏、卡片显示（间距 10px，内边距 12px，各项间距 8px，第一行两端对齐、可换行），`admin.promo_open` 至少 44px 高。只写布局、显隐与媒体查询，没有颜色、字体、圆角属性。
+- [x] 测试（`frontend/src/pages/AdminPromotionsPage.test.tsx`，vitest 与 react-dom/server，读取结果以替身给出）：
+  - 改动的现有断言只有一条：「shows only the title in the content area」改为「shows the title in the content area」，已登录时内容区含原样的 h1 `admin.nav_promotions`（class `acs-admin__h`），会话返回前内容区没有 h1 的断言保留；其余现有断言未改。
+  - 新增：标题行与新建链接、两条说明；表格列头与每行各格；三种语言下四种状态的标签文字与类名（表格与卡片）及导出映射；行的顺序照接口；表格与卡片的 `admin.promo_open` 链接目标；卡片内容；时间只格式化不换算；时间两端、一端与两端为 null 的显示；内部名称按纯文本；空列表；读取中；读取取到、401、网络中断与其他失败；离开页面后的结果不更新页面。每条注释写明守住的 UX 0.20 A12 原句（读取中与失败 A12 没有原句，注释另写明照 HANDOFF 0.98 落实写法与 A07）。
+- 偏离（照任务约定，site.css 写不了的不搬，不借用其他组件的类取颜色）：
+  - 说明框的底色（`--demo-soft`）、文字颜色（`--on-demo-soft`）、圆角 4px 与字号（桌面 13px、手机 12px）没有搬。
+  - 表格内部名称的字重 600 没有搬。
+  - 空提示用设计系统自身的 `acs-admin__panel` 与 `acs-admin__muted`（即视觉稿的面板与 `var(--a-muted)`），不是借其他页面组件的类。
+  - 视觉稿的 `admin.promo_open` 与 `common.create` 画为按钮，这里照落实写法为 `Link`（带 `acs-admin__btn` 类）。
+  - 视觉稿的时间写成「2027-01-20 00:00 – …」、草稿行写「—」；这里照落实写法按当前语言格式化（日期 medium、时间 short），两端都为 null 时整格为空。
+  - A12-phone 只画了编辑区，没有画列表卡片；卡片照 UX A12 手机说明与 A07、A11 的卡片布局。
+- 设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 1、2 条的列表呈现，只显示内部名称、状态、时间与规则条数，不碰金额计算与个人资料。
+- 未改：`frontend/src/router.tsx` 与 `frontend/src/App.tsx`（路由与页面表已由 SHOP-TASK-268 加入，不新增路由）；后端、`.platform/`、CI 与部署配置；没有装依赖，没有改设计。
+- 留给之后的任务：编辑区由 SHOP-TASK-270 起实现（沿用本页导出的状态映射与 `formatPromotionTime`）。未做浏览器验收。
+- 验证到什么程度：人工逐条对照 UX 0.20 A12 的列表线框、状态值、排序说明与手机卡片说明、UX-COPY 0.22 的十条文案与视觉稿 A12-desktop；上述测试为本次新增或修改的测试代码，前端检查由 PR 的必需 CI 检查 `frontend` 执行。
