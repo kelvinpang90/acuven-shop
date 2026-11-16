@@ -629,6 +629,18 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-stripe-pending__confirm { gap: 14px; max-width: 460px; }
 .site-admin-stripe-pending__verified { gap: 8px; align-items: flex-start; }
 
+/* 后台促销活动列表 A12（A12-desktop，SHOP-TASK-269）：内容最宽 1180px，标题行、说明与列表区上下排列（间距 16px）；标题行里 h1 与 common.create
+   两端对齐、垂直居中（可换行，间距 12px）；说明内边距 10px 12px。表格在可横向滚动的面板里，admin.promo_open 列靠右；手机卡片在桌面不显示。
+   没有活动时的面板内边距 20px。说明的底色、文字颜色、圆角与字号，内部名称的字重 site.css 写不了，记在任务记录的偏离里 */
+.site-admin-promotions { display: grid; gap: 16px; max-width: 1180px; }
+.site-admin-promotions__title { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
+.site-admin-promotions__note { margin: 0; padding: 10px 12px; }
+.site-admin-promotions__list { display: grid; gap: 16px; }
+.site-admin-promotions__table { overflow-x: auto; }
+.site-admin-promotions__end { text-align: right; }
+.site-admin-promotions__cards { display: none; margin: 0; padding: 0; list-style: none; }
+.site-admin-promotions__empty { margin: 0; padding: 20px; }
+
 /* 后台店铺装修 A08 的页头（A08-desktop）：标题与演示说明上下排列（间距 16px）；说明内边距 10px 12px。
    说明的底色、文字颜色、字号、圆角与 ★ 图形 site.css 写不了，记在 docs/TODO.md 的偏离里 */
 .site-admin-store-design { display: grid; gap: 16px; }
@@ -1316,6 +1328,17 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-stripe-pending__cards { display: grid; gap: 10px; }
   .site-admin-stripe-pending__card { display: grid; gap: 8px; padding: 12px; }
   .site-admin-stripe-pending__card-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; }
+
+  /* 后台促销活动列表 A12（A12-phone 与 UX A12 手机列表卡片）：各块间距 12px，说明内边距 8px 10px；表格不显示，每个活动一张卡片
+     （卡片之间 10px，内边距 12px，各项间距 8px），第一行内部名称与状态标签分列两端（间距 8px，垂直居中，可换行）；admin.promo_open 至少 44px 高。
+     说明的字号与内部名称的字重 site.css 写不了，记在任务记录的偏离里 */
+  .site-admin-promotions, .site-admin-promotions__list { gap: 12px; }
+  .site-admin-promotions__note { padding: 8px 10px; }
+  .site-admin-promotions__table { display: none; }
+  .site-admin-promotions__cards { display: grid; gap: 10px; }
+  .site-admin-promotions__card { display: grid; gap: 8px; padding: 12px; }
+  .site-admin-promotions__card-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center; }
+  .site-admin-promotions__card .acs-admin__btn { min-height: 44px; }
 
   /* 后台店铺装修的页头（A08-phone 与 UX A08 手机线框）：顶栏已是 admin.nav_store_design，页面里不显示标题，h1 只留给读屏；
      演示说明在内容区最上方，与之后各块间距 14px */

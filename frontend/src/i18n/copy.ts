@@ -2745,6 +2745,56 @@ export const COPY = {
     zh: "活动进行期间，前台在本页设置之上叠加活动装饰，可能临时换为节日配色；本页设置不变，活动结束即恢复。",
     ms: "Semasa promosi berjalan, hiasannya dipaparkan di atas tetapan ini dan mungkin bertukar kepada warna perayaan. Tetapan ini tidak berubah, dan kedai kembali kepadanya apabila promosi tamat.",
   },
+  "admin.promo_demo_note": {
+    en: "Sale prices and discounts are demo amounts; no real money moves.",
+    zh: "活动价格与优惠都是演示金额，不发生真实资金流动。",
+    ms: "Harga dan diskaun jualan ialah jumlah demo; tiada wang sebenar berpindah.",
+  },
+  "admin.promo_name": {
+    en: "Internal name",
+    zh: "内部名称",
+    ms: "Nama dalaman",
+  },
+  "admin.promo_time": {
+    en: "Time (Malaysia)",
+    zh: "时间（马来西亚）",
+    ms: "Masa (Malaysia)",
+  },
+  "admin.promo_rule_count": {
+    en: "Rules",
+    zh: "规则数",
+    ms: "Peraturan",
+  },
+  "admin.promo_draft": {
+    en: "Draft",
+    zh: "草稿",
+    ms: "Draf",
+  },
+  "admin.promo_scheduled": {
+    en: "Scheduled",
+    zh: "未开始",
+    ms: "Dijadualkan",
+  },
+  "admin.promo_running": {
+    en: "Running",
+    zh: "进行中",
+    ms: "Sedang berjalan",
+  },
+  "admin.promo_ended": {
+    en: "Ended",
+    zh: "已结束",
+    ms: "Tamat",
+  },
+  "admin.promo_open": {
+    en: "Open",
+    zh: "打开",
+    ms: "Buka",
+  },
+  "admin.promo_empty": {
+    en: "No promotions yet.",
+    zh: "还没有促销活动。",
+    ms: "Belum ada promosi.",
+  },
   "admin.theme": {
     en: "Theme",
     zh: "主题",
