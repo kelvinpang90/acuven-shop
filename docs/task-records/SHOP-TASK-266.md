@@ -1,0 +1,38 @@
+# SHOP-TASK-266 后台促销活动的请求模块 A12（列表、读取、新建、保存与状态操作）
+
+- [x] 新增 `frontend/src/api/adminPromotions.ts` 与 `frontend/src/api/adminPromotions.test.ts`：为 A12 页面（SHOP-TASK-269 起）调用 SHOP-TASK-242 的九个接口（`GET` 与 `POST /api/admin/promotions`，`GET`、`PUT` 与 `DELETE /api/admin/promotions/{活动 ID}`，`POST …/{活动 ID}/publish`、`/withdraw`、`/end` 与 `/copy`）。写法照 `frontend/src/api/adminCategories.ts`；CSRF 请求头名取 `frontend/src/api/pay.ts` 的 `CSRF_HEADER`。改动只在这两个文件与本文件；不做页面，不改路由与导航、后端、设计、`.platform/`、CI 与部署配置，未装依赖。设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 1–3、12 条——请求模块只传递与校验字段，规则、核对与审计在服务端（SHOP-TASK-239、241、242、249）。
+- 导出的常量与地址：
+  - `ADMIN_PROMOTIONS_URL`（`/api/admin/promotions`）、`MAX_PROMOTION_ID`（2147483647，与服务端相同）、`PROMOTION_STATES`（`draft`、`scheduled`、`running`、`ended`）。
+  - `adminPromotionUrl(id)`（`…/{id}`）、`adminPromotionActionUrl(id, action)`（`…/{id}/publish|withdraw|end|copy`）。
+- 导出的类型（字段名同 `app/api/admin_promotions.py`）：
+  - `PromotionState`；`AdminPromotionSummary`（id、name、state、starts_at、ends_at、rule_count、updated_at）。
+  - `AdminPromotion`（id、version、state、ended_early_at、name、starts_at、ends_at、coupon_combinable、points_combinable、rules、decoration、copy、poster_desktop_url、poster_phone_url）。
+  - `AdminPromotionRule`（`PromotionRuleInput` 另加 rule_id 与 products）、`PromotionRuleInput`（kind、discount_mode、percent、amount_sen、buy_quantity、get_quantity、get_percent、threshold_sen、product_ids、category_ids、tiers）、`PromotionTier`（threshold_sen、amount_sen、percent）、`PromotionScopeProduct`（id、slug、name_en）。
+  - `PromotionDecoration`（pack、palette、ambient、home_poster、list_strip、card_badge、detail_ribbon、cart_progress、poster_mode）、`PromotionCopy`（title、subtitle、badge、strip、poster_alt 各 `_en`、`_zh`、`_ms`，字符串或 null）。
+  - `PromotionInput`（name、starts_at、ends_at、coupon_combinable、points_combinable、rules、decoration、copy）、`PromotionSave`（另加 version）、`PromotionProblem`（code、field、product_id、product_name）。
+  - 结果：`PromotionsRead`、`PromotionRead`、`PromotionRejection`、`PromotionWrite`、`PromotionDelete`。
+- 导出的函数（都凭同源 cookie、`cache: "no-store"`、`Accept: application/json`，最后一个参数为可选的 `AbortSignal`；不写日志、不抛出）：
+  - `readAdminPromotions(signal?)`：GET 列表，请求头只有 Accept。结果 `ok`（promotions、csrf_token）、`none`（401）、`failed`、`network`。
+  - `readAdminPromotion(id, signal?)`：GET 一个。结果 `ok`（promotion、csrf_token）、`none`（401）、`missing`（404 或路径 ID 不合法）、`failed`、`network`。
+  - `createAdminPromotion(input, csrfToken, signal?)`：POST，成功 201。
+  - `saveAdminPromotion(id, input, csrfToken, signal?)`：PUT，请求体为新建各项另加 version，成功 200。
+  - `publishAdminPromotion`、`withdrawAdminPromotion`、`endAdminPromotion`（都为 `(id, version, csrfToken, signal?)`）：POST，请求体恰为 `{"version": …}`，成功 200。
+  - `copyAdminPromotion(id, csrfToken, signal?)`：POST，没有请求体与 Content-Type，请求头只有 Accept 与 `X-CSRF-Token`，成功 201。
+  - `deleteAdminPromotion(id, version, csrfToken, signal?)`：DELETE，请求体恰为 `{"version": …}`，成功 204（`{ kind: "ok" }`，不读响应体）。
+  - 写操作的结果：`ok`（删除之外带 promotion）、`none`（401）、`csrf`（403）、`invalid`（422 且 `detail.code` 为 `promotion_invalid`，带 problems）、`overlap`（409 `promotion_overlap`，带 name）、`changed`（409 `promotion_changed`）、`state`（409 `promotion_state_invalid`，带 state）、`ended`（409 `promotion_ended`）、`missing`（404 或路径 ID 不合法）、`failed`（其他，含 413、415、其他 422、其他 409、非成功状态码的 2xx 与响应体不合格）、`network`（fetch 抛错，含调用方中止）。
+- 请求体：只取规定字段，调用方对象上多出的属性（含读回规则的 rule_id 与 products）不带进；规则参数与文案没有值（undefined）时提交 null；tiers 每项恰为 threshold_sen、amount_sen、percent 三个键，amount_sen 与 percent 没有值时为 null。时间原样收发，不换算。
+- 校验：响应各字段逐项检查，任一项缺少或类型不对整份为 `failed`；state 只认四个值；ID 为正整数，version、rule_count 与规则的数值参数、档位为不小于 0 的整数（参数可为 null）；时间、`ended_early_at` 与海报地址为字符串或 null，`updated_at` 为字符串；列表与读取的 csrf_token 为非空字符串；422 的 problems 每项四个键都须在（code、field 为字符串，product_id 为正整数或 null，product_name 为字符串或 null），任一项不合格整份为 `failed`；409 的 overlap 须有字符串 name，state_invalid 的 state 须为四个值之一，否则为 `failed`。
+- 偏离与取舍，请审阅（未改设计，未发现须停下的设计问题）：
+  - 落实写法写「路径 ID 不是正整数时不发请求、按 none 处理」，结果一节又写读取一个为「missing（404 或路径 ID 不合法）」。两处不一致；`none` 在页面上意味着去登录，用于不合法的 ID 不对，所以按结果一节的写法，读取与六个带路径 ID 的写操作在 ID 不合法时都不发请求、返回 `missing`。
+  - 路径 ID 另有上限 2³¹−1（照 SHOP-TASK-227 与服务端 `MAX_PROMOTION_ID`），超出时服务端也只会 422，提前不发请求。
+  - `PromotionTier.threshold_sen` 类型为 `number`（不是 `number | null`）：后端 `TierIn.threshold_sen` 为不可为 null 的 `int`，「没有值的为 null」只适用于 amount_sen 与 percent；页面按 UX 0.20 A12 在提交前先检查档位。
+  - 404 不读错误体，不论错误码都归为 `missing`（文档字符串只有 `promotion_not_found` 一种 404）。
+  - kind、discount_mode 与装饰各项只校验为字符串，不核对取值清单：验收只要求 state 限四个值，取值规则在服务端。
+- 留给之后：A12 的路由与导航（SHOP-TASK-268）、列表与编辑区页面（SHOP-TASK-269 起）。
+- 验证到什么程度：人工逐条对照 `app/api/admin_promotions.py` 的请求与响应模型、文档字符串与 UX 0.20 A12 自查。`frontend/src/api/adminPromotions.test.ts`（vitest，fetch 以参数带类型的 `vi.fn` 替身代替）覆盖：
+  - 每个函数的地址、方法、同源 cookie、no-store、请求头（读取只有 Accept，复制只有 Accept 与 CSRF，其余另有 Content-Type）、请求体（新建与保存只取规定字段并补 null，状态操作与删除恰为 version，读取与复制没有请求体）与 signal。
+  - 列表与读取的 ok（按接口顺序、多出字段含嵌套的不带进、四种状态）、401、404 与其他状态；新建、保存、状态操作、复制与删除各自的成功状态码（错的 2xx 归 `failed`）。
+  - 七个写操作的每种拒绝（401、403、404、422 promotion_invalid、409 的四种）与 `failed`（413、415、FastAPI 的 422、其他 422 与 409、problems 缺少 / 不是数组 / 每项缺字段或类型不对、overlap 没有 name、state 不在四个值里、不是 JSON、500）。
+  - 不合格响应：列表各字段与读取 / 写操作共用的活动各字段（含规则、档位、范围商品、装饰与文案的缺字段与类型不对）。
+  - 路径 ID 为 0、负数、小数、超上限、NaN、Infinity 时不发请求并返回 `missing`，上限本身照发；网络中断与调用方中止为 `network`。
+  - 每条测试的注释写明它守住的 `app/api/admin_promotions.py` 文档字符串、落实写法或 UX 0.20 A12 的原句。前端检查交由 PR 的必需 CI 检查 frontend 执行（Worker 沙箱不跑前端检查），检查命令结果由 Worker 另行记录。本任务不做浏览器验收。
