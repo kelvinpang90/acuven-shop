@@ -6142,7 +6142,7 @@ tasks:
       运营者落实写法（HANDOFF 0.98）：（1）promotionForm.ts 的规则改为可编辑的表单：每条规则有页面内的 key、kind 与按类别用到的文字输入（金额以 RM 文字输入，照 frontend/src/pages/AdminShippingPage.tsx 的 feeSen 与 feeText 与整仙互换；百分比与件数为整数文字），商品级规则另有 product_ids、显示用的商品列表（ID 与名称）与 category_ids；promotionInput 按类别只填该类用到的参数，其余为 null 或空，取舍照 app/services/admin_promotions.py 的 check_rule_params（满额各档由它调用的 _tier_problems 检查）。（2）formProblems 加规则的检查，范围照同文件的 check_rule_params（含它调用的 _tier_problems）、check_rule_scope 与条数检查和 app/models/promotion.py 的常量（每件直降百分比与金额、X 与 Y、Y 的折扣、满额各档门槛与优惠逐档递增与档数、免运费门槛、范围至多 200 件商品与 30 个分类且至少选一项、至多 20 条商品级规则、满额与免运费各至多一条），field 写法同服务端（rules.N.参数、rules.N.tiers.M.参数、rules.N.product_ids、rules.N.category_ids），文字不能换成整数或整仙时同样不合格。整数文字只认 /^[0-9]+$/（不带符号、空白与小数点，前导零照收）；RM 文字照 feeSen 的格式；换不成整数或整仙的参数在 promotionInput 里为 null（formProblems 同时报它不合格，页面不会提交）。另导出新规则的初值函数（每件直降为百分比方式、数值空；买 X 享 Y 三项空；满额为满额减方式、一档（门槛与优惠都空）；免运费门槛空；商品级规则的范围为空）与切换方式的函数（切换直降的百分比与金额方式、满额的减与折时，清空该规则（满额为各档）的优惠值文字，门槛保留）。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 2、3 条与 UX 0.20 A12 的 M1：规则参数的换算与提交前检查，金额以 RM 输入、提交整仙；计价、核对与审计在服务端，不碰个人资料。
       拆分：预审报 SHOP-TASK-271 TOO_LARGE（表单、规则组件、页面接线与三份测试约 2,300 行），把规则的纯函数拆成本任务（3 个允许路径），271 依赖它。依赖 SHOP-TASK-281。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-281
     acceptance_criteria:
