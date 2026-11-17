@@ -1,0 +1,50 @@
+# SHOP-TASK-282 后台促销活动 A12 规则的表单换算与提交前检查（纯函数）
+
+- [x] 在 SHOP-TASK-281 的 `frontend/src/pages/promotionForm.ts` 里加规则的可编辑表单、与接口值的换算、新规则的初值、切换方式与提交前检查，照 HANDOFF 0.98 的落实写法（1）（2）与 docs/UX.md 0.20 A12 的「规则」一条与金额元素 M1；范围照 `app/services/admin_promotions.py` 的 `check_rule_params`、`_tier_problems`、`check_rule_scope`、`_ids_ok`、`_rule_count_problems`、`_int_in` 与 `app/models/promotion.py` 的常量。测试加在 `frontend/src/pages/promotionForm.test.ts`。改动只在这两个文件与本文件；不做页面，不改后端、路由、设计、`.platform/`、CI 与部署配置，未装依赖。设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 2、3 条与 UX 0.20 A12 的 M1——规则参数的换算与提交前检查，金额以 RM 输入、提交整仙；计价、核对与审计在服务端，不碰个人资料。
+- 新增的常量（与服务端相同）：
+  - `PERCENT_MIN`（1）、`DISCOUNT_PERCENT_MAX`（90）、`GET_PERCENT_MAX`（100）、`ITEM_AMOUNT_MAX_SEN`（50,000,000）、`QUANTITY_MIN`（1）、`QUANTITY_MAX`（10）、`THRESHOLD_MAX_SEN`（99,999,999）、`SPEND_TIERS_MAX`（5）——`app/models/promotion.py`。
+  - `ITEM_RULES_MAX`（20）、`SCOPE_PRODUCTS_MAX`（200）、`SCOPE_CATEGORIES_MAX`（30）——`app/services/admin_promotions.py`。
+  - `RULE_KINDS`：`item_discount`、`buy_x_get_y`、`spend_discount`、`free_shipping`（顺序同 UX A12 的 `[admin.rule_add]`）。
+- 新增与改动的类型：
+  - `RuleKind`（四类之一）、`DiscountMode`（`percent` 或 `amount`）。
+  - `PromotionFormTier`：`threshold`（RM 文字）与 `discount`（满额减为 RM 文字、满额折为整数文字）。
+  - `ItemDiscountFormRule`（`discount_mode`、`discount`：百分比方式为整数文字、金额方式为 RM 文字）、`BuyXGetYFormRule`（`buy_quantity`、`get_quantity`、`get_percent` 都为整数文字）、`SpendDiscountFormRule`（`discount_mode`、`tiers`）、`FreeShippingFormRule`（`threshold`，RM 文字）。每条都有页面内的 `key`（数字）与 `kind`，读回的另带可选的 `rule_id`；两类商品级规则另有 `product_ids`、`products`（显示用的所选商品，266 的 `PromotionScopeProduct`，即 ID、slug 与名称）与 `category_ids`。
+  - `PromotionFormRule` 改为上面四者的联合（原为 `PromotionRuleInput` 加可选的 `rule_id` 与 `products`）；`ItemFormRule` 为两类商品级规则的联合。`PromotionForm.rules` 仍为 `PromotionFormRule[]`。
+  - `PromotionFormProblem.code` 另加 `rule`、`scope`、`tiers`（同服务端问题码）。
+- 新增的函数（都是纯函数，不改参数，返回新对象）：
+  - `newPromotionRule(kind, key)`：新规则的初值——每件直降为百分比方式、数值空；买 X 享 Y 三项空；满额为满额减方式、一档（门槛与优惠都空）；免运费门槛空；商品级规则的范围（含 products）为空。
+  - `nextRuleKey(form)`：新加规则的 key，比现有规则的 key 都大（没有规则时为 0）。
+  - `switchDiscountMode(rule, mode)`：每件直降或满额规则换方式；方式改变时清空优惠值文字（满额为各档的优惠，门槛保留），方式不变时照原值。
+  - `rmSen(text)` 与 `rmText(sen)`：RM 文字与整仙互换，照 `frontend/src/pages/AdminShippingPage.tsx` 的 `feeSen`（一到九位数字，可再跟小数点与一到两位数字，不经浮点数相乘；格式不对为 null）与 `feeText`（整数运算写成两位小数）。
+  - `integerOf(text)`：整数文字只认 `/^[0-9]+$/`（不带符号、空白与小数点，前导零照收）；不合格式或位数多到不是安全整数为 null。
+- 改动的函数：
+  - `formFromPromotion`：规则按类别与方式写成文字（数值 null 读成空串，方式不是 `percent`、`amount` 之一时取新规则的初值方式），key 按排序为 0、1、2…，带 rule_id 与逐项复制的 products、product_ids、category_ids；其余各项不变。
+  - `promotionInput`：规则按类别只填该类用到的参数（照 `check_rule_params` 的 `_KIND_PARAMS`：每件直降按方式只填 `percent` 或 `amount_sen`，满额各档按方式只填 `percent` 或 `amount_sen`），其余为 null，整单级规则的范围为空、满额以外的规则没有档；不提交 key、rule_id 与 products；键序与 281 相同。换不成整数或整仙的参数为 null。其余各项不变。
+  - `formProblems`：在时间之后、文案之前，逐条规则先查参数再查范围，再查条数；field 写法同服务端（`rules.N.<参数>`、`rules.N.tiers.M.<参数>`、`rules.N.tiers`、`rules.N.product_ids`、`rules.N.category_ids`、`rules`，N 与 M 从 1 起）：
+    - 每件直降：百分比方式 `percent` 1–90，金额方式 `amount_sen` 1 仙至 RM500,000.00（`rule`）。
+    - 买 X 享 Y：`buy_quantity`、`get_quantity` 1–10，`get_percent` 1–100（`rule`）。
+    - 满额（`tiers`）：1–5 档（否则 `rules.N.tiers`）；逐档门槛 1 仙至 RM999,999.99，满额减的优惠 1 仙至门槛减 1 仙（门槛不合格时至上限减 1 仙），满额折 1–90；之后门槛、优惠各自逐档严格递增，只比相邻两档都合格的，报在后一档。
+    - 免运费：`threshold_sen` 0 至 RM999,999.99（`rule`）。
+    - 商品级规则的范围（`scope`）：商品与分类 ID 为正整数、不重复，至多 200 件、30 个；两项都空时报 `product_ids`。
+    - 条数（`rule`、field `rules`）：商品级规则多于 20 条、满额多于一条、免运费多于一条，各报一个。
+    - 文字换不成整数或整仙时同样不合格。
+  - `newPromotionForm`、`isDirty`、`pyStrip`、`copyLength`、`copyMaxLength` 未改；名称、时间与文案的检查与换算未改。
+- 偏离与取舍，请审阅（未改设计，未发现须停下的设计问题）：
+  - 满额档门槛换不成整仙时，照落实写法在 `promotionInput` 里为 null，但 266 的 `PromotionTier.threshold_sen` 为 `number`（后端 `TierIn` 必填整数），允许路径之外的类型不能改，所以这一处用了类型断言（`as number`）并写了注释；这时 `formProblems` 报该档门槛，页面不提交，这个 null 只在 `isDirty` 比较时出现。
+  - 每件直降与满额各档的优惠用一个文字输入 `discount`，按方式解读（落实写法「清空该规则的优惠值文字」「数值空」都是单数）；UX 线框里百分比与金额各有一个输入框，页面可以按方式显示同一个值。
+  - `products` 沿用 266 的 `PromotionScopeProduct`（ID、slug 与 name_en），没有另定只有 ID 与名称的类型，281 的断言 `products` 与读回值相同因此不变；商品级规则都必有 `products`（新规则为空数组），整单级规则没有。
+  - 读到四类以外的规则类别时 `formFromPromotion` 抛 `TypeError`：服务端只存四类（`check_rule_params` 拒绝其他类别），悄悄丢掉会让保存删掉它。281 时其他类别原样带过，这是唯一行为变化的情形。
+  - 位数多到不是安全整数的整数文字按「换不成整数」处理（为 null）；这样的值都远超各项上限，检查结果与服务端相同。
+  - `isDirty` 照 281 只比提交内容：同一金额的不同写法（如 `10.5` 与 `10.50`）不算改动；两段都换不成数值的文字也不算改动（都提交 null）。
+  - 规则 key 由 `formFromPromotion` 按排序给出、`nextRuleKey` 给新规则，不用模块级计数器，函数保持纯；满额各档没有 key（页面可按位置区分）。
+  - 另导出了上列常量、`RULE_KINDS`、`ItemFormRule`、`nextRuleKey`、`integerOf`、`rmSen`、`rmText`；落实写法没有逐个列出，属于便利导出，供 SHOP-TASK-271 显示与提示用。
+  - 测试只改了 281 的六行准备代码（新规则的构造、`product_ids`/`category_ids` 取商品级规则、满额档改 `discount` 文字）、导入列表与 `ruleAt`、`tierAt` 两个辅助函数的类型；281 的 `expect` 断言一行未改。
+- 留给之后：规则区的页面、规则组件与接线（SHOP-TASK-271，引用上列类型与函数）。
+- 验证到什么程度：人工逐条对照 `app/services/admin_promotions.py` 的上列函数、`app/models/promotion.py` 的常量、`AdminShippingPage.tsx` 的 `feeSen` 与 `feeText` 及 UX 0.20 A12 自查。`frontend/src/pages/promotionForm.test.ts`（vitest）新增覆盖：
+  - 常量与服务端相同。
+  - `rmSen`、`rmText`、`integerOf` 的格式与边界（前导零、符号、空白、小数位、全角与其他文字的数字、九位整数上限、安全整数）。
+  - 四类规则读成文字、经表单往返后提交的参数与读取时相同（两种直降方式、满额减与满额折、取值范围两端的金额），读回的规则通过检查、不算改动；未知类别抛错；同一金额的不同写法不算改动。
+  - 按类别与方式只提交该类的参数；换不成数值的文字提交 null 并报问题。
+  - 新规则的初值、每次返回新对象、新规则的提交内容与各自的问题；`nextRuleKey`；两种 `switchDiscountMode`（清空优惠、保留门槛与范围、方式不变时不清空、不改原规则）。
+  - 每项检查的边界与 field：直降百分比与金额、X 与 Y 与 Y 的折扣、免运费门槛、满额各档的门槛与优惠（含门槛不合格时的优惠上限）、档数、逐档递增（含不跨过不合格的一档）、两类商品级规则的范围（200 件、30 个、重复、0 与小数 ID、至少一项）、条数上限（20 条商品级规则、满额与免运费各一条），以及问题的整体顺序。
+  - 每条测试的注释写明它守住的 UX 0.20 A12、落实写法或服务端检查函数的原句。前端检查交由 PR 的必需 CI 检查 frontend 执行（Worker 沙箱不跑前端检查），检查命令结果由 Worker 另行记录。本任务不做浏览器验收。
