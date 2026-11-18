@@ -10,7 +10,9 @@ import { htmlLang, useCopy } from "../i18n/language";
 import { ADMIN_LOGIN_PATH, ADMIN_PROMOTION_NEW_PATH, ADMIN_PROMOTIONS_PATH, adminPromotionPath, Link, useRouter } from "../router";
 import type { RouteParams, RoutePath, RoutePattern } from "../router";
 import { startDeferred } from "./AdminOrderDetail";
-import AdminPromotionRules, { loadScopeLists, SCOPE_LOADING } from "./AdminPromotionRules";
+import AdminPromotionDecoration from "./AdminPromotionDecoration";
+import type { DecorationChange } from "./AdminPromotionDecoration";
+import AdminPromotionRules,{ loadScopeLists, SCOPE_LOADING } from "./AdminPromotionRules";
 import type { RulesChange, ScopeLists } from "./AdminPromotionRules";
 import { PROMOTION_STATE_CLASS, PROMOTION_STATE_LABEL } from "./AdminPromotionsPage";
 import { copyLength, copyMaxLength, formFromPromotion, formProblems, isDirty, NAME_MAX_LENGTH, newPromotionForm, promotionInput } from "./promotionForm";
@@ -20,7 +22,8 @@ import type { CopyField, PromotionForm, PromotionFormProblem } from "./promotion
 // HANDOFF 0.98 落实写法；DESIGN 1.23「节日促销活动」第 1–2、12 条）：新建 /admin/promotions/new 与编辑 /admin/promotions/:id（段值为活动的内部 ID）共用本页，
 // 用后台框架渲染，当前导航项为促销活动。本任务（SHOP-TASK-270）是编辑区的框架：读取、标题行、基本信息、同用开关、文案、操作栏的保存与结果提示、
 // 提交前的字段检查与离开确认；SHOP-TASK-271 在基本信息之后、同用开关与文案之前接上规则区（AdminPromotionRules.tsx，规则的修改计入未保存与提交）；
-// 状态操作、装饰、编辑区预览、海报与 AI 由之后的任务接上。
+// SHOP-TASK-273 在文案之后接上装饰区（AdminPromotionDecoration.tsx，装饰的修改计入未保存与提交；已结束只读）；
+// 状态操作、编辑区预览、海报与 AI 由之后的任务接上。
 // - 新建先以 readAdminPromotions 取 CSRF 令牌，保存为 createAdminPromotion，成功后以 replace 换到新 ID 的页面并在那里显示 admin.promo_saved（本模块里存的
 //   一次性提示）；已有活动以 readAdminPromotion 读取，保存为 saveAdminPromotion（带读取到的 version），成功后以返回的活动为新基准。段值不是不超过
 //   MAX_PROMOTION_ID 的正整数即不存在，不发请求。
@@ -317,6 +320,15 @@ export function changeRules(editor: Editor, change: RulesChange): Editor {
   return rules === editor.form.rules ? editor : { ...editor, form: { ...editor.form, rules }, notice: null };
 }
 
+// 素材包、配色与各装饰位的改动（落实写法（4））：已结束时不改，进行中与其他状态可改；装饰不变时编辑区不变。
+export function changeDecoration(editor: Editor, change: DecorationChange): Editor {
+  if (isEnded(editor)) {
+    return editor;
+  }
+  const decoration = change(editor.form.decoration);
+  return decoration === editor.form.decoration ? editor : { ...editor, form: { ...editor.form, decoration }, notice: null };
+}
+
 // 本页用到的请求，测试以替身代替。
 export interface PromotionApi {
   readList: typeof readAdminPromotions;
@@ -407,15 +419,15 @@ export async function submitPromotion(editor: Editor, signal: AbortSignal, moves
 }
 
 // 各区块的展开状态：首次渲染（含服务端渲染）全部展开；挂载后在手机宽度上收起基本信息与规则区之外的区块。
-export type Panel = "basic" | "rules" | "combine" | "texts";
+export type Panel = "basic" | "rules" | "combine" | "texts" | "decoration";
 export type PanelsOpen = Readonly<Record<Panel, boolean>>;
 
-export const ALL_OPEN: PanelsOpen = { basic: true, rules: true, combine: true, texts: true };
+export const ALL_OPEN: PanelsOpen = { basic: true, rules: true, combine: true, texts: true, decoration: true };
 
 export const PHONE_QUERY = "(max-width: 767px)";
 
 export function phonePanels(current: PanelsOpen, isPhone: boolean): PanelsOpen {
-  return isPhone ? { ...current, combine: false, texts: false } : current;
+  return isPhone ? { ...current, combine: false, texts: false, decoration: false } : current;
 }
 
 export type MatchesQuery = (query: string) => boolean;
@@ -454,6 +466,7 @@ export interface EditHandlers {
   onField: <K extends EditableField>(field: K, value: PromotionForm[K]) => void;
   onCopy: (field: CopyField, value: string) => void;
   onRules: (change: RulesChange) => void;
+  onDecoration: (change: DecorationChange) => void;
   onSave: () => void;
   onReload: () => void;
   onPanel: (panel: Panel, open: boolean) => void;
@@ -545,7 +558,7 @@ function BackLink() {
 }
 
 // 编辑区：标题行（admin.promo_back、已保存的内部名称与状态标签；新建尚未保存时只有 admin.promo_back）、操作栏（common.save，已结束时不显示）、
-// 结果提示、演示说明，再下为基本信息、规则、同用开关与文案四个区块。lists 为规则范围用的分类与商品列表。
+// 结果提示、演示说明，再下为基本信息、规则、同用开关、文案与装饰五个区块。lists 为规则范围用的分类与商品列表。
 function EditorView({ editor, panels, lists, handlers }: { editor: Editor; panels: PanelsOpen; lists: ScopeLists; handlers: EditHandlers }) {
   const t = useCopy();
   const { promotion, form } = editor;
@@ -692,6 +705,9 @@ function EditorView({ editor, panels, lists, handlers }: { editor: Editor; panel
         </div>
         <span className="acs-admin__muted">{t("admin.copy_fallback")}</span>
       </PanelBox>
+      <PanelBox panel="decoration" title="admin.promo_decoration" open={panels.decoration} onPanel={handlers.onPanel}>
+        <AdminPromotionDecoration decoration={form.decoration} readOnly={ended} onDecoration={handlers.onDecoration} />
+      </PanelBox>
     </form>
   );
 }
@@ -782,6 +798,9 @@ export function AdminPromotionEditContent() {
     },
     onRules: (change) => {
       edit((current) => changeRules(current, change));
+    },
+    onDecoration: (change) => {
+      edit((current) => changeDecoration(current, change));
     },
     onSave: () => {
       const controller = lifetime.current;
