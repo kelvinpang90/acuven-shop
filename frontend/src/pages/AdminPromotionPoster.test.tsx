@@ -209,8 +209,8 @@ describe("AdminPromotionPoster", () => {
     }
   });
 
-  // 落实写法（3）「上传中显示 admin.image_uploading 并禁用该位置的按钮」：上传中的位置按钮禁用并标 aria-busy，旁边为 admin.image_uploading（role="status"）；
-  // 另一位置照常可用。
+  // UX 0.20 A12 说明「海报」「上传即替换该位置的图，上传结果提示沿用 A08 标志图的写法」与落实写法（3）「上传中显示 admin.image_uploading 并禁用该位置的按钮」：
+  // 上传中的位置按钮禁用并标 aria-busy，旁边为 admin.image_uploading（role="status"）；另一位置照常可用。
   it.each(LANGUAGES)("shows uploading and disables only that slot in %s", (language) => {
     const html = render(language, { state: startUpload(POSTER_IDLE, "phone") });
     expect(uploadButton(html, "phone").has("disabled")).toBe(true);
@@ -247,7 +247,7 @@ describe("AdminPromotionPoster", () => {
     }
   });
 
-  // 落实写法（3）的各种结果：ok 换上返回的海报图；415、413、poster_invalid、ended 与 missing、网络中断与其他失败为对应的提示；csrf 重新读取令牌；401 回到 A01。
+  // UX 0.20 A12 说明「海报」「上传即替换该位置的图，上传结果提示沿用 A08 标志图的写法」与落实写法（3）的各种结果：ok 换上返回的海报图；415、413、poster_invalid、ended 与 missing、网络中断与其他失败为对应的提示；csrf 重新读取令牌；401 回到 A01。
   it("maps every upload result to a step", () => {
     const cases: [PosterUpload, ReturnType<typeof posterUploadStep>][] = [
       [{ kind: "ok", poster: DESKTOP }, { poster: DESKTOP }],
@@ -266,7 +266,8 @@ describe("AdminPromotionPoster", () => {
     }
   });
 
-  // 落实写法（3）「上传照 A08 标志图的写法：选好文件即上传…成功即替换缩略图」：先查格式与大小（不通过不发请求），通过时以活动 ID、位置、文件本身与它的类型及 CSRF 令牌上传；
+  // UX 0.20 A12 说明「海报」「上传成功即替换并立即生效…不改变活动的版本号」与落实写法（3）「上传照 A08 标志图的写法：选好文件即上传…成功即替换缩略图」：
+  // 先查格式与大小（不通过不发请求），通过时以活动 ID、位置、文件本身与它的类型及 CSRF 令牌上传；
   // 成功先换上返回的海报图再结束；被拒只结束并给提示，不换图。
   it("checks the file, uploads it and settles the result", async () => {
     const signal = new AbortController().signal;
@@ -297,7 +298,7 @@ describe("AdminPromotionPoster", () => {
     expect(invalid.record.posters).toEqual([]);
   });
 
-  // 落实写法（3）「csrf 显示 common.error_retry 并重新读取 CSRF 令牌；401 回到 A01」：403 后由页面重新读取，取到与其他失败为 common.error_retry、网络中断为
+  // UX 0.20 A12 说明「海报」「上传结果提示沿用 A08 标志图的写法」与落实写法（3）「csrf 显示 common.error_retry 并重新读取 CSRF 令牌；401 回到 A01」：403 后由页面重新读取，取到与其他失败为 common.error_retry、网络中断为
   // common.network_check（同 A08 标志图）、重新读取答 401 时回到 A01；上传答 401 时直接回到 A01、不结束提示。
   it("rereads the token after csrf and goes to sign-in on 401", async () => {
     const signal = new AbortController().signal;
@@ -323,7 +324,7 @@ describe("AdminPromotionPoster", () => {
     expect(none.record.finished).toEqual([]);
   });
 
-  // 落实写法（3）照 A08 标志图「卸载时中止进行中的请求」：上传返回前已中止（离开页面或重新读取）时不再更新。
+  // UX 0.20 A12 说明「海报」「上传结果提示沿用 A08 标志图的写法」与落实写法（3）照 A08 标志图「卸载时中止进行中的请求」：上传返回前已中止（离开页面或重新读取）时不再更新。
   it("ignores an upload that finishes after leaving", async () => {
     const controller = new AbortController();
     const { record, moves } = movesRecorder();
@@ -334,6 +335,7 @@ describe("AdminPromotionPoster", () => {
     expect(record).toEqual({ posters: [], finished: [], rereads: 0, logins: 0 });
   });
 
+  // UX 0.20 A12 说明「海报」「新建而尚未保存的活动没有 ID，上传按钮禁用并显示 `[admin.poster_save_first]`；已结束的活动上传按钮禁用」与
   // 落实写法（4）「新建而尚未保存（没有活动 ID）时上传按钮禁用并显示 admin.poster_save_first；已结束的活动上传按钮禁用、单选与替代文字只读」：新建时两个按钮禁用并以
   // aria-describedby 指向唯一一处 admin.poster_save_first；已结束时按钮与单选禁用、替代文字只读，不显示 admin.poster_save_first；其他时候都可用。
   it.each(LANGUAGES)("disables uploads before the first save and when ended in %s", (language) => {
@@ -384,6 +386,7 @@ describe("AdminPromotionPoster", () => {
     expect(html.split(escapeHtml(COPY["admin.promo_field_invalid"][language]))).toHaveLength(2);
   });
 
+  // UX 0.20 A12 线框「( ) [admin.poster_template]   ( ) [admin.poster_image]」与说明「海报」「上传与 A08 的标志图一样不随本页的保存提交」，
   // 落实写法（1）「两个单选改表单装饰的 poster_mode」与（3）「上传…不算未保存的修改」：换模式只改 poster_mode（值不变时返回原对象）；开始与结束上传只改该位置的状态，
   // 开始时收起该位置上一次的提示。
   it("changes the mode and the per-slot upload state", () => {
@@ -396,7 +399,7 @@ describe("AdminPromotionPoster", () => {
     expect(startUpload(failed, "phone")).toEqual({ desktop: { busy: false, notice: { kind: "invalid" } }, phone: { busy: true, notice: null } });
   });
 
-  // 落实写法（3）「上传中…」的初始：容器首次渲染（含服务端渲染）两个位置都没有上传进行中与提示，不发请求。
+  // UX 0.20 A12 说明「海报」「上传结果提示沿用 A08 标志图的写法」与落实写法（3）「上传中…」的初始：容器首次渲染（含服务端渲染）两个位置都没有上传进行中与提示，不发请求。
   it("renders the container idle without any request", () => {
     const upload = vi.fn((): Promise<PosterUpload> => Promise.resolve({ kind: "failed" }));
     const html = renderToStaticMarkup(

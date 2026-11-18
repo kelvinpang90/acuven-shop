@@ -12,7 +12,7 @@
 - [x] 测试（vitest 与 react-dom/server，上传结果以替身给出）：
   - 新文件 `frontend/src/pages/AdminPromotionPoster.test.tsx`：三种语言下两种模式、两行、规则文字与替代文字（已用字数）；缩略图与占位、文件输入框只收三种格式；上传中只禁用该位置；每种上传结果在该位置下方的提示（`poster_invalid` 为该位置自己的规则文字，ended 与 missing 为 `admin.promo_changed` 与 `admin.reload`）；`posterUploadStep` 的每种结果；先查格式与大小、上传参数与成功换图；csrf 后重新读取的三种提示与 401；中止后不再更新；新建未保存与已结束时禁用；替代文字不合格的提示；模式与每个位置状态的改动；容器首次渲染不发请求。
   - `frontend/src/pages/AdminPromotionEditPage.test.tsx`：新增（三种语言）海报区排在装饰区之后、两种模式与读到的海报图和替代文字；模式与替代文字计入未保存并照当前的值提交（保存与新建）；替代文字超过 150 不提交；上传成功（`replacePoster`）不算未保存、不改版本，之后的保存仍带读取到的版本；新建未保存与已结束时禁用，进行中与 `rules_locked` 之后可用；`rereadPosterToken` 只换令牌与各种失败。现有断言因海报区成为第六个区块而改了两处：「shows the title row and the three sections in the content area」的区块数由 5 改为 6、区块标题列表末尾加 `admin.promo_poster`；「starts with every section open and folds all but the basics on phones」的手机收起结果加 `poster: false`、`details` 的展开末尾加一个 `false`。另在辅助的 `NO_HANDLERS` 加 `onPoster`、`onPosterReread` 与 `onLogin`。其余现有断言未改。
-  - 每条测试的注释写明守住的 UX 0.20 A12 原句（另写明落实写法的对应条目）。
+  - 每条测试的注释写明守住的 UX 0.20 A12 原句（另写明落实写法的对应条目）。评审第 1 轮后，`AdminPromotionPoster.test.tsx` 中原先只写落实写法或 A08 的 8 条测试（上传中、各种结果的对应、查文件与上传、csrf 与 401、中止、禁用、模式与位置状态、容器初始）补上了 UX 0.20 A12 的线框或说明「海报」原句。
 - 偏离（照任务约定，site.css 写不了的不搬，评审不以此要求修改）：
   - 视觉稿里写不了的：缩略图的底色（示意色块）、占位的虚线边框颜色与圆角（1px dashed `--a-border`、4px）、规则文字与「(1–150)」的字号 12px 与字重 400、区块标题的字号 16px。
   - 视觉稿 A12-editor-desktop 在 `admin.poster_alt` 标签旁写「(1–150)」；UX-COPY 没有这条文案，这里照 UX 线框与落实写法在每个输入旁显示已用字数「<已用>/150」。
