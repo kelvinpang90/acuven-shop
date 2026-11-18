@@ -6,8 +6,10 @@ import type { CategoryListItem, FilterOption, ProductPage, ProductSummary, Remot
 import ProductCard from "../components/ProductCard";
 import { PromoStrip } from "../components/PromoParts";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
-import type { CopyKey } from "../i18n/copy";
+import type { CopyKey, Language } from "../i18n/copy";
 import { useCopy, useLanguage } from "../i18n/language";
+import { usePreview } from "../preview";
+import type { StorefrontPreview } from "../preview";
 import { usePromotion } from "../promotion";
 import { Link, PRODUCTS_PATH, useRouter } from "../router";
 import {
@@ -402,8 +404,14 @@ export function ProductListView({
   );
 }
 
+// 「加载更多」读一页；在预览上下文里（preview 不为 null）改经后台预览接口取数（UX 0.20 A12「前台预览」）。
+export function fetchMoreProducts(language: Language, query: ProductListQuery, page: number, preview: StorefrontPreview | null): Promise<ProductPage> {
+  return fetchCatalog<ProductPage>(productsUrl(language, toProductListRequest(query, page)), undefined, preview);
+}
+
 export default function ProductListPage() {
   const { language } = useLanguage();
+  const preview = usePreview();
   const { search, navigate } = useRouter();
   const query = useMemo(() => parseProductListQuery(search), [search]);
   const listUrl = productsUrl(language, toProductListRequest(query));
@@ -418,7 +426,7 @@ export default function ProductListPage() {
     const page = lastPage + 1;
     const items = currentMore?.items ?? [];
     setMore({ listUrl, items, lastPage, status: "loading" });
-    fetchCatalog<ProductPage>(productsUrl(language, toProductListRequest(query, page))).then(
+    fetchMoreProducts(language, query, page, preview).then(
       (data) => {
         setMore((current) =>
           current?.listUrl === listUrl

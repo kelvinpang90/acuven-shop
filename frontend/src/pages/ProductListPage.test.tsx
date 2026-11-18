@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { productsUrl } from "../api/catalog";
 import type { CategoryListItem, FilterOption, ProductPage, ProductSummary, Remote } from "../api/catalog";
 import type { PromotionDisplay, PromotionResponse } from "../api/promotion";
 import App from "../App";
@@ -9,12 +10,14 @@ import { saleLinkPath } from "../components/PromoParts";
 import { COPY, LANGUAGES } from "../i18n/copy";
 import type { Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
+import { PreviewProvider, usePreview } from "../preview";
+import type { StorefrontPreview } from "../preview";
 import { PromotionProvider } from "../promotion";
 import { countdownText } from "../promoText";
 import { RouterProvider } from "../router";
-import { ProductListView } from "./ProductListPage";
+import { fetchMoreProducts, ProductListView } from "./ProductListPage";
 import type { MoreResults } from "./ProductListPage";
-import { DEFAULT_PRODUCT_LIST_QUERY, parseProductListQuery } from "./productListQuery";
+import { DEFAULT_PRODUCT_LIST_QUERY, parseProductListQuery, toProductListRequest } from "./productListQuery";
 import type { ProductListQuery } from "./productListQuery";
 
 function item(slug: string, overrides: Partial<ProductSummary> = {}): ProductSummary {
@@ -442,5 +445,70 @@ describe("product list promotion strip", () => {
     ));
     expect(whileLoading).toBe(without);
     expect(without).not.toContain("acs-promo");
+  });
+});
+
+const PREVIEW: StorefrontPreview = { promotionId: 7, csrfToken: "csrf-token" };
+
+// 渲染时取出 usePreview() 的结果（服务端渲染不发请求，读取由测试以 fetch 替身发出）。
+function PreviewProbe({ onPreview }: { onPreview: (preview: StorefrontPreview | null) => void }) {
+  onPreview(usePreview());
+  return null;
+}
+
+function previewOf(inside: boolean): StorefrontPreview | null {
+  const seen: (StorefrontPreview | null)[] = [];
+  const probe = (
+    <PreviewProbe
+      onPreview={(preview) => {
+        seen.push(preview);
+      }}
+    />
+  );
+  renderToStaticMarkup(inside ? <PreviewProvider preview={PREVIEW}>{probe}</PreviewProvider> : probe);
+  expect(seen).toHaveLength(1);
+  return seen[0] ?? null;
+}
+
+function stubOk() {
+  const fetchMock = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(() => Promise.resolve(new Response(JSON.stringify(page(30, 2, [])), { status: 200 })));
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+describe("product list load more in a storefront preview", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const query = parseProductListQuery("?q=tee&category=bags&sort=price_asc");
+
+  // UX 0.20 A12「前台预览」「预览凭管理员会话经后台接口取数」：在 PreviewProvider 里，list.load_more 读下一页走后台预览接口，
+  // 条件与页码原样保留，凭同源 cookie、不缓存。
+  it("loads more from the preview endpoint inside the preview", async () => {
+    const fetchMock = stubOk();
+    await expect(fetchMoreProducts("ms", query, 2, previewOf(true))).resolves.toEqual(page(30, 2, []));
+    expect(fetchMock.mock.calls).toEqual([
+      [
+        "/api/admin/promotions/7/preview/products?lang=ms&q=tee&category=bags&sort=price_asc&page=2",
+        { method: "GET", credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" }, signal: null },
+      ],
+    ]);
+  });
+
+  // 同一句只说预览：PreviewProvider 之外 list.load_more 照旧读公开接口，地址与选项与之前逐字相同。
+  it("loads more from the public endpoint outside the preview", async () => {
+    const fetchMock = stubOk();
+    expect(previewOf(false)).toBeNull();
+    await fetchMoreProducts("ms", query, 2, previewOf(false));
+    expect(fetchMock.mock.calls).toEqual([
+      [productsUrl("ms", toProductListRequest(query, 2)), { method: "GET", credentials: "omit", headers: { Accept: "application/json" }, signal: null }],
+    ]);
+  });
+
+  // UX 0.20 A12「前台预览」「<前台页面……按该活动正在生效时的样子显示>」：预览只改取数路径，同样的数据在 PreviewProvider 里显示得与之外逐字相同。
+  it("renders the list the same inside the preview", () => {
+    const options: RenderOptions = { products: listed, more: { items: [item("c")], lastPage: 2, status: "idle" } };
+    expect(renderInside(options, (view) => <PreviewProvider preview={PREVIEW}>{view}</PreviewProvider>)).toBe(render(options));
   });
 });

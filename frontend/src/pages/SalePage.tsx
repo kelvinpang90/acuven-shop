@@ -9,6 +9,8 @@ import { PromoRuleList, PromoStrip } from "../components/PromoParts";
 import { DemoHint, ErrorNotice } from "../components/SiteFrame";
 import type { Language } from "../i18n/copy";
 import { useCopy, useLanguage } from "../i18n/language";
+import { usePreview } from "../preview";
+import type { StorefrontPreview } from "../preview";
 import { KIND_BUY_X_GET_Y, KIND_ITEM_DISCOUNT, ruleTexts, scopeText } from "../promoText";
 import { usePromotion } from "../promotion";
 import { Link, PRODUCTS_PATH } from "../router";
@@ -322,12 +324,13 @@ function SaleProducts({ language, fetcher, initial }: SaleProductsProps) {
   );
 }
 
-function fetchSaleProducts(url: string, signal: AbortSignal): Promise<ProductPage> {
-  return fetchCatalog<ProductPage>(url, signal);
+// 商品区的目录读取；在预览上下文里（preview 不为 null）改经后台预览接口取数（UX 0.20 A12「前台预览」）。
+export function fetchSaleProducts(preview: StorefrontPreview | null): SaleProductsFetcher {
+  return (url, signal) => fetchCatalog<ProductPage>(url, signal, preview);
 }
 
 export interface SalePageProps {
-  // 测试传入替身；不传时用 api/catalog.ts 的 fetchCatalog。
+  // 测试传入替身；不传时用 api/catalog.ts 的 fetchCatalog（带上 usePreview 的结果）。
   fetcher?: SaleProductsFetcher | undefined;
   // 测试用：商品区一开始的状态，给出时挂载后不读取；不传时为读取中的第 1 页。
   initial?: SaleListState | undefined;
@@ -336,6 +339,7 @@ export interface SalePageProps {
 export default function SalePage({ fetcher, initial }: SalePageProps) {
   const t = useCopy();
   const { language } = useLanguage();
+  const preview = usePreview();
   const { status, promotion } = usePromotion();
   return (
     <main className="site-sale" aria-busy={status === "loading" ? true : undefined}>
@@ -368,7 +372,7 @@ export default function SalePage({ fetcher, initial }: SalePageProps) {
             <SaleProducts
               key={saleListKey(language, promotion)}
               language={language}
-              fetcher={fetcher ?? fetchSaleProducts}
+              fetcher={fetcher ?? fetchSaleProducts(preview)}
               initial={initial ?? null}
             />
           ) : (

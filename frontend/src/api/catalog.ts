@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 
 import type { Language } from "../i18n/copy";
+import { usePreview } from "../preview";
+import type { StorefrontPreview } from "../preview";
+import { previewCatalogUrl } from "./adminPromotionPreview";
 
 // 商品目录的公开只读接口（app/api/catalog.py，SHOP-TASK-005 与 SHOP-TASK-013）。
 // 请求只带语言与筛选参数：不带 cookie（credentials: "omit"），不带任何个人资料。
 // 筛选、排序与分页全部交给服务端，页面不自行过滤或排序；金额是服务端给的整数仙，页面只格式化。
+// 只有前台预览中的商品列表与详情例外：改经后台预览接口、凭管理员会话取数（见 fetchCatalog）；公开接口不加预览参数。
 
 const CATALOG_BASE = "/api/catalog";
 
@@ -177,13 +181,28 @@ export class CatalogError extends Error {
 }
 
 // 发一个目录请求；非 2xx 或网络错误时抛错，由页面显示 common.error_retry（详情 404 时回到商品列表）。
-export async function fetchCatalog<T>(url: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(url, {
-    method: "GET",
-    credentials: "omit",
-    headers: { Accept: "application/json" },
-    signal: signal ?? null,
-  });
+// 前台预览（UX 0.20 A12「前台预览」，DESIGN 1.23 第 11 条，HANDOFF 0.98）：preview 不为 null 时，商品列表与详情的地址经
+// previewCatalogUrl 换成后台预览接口，凭同源 cookie、不缓存地读取；分类与规格选项的地址不被改写，照旧取公开接口、不带 cookie。
+// preview 为 null 或省略时与之前完全相同。
+export async function fetchCatalog<T>(url: string, signal?: AbortSignal, preview?: StorefrontPreview | null): Promise<T> {
+  const target = preview ? previewCatalogUrl(preview.promotionId, url) : url;
+  const response = await fetch(
+    target,
+    target === url
+      ? {
+          method: "GET",
+          credentials: "omit",
+          headers: { Accept: "application/json" },
+          signal: signal ?? null,
+        }
+      : {
+          method: "GET",
+          credentials: "same-origin",
+          cache: "no-store",
+          headers: { Accept: "application/json" },
+          signal: signal ?? null,
+        },
+  );
   if (!response.ok) {
     throw new CatalogError(response.status);
   }
@@ -206,7 +225,9 @@ export function failedRemote(error: unknown): Remote<never> {
 
 // 按地址取一次目录数据；地址变了（如切换语言、换筛选）就重新请求，旧请求作废。
 // url 为 null 时不请求（如首页隐藏的区块）。结果按地址记下，地址变了之前的结果不再显示。
+// 在预览上下文里（usePreview 不为 null）商品列表与详情改经后台预览接口取数（见 fetchCatalog）。
 export function useCatalog<T>(url: string | null): Remote<T> {
+  const preview = usePreview();
   const [settled, setSettled] = useState<{ url: string; remote: Remote<T> } | null>(null);
 
   useEffect(() => {
@@ -214,7 +235,7 @@ export function useCatalog<T>(url: string | null): Remote<T> {
       return undefined;
     }
     const controller = new AbortController();
-    fetchCatalog<T>(url, controller.signal).then(
+    fetchCatalog<T>(url, controller.signal, preview).then(
       (data) => {
         setSettled({ url, remote: { status: "ready", data } });
       },
@@ -227,7 +248,7 @@ export function useCatalog<T>(url: string | null): Remote<T> {
     return () => {
       controller.abort();
     };
-  }, [url]);
+  }, [url, preview]);
 
   return settled !== null && settled.url === url ? settled.remote : LOADING;
 }
