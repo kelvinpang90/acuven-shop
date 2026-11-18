@@ -676,7 +676,7 @@ describe("sale products in a storefront preview", () => {
     ]);
   });
 
-  // 同一句只说预览：PreviewProvider 之外商品区照旧读公开接口，地址与选项与之前逐字相同。
+  // UX 0.20 A12「前台预览」「预览凭管理员会话经后台接口取数」只说预览：PreviewProvider 之外商品区照旧读公开接口，地址与选项与之前逐字相同。
   it("reads the sale products from the public endpoint outside the preview", async () => {
     const fetchMock = stubOk();
     const controller = new AbortController();
@@ -690,7 +690,7 @@ describe("sale products in a storefront preview", () => {
     ]);
   });
 
-  // UX 0.20 A12「前台预览」「<前台页面……按该活动正在生效时的样子显示>」：预览只改取数路径，同样的活动与商品在 PreviewProvider 里显示得与之外逐字相同。
+  // UX 0.20 A12「前台预览」「未开始的活动按它正在生效的样子显示」：预览只改取数路径，同样的活动与商品在 PreviewProvider 里显示得与之外逐字相同。
   it("renders the sale page the same inside the preview", () => {
     const outside = render({ display: sale() });
     const inside = renderToStaticMarkup(
