@@ -153,7 +153,7 @@ describe("reading the previewed promotion", () => {
 });
 
 describe("the promotion fetcher for the shared read", () => {
-  // DESIGN 1.23 第 11 条「预览的数据只经后台接口（凭管理员会话）取得，公开接口不接受任何预览参数」：按给的地址读取，凭同源 cookie、不缓存，
+  // DESIGN 1.23 第 11 条「预览的数据只经后台接口（凭管理员会话）取得」：按给的地址读取，凭同源 cookie、不缓存，
   // 返回响应体；地址由 previewPromotionUrl 给出，公开地址 promotionUrl 不变。
   it("gets the given url with the same-origin cookie", async () => {
     const fetchMock = stubFetch(json(200, RESPONSE));
@@ -191,7 +191,8 @@ describe("rewriting catalog urls", () => {
     expect(previewCatalogUrl(12, productDetailUrl("en", "a b"))).toBe("/api/admin/promotions/12/preview/products/a%20b?lang=en");
   });
 
-  // DESIGN 1.23 第 11 条「公开接口不接受任何预览参数」：分类、规格选项与其他地址原样返回，不加任何预览参数。
+  // DESIGN 1.23 第 11 条「预览的数据只经后台接口（凭管理员会话）取得」：只改写商品列表与详情的地址，分类、规格选项与其他地址原样返回，
+  // 不加任何预览参数。
   it.each([
     categoriesUrl("en"),
     optionsUrl("zh"),

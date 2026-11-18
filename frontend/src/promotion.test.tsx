@@ -439,7 +439,7 @@ describe("initial result", () => {
 describe("storefront preview options", () => {
   const previewUrl = (language: Language) => `/api/admin/promotions/7/preview?lang=${language}`;
 
-  // DESIGN 1.23 第 11 条「预览的数据只经后台接口（凭管理员会话）取得，公开接口不接受任何预览参数」：传 url 时开始与切换语言都按它读取，
+  // DESIGN 1.23 第 11 条「预览的数据只经后台接口（凭管理员会话）取得」：传 url 时开始与切换语言都按它读取，
   // 不读 /api/promotion。
   it("reads through the given url on start and on a language change", async () => {
     const { store, fetcher, call } = setup(null, "en", { url: previewUrl });
@@ -510,7 +510,8 @@ describe("storefront preview options", () => {
     expect(store.current()).toMatchObject({ status: "ready", promotion: DEEPAVALI, generation: 0 });
   });
 
-  // HANDOFF 0.98（3）「还没有结果（仍在 loading）则照现有写法变为 ready、没有活动」：第一次读取失败时 holdAtZero 也按没有活动处理。
+  // DESIGN 1.23 第 11 条「预览的数据只经后台接口（凭管理员会话）取得」与 HANDOFF 0.98（3）「还没有结果（仍在 loading）则照现有写法变为
+  // ready、没有活动」：后台接口第一次读取就失败时没有可显示的活动，holdAtZero 也按没有活动处理。
   it("settles to no promotion when the first read fails", async () => {
     const { store, call } = setup(null, "en", { url: previewUrl, holdAtZero: true });
     store.start("en");
@@ -519,7 +520,7 @@ describe("storefront preview options", () => {
     expect(store.current()).toMatchObject({ status: "ready", promotion: null, generation: 1 });
   });
 
-  // DESIGN 1.23 第 11 条「预览不改变访客看到的内容」：两个选项都不传（或 holdAtZero 为假）时照旧读 /api/promotion，到 0 去掉活动并重新读取一次，
+  // DESIGN 1.23 第 11 条「预览的数据只经后台接口（凭管理员会话）取得」：预览之外两个选项都不传（或 holdAtZero 为假）时照旧读 /api/promotion，到 0 去掉活动并重新读取一次，
   // 切换语言读取失败时按没有活动处理。
   it("behaves as before without the options", async () => {
     const plain = setup(null, "en", { url: undefined, holdAtZero: false });

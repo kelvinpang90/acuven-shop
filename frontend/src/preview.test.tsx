@@ -9,7 +9,8 @@ function Probe() {
 }
 
 describe("usePreview", () => {
-  // DESIGN 1.23 第 11 条「预览不改变访客看到的内容」：前台平常的页面都在 Provider 之外，取值为 null，行为不变。
+  // DESIGN 1.23 第 11 条「预览的数据只经后台接口（凭管理员会话）取得」：只有预览在 Provider 之内改经后台接口取数；
+  // 前台平常的页面都在 Provider 之外，取值为 null，行为不变。
   it("is null outside the provider", () => {
     expect(renderToStaticMarkup(<Probe />)).toBe("none");
   });
