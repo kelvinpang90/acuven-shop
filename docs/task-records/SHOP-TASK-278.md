@@ -6,7 +6,7 @@
   - 模块开头注释补一行：只有前台预览中的商品列表与详情改经后台预览接口取数，公开接口不加预览参数。
 - [x] 商品列表（`frontend/src/pages/ProductListPage.tsx`）：「加载更多」的读取抽成导出的 `fetchMoreProducts(language, query, page, preview)`，页面传入 `usePreview()` 的结果；显示与现有行为不变。
 - [x] 专题页（`frontend/src/pages/SalePage.tsx`）：`fetchSaleProducts` 改为导出的 `fetchSaleProducts(preview)`，返回带上 preview 的 `SaleProductsFetcher`；`SalePage` 不传 `fetcher` 时用 `fetchSaleProducts(usePreview())`。显示与现有行为不变。
-- [x] 测试（vitest 与 react-dom/server；每条新测试的注释写明守住的 UX 0.20 A12「前台预览」原句「预览凭管理员会话经后台接口取数」或「按该活动正在生效时的样子显示」）：
+- [x] 测试（vitest 与 react-dom/server；每条新测试的注释写明守住的 UX 0.20 A12「前台预览」原句——同一段说明里的「预览凭管理员会话经后台接口取数」或「未开始的活动按它正在生效的样子显示」，两句均逐字取自 docs/UX.md A12 前台预览线框下的说明）：
   - `frontend/src/api/catalog.test.ts`：新增 `describe("fetchCatalog in a storefront preview")`——预览中列表（含 sale）与详情的改写地址、`same-origin`、`no-store` 与 signal；预览中分类与规格选项不改写、`omit`、不带 `cache`；preview 为 `null` 或省略时列表与详情的地址与选项逐字不变；预览的 404 照旧为 `CatalogError` 与 not_found。
   - `frontend/src/pages/ProductListPage.test.tsx`：新增 `describe("product list load more in a storefront preview")`——以渲染时取出的 `usePreview()` 结果，在 `PreviewProvider` 里加载更多走预览地址与 `same-origin`、`no-store`，之外照旧公开地址与 `omit`；同样的数据在 `PreviewProvider` 里与之外渲染逐字相同。
   - `frontend/src/pages/SalePage.test.tsx`：新增 `describe("sale products in a storefront preview")`——三种语言下 `PreviewProvider` 里商品区走预览地址（sale=true、排序与页码保留）与 `same-origin`、`no-store`、商品区的 signal，之外照旧公开地址与 `omit`；有活动时 `PreviewProvider` 里与之外渲染逐字相同。
