@@ -3215,6 +3215,51 @@ export const COPY = {
     zh: "图片说明（替代文字）",
     ms: "Penerangan imej (teks alternatif)",
   },
+  "admin.ai_title": {
+    en: "Design with AI",
+    zh: "用 AI 装饰",
+    ms: "Reka dengan AI",
+  },
+  "admin.ai_placeholder": {
+    en: "e.g. Chinese New Year, festive red and gold",
+    zh: "例如：农历新年，喜庆红金",
+    ms: "cth. Tahun Baru Cina, merah dan emas yang meriah",
+  },
+  "admin.ai_describe": {
+    en: "Describe the look you want",
+    zh: "描述你想要的效果",
+    ms: "Terangkan rupa yang anda mahu",
+  },
+  "admin.ai_privacy": {
+    en: "Don't include personal information. Your description is sent to the AI service and isn't saved.",
+    zh: "请不要填写个人资料。描述会发送给 AI 服务，不会保存。",
+    ms: "Jangan masukkan maklumat peribadi. Penerangan anda dihantar kepada perkhidmatan AI dan tidak disimpan.",
+  },
+  "admin.ai_generate": {
+    en: "Suggest a design",
+    zh: "生成方案",
+    ms: "Cadangkan reka bentuk",
+  },
+  "admin.ai_generating": {
+    en: "Designing…",
+    zh: "正在生成…",
+    ms: "Sedang mereka…",
+  },
+  "admin.ai_review_copy": {
+    en: "Check the text before you save — it appears on the storefront.",
+    zh: "保存前请检查文字，它会显示在前台。",
+    ms: "Semak teks sebelum menyimpan — ia dipaparkan di kedai.",
+  },
+  "admin.ai_apply": {
+    en: "Use this design",
+    zh: "填入编辑区",
+    ms: "Guna reka bentuk ini",
+  },
+  "admin.ai_applied": {
+    en: "Filled in. Check it in the editor preview, then save to use it.",
+    zh: "已填入编辑区。请在编辑区预览里检查，保存后才生效。",
+    ms: "Telah diisi. Semak dalam pratonton penyunting, kemudian simpan untuk menggunakannya.",
+  },
   "admin.editor_preview": {
     en: "Editor preview",
     zh: "编辑区预览",
@@ -3224,6 +3269,26 @@ export const COPY = {
     en: "A sketch with sample products and amounts. Real prices are worked out on the storefront.",
     zh: "示意图，商品与金额都是示例；实际价格以前台计算为准。",
     ms: "Lakaran dengan produk dan jumlah contoh. Harga sebenar dikira di kedai.",
+  },
+  "admin.ai_invalid": {
+    en: "The AI's suggestion couldn't be used. Try again, or set the decoration yourself.",
+    zh: "AI 的结果不合格。请重试，或手动设置装饰。",
+    ms: "Cadangan AI tidak dapat digunakan. Cuba lagi, atau tetapkan hiasan sendiri.",
+  },
+  "admin.ai_unavailable": {
+    en: "AI isn't available right now. You can still set the decoration yourself.",
+    zh: "AI 暂不可用，仍可手动设置装饰。",
+    ms: "AI tidak tersedia sekarang. Anda masih boleh menetapkan hiasan sendiri.",
+  },
+  "admin.ai_daily_limit": {
+    en: "Today's AI limit ({count}) has been reached. Try again tomorrow, or set the decoration yourself.",
+    zh: "今天的 AI 次数（{count} 次）已用完。请明天再试，或手动设置装饰。",
+    ms: "Had AI hari ini ({count}) telah dicapai. Cuba esok, atau tetapkan hiasan sendiri.",
+  },
+  "admin.ai_not_configured": {
+    en: "AI isn't set up for this store. You can set the decoration yourself.",
+    zh: "本店尚未设置 AI，可手动设置装饰。",
+    ms: "AI belum disediakan untuk kedai ini. Anda boleh menetapkan hiasan sendiri.",
   },
   "admin.theme": {
     en: "Theme",

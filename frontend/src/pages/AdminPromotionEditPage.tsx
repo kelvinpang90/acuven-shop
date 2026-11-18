@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, Dispatch, FormEvent, ReactNode, SetStateAction, SyntheticEvent } from "react";
 
+import type { AiProposal } from "../api/adminPromotionAi";
 import type { PosterSlot } from "../api/adminPromotionPoster";
 import { createAdminPromotion, MAX_PROMOTION_ID, readAdminPromotion, readAdminPromotions, saveAdminPromotion } from "../api/adminPromotions";
 import type { AdminPromotion, PromotionProblem, PromotionRead, PromotionsRead, PromotionWrite } from "../api/adminPromotions";
@@ -11,6 +12,7 @@ import { htmlLang, useCopy } from "../i18n/language";
 import { ADMIN_LOGIN_PATH, ADMIN_PROMOTION_NEW_PATH, ADMIN_PROMOTIONS_PATH, adminPromotionPath, Link, useRouter } from "../router";
 import type { RouteParams, RoutePath, RoutePattern } from "../router";
 import { startDeferred } from "./AdminOrderDetail";
+import AdminPromotionAi, { aiRuleProblems, applyProposal } from "./AdminPromotionAi";
 import AdminPromotionDecoration from "./AdminPromotionDecoration";
 import type { DecorationChange } from "./AdminPromotionDecoration";
 import AdminPromotionEditorPreview from "./AdminPromotionEditorPreview";
@@ -29,7 +31,8 @@ import type { CopyField, PromotionForm, PromotionFormProblem } from "./promotion
 // SHOP-TASK-273 在文案之后接上装饰区（AdminPromotionDecoration.tsx，装饰的修改计入未保存与提交；已结束只读）；
 // SHOP-TASK-275 在装饰区之后接上海报区（AdminPromotionPoster.tsx，海报模式与替代文字计入未保存与提交；海报图上传即替换、立即生效、不随保存提交、
 // 不改版本，所以只换 promotion 上的海报图，不改表单、基准与版本号）；SHOP-TASK-274 在装饰区末尾接上编辑区预览（AdminPromotionEditorPreview.tsx，
-// 传入当前的表单与已保存的桌面海报图，随未保存的输入即时更新，任何状态都显示）；状态操作与 AI 由之后的任务接上。
+// 传入当前的表单与已保存的桌面海报图，随未保存的输入即时更新，任何状态都显示）；SHOP-TASK-276 在海报区之后接上 AI 区（AdminPromotionAi.tsx，描述只在该区
+// 内存里、不进表单与提交；点 admin.ai_apply 才把提案的装饰与 12 个文案字段填回表单，计入未保存、经普通保存提交；已结束只读）；状态操作由之后的任务接上。
 // - 新建先以 readAdminPromotions 取 CSRF 令牌，保存为 createAdminPromotion，成功后以 replace 换到新 ID 的页面并在那里显示 admin.promo_saved（本模块里存的
 //   一次性提示）；已有活动以 readAdminPromotion 读取，保存为 saveAdminPromotion（带读取到的 version），成功后以返回的活动为新基准。段值不是不超过
 //   MAX_PROMOTION_ID 的正整数即不存在，不发请求。
@@ -78,7 +81,8 @@ export type EditNotice =
   | { kind: "alert"; key: "common.network_check" | "common.error_retry" };
 
 // 编辑区：promotion 为最近一次读取或保存给的活动（新建尚未保存时为 null），base 为比较基准，form 为已填的值；locked 为保存时服务端答 rules_locked 后
-// 时间与同用开关（及规则）只读，直到离开本页或 admin.reload；checked 为点过保存而字段检查不合格，此后按当前的值在字段旁提示；saving 为保存进行中。
+// 时间与同用开关（及规则）只读，直到离开本页或 admin.reload；checked 为点过保存而字段检查不合格，此后按当前的值在字段旁提示；aiChecked 为点过
+// admin.ai_generate 而规则参数不合格，此后按当前的值只在规则参数旁提示（SHOP-TASK-276）；saving 为保存进行中。
 export interface Editor {
   promotion: AdminPromotion | null;
   csrfToken: string;
@@ -86,6 +90,7 @@ export interface Editor {
   form: PromotionForm;
   locked: boolean;
   checked: boolean;
+  aiChecked: boolean;
   saving: boolean;
   notice: EditNotice | null;
 }
@@ -97,7 +102,7 @@ export const LOADING: EditState = { status: "loading" };
 
 export function openEditor(promotion: AdminPromotion | null, csrfToken: string, notice: EditNotice | null = null): Editor {
   const base = promotion === null ? newPromotionForm() : formFromPromotion(promotion);
-  return { promotion, csrfToken, base, form: base, locked: false, checked: false, saving: false, notice };
+  return { promotion, csrfToken, base, form: base, locked: false, checked: false, aiChecked: false, saving: false, notice };
 }
 
 // 按状态的可改范围（UX A12「状态与可用操作」）：已结束全部只读、不显示保存；进行中（或保存时被答 rules_locked）开始与结束时间、同用开关只读。
@@ -118,9 +123,12 @@ export function hasUnsavedChanges(state: EditState): boolean {
   return state.status === "ready" && isDirty(state.editor.form, state.editor.base);
 }
 
-// 字段旁要提示的问题：点过保存而不合格之后，按当前的值重新检查。
+// 字段旁要提示的问题：点过保存而不合格之后，按当前的值重新检查；只点过 admin.ai_generate 而规则参数不合格时，只按当前的值查规则参数（照保存时的写法标在字段旁）。
 export function shownProblems(editor: Editor): PromotionFormProblem[] {
-  return editor.checked ? formProblems(editor.form) : [];
+  if (editor.checked) {
+    return formProblems(editor.form);
+  }
+  return editor.aiChecked ? aiRuleProblems(editor.form) : [];
 }
 
 // 新建的读取（只为取 CSRF 令牌）：取到时为空表单；401 回到 A01；网络中断 common.network_check、其他失败 common.error_retry，都只带 admin.promo_back。
@@ -284,7 +292,7 @@ export function rejectSave(editor: Editor): Editor {
 }
 
 export function startSaving(editor: Editor): Editor {
-  return { ...editor, checked: false, saving: true, notice: null };
+  return { ...editor, checked: false, aiChecked: false, saving: true, notice: null };
 }
 
 // 点保存后的编辑区：字段不合格时只标出（不调用 submit、不发请求），合格时以 submit 提交并进入保存中；保存中与已结束时不变。
@@ -346,6 +354,20 @@ export function replacePoster(editor: Editor, promotionId: number, slot: PosterS
   return promotion[key] === poster ? editor : { ...editor, promotion: { ...promotion, [key]: poster } };
 }
 
+// AI 区点 admin.ai_apply（SHOP-TASK-276 落实写法（3））：提案的装饰（pack、palette 与六个装饰位）与 12 个文案字段填回表单，计入未保存的修改、不保存；
+// poster_mode、替代文字、名称、规则、时间与开关不变，收起操作栏下方的提示。已结束时不改。
+export function applyAiProposal(editor: Editor, proposal: AiProposal): Editor {
+  if (isEnded(editor)) {
+    return editor;
+  }
+  return { ...editor, form: applyProposal(editor.form, proposal), notice: null };
+}
+
+// AI 区点 admin.ai_generate 做过检查（落实写法（3））：规则参数不合格时此后在规则区字段旁提示，合格时收起只因 AI 而起的提示。
+export function checkAiRules(editor: Editor, rulesInvalid: boolean): Editor {
+  return editor.aiChecked === rulesInvalid ? editor : { ...editor, aiChecked: rulesInvalid };
+}
+
 // 本页用到的请求，测试以替身代替。
 export interface PromotionApi {
   readList: typeof readAdminPromotions;
@@ -386,6 +408,38 @@ export async function rereadPosterToken(
     case "network":
       return "network";
     case "missing":
+    case "failed":
+      return "failed";
+  }
+}
+
+// AI 提案被答 403 之后重新取 CSRF 令牌（SHOP-TASK-276 落实写法（4））：已有活动同 rereadPosterToken；新建尚未保存（promotionId 为 null）时以 readAdminPromotions
+// 只取 csrf_token，取到时只换新建编辑区的令牌（表单不变）。401 为 login，网络中断 network，其余失败 failed；signal 中止之后不再更新。
+export async function rereadAiToken(
+  promotionId: number | null,
+  signal: AbortSignal,
+  update: (change: EditChange) => void,
+  api: PromotionApi = PROMOTION_API,
+): Promise<RereadOutcome> {
+  if (promotionId !== null) {
+    return rereadPosterToken(promotionId, signal, update, api);
+  }
+  const read = await api.readList(signal);
+  if (signal.aborted) {
+    return "failed";
+  }
+  switch (read.kind) {
+    case "ok": {
+      const csrfToken = read.csrf_token;
+      update((current) =>
+        current.status === "ready" && current.editor.promotion === null ? { status: "ready", editor: { ...current.editor, csrfToken } } : current,
+      );
+      return "ok";
+    }
+    case "none":
+      return "login";
+    case "network":
+      return "network";
     case "failed":
       return "failed";
   }
@@ -466,15 +520,15 @@ export async function submitPromotion(editor: Editor, signal: AbortSignal, moves
 }
 
 // 各区块的展开状态：首次渲染（含服务端渲染）全部展开；挂载后在手机宽度上收起基本信息与规则区之外的区块。
-export type Panel = "basic" | "rules" | "combine" | "texts" | "decoration" | "poster";
+export type Panel = "basic" | "rules" | "combine" | "texts" | "decoration" | "poster" | "ai";
 export type PanelsOpen = Readonly<Record<Panel, boolean>>;
 
-export const ALL_OPEN: PanelsOpen = { basic: true, rules: true, combine: true, texts: true, decoration: true, poster: true };
+export const ALL_OPEN: PanelsOpen = { basic: true, rules: true, combine: true, texts: true, decoration: true, poster: true, ai: true };
 
 export const PHONE_QUERY = "(max-width: 767px)";
 
 export function phonePanels(current: PanelsOpen, isPhone: boolean): PanelsOpen {
-  return isPhone ? { ...current, combine: false, texts: false, decoration: false, poster: false } : current;
+  return isPhone ? { ...current, combine: false, texts: false, decoration: false, poster: false, ai: false } : current;
 }
 
 export type MatchesQuery = (query: string) => boolean;
@@ -521,6 +575,10 @@ export interface EditHandlers {
   onPoster: (promotionId: number, slot: PosterSlot, poster: string) => void;
   onPosterReread: (promotionId: number, signal: AbortSignal) => Promise<RereadOutcome>;
   onLogin: () => void;
+  // AI 区：点 admin.ai_apply 填回提案、点 admin.ai_generate 之后的规则参数检查、403 后重新取令牌（新建尚未保存时 promotionId 为 null）。
+  onAiApply: (proposal: AiProposal) => void;
+  onAiRulesChecked: (rulesInvalid: boolean) => void;
+  onAiReread: (promotionId: number | null, signal: AbortSignal) => Promise<RereadOutcome>;
 }
 
 // 一个字段与其旁的 admin.promo_field_invalid（不合格时）；输入框以 aria-describedby 指向提示。
@@ -609,7 +667,7 @@ function BackLink() {
 }
 
 // 编辑区：标题行（admin.promo_back、已保存的内部名称与状态标签；新建尚未保存时只有 admin.promo_back）、操作栏（common.save，已结束时不显示）、
-// 结果提示、演示说明，再下为基本信息、规则、同用开关、文案、装饰与海报六个区块。lists 为规则范围用的分类与商品列表。
+// 结果提示、演示说明，再下为基本信息、规则、同用开关、文案、装饰、海报与 AI 七个区块。lists 为规则范围用的分类与商品列表。
 function EditorView({ editor, panels, lists, handlers }: { editor: Editor; panels: PanelsOpen; lists: ScopeLists; handlers: EditHandlers }) {
   const t = useCopy();
   const { promotion, form } = editor;
@@ -783,6 +841,17 @@ function EditorView({ editor, panels, lists, handlers }: { editor: Editor; panel
           onReload={handlers.onReload}
         />
       </PanelBox>
+      <PanelBox panel="ai" title="admin.ai_title" open={panels.ai} onPanel={handlers.onPanel}>
+        <AdminPromotionAi
+          form={form}
+          readOnly={ended}
+          csrfToken={editor.csrfToken}
+          onApply={handlers.onAiApply}
+          onRulesChecked={handlers.onAiRulesChecked}
+          onReread={(signal) => handlers.onAiReread(promotion?.id ?? null, signal)}
+          onLogin={handlers.onLogin}
+        />
+      </PanelBox>
     </form>
   );
 }
@@ -906,6 +975,13 @@ export function AdminPromotionEditContent() {
     onLogin: () => {
       replace(ADMIN_LOGIN_PATH);
     },
+    onAiApply: (proposal) => {
+      edit((current) => applyAiProposal(current, proposal));
+    },
+    onAiRulesChecked: (rulesInvalid) => {
+      edit((current) => checkAiRules(current, rulesInvalid));
+    },
+    onAiReread: (promotionId, signal) => rereadAiToken(promotionId, signal, setState),
   };
 
   return <AdminPromotionEditView state={state} panels={panels} handlers={handlers} lists={lists} />;

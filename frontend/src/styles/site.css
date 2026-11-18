@@ -749,6 +749,21 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-promo-poster__alt { display: grid; gap: 6px; min-width: 0; }
 .site-admin-promo-poster__alt-langs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 
+/* 后台促销活动编辑区 A12 的 AI 区（A12-editor-desktop 的 Design with AI 与 A12-states 的 AI 结果，SHOP-TASK-276）：各项上下排列（间距 10px）；描述输入框
+   最宽 640px，标签与已用字数分列两端（沿用 .site-admin-promo-edit__copy-label）；admin.ai_generate 与 admin.ai_generating 一行（间距 10px，可换行）；
+   提案框内边距 12px、各项间距 8px，每项为标签与值两列（标签列 160px，列距 12px）；三语文案各占一行（间距 4px），admin.ai_apply 靠左。
+   提案框的边框颜色、圆角与底色、标签的字重、admin.ai_review_copy 的底色与圆角、admin.ai_applied 的成功底色 site.css 写不了，记在任务记录的偏离里 */
+.site-admin-promo-ai { display: grid; gap: 10px; min-width: 0; }
+.site-admin-promo-ai__describe { max-width: 640px; }
+.site-admin-promo-ai__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.site-admin-promo-ai__actions > .acs-admin__btn, .site-admin-promo-ai__apply { justify-self: start; }
+.site-admin-promo-ai__proposal { display: grid; gap: 8px; padding: 12px; min-width: 0; }
+.site-admin-promo-ai__items { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 8px 12px; margin: 0; }
+.site-admin-promo-ai__items > dt, .site-admin-promo-ai__items > dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.site-admin-promo-ai__langs { display: grid; gap: 4px; }
+.site-admin-promo-ai__lang { display: flex; flex-wrap: wrap; gap: 6px; }
+.site-admin-promo-ai__review { margin: 0; padding: 6px 8px; }
+
 /* 后台店铺装修 A08 的页头（A08-desktop）：标题与演示说明上下排列（间距 16px）；说明内边距 10px 12px。
    说明的底色、文字颜色、字号、圆角与 ★ 图形 site.css 写不了，记在 docs/TODO.md 的偏离里 */
 .site-admin-store-design { display: grid; gap: 16px; }
@@ -1506,6 +1521,12 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-promo-poster__slots { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .site-admin-promo-poster__alt-langs { grid-template-columns: minmax(0, 1fr); gap: 8px; }
   .site-admin-promo-poster .acs-admin__btn { min-height: 44px; }
+
+  /* AI 区（手机）：描述输入框占满宽度；提案每项的标签与值上下排列（间距 2px，项间 8px）；按钮至少 44px 高、占满宽度 */
+  .site-admin-promo-ai__describe { max-width: none; }
+  .site-admin-promo-ai__items { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .site-admin-promo-ai__items > dd + dt { margin-top: 6px; }
+  .site-admin-promo-ai .acs-admin__btn { min-height: 44px; width: 100%; }
 
   /* 后台店铺装修的页头（A08-phone 与 UX A08 手机线框）：顶栏已是 admin.nav_store_design，页面里不显示标题，h1 只留给读屏；
      演示说明在内容区最上方，与之后各块间距 14px */

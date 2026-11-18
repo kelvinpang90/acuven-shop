@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { AiProposal } from "../api/adminPromotionAi";
 import type { AdminPromotion, AdminPromotionRule, PromotionProblem, PromotionRead, PromotionsRead, PromotionWrite } from "../api/adminPromotions";
 import App from "../App";
 import { AdminFrameView } from "../components/AdminFrame";
@@ -14,10 +15,12 @@ import type { RoutePath } from "../router";
 import AdminPromotionEditPage, {
   ALL_OPEN,
   AdminPromotionEditView,
+  applyAiProposal,
   changeCopy,
   changeDecoration,
   changeField,
   changeRules,
+  checkAiRules,
   collapseOnPhone,
   copyCount,
   csrfStep,
@@ -31,8 +34,10 @@ import AdminPromotionEditPage, {
   pressSave,
   reloadEditor,
   replacePoster,
+  rereadAiToken,
   rereadPosterToken,
   saveStep,
+  shownProblems,
   stashPromotionNotice,
   startSaving,
   submitPromotion,
@@ -235,6 +240,9 @@ const NO_HANDLERS: EditHandlers = {
   onPoster: () => undefined,
   onPosterReread: () => Promise.resolve("failed"),
   onLogin: () => undefined,
+  onAiApply: () => undefined,
+  onAiRulesChecked: () => undefined,
+  onAiReread: () => Promise.resolve("failed"),
 };
 
 function renderView(state: EditState, language: Language, panels: PanelsOpen = ALL_OPEN): string {
@@ -394,7 +402,7 @@ describe("AdminPromotionEditPage", () => {
   // admin.promo_back（标 aria-busy）；取到后（新建与已有活动）为标题行与基本信息、同用开关、文案三个区块（details.acs-admin__panel，summary 为区块标题）。
   // 会话返回前内容区仍为空。SHOP-TASK-271 起另有「+---- [admin.promo_rules] ----」，排在基本信息之后、同用开关之前，共四个区块；
   // SHOP-TASK-273 起另有「+---- [admin.promo_decoration] ----」，排在文案之后，共五个区块；SHOP-TASK-275 起另有「+---- [admin.promo_poster] ----」，
-  // 排在装饰之后，共六个区块。
+  // 排在装饰之后，共六个区块；SHOP-TASK-276 起另有「+---- [admin.ai_title] ----」，排在海报之后，共七个区块。
   it.each(LANGUAGES)("shows the title row and the three sections in the content area in %s", (language) => {
     const main = element(renderSignedIn(language), "main", "acs-admin__main");
     expect(main).toContain('aria-busy="true"');
@@ -403,7 +411,7 @@ describe("AdminPromotionEditPage", () => {
     for (const editor of [openEditor(null, "csrf-1"), openEditor(promotion(), "csrf-1")]) {
       const html = renderView(ready(editor), language);
       const details = tags(html, "details");
-      expect(details).toHaveLength(6);
+      expect(details).toHaveLength(7);
       for (const tag of details) {
         expect(classes(tag)).toEqual(["acs-admin__panel", "site-admin-promo-edit__panel"]);
       }
@@ -414,6 +422,7 @@ describe("AdminPromotionEditPage", () => {
         COPY["admin.promo_texts"][language],
         COPY["admin.promo_decoration"][language],
         COPY["admin.promo_poster"][language],
+        COPY["admin.ai_title"][language],
       ]);
     }
     for (const path of EDIT_PATHS) {
@@ -1011,11 +1020,12 @@ describe("AdminPromotionEditPage panels and leaving", () => {
     );
     expect(queries).toEqual([PHONE_QUERY]);
     expect(PHONE_QUERY).toBe("(max-width: 767px)");
-    // SHOP-TASK-273 起装饰区为第五个区块、SHOP-TASK-275 起海报区为第六个区块，手机上同样收起。
-    expect(panels).toEqual({ basic: true, rules: true, combine: false, texts: false, decoration: false, poster: false });
+    // SHOP-TASK-273 起装饰区为第五个区块、SHOP-TASK-275 起海报区为第六个区块、SHOP-TASK-276 起 AI 区为第七个区块，手机上同样收起。
+    expect(panels).toEqual({ basic: true, rules: true, combine: false, texts: false, decoration: false, poster: false, ai: false });
     expect(tags(renderView(ready(openEditor(null, "csrf-1")), "en", panels), "details").map((tag) => attributes(tag).has("open"))).toEqual([
       true,
       true,
+      false,
       false,
       false,
       false,
@@ -1595,5 +1605,242 @@ describe("AdminPromotionEditPage editor preview", () => {
       expect(promoTag(area), state).toBe('<div class="acs-promo" data-promo-pack="generic">');
       expect(area, state).toContain('<div class="acs-promo-garland" aria-hidden="true"></div>');
     }
+  });
+});
+
+describe("AdminPromotionEditPage AI", () => {
+  // 提案：农历新年素材包与配色、各装饰位换了变体；文案有 null。
+  const PROPOSAL: AiProposal = {
+    pack: "cny",
+    palette: "cny",
+    ambient: "fall",
+    home_poster: "centered",
+    list_strip: "ticket",
+    card_badge: "seal",
+    detail_ribbon: "panel",
+    cart_progress: "steps",
+    title_en: "Lunar Sale",
+    title_zh: "新年特卖",
+    title_ms: null,
+    subtitle_en: null,
+    subtitle_zh: "红金好礼",
+    subtitle_ms: null,
+    badge_en: "Hot",
+    badge_zh: null,
+    badge_ms: null,
+    strip_en: "Up to 20% off",
+    strip_zh: null,
+    strip_ms: null,
+  };
+  // 读回的免运费规则（门槛 RM120）。
+  const READ_RULE: AdminPromotionRule = {
+    rule_id: 41,
+    kind: "free_shipping",
+    discount_mode: null,
+    percent: null,
+    amount_sen: null,
+    buy_quantity: null,
+    get_quantity: null,
+    get_percent: null,
+    threshold_sen: 12000,
+    product_ids: [],
+    category_ids: [],
+    tiers: [],
+    products: [],
+  };
+  const LISTS: ScopeLists = { status: "ok", categories: [], products: [] };
+
+  // AI 区（div.site-admin-promo-ai）。
+  function aiArea(html: string): string {
+    return element(html, "div", "site-admin-promo-ai");
+  }
+
+  function generateButton(html: string): Map<string, string> | undefined {
+    const tag = tags(aiArea(html), "button").find((item) => attributes(item).get("name") === "ai_generate");
+    return tag === undefined ? undefined : attributes(tag);
+  }
+
+  // UX 0.20 A12 编辑区线框「+---- [admin.promo_poster] ----」…之后为「+---- [admin.ai_title] ----」「[admin.ai_describe] [<占位 admin.ai_placeholder>______]  <已用>/500」
+  // 「[admin.ai_privacy]」「( [admin.ai_generate] )」：AI 区排在海报区之后（区块标题 admin.ai_title），新建与已有活动都有；首次渲染不发请求。
+  it.each(LANGUAGES)("places the AI section after the poster section in %s", (language) => {
+    const t = (key: CopyKey) => COPY[key][language];
+    const request = vi.fn(() => Promise.reject(new Error("unexpected request")));
+    vi.stubGlobal("fetch", request);
+    for (const editor of [openEditor(null, "csrf-1"), openEditor(promotion(), "csrf-1")]) {
+      const html = renderView(ready(editor), language);
+      const at = (text: string) => html.indexOf(text);
+      expect(at('name="poster_mode"')).toBeLessThan(at(`<summary>${escapeHtml(t("admin.ai_title"))}</summary>`));
+      expect(at(`<summary>${escapeHtml(t("admin.ai_title"))}</summary>`)).toBeLessThan(at('name="ai_description"'));
+      expect(textNodes(aiArea(html))).toEqual([t("admin.ai_describe"), "0/500", t("admin.ai_privacy"), t("admin.ai_generate")]);
+      expect(input(html, "ai_description").get("placeholder")).toBe(t("admin.ai_placeholder"));
+      expect(generateButton(html)?.get("type")).toBe("button");
+      expect(generateButton(html)?.has("disabled")).toBe(false);
+    }
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  // DESIGN 1.23 第 13 条「描述不保存」与落实写法（2）「描述只在页面内存里，不进表单、不随保存提交」：表单与提交内容里没有描述，保存与新建的请求照旧只带表单的值。
+  it("keeps the description out of the form and the save", async () => {
+    const editor = changeCopy(openEditor(promotion(), "csrf-1"), "title_en", "Changed");
+    expect(Object.keys(editor.form)).not.toContain("description");
+    expect(Object.keys(promotionInput(editor.form))).not.toContain("description");
+    expect(JSON.stringify(promotionInput(editor.form))).not.toContain("ai_");
+    const { api, signal } = await submitWith(editor, { kind: "failed" });
+    expect(api.save).toHaveBeenCalledWith(7, { ...promotionInput(editor.form), version: 3 }, "csrf-1", signal);
+  });
+
+  // 落实写法（3）「点 admin.ai_apply 才把提案填回表单：装饰的 pack、palette 与六个装饰位，文案的标题、副标题、角标短语与横条文字共 12 个字段（null 填为空串）；poster_mode、
+  // 替代文字、规则、时间与开关不变；…不保存（计入未保存的修改）」与 UX 0.20 A12 说明「AI」「AI 结果只在点 [admin.ai_apply] 后填回本页的文案、装饰与配色，不保存，也不改规则、
+  // 时间与开关」：填回后表单与页面换成提案的值、算未保存的修改、基准与版本不变，之后照当前的值经普通保存提交（null 的文案提交 null）。
+  it.each(LANGUAGES)("fills the proposal into the form as unsaved changes in %s", async (language) => {
+    const base = promotion({
+      rules: [READ_RULE],
+      decoration: { ...newPromotionForm().decoration, poster_mode: "image" },
+      copy: { ...promotion().copy, title_ms: "Jualan lama", poster_alt_en: "Banner" },
+    });
+    const editor: Editor = { ...openEditor(base, "csrf-1"), notice: { kind: "done", key: "admin.promo_saved" } };
+    const applied = applyAiProposal(editor, PROPOSAL);
+    expect(applied.notice).toBeNull();
+    expect(applied.base).toBe(editor.base);
+    expect(applied.promotion).toBe(editor.promotion);
+    expect(hasUnsavedChanges(ready(applied))).toBe(true);
+    expect(applied.form.decoration).toEqual({
+      pack: "cny",
+      palette: "cny",
+      ambient: "fall",
+      home_poster: "centered",
+      list_strip: "ticket",
+      card_badge: "seal",
+      detail_ribbon: "panel",
+      cart_progress: "steps",
+      poster_mode: "image",
+    });
+    expect(applied.form.copy).toEqual({
+      ...editor.form.copy,
+      title_en: "Lunar Sale",
+      title_zh: "新年特卖",
+      title_ms: "",
+      subtitle_en: "",
+      subtitle_zh: "红金好礼",
+      subtitle_ms: "",
+      badge_en: "Hot",
+      badge_zh: "",
+      badge_ms: "",
+      strip_en: "Up to 20% off",
+      strip_zh: "",
+      strip_ms: "",
+    });
+    expect(applied.form.copy.poster_alt_en).toBe("Banner");
+    for (const field of ["name", "starts_at", "ends_at", "coupon_combinable", "points_combinable", "rules"] as const) {
+      expect(applied.form[field], field).toEqual(editor.form[field]);
+    }
+
+    const html = renderView(ready(applied), language);
+    expect(input(html, "title_en").get("value")).toBe("Lunar Sale");
+    expect(input(html, "title_ms").get("value")).toBe("");
+    expect(input(html, "subtitle_zh").get("value")).toBe("红金好礼");
+    expect(input(html, "poster_alt_en").get("value")).toBe("Banner");
+    expect(input(html, "rules.1.threshold_sen").get("value")).toBe("120.00");
+
+    const input0 = promotionInput(applied.form);
+    expect(input0.copy.title_ms).toBeNull();
+    expect(input0.rules).toEqual(promotionInput(editor.form).rules);
+    const { api, signal } = await submitWith(applied, { kind: "failed" });
+    expect(api.save).toHaveBeenCalledWith(7, { ...input0, version: 3 }, "csrf-1", signal);
+
+    // 新建尚未保存时同样只填回表单，经新建提交。
+    const draft = applyAiProposal(changeField(openEditor(null, "csrf-new"), "name", "New sale"), PROPOSAL);
+    expect(hasUnsavedChanges(ready(draft))).toBe(true);
+    const created = await submitWith(draft, { kind: "failed" });
+    expect(created.api.create).toHaveBeenCalledWith(promotionInput(draft.form), "csrf-new", created.signal);
+  });
+
+  // DESIGN 1.23 第 13 条「送出的内容只有：这段描述、活动的规则类别与参数（只作为写文案的参考，模型的回答不能改动它们）」与
+  // 落实写法（3）「有不合格时不发请求，规则区照保存时的写法在字段旁显示 admin.promo_field_invalid」（规则参数之外的不查）：点 admin.ai_generate 而规则参数不合格后，
+  // 只在规则参数旁提示（名称、范围不提示），随当前的值消失；规则参数合格或开始保存时收起。
+  it.each(LANGUAGES)("marks invalid rule parameters beside the rules after generate in %s", (language) => {
+    const renderWithLists = (editor: Editor) =>
+      renderToStaticMarkup(wrap(<AdminPromotionEditView state={ready(editor)} panels={ALL_OPEN} handlers={NO_HANDLERS} lists={LISTS} />, language, EDIT_PATH));
+    const editor = changeRules(openEditor(null, "csrf-1"), (form) => addRule(form, "item_discount"));
+    expect(renderWithLists(editor)).not.toContain(escapeHtml(COPY["admin.promo_field_invalid"][language]));
+    const checked = checkAiRules(editor, true);
+    expect(checked.aiChecked).toBe(true);
+    expect(checkAiRules(checked, true)).toBe(checked);
+    expect(shownProblems(checked).map((problem) => problem.field)).toEqual(["rules.1.percent"]);
+    const html = renderWithLists(checked);
+    expect(fieldInvalid(html, "rules.1.percent", language)).toBe(true);
+    expect(fieldInvalid(html, "name", language)).toBe(false);
+    expect(countOf(html, escapeHtml(COPY["admin.promo_field_invalid"][language]))).toBe(1);
+
+    const fixed = changeRules(checked, (form) => mapRule(form.rules, 0, (rule) => (rule.kind === "item_discount" ? { ...rule, discount: "20" } : rule)));
+    expect(renderWithLists(fixed)).not.toContain(escapeHtml(COPY["admin.promo_field_invalid"][language]));
+    expect(checkAiRules(checked, false).aiChecked).toBe(false);
+    expect(startSaving(checked).aiChecked).toBe(false);
+    // 点保存后照保存的写法全部检查。
+    expect(shownProblems(pressSave(checked, vi.fn())).map((problem) => problem.field)).toContain("name");
+  });
+
+  // UX 0.20 A12「状态与可用操作」「进行中 | 内部名称、文案、装饰、海报、AI …」「已结束 | 无（全部只读…）」与说明「AI」「进行中的活动也可用 AI 改装饰与文案；已结束的不可用」，
+  // 落实写法（5）「已结束的活动不显示生成按钮（区块只读）」：已结束时没有 admin.ai_generate 与 admin.ai_privacy、描述只读、填回不生效；草稿、未开始、进行中与 rules_locked 之后都可用。
+  it.each(LANGUAGES)("makes the AI section read-only only when ended in %s", async (language) => {
+    const t = (key: CopyKey) => COPY[key][language];
+    const ended = openEditor(promotion({ state: "ended" }), "csrf-1");
+    const endedHtml = renderView(ready(ended), language);
+    expect(generateButton(endedHtml)).toBeUndefined();
+    expect(input(endedHtml, "ai_description").has("readonly")).toBe(true);
+    expect(textNodes(aiArea(endedHtml))).toEqual([t("admin.ai_describe"), "0/500"]);
+    expect(applyAiProposal(ended, PROPOSAL)).toBe(ended);
+
+    for (const state of ["draft", "scheduled", "running"] as const) {
+      const editor = openEditor(promotion({ state }), "csrf-1");
+      const html = renderView(ready(editor), language);
+      expect(generateButton(html)?.has("disabled"), state).toBe(false);
+      expect(input(html, "ai_description").has("readonly"), state).toBe(false);
+      expect(applyAiProposal(editor, PROPOSAL).form.decoration.pack, state).toBe("cny");
+    }
+    const { record } = await submitWith(openEditor(promotion({ state: "scheduled", rules: [READ_RULE] }), "csrf-1"), {
+      kind: "invalid",
+      problems: [problem("rules_locked")],
+    });
+    const locked = editorOf(record.state);
+    expect(locked.locked).toBe(true);
+    expect(generateButton(renderView(ready(locked), language))?.has("disabled")).toBe(false);
+    const filled = applyAiProposal(locked, PROPOSAL);
+    expect(filled.form.copy.title_en).toBe("Lunar Sale");
+    expect(filled.form.rules).toBe(locked.form.rules);
+  });
+
+  // DESIGN 1.23 第 13 条「管理员在活动编辑页输入一段描述…请求 AI 给出一份装饰与文案的提案」（重取令牌后在同一编辑页再请求）与
+  // 落实写法（4）「csrf 显示 common.error_retry 并重新读取 CSRF 令牌」：已有活动同海报区以 readAdminPromotion 只换令牌；新建尚未保存时以 readAdminPromotions 只换令牌
+  // （表单不变）；401 为 login、网络中断 network、其他失败 failed，都不改编辑区；编辑区已换成别的活动时不换。
+  it("reads a new CSRF token for AI after csrf", async () => {
+    const signal = new AbortController().signal;
+    const fresh = changeCopy(openEditor(null, "csrf-1"), "title_en", "Draft title");
+    const record = recorder(ready(fresh));
+    const readList = vi.fn(() => Promise.resolve<PromotionsRead>({ kind: "ok", promotions: [], csrf_token: "csrf-2" }));
+    await expect(rereadAiToken(null, signal, record.moves.update, fakeApi({ readList }))).resolves.toBe("ok");
+    expect(readList).toHaveBeenCalledWith(signal);
+    expect(editorOf(record.state)).toEqual({ ...fresh, csrfToken: "csrf-2" });
+
+    for (const [read, outcome] of [
+      [{ kind: "none" }, "login"],
+      [{ kind: "network" }, "network"],
+      [{ kind: "failed" }, "failed"],
+    ] as const) {
+      const other = recorder(ready(fresh));
+      await expect(rereadAiToken(null, signal, other.moves.update, fakeApi({ readList: () => Promise.resolve<PromotionsRead>(read) }))).resolves.toBe(outcome);
+      expect(other.state).toEqual(ready(fresh));
+    }
+    const existing = openEditor(promotion(), "csrf-1");
+    const elsewhere = recorder(ready(existing));
+    await rereadAiToken(null, signal, elsewhere.moves.update, fakeApi({ readList }));
+    expect(elsewhere.state).toEqual(ready(existing));
+
+    const edited = changeCopy(existing, "badge_en", "Edited");
+    const saved = recorder(ready(edited));
+    const readOne = vi.fn(() => Promise.resolve<PromotionRead>({ kind: "ok", promotion: promotion({ version: 9 }), csrf_token: "csrf-3" }));
+    await expect(rereadAiToken(7, signal, saved.moves.update, fakeApi({ readOne }))).resolves.toBe("ok");
+    expect(readOne).toHaveBeenCalledWith(7, signal);
+    expect(editorOf(saved.state)).toEqual({ ...edited, csrfToken: "csrf-3" });
   });
 });
