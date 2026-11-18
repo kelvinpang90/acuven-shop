@@ -15,6 +15,10 @@ import { countdownText } from "./promoText";
 // 剩余到 0 时立即按没有活动处理（promotion 置为 null，generation 加一），再重新读取一次；读取返回的活动剩余时间不大于 0 时
 // 按没有活动处理、不再读取。等待超过 setTimeout 上限时分段等待；ends_at 为 null 时不计时。
 // 读取状态放在不依赖 React 的读取对象里（createPromotionStore），组件经 useSyncExternalStore 订阅。
+//
+// 前台预览（UX 0.20 A12「前台预览」，DESIGN 1.23 第 11 条，HANDOFF 0.98）另给两个选项：url 换读取地址（预览接口）；
+// holdAtZero 为真时剩余到 0 不去掉活动、不重新读取，倒计时停在 0；切换语言照常读取一次，这次读取失败时已有结果则保留
+// 当前的活动、状态与 generation，还没有结果则照常变为 ready、没有活动。两个选项都不传时行为同上。
 
 // setTimeout 的等待上限（毫秒）；更长的等待分段进行。
 export const MAX_TIMEOUT_MS = 2_147_483_647;
@@ -78,6 +82,10 @@ export interface PromotionStoreOptions {
   initial: PromotionResponse | null;
   // initial 所属的语言。
   language: Language;
+  // 按语言给出读取地址；不传时为 api/promotion.ts 的 promotionUrl。
+  url?: ((language: Language) => string) | undefined;
+  // 为真时剩余到 0 不去掉活动、不重新读取；已有结果时读取失败不改状态（前台预览用）。
+  holdAtZero?: boolean | undefined;
 }
 
 export interface PromotionStore {
@@ -90,7 +98,14 @@ export interface PromotionStore {
   start: (language: Language) => () => void;
 }
 
-export function createPromotionStore({ fetcher, clock, initial, language }: PromotionStoreOptions): PromotionStore {
+export function createPromotionStore({
+  fetcher,
+  clock,
+  initial,
+  language,
+  url = promotionUrl,
+  holdAtZero = false,
+}: PromotionStoreOptions): PromotionStore {
   const listeners = new Set<() => void>();
   let state = initial === null ? LOADING : settledState(initial, clock(), 0);
   // 当前结果所属的语言；null 即还没有可用的结果（尚未读取、读取被中止或活动已到期）。
@@ -124,10 +139,14 @@ export function createPromotionStore({ fetcher, clock, initial, language }: Prom
       }
       controller = null;
       loaded = target;
+      // holdAtZero：已有结果时读取失败（含结束时间已过时的 409）保留当前的活动、状态与 generation。
+      if (response === null && holdAtZero && state.status === "ready") {
+        return;
+      }
       publish(settledState(response, clock(), state.generation + 1));
       arm();
     };
-    void fetcher(promotionUrl(target), current.signal).then(finish, () => {
+    void fetcher(url(target), current.signal).then(finish, () => {
       finish(null);
     });
   };
@@ -143,9 +162,10 @@ export function createPromotionStore({ fetcher, clock, initial, language }: Prom
   };
 
   // 为正在显示的活动计时；超过 setTimeout 上限时先等上限，到点后按时钟重新计算剩余时间。
+  // holdAtZero 时不计时：到 0 不去掉活动、不重新读取，倒计时文字自己停在 0。
   function arm() {
     clearTimer();
-    if (active === null || state.promotion === null || state.deadline === null) {
+    if (holdAtZero || active === null || state.promotion === null || state.deadline === null) {
       return;
     }
     const remaining = state.deadline - clock();
@@ -196,12 +216,22 @@ interface PromotionProviderProps {
   // 测试传入替身；不传时用 api/promotion.ts 的 fetchPromotion 与 performance.now。
   fetcher?: PromotionFetcher | undefined;
   clock?: MonotonicClock | undefined;
+  // 前台预览用（只在首次渲染时取用）：按语言给出读取地址，不传时为 promotionUrl；holdAtZero 为真时到 0 不去掉活动、不重新读取。
+  url?: ((language: Language) => string) | undefined;
+  holdAtZero?: boolean | undefined;
 }
 
-export function PromotionProvider({ children, initial, fetcher, clock }: PromotionProviderProps) {
+export function PromotionProvider({ children, initial, fetcher, clock, url, holdAtZero }: PromotionProviderProps) {
   const { language } = useLanguage();
   const [store] = useState(() =>
-    createPromotionStore({ fetcher: fetcher ?? fetchPromotion, clock: clock ?? monotonicClock, initial: initial ?? null, language }),
+    createPromotionStore({
+      fetcher: fetcher ?? fetchPromotion,
+      clock: clock ?? monotonicClock,
+      initial: initial ?? null,
+      language,
+      url,
+      holdAtZero,
+    }),
   );
   const state = useSyncExternalStore(store.subscribe, store.current, store.current);
 

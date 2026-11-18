@@ -15,6 +15,7 @@ import {
   usePromotion,
   watchCountdown,
 } from "./promotion";
+import type { PromotionStoreOptions } from "./promotion";
 
 // 读取函数与本机时钟（performance.now）都以替身代替；计时用 vitest 的假计时器（连同 Date，以便改动设备时钟），
 // performance 不交给假计时器，本机经过的时间只由测试的替身时钟决定。
@@ -73,7 +74,12 @@ interface FetchCall {
 }
 
 // 读取的替身：每次读取记下地址与中止信号，由测试决定何时、以什么结果完成。本机时钟从 50 000 开始，advance 同时推进它与假计时器。
-function setup(initial: PromotionResponse | null = null, language: Language = "en") {
+// options 为前台预览的两个选项（url 与 holdAtZero），不传即两个都不传。
+function setup(
+  initial: PromotionResponse | null = null,
+  language: Language = "en",
+  options: Pick<PromotionStoreOptions, "url" | "holdAtZero"> = {},
+) {
   let now = 50_000;
   const calls: FetchCall[] = [];
   const fetcher = vi.fn(
@@ -82,7 +88,7 @@ function setup(initial: PromotionResponse | null = null, language: Language = "e
         calls.push({ url, signal, resolve, reject });
       }),
   );
-  const store = createPromotionStore({ fetcher, clock: () => now, initial, language });
+  const store = createPromotionStore({ fetcher, clock: () => now, initial, language, ...options });
   const call = (index: number): FetchCall => {
     const found = calls[index];
     if (found === undefined) {
@@ -94,7 +100,7 @@ function setup(initial: PromotionResponse | null = null, language: Language = "e
     now += ms;
     vi.advanceTimersByTime(ms);
   };
-  return { store, fetcher, call, advance };
+  return { store, fetcher, call, advance, now: () => now };
 }
 
 // 让读取替身完成后的回调跑完。
@@ -427,6 +433,134 @@ describe("initial result", () => {
       </LanguageProvider>,
     );
     expect(html).toBe("loading none");
+  });
+});
+
+describe("storefront preview options", () => {
+  const previewUrl = (language: Language) => `/api/admin/promotions/7/preview?lang=${language}`;
+
+  // DESIGN 1.23 第 11 条「预览的数据只经后台接口（凭管理员会话）取得」：传 url 时开始与切换语言都按它读取，
+  // 不读 /api/promotion。
+  it("reads through the given url on start and on a language change", async () => {
+    const { store, fetcher, call } = setup(null, "en", { url: previewUrl });
+    const stop = store.start("en");
+    expect(call(0).url).toBe("/api/admin/promotions/7/preview?lang=en");
+    call(0).resolve(response(DEEPAVALI));
+    await flush();
+    stop();
+    store.start("ms");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(call(1).url).toBe("/api/admin/promotions/7/preview?lang=ms");
+    const translated = display({ title: "Jualan Deepavali" });
+    call(1).resolve(response(translated));
+    await flush();
+    expect(store.current()).toMatchObject({ status: "ready", promotion: translated, generation: 2 });
+  });
+
+  // UX 0.20 A12「前台预览」「预览中倒计时走到 0 时停在 0，不触发重新读取，也不去掉活动内容」：holdAtZero 时到 0 与之后很久，
+  // 活动、状态与 generation 都不变，不读取、不留计时器，倒计时文字为 0。
+  it("holds the promotion at zero without rereading", async () => {
+    const { store, fetcher, call, advance, now } = setup(null, "en", { url: previewUrl, holdAtZero: true });
+    store.start("en");
+    call(0).resolve(response(DEEPAVALI));
+    await flush();
+    advance(HOUR_MS);
+    expect(store.current()).toMatchObject({ status: "ready", promotion: DEEPAVALI, generation: 1 });
+    advance(24 * HOUR_MS);
+    await flush();
+    expect(store.current()).toMatchObject({ status: "ready", promotion: DEEPAVALI, generation: 1 });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+    const deadline = store.current().deadline;
+    expect(deadline).not.toBeNull();
+    expect(countdownText("en", (deadline ?? 0) - now())).toBe(countdownText("en", 0));
+  });
+
+  // 同一句「也不去掉活动内容」与 HANDOFF 0.98（3）：到 0 之后切换语言照常按 url 读取一次；后台因结束时间已过回答 409 时保留当前的活动、
+  // 状态与 generation，不置为没有活动，也不再读取。
+  it("keeps the shown promotion when a language reread fails", async () => {
+    const { store, fetcher, call, advance } = setup(null, "en", { url: previewUrl, holdAtZero: true });
+    const stop = store.start("en");
+    call(0).resolve(response(DEEPAVALI));
+    await flush();
+    advance(HOUR_MS);
+    stop();
+    store.start("zh");
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(call(1).url).toBe("/api/admin/promotions/7/preview?lang=zh");
+    call(1).reject(new PromotionError(409));
+    await flush();
+    expect(store.current()).toMatchObject({ status: "ready", promotion: DEEPAVALI, generation: 1 });
+    advance(HOUR_MS);
+    await flush();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  // HANDOFF 0.98（3）与 UX 0.20 A12「前台预览」「预览凭管理员会话经后台接口取数」：传入 initial 时切换语言按 url 读取，
+  // 读取失败（含网络中断）保留 initial 的活动与 generation 0。
+  it.each([
+    ["409", new PromotionError(409)],
+    ["network error", new TypeError("Failed to fetch")],
+  ])("keeps an initial result when a language reread fails (%s)", async (_name, error) => {
+    const { store, call } = setup(response(DEEPAVALI), "en", { url: previewUrl, holdAtZero: true });
+    store.start("zh");
+    expect(call(0).url).toBe("/api/admin/promotions/7/preview?lang=zh");
+    call(0).reject(error);
+    await flush();
+    expect(store.current()).toMatchObject({ status: "ready", promotion: DEEPAVALI, generation: 0 });
+  });
+
+  // DESIGN 1.23 第 11 条「预览的数据只经后台接口（凭管理员会话）取得」与 HANDOFF 0.98（3）「还没有结果（仍在 loading）则照现有写法变为
+  // ready、没有活动」：后台接口第一次读取就失败时没有可显示的活动，holdAtZero 也按没有活动处理。
+  it("settles to no promotion when the first read fails", async () => {
+    const { store, call } = setup(null, "en", { url: previewUrl, holdAtZero: true });
+    store.start("en");
+    call(0).reject(new PromotionError(409));
+    await flush();
+    expect(store.current()).toMatchObject({ status: "ready", promotion: null, generation: 1 });
+  });
+
+  // DESIGN 1.23 第 11 条「预览的数据只经后台接口（凭管理员会话）取得」：预览之外两个选项都不传（或 holdAtZero 为假）时照旧读 /api/promotion，到 0 去掉活动并重新读取一次，
+  // 切换语言读取失败时按没有活动处理。
+  it("behaves as before without the options", async () => {
+    const plain = setup(null, "en", { url: undefined, holdAtZero: false });
+    plain.store.start("en");
+    expect(plain.call(0).url).toBe("/api/promotion?lang=en");
+    plain.call(0).resolve(response(DEEPAVALI));
+    await flush();
+    plain.advance(HOUR_MS);
+    expect(plain.store.current()).toMatchObject({ status: "ready", promotion: null, generation: 2 });
+    expect(plain.fetcher).toHaveBeenCalledTimes(2);
+
+    const relabelled = setup(response(DEEPAVALI));
+    relabelled.store.start("zh");
+    relabelled.call(0).reject(new PromotionError(503));
+    await flush();
+    expect(relabelled.store.current()).toMatchObject({ status: "ready", promotion: null, generation: 1 });
+  });
+
+  // UX 0.20 A12「前台预览」「倒计时按活动的结束时间显示」：PromotionProvider 收下 url 与 holdAtZero，首次渲染照 initial 显示活动与倒计时，不读取。
+  it("accepts the options on the provider", () => {
+    const fetcher = vi.fn(() => new Promise<PromotionResponse>(() => undefined));
+    function Probe() {
+      const { status, promotion } = usePromotion();
+      return `${status} ${promotion?.title ?? "none"}`;
+    }
+    const storage = { getItem: () => "en", setItem: () => undefined };
+    const html = renderToStaticMarkup(
+      <LanguageProvider storage={storage}>
+        <PromotionProvider initial={response(DEEPAVALI)} fetcher={fetcher} clock={() => 0} url={previewUrl} holdAtZero>
+          <p>
+            <Probe />
+          </p>
+          <p>
+            <PromotionCountdown />
+          </p>
+        </PromotionProvider>
+      </LanguageProvider>,
+    );
+    expect(html).toBe(`<p>ready Deepavali Sale</p><p>${countdownText("en", HOUR_MS)}</p>`);
+    expect(fetcher).not.toHaveBeenCalled();
   });
 });
 
