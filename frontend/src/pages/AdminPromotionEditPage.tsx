@@ -10,6 +10,8 @@ import { htmlLang, useCopy } from "../i18n/language";
 import { ADMIN_LOGIN_PATH, ADMIN_PROMOTION_NEW_PATH, ADMIN_PROMOTIONS_PATH, adminPromotionPath, Link, useRouter } from "../router";
 import type { RouteParams, RoutePath, RoutePattern } from "../router";
 import { startDeferred } from "./AdminOrderDetail";
+import AdminPromotionRules, { loadScopeLists, SCOPE_LOADING } from "./AdminPromotionRules";
+import type { RulesChange, ScopeLists } from "./AdminPromotionRules";
 import { PROMOTION_STATE_CLASS, PROMOTION_STATE_LABEL } from "./AdminPromotionsPage";
 import { copyLength, copyMaxLength, formFromPromotion, formProblems, isDirty, NAME_MAX_LENGTH, newPromotionForm, promotionInput } from "./promotionForm";
 import type { CopyField, PromotionForm, PromotionFormProblem } from "./promotionForm";
@@ -17,7 +19,8 @@ import type { CopyField, PromotionForm, PromotionFormProblem } from "./promotion
 // 后台促销活动编辑区 A12（docs/UX.md 0.20 A12「编辑区」「状态与可用操作」与说明的「时间」「文案」两条，视觉稿 A12-editor-desktop、A12-phone、A12-states；
 // HANDOFF 0.98 落实写法；DESIGN 1.23「节日促销活动」第 1–2、12 条）：新建 /admin/promotions/new 与编辑 /admin/promotions/:id（段值为活动的内部 ID）共用本页，
 // 用后台框架渲染，当前导航项为促销活动。本任务（SHOP-TASK-270）是编辑区的框架：读取、标题行、基本信息、同用开关、文案、操作栏的保存与结果提示、
-// 提交前的字段检查与离开确认；规则区、状态操作、装饰、编辑区预览、海报与 AI 由之后的任务接上。
+// 提交前的字段检查与离开确认；SHOP-TASK-271 在基本信息之后、同用开关与文案之前接上规则区（AdminPromotionRules.tsx，规则的修改计入未保存与提交）；
+// 状态操作、装饰、编辑区预览、海报与 AI 由之后的任务接上。
 // - 新建先以 readAdminPromotions 取 CSRF 令牌，保存为 createAdminPromotion，成功后以 replace 换到新 ID 的页面并在那里显示 admin.promo_saved（本模块里存的
 //   一次性提示）；已有活动以 readAdminPromotion 读取，保存为 saveAdminPromotion（带读取到的 version），成功后以返回的活动为新基准。段值不是不超过
 //   MAX_PROMOTION_ID 的正整数即不存在，不发请求。
@@ -305,6 +308,15 @@ export function changeCopy(editor: Editor, field: CopyField, value: string): Edi
   return { ...editor, form: { ...editor.form, copy: { ...editor.form.copy, [field]: value } }, notice: null };
 }
 
+// 规则的增删、排序与改值（落实写法（5））：进行中、已结束与 rules_locked 锁定之后（同 timesLocked）规则只读，不改；规则不变时编辑区不变。
+export function changeRules(editor: Editor, change: RulesChange): Editor {
+  if (timesLocked(editor)) {
+    return editor;
+  }
+  const rules = change(editor.form);
+  return rules === editor.form.rules ? editor : { ...editor, form: { ...editor.form, rules }, notice: null };
+}
+
 // 本页用到的请求，测试以替身代替。
 export interface PromotionApi {
   readList: typeof readAdminPromotions;
@@ -394,11 +406,11 @@ export async function submitPromotion(editor: Editor, signal: AbortSignal, moves
   }
 }
 
-// 各区块的展开状态：首次渲染（含服务端渲染）全部展开；挂载后在手机宽度上收起基本信息之外的区块（规则区由 SHOP-TASK-271 起照此保持展开）。
-export type Panel = "basic" | "combine" | "texts";
+// 各区块的展开状态：首次渲染（含服务端渲染）全部展开；挂载后在手机宽度上收起基本信息与规则区之外的区块。
+export type Panel = "basic" | "rules" | "combine" | "texts";
 export type PanelsOpen = Readonly<Record<Panel, boolean>>;
 
-export const ALL_OPEN: PanelsOpen = { basic: true, combine: true, texts: true };
+export const ALL_OPEN: PanelsOpen = { basic: true, rules: true, combine: true, texts: true };
 
 export const PHONE_QUERY = "(max-width: 767px)";
 
@@ -441,6 +453,7 @@ export function copyCount(field: CopyField, value: string): string {
 export interface EditHandlers {
   onField: <K extends EditableField>(field: K, value: PromotionForm[K]) => void;
   onCopy: (field: CopyField, value: string) => void;
+  onRules: (change: RulesChange) => void;
   onSave: () => void;
   onReload: () => void;
   onPanel: (panel: Panel, open: boolean) => void;
@@ -532,8 +545,8 @@ function BackLink() {
 }
 
 // 编辑区：标题行（admin.promo_back、已保存的内部名称与状态标签；新建尚未保存时只有 admin.promo_back）、操作栏（common.save，已结束时不显示）、
-// 结果提示、演示说明，再下为基本信息、同用开关与文案三个区块。
-function EditorView({ editor, panels, handlers }: { editor: Editor; panels: PanelsOpen; handlers: EditHandlers }) {
+// 结果提示、演示说明，再下为基本信息、规则、同用开关与文案四个区块。lists 为规则范围用的分类与商品列表。
+function EditorView({ editor, panels, lists, handlers }: { editor: Editor; panels: PanelsOpen; lists: ScopeLists; handlers: EditHandlers }) {
   const t = useCopy();
   const { promotion, form } = editor;
   const ended = isEnded(editor);
@@ -616,6 +629,9 @@ function EditorView({ editor, panels, handlers }: { editor: Editor; panels: Pane
         <span className="acs-admin__muted">{t("admin.promo_time_note")}</span>
         {showsRulesLocked(editor) && <p className="site-admin-promo-edit__state">{t("admin.promo_rules_locked")}</p>}
       </PanelBox>
+      <PanelBox panel="rules" title="admin.promo_rules" open={panels.rules} onPanel={handlers.onPanel}>
+        <AdminPromotionRules form={form} readOnly={locked} lists={lists} invalid={invalid} onRules={handlers.onRules} />
+      </PanelBox>
       <PanelBox panel="combine" title="admin.promo_combine" open={panels.combine} onPanel={handlers.onPanel}>
         <div className="site-admin-promo-edit__checks">
           {(
@@ -684,12 +700,14 @@ export interface AdminPromotionEditViewProps {
   state: EditState;
   panels: PanelsOpen;
   handlers: EditHandlers;
+  // 规则范围用的列表；没给时为读取中。
+  lists?: ScopeLists;
 }
 
 // 内容区：读取中只有 admin.promo_back（标 aria-busy）；不存在与读取失败只有 admin.promo_back 与提示；取到后为编辑区。
-export function AdminPromotionEditView({ state, panels, handlers }: AdminPromotionEditViewProps) {
+export function AdminPromotionEditView({ state, panels, handlers, lists = SCOPE_LOADING }: AdminPromotionEditViewProps) {
   if (state.status === "ready") {
-    return <EditorView editor={state.editor} panels={panels} handlers={handlers} />;
+    return <EditorView editor={state.editor} panels={panels} lists={lists} handlers={handlers} />;
   }
   return (
     <div className="site-admin-promo-edit" aria-busy={state.status === "loading"}>
@@ -720,8 +738,10 @@ export function AdminPromotionEditContent() {
   const target = useMemo(() => editTarget(pattern, segment === undefined ? {} : { id: segment }), [pattern, segment]);
   const [state, setState] = useState<EditState>(LOADING);
   const [panels, setPanels] = useState<PanelsOpen>(ALL_OPEN);
+  const [lists, setLists] = useState<ScopeLists>(SCOPE_LOADING);
   // 本页的请求（读取、保存、admin.reload 与 403 后重新取令牌）共用的中止；离开页面时中止。
   const lifetime = useRef<AbortController | null>(null);
+  const opened = state.status === "ready";
 
   useEffect(() => {
     collapseOnPhone(browserMatches(), setPanels);
@@ -736,6 +756,17 @@ export function AdminPromotionEditContent() {
     });
   }, [target, replace]);
 
+  // 编辑区打开时各读一次规则范围用的分类与商品列表（落实写法（4））；离开页面或重新读取编辑区时中止。
+  useEffect(() => {
+    if (!opened) {
+      return undefined;
+    }
+    const controller = new AbortController();
+    return startDeferred(controller, () => {
+      void loadScopeLists(controller.signal, { show: setLists, replace });
+    });
+  }, [opened, replace]);
+
   useUnsavedConfirm(hasUnsavedChanges(state));
 
   const edit = (change: (current: Editor) => Editor) => {
@@ -748,6 +779,9 @@ export function AdminPromotionEditContent() {
     },
     onCopy: (field, value) => {
       edit((current) => changeCopy(current, field, value));
+    },
+    onRules: (change) => {
+      edit((current) => changeRules(current, change));
     },
     onSave: () => {
       const controller = lifetime.current;
@@ -773,7 +807,7 @@ export function AdminPromotionEditContent() {
     },
   };
 
-  return <AdminPromotionEditView state={state} panels={panels} handlers={handlers} />;
+  return <AdminPromotionEditView state={state} panels={panels} handlers={handlers} lists={lists} />;
 }
 
 export default function AdminPromotionEditPage() {

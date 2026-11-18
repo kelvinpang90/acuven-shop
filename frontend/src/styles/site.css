@@ -672,6 +672,32 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-promo-edit__lang > legend { padding: 0 4px; }
 .site-admin-promo-edit__copy-label { display: flex; justify-content: space-between; gap: 8px; }
 
+/* 后台促销活动编辑区 A12 的规则区（A12-editor-desktop，SHOP-TASK-271）：各条规则与 admin.rule_add 上下排列（间距 14px）；每条规则内边距 14px、各项间距 10px，
+   首行为编号（24px 见方，居中）与类别名（间距 10px），(↑)(↓) 与 admin.rule_remove 靠右（间距 6px）。范围的分类勾选与已选商品可换行（行距 6px、列距 14px），
+   商品搜索框 260px；方式单选与输入框一行（间距 18px，框与单位 6px）；满额每档一行（间距 10px），admin.rule_add_tier 与 admin.rule_add 靠左；数字输入框 120px。
+   每条规则的边框颜色与圆角、编号的圆形底色与字重、类别名的字重、提示的字号 12px 与字段提示的颜色 site.css 写不了，记在任务记录的偏离里 */
+.site-admin-promo-rules { display: grid; gap: 14px; min-width: 0; }
+.site-admin-promo-rules__list { display: grid; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.site-admin-promo-rules__rule { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 14px; min-width: 0; }
+.site-admin-promo-rules__head { display: flex; align-items: center; gap: 10px; min-width: 0; overflow-wrap: anywhere; }
+.site-admin-promo-rules__number { display: grid; place-items: center; flex-shrink: 0; width: 24px; height: 24px; }
+.site-admin-promo-rules__tools { display: flex; gap: 6px; justify-content: flex-end; }
+.site-admin-promo-rules__body { grid-column: 1 / -1; display: grid; gap: 10px; min-width: 0; }
+.site-admin-promo-rules__scope-body { display: grid; gap: 10px; min-width: 0; }
+.site-admin-promo-rules__categories { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.site-admin-promo-rules__products { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; min-width: 0; }
+.site-admin-promo-rules__results, .site-admin-promo-rules__chosen { display: flex; flex-wrap: wrap; flex-basis: 100%; gap: 6px 10px; margin: 0; padding: 0; list-style: none; }
+.site-admin-promo-rules__chip { display: inline-flex; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+.site-admin-promo-rules__modes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
+.site-admin-promo-rules__mode { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.site-admin-promo-rules__unit { display: inline-flex; align-items: center; gap: 6px; }
+.site-admin-promo-rules__row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px; }
+.site-admin-promo-rules__tier-list { display: grid; gap: 10px; }
+.site-admin-promo-rules__tier { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.site-admin-promo-rules__add-tier, .site-admin-promo-rules__add { justify-self: start; }
+.site-admin-promo-rules .acs-admin__input { width: 120px; }
+.site-admin-promo-rules .site-admin-promo-rules__search { width: 260px; }
+
 /* 后台店铺装修 A08 的页头（A08-desktop）：标题与演示说明上下排列（间距 16px）；说明内边距 10px 12px。
    说明的底色、文字颜色、字号、圆角与 ★ 图形 site.css 写不了，记在 docs/TODO.md 的偏离里 */
 .site-admin-store-design { display: grid; gap: 16px; }
@@ -1392,6 +1418,19 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-promo-edit__langs { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .site-admin-promo-edit__lang { gap: 8px; }
   .site-admin-promo-edit .acs-admin__input { min-height: 44px; }
+
+  /* 规则区（A12-phone）：各条规则间距 10px，每条内边距 10px、各项间距 8px；类别名独占首行，(↑)(↓) 与 admin.rule_remove 移到每条的末尾；商品搜索框占满宽度；
+     满额每档的门槛与优惠两列并排（间距 8px），admin.rule_remove_tier 在其下靠左；按钮与选择至少 44px 高 */
+  .site-admin-promo-rules, .site-admin-promo-rules__list { gap: 10px; }
+  .site-admin-promo-rules__rule { grid-template-columns: minmax(0, 1fr); gap: 8px; padding: 10px; }
+  .site-admin-promo-rules__tools { order: 1; justify-content: flex-start; }
+  .site-admin-promo-rules__body, .site-admin-promo-rules__scope-body { gap: 8px; }
+  .site-admin-promo-rules__products { display: grid; gap: 8px; }
+  .site-admin-promo-rules .site-admin-promo-rules__search { width: 100%; }
+  .site-admin-promo-rules__tier { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .site-admin-promo-rules__tier .acs-admin__input { width: 100%; }
+  .site-admin-promo-rules__tier > .acs-admin__btn { justify-self: start; }
+  .site-admin-promo-rules .acs-admin__btn, .site-admin-promo-rules .acs-admin__select { min-height: 44px; }
 
   /* 后台店铺装修的页头（A08-phone 与 UX A08 手机线框）：顶栏已是 admin.nav_store_design，页面里不显示标题，h1 只留给读屏；
      演示说明在内容区最上方，与之后各块间距 14px */

@@ -2870,6 +2870,156 @@ export const COPY = {
     zh: "活动已开始，时间、规则与同用开关不能再改；文案与装饰仍可修改。",
     ms: "Promosi ini telah bermula, jadi masa, peraturan dan pilihan gabungannya tidak boleh diubah. Anda masih boleh menyunting teks dan hiasannya.",
   },
+  "admin.promo_rules": {
+    en: "Rules",
+    zh: "规则",
+    ms: "Peraturan",
+  },
+  "admin.rule_add": {
+    en: "Add rule",
+    zh: "添加规则",
+    ms: "Tambah peraturan",
+  },
+  "admin.rule_remove": {
+    en: "Remove",
+    zh: "移除",
+    ms: "Buang",
+  },
+  "admin.rule_move_up": {
+    en: "Move up",
+    zh: "上移",
+    ms: "Naikkan",
+  },
+  "admin.rule_move_down": {
+    en: "Move down",
+    zh: "下移",
+    ms: "Turunkan",
+  },
+  "admin.rule_item_discount": {
+    en: "Discount on items",
+    zh: "商品打折",
+    ms: "Diskaun item",
+  },
+  "admin.rule_bxgy": {
+    en: "Buy X get Y",
+    zh: "买 X 享 Y",
+    ms: "Beli X dapat Y",
+  },
+  "admin.rule_tiers": {
+    en: "Spend and save",
+    zh: "满额减或满额折",
+    ms: "Belanja dan jimat",
+  },
+  "admin.rule_free_shipping": {
+    en: "Free shipping",
+    zh: "满额免运费",
+    ms: "Penghantaran percuma",
+  },
+  "admin.rule_scope_hint": {
+    en: "Up to 200 products and 30 categories. A product can be in only one item rule.",
+    zh: "最多 200 件商品与 30 个分类；一件商品只能属于一条商品级规则。",
+    ms: "Sehingga 200 produk dan 30 kategori. Satu produk hanya boleh berada dalam satu peraturan item.",
+  },
+  "admin.rule_item_hint": {
+    en: "Percent off: 1–90%. Amount off: RM0.01 to RM500,000.00 per item (never more than the item's price).",
+    zh: "百分比 1–90%；每件直降 RM0.01 至 RM500,000.00（不超过该件单价）。",
+    ms: "Peratus diskaun: 1–90%. Jumlah diskaun: RM0.01 hingga RM500,000.00 setiap item (tidak melebihi harga item).",
+  },
+  "admin.rule_xy_hint": {
+    en: "Buy and Get: 1–10 each.",
+    zh: "买、享各 1–10 件。",
+    ms: "Beli dan Dapat: 1–10 setiap satu.",
+  },
+  "admin.rule_tiers_hint": {
+    en: "Up to 5 tiers. Each tier needs a higher spend and a bigger discount than the one before; an amount off must be less than its spend, and a percent off is 1–90%. Spend: RM0.01 to RM999,999.99.",
+    zh: "最多 5 档；每一档的门槛与优惠都须高于上一档；减金额须小于该档门槛，减百分比为 1–90%；门槛 RM0.01 至 RM999,999.99。",
+    ms: "Sehingga 5 peringkat. Setiap peringkat perlu perbelanjaan dan diskaun yang lebih tinggi daripada sebelumnya; jumlah diskaun mesti kurang daripada perbelanjaannya, dan peratus diskaun 1–90%. Perbelanjaan: RM0.01 hingga RM999,999.99.",
+  },
+  "admin.rule_scope": {
+    en: "Applies to",
+    zh: "适用范围",
+    ms: "Untuk",
+  },
+  "admin.rule_categories": {
+    en: "Categories",
+    zh: "分类",
+    ms: "Kategori",
+  },
+  "admin.rule_products": {
+    en: "Products",
+    zh: "商品",
+    ms: "Produk",
+  },
+  "admin.rule_percent": {
+    en: "Percent off",
+    zh: "按百分比",
+    ms: "Peratus diskaun",
+  },
+  "admin.rule_amount": {
+    en: "Amount off each item",
+    zh: "每件直降",
+    ms: "Jumlah diskaun setiap item",
+  },
+  "admin.rule_buy": {
+    en: "Buy",
+    zh: "买",
+    ms: "Beli",
+  },
+  "admin.rule_get": {
+    en: "Get",
+    zh: "享",
+    ms: "Dapat",
+  },
+  "admin.rule_get_percent": {
+    en: "Discount on those",
+    zh: "这几件的折扣",
+    ms: "Diskaun untuk item itu",
+  },
+  "admin.rule_get_percent_hint": {
+    en: "1–100%. 100% means free; 50% means half price. The discount goes to the lowest-priced items in this rule.",
+    zh: "1–100%。100% 即送，50% 即半价；优惠给本规则范围内价格最低的件。",
+    ms: "1–100%. 100% bermaksud percuma; 50% bermaksud separuh harga. Diskaun diberi kepada item paling murah dalam peraturan ini.",
+  },
+  "admin.rule_tier_amount": {
+    en: "Amount off",
+    zh: "减金额",
+    ms: "Jumlah diskaun",
+  },
+  "admin.rule_tier_percent": {
+    en: "Percent off",
+    zh: "减百分比",
+    ms: "Peratus diskaun",
+  },
+  "admin.rule_tier_threshold": {
+    en: "Spend at least",
+    zh: "满",
+    ms: "Belanja sekurang-kurangnya",
+  },
+  "admin.rule_tier_discount": {
+    en: "Discount",
+    zh: "优惠",
+    ms: "Diskaun",
+  },
+  "admin.rule_add_tier": {
+    en: "Add tier",
+    zh: "添加一档",
+    ms: "Tambah peringkat",
+  },
+  "admin.rule_remove_tier": {
+    en: "Remove tier",
+    zh: "移除这一档",
+    ms: "Buang peringkat",
+  },
+  "admin.rule_threshold": {
+    en: "Minimum spend",
+    zh: "门槛",
+    ms: "Perbelanjaan minimum",
+  },
+  "admin.rule_threshold_hint": {
+    en: "RM0.00 to RM999,999.99; 0 means every order ships free. Thresholds use the amount after item discounts.",
+    zh: "RM0.00 至 RM999,999.99，填 0 即全部订单免运费；门槛按商品打折后的金额判断。",
+    ms: "RM0.00 hingga RM999,999.99; 0 bermaksud semua pesanan dihantar percuma. Had dikira selepas diskaun item.",
+  },
   "admin.promo_combine": {
     en: "Combining with coupons and points",
     zh: "与优惠券、积分同用",

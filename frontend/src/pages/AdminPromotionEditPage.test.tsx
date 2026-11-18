@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { AdminPromotion, PromotionProblem, PromotionRead, PromotionsRead, PromotionWrite } from "../api/adminPromotions";
+import type { AdminPromotion, AdminPromotionRule, PromotionProblem, PromotionRead, PromotionsRead, PromotionWrite } from "../api/adminPromotions";
 import App from "../App";
 import { AdminFrameView } from "../components/AdminFrame";
 import type { FrameState } from "../components/AdminFrame";
@@ -16,6 +16,7 @@ import AdminPromotionEditPage, {
   AdminPromotionEditView,
   changeCopy,
   changeField,
+  changeRules,
   collapseOnPhone,
   copyCount,
   csrfStep,
@@ -35,6 +36,8 @@ import AdminPromotionEditPage, {
   takePromotionNotice,
 } from "./AdminPromotionEditPage";
 import type { Editor, EditHandlers, EditMoves, EditState, PanelsOpen, PromotionApi } from "./AdminPromotionEditPage";
+import { addRule, mapRule, moveRule, removeRule } from "./AdminPromotionRules";
+import type { ScopeLists } from "./AdminPromotionRules";
 import { PROMOTION_STATE_CLASS, PROMOTION_STATE_LABEL } from "./AdminPromotionsPage";
 import { formFromPromotion, newPromotionForm, promotionInput } from "./promotionForm";
 
@@ -219,6 +222,7 @@ function ready(editor: Editor): EditState {
 const NO_HANDLERS: EditHandlers = {
   onField: () => undefined,
   onCopy: () => undefined,
+  onRules: () => undefined,
   onSave: () => undefined,
   onReload: () => undefined,
   onPanel: () => undefined,
@@ -379,7 +383,7 @@ describe("AdminPromotionEditPage", () => {
   // SHOP-TASK-270 替换 SHOP-TASK-268 的「内容区只有标题」：UX 0.20 A12 编辑区「([admin.promo_back]) → 列表    <内部名称>  <状态>」与
   // 「+---- [admin.promo_basic] ----」「+---- [admin.promo_combine] ----」「+---- [admin.promo_texts] ----」：已登录而读取返回前，内容区只有
   // admin.promo_back（标 aria-busy）；取到后（新建与已有活动）为标题行与基本信息、同用开关、文案三个区块（details.acs-admin__panel，summary 为区块标题）。
-  // 会话返回前内容区仍为空。
+  // 会话返回前内容区仍为空。SHOP-TASK-271 起另有「+---- [admin.promo_rules] ----」，排在基本信息之后、同用开关之前，共四个区块。
   it.each(LANGUAGES)("shows the title row and the three sections in the content area in %s", (language) => {
     const main = element(renderSignedIn(language), "main", "acs-admin__main");
     expect(main).toContain('aria-busy="true"');
@@ -388,12 +392,13 @@ describe("AdminPromotionEditPage", () => {
     for (const editor of [openEditor(null, "csrf-1"), openEditor(promotion(), "csrf-1")]) {
       const html = renderView(ready(editor), language);
       const details = tags(html, "details");
-      expect(details).toHaveLength(3);
+      expect(details).toHaveLength(4);
       for (const tag of details) {
         expect(classes(tag)).toEqual(["acs-admin__panel", "site-admin-promo-edit__panel"]);
       }
       expect([...html.matchAll(/<summary>([^<]*)<\/summary>/g)].map((m) => unescapeHtml(m[1] ?? ""))).toEqual([
         COPY["admin.promo_basic"][language],
+        COPY["admin.promo_rules"][language],
         COPY["admin.promo_combine"][language],
         COPY["admin.promo_texts"][language],
       ]);
@@ -979,8 +984,8 @@ describe("AdminPromotionEditPage panels and leaving", () => {
     );
     expect(queries).toEqual([PHONE_QUERY]);
     expect(PHONE_QUERY).toBe("(max-width: 767px)");
-    expect(panels).toEqual({ basic: true, combine: false, texts: false });
-    expect(tags(renderView(ready(openEditor(null, "csrf-1")), "en", panels), "details").map((tag) => attributes(tag).has("open"))).toEqual([true, false, false]);
+    expect(panels).toEqual({ basic: true, rules: true, combine: false, texts: false });
+    expect(tags(renderView(ready(openEditor(null, "csrf-1")), "en", panels), "details").map((tag) => attributes(tag).has("open"))).toEqual([true, true, false, false]);
     expect(phonePanels(ALL_OPEN, false)).toBe(ALL_OPEN);
     const set = vi.fn();
     collapseOnPhone(null, set);
@@ -997,5 +1002,131 @@ describe("AdminPromotionEditPage panels and leaving", () => {
     expect(hasUnsavedChanges(ready(changed))).toBe(true);
     expect(hasUnsavedChanges(ready(changeCopy(changed, "strip_ms", "")))).toBe(false);
     expect(hasUnsavedChanges(ready(changeField(openEditor(null, "csrf-1"), "points_combinable", true)))).toBe(true);
+  });
+});
+
+describe("AdminPromotionEditPage rules", () => {
+  function readRule(kind: string, overrides: Partial<AdminPromotionRule> = {}): AdminPromotionRule {
+    return {
+      rule_id: 1,
+      kind,
+      discount_mode: null,
+      percent: null,
+      amount_sen: null,
+      buy_quantity: null,
+      get_quantity: null,
+      get_percent: null,
+      threshold_sen: null,
+      product_ids: [],
+      category_ids: [],
+      tiers: [],
+      products: [],
+      ...overrides,
+    };
+  }
+
+  // 读回的两条规则：每件直降 20%（分类 3）与免运费门槛 RM120。
+  const READ_RULES = [
+    readRule("item_discount", { rule_id: 31, discount_mode: "percent", percent: 20, category_ids: [3] }),
+    readRule("free_shipping", { rule_id: 32, threshold_sen: 12000 }),
+  ];
+  const LISTS: ScopeLists = {
+    status: "ok",
+    categories: [{ id: 3, slug: "apparel", name_en: "Apparel", name_zh: "服装", name_ms: null, is_active: true, version: 1, visible_products: 2 }],
+    products: [],
+  };
+
+  function renderWithLists(editor: Editor, language: Language): string {
+    return renderToStaticMarkup(
+      wrap(<AdminPromotionEditView state={ready(editor)} panels={ALL_OPEN} handlers={NO_HANDLERS} lists={LISTS} />, language, EDIT_PATH),
+    );
+  }
+
+  // UX 0.20 A12 编辑区线框「+---- [admin.promo_basic] ----」…「+---- [admin.promo_rules] ----」「1 [admin.rule_item_discount] …」…「+---- [admin.promo_combine] ----」：
+  // 规则区排在基本信息之后、同用开关与文案之前，按读取到的规则显示（金额为 RM 文字），分类名称按当前语言。
+  it.each(LANGUAGES)("places the rules section after the basics and before combining in %s", (language) => {
+    const html = renderWithLists(openEditor(promotion({ rules: READ_RULES }), "csrf-1"), language);
+    const at = (text: string) => html.indexOf(text);
+    const summary = (key: CopyKey) => at(`<summary>${escapeHtml(COPY[key][language])}</summary>`);
+    expect(summary("admin.promo_basic")).toBeLessThan(summary("admin.promo_rules"));
+    expect(summary("admin.promo_rules")).toBeLessThan(at('name="rules.1.percent"'));
+    expect(at('name="rules.2.threshold_sen"')).toBeLessThan(summary("admin.promo_combine"));
+    expect(summary("admin.promo_combine")).toBeLessThan(summary("admin.promo_texts"));
+    expect(input(html, "rules.1.percent").get("value")).toBe("20");
+    expect(input(html, "rules.2.threshold_sen").get("value")).toBe("120.00");
+    expect(input(html, "rules.1.category_ids").get("checked")).toBe("");
+    expect(html).toContain(escapeHtml(language === "zh" ? "服装" : "Apparel"));
+    expect(html).toContain(`aria-label="${escapeHtml(COPY["admin.rule_add"][language])}"`);
+  });
+
+  // UX 0.20 A12 说明「规则」中「(↑)(↓) 调整规则排序」与「前台预览」「离开有未保存修改的编辑区时沿用 A04、A10 的离开确认」：规则的增删、排序与改值都算未保存的
+  // 修改（换回原样即不再算），并照当前的顺序与值提交；规则不变时编辑区不变。
+  it("counts rule changes as unsaved and submits them", async () => {
+    const editor = openEditor(promotion({ rules: READ_RULES }), "csrf-1");
+    expect(hasUnsavedChanges(ready(editor))).toBe(false);
+    expect(changeRules(editor, (form) => form.rules)).toBe(editor);
+    const added = changeRules(editor, (form) => addRule(form, "buy_x_get_y"));
+    expect(added.form.rules.map((rule) => rule.kind)).toEqual(["item_discount", "free_shipping", "buy_x_get_y"]);
+    expect(hasUnsavedChanges(ready(added))).toBe(true);
+    const moved = changeRules(editor, (form) => moveRule(form.rules, 1, -1));
+    expect(hasUnsavedChanges(ready(moved))).toBe(true);
+    expect(promotionInput(moved.form).rules.map((rule) => rule.kind)).toEqual(["free_shipping", "item_discount"]);
+    expect(hasUnsavedChanges(ready(changeRules(moved, (form) => moveRule(form.rules, 1, 1))))).toBe(false);
+    expect(hasUnsavedChanges(ready(changeRules(editor, (form) => removeRule(form.rules, 0))))).toBe(true);
+    const edited = changeRules(editor, (form) => mapRule(form.rules, 1, (rule) => (rule.kind === "free_shipping" ? { ...rule, threshold: "99.50" } : rule)));
+    expect(hasUnsavedChanges(ready(edited))).toBe(true);
+    expect(promotionInput(edited.form).rules[1]?.threshold_sen).toBe(9950);
+    const { api, signal } = await submitWith(moved, { kind: "failed" });
+    expect(api.save).toHaveBeenCalledWith(7, { ...promotionInput(moved.form), version: 3 }, "csrf-1", signal);
+  });
+
+  // UX 0.20 A12 说明「提交前页面先按 DESIGN 1.23 第 1–3、12 条的取值范围逐项检查（…百分比与金额范围…范围至多 200 件商品与 30 个分类…），不合格的字段旁显示
+  // [admin.promo_field_invalid] 并不提交」：新加的每件直降未填百分比、范围为空时点保存不提交，百分比与范围旁各提示一次；填好之后提示消失、才提交。
+  it.each(LANGUAGES)("keeps invalid rules from being submitted in %s", (language) => {
+    const editor = changeRules(changeField(openEditor(null, "csrf-1"), "name", "Sale"), (form) => addRule(form, "item_discount"));
+    const submit = vi.fn();
+    const pressed = pressSave(editor, submit);
+    expect(submit).not.toHaveBeenCalled();
+    expect(pressed.saving).toBe(false);
+    const html = renderWithLists(pressed, language);
+    expect(fieldInvalid(html, "rules.1.percent", language)).toBe(true);
+    expect(input(html, "rules.1.percent").get("aria-invalid")).toBe("true");
+    expect(countOf(html, escapeHtml(COPY["admin.promo_field_invalid"][language]))).toBe(2);
+    const fixed = changeRules(pressed, (form) =>
+      mapRule(form.rules, 0, (rule) => (rule.kind === "item_discount" ? { ...rule, discount: "20", category_ids: [3] } : rule)),
+    );
+    expect(renderWithLists(fixed, language)).not.toContain(escapeHtml(COPY["admin.promo_field_invalid"][language]));
+    pressSave(fixed, submit);
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  // UX 0.20 A12「状态与可用操作」「进行中 | …（开始与结束时间、规则与同用开关只读，显示 [admin.promo_rules_locked]…）」「已结束 | 无（全部只读…）」与
+  // 「[admin.promo_rules_locked]（已开始时显示；时间、规则与同用开关只读）」：进行中、已结束与保存被答 rules_locked 之后，规则恢复为读取时的值并只读
+  // （不显示添加、排序与移除，改动不生效）；未开始时可改。
+  it.each(LANGUAGES)("makes the rules read-only when running, ended or locked in %s", async (language) => {
+    const readOnly = (html: string) => {
+      expect(html).not.toContain('name="rule_add"');
+      expect(html).not.toContain(`aria-label="${escapeHtml(COPY["admin.rule_move_up"][language])}"`);
+      expect(html).not.toContain(`>${escapeHtml(COPY["admin.rule_remove"][language])}</button>`);
+      expect(input(html, "rules.1.percent").has("readonly")).toBe(true);
+      expect(input(html, "rules.2.threshold_sen").has("readonly")).toBe(true);
+    };
+    for (const state of ["running", "ended"] as const) {
+      const editor = openEditor(promotion({ state, rules: READ_RULES }), "csrf-1");
+      expect(changeRules(editor, (form) => addRule(form, "buy_x_get_y"))).toBe(editor);
+      readOnly(renderWithLists(editor, language));
+    }
+    const scheduled = openEditor(promotion({ state: "scheduled", rules: READ_RULES }), "csrf-1");
+    const open = renderWithLists(scheduled, language);
+    expect(open).toContain('name="rule_add"');
+    expect(input(open, "rules.1.percent").has("readonly")).toBe(false);
+
+    const edited = changeRules(changeField(scheduled, "name", "Renamed"), (form) => removeRule(form.rules, 0));
+    const { record } = await submitWith(edited, { kind: "invalid", problems: [problem("rules_locked")] });
+    const locked = editorOf(record.state);
+    expect(locked.form.rules).toEqual(scheduled.base.rules);
+    expect(locked.form.name).toBe("Renamed");
+    expect(changeRules(locked, (form) => removeRule(form.rules, 0))).toBe(locked);
+    readOnly(renderWithLists(locked, language));
   });
 });
