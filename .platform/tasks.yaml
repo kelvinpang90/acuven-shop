@@ -6366,7 +6366,7 @@ tasks:
       运营者落实写法（HANDOFF 0.98）：frontend/src/api/catalog.ts 的 fetchCatalog 加可选的第三个参数 preview（frontend/src/preview.tsx 的 StorefrontPreview 或 null）：为 null 或省略时与现在完全相同（credentials 为 omit）；不为 null 时地址经 SHOP-TASK-277 的 previewCatalogUrl 改写；只有被改写的地址（商品列表与详情）用 credentials same-origin 与 cache no-store，地址没被改写的（分类与规格选项）照旧 credentials omit、不设 cache，与模块开头注释一致。useCatalog 内以 usePreview() 取得 preview 并传给 fetchCatalog，所以首页（frontend/src/pages/HomePage.tsx）与商品详情（frontend/src/pages/ProductDetailPage.tsx）不必改；直接调用 fetchCatalog 的两处——商品列表的「载入更多」（frontend/src/pages/ProductListPage.tsx）与专题页的 fetchSaleProducts（frontend/src/pages/SalePage.tsx）——改为传入 usePreview() 的结果。分类与规格选项的地址不被改写（预览接口没有它们，与活动无关），照旧取公开接口。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 11 条：预览只经后台接口取数，公开接口不加预览参数；只改取数路径，不改金额的显示，不碰个人资料。
       拆分：目录取数一层（7 个允许路径：目录模块、商品列表页与专题页各带测试），依赖 SHOP-TASK-277。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-277
     acceptance_criteria:
