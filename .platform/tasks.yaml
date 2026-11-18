@@ -6268,7 +6268,7 @@ tasks:
       运营者落实写法（HANDOFF 0.98）：新文件 frontend/src/pages/AdminPromotionPoster.tsx。（1）admin.poster_template 与 admin.poster_image 两个单选改表单装饰的 poster_mode（计入未保存与提交）。（2）上传图模式下显示桌面与手机两行：admin.poster_desktop 或 admin.poster_phone、缩略图（已保存或刚上传的海报图，没有时为占位）、上传按钮（admin.upload，文件选择只收 image/jpeg、image/png、image/webp）与该位置的规则文字 admin.poster_desktop_rules 或 admin.poster_phone_rules，两行之下为 admin.image_rules；其下为 admin.poster_alt 三语输入（表单 copy 的 poster_alt_en、poster_alt_zh、poster_alt_ms，已用字数「<已用>/150」，计入未保存与提交）。模板模式下不显示这两行与替代文字。（3）上传照 A08 标志图（frontend/src/pages/AdminStoreLogo.tsx）的写法：选好文件即上传，上传中显示 admin.image_uploading 并禁用该位置的按钮；成功即替换缩略图，不改版本、不算未保存的修改；415 显示 admin.image_type_unsupported，413 显示 admin.image_too_large；invalid（poster_invalid）在该位置下方以提示样式显示该位置的规则文字（admin.poster_desktop_rules 或 admin.poster_phone_rules，Kelvin 2026-11-15 决定，不新增文案键）；ended 与 missing 显示 admin.promo_changed 与 admin.reload；csrf 显示 common.error_retry 并重新读取 CSRF 令牌；401 回到 A01；网络中断 common.network_check，其他失败 common.error_retry。（4）新建而尚未保存（没有活动 ID）时上传按钮禁用并显示 admin.poster_save_first；已结束的活动上传按钮禁用、单选与替代文字只读。视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离，评审不以此要求修改。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 12 条与 UX 0.20 A12 的海报一条：海报图上传即替换、立即生效、不随保存提交、不改版本；格式、大小、像素与存储由服务端检查；不碰金额与个人资料。
       拆分：A12 海报区一层（9 个允许路径：海报组件与编辑页各带测试，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入），依赖 SHOP-TASK-267（海报请求）、270（编辑区）与 273（装饰区，海报区排在它之后）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-267
       - SHOP-TASK-270
