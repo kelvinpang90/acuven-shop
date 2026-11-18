@@ -15,6 +15,7 @@ import AdminPromotionEditPage, {
   ALL_OPEN,
   AdminPromotionEditView,
   changeCopy,
+  changeDecoration,
   changeField,
   changeRules,
   collapseOnPhone,
@@ -36,6 +37,7 @@ import AdminPromotionEditPage, {
   takePromotionNotice,
 } from "./AdminPromotionEditPage";
 import type { Editor, EditHandlers, EditMoves, EditState, PanelsOpen, PromotionApi } from "./AdminPromotionEditPage";
+import { PACK_LABEL, pickFestivalPalette, pickPack, pickVariant } from "./AdminPromotionDecoration";
 import { addRule, mapRule, moveRule, removeRule } from "./AdminPromotionRules";
 import type { ScopeLists } from "./AdminPromotionRules";
 import { PROMOTION_STATE_CLASS, PROMOTION_STATE_LABEL } from "./AdminPromotionsPage";
@@ -223,6 +225,7 @@ const NO_HANDLERS: EditHandlers = {
   onField: () => undefined,
   onCopy: () => undefined,
   onRules: () => undefined,
+  onDecoration: () => undefined,
   onSave: () => undefined,
   onReload: () => undefined,
   onPanel: () => undefined,
@@ -383,7 +386,8 @@ describe("AdminPromotionEditPage", () => {
   // SHOP-TASK-270 替换 SHOP-TASK-268 的「内容区只有标题」：UX 0.20 A12 编辑区「([admin.promo_back]) → 列表    <内部名称>  <状态>」与
   // 「+---- [admin.promo_basic] ----」「+---- [admin.promo_combine] ----」「+---- [admin.promo_texts] ----」：已登录而读取返回前，内容区只有
   // admin.promo_back（标 aria-busy）；取到后（新建与已有活动）为标题行与基本信息、同用开关、文案三个区块（details.acs-admin__panel，summary 为区块标题）。
-  // 会话返回前内容区仍为空。SHOP-TASK-271 起另有「+---- [admin.promo_rules] ----」，排在基本信息之后、同用开关之前，共四个区块。
+  // 会话返回前内容区仍为空。SHOP-TASK-271 起另有「+---- [admin.promo_rules] ----」，排在基本信息之后、同用开关之前，共四个区块；
+  // SHOP-TASK-273 起另有「+---- [admin.promo_decoration] ----」，排在文案之后，共五个区块。
   it.each(LANGUAGES)("shows the title row and the three sections in the content area in %s", (language) => {
     const main = element(renderSignedIn(language), "main", "acs-admin__main");
     expect(main).toContain('aria-busy="true"');
@@ -392,7 +396,7 @@ describe("AdminPromotionEditPage", () => {
     for (const editor of [openEditor(null, "csrf-1"), openEditor(promotion(), "csrf-1")]) {
       const html = renderView(ready(editor), language);
       const details = tags(html, "details");
-      expect(details).toHaveLength(4);
+      expect(details).toHaveLength(5);
       for (const tag of details) {
         expect(classes(tag)).toEqual(["acs-admin__panel", "site-admin-promo-edit__panel"]);
       }
@@ -401,6 +405,7 @@ describe("AdminPromotionEditPage", () => {
         COPY["admin.promo_rules"][language],
         COPY["admin.promo_combine"][language],
         COPY["admin.promo_texts"][language],
+        COPY["admin.promo_decoration"][language],
       ]);
     }
     for (const path of EDIT_PATHS) {
@@ -532,8 +537,15 @@ describe("AdminPromotionEditPage title row and sections", () => {
   });
 
   // UX「管理后台总体」「表格列头、状态值、按钮与区块标题同样都用 `[key]`」：编辑区除内部名称与已用字数外，每段文字都是当前语言的某条字典文案。
+  // SHOP-TASK-273 起装饰区的 admin.variant_n 与 admin.palette_of 带变量，按填入序号与素材包名称之后的文字计（UX A12 说明「装饰」）。
   it.each(LANGUAGES)("shows only dictionary text besides the name and the counts in %s", (language) => {
     const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language]));
+    for (const n of [1, 2, 3]) {
+      allowed.add(formatCopy(COPY["admin.variant_n"][language], { n }));
+    }
+    for (const label of Object.values(PACK_LABEL)) {
+      allowed.add(formatCopy(COPY["admin.palette_of"][language], { pack: COPY[label][language] }));
+    }
     for (const state of ["draft", "running", "ended"] as const) {
       for (const value of visibleTexts(renderView(ready(openEditor(promotion({ state }), "csrf-1")), language))) {
         if (value === "Lunar <b>New</b> Year" || /^\d+\/\d+$/.test(value)) {
@@ -984,8 +996,15 @@ describe("AdminPromotionEditPage panels and leaving", () => {
     );
     expect(queries).toEqual([PHONE_QUERY]);
     expect(PHONE_QUERY).toBe("(max-width: 767px)");
-    expect(panels).toEqual({ basic: true, rules: true, combine: false, texts: false });
-    expect(tags(renderView(ready(openEditor(null, "csrf-1")), "en", panels), "details").map((tag) => attributes(tag).has("open"))).toEqual([true, true, false, false]);
+    // SHOP-TASK-273 起装饰区为第五个区块，手机上同样收起。
+    expect(panels).toEqual({ basic: true, rules: true, combine: false, texts: false, decoration: false });
+    expect(tags(renderView(ready(openEditor(null, "csrf-1")), "en", panels), "details").map((tag) => attributes(tag).has("open"))).toEqual([
+      true,
+      true,
+      false,
+      false,
+      false,
+    ]);
     expect(phonePanels(ALL_OPEN, false)).toBe(ALL_OPEN);
     const set = vi.fn();
     collapseOnPhone(null, set);
@@ -1128,5 +1147,136 @@ describe("AdminPromotionEditPage rules", () => {
     expect(locked.form.name).toBe("Renamed");
     expect(changeRules(locked, (form) => removeRule(form.rules, 0))).toBe(locked);
     readOnly(renderWithLists(locked, language));
+  });
+});
+
+describe("AdminPromotionEditPage decoration", () => {
+  // 读回的装饰：农历新年素材包、开斋节配色，各装饰位都不是第一个变体。
+  const READ_DECORATION = {
+    pack: "cny",
+    palette: "raya",
+    ambient: "fall",
+    home_poster: "centered",
+    list_strip: "ticket",
+    card_badge: "seal",
+    detail_ribbon: "panel",
+    cart_progress: "steps",
+    poster_mode: "template",
+  };
+
+  // 装饰区（div.site-admin-promo-deco）里的单选与选择。
+  function decorationControls(html: string): Map<string, string>[] {
+    const area = element(html, "div", "site-admin-promo-deco");
+    return [...tags(area, "input"), ...tags(area, "select")].map(attributes);
+  }
+
+  // name 属性为 name 的 select 里选中的选项值。
+  function selected(html: string, name: string): string | undefined {
+    const start = [...html.matchAll(/<select\b[^>]*>/g)].find((m) => attributes(m[0]).get("name") === name)?.index;
+    if (start === undefined) {
+      throw new Error(`no select named ${name}`);
+    }
+    const body = html.slice(start, html.indexOf("</select>", start));
+    return tags(body, "option")
+      .map(attributes)
+      .find((attrs) => attrs.has("selected"))
+      ?.get("value");
+  }
+
+  // 页面装饰里选中的单选值。
+  function checkedAmbient(html: string): string | undefined {
+    return tags(html, "input")
+      .map(attributes)
+      .find((attrs) => attrs.get("name") === "ambient" && attrs.has("checked"))
+      ?.get("value");
+  }
+
+  // UX 0.20 A12 编辑区线框「+---- [admin.promo_texts] ----」…「[admin.copy_fallback]」之后为「+---- [admin.promo_decoration] ----」「[admin.promo_pack] <素材包> ▾」…：
+  // 装饰区排在文案之后，按读取到的素材包、配色与各装饰位显示（配色为节日配色时旁边为色块）。
+  it.each(LANGUAGES)("places the decoration section after the copy and shows the read values in %s", (language) => {
+    const html = renderView(ready(openEditor(promotion({ decoration: READ_DECORATION }), "csrf-1")), language);
+    const at = (text: string) => html.indexOf(text);
+    expect(at(escapeHtml(COPY["admin.copy_fallback"][language]))).toBeLessThan(at(`<summary>${escapeHtml(COPY["admin.promo_decoration"][language])}</summary>`));
+    expect(at(`<summary>${escapeHtml(COPY["admin.promo_decoration"][language])}</summary>`)).toBeLessThan(at('name="pack"'));
+    expect(selected(html, "pack")).toBe("cny");
+    expect(selected(html, "palette")).toBe("raya");
+    for (const slot of ["home_poster", "list_strip", "card_badge", "detail_ribbon", "cart_progress"] as const) {
+      expect(selected(html, slot), slot).toBe(READ_DECORATION[slot]);
+    }
+    expect(input(html, "ambient").get("value")).toBe("garland");
+    expect(checkedAmbient(html)).toBe("fall");
+    expect(html).toContain('data-promo-palette="raya" aria-hidden="true"');
+    expect(html).toContain(`>${escapeHtml(COPY[PACK_LABEL.cny][language])}</option>`);
+  });
+
+  // UX 0.20 A12 说明「前台预览」「离开有未保存修改的编辑区时沿用 A04、A10 的离开确认」与落实写法（4）「装饰的修改计入未保存与提交」：素材包、配色与装饰位的改动都算
+  // 未保存的修改（换回原样即不再算），并照当前的值提交；装饰不变时编辑区不变；改动收起操作栏下方的提示。
+  it("counts decoration changes as unsaved and submits them", async () => {
+    const editor = openEditor(promotion(), "csrf-1");
+    expect(changeDecoration(editor, (decoration) => decoration)).toBe(editor);
+    const packed = changeDecoration(editor, (decoration) => pickPack(decoration, "cny"));
+    expect(hasUnsavedChanges(ready(packed))).toBe(true);
+    expect(hasUnsavedChanges(ready(changeDecoration(packed, (decoration) => pickPack(decoration, "generic"))))).toBe(false);
+    expect(hasUnsavedChanges(ready(changeDecoration(editor, pickFestivalPalette)))).toBe(true);
+    const varied = changeDecoration(editor, (decoration) => pickVariant(decoration, "ambient", "none"));
+    expect(hasUnsavedChanges(ready(varied))).toBe(true);
+    expect(promotionInput(varied.form).decoration.ambient).toBe("none");
+    const noticed: Editor = { ...editor, notice: { kind: "done", key: "admin.promo_saved" } };
+    expect(changeDecoration(noticed, (decoration) => pickPack(decoration, "raya")).notice).toBeNull();
+
+    const festival = changeDecoration(packed, pickFestivalPalette);
+    const { api, signal } = await submitWith(festival, { kind: "failed" });
+    expect(api.save).toHaveBeenCalledWith(7, { ...promotionInput(festival.form), version: 3 }, "csrf-1", signal);
+    expect(promotionInput(festival.form).decoration).toEqual({ ...newPromotionForm().decoration, pack: "cny", palette: "cny" });
+    const draft = changeDecoration(changeField(openEditor(null, "csrf-new"), "name", "New sale"), (decoration) => pickPack(decoration, "merdeka"));
+    const created = await submitWith(draft, { kind: "failed" });
+    expect(created.api.create).toHaveBeenCalledWith(promotionInput(draft.form), "csrf-new", created.signal);
+    expect(promotionInput(draft.form).decoration.pack).toBe("merdeka");
+  });
+
+  // UX 0.20 A12 说明「换素材包时各装饰位改为新素材包的第一个变体」与落实写法（3）「配色为节日配色时改为新素材包的配色，为 theme 时不变」：换素材包后页面上各装饰位
+  // 都选第一项（页面装饰为 garland），节日配色跟着新素材包，沿用主题配色不变。
+  it.each(LANGUAGES)("resets the slots and follows the palette after a pack change in %s", (language) => {
+    const editor = openEditor(promotion({ decoration: READ_DECORATION }), "csrf-1");
+    const festival = changeDecoration(editor, (decoration) => pickPack(decoration, "christmas"));
+    let html = renderView(ready(festival), language);
+    expect(selected(html, "pack")).toBe("christmas");
+    expect(selected(html, "palette")).toBe("christmas");
+    for (const slot of ["home_poster", "list_strip", "card_badge", "detail_ribbon", "cart_progress"] as const) {
+      expect(selected(html, slot), slot).toBe(newPromotionForm().decoration[slot]);
+    }
+    expect(checkedAmbient(html)).toBe("garland");
+    expect(html).toContain('data-promo-palette="christmas" aria-hidden="true"');
+
+    const keep = changeDecoration(changeDecoration(editor, (decoration) => ({ ...decoration, palette: "theme" })), (decoration) => pickPack(decoration, "deepavali"));
+    expect(keep.form.decoration.palette).toBe("theme");
+    html = renderView(ready(keep), language);
+    expect(selected(html, "palette")).toBe("deepavali");
+    expect(html).not.toContain("acs-promo-swatch");
+  });
+
+  // UX 0.20 A12「状态与可用操作」「进行中 | 内部名称、文案、装饰、海报、AI …」与「已结束 | 无（全部只读，显示 [admin.promo_ended_readonly]） | 复制」：已结束时装饰区
+  // 全部禁用、改动不生效；进行中（及保存被答 rules_locked 之后）与其他状态装饰可改。
+  it.each(LANGUAGES)("makes the decoration read-only only when ended in %s", async (language) => {
+    const ended = openEditor(promotion({ state: "ended", decoration: READ_DECORATION }), "csrf-1");
+    const endedControls = decorationControls(renderView(ready(ended), language));
+    expect(endedControls).toHaveLength(13);
+    expect(endedControls.every((attrs) => attrs.has("disabled"))).toBe(true);
+    expect(changeDecoration(ended, (decoration) => pickPack(decoration, "raya"))).toBe(ended);
+
+    for (const state of ["draft", "scheduled", "running"] as const) {
+      const editor = openEditor(promotion({ state, decoration: READ_DECORATION }), "csrf-1");
+      expect(decorationControls(renderView(ready(editor), language)).some((attrs) => attrs.has("disabled")), state).toBe(false);
+      expect(changeDecoration(editor, (decoration) => pickPack(decoration, "raya")).form.decoration.pack, state).toBe("raya");
+    }
+
+    const { record } = await submitWith(openEditor(promotion({ state: "scheduled", decoration: READ_DECORATION }), "csrf-1"), {
+      kind: "invalid",
+      problems: [problem("rules_locked")],
+    });
+    const locked = editorOf(record.state);
+    expect(locked.locked).toBe(true);
+    expect(decorationControls(renderView(ready(locked), language)).some((attrs) => attrs.has("disabled"))).toBe(false);
+    expect(changeDecoration(locked, (decoration) => pickVariant(decoration, "card_badge", "tag")).form.decoration.card_badge).toBe("tag");
   });
 });

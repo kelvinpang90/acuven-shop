@@ -698,6 +698,22 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-promo-rules .acs-admin__input { width: 120px; }
 .site-admin-promo-rules .site-admin-promo-rules__search { width: 260px; }
 
+/* 后台促销活动编辑区 A12 的装饰区（A12-editor-desktop、A12-states 的 Page ornaments，SHOP-TASK-273）：各项上下排列（间距 14px）；素材包选择 320px；
+   配色的两个单选、配色下拉（260px）与色块一行（间距 18px，可换行）；页面装饰的各项上下排列（间距 6px，最宽 300px），每项为单选、96px 的缩样与文字
+   （间距 10px）；缩样高 34px、超出部分裁掉，garland 高 14px，corners 的两个图案缩为 26px、贴近顶部（--promo-corner 与 --promo-corner-top）；
+   其余五个装饰位三列（间距 14px）。缩样的边框颜色与圆角、色块外层的透明底色、装饰位标签的字重与区块标题的字号 site.css 写不了，记在任务记录的偏离里 */
+.site-admin-promo-deco { display: grid; gap: 14px; min-width: 0; }
+.site-admin-promo-deco__pack .acs-admin__select { width: 320px; max-width: 100%; }
+.site-admin-promo-deco__palette { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; min-width: 0; }
+.site-admin-promo-deco__palette-select { width: 260px; max-width: 100%; }
+.site-admin-promo-deco__choices { display: grid; gap: 6px; max-width: 300px; }
+.site-admin-promo-deco__choice { display: grid; grid-template-columns: auto 96px minmax(0, 1fr); align-items: center; gap: 10px; }
+.site-admin-promo-deco__thumb { display: block; width: 96px; height: 34px; overflow: hidden; }
+.site-admin-promo-deco__thumb > .acs-promo { height: 34px; --promo-corner: 26px; --promo-corner-top: 4px; }
+.site-admin-promo-deco__thumb .acs-promo-garland { height: 14px; }
+.site-admin-promo-deco__slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.site-admin-promo-deco__slots .acs-admin__select { width: 100%; min-width: 0; }
+
 /* 后台店铺装修 A08 的页头（A08-desktop）：标题与演示说明上下排列（间距 16px）；说明内边距 10px 12px。
    说明的底色、文字颜色、字号、圆角与 ★ 图形 site.css 写不了，记在 docs/TODO.md 的偏离里 */
 .site-admin-store-design { display: grid; gap: 16px; }
@@ -1431,6 +1447,16 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-promo-rules__tier .acs-admin__input { width: 100%; }
   .site-admin-promo-rules__tier > .acs-admin__btn { justify-self: start; }
   .site-admin-promo-rules .acs-admin__btn, .site-admin-promo-rules .acs-admin__select { min-height: 44px; }
+
+  /* 装饰区（A12-phone）：各项上下排列（间距 10px）；素材包与配色下拉占满宽度，配色的两个单选与下拉上下排列（间距 10px）；页面装饰的各项占满宽度；
+     五个装饰位单列（间距 10px）；选择与单选行至少 44px 高 */
+  .site-admin-promo-deco { gap: 10px; }
+  .site-admin-promo-deco__pack .acs-admin__select, .site-admin-promo-deco__palette-select { width: 100%; }
+  .site-admin-promo-deco__palette { display: grid; gap: 10px; }
+  .site-admin-promo-deco__palette > .site-admin-promo-edit__check { min-height: 44px; }
+  .site-admin-promo-deco__choices { max-width: none; }
+  .site-admin-promo-deco__slots { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .site-admin-promo-deco .acs-admin__select { min-height: 44px; }
 
   /* 后台店铺装修的页头（A08-phone 与 UX A08 手机线框）：顶栏已是 admin.nav_store_design，页面里不显示标题，h1 只留给读屏；
      演示说明在内容区最上方，与之后各块间距 14px */

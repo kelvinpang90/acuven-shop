@@ -1,0 +1,29 @@
+# SHOP-TASK-273 节日促销的装饰清单与 A12 的装饰区
+
+- [x] 清单（新文件 `frontend/src/promoManifest.ts`，落实写法（1））：常量 `PROMO_PACKS`（cny、raya、deepavali、christmas、merdeka、mega_sale、generic，顺序同清单）、`PROMO_KEEP_THEME`（theme）、`PROMO_SLOTS`（六个装饰位，顺序同清单）、`PROMO_VARIANTS`（ambient 为 garland、corners、fall，home_poster 为 split、centered，list_strip 为 band、ticket，card_badge 为 tag、seal，detail_ribbon 为 ribbon、panel，cart_progress 为 bar、steps；各素材包相同，所以只有一份）与 `PROMO_AMBIENT_NONE`（none，只有页面装饰有）。新文件 `frontend/src/promoManifest.test.ts` 以 Vite 的 `?raw` 读入 `docs/design/tokens/promotions.json`（照 `i18n/copy.test.ts` 的写法），逐项断言素材包 ID 与顺序、`keepThemePalette`、装饰位的顺序、每个装饰位的变体（对清单的 `slots`，也对每个素材包自己的 `variants`）与只有 ambient 有 none。
+- [x] 装饰区（新文件 `frontend/src/pages/AdminPromotionDecoration.tsx`，落实写法（2）（3））：
+  - `admin.promo_pack`：原生 `select`（`name="pack"`），七项文字为 `admin.pack_<素材包 ID>`（`PACK_LABEL`）。
+  - `admin.promo_palette`（`role="radiogroup"`，以该文字为组标签）：两个单选（`name="palette_mode"`）——`admin.palette_keep`（palette 为 theme）与第二个单选；第二个单选没有文字，以 `aria-labelledby` 指向旁边列出 7 套配色的 `select`（`name="palette"`，选项文字为 `admin.palette_of`，`{pack}` 为当前语言的素材包名称；读屏标签 `aria-label` 为 `admin.promo_palette`），即以该下拉为可见标签。palette 为 theme 时下拉禁用、显示所选素材包的那一项、不显示色块；为节日配色时下拉可选、显示所选配色，旁边为 `.acs[data-mode="light"] > .acs-promo-swatch[data-promo-palette]`（四格：promo-1、promo-2、promo-soft、surface；外层 `.acs` 是让清单配色的变量生效）。选第二个单选时下拉默认是所选素材包（`pickFestivalPalette`）。
+  - `admin.slot_ambient`（`role="radiogroup"`）：一组单选（`name="ambient"`），每项为 `label.acs-admin__choice`，内有单选、96px 的缩样与文字（`admin.variant_n`，n 为变体在清单里的序号加 1；最后一项 `admin.variant_none`）。缩样为读屏忽略的 `span.acs[data-mode="light"]`（不设 `data-shop-theme`，即默认主题），其内 `.acs-promo` 带当前素材包的 `data-promo-pack`、配色不为 theme 时带 `data-promo-palette`，按 SiteFrame 的规则画出该变体：garland 为其内的 `.acs-promo-garland`，corners 与 fall 为 `data-promo-ambient`，none 什么都不画（同样大小的空白框）。
+  - 其余五个装饰位（`admin.slot_home_poster`、`admin.slot_list_strip`、`admin.slot_card_badge`、`admin.slot_detail_ribbon`、`admin.slot_cart_progress`）：原生 `select`（`name` 为装饰位 ID），选项文字为 `admin.variant_n`。
+  - 改动都是导出的纯函数，值不变时返回原对象：`pickPack`（换素材包：六个装饰位都改为第一个变体，页面装饰为 garland；配色为节日配色时改为新素材包，为 theme 时不变；poster_mode 不变）、`pickPalette`、`pickFestivalPalette`、`pickVariant`。
+  - 读到的 ID 都经服务端按同一清单校验过，不另处理不在常量里的值；poster_mode 不在本区（SHOP-TASK-275）。
+- [x] 编辑页（`frontend/src/pages/AdminPromotionEditPage.tsx`，落实写法（4））：在文案区之后加装饰区（`details`，区块标题 `admin.promo_decoration`）；`Panel` 加 `decoration`，首次渲染展开，手机上与同用开关、文案一样收起（UX「默认展开 [admin.promo_basic] 与 [admin.promo_rules]」）。新增 `changeDecoration` 与处理函数 `onDecoration`：已结束时不改（装饰区的单选与选择都禁用），进行中、`rules_locked` 之后与其他状态可改；改动收起操作栏下方的提示。装饰的修改只改表单的 `decoration`，由 SHOP-TASK-281 的 `promotionInput` 提交、`isDirty` 比较（`promotionForm.ts` 未改）。
+- [x] 文案：`frontend/src/i18n/copy.ts` 在 `admin.copy_fallback` 之后按 `docs/UX-COPY.md` 0.22 的行序加 `admin.promo_decoration`、`admin.promo_pack`、`admin.pack_cny`、`admin.pack_raya`、`admin.pack_deepavali`、`admin.pack_christmas`、`admin.pack_merdeka`、`admin.pack_mega_sale`、`admin.pack_generic`、`admin.promo_palette`、`admin.palette_keep`、`admin.palette_of`、`admin.slot_ambient`、`admin.slot_home_poster`、`admin.slot_list_strip`、`admin.slot_card_badge`、`admin.slot_detail_ribbon`、`admin.slot_cart_progress`、`admin.variant_none`、`admin.variant_n`（共 20 个），三语逐字抄录。
+- [x] 样式：`frontend/src/styles/site.css` 加 `.site-admin-promo-deco*`。桌面：各项间距 14px；素材包选择 320px；配色的两个单选、下拉（260px）与色块一行（间距 18px，可换行）；页面装饰各项上下排列（间距 6px，最宽 300px），每项为单选、96px 缩样与文字（间距 10px）；缩样高 34px、超出裁掉，garland 高 14px，corners 以 `--promo-corner: 26px`、`--promo-corner-top: 4px` 缩小并贴近顶部；五个装饰位三列（间距 14px）。手机（767px 及以下）：间距 10px，选择占满宽度，配色两个单选与下拉上下排列，页面装饰各项占满宽度，五个装饰位单列，选择与单选行至少 44px 高。只写布局、显隐与媒体查询，没有颜色、字体、圆角属性。
+- [x] 测试（vitest 与 react-dom/server）：
+  - `frontend/src/promoManifest.test.ts`：见上。
+  - 新文件 `frontend/src/pages/AdminPromotionDecoration.test.tsx`（三种语言）：素材包、配色、页面装饰与五个装饰位的选项文字与值；配色两种模式（单选、下拉的禁用与所选项、读屏标签、色块）；页面装饰各项的缩样（默认主题浅色、素材包与配色属性、garland、corners、fall 与 none）；换素材包后各装饰位与配色的变化；配色与变体的选取；只读时全部禁用。
+  - `frontend/src/pages/AdminPromotionEditPage.test.tsx`：新增（三种语言）装饰区排在文案之后并显示读到的值；装饰的修改计入未保存并照当前的值提交（新建与保存）；换素材包后页面上各装饰位与配色的变化；已结束只读、进行中与 `rules_locked` 之后可改。现有断言因装饰区成为第五个区块而改了三处：「shows the title row and the three sections in the content area」的区块数由 4 改为 5、区块标题列表末尾加 `admin.promo_decoration`；「starts with every section open and folds all but the basics on phones」的手机收起结果加 `decoration: false`、`details` 的展开末尾加一个 `false`；「shows only dictionary text besides the name and the counts」允许的文字加上填入变量后的 `admin.variant_n`（1 至 3）与 `admin.palette_of`（七个素材包名称）。另在辅助的 `NO_HANDLERS` 加 `onDecoration`。其余现有断言未改。
+  - 每条测试的注释写明守住的 UX 0.20 A12 原句（换素材包后配色的变化另写明落实写法（3））。
+- 偏离（照任务约定，site.css 写不了的不搬，评审不以此要求修改）：
+  - 视觉稿里写不了的：缩样的边框颜色与圆角（1px `--a-line`、3px）；色块外层 `.acs` 的透明底色（这里为 `.acs` 默认的 surface 底色）；五个装饰位标签的字重 600；区块标题的字号 16px。
+  - 视觉稿 A12-editor-desktop 与 A12-phone 的页面装饰为下拉、选项文字为「Style 1 · garland」；这里照落实写法（2）为带缩略图的单选（A12-states 的 Page ornaments），其余五个装饰位的选项文字只有 `admin.variant_n`（UX-COPY 没有变体 ID 的文案）。
+  - A12-states 的缩样用 `data-shop-theme="pandan"`，corners 与 fall 是手画的几个图案；这里照落实写法不设 `data-shop-theme`（默认主题），并按 SiteFrame 的规则以 `data-promo-ambient` 画出，fall 的散落图案按清单 CSS 的 240px 平铺，在 96 × 34 的框里只露出一部分。
+  - 视觉稿每个单选项没有可见的圆点（整块可点）；这里保留原生单选，读屏与键盘可用。
+  - 落实写法「第二个单选的可见标签就是这个下拉（读屏标签为 admin.promo_palette）」：这里理解为下拉的 `aria-label` 为 `admin.promo_palette`，第二个单选以 `aria-labelledby` 指向下拉。
+  - 装饰区在已结束时禁用；读到的值不在清单里时（不应出现）原生 `select` 显示第一项，页面装饰没有选中项，不另处理。
+- 设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 12 条：装饰只影响外观、不影响金额，素材包、配色与各装饰位的 ID 从清单中选，保存时由服务端再校验；不碰个人资料。
+- 未改：`frontend/src/router.tsx` 与 `frontend/src/App.tsx`（不新增路由，不需要改）；`frontend/src/pages/promotionForm.ts`；后端、`.platform/`、CI 与部署配置；没有装依赖，没有改设计。
+- 留给之后的任务：编辑区预览（SHOP-TASK-274）、海报区与 poster_mode（SHOP-TASK-275）、AI（SHOP-TASK-276）、状态操作（SHOP-TASK-272）。未做浏览器验收。
+- 验证到什么程度：人工逐条对照 UX 0.20 A12 的装饰区线框、说明的「装饰」一条与「状态与可用操作」表、HANDOFF 0.98 落实写法、UX-COPY 0.22 的 20 条文案、`docs/design/tokens/promotions.json` 与视觉稿 A12-editor-desktop、A12-phone、A12-states；上述测试为本次新增或修改的测试代码，前端检查由 PR 的必需 CI 检查 `frontend` 执行。

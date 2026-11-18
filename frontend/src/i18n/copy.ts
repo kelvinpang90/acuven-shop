@@ -3070,6 +3070,106 @@ export const COPY = {
     zh: "发布前须填英文标题；中文或马来文留空时显示英文。",
     ms: "Tajuk Inggeris diperlukan untuk menerbitkan. Teks Cina atau Melayu yang kosong akan memaparkan versi Inggeris.",
   },
+  "admin.promo_decoration": {
+    en: "Decoration",
+    zh: "装饰",
+    ms: "Hiasan",
+  },
+  "admin.promo_pack": {
+    en: "Theme pack",
+    zh: "素材包",
+    ms: "Pek tema",
+  },
+  "admin.pack_cny": {
+    en: "Chinese New Year",
+    zh: "农历新年",
+    ms: "Tahun Baru Cina",
+  },
+  "admin.pack_raya": {
+    en: "Hari Raya",
+    zh: "开斋节",
+    ms: "Hari Raya",
+  },
+  "admin.pack_deepavali": {
+    en: "Deepavali",
+    zh: "屠妖节",
+    ms: "Deepavali",
+  },
+  "admin.pack_christmas": {
+    en: "Christmas",
+    zh: "圣诞节",
+    ms: "Krismas",
+  },
+  "admin.pack_merdeka": {
+    en: "Merdeka",
+    zh: "国庆",
+    ms: "Merdeka",
+  },
+  "admin.pack_mega_sale": {
+    en: "Mega sale (11.11, 12.12, Black Friday)",
+    zh: "电商大促（11.11、12.12、黑五）",
+    ms: "Jualan mega (11.11, 12.12, Black Friday)",
+  },
+  "admin.pack_generic": {
+    en: "General sale",
+    zh: "通用促销",
+    ms: "Jualan umum",
+  },
+  "admin.promo_palette": {
+    en: "Colours",
+    zh: "配色",
+    ms: "Warna",
+  },
+  "admin.palette_keep": {
+    en: "Keep the store theme colours",
+    zh: "保持店铺主题配色",
+    ms: "Kekalkan warna tema kedai",
+  },
+  "admin.palette_of": {
+    en: "{pack} colours",
+    zh: "{pack}配色",
+    ms: "Warna {pack}",
+  },
+  "admin.slot_ambient": {
+    en: "Page ornaments",
+    zh: "页面装饰",
+    ms: "Hiasan halaman",
+  },
+  "admin.slot_home_poster": {
+    en: "Home poster layout",
+    zh: "首页海报版式",
+    ms: "Susun atur poster utama",
+  },
+  "admin.slot_list_strip": {
+    en: "Sale banner",
+    zh: "活动横条",
+    ms: "Sepanduk jualan",
+  },
+  "admin.slot_card_badge": {
+    en: "Product badge",
+    zh: "商品角标",
+    ms: "Lencana produk",
+  },
+  "admin.slot_detail_ribbon": {
+    en: "Product page price ribbon",
+    zh: "详情页价格飘带",
+    ms: "Reben harga halaman produk",
+  },
+  "admin.slot_cart_progress": {
+    en: "Cart progress bar",
+    zh: "购物车进度条",
+    ms: "Bar kemajuan troli",
+  },
+  "admin.variant_none": {
+    en: "None",
+    zh: "无",
+    ms: "Tiada",
+  },
+  "admin.variant_n": {
+    en: "Style {n}",
+    zh: "样式 {n}",
+    ms: "Gaya {n}",
+  },
   "admin.theme": {
     en: "Theme",
     zh: "主题",
