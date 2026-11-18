@@ -8,11 +8,13 @@ import { formatSen } from "../format";
 import { COPY, LANGUAGES, translate } from "../i18n/copy";
 import type { CopyKey, CopyVars, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
+import { PreviewProvider, usePreview } from "../preview";
+import type { StorefrontPreview } from "../preview";
 import { PromotionProvider } from "../promotion";
 import { countdownText } from "../promoText";
 import { RouterProvider } from "../router";
 import type { MoreResults } from "./ProductListPage";
-import SalePage, { createSaleList, SALE_LIST_START, saleListKey, saleProductsUrl, saleRuleLines } from "./SalePage";
+import SalePage, { createSaleList, fetchSaleProducts, SALE_LIST_START, saleListKey, saleProductsUrl, saleRuleLines } from "./SalePage";
 import type { SaleListState } from "./SalePage";
 
 // 有活动的状态以 PromotionProvider 的 initial 传入（读取替身从不返回，时钟替身固定为 0）；
@@ -628,5 +630,80 @@ describe("sale list", () => {
     list.start();
     expect(list.current()).toEqual(SALE_LIST_START);
     expect(call(0).url).toBe(saleProductsUrl("zh", 1));
+  });
+});
+
+const PREVIEW: StorefrontPreview = { promotionId: 7, csrfToken: "csrf-token" };
+
+// 渲染时取出 usePreview() 的结果（服务端渲染不发请求，读取由测试以 fetch 替身发出）。
+function PreviewProbe({ onPreview }: { onPreview: (preview: StorefrontPreview | null) => void }) {
+  onPreview(usePreview());
+  return null;
+}
+
+function previewOf(inside: boolean): StorefrontPreview | null {
+  const seen: (StorefrontPreview | null)[] = [];
+  const probe = (
+    <PreviewProbe
+      onPreview={(preview) => {
+        seen.push(preview);
+      }}
+    />
+  );
+  renderToStaticMarkup(inside ? <PreviewProvider preview={PREVIEW}>{probe}</PreviewProvider> : probe);
+  expect(seen).toHaveLength(1);
+  return seen[0] ?? null;
+}
+
+function stubOk() {
+  const fetchMock = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(() => Promise.resolve(new Response(JSON.stringify(page(30, 1, [])), { status: 200 })));
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+describe("sale products in a storefront preview", () => {
+  // UX 0.20 A12「前台预览」「预览凭管理员会话经后台接口取数」：在 PreviewProvider 里，专题页商品区读目录走后台预览接口，
+  // sale=true、排序与页码原样保留，凭同源 cookie、不缓存，并带上商品区的中止信号。
+  it.each(LANGUAGES)("reads the sale products from the preview endpoint inside the preview in %s", async (language) => {
+    const fetchMock = stubOk();
+    const controller = new AbortController();
+    await expect(fetchSaleProducts(previewOf(true))(saleProductsUrl(language, 2), controller.signal)).resolves.toEqual(page(30, 1, []));
+    expect(fetchMock.mock.calls).toEqual([
+      [
+        `/api/admin/promotions/7/preview/products?lang=${language}&sort=newest&page=2&sale=true`,
+        { method: "GET", credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" }, signal: controller.signal },
+      ],
+    ]);
+  });
+
+  // UX 0.20 A12「前台预览」「预览凭管理员会话经后台接口取数」只说预览：PreviewProvider 之外商品区照旧读公开接口，地址与选项与之前逐字相同。
+  it("reads the sale products from the public endpoint outside the preview", async () => {
+    const fetchMock = stubOk();
+    const controller = new AbortController();
+    expect(previewOf(false)).toBeNull();
+    await fetchSaleProducts(previewOf(false))(saleProductsUrl("en", 1), controller.signal);
+    expect(fetchMock.mock.calls).toEqual([
+      [
+        "/api/catalog/products?lang=en&sort=newest&page=1&sale=true",
+        { method: "GET", credentials: "omit", headers: { Accept: "application/json" }, signal: controller.signal },
+      ],
+    ]);
+  });
+
+  // UX 0.20 A12「前台预览」「未开始的活动按它正在生效的样子显示」：预览只改取数路径，同样的活动与商品在 PreviewProvider 里显示得与之外逐字相同。
+  it("renders the sale page the same inside the preview", () => {
+    const outside = render({ display: sale() });
+    const inside = renderToStaticMarkup(
+      <PreviewProvider preview={PREVIEW}>
+        <LanguageProvider storage={storage("en")}>
+          <RouterProvider initialPath="/sale">
+            <PromotionProvider initial={{ promotion: sale(), server_time: SERVER_TIME }} fetcher={() => new Promise<PromotionResponse>(() => undefined)} clock={() => 0}>
+              <SalePage fetcher={() => new Promise<ProductPage>(() => undefined)} initial={LISTED} />
+            </PromotionProvider>
+          </RouterProvider>
+        </LanguageProvider>
+      </PreviewProvider>,
+    );
+    expect(inside).toBe(outside);
   });
 });

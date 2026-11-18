@@ -1,0 +1,22 @@
+# SHOP-TASK-278 前台商品目录的取数接入预览（首页、列表、详情与专题页）
+
+- [x] 目录模块（`frontend/src/api/catalog.ts`，HANDOFF 0.98 落实写法）：
+  - `fetchCatalog<T>(url, signal?, preview?)`：第三个参数为 `frontend/src/preview.tsx` 的 `StorefrontPreview` 或 `null`。为 `null` 或省略时与之前完全相同（`credentials: "omit"`，不设 `cache`）。不为 `null` 时地址经 SHOP-TASK-277 的 `previewCatalogUrl(preview.promotionId, url)` 改写；只有被改写的地址（商品列表与详情）用 `credentials: "same-origin"` 与 `cache: "no-store"`，没被改写的地址（分类与规格选项）照旧 `credentials: "omit"`、不设 `cache`，与模块开头注释一致。非 2xx 照旧抛 `CatalogError`。
+  - `useCatalog`：以 `usePreview()` 取得 preview 并传给 `fetchCatalog`；effect 的依赖为地址与 preview。首页（`HomePage.tsx`）与商品详情（`ProductDetailPage.tsx`）经它取数，未改。
+  - 模块开头注释补一行：只有前台预览中的商品列表与详情改经后台预览接口取数，公开接口不加预览参数。
+- [x] 商品列表（`frontend/src/pages/ProductListPage.tsx`）：「加载更多」的读取抽成导出的 `fetchMoreProducts(language, query, page, preview)`，页面传入 `usePreview()` 的结果；显示与现有行为不变。
+- [x] 专题页（`frontend/src/pages/SalePage.tsx`）：`fetchSaleProducts` 改为导出的 `fetchSaleProducts(preview)`，返回带上 preview 的 `SaleProductsFetcher`；`SalePage` 不传 `fetcher` 时用 `fetchSaleProducts(usePreview())`。显示与现有行为不变。
+- [x] 测试（vitest 与 react-dom/server；每条新测试的注释写明守住的 UX 0.20 A12「前台预览」原句——同一段说明里的「预览凭管理员会话经后台接口取数」或「未开始的活动按它正在生效的样子显示」，两句均逐字取自 docs/UX.md A12 前台预览线框下的说明）：
+  - `frontend/src/api/catalog.test.ts`：新增 `describe("fetchCatalog in a storefront preview")`——预览中列表（含 sale）与详情的改写地址、`same-origin`、`no-store` 与 signal；预览中分类与规格选项不改写、`omit`、不带 `cache`；preview 为 `null` 或省略时列表与详情的地址与选项逐字不变；预览的 404 照旧为 `CatalogError` 与 not_found。
+  - `frontend/src/pages/ProductListPage.test.tsx`：新增 `describe("product list load more in a storefront preview")`——以渲染时取出的 `usePreview()` 结果，在 `PreviewProvider` 里加载更多走预览地址与 `same-origin`、`no-store`，之外照旧公开地址与 `omit`；同样的数据在 `PreviewProvider` 里与之外渲染逐字相同。
+  - `frontend/src/pages/SalePage.test.tsx`：新增 `describe("sale products in a storefront preview")`——三种语言下 `PreviewProvider` 里商品区走预览地址（sale=true、排序与页码保留）与 `same-origin`、`no-store`、商品区的 signal，之外照旧公开地址与 `omit`；有活动时 `PreviewProvider` 里与之外渲染逐字相同。
+  - 其余现有断言未改。
+- 偏离：
+  - 落实写法写「改为传入 usePreview() 的结果」；为能在没有 DOM 的服务端渲染测试里验证读取，两处读取各抽成一个导出函数（`fetchMoreProducts`、`fetchSaleProducts(preview)`），页面以 `usePreview()` 的结果调用它们。
+  - `catalog.ts` 引入 `adminPromotionPreview.ts` 的 `previewCatalogUrl`，而后者引入 `catalog.ts` 的 `CatalogError`，两模块互相引用；双方只在函数体内使用对方的导出，模块求值时不取用。
+  - 没有改用 SHOP-TASK-277 的 `fetchPreviewCatalog`：落实写法要求在 `fetchCatalog` 内按地址是否被改写选择请求选项，两者的请求选项相同。
+  - 首页、商品详情与 `useCatalog` 本身没有新增页面级测试：现有测试只做服务端渲染，不运行 effect；`useCatalog` 传入的就是 `fetchCatalog` 的 preview，由目录模块的测试覆盖。
+- 设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 11 条：预览只经后台接口取数，公开接口不加预览参数；只改取数路径，不改金额的显示，不碰个人资料。本任务预览中的商品列表与详情只发往 `/api/admin/promotions/{ID}/preview/products…`，公开接口的地址与参数不变；分类与规格选项照旧取公开接口；页面的显示未改。
+- 未改：`HomePage.tsx`、`ProductDetailPage.tsx`、`preview.tsx`、`adminPromotionPreview.ts`；后端、`.platform/`、CI 与部署配置；没有装依赖，没有改设计。
+- 留给之后的任务：预览页本身（SHOP-TASK-280）。
+- 验证到什么程度：人工逐条对照 UX 0.20 A12「前台预览」、DESIGN 1.23 第 11 条、HANDOFF 0.98 落实写法与 SHOP-TASK-277 的 `previewCatalogUrl`；上述测试为本次新增的测试代码，前端检查由 PR 的必需 CI 检查 `frontend` 执行。

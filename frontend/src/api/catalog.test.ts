@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { StorefrontPreview } from "../preview";
 import {
   CatalogError,
   categoriesUrl,
@@ -205,5 +206,85 @@ describe("fetchCatalog", () => {
     const url = optionsUrl("en");
     await fetchCatalog(url, controller.signal);
     expect(fetchMock).toHaveBeenCalledWith(url, expect.objectContaining({ signal: controller.signal }));
+  });
+});
+
+describe("fetchCatalog in a storefront preview", () => {
+  const PREVIEW: StorefrontPreview = { promotionId: 7, csrfToken: "csrf-token" };
+
+  function stubOk() {
+    const fetchMock = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(() => Promise.resolve(new Response("{}", { status: 200 })));
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  function sent(fetchMock: ReturnType<typeof stubOk>, index: number): [string, RequestInit] {
+    const call = fetchMock.mock.calls[index];
+    if (call === undefined) {
+      throw new Error(`no request ${String(index)}`);
+    }
+    return call;
+  }
+
+  // UX 0.20 A12「前台预览」「预览凭管理员会话经后台接口取数」：预览中的商品列表（含 sale）与详情换成后台预览接口，
+  // 查询参数与 slug 原样保留，凭同源 cookie、不缓存地读取。
+  it("reads the product list and detail from the preview endpoints with the admin session", async () => {
+    const fetchMock = stubOk();
+    const controller = new AbortController();
+    await fetchCatalog(productsUrl("ms", { categories: ["bags"], sort: "price_asc", page: 2, sale: true }), controller.signal, PREVIEW);
+    await fetchCatalog(productDetailUrl("zh", "a b"), controller.signal, PREVIEW);
+    expect(sent(fetchMock, 0)).toEqual([
+      "/api/admin/promotions/7/preview/products?lang=ms&category=bags&sort=price_asc&page=2&sale=true",
+      { method: "GET", credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" }, signal: controller.signal },
+    ]);
+    expect(sent(fetchMock, 1)).toEqual([
+      "/api/admin/promotions/7/preview/products/a%20b?lang=zh",
+      { method: "GET", credentials: "same-origin", cache: "no-store", headers: { Accept: "application/json" }, signal: controller.signal },
+    ]);
+  });
+
+  // 同一句「预览凭管理员会话经后台接口取数」：预览接口没有分类与规格选项（与活动无关），预览中它们照旧取公开接口，
+  // 地址不改写、不带 cookie、不设 cache，与不在预览中时逐字相同。
+  it("keeps categories and filter options on the public endpoints", async () => {
+    const fetchMock = stubOk();
+    for (const url of [categoriesUrl("en"), optionsUrl("zh")]) {
+      await fetchCatalog(url, undefined, PREVIEW);
+      await fetchCatalog(url);
+    }
+    for (const [index, url] of [categoriesUrl("en"), categoriesUrl("en"), optionsUrl("zh"), optionsUrl("zh")].entries()) {
+      const [sentUrl, init] = sent(fetchMock, index);
+      expect(sentUrl).toBe(url);
+      expect(init).toEqual({ method: "GET", credentials: "omit", headers: { Accept: "application/json" }, signal: null });
+      expect("cache" in init).toBe(false);
+    }
+  });
+
+  // UX 0.20 A12「前台预览」只在预览中「凭管理员会话经后台接口取数」：preview 为 null 或省略时，列表与详情的地址与选项与之前逐字相同。
+  it("leaves every request unchanged outside a preview", async () => {
+    const fetchMock = stubOk();
+    const list = productsUrl("en", { sale: true });
+    const detail = productDetailUrl("en", "tee");
+    await fetchCatalog(list, undefined, null);
+    await fetchCatalog(list);
+    await fetchCatalog(detail, undefined, null);
+    await fetchCatalog(detail);
+    const plain = { method: "GET", credentials: "omit", headers: { Accept: "application/json" }, signal: null };
+    expect(fetchMock.mock.calls).toEqual([
+      [list, plain],
+      [list, plain],
+      [detail, plain],
+      [detail, plain],
+    ]);
+    for (const [, init] of fetchMock.mock.calls) {
+      expect("cache" in init).toBe(false);
+    }
+  });
+
+  // 同一句「预览凭管理员会话经后台接口取数」：预览接口的失败照公开接口带状态码（详情 404 为商品不存在）。
+  it("keeps the status of a failed preview request", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response("{}", { status: 404 }))));
+    const notFound = await fetchCatalog(productDetailUrl("en", "gone"), undefined, PREVIEW).catch((error: unknown) => error);
+    expect(notFound).toBeInstanceOf(CatalogError);
+    expect(failedRemote(notFound)).toEqual({ status: "not_found" });
   });
 });
