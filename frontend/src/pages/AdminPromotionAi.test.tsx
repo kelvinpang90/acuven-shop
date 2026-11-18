@@ -522,7 +522,8 @@ describe("AdminPromotionAi", () => {
   });
 
   // 落实写法（4）「invalid 时问题只有 description 的在描述旁显示 admin.promo_field_invalid，另有其他问题（规则参数，field 以 rules 开头）时在 AI 区显示 admin.promo_invalid
-  // 与 admin.promo_invalid_other，同时有 description 问题的描述旁照样显示」。
+  // 与 admin.promo_invalid_other，同时有 description 问题的描述旁照样显示」（DESIGN 1.23 第 13 条「输入一段描述（1–500 个字符，页面提示不要填写个人资料）」与
+  // 「送出的内容只有：这段描述、活动的规则类别与参数」：服务端退回的问题只会落在描述与规则参数上）。
   it.each(LANGUAGES)("marks the description or lists the other problems after invalid in %s", async (language) => {
     const t = (key: CopyKey) => COPY[key][language];
     const generating: AiState = { ...AI_IDLE, description: "Lunar", generating: true };
@@ -552,6 +553,7 @@ describe("AdminPromotionAi", () => {
     expect(render(language, await outcomeOf([]))).toContain(escapeHtml(t("common.error_retry")));
   });
 
+  // DESIGN 1.23 第 13 条「管理员在活动编辑页输入一段描述…请求 AI 给出一份装饰与文案的提案」（请求由已登录的管理员在编辑页发出）与
   // 落实写法（4）「csrf 显示 common.error_retry 并重新读取 CSRF 令牌；401 回到 A01」：403 后由编辑页重新读取令牌，之后照 A08 的 rereadNotice（取到与其他失败
   // common.error_retry、网络中断 common.network_check、401 回到 A01）；401 直接回到 A01；中止之后不再更新。
   it("reads a new CSRF token after csrf and returns to A01 after 401", async () => {
@@ -600,6 +602,7 @@ describe("AdminPromotionAi", () => {
     expect(pressGenerate({ ...AI_IDLE, description: "Lunar" }, formWith(validRules()), true)).toEqual({ kind: "ignored" });
   });
 
+  // DESIGN 1.23 第 13 条「描述是管理员自填的自由文字…描述不保存」与 UX 0.20 A12 线框「[admin.ai_describe] [<占位 admin.ai_placeholder>______]  <已用>/500」，
   // 落实写法（1）「编辑区打开时读一次 readAiStatus」与（2）「描述只在页面内存里」：首次渲染（服务端渲染不跑 effect）不发请求，与只给初始状态的区块相同。
   it("renders the container without any request", () => {
     const request = vi.fn(() => Promise.reject(new Error("unexpected request")));

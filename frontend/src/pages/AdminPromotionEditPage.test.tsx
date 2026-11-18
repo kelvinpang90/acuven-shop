@@ -1755,6 +1755,7 @@ describe("AdminPromotionEditPage AI", () => {
     expect(created.api.create).toHaveBeenCalledWith(promotionInput(draft.form), "csrf-new", created.signal);
   });
 
+  // DESIGN 1.23 第 13 条「送出的内容只有：这段描述、活动的规则类别与参数（只作为写文案的参考，模型的回答不能改动它们）」与
   // 落实写法（3）「有不合格时不发请求，规则区照保存时的写法在字段旁显示 admin.promo_field_invalid」（规则参数之外的不查）：点 admin.ai_generate 而规则参数不合格后，
   // 只在规则参数旁提示（名称、范围不提示），随当前的值消失；规则参数合格或开始保存时收起。
   it.each(LANGUAGES)("marks invalid rule parameters beside the rules after generate in %s", (language) => {
@@ -1809,6 +1810,7 @@ describe("AdminPromotionEditPage AI", () => {
     expect(filled.form.rules).toBe(locked.form.rules);
   });
 
+  // DESIGN 1.23 第 13 条「管理员在活动编辑页输入一段描述…请求 AI 给出一份装饰与文案的提案」（重取令牌后在同一编辑页再请求）与
   // 落实写法（4）「csrf 显示 common.error_retry 并重新读取 CSRF 令牌」：已有活动同海报区以 readAdminPromotion 只换令牌；新建尚未保存时以 readAdminPromotions 只换令牌
   // （表单不变）；401 为 login、网络中断 network、其他失败 failed，都不改编辑区；编辑区已换成别的活动时不换。
   it("reads a new CSRF token for AI after csrf", async () => {
