@@ -587,15 +587,16 @@ describe("AdminPromotionAi", () => {
   });
 
   // UX 0.20 A12 说明「AI」「进行中的活动也可用 AI 改装饰与文案；已结束的不可用」与落实写法（5）「已结束的活动不显示生成按钮（区块只读）」：只读时描述只读，不显示
-  // admin.ai_generate、admin.ai_not_configured 与 admin.ai_apply，点生成不响应。
+  // admin.ai_generate、admin.ai_not_configured 与 admin.ai_apply，点生成不响应；不能描述与发送，也不显示 admin.ai_privacy 与结果。
   it.each(LANGUAGES)("shows a read-only section without buttons when ended in %s", (language) => {
     const t = (key: CopyKey) => COPY[key][language];
     const html = render(language, { notConfigured: true }, true);
-    expect(textNodes(html)).toEqual([t("admin.ai_describe"), "0/500", t("admin.ai_privacy")]);
+    expect(textNodes(html)).toEqual([t("admin.ai_describe"), "0/500"]);
     expect(named(html, "input", "ai_description")?.has("readonly")).toBe(true);
     expect(tags(html, "button")).toEqual([]);
     const proposal = render(language, { result: { kind: "proposal", proposal: PROPOSAL } }, true);
     expect(named(proposal, "button", "ai_apply")).toBeUndefined();
+    expect(textNodes(proposal)).toEqual([t("admin.ai_describe"), "0/500"]);
     expect(pressGenerate({ ...AI_IDLE, description: "Lunar" }, formWith(validRules()), true)).toEqual({ kind: "ignored" });
   });
 

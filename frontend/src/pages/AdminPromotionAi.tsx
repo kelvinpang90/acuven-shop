@@ -405,6 +405,7 @@ export interface PromotionAiViewProps {
 
 // AI 区：admin.ai_describe 与单行输入框（占位 admin.ai_placeholder，标签旁为已用字数，不合格时旁边为 admin.promo_field_invalid）、admin.ai_privacy、
 // admin.ai_generate 与提交中的 admin.ai_generating、未配置时的 admin.ai_not_configured，再下为结果。描述框里按回车不提交编辑页的表单。
+// 只读（已结束）时不能描述与发送，不显示 admin.ai_privacy、按钮与结果，只留描述标签、字数与只读的输入框。
 export function PromotionAiView({ state, readOnly, onDescription, onGenerate, onApply }: PromotionAiViewProps) {
   const t = useCopy();
   const invalidId = useId();
@@ -442,7 +443,7 @@ export function PromotionAiView({ state, readOnly, onDescription, onGenerate, on
           </span>
         )}
       </div>
-      <span className="acs-admin__muted">{t("admin.ai_privacy")}</span>
+      {!readOnly && <span className="acs-admin__muted">{t("admin.ai_privacy")}</span>}
       {!readOnly && (
         <div className="site-admin-promo-ai__actions">
           <button
@@ -468,7 +469,7 @@ export function PromotionAiView({ state, readOnly, onDescription, onGenerate, on
           {t("admin.ai_not_configured")}
         </span>
       )}
-      {result !== null && <ResultView result={result} readOnly={readOnly} onApply={onApply} />}
+      {!readOnly && result !== null && <ResultView result={result} readOnly={readOnly} onApply={onApply} />}
     </div>
   );
 }

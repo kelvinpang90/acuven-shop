@@ -1780,14 +1780,14 @@ describe("AdminPromotionEditPage AI", () => {
   });
 
   // UX 0.20 A12「状态与可用操作」「进行中 | 内部名称、文案、装饰、海报、AI …」「已结束 | 无（全部只读…）」与说明「AI」「进行中的活动也可用 AI 改装饰与文案；已结束的不可用」，
-  // 落实写法（5）「已结束的活动不显示生成按钮（区块只读）」：已结束时没有 admin.ai_generate、描述只读、填回不生效；草稿、未开始、进行中与 rules_locked 之后都可用。
+  // 落实写法（5）「已结束的活动不显示生成按钮（区块只读）」：已结束时没有 admin.ai_generate 与 admin.ai_privacy、描述只读、填回不生效；草稿、未开始、进行中与 rules_locked 之后都可用。
   it.each(LANGUAGES)("makes the AI section read-only only when ended in %s", async (language) => {
     const t = (key: CopyKey) => COPY[key][language];
     const ended = openEditor(promotion({ state: "ended" }), "csrf-1");
     const endedHtml = renderView(ready(ended), language);
     expect(generateButton(endedHtml)).toBeUndefined();
     expect(input(endedHtml, "ai_description").has("readonly")).toBe(true);
-    expect(textNodes(aiArea(endedHtml))).toEqual([t("admin.ai_describe"), "0/500", t("admin.ai_privacy")]);
+    expect(textNodes(aiArea(endedHtml))).toEqual([t("admin.ai_describe"), "0/500"]);
     expect(applyAiProposal(ended, PROPOSAL)).toBe(ended);
 
     for (const state of ["draft", "scheduled", "running"] as const) {
