@@ -1,0 +1,26 @@
+# SHOP-TASK-277 前台预览的请求模块、预览上下文与共享活动读取的预览选项
+
+- [x] 请求模块（新文件 `frontend/src/api/adminPromotionPreview.ts`，落实写法（1），对照 `app/api/admin_promotion_preview.py`）。以下请求都凭同源 cookie（`credentials: "same-origin"`）、`cache: "no-store"`，Accept 为 JSON；公开接口的地址与请求不变。
+  - `previewPromotionUrl(promotionId, language)`：`/api/admin/promotions/{ID}/preview?lang=<语言>`。
+  - `readPreviewPromotion(promotionId, language, signal?)` → `PreviewPromotionRead`：`{ kind: "ok", response: PromotionResponse }`（2xx，只带 `promotion` 与 `server_time` 两个键，更深的字段照 `fetchPromotion` 不逐项校验）、`none`（401）、`missing`（404，或活动 ID 不是正整数，后者不发请求）、`unavailable`（409 且 detail 为 `promotion_preview_unavailable`）、`failed`（其他状态码、其他 detail 或读不出的 409，或 2xx 但响应体不是 JSON、不是对象、缺 `promotion` 或 `server_time` 键）、`network`（网络中断与调用方中止，含读响应体时被中止）。
+  - `fetchPreviewPromotion(url, signal?)`：符合 `promotion.tsx` 的 `PromotionFetcher`，非 2xx 抛 `PromotionError`，网络错误与中止原样抛出。供 `PromotionProvider` 的 `fetcher`，与 `url={(language) => previewPromotionUrl(id, language)}` 配合。
+  - `previewCatalogUrl(promotionId, url)`：只把 `/api/catalog/products?…`（列表）与 `/api/catalog/products/<slug>…`（详情）换成 `/api/admin/promotions/{ID}/preview/products` 加原来的其余部分（查询参数、已编码的 slug 原样保留）；分类、规格选项与其他地址（含不带 `?` 的 `/api/catalog/products`）原样返回。
+  - `fetchPreviewCatalog<T>(url, signal?)`：同 `api/catalog.ts` 的 `fetchCatalog`（非 2xx 抛 `CatalogError`），但凭同源 cookie、不缓存。
+  - `fetchPreviewQuote(promotionId, csrfToken, language, lines, signal?)`：POST `/api/admin/promotions/{ID}/preview/quote?lang=<语言>`，请求体为 `quoteRequestBody(lines)`（同 `fetchQuote`），请求头另带 `X-CSRF-Token`；返回 `CheckoutQuote`，非 2xx 抛 `QuoteError`，网络错误与中止原样抛出。
+- [x] 预览上下文（新文件 `frontend/src/preview.tsx`，落实写法（2））：`StorefrontPreview`（`promotionId`、`csrfToken`）、`PreviewProvider`（属性 `preview: StorefrontPreview` 与 `children`）与 `usePreview(): StorefrontPreview | null`；Provider 之外为 `null`。
+- [x] 共享读取（`frontend/src/promotion.tsx`，落实写法（3））：`PromotionProvider` 与 `createPromotionStore` 的选项各加两个可选项（Provider 只在首次渲染时取用，与 `fetcher`、`clock` 相同）：
+  - `url?: (language) => string`：读取地址，不传时为 `promotionUrl`。
+  - `holdAtZero?: boolean`：为真时不为活动计时（剩余到 0 不去掉活动、generation 不变、不重新读取；`PromotionCountdown` 的文字由 `countdownText` 停在 0）；切换语言照常按 `url` 读取一次，这次读取失败（含结束时间已过时的 409 与网络中断）时：已有结果（状态为 ready，含传入 `initial`）则保留当前的活动、状态与 generation；还没有结果（loading）则照现有写法变为 ready、没有活动、generation 加一。读取成功时照现有写法替换。
+  - 两个都不传时与原来完全相同。
+- [x] 测试（vitest 与 react-dom/server；每条测试的注释写明守住的 UX 0.20 A12「前台预览」或 DESIGN 1.23 第 11 条原句）：
+  - 新文件 `frontend/src/api/adminPromotionPreview.test.ts`：以 fetch 替身覆盖预览、预览商品列表、预览商品详情与预览计价四个接口的请求形状（方法、地址、credentials、cache、Accept、CSRF 请求头有无、请求体与 signal）；`readPreviewPromotion` 的每种结果（含不发请求的非法 ID、409 的三种情形、2xx 的六种不合格响应体与中止）；`fetchPreviewPromotion`、`fetchPreviewCatalog` 与 `fetchPreviewQuote` 的抛错；地址改写的列表与详情两种形状与原样返回。
+  - 新文件 `frontend/src/preview.test.tsx`：Provider 之外为 null、之内的取值、内层覆盖外层。
+  - `frontend/src/promotion.test.tsx`：新增 `describe("storefront preview options")`（url 用于开始与切换语言的读取；holdAtZero 到 0 与之后不去掉活动、不读取、没有计时器、倒计时文字为 0；到 0 后切换语言 409 时保留活动与 generation；传入 initial 时切换语言 409 与网络中断都保留；第一次读取失败仍为 ready、没有活动；不传选项时行为不变；Provider 接受两个选项）。辅助函数 `setup` 加了可选的第三个参数（两个选项）并多返回 `now`；其余现有断言未改。
+- 偏离：
+  - 另导出 `fetchPreviewCatalog`（落实写法未列）：`api/catalog.ts` 的 `fetchCatalog` 不带 cookie（`credentials: "omit"`），经它读改写后的预览商品地址会得到 401；验收要求以 fetch 替身覆盖四个接口（含商品列表与详情）的 credentials，因此在本模块给出凭同源 cookie 的读取函数，供 SHOP-TASK-278 选用。
+  - `previewCatalogUrl` 照落实写法只认「列表的 ?」与「详情的 /slug」两种形状；不带查询参数的 `/api/catalog/products`（`productsUrl` 不会产生）原样返回。
+  - holdAtZero 时读取成功但活动剩余时间不大于 0 的回答仍照现有写法按没有活动处理（后台对结束时间已过的活动回答 409，正常不会出现）。
+- 设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 11 条：预览的数据只经后台接口（凭管理员会话）取得，公开接口不加任何预览参数；只取数与计价，不下单、不碰个人资料。本任务的请求只发往 `/api/admin/promotions/{ID}/preview…`，`api/promotion.ts`、`api/catalog.ts` 与 `api/checkout.ts` 的公开请求不变；计价请求体只有每行的 sku 与件数。
+- 未改：页面、`frontend/src/api/promotion.ts`、`frontend/src/api/catalog.ts`、`frontend/src/api/checkout.ts`；后端、`.platform/`、CI 与部署配置；没有装依赖，没有改设计。
+- 留给之后的任务：页面接入（SHOP-TASK-278 至 280）。
+- 验证到什么程度：人工逐条对照 UX 0.20 A12「前台预览」、DESIGN 1.23 第 11 条、HANDOFF 0.98 落实写法与 `app/api/admin_promotion_preview.py` 的方法、路径、请求头与请求体；上述测试为本次新增或修改的测试代码，前端检查由 PR 的必需 CI 检查 `frontend` 执行。
