@@ -1,0 +1,32 @@
+# SHOP-TASK-274 后台促销活动 A12 的编辑区预览（浏览器里画出的装饰缩样）
+
+- [x] 预览（新文件 `frontend/src/pages/AdminPromotionEditorPreview.tsx`，落实写法（1）至（4））：
+  - 默认导出 `AdminPromotionEditorPreview`（`form` 为编辑页当前的表单，`poster` 为已保存的桌面海报图）：挂载后以 `readPreviewDesign` 经 `storeDesign.ts` 的 `fetchStoreDesign` 读一次店铺装修，读取中与失败时为 `DEFAULT_STORE_DESIGN`；离开时中止。深浅色初值为浅色。画面由导出的 `EditorPreviewView` 负责（不读取，测试直接给出主题与深浅色）。
+  - 依次为：`admin.preview_light` 与 `admin.preview_dark` 两个切换按钮（照 A08 的 `PreviewModes`：`aria-pressed` 标当前，当前的为 `acs-admin__btn`、另一个加 `acs-admin__btn--secondary`；A08 的组件没有导出、文件不在允许路径里，所以按同样写法另写一份，`PREVIEW_MODES` 与 `PreviewMode` 照用 A08 导出的）、预览框 `div.acs-admin__preview` 与 `admin.editor_preview_note`（`acs-admin__muted`）。
+  - 预览框内为 `.acs`（`data-shop-theme` 为店铺主题，主色为 null 时不设 `data-accent`，`data-mode` 为所选深浅色），其内为 `.acs-promo`：`data-promo-pack`；配色不为 theme 时 `data-promo-palette`；页面装饰为 corners 或 fall 时 `data-promo-ambient`，为 garland 时其内先放读屏忽略的 `div.acs-promo-garland`，为 none 时什么都不画（与 SiteFrame 的规则相同）。
+  - 其内依次为五种缩样：海报（`poster_mode` 为 template 时按 `home_poster` 画 `acs-promo-poster--split` 或 `--centered`，只有标题与副标题和图案区，没有倒计时与按钮；为 image 时为 `.acs-promo-poster-img` 里已保存的桌面海报图，没有图时为同样大小、读屏忽略的占位块）、活动横条（照 `PromoStrip`，按 `list_strip` 为 band 或 ticket，活动图案与横条文字，文字缺时用标题，不带倒计时与 `promo.view_all`）、两张示例商品卡（`span.acs-pcard`，图片位为 `PlaceholderShape`，没有商品名称；`PromoBadges` 与 `PromoPrices`）、价格飘带（照 P03 的 `PriceRibbon`，按 `detail_ribbon` 为 ribbon 或 panel，同一组示意金额与角标，不带倒计时）、购物车进度条（照 P04 的 `PromoProgress`，按 `cart_progress`：bar 为 `--progress: 60%`，steps 为 10 格点亮 6 格；其下为 `common.price_myr` 的 RM 60.00 与 RM 100.00）。
+  - 示意金额固定：原价 12000 仙、活动价 9600 仙（`common.price_myr`，经 `formatSen`），不论规则类别都照样显示；不调用计价。
+  - 角标（样式按 `card_badge`）：角标短语，与第一条商品级规则（每件直降或买 X 享 Y）的 `promoText.ts` 的 `badgeText`。规则参数由表单文字换算（`integerOf`、`rmSen`），为空或换不成整数、整仙时不显示规则角标，也不往后找；两者都没有时商品卡不放角标、飘带不放 `__meta`。
+  - 文案（`previewCopy`、`previewStripText`）：当前语言去掉首尾空白后不为空时用它，否则用英文；都为空时该行不显示（海报的标题或副标题、横条文字、角标短语）；都按纯文本显示。
+  - 任何状态都显示；切换按钮不受只读影响。
+- [x] 位置（`frontend/src/pages/AdminPromotionDecoration.tsx`，落实写法（0））：新增可选的 `preview`；传入时装饰区末尾（五个装饰位之后）为 `div.site-admin-promo-deco__preview`（`role="group"`，以小标题为组标签），其内为小标题 `strong`（`admin.editor_preview`）与预览。没传时不显示（原有测试照旧）。
+- [x] 编辑页（`frontend/src/pages/AdminPromotionEditPage.tsx`）：给装饰区传入 `AdminPromotionEditorPreview`，`form` 为当前（含未保存）的表单，`poster` 为 `editor.promotion` 的 `poster_desktop_url`（新建未保存时为 null；上传成功经 `replacePoster` 换图后随之更换），所以预览随本页的输入即时更新。
+- [x] 文案：`frontend/src/i18n/copy.ts` 在 `admin.poster_alt` 之后按 `docs/UX-COPY.md` 0.22 加 `admin.editor_preview` 与 `admin.editor_preview_note`，三语逐字抄录；`admin.preview_light`、`admin.preview_dark`、`common.price_myr` 与 `promo.*` 沿用。
+- [x] 样式：`frontend/src/styles/site.css` 加 `.site-admin-promo-deco__preview` 与 `.site-admin-promo-preview*`。桌面：小标题与切换按钮一行（按钮间距 6px），其下为预览框与说明（间距 10px）；预览框内边距 16px，缩样两列（1.4 : 1，间距 16px）——左列海报跨两行、右列横条与价格飘带，下一行左列两张商品卡（两列、间距 16px、最宽 300px）、右列进度条（内边距 14px）；海报文字区内边距 22px 24px、间距 10px，图案区最小高 170px，上传图与占位保持 3:1；corners 的图案以 `--promo-corner: 120px`、`--promo-corner-top: 60px` 缩小。手机（767px 及以下）：小标题与按钮上下排列，缩样单列（依次为海报、横条、商品卡、飘带、进度条，间距 12px，内边距 12px），商品卡占满宽度，切换按钮至少 44px 高。只写布局、显隐与媒体查询，没有颜色、字体、圆角属性。
+- [x] 测试（vitest 与 react-dom/server）：
+  - 新文件 `frontend/src/pages/AdminPromotionEditorPreview.test.tsx`（三种语言）：五种缩样的顺序与文字（纯文本、没有链接、表单控件与倒计时）；每个素材包与配色（theme 时不加 `data-promo-palette`）、页面装饰 garland、corners、fall 与 none；每个装饰位每个变体的类名与属性（进度条 60% 与 6/10 格）；两种海报模式与没有海报图时的占位；缺译回退英文、空白算空、为空不显示与横条用标题；示意金额不论规则类别都显示、卡片没有商品名称；规则角标取第一条商品级规则、参数为空或不合格时不显示；深浅色切换（`aria-pressed`、`data-mode`，容器初值浅色）；店铺装修取到时的主题与主色、读取中与读取失败时为默认主题。
+  - `frontend/src/pages/AdminPromotionDecoration.test.tsx`：新增（三种语言）预览在装饰区末尾、小标题与组标签、随传入的装饰改变、只读时照样显示且控件数不变、没传时没有小标题。
+  - `frontend/src/pages/AdminPromotionEditPage.test.tsx`：新增（三种语言）预览在五个装饰位之后、海报区之前（新建与已有活动），首次渲染不发请求；随未保存的标题、角标短语、素材包、配色、变体与规则改变；上传图模式下显示已保存的桌面图（换图后随之更换）、没有图时为占位、切回模板模式为模板海报；四种状态都显示且切换按钮可用。现有断言改了一处：「shows only dictionary text besides the name and the counts」允许的文字加上预览显示的活动文案（读到的标题与角标短语）与 `common.price_myr` 填入的四个示意金额（预览是 UX 要求显示的内容，原断言本身未改）。其余现有断言未改。
+  - 每条测试的注释写明守住的 UX 0.20 A12 原句（店铺装修一条另写明落实写法（1））。
+- 偏离（照任务约定，site.css 写不了的不搬，评审不以此要求修改）：
+  - 视觉稿里写不了的：海报标题的字号 22px、倒计时的字号；进度条区块的底色（`--surface-alt`）与圆角；预览框头尾的分隔线（1px `--a-line`）与小标题的字重（这里用 `strong`）。
+  - 视觉稿的小标题与切换按钮在预览框里的一行头部；这里小标题在装饰区（落实写法：区块内小标题由装饰区放），所以小标题与按钮在预览框之上的一行，说明在预览框之下、框外。
+  - 视觉稿 DOM 的顺序为海报、横条、飘带、商品卡、进度条，并画了倒计时、`promo.shop_now` 按钮、`promo.view_all` 链接、商品名称、第二张卡的普通价与进度条的凑单提示；这里照落实写法（2）的顺序（海报、横条、商品卡、飘带、进度条，以 grid 区域排成视觉稿的位置），不画上述各项，两张卡都显示同一组示意金额与角标。
+  - 进度条下的两个金额没有像 P04 那样读屏忽略（P04 由凑单提示说明意思，这里没有提示）。
+  - 上传图模式的海报图 `alt=""`（缩样里的示意，旁边没有对应文字需要读出）；海报图加载失败时为浏览器的破图（UX 没有写这种情况）。
+  - 店铺装修在每次挂载预览时读一次（admin.reload 重新读取编辑区时会再读）；深浅色的选择不记住，重新挂载时回到浅色。
+  - 横条文字与标题都为空时横条仍画出（只有活动图案），以便看到 `list_strip` 的样子；海报标题与副标题都为空时同样只画图案区。
+- 设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 12 条：只画外观，示意金额固定、不调用计价、不代表前台实际价格（UX 0.20 A12）；不碰个人资料。
+- 未改：`frontend/src/router.tsx` 与 `frontend/src/App.tsx`（不新增路由，不需要改）；`frontend/src/pages/AdminStoreDesignPage.tsx`、`frontend/src/components/PromoParts.tsx`、`frontend/src/promoText.ts`、`frontend/src/storeDesign.ts` 与 `frontend/src/pages/promotionForm.ts`；后端、`.platform/`、CI 与部署配置；没有装依赖，没有改设计。
+- 留给之后的任务：AI（SHOP-TASK-276，填回后在本预览里检查）、状态操作（SHOP-TASK-272）。未做浏览器验收。
+- 验证到什么程度：人工逐条对照 UX 0.20 A12 的线框「[admin.editor_preview]」一段、说明的「编辑区预览」「海报」两条、HANDOFF 0.98 落实写法、UX-COPY 0.22 的 2 条文案与视觉稿 A12-editor-desktop 的预览框；上述测试为本次新增或修改的测试代码，前端检查由 PR 的必需 CI 检查 `frontend` 执行。

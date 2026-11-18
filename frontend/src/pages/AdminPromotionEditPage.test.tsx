@@ -546,6 +546,7 @@ describe("AdminPromotionEditPage title row and sections", () => {
 
   // UX「管理后台总体」「表格列头、状态值、按钮与区块标题同样都用 `[key]`」：编辑区除内部名称与已用字数外，每段文字都是当前语言的某条字典文案。
   // SHOP-TASK-273 起装饰区的 admin.variant_n 与 admin.palette_of 带变量，按填入序号与素材包名称之后的文字计（UX A12 说明「装饰」）。
+  // SHOP-TASK-274 起装饰区末尾的编辑区预览另显示活动的文案（读到的标题与角标短语，缺译用英文）与 common.price_myr 填入的示意金额（UX A12 说明「编辑区预览」）。
   it.each(LANGUAGES)("shows only dictionary text besides the name and the counts in %s", (language) => {
     const allowed = new Set<string>(Object.values(COPY).map((entry) => entry[language]));
     for (const n of [1, 2, 3]) {
@@ -553,6 +554,12 @@ describe("AdminPromotionEditPage title row and sections", () => {
     }
     for (const label of Object.values(PACK_LABEL)) {
       allowed.add(formatCopy(COPY["admin.palette_of"][language], { pack: COPY[label][language] }));
+    }
+    for (const text of ["Lunar New Year Sale", "农历新年特卖", "Lunar deal"]) {
+      allowed.add(text);
+    }
+    for (const amount of ["120.00", "96.00", "60.00", "100.00"]) {
+      allowed.add(formatCopy(COPY["common.price_myr"][language], { amount }));
     }
     for (const state of ["draft", "running", "ended"] as const) {
       for (const value of visibleTexts(renderView(ready(openEditor(promotion({ state }), "csrf-1")), language))) {
@@ -1494,5 +1501,99 @@ describe("AdminPromotionEditPage poster", () => {
     const elsewhere = recorder(ready(editor));
     await rereadPosterToken(8, signal, elsewhere.moves.update, fakeApi({ readOne }));
     expect(elsewhere.state).toEqual(ready(editor));
+  });
+});
+
+describe("AdminPromotionEditPage editor preview", () => {
+  const DESKTOP = `/api/promotion-posters/${"d".repeat(32)}.webp`;
+
+  // 装饰区末尾的编辑区预览（div.site-admin-promo-deco__preview）。
+  function previewArea(html: string): string {
+    return element(html, "div", "site-admin-promo-deco__preview");
+  }
+
+  // 预览里 .acs-promo 的开始标签。
+  function promoTag(html: string): string {
+    return tags(previewArea(html), "div").find((tag) => attributes(tag).get("class") === "acs-promo") ?? "";
+  }
+
+  // UX 0.20 A12 线框「[admin.slot_cart_progress] <变体> ▾」「[admin.editor_preview]（编辑区预览，随本页未保存的输入即时更新）」之后为「+---- [admin.promo_poster] ----」：
+  // 预览在装饰区里、五个装饰位之后、海报区之前（新建与已有活动都有），小标题为 admin.editor_preview，其下为切换按钮、缩样与 admin.editor_preview_note；
+  // 首次渲染不发请求（店铺装修在挂载后才读，首次为默认主题）。
+  it.each(LANGUAGES)("places the editor preview at the end of the decoration section in %s", (language) => {
+    const request = vi.fn(() => Promise.reject(new Error("unexpected request")));
+    vi.stubGlobal("fetch", request);
+    for (const editor of [openEditor(null, "csrf-1"), openEditor(promotion(), "csrf-1")]) {
+      const html = renderView(ready(editor), language);
+      const at = (text: string) => html.indexOf(text);
+      expect(at('name="cart_progress"')).toBeLessThan(at('class="site-admin-promo-deco__preview"'));
+      expect(at('class="site-admin-promo-deco__preview"')).toBeLessThan(at(`<summary>${escapeHtml(COPY["admin.promo_poster"][language])}</summary>`));
+      const area = previewArea(html);
+      expect(element(html, "div", "site-admin-promo-deco")).toContain(area);
+      const texts = textNodes(area);
+      expect(texts.slice(0, 3)).toEqual([COPY["admin.editor_preview"][language], COPY["admin.preview_light"][language], COPY["admin.preview_dark"][language]]);
+      expect(texts[texts.length - 1]).toBe(COPY["admin.editor_preview_note"][language]);
+      expect(attributes(tags(area, "div").find((tag) => classes(tag).includes("site-admin-promo-preview__shop")) ?? "").get("data-shop-theme")).toBe("pandan");
+    }
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  // UX 0.20 A12 说明「编辑区预览」「按本页当前（含未保存）的文案、素材包、配色、各装饰位变体与海报模式…画出…的缩样」：改了（尚未保存的）标题、角标短语、素材包、配色、
+  // 变体与规则后，预览随之改变，读到的旧值不再显示。
+  it.each(LANGUAGES)("follows unsaved copy, decoration and rules in %s", (language) => {
+    let editor = openEditor(promotion(), "csrf-1");
+    const before = previewArea(renderView(ready(editor), language));
+    expect(before).toContain(language === "zh" ? "农历新年特卖" : "Lunar New Year Sale");
+    expect(promoTag(before)).toBe('<div class="acs-promo" data-promo-pack="generic">');
+
+    editor = changeCopy(editor, `title_${language}`, "Unsaved title");
+    editor = changeCopy(editor, "badge_en", "Hot");
+    editor = changeDecoration(editor, (decoration) => pickFestivalPalette(pickPack(decoration, "deepavali")));
+    editor = changeDecoration(editor, (decoration) => pickVariant(pickVariant(decoration, "ambient", "fall"), "cart_progress", "steps"));
+    editor = changeRules(editor, (form) => addRule(form, "item_discount"));
+    editor = changeRules(editor, (form) => mapRule(form.rules, 0, (rule) => (rule.kind === "item_discount" ? { ...rule, discount: "15" } : rule)));
+    expect(hasUnsavedChanges(ready(editor))).toBe(true);
+    const after = previewArea(renderView(ready(editor), language));
+    expect(after).toContain(">Unsaved title</span>");
+    expect(after).not.toContain("Lunar New Year Sale");
+    expect(after).toContain(">Hot</span>");
+    expect(after).toContain(`>${escapeHtml(formatCopy(COPY["promo.badge_percent"][language], { percent: 15 }))}</span>`);
+    expect(promoTag(after)).toBe('<div class="acs-promo" data-promo-pack="deepavali" data-promo-palette="deepavali" data-promo-ambient="fall">');
+    expect(after).toContain("acs-promo-progress__steps");
+  });
+
+  // UX 0.20 A12 说明「海报」「编辑区预览在上传图模式下显示已上传的图，没有图的位置显示占位」与「编辑区预览」「…与海报模式」：上传图模式下为已保存的桌面海报图（上传成功换图后
+  // 随之更换），没有桌面图时为占位块；切回（未保存的）模板模式时为模板海报。
+  it.each(LANGUAGES)("shows the saved desktop poster in image mode in %s", (language) => {
+    const image = { ...newPromotionForm().decoration, poster_mode: "image" };
+    const saved = openEditor(promotion({ decoration: image, poster_desktop_url: DESKTOP }), "csrf-1");
+    expect(tags(previewArea(renderView(ready(saved), language)), "img").map((tag) => attributes(tag).get("src"))).toEqual([DESKTOP]);
+    const replaced = replacePoster(saved, 7, "desktop", `/api/promotion-posters/${"e".repeat(32)}.webp`);
+    expect(tags(previewArea(renderView(ready(replaced), language)), "img").map((tag) => attributes(tag).get("src"))).toEqual([`/api/promotion-posters/${"e".repeat(32)}.webp`]);
+
+    for (const editor of [
+      openEditor(promotion({ decoration: image }), "csrf-1"),
+      changeDecoration(openEditor(null, "csrf-1"), (decoration) => pickPosterMode(decoration, "image")),
+    ]) {
+      const area = previewArea(renderView(ready(editor), language));
+      expect(tags(area, "img")).toEqual([]);
+      expect(area).toContain('<div class="acs-promo-poster-img site-admin-promo-preview__poster" aria-hidden="true"></div>');
+    }
+
+    const template = changeDecoration(saved, (decoration) => pickPosterMode(decoration, "template"));
+    const area = previewArea(renderView(ready(template), language));
+    expect(tags(area, "img")).toEqual([]);
+    expect(area).toContain("acs-promo-poster--split");
+  });
+
+  // UX 0.20 A12 说明「编辑区预览」「它在任何状态下都可用（已结束的只读显示）」：草稿、未开始、进行中与已结束都显示预览，已结束时装饰区禁用而切换按钮可用，缩样为已保存的样子。
+  it.each(LANGUAGES)("shows the preview in every state in %s", (language) => {
+    for (const state of ["draft", "scheduled", "running", "ended"] as const) {
+      const area = previewArea(renderView(ready(openEditor(promotion({ state }), "csrf-1")), language));
+      expect(tags(area, "button").map((tag) => attributes(tag).get("aria-pressed")), state).toEqual(["true", "false"]);
+      expect(tags(area, "button").some((tag) => attributes(tag).has("disabled")), state).toBe(false);
+      expect(promoTag(area), state).toBe('<div class="acs-promo" data-promo-pack="generic">');
+      expect(area, state).toContain('<div class="acs-promo-garland" aria-hidden="true"></div>');
+    }
   });
 });

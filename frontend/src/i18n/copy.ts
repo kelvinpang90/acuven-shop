@@ -3215,6 +3215,16 @@ export const COPY = {
     zh: "图片说明（替代文字）",
     ms: "Penerangan imej (teks alternatif)",
   },
+  "admin.editor_preview": {
+    en: "Editor preview",
+    zh: "编辑区预览",
+    ms: "Pratonton penyunting",
+  },
+  "admin.editor_preview_note": {
+    en: "A sketch with sample products and amounts. Real prices are worked out on the storefront.",
+    zh: "示意图，商品与金额都是示例；实际价格以前台计算为准。",
+    ms: "Lakaran dengan produk dan jumlah contoh. Harga sebenar dikira di kedai.",
+  },
   "admin.theme": {
     en: "Theme",
     zh: "主题",

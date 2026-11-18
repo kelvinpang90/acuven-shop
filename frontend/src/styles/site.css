@@ -714,6 +714,26 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-promo-deco__slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .site-admin-promo-deco__slots .acs-admin__select { width: 100%; min-width: 0; }
 
+/* 装饰区末尾的编辑区预览（A12-editor-desktop 的预览框，SHOP-TASK-274）：小标题与浅色、深色两个切换按钮一行（按钮间距 6px），其下为预览框与
+   admin.editor_preview_note（间距 10px）。预览框内边距 16px、各缩样间距 16px，两列（1.4 : 1）：左列为海报（跨两行），右列为横条与价格飘带；
+   下一行左列为两张示例商品卡（两列、间距 16px、最宽 300px），右列为购物车进度条（内边距 14px）。海报文字区内边距 22px 24px、间距 10px，图案区最小高 170px；
+   上传图模式的海报与占位保持 3:1。corners 的两个图案缩为 120px、距顶 60px。海报标题的字号、进度条底色与圆角、预览框头尾的分隔线 site.css 写不了，
+   记在任务记录的偏离里 */
+.site-admin-promo-deco__preview { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 12px; min-width: 0; }
+.site-admin-promo-preview__box, .site-admin-promo-preview__note { grid-column: 1 / -1; min-width: 0; }
+.site-admin-promo-preview__modes { display: flex; flex-wrap: wrap; gap: 6px; }
+.site-admin-promo-preview__note { margin: 0; }
+.site-admin-promo-preview__shop > .acs-promo { --promo-corner: 120px; --promo-corner-top: 60px; }
+.site-admin-promo-preview__body { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); grid-template-areas: "poster strip" "poster ribbon" "cards progress"; align-items: start; gap: 16px; padding: 16px; }
+.site-admin-promo-preview__poster { grid-area: poster; min-width: 0; }
+.site-admin-promo-preview__poster .acs-promo-poster__text, .site-admin-promo-preview__poster.acs-promo-poster--centered .acs-promo-poster__text { gap: 10px; padding: 22px 24px; }
+.site-admin-promo-preview__poster .acs-promo-poster__art { min-height: 170px; }
+.site-admin-promo-preview__poster.acs-promo-poster-img { aspect-ratio: 3 / 1; }
+.site-admin-promo-preview__strip { grid-area: strip; min-width: 0; }
+.site-admin-promo-preview__ribbon { grid-area: ribbon; min-width: 0; }
+.site-admin-promo-preview__cards { grid-area: cards; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; max-width: 300px; }
+.site-admin-promo-preview__progress { grid-area: progress; padding: 14px; }
+
 /* 后台促销活动编辑区 A12 的海报区（A12-editor-desktop 的 Home poster，SHOP-TASK-275）：各项上下排列（间距 14px）；两个单选一行（间距 18px，可换行）；
    桌面与手机两个位置两列（间距 16px），每个位置为名称、缩略图与 admin.upload 一行（间距 10px）、规则文字与提示上下排列（间距 6px）；缩略图桌面 120 × 40、
    手机 40 × 50，图片居中裁切铺满；替代文字三语三列（间距 10px）。缩略图占位的虚线边框与圆角、规则文字的字号 site.css 写不了，记在任务记录的偏离里 */
@@ -1472,6 +1492,13 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-promo-deco__choices { max-width: none; }
   .site-admin-promo-deco__slots { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .site-admin-promo-deco .acs-admin__select { min-height: 44px; }
+
+  /* 编辑区预览（手机）：小标题与切换按钮上下排列；缩样单列，依次为海报、横条、两张商品卡（占满宽度）、价格飘带与进度条（间距 12px，预览框内边距 12px）；
+     切换按钮至少 44px 高 */
+  .site-admin-promo-deco__preview { grid-template-columns: minmax(0, 1fr); }
+  .site-admin-promo-preview__body { grid-template-columns: minmax(0, 1fr); grid-template-areas: "poster" "strip" "cards" "ribbon" "progress"; gap: 12px; padding: 12px; }
+  .site-admin-promo-preview__cards { max-width: none; gap: 12px; }
+  .site-admin-promo-preview__modes .acs-admin__btn { min-height: 44px; }
 
   /* 海报区（手机）：各项间距 10px；两个单选与两个位置上下排列，替代文字三语单列（间距 8px）；单选行与 admin.upload 至少 44px 高 */
   .site-admin-promo-poster { gap: 10px; }
