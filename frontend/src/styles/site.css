@@ -714,6 +714,21 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-promo-deco__slots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
 .site-admin-promo-deco__slots .acs-admin__select { width: 100%; min-width: 0; }
 
+/* 后台促销活动编辑区 A12 的海报区（A12-editor-desktop 的 Home poster，SHOP-TASK-275）：各项上下排列（间距 14px）；两个单选一行（间距 18px，可换行）；
+   桌面与手机两个位置两列（间距 16px），每个位置为名称、缩略图与 admin.upload 一行（间距 10px）、规则文字与提示上下排列（间距 6px）；缩略图桌面 120 × 40、
+   手机 40 × 50，图片居中裁切铺满；替代文字三语三列（间距 10px）。缩略图占位的虚线边框与圆角、规则文字的字号 site.css 写不了，记在任务记录的偏离里 */
+.site-admin-promo-poster { display: grid; gap: 14px; min-width: 0; }
+.site-admin-promo-poster__modes { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
+.site-admin-promo-poster__slots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.site-admin-promo-poster__slot { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.site-admin-promo-poster__row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.site-admin-promo-poster__thumb { display: block; flex-shrink: 0; overflow: hidden; }
+.site-admin-promo-poster__thumb--desktop { width: 120px; height: 40px; }
+.site-admin-promo-poster__thumb--phone { width: 40px; height: 50px; }
+.site-admin-promo-poster__img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.site-admin-promo-poster__alt { display: grid; gap: 6px; min-width: 0; }
+.site-admin-promo-poster__alt-langs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+
 /* 后台店铺装修 A08 的页头（A08-desktop）：标题与演示说明上下排列（间距 16px）；说明内边距 10px 12px。
    说明的底色、文字颜色、字号、圆角与 ★ 图形 site.css 写不了，记在 docs/TODO.md 的偏离里 */
 .site-admin-store-design { display: grid; gap: 16px; }
@@ -1457,6 +1472,13 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-promo-deco__choices { max-width: none; }
   .site-admin-promo-deco__slots { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .site-admin-promo-deco .acs-admin__select { min-height: 44px; }
+
+  /* 海报区（手机）：各项间距 10px；两个单选与两个位置上下排列，替代文字三语单列（间距 8px）；单选行与 admin.upload 至少 44px 高 */
+  .site-admin-promo-poster { gap: 10px; }
+  .site-admin-promo-poster__modes { display: grid; gap: 0; }
+  .site-admin-promo-poster__slots { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .site-admin-promo-poster__alt-langs { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .site-admin-promo-poster .acs-admin__btn { min-height: 44px; }
 
   /* 后台店铺装修的页头（A08-phone 与 UX A08 手机线框）：顶栏已是 admin.nav_store_design，页面里不显示标题，h1 只留给读屏；
      演示说明在内容区最上方，与之后各块间距 14px */

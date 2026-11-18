@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, Dispatch, FormEvent, ReactNode, SetStateAction, SyntheticEvent } from "react";
 
+import type { PosterSlot } from "../api/adminPromotionPoster";
 import { createAdminPromotion, MAX_PROMOTION_ID, readAdminPromotion, readAdminPromotions, saveAdminPromotion } from "../api/adminPromotions";
 import type { AdminPromotion, PromotionProblem, PromotionRead, PromotionsRead, PromotionWrite } from "../api/adminPromotions";
 import AdminFrame, { AdminAlert, LANGUAGE_LABEL, useUnsavedConfirm } from "../components/AdminFrame";
@@ -12,9 +13,11 @@ import type { RouteParams, RoutePath, RoutePattern } from "../router";
 import { startDeferred } from "./AdminOrderDetail";
 import AdminPromotionDecoration from "./AdminPromotionDecoration";
 import type { DecorationChange } from "./AdminPromotionDecoration";
+import AdminPromotionPoster, { pickPosterMode } from "./AdminPromotionPoster";
 import AdminPromotionRules,{ loadScopeLists, SCOPE_LOADING } from "./AdminPromotionRules";
 import type { RulesChange, ScopeLists } from "./AdminPromotionRules";
 import { PROMOTION_STATE_CLASS, PROMOTION_STATE_LABEL } from "./AdminPromotionsPage";
+import type { RereadOutcome } from "./AdminStoreLogo";
 import { copyLength, copyMaxLength, formFromPromotion, formProblems, isDirty, NAME_MAX_LENGTH, newPromotionForm, promotionInput } from "./promotionForm";
 import type { CopyField, PromotionForm, PromotionFormProblem } from "./promotionForm";
 
@@ -23,7 +26,8 @@ import type { CopyField, PromotionForm, PromotionFormProblem } from "./promotion
 // 用后台框架渲染，当前导航项为促销活动。本任务（SHOP-TASK-270）是编辑区的框架：读取、标题行、基本信息、同用开关、文案、操作栏的保存与结果提示、
 // 提交前的字段检查与离开确认；SHOP-TASK-271 在基本信息之后、同用开关与文案之前接上规则区（AdminPromotionRules.tsx，规则的修改计入未保存与提交）；
 // SHOP-TASK-273 在文案之后接上装饰区（AdminPromotionDecoration.tsx，装饰的修改计入未保存与提交；已结束只读）；
-// 状态操作、编辑区预览、海报与 AI 由之后的任务接上。
+// SHOP-TASK-275 在装饰区之后接上海报区（AdminPromotionPoster.tsx，海报模式与替代文字计入未保存与提交；海报图上传即替换、立即生效、不随保存提交、
+// 不改版本，所以只换 promotion 上的海报图，不改表单、基准与版本号）；状态操作、编辑区预览与 AI 由之后的任务接上。
 // - 新建先以 readAdminPromotions 取 CSRF 令牌，保存为 createAdminPromotion，成功后以 replace 换到新 ID 的页面并在那里显示 admin.promo_saved（本模块里存的
 //   一次性提示）；已有活动以 readAdminPromotion 读取，保存为 saveAdminPromotion（带读取到的 version），成功后以返回的活动为新基准。段值不是不超过
 //   MAX_PROMOTION_ID 的正整数即不存在，不发请求。
@@ -329,6 +333,17 @@ export function changeDecoration(editor: Editor, change: DecorationChange): Edit
   return decoration === editor.form.decoration ? editor : { ...editor, form: { ...editor.form, decoration }, notice: null };
 }
 
+// 海报图上传成功（落实写法（3））：只换该活动该位置的海报图，表单、基准、版本号与操作栏下方的提示都不变（不算未保存的修改，之后的保存照读取到的版本）；
+// 编辑区已换成别的活动时不变。
+export function replacePoster(editor: Editor, promotionId: number, slot: PosterSlot, poster: string): Editor {
+  const { promotion } = editor;
+  if (promotion?.id !== promotionId) {
+    return editor;
+  }
+  const key = slot === "desktop" ? "poster_desktop_url" : "poster_phone_url";
+  return promotion[key] === poster ? editor : { ...editor, promotion: { ...promotion, [key]: poster } };
+}
+
 // 本页用到的请求，测试以替身代替。
 export interface PromotionApi {
   readList: typeof readAdminPromotions;
@@ -343,6 +358,36 @@ export const PROMOTION_API: PromotionApi = {
   create: createAdminPromotion,
   save: saveAdminPromotion,
 };
+
+// 海报图上传被答 403 之后重新取 CSRF 令牌（readAdminPromotion，只取 csrf_token）：取到时只换该活动编辑区的令牌（表单、基准、海报图与版本号都不变）；
+// 401 为 login，网络中断 network，其余失败 failed（海报区照 A08 的 rereadNotice 提示）。signal 中止之后不再更新。
+export async function rereadPosterToken(
+  promotionId: number,
+  signal: AbortSignal,
+  update: (change: EditChange) => void,
+  api: PromotionApi = PROMOTION_API,
+): Promise<RereadOutcome> {
+  const read = await api.readOne(promotionId, signal);
+  if (signal.aborted) {
+    return "failed";
+  }
+  switch (read.kind) {
+    case "ok": {
+      const csrfToken = read.csrf_token;
+      update((current) =>
+        current.status === "ready" && current.editor.promotion?.id === promotionId ? { status: "ready", editor: { ...current.editor, csrfToken } } : current,
+      );
+      return "ok";
+    }
+    case "none":
+      return "login";
+    case "network":
+      return "network";
+    case "missing":
+    case "failed":
+      return "failed";
+  }
+}
 
 // 页面对结果的处理：换成某个状态、按当前状态改动，或用路由的 replace 换页（A01 与新建后的新 ID，不留本页的历史记录）。
 export interface EditMoves {
@@ -419,15 +464,15 @@ export async function submitPromotion(editor: Editor, signal: AbortSignal, moves
 }
 
 // 各区块的展开状态：首次渲染（含服务端渲染）全部展开；挂载后在手机宽度上收起基本信息与规则区之外的区块。
-export type Panel = "basic" | "rules" | "combine" | "texts" | "decoration";
+export type Panel = "basic" | "rules" | "combine" | "texts" | "decoration" | "poster";
 export type PanelsOpen = Readonly<Record<Panel, boolean>>;
 
-export const ALL_OPEN: PanelsOpen = { basic: true, rules: true, combine: true, texts: true, decoration: true };
+export const ALL_OPEN: PanelsOpen = { basic: true, rules: true, combine: true, texts: true, decoration: true, poster: true };
 
 export const PHONE_QUERY = "(max-width: 767px)";
 
 export function phonePanels(current: PanelsOpen, isPhone: boolean): PanelsOpen {
-  return isPhone ? { ...current, combine: false, texts: false, decoration: false } : current;
+  return isPhone ? { ...current, combine: false, texts: false, decoration: false, poster: false } : current;
 }
 
 export type MatchesQuery = (query: string) => boolean;
@@ -470,6 +515,10 @@ export interface EditHandlers {
   onSave: () => void;
   onReload: () => void;
   onPanel: (panel: Panel, open: boolean) => void;
+  // 海报区：上传成功换上海报图、403 后重新取令牌、401 回到 A01。
+  onPoster: (promotionId: number, slot: PosterSlot, poster: string) => void;
+  onPosterReread: (promotionId: number, signal: AbortSignal) => Promise<RereadOutcome>;
+  onLogin: () => void;
 }
 
 // 一个字段与其旁的 admin.promo_field_invalid（不合格时）；输入框以 aria-describedby 指向提示。
@@ -558,7 +607,7 @@ function BackLink() {
 }
 
 // 编辑区：标题行（admin.promo_back、已保存的内部名称与状态标签；新建尚未保存时只有 admin.promo_back）、操作栏（common.save，已结束时不显示）、
-// 结果提示、演示说明，再下为基本信息、规则、同用开关、文案与装饰五个区块。lists 为规则范围用的分类与商品列表。
+// 结果提示、演示说明，再下为基本信息、规则、同用开关、文案、装饰与海报六个区块。lists 为规则范围用的分类与商品列表。
 function EditorView({ editor, panels, lists, handlers }: { editor: Editor; panels: PanelsOpen; lists: ScopeLists; handlers: EditHandlers }) {
   const t = useCopy();
   const { promotion, form } = editor;
@@ -708,6 +757,25 @@ function EditorView({ editor, panels, lists, handlers }: { editor: Editor; panel
       <PanelBox panel="decoration" title="admin.promo_decoration" open={panels.decoration} onPanel={handlers.onPanel}>
         <AdminPromotionDecoration decoration={form.decoration} readOnly={ended} onDecoration={handlers.onDecoration} />
       </PanelBox>
+      <PanelBox panel="poster" title="admin.promo_poster" open={panels.poster} onPanel={handlers.onPanel}>
+        <AdminPromotionPoster
+          promotionId={promotion?.id ?? null}
+          posters={{ desktop: promotion?.poster_desktop_url ?? null, phone: promotion?.poster_phone_url ?? null }}
+          csrfToken={editor.csrfToken}
+          mode={form.decoration.poster_mode}
+          copy={form.copy}
+          readOnly={ended}
+          invalid={invalid}
+          onMode={(mode) => {
+            handlers.onDecoration((decoration) => pickPosterMode(decoration, mode));
+          }}
+          onAlt={handlers.onCopy}
+          onPoster={handlers.onPoster}
+          onReread={handlers.onPosterReread}
+          onLogin={handlers.onLogin}
+          onReload={handlers.onReload}
+        />
+      </PanelBox>
     </form>
   );
 }
@@ -823,6 +891,13 @@ export function AdminPromotionEditContent() {
     },
     onPanel: (panel, open) => {
       setPanels((current) => (current[panel] === open ? current : { ...current, [panel]: open }));
+    },
+    onPoster: (promotionId, slot, poster) => {
+      edit((current) => replacePoster(current, promotionId, slot, poster));
+    },
+    onPosterReread: (promotionId, signal) => rereadPosterToken(promotionId, signal, setState),
+    onLogin: () => {
+      replace(ADMIN_LOGIN_PATH);
     },
   };
 
