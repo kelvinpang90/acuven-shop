@@ -2820,6 +2820,11 @@ export const COPY = {
     zh: "有取值未被接受，请检查日期、数字与文字长度后重试。",
     ms: "Sesetengah nilai tidak diterima. Semak tarikh, nombor dan panjang teks, kemudian cuba lagi.",
   },
+  "admin.poster_save_first": {
+    en: "Save this promotion first, then upload images.",
+    zh: "请先保存这个活动，再上传图片。",
+    ms: "Simpan promosi ini dahulu, kemudian muat naik imej.",
+  },
   "admin.promo_invalid": {
     en: "Not saved. Please fix:",
     zh: "未保存，请修正：",
@@ -3169,6 +3174,46 @@ export const COPY = {
     en: "Style {n}",
     zh: "样式 {n}",
     ms: "Gaya {n}",
+  },
+  "admin.promo_poster": {
+    en: "Home poster",
+    zh: "首页海报",
+    ms: "Poster utama",
+  },
+  "admin.poster_template": {
+    en: "Template",
+    zh: "模板",
+    ms: "Templat",
+  },
+  "admin.poster_image": {
+    en: "Uploaded image",
+    zh: "上传图片",
+    ms: "Imej dimuat naik",
+  },
+  "admin.poster_desktop": {
+    en: "Desktop image",
+    zh: "桌面图",
+    ms: "Imej desktop",
+  },
+  "admin.poster_desktop_rules": {
+    en: "At least 1,200 pixels wide. Best at 1,800 × 600 (3:1); other shapes are cropped from the centre.",
+    zh: "宽至少 1,200 像素；建议 1,800 × 600（3:1），其他比例会从中间裁切。",
+    ms: "Lebar sekurang-kurangnya 1,200 piksel. Terbaik 1,800 × 600 (3:1); bentuk lain dipotong dari tengah.",
+  },
+  "admin.poster_phone": {
+    en: "Phone image",
+    zh: "手机图",
+    ms: "Imej telefon",
+  },
+  "admin.poster_phone_rules": {
+    en: "At least 600 pixels wide. Best at 960 × 1,200 (4:5); other shapes are cropped from the centre.",
+    zh: "宽至少 600 像素；建议 960 × 1,200（4:5），其他比例会从中间裁切。",
+    ms: "Lebar sekurang-kurangnya 600 piksel. Terbaik 960 × 1,200 (4:5); bentuk lain dipotong dari tengah.",
+  },
+  "admin.poster_alt": {
+    en: "Image description (alt text)",
+    zh: "图片说明（替代文字）",
+    ms: "Penerangan imej (teks alternatif)",
   },
   "admin.theme": {
     en: "Theme",

@@ -30,6 +30,8 @@ import AdminPromotionEditPage, {
   phonePanels,
   pressSave,
   reloadEditor,
+  replacePoster,
+  rereadPosterToken,
   saveStep,
   stashPromotionNotice,
   startSaving,
@@ -38,6 +40,7 @@ import AdminPromotionEditPage, {
 } from "./AdminPromotionEditPage";
 import type { Editor, EditHandlers, EditMoves, EditState, PanelsOpen, PromotionApi } from "./AdminPromotionEditPage";
 import { PACK_LABEL, pickFestivalPalette, pickPack, pickVariant } from "./AdminPromotionDecoration";
+import { pickPosterMode } from "./AdminPromotionPoster";
 import { addRule, mapRule, moveRule, removeRule } from "./AdminPromotionRules";
 import type { ScopeLists } from "./AdminPromotionRules";
 import { PROMOTION_STATE_CLASS, PROMOTION_STATE_LABEL } from "./AdminPromotionsPage";
@@ -229,6 +232,9 @@ const NO_HANDLERS: EditHandlers = {
   onSave: () => undefined,
   onReload: () => undefined,
   onPanel: () => undefined,
+  onPoster: () => undefined,
+  onPosterReread: () => Promise.resolve("failed"),
+  onLogin: () => undefined,
 };
 
 function renderView(state: EditState, language: Language, panels: PanelsOpen = ALL_OPEN): string {
@@ -387,7 +393,8 @@ describe("AdminPromotionEditPage", () => {
   // 「+---- [admin.promo_basic] ----」「+---- [admin.promo_combine] ----」「+---- [admin.promo_texts] ----」：已登录而读取返回前，内容区只有
   // admin.promo_back（标 aria-busy）；取到后（新建与已有活动）为标题行与基本信息、同用开关、文案三个区块（details.acs-admin__panel，summary 为区块标题）。
   // 会话返回前内容区仍为空。SHOP-TASK-271 起另有「+---- [admin.promo_rules] ----」，排在基本信息之后、同用开关之前，共四个区块；
-  // SHOP-TASK-273 起另有「+---- [admin.promo_decoration] ----」，排在文案之后，共五个区块。
+  // SHOP-TASK-273 起另有「+---- [admin.promo_decoration] ----」，排在文案之后，共五个区块；SHOP-TASK-275 起另有「+---- [admin.promo_poster] ----」，
+  // 排在装饰之后，共六个区块。
   it.each(LANGUAGES)("shows the title row and the three sections in the content area in %s", (language) => {
     const main = element(renderSignedIn(language), "main", "acs-admin__main");
     expect(main).toContain('aria-busy="true"');
@@ -396,7 +403,7 @@ describe("AdminPromotionEditPage", () => {
     for (const editor of [openEditor(null, "csrf-1"), openEditor(promotion(), "csrf-1")]) {
       const html = renderView(ready(editor), language);
       const details = tags(html, "details");
-      expect(details).toHaveLength(5);
+      expect(details).toHaveLength(6);
       for (const tag of details) {
         expect(classes(tag)).toEqual(["acs-admin__panel", "site-admin-promo-edit__panel"]);
       }
@@ -406,6 +413,7 @@ describe("AdminPromotionEditPage", () => {
         COPY["admin.promo_combine"][language],
         COPY["admin.promo_texts"][language],
         COPY["admin.promo_decoration"][language],
+        COPY["admin.promo_poster"][language],
       ]);
     }
     for (const path of EDIT_PATHS) {
@@ -996,11 +1004,12 @@ describe("AdminPromotionEditPage panels and leaving", () => {
     );
     expect(queries).toEqual([PHONE_QUERY]);
     expect(PHONE_QUERY).toBe("(max-width: 767px)");
-    // SHOP-TASK-273 起装饰区为第五个区块，手机上同样收起。
-    expect(panels).toEqual({ basic: true, rules: true, combine: false, texts: false, decoration: false });
+    // SHOP-TASK-273 起装饰区为第五个区块、SHOP-TASK-275 起海报区为第六个区块，手机上同样收起。
+    expect(panels).toEqual({ basic: true, rules: true, combine: false, texts: false, decoration: false, poster: false });
     expect(tags(renderView(ready(openEditor(null, "csrf-1")), "en", panels), "details").map((tag) => attributes(tag).has("open"))).toEqual([
       true,
       true,
+      false,
       false,
       false,
       false,
@@ -1278,5 +1287,212 @@ describe("AdminPromotionEditPage decoration", () => {
     expect(locked.locked).toBe(true);
     expect(decorationControls(renderView(ready(locked), language)).some((attrs) => attrs.has("disabled"))).toBe(false);
     expect(changeDecoration(locked, (decoration) => pickVariant(decoration, "card_badge", "tag")).form.decoration.card_badge).toBe("tag");
+  });
+});
+
+describe("AdminPromotionEditPage poster", () => {
+  const DESKTOP = `/api/promotion-posters/${"a".repeat(32)}.webp`;
+  const PHONE = `/api/promotion-posters/${"b".repeat(32)}.webp`;
+  const NEW_DESKTOP = `/api/promotion-posters/${"c".repeat(32)}.webp`;
+  const IMAGE_DECORATION = { ...newPromotionForm().decoration, poster_mode: "image" };
+
+  // 上传图模式、已有桌面图（没有手机图）与英文替代文字的活动。
+  function imagePromotion(overrides: Partial<AdminPromotion> = {}): AdminPromotion {
+    const base = promotion();
+    return promotion({
+      decoration: IMAGE_DECORATION,
+      poster_desktop_url: DESKTOP,
+      copy: { ...base.copy, poster_alt_en: "Lunar New Year Sale banner" },
+      ...overrides,
+    });
+  }
+
+  // 海报区（div.site-admin-promo-poster）。
+  function posterArea(html: string): string {
+    return element(html, "div", "site-admin-promo-poster");
+  }
+
+  // 两个位置的 admin.upload 按钮。
+  function uploadButtons(html: string): Map<string, string>[] {
+    return tags(posterArea(html), "button")
+      .map(attributes)
+      .filter((attrs) => (attrs.get("name") ?? "").startsWith("poster_upload_"));
+  }
+
+  function modeRadios(html: string): Map<string, string>[] {
+    return tags(html, "input")
+      .map(attributes)
+      .filter((attrs) => attrs.get("name") === "poster_mode");
+  }
+
+  const ALT_INPUTS = ["poster_alt_en", "poster_alt_zh", "poster_alt_ms"];
+
+  // UX 0.20 A12 编辑区线框「+---- [admin.promo_decoration] ----」…之后为「+---- [admin.promo_poster] ----」「( ) [admin.poster_template]   ( ) [admin.poster_image]」
+  // 「上传图时：[admin.poster_desktop] <缩略图>( [admin.upload] )  [admin.poster_desktop_rules]」「[admin.poster_phone] <缩略图>( [admin.upload] )  [admin.poster_phone_rules]」
+  // 「[admin.image_rules]」「[admin.poster_alt]  [common.lang_en][____] [common.lang_zh][____] [common.lang_ms][____]（各 150）」：海报区排在装饰区之后；模板模式下只有
+  // 两个单选；上传图模式下另有两行（已保存的海报图为缩略图，没有时为占位）、admin.image_rules 与读取到的三语替代文字。
+  it.each(LANGUAGES)("places the poster section after the decoration and shows both modes in %s", (language) => {
+    const t = (key: CopyKey) => COPY[key][language];
+    const template = renderView(ready(openEditor(promotion(), "csrf-1")), language);
+    const at = (text: string) => template.indexOf(text);
+    expect(at('name="cart_progress"')).toBeLessThan(at(`<summary>${escapeHtml(t("admin.promo_poster"))}</summary>`));
+    expect(at(`<summary>${escapeHtml(t("admin.promo_poster"))}</summary>`)).toBeLessThan(at('name="poster_mode"'));
+    expect(textNodes(posterArea(template))).toEqual([t("admin.poster_template"), t("admin.poster_image")]);
+    expect(modeRadios(template).map((attrs) => [attrs.get("value"), attrs.has("checked")])).toEqual([
+      ["template", true],
+      ["image", false],
+    ]);
+    expect(template).not.toContain('name="poster_alt_en"');
+
+    const html = renderView(ready(openEditor(imagePromotion(), "csrf-1")), language);
+    expect(modeRadios(html).map((attrs) => attrs.has("checked"))).toEqual([false, true]);
+    expect(textNodes(posterArea(html))).toEqual([
+      t("admin.poster_template"),
+      t("admin.poster_image"),
+      t("admin.poster_desktop"),
+      t("admin.upload"),
+      t("admin.poster_desktop_rules"),
+      t("admin.poster_phone"),
+      t("admin.upload"),
+      t("admin.poster_phone_rules"),
+      t("admin.image_rules"),
+      t("admin.poster_alt"),
+      t("common.lang_en"),
+      "26/150",
+      t("common.lang_zh"),
+      "0/150",
+      t("common.lang_ms"),
+      "0/150",
+    ]);
+    expect(tags(posterArea(html), "img").map(attributes).map((attrs) => attrs.get("src"))).toEqual([DESKTOP]);
+    expect(input(html, "poster_alt_en").get("value")).toBe("Lunar New Year Sale banner");
+    expect(ALT_INPUTS.map((name) => input(html, name).get("lang"))).toEqual(["en", "zh-Hans", "ms"]);
+    expect(uploadButtons(html).map((attrs) => attrs.has("disabled"))).toEqual([false, false]);
+  });
+
+  // 落实写法（1）「两个单选改表单装饰的 poster_mode（计入未保存与提交）」与（2）「admin.poster_alt 三语输入（…计入未保存与提交）」，UX 0.20 A12 说明「海报」中
+  // 「替代文字随本页的保存提交」：模式与替代文字的改动都算未保存的修改（换回原样即不再算），并照当前的值提交（保存与新建）；不变时编辑区不变。
+  it("counts the poster mode and alt text as unsaved and submits them", async () => {
+    const editor = openEditor(promotion(), "csrf-1");
+    expect(changeDecoration(editor, (decoration) => pickPosterMode(decoration, "template"))).toBe(editor);
+    const image = changeDecoration(editor, (decoration) => pickPosterMode(decoration, "image"));
+    expect(hasUnsavedChanges(ready(image))).toBe(true);
+    expect(hasUnsavedChanges(ready(changeDecoration(image, (decoration) => pickPosterMode(decoration, "template"))))).toBe(false);
+    const alt = changeCopy(image, "poster_alt_ms", "Sepanduk jualan");
+    expect(hasUnsavedChanges(ready(changeCopy(editor, "poster_alt_ms", "Sepanduk jualan")))).toBe(true);
+    expect(promotionInput(alt.form).decoration.poster_mode).toBe("image");
+    expect(promotionInput(alt.form).copy.poster_alt_ms).toBe("Sepanduk jualan");
+    const { api, signal } = await submitWith(alt, { kind: "failed" });
+    expect(api.save).toHaveBeenCalledWith(7, { ...promotionInput(alt.form), version: 3 }, "csrf-1", signal);
+
+    const draft = changeCopy(
+      changeDecoration(changeField(openEditor(null, "csrf-new"), "name", "New sale"), (decoration) => pickPosterMode(decoration, "image")),
+      "poster_alt_en",
+      "Sale banner",
+    );
+    const created = await submitWith(draft, { kind: "failed" });
+    expect(created.api.create).toHaveBeenCalledWith(promotionInput(draft.form), "csrf-new", created.signal);
+    expect(promotionInput(draft.form).copy.poster_alt_en).toBe("Sale banner");
+  });
+
+  // UX 0.20 A12 线框「[admin.poster_alt] …（各 150）」与说明「提交前页面先按 DESIGN 1.23 第 1–3、12 条的取值范围逐项检查（…文案长度），不合格的字段旁显示
+  // [admin.promo_field_invalid] 并不提交」：替代文字超过 150 个字符时已用字数照常显示，点保存不提交，只在该输入旁提示。
+  it.each(LANGUAGES)("keeps an over-long alt text from being submitted in %s", (language) => {
+    const submit = vi.fn();
+    const editor = pressSave(changeCopy(openEditor(imagePromotion(), "csrf-1"), "poster_alt_zh", "字".repeat(151)), submit);
+    expect(submit).not.toHaveBeenCalled();
+    const html = renderView(ready(editor), language);
+    expect(fieldInvalid(html, "poster_alt_zh", language)).toBe(true);
+    expect(fieldInvalid(html, "poster_alt_en", language)).toBe(false);
+    expect(textNodes(posterArea(html))).toContain("151/150");
+  });
+
+  // UX 0.20 A12 说明「海报」「上传成功即替换并立即生效…，不改变活动的版本号，所以不会让之后的保存撞上 [admin.promo_changed]」与落实写法（3）「成功即替换缩略图，
+  // 不改版本、不算未保存的修改」：上传成功只换该位置的缩略图，表单、基准、版本号与提示都不变，未保存状态不变；之后的保存仍带读取到的版本；编辑区换成别的活动时不换。
+  it.each(LANGUAGES)("replaces the thumbnail without unsaved changes or a new version in %s", async (language) => {
+    const editor = openEditor(imagePromotion(), "csrf-1");
+    const uploaded = replacePoster(editor, 7, "phone", PHONE);
+    expect(uploaded.form).toBe(editor.form);
+    expect(uploaded.base).toBe(editor.base);
+    expect(uploaded.promotion?.version).toBe(3);
+    expect(uploaded.promotion?.poster_phone_url).toBe(PHONE);
+    expect(hasUnsavedChanges(ready(uploaded))).toBe(false);
+    expect(tags(posterArea(renderView(ready(uploaded), language)), "img").map((tag) => attributes(tag).get("src"))).toEqual([DESKTOP, PHONE]);
+    const replaced = replacePoster(uploaded, 7, "desktop", NEW_DESKTOP);
+    expect(tags(posterArea(renderView(ready(replaced), language)), "img").map((tag) => attributes(tag).get("src"))).toEqual([NEW_DESKTOP, PHONE]);
+    expect(replacePoster(uploaded, 7, "phone", PHONE)).toBe(uploaded);
+    expect(replacePoster(uploaded, 8, "phone", NEW_DESKTOP)).toBe(uploaded);
+    expect(replacePoster(openEditor(null, "csrf-1"), 7, "phone", PHONE).promotion).toBeNull();
+
+    const edited = changeCopy(uploaded, "poster_alt_en", "Changed alt");
+    const noticed = replacePoster({ ...edited, notice: { kind: "done", key: "admin.promo_saved" } }, 7, "desktop", NEW_DESKTOP);
+    expect(noticed.notice).toEqual({ kind: "done", key: "admin.promo_saved" });
+    expect(hasUnsavedChanges(ready(noticed))).toBe(true);
+    const { api, signal } = await submitWith(replacePoster(edited, 7, "desktop", NEW_DESKTOP), { kind: "failed" });
+    expect(api.save).toHaveBeenCalledWith(7, { ...promotionInput(edited.form), version: 3 }, "csrf-1", signal);
+  });
+
+  // UX 0.20 A12 说明「海报」「新建而尚未保存的活动没有 ID，上传按钮禁用并显示 [admin.poster_save_first]；已结束的活动上传按钮禁用」与「状态与可用操作」「进行中 | 内部名称、
+  // 文案、装饰、海报、AI …」「已结束 | 无（全部只读…）」：新建时两个按钮禁用并指向 admin.poster_save_first（单选与替代文字可改）；已结束时按钮与单选禁用、替代文字只读、
+  // 改动不生效；进行中（及保存被答 rules_locked 之后）与其他状态都可用。
+  it.each(LANGUAGES)("disables uploads before the first save and when ended in %s", async (language) => {
+    const fresh = changeDecoration(openEditor(null, "csrf-1"), (decoration) => pickPosterMode(decoration, "image"));
+    const unsaved = renderView(ready(fresh), language);
+    const buttons = uploadButtons(unsaved);
+    expect(buttons.map((attrs) => attrs.has("disabled"))).toEqual([true, true]);
+    const describedBy = buttons[0]?.get("aria-describedby") ?? "";
+    expect(describedBy).not.toBe("");
+    expect(buttons[1]?.get("aria-describedby")).toBe(describedBy);
+    expect(unsaved).toContain(`<span id="${escapeHtml(describedBy)}" class="acs-admin__muted">${escapeHtml(COPY["admin.poster_save_first"][language])}</span>`);
+    expect(countOf(unsaved, escapeHtml(COPY["admin.poster_save_first"][language]))).toBe(1);
+    expect(modeRadios(unsaved).some((attrs) => attrs.has("disabled"))).toBe(false);
+    expect(ALT_INPUTS.some((name) => input(unsaved, name).has("readonly"))).toBe(false);
+    expect(tags(posterArea(unsaved), "img")).toEqual([]);
+
+    const ended = openEditor(imagePromotion({ state: "ended" }), "csrf-1");
+    const endedHtml = renderView(ready(ended), language);
+    expect(uploadButtons(endedHtml).map((attrs) => attrs.has("disabled"))).toEqual([true, true]);
+    expect(modeRadios(endedHtml).every((attrs) => attrs.has("disabled"))).toBe(true);
+    expect(ALT_INPUTS.every((name) => input(endedHtml, name).has("readonly"))).toBe(true);
+    expect(endedHtml).not.toContain(escapeHtml(COPY["admin.poster_save_first"][language]));
+    expect(changeDecoration(ended, (decoration) => pickPosterMode(decoration, "template"))).toBe(ended);
+    expect(changeCopy(ended, "poster_alt_en", "x")).toBe(ended);
+
+    for (const state of ["draft", "scheduled", "running"] as const) {
+      const html = renderView(ready(openEditor(imagePromotion({ state }), "csrf-1")), language);
+      expect(uploadButtons(html).map((attrs) => attrs.has("disabled")), state).toEqual([false, false]);
+      expect(modeRadios(html).some((attrs) => attrs.has("disabled")), state).toBe(false);
+      expect(html).not.toContain(escapeHtml(COPY["admin.poster_save_first"][language]));
+    }
+    const { record } = await submitWith(openEditor(imagePromotion({ state: "scheduled" }), "csrf-1"), { kind: "invalid", problems: [problem("rules_locked")] });
+    expect(uploadButtons(renderView(record.state, language)).some((attrs) => attrs.has("disabled"))).toBe(false);
+  });
+
+  // 落实写法（3）「csrf 显示 common.error_retry 并重新读取 CSRF 令牌；401 回到 A01」（UX 0.20 A12 说明「海报」「上传结果提示沿用 A08 标志图的写法」）：重新读取取到时
+  // 只换该活动编辑区的令牌（表单、海报图与版本号不变）；401 为 login、网络中断 network、不存在与其他失败 failed，都不改编辑区；编辑区已换成别的活动时不换。
+  it("reads a new CSRF token for the poster after csrf", async () => {
+    const editor = changeCopy(openEditor(imagePromotion(), "csrf-1"), "poster_alt_en", "Edited");
+    const fresh = promotion({ version: 9, poster_phone_url: PHONE });
+    const signal = new AbortController().signal;
+    const record = recorder(ready(editor));
+    const readOne = vi.fn(() => Promise.resolve<PromotionRead>({ kind: "ok", promotion: fresh, csrf_token: "csrf-2" }));
+    await expect(rereadPosterToken(7, signal, record.moves.update, fakeApi({ readOne }))).resolves.toBe("ok");
+    expect(readOne).toHaveBeenCalledWith(7, signal);
+    expect(editorOf(record.state)).toEqual({ ...editor, csrfToken: "csrf-2" });
+
+    for (const [read, outcome] of [
+      [{ kind: "none" }, "login"],
+      [{ kind: "network" }, "network"],
+      [{ kind: "missing" }, "failed"],
+      [{ kind: "failed" }, "failed"],
+    ] as const) {
+      const other = recorder(ready(editor));
+      await expect(rereadPosterToken(7, signal, other.moves.update, fakeApi({ readOne: () => Promise.resolve<PromotionRead>(read) }))).resolves.toBe(outcome);
+      expect(other.state).toEqual(ready(editor));
+    }
+
+    const elsewhere = recorder(ready(editor));
+    await rereadPosterToken(8, signal, elsewhere.moves.update, fakeApi({ readOne }));
+    expect(elsewhere.state).toEqual(ready(editor));
   });
 });
