@@ -1,5 +1,5 @@
 import { useId } from "react";
-import type { ChangeEvent } from "react";
+import type { ChangeEvent, ReactNode } from "react";
 
 import type { PromotionDecoration } from "../api/adminPromotions";
 import type { CopyKey } from "../i18n/copy";
@@ -13,7 +13,9 @@ import type { PromoPack, PromoSlot } from "../promoManifest";
 // 页面装饰（带缩略图的单选，含 admin.variant_none）与其余五个装饰位（原生 select）。选项都来自 promoManifest.ts 的清单常量；读到的 ID 已经服务端
 // 按同一清单校验，不另处理不在常量里的值。装饰只影响外观、不影响金额，保存时由服务端再校验；不碰个人资料。
 // - 换素材包时各装饰位改为该素材包的第一个变体（页面装饰为 garland）；配色为节日配色时改为新素材包的配色，沿用主题配色时不变。
-// - 只读（已结束）时单选与选择都禁用。编辑区预览由 SHOP-TASK-274 接上，poster_mode 由 SHOP-TASK-275 编辑，本区不改。
+// - 只读（已结束）时单选与选择都禁用。poster_mode 由 SHOP-TASK-275 编辑，本区不改。
+// - 编辑区预览（SHOP-TASK-274，UX 0.20 A12「[admin.editor_preview]（编辑区预览，随本页未保存的输入即时更新）」）：编辑页以 preview 传入
+//   AdminPromotionEditorPreview，放在本区末尾，前面为小标题 admin.editor_preview（以它为组标签）；没传时不显示。
 
 // 素材包的名称，顺序同 PROMO_PACKS。
 export const PACK_LABEL: Readonly<Record<PromoPack, CopyKey>> = {
@@ -102,13 +104,16 @@ export interface AdminPromotionDecorationProps {
   decoration: PromotionDecoration;
   readOnly: boolean;
   onDecoration: (change: DecorationChange) => void;
+  // 编辑区预览（编辑页传入）；没有时不显示小标题。
+  preview?: ReactNode;
 }
 
-export default function AdminPromotionDecoration({ decoration, readOnly, onDecoration }: AdminPromotionDecorationProps) {
+export default function AdminPromotionDecoration({ decoration, readOnly, onDecoration, preview }: AdminPromotionDecorationProps) {
   const t = useCopy();
   const paletteId = useId();
   const paletteSelectId = useId();
   const ambientId = useId();
+  const previewId = useId();
   const keep = decoration.palette === PROMO_KEEP_THEME;
   const packName = (pack: PromoPack) => t(PACK_LABEL[pack]);
   return (
@@ -235,6 +240,14 @@ export default function AdminPromotionDecoration({ decoration, readOnly, onDecor
           </label>
         ))}
       </div>
+      {preview !== undefined && (
+        <div className="site-admin-promo-deco__preview" role="group" aria-labelledby={previewId}>
+          <strong id={previewId} className="site-admin-promo-deco__preview-title">
+            {t("admin.editor_preview")}
+          </strong>
+          {preview}
+        </div>
+      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ import AdminPromotionDecoration, {
   pickVariant,
   SELECT_SLOTS,
 } from "./AdminPromotionDecoration";
+import AdminPromotionEditorPreview from "./AdminPromotionEditorPreview";
 import { newPromotionForm } from "./promotionForm";
 
 function storage(language: Language) {
@@ -241,5 +242,50 @@ describe("AdminPromotionDecoration", () => {
     const disabled = [...tags(open, "input"), ...tags(open, "select")].filter((tag) => attributes(tag).has("disabled")).map((tag) => attributes(tag).get("name"));
     expect(disabled).toEqual(["palette"]);
     expect([...tags(render(CNY, language), "input"), ...tags(render(CNY, language), "select")].some((tag) => attributes(tag).has("disabled"))).toBe(false);
+  });
+
+  // SHOP-TASK-274。UX 0.20 A12 线框「[admin.slot_cart_progress] <变体> ▾」之后为「[admin.editor_preview]（编辑区预览，随本页未保存的输入即时更新）」与说明「编辑区预览」
+  // 「装饰区下方的 [admin.editor_preview] 按本页当前（含未保存）的文案、素材包、配色、各装饰位变体与海报模式…画出…的缩样」：传入预览时，装饰区末尾（五个装饰位之后）为
+  // 以小标题 admin.editor_preview 为组标签的一组，其内为预览；缩样按传入的当前装饰画出，换素材包或变体后随之改变。没传预览时没有小标题。
+  it.each(LANGUAGES)("puts the editor preview at the end of the decoration in %s", (language) => {
+    const renderWithPreview = (decoration: PromotionDecoration, readOnly = false) =>
+      renderToStaticMarkup(
+        <LanguageProvider storage={storage(language)}>
+          <AdminPromotionDecoration
+            decoration={decoration}
+            readOnly={readOnly}
+            onDecoration={() => undefined}
+            preview={<AdminPromotionEditorPreview form={{ ...newPromotionForm(), decoration }} poster={null} />}
+          />
+        </LanguageProvider>,
+      );
+    const html = renderWithPreview(CNY);
+    const at = (text: string) => html.indexOf(text);
+    const group = tags(html, "div").map(attributes).find((attrs) => attrs.get("class") === "site-admin-promo-deco__preview");
+    expect(group?.get("role")).toBe("group");
+    const title = tags(html, "strong").map(attributes)[0];
+    expect(title?.get("class")).toBe("site-admin-promo-deco__preview-title");
+    expect(group?.get("aria-labelledby")).toBe(title?.get("id"));
+    expect(html).toContain(`>${COPY["admin.editor_preview"][language]}</strong><span class="site-admin-promo-preview__modes">`);
+    expect(at('name="cart_progress"')).toBeLessThan(at('class="site-admin-promo-deco__preview"'));
+    expect(at('class="site-admin-promo-deco__preview"')).toBeLessThan(at("acs-admin__preview"));
+    expect(html.endsWith(`${COPY["admin.editor_preview_note"][language]}</p></div></div>`)).toBe(true);
+    expect(html).toContain('<div class="acs-promo" data-promo-pack="cny" data-promo-palette="cny" data-promo-ambient="corners">');
+
+    // 换素材包（各装饰位回到第一个变体、配色跟着素材包）后，缩样随之改变。
+    const changed = renderWithPreview(pickPack(CNY, "raya"));
+    expect(changed).toContain('<div class="acs-promo" data-promo-pack="raya" data-promo-palette="raya"><div class="acs-promo-garland" aria-hidden="true"></div>');
+    expect(changed).toContain("acs-promo-strip--band");
+    expect(renderWithPreview(pickVariant(CNY, "list_strip", "band"))).toContain("acs-promo-strip--band");
+
+    // 已结束（只读）时预览照样显示，切换按钮不禁用；预览不加单选与选择，装饰区的控件数不变。
+    const locked = renderWithPreview(CNY, true);
+    expect(locked).toContain("acs-admin__preview");
+    expect(tags(locked, "button").some((tag) => attributes(tag).has("disabled"))).toBe(false);
+    expect([...tags(locked, "input"), ...tags(locked, "select")]).toHaveLength(7 + 2 + 4);
+
+    const plain = render(CNY, language);
+    expect(plain).not.toContain("site-admin-promo-deco__preview");
+    expect(plain).not.toContain(COPY["admin.editor_preview"][language]);
   });
 });

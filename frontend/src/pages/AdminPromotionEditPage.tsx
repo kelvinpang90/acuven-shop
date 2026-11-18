@@ -13,6 +13,7 @@ import type { RouteParams, RoutePath, RoutePattern } from "../router";
 import { startDeferred } from "./AdminOrderDetail";
 import AdminPromotionDecoration from "./AdminPromotionDecoration";
 import type { DecorationChange } from "./AdminPromotionDecoration";
+import AdminPromotionEditorPreview from "./AdminPromotionEditorPreview";
 import AdminPromotionPoster, { pickPosterMode } from "./AdminPromotionPoster";
 import AdminPromotionRules,{ loadScopeLists, SCOPE_LOADING } from "./AdminPromotionRules";
 import type { RulesChange, ScopeLists } from "./AdminPromotionRules";
@@ -27,7 +28,8 @@ import type { CopyField, PromotionForm, PromotionFormProblem } from "./promotion
 // 提交前的字段检查与离开确认；SHOP-TASK-271 在基本信息之后、同用开关与文案之前接上规则区（AdminPromotionRules.tsx，规则的修改计入未保存与提交）；
 // SHOP-TASK-273 在文案之后接上装饰区（AdminPromotionDecoration.tsx，装饰的修改计入未保存与提交；已结束只读）；
 // SHOP-TASK-275 在装饰区之后接上海报区（AdminPromotionPoster.tsx，海报模式与替代文字计入未保存与提交；海报图上传即替换、立即生效、不随保存提交、
-// 不改版本，所以只换 promotion 上的海报图，不改表单、基准与版本号）；状态操作、编辑区预览与 AI 由之后的任务接上。
+// 不改版本，所以只换 promotion 上的海报图，不改表单、基准与版本号）；SHOP-TASK-274 在装饰区末尾接上编辑区预览（AdminPromotionEditorPreview.tsx，
+// 传入当前的表单与已保存的桌面海报图，随未保存的输入即时更新，任何状态都显示）；状态操作与 AI 由之后的任务接上。
 // - 新建先以 readAdminPromotions 取 CSRF 令牌，保存为 createAdminPromotion，成功后以 replace 换到新 ID 的页面并在那里显示 admin.promo_saved（本模块里存的
 //   一次性提示）；已有活动以 readAdminPromotion 读取，保存为 saveAdminPromotion（带读取到的 version），成功后以返回的活动为新基准。段值不是不超过
 //   MAX_PROMOTION_ID 的正整数即不存在，不发请求。
@@ -755,7 +757,12 @@ function EditorView({ editor, panels, lists, handlers }: { editor: Editor; panel
         <span className="acs-admin__muted">{t("admin.copy_fallback")}</span>
       </PanelBox>
       <PanelBox panel="decoration" title="admin.promo_decoration" open={panels.decoration} onPanel={handlers.onPanel}>
-        <AdminPromotionDecoration decoration={form.decoration} readOnly={ended} onDecoration={handlers.onDecoration} />
+        <AdminPromotionDecoration
+          decoration={form.decoration}
+          readOnly={ended}
+          onDecoration={handlers.onDecoration}
+          preview={<AdminPromotionEditorPreview form={form} poster={promotion?.poster_desktop_url ?? null} />}
+        />
       </PanelBox>
       <PanelBox panel="poster" title="admin.promo_poster" open={panels.poster} onPanel={handlers.onPanel}>
         <AdminPromotionPoster
