@@ -235,6 +235,8 @@ describe("previewed pages", () => {
     expect(currentTab(location)).toBe(tab);
   });
 
+  // UX 0.20 A12「前台预览」「预览中点击商品、分类等链接仍留在预览里」：从页头搜索或分类进入的商品列表位置保留查询串，
+  // 页头搜索框预先填入搜索词，与前台一样。
   it("keeps the search words of the product list", () => {
     expect(render({ state: READY, location: { path: "/products", search: "?q=tee" } })).toContain(`value="tee"`);
   });
@@ -436,6 +438,8 @@ describe("opening the preview", () => {
     expect(shown).toEqual([{ status: "gone", error }]);
   });
 
+  // UX 0.20 A12「前台预览」「预览凭管理员会话经后台接口取数」：A12 原句没有写段值不合法的情形，这里守住的是同一组失败提示的写法——
+  // 段值不是正整数时不经后台接口取数（一个请求也不发），按活动不存在显示 common.error_retry（预览条照旧）。
   it("sends no request for an invalid segment", async () => {
     for (const segment of ["abc", "0", "007", "-1", "2147483648", "1.5"]) {
       expect(previewTarget("/admin/promotions/:id/preview", { id: segment }), segment).toBeNull();
@@ -448,7 +452,8 @@ describe("opening the preview", () => {
     expect(shown).toEqual([{ status: "gone", error: "common.error_retry" }]);
   });
 
-  // 离开页面（中止）之后不再更新页面。
+  // UX 0.20 A12「前台预览」「预览凭管理员会话经后台接口取数」：A12 原句没有写离开页面的情形，这里守住的是这两次读取的收尾——
+  // 离开页面（中止）之后不再更新页面，也不以 replace 换位置。
   it("stops after the page is left", async () => {
     const controller = new AbortController();
     const { api } = fakeApi(okRead("draft"));
