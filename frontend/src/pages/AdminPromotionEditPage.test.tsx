@@ -1938,7 +1938,7 @@ describe("AdminPromotionEditPage state actions", () => {
       },
     };
     const reply = vi.fn(() => Promise.resolve(result));
-    const api = fakeActionApi({ [API_OF[action]]: reply, ...extra } as unknown as Partial<PromotionActionApi>);
+    const api = fakeActionApi({ [API_OF[action]]: reply, ...extra });
     const signal = new AbortController().signal;
     await runAction(editor, action, signal, moves, api);
     return { record, navigated, reply, api, signal };
