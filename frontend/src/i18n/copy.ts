@@ -3925,6 +3925,11 @@ export const COPY = {
     zh: "目前没有进行中的活动。",
     ms: "Tiada jualan sedang berjalan sekarang.",
   },
+  "promo.preview_no_checkout": {
+    en: "Checkout is off in preview.",
+    zh: "预览中不能结账。",
+    ms: "Pembayaran dimatikan dalam pratonton.",
+  },
 } as const satisfies Record<string, CopyEntry>;
 
 export type CopyKey = keyof typeof COPY;
