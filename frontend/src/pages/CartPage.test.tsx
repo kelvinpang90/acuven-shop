@@ -13,11 +13,14 @@ import type { CartLine, CartStorage } from "../cart";
 import { BRAND, COPY, LANGUAGES, translate } from "../i18n/copy";
 import type { CopyKey, CopyVars, Language } from "../i18n/copy";
 import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
+import { PreviewProvider, usePreview } from "../preview";
+import type { StorefrontPreview } from "../preview";
 import { PromotionProvider } from "../promotion";
 import { RouterProvider } from "../router";
 import {
   CartView,
   canIncrease,
+  cartQuoteRequest,
   cartProgress,
   changeQuantity,
   hasChangedLine,
@@ -91,6 +94,8 @@ interface RenderOptions {
   promotion?: PromotionResponse | "loading";
   // 会员会话状态的替身；不给时不包 MemberSessionProvider。
   session?: MemberSessionState;
+  // 前台预览的上下文；不给时不包 PreviewProvider（预览之外）。
+  preview?: StorefrontPreview;
 }
 
 function sessionReader(state: MemberSessionState): MemberSessionReader {
@@ -111,6 +116,7 @@ function render({
   language = "en",
   promotion,
   session,
+  preview,
 }: RenderOptions = {}): string {
   let view: ReactElement = (
     <CartView
@@ -138,6 +144,9 @@ function render({
   }
   if (session !== undefined) {
     view = <MemberSessionProvider reader={sessionReader(session)}>{view}</MemberSessionProvider>;
+  }
+  if (preview !== undefined) {
+    view = <PreviewProvider preview={preview}>{view}</PreviewProvider>;
   }
   return renderToStaticMarkup(
     <LanguageProvider storage={languageStorage(language)}>
@@ -1027,6 +1036,135 @@ describe("re-quoting when the sale changes", () => {
   });
 });
 
+// 前台预览（SHOP-TASK-279）的夹具：预览上下文、本浏览器购物车与公开、预览两种计价的替身。
+const PREVIEW: StorefrontPreview = { promotionId: 7, csrfToken: "csrf-token" };
+const PREVIEW_LINES: CartLine[] = [
+  { sku: "tee-black-m", slug: "crew-neck-tee", quantity: 2 },
+  { sku: "candle", slug: "candle", quantity: 1 },
+];
+const PREVIEW_BODY = JSON.stringify({ lines: [{ sku: "tee-black-m", quantity: 2 }, { sku: "candle", quantity: 1 }] });
+
+// 渲染时取出 usePreview() 的结果（服务端渲染不发请求，计价由测试以 fetch 替身发出）。
+function PreviewProbe({ onPreview }: { onPreview: (preview: StorefrontPreview | null) => void }) {
+  onPreview(usePreview());
+  return null;
+}
+
+function previewOf(inside: boolean): StorefrontPreview | null {
+  const seen: (StorefrontPreview | null)[] = [];
+  const probe = (
+    <PreviewProbe
+      onPreview={(preview) => {
+        seen.push(preview);
+      }}
+    />
+  );
+  renderToStaticMarkup(inside ? <PreviewProvider preview={PREVIEW}>{probe}</PreviewProvider> : probe);
+  expect(seen).toHaveLength(1);
+  return seen[0] ?? null;
+}
+
+function stubQuote() {
+  const quote: CheckoutQuote = { lines: [priced("tee-black-m", { quantity: 2 }), priced("candle", { product_slug: "candle" })], subtotal_sen: 11000, ...WITHIN_LIMITS };
+  const fetchMock = vi.fn<(url: string, init: RequestInit) => Promise<Response>>(() => Promise.resolve(new Response(JSON.stringify(quote), { status: 200 })));
+  vi.stubGlobal("fetch", fetchMock);
+  return { fetchMock, quote };
+}
+
+// 替身收到的唯一一次请求：地址与选项；选项里的中止信号（latestQuoter 每次新建）只查是 AbortSignal，比较时记为 null。
+function onlyRequest(fetchMock: ReturnType<typeof stubQuote>["fetchMock"]): [string, RequestInit] {
+  expect(fetchMock.mock.calls).toHaveLength(1);
+  const [url = "", init = {}] = fetchMock.mock.calls[0] ?? [];
+  expect(init.signal).toBeInstanceOf(AbortSignal);
+  return [url, { ...init, signal: null }];
+}
+
+const DESKTOP_CHECKOUT = "acs-btn acs-btn--primary acs-btn--block site-cart__checkout";
+const PHONE_CHECKOUT = "acs-btn acs-btn--primary acs-btn--block";
+const checkoutLink = (className: string, language: Language) => `<a class="${className}" href="/checkout">${escapeHtml(copy("cart.checkout", language))}</a>`;
+// 预览中的 cart.checkout：禁用的按钮（不是链接），紧接其下的 promo.preview_no_checkout（视觉稿 A12-states）。
+const disabledCheckout = (className: string, language: Language) =>
+  `<button class="${className}" type="button" disabled="">${escapeHtml(copy("cart.checkout", language))}</button>` +
+  `<p class="acs-body-s acs-muted site-cart__preview-note">${escapeHtml(copy("promo.preview_no_checkout", language))}</p>`;
+
+function renderPreviewCart(language: Language, preview?: StorefrontPreview): string {
+  return render({
+    lines: cartOf(SALE_ROWS),
+    quote: ready(SALE_ROWS, 19900, { promotion: promotionQuote() }),
+    language,
+    promotion: sale(),
+    session: MEMBER,
+    ...(preview === undefined ? {} : { preview }),
+  });
+}
+
+describe("cart in a storefront preview", () => {
+  // UX 0.20 A12「前台预览」「购物车预览用本浏览器的购物车计价，不能结账、不能下单」与「预览凭管理员会话经后台接口取数」：
+  // 在 PreviewProvider 里经 latestQuoter 计价时走 fetchPreviewQuote——地址带预览的活动 ID 与语言，请求头带预览的 CSRF 令牌，
+  // 请求体为本浏览器购物车的 SKU 与件数，凭同源 cookie、不缓存；返回的结果照现有写法采用。
+  it.each(LANGUAGES)("quotes through the preview quote endpoint inside the preview in %s", async (language) => {
+    const { fetchMock, quote } = stubQuote();
+    await expect(latestQuoter(cartQuoteRequest(previewOf(true))).run(language, PREVIEW_LINES)).resolves.toEqual({ status: "ready", quote });
+    expect(onlyRequest(fetchMock)).toEqual([
+      `/api/admin/promotions/7/preview/quote?lang=${language}`,
+      {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { Accept: "application/json", "Content-Type": "application/json", "X-CSRF-Token": "csrf-token" },
+        body: PREVIEW_BODY,
+        signal: null,
+      },
+    ]);
+  });
+
+  // UX 0.20 A12「前台预览」「预览凭管理员会话经后台接口取数」只说预览：PreviewProvider 之外照旧经公开计价接口，函数、地址与选项与之前逐字相同。
+  it("quotes through the public endpoint outside the preview", async () => {
+    const { fetchMock } = stubQuote();
+    expect(previewOf(false)).toBeNull();
+    expect(cartQuoteRequest(previewOf(false))).toBe(fetchQuote);
+    await latestQuoter(cartQuoteRequest(previewOf(false))).run("en", PREVIEW_LINES);
+    expect(onlyRequest(fetchMock)).toEqual([
+      "/api/checkout/quote?lang=en",
+      { method: "POST", credentials: "omit", headers: { Accept: "application/json", "Content-Type": "application/json" }, body: PREVIEW_BODY, signal: null },
+    ]);
+  });
+
+  // UX 0.20 A12「前台预览」线框「P04 的 ( [cart.checkout] ) 禁用，旁边显示 [promo.preview_no_checkout]」与「不能结账、不能下单」：
+  // 在 PreviewProvider 里桌面小计栏与手机底部固定栏的 cart.checkout 都是禁用的按钮（不是链接、不跳转），各自紧接其下显示 promo.preview_no_checkout；
+  // 页面里没有链到 /checkout 的链接。
+  it.each(LANGUAGES)("disables both checkout buttons and shows promo.preview_no_checkout in the preview in %s", (language) => {
+    const html = renderPreviewCart(language, PREVIEW);
+    expect(aside(html)).toContain(disabledCheckout(DESKTOP_CHECKOUT, language) + `<a class="acs-btn acs-btn--quiet site-cart__continue" href="/products">`);
+    expect(bottomBar(html).endsWith(`${disabledCheckout(PHONE_CHECKOUT, language)}</div></main>`)).toBe(true);
+    expect(html).not.toContain(`href="/checkout"`);
+    expect(html.split(escapeHtml(copy("promo.preview_no_checkout", language)))).toHaveLength(3);
+  });
+
+  // UX 0.20 A12「前台预览」线框「<前台页面…按该活动正在生效时的样子显示>」：预览只改结账这两处，金额行、提示、角标与会员说明等其余内容照现有写法显示——
+  // 把两处换回链接、去掉预览的 class 后与预览之外的页面逐字相同。
+  it.each(LANGUAGES)("renders the rest of the cart the same inside the preview in %s", (language) => {
+    const inside = renderPreviewCart(language, PREVIEW)
+      .replace(`<main class="site-cart site-cart--preview"`, `<main class="site-cart"`)
+      .replace(disabledCheckout(DESKTOP_CHECKOUT, language), checkoutLink(DESKTOP_CHECKOUT, language))
+      .replace(disabledCheckout(PHONE_CHECKOUT, language), checkoutLink(PHONE_CHECKOUT, language));
+    expect(inside).toBe(renderPreviewCart(language));
+    expect(inside).toContain(escapeHtml(copy("cart.member_scheme_note", language)));
+  });
+
+  // UX 0.20 A12「前台预览」「P04 的 ( [cart.checkout] ) 禁用」只说预览：PreviewProvider 之外不显示 promo.preview_no_checkout，
+  // 两处 cart.checkout 照旧链到 /checkout，没有禁用的结账按钮。
+  it.each(LANGUAGES)("shows no preview note and links checkout as before outside the preview in %s", (language) => {
+    const html = renderPreviewCart(language);
+    expect(html).not.toContain(escapeHtml(copy("promo.preview_no_checkout", language)));
+    expect(html).not.toContain("site-cart__preview-note");
+    expect(html).not.toContain("site-cart--preview");
+    expect(aside(html)).toContain(checkoutLink(DESKTOP_CHECKOUT, language));
+    expect(bottomBar(html)).toContain(checkoutLink(PHONE_CHECKOUT, language));
+    expect(html).not.toContain(`type="button" disabled="">${escapeHtml(copy("cart.checkout", language))}`);
+  });
+});
+
 describe("dictionary", () => {
   // SHOP-TASK-018 验收第 6 条「页面文字全部来自字典」：除接口返回的商品数据（名称、规格值、不可购买行的 SKU）、件数与金额模板外，每段文字都是当前语言的某条字典文案。
   it.each(LANGUAGES)("shows only dictionary text besides product data in %s", (language) => {
@@ -1098,6 +1236,7 @@ const CART_KEYS: readonly CopyKey[] = [
   "cart.free_shipping_reached",
   "cart.hint_bxgy",
   "cart.member_scheme_note",
+  "promo.preview_no_checkout",
   "common.nav_cart",
   "common.price_myr",
   "common.error_retry",

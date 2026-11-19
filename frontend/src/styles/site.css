@@ -1098,6 +1098,9 @@ a.site-admin-refunds__clear { text-decoration: none; }
   /* 活动内容：进度条、提示、活动优惠、活动后金额与会员说明在各行之后的一块里（内边距 18px，视觉稿 P04-promo-phone）；打折行的两个行小计间距为 0 */
   .site-cart__promo-phone { display: grid; padding: 18px; }
   .site-cart__price > .acs-prices { gap: 0; }
+  /* 前台预览的购物车（SHOP-TASK-279，视觉稿 A12-states）：禁用的 cart.checkout 之下紧接 promo.preview_no_checkout（桌面随小计栏的间距排列）；
+     手机底部固定栏多这一行，页面底部留出的高度随之加高 */
+  .site-cart--preview { padding-bottom: 160px; }
 
   /* 结账：单列；摘要折叠在顶部（未选定收货国家时显示商品小计，选定后显示合计）；收货资料一列；
      第 3 步的金额在表单之后，合计与下单按钮、◆ 提示固定在底部，页面底部留出它的高度 */

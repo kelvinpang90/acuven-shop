@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { CSSProperties } from "react";
 
-import { latestQuoter, quoteRequestBody } from "../api/checkout";
+import { fetchPreviewQuote } from "../api/adminPromotionPreview";
+import { fetchQuote, latestQuoter, quoteRequestBody } from "../api/checkout";
 import type { CheckoutQuote, PricedQuoteLine, PromotionQuote, QuoteLine, QuoteOutcome } from "../api/checkout";
 import type { LocalizedText } from "../api/catalog";
 import { useMemberSession } from "../api/memberSession";
@@ -24,6 +25,8 @@ import { DemoHint, ErrorNotice } from "../components/SiteFrame";
 import { formatSen } from "../format";
 import type { CopyKey, CopyVars, Language } from "../i18n/copy";
 import { browserStorage, useCopy, useLanguage } from "../i18n/language";
+import { usePreview } from "../preview";
+import type { StorefrontPreview } from "../preview";
 import { badgeText } from "../promoText";
 import { usePromotion } from "../promotion";
 import { isRoutePath, Link, PRODUCTS_PATH, productPath } from "../router";
@@ -41,6 +44,18 @@ import type { RoutePath } from "../router";
 // 金额行（cart.promo_discount、cart.after_promo、打折行的划线行小计与活动价行小计）与凑单提示照计价接口的暂算结果显示，
 // 页面只做显示所需的减法与进度比例，不判定是否参加活动，不碰个人资料。进度条与行角标要用共享读取（usePromotion）的装饰与规则，
 // 只在它的活动与计价结果是同一个活动时显示。共享读取的 generation 变化（含倒计时到 0）时重新计价。
+// 前台预览（UX 0.20 A12「前台预览」，DESIGN 1.23「节日促销活动」第 11 条，HANDOFF 0.98，SHOP-TASK-279）：在预览上下文里（usePreview 不为 null）
+// 计价改经后台预览计价（fetchPreviewQuote，活动 ID 与 CSRF 令牌取自预览上下文），重新计价与 pending 的写法不变；
+// 桌面小计栏与手机底部固定栏的 cart.checkout 为禁用的按钮（不跳转），各自之下显示 promo.preview_no_checkout。预览之外一切照旧。
+
+// 购物车的计价请求：预览之外为公开计价接口；在预览上下文里改经后台预览计价，不下单、不碰个人资料。
+export function cartQuoteRequest(preview: StorefrontPreview | null): typeof fetchQuote {
+  if (preview === null) {
+    return fetchQuote;
+  }
+  const { promotionId, csrfToken } = preview;
+  return (language, lines, signal) => fetchPreviewQuote(promotionId, csrfToken, language, lines, signal);
+}
 
 function checkoutPath(): RoutePath | null {
   const path: string = "/checkout";
@@ -481,12 +496,34 @@ function CartAlert({ children }: { children: string }) {
   );
 }
 
+// cart.checkout：预览之外按路由规则链到 /checkout；在预览上下文里为禁用的按钮（不跳转），之下显示 promo.preview_no_checkout（视觉稿 A12-states）。
+function CheckoutAction({ className }: { className: string }) {
+  const t = useCopy();
+  const preview = usePreview();
+  const checkout = checkoutPath();
+  if (preview !== null) {
+    return (
+      <>
+        <button className={className} type="button" disabled>
+          {t("cart.checkout")}
+        </button>
+        <p className="acs-body-s acs-muted site-cart__preview-note">{t("promo.preview_no_checkout")}</p>
+      </>
+    );
+  }
+  return checkout === null ? null : (
+    <Link className={className} to={checkout}>
+      {t("cart.checkout")}
+    </Link>
+  );
+}
+
 export function CartView({ lines, quote, writeFailed, draft, capped, onQuantity, onDraft, onQuantityInput, onRemove }: CartViewProps) {
   const t = useCopy();
   const { language } = useLanguage();
   const { promotion } = usePromotion();
   const session = useMemberSession();
-  const checkout = checkoutPath();
+  const preview = usePreview();
   const empty = lines.length === 0;
   const busy = !empty && (quote.status === "loading" || (quote.status === "ready" && quote.pending));
 
@@ -571,7 +608,7 @@ export function CartView({ lines, quote, writeFailed, draft, capped, onQuantity,
   const note = memberNote && <p className="acs-body-s">{t("cart.member_scheme_note")}</p>;
 
   return (
-    <main className="site-cart" aria-busy={busy}>
+    <main className={preview === null ? "site-cart" : "site-cart site-cart--preview"} aria-busy={busy}>
       {head}
       <div className="site-cart__body">
         <div className="site-cart__main">
@@ -618,11 +655,7 @@ export function CartView({ lines, quote, writeFailed, draft, capped, onQuantity,
           {note}
           <p className="acs-body-s acs-muted">{t("cart.shipping_later")}</p>
           <p className="acs-body-s acs-muted">{t("cart.price_recheck")}</p>
-          {checkout && (
-            <Link className="acs-btn acs-btn--primary acs-btn--block site-cart__checkout" to={checkout}>
-              {t("cart.checkout")}
-            </Link>
-          )}
+          <CheckoutAction className="acs-btn acs-btn--primary acs-btn--block site-cart__checkout" />
           <Link className="acs-btn acs-btn--quiet site-cart__continue" to={PRODUCTS_PATH}>
             {t("cart.continue")}
           </Link>
@@ -633,11 +666,7 @@ export function CartView({ lines, quote, writeFailed, draft, capped, onQuantity,
           <span>{t(hasDiscount ? "cart.after_promo" : "cart.subtotal")}</span>
           <span className="acs-price">{hasDiscount ? afterPromo : subtotal}</span>
         </div>
-        {checkout && (
-          <Link className="acs-btn acs-btn--primary acs-btn--block" to={checkout}>
-            {t("cart.checkout")}
-          </Link>
-        )}
+        <CheckoutAction className="acs-btn acs-btn--primary acs-btn--block" />
       </div>
     </main>
   );
@@ -647,7 +676,9 @@ export default function CartPage() {
   const { language } = useLanguage();
   const storage = browserStorage();
   const lines = useCartLines(storage);
-  const [quoter] = useState(() => latestQuoter());
+  // 计价函数在页面打开时按预览上下文选定（cartQuoteRequest），之后的重新计价与作废照 latestQuoter 的现有写法。
+  const preview = usePreview();
+  const [quoter] = useState(() => latestQuoter(cartQuoteRequest(preview)));
   const [settled, setSettled] = useState<SettledQuote | null>(null);
   const [writeFailed, setWriteFailed] = useState(false);
   const [draft, setDraft] = useState<QuantityDraft | null>(null);
