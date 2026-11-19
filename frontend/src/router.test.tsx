@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
 import { COPY } from "./i18n/copy";
@@ -8,6 +8,7 @@ import {
   ADMIN_PRODUCTS_PATH,
   ROUTE_PATHS,
   adminOrderPath,
+  adminPromotionPreviewPath,
   adminRefundPath,
   adminRefundsOrderPath,
   blockUnload,
@@ -18,7 +19,10 @@ import {
   isPlainLeftClick,
   isRoutePath,
   isSourcePath,
+  Link,
   matchRoute,
+  MemoryRouter,
+  memoryRouterValue,
   nextSource,
   popGuard,
   productPath,
@@ -125,6 +129,8 @@ describe("route table", () => {
   // 路由表断言在商品详情之后、购物车之前加上这条路径。
   // SHOP-TASK-268 改动：按 UX 0.20 页面地图「A12 | 后台促销活动 | /admin/promotions、/admin/promotions/<活动 ID>」与 A12「编辑区（新建时同一版式）」，
   // 路由表断言在优惠券之后、运费之前依次加上 /admin/promotions、/admin/promotions/new 与 /admin/promotions/:id（新建在编辑之前）。
+  // SHOP-TASK-280 验收「路由」一条与 UX 0.20 A12「前台预览」「以该活动正在生效的样子显示前台」：路由表断言在活动编辑之后、运费之前
+  // 加上 /admin/promotions/:id/preview，adminPromotionPreviewPath 由活动 ID 生成同一网址。
   it("has the home page, the product list, the product detail, the sale page, the cart, the checkout, the payment pages, the order lookup pages, the refund page, the privacy page, the member login, the password reset, the register page, the member centre, the member order detail and the admin pages", () => {
     expect([...ROUTE_PATHS]).toEqual([
       "/",
@@ -158,6 +164,7 @@ describe("route table", () => {
       "/admin/promotions",
       "/admin/promotions/new",
       "/admin/promotions/:id",
+      "/admin/promotions/:id/preview",
       "/admin/shipping",
       "/admin/stock-resets",
       "/admin/store-design",
@@ -192,6 +199,8 @@ describe("route table", () => {
     expect(isRoutePath("/account")).toBe(true);
     expect(isRoutePath("/account/order")).toBe(true);
     expect(isRoutePath("/account/order/refund")).toBe(true);
+    expect(adminPromotionPreviewPath(7)).toBe("/admin/promotions/7/preview");
+    expect(matchRoute(adminPromotionPreviewPath(7))).toEqual({ pattern: "/admin/promotions/:id/preview", params: { id: "7" } });
   });
 
   // SHOP-TASK-155 验收第 2 条与 HANDOFF 0.61 第（4）条「订单号经会员订单请求模块的模块内存交接，不进地址」：会员模式退款申请的路径不带段值，
@@ -710,6 +719,66 @@ describe("in-site navigation", () => {
         expect(PRODUCT_LIST_KEYS, href).toContain(key);
       }
     }
+  });
+});
+
+// 只输出内存路由给出的位置、模式与段值，另放一个站内链接。
+function MemoryProbe() {
+  const { path, search, pattern, params } = useRouter();
+  return (
+    <>
+      {`${path}|${search}|${pattern}|${params.slug ?? ""}`}
+      <Link to="/cart">cart</Link>
+    </>
+  );
+}
+
+describe("memory router", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // UX 0.20 A12「前台预览」「以该活动正在生效的样子显示前台的首页、商品列表、商品详情、购物车与专题页」与 SHOP-TASK-280 落实写法（4）
+  // 「提供与 RouterProvider 相同的 useRouter 值」：里面的页面读到受控给出的位置、匹配的模式与解码后的段值，站内链接的 href 仍是前台的实际路径。
+  it("gives pages the controlled location", () => {
+    const html = renderToStaticMarkup(
+      <MemoryRouter location={{ path: "/products/a%20b", search: "" }} onNavigate={() => undefined}>
+        <MemoryProbe />
+      </MemoryRouter>,
+    );
+    expect(html).toBe(`/products/a%20b||/products/:slug|a b<a href="/cart">cart</a>`);
+    const list = renderToStaticMarkup(
+      <MemoryRouter location={{ path: "/products", search: "?q=tee" }} onNavigate={() => undefined}>
+        <MemoryProbe />
+      </MemoryRouter>,
+    );
+    expect(list).toContain("/products|?q=tee|/products|");
+  });
+
+  // UX 0.20 A12「前台预览」（预览只给管理员看，地址栏始终是预览页）与 SHOP-TASK-280 落实写法（4）「navigate 与 replace 只调用 onNavigate、
+  // 不写历史记录与地址栏，source 为 null，离开拦截为空操作」及（8）「navigate 换了位置后回到页面顶部」：浏览器的历史记录一次也不写；
+  // 目标（未知路径落到首页）交给 onNavigate；navigate 到当前位置不交给 onNavigate、只回到顶部。
+  it("never writes the browser history", () => {
+    const { browser, calls } = fakeBrowser("/admin/promotions/7/preview");
+    vi.stubGlobal("window", browser);
+    const targets: RouteLocation[] = [];
+    const value = memoryRouterValue({ path: "/", search: "" }, (next) => {
+      targets.push(next);
+    });
+    value.navigate("/products", "q=tee");
+    value.replace("/cart");
+    value.navigate("/track/order");
+    value.navigate("/");
+    value.setLeaveGuard(() => undefined);
+    expect(targets).toEqual([
+      { path: "/products", search: "?q=tee" },
+      { path: "/cart", search: "" },
+      { path: "/track/order", search: "" },
+    ]);
+    expect(calls).toEqual(["scroll 0,0"]);
+    expect(browser.location).toEqual({ pathname: "/admin/promotions/7/preview", search: "" });
+    expect(value.source()).toBeNull();
+    expect(value.pattern).toBe("/");
   });
 });
 

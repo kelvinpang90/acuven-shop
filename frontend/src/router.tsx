@@ -19,7 +19,8 @@ import type { AnchorHTMLAttributes, MouseEvent, ReactNode } from "react";
 // 按订单筛选 /admin/refunds/order/:orderId 的段值是订单的内部 ID，订单号只在页面内存里；
 // 退款详情 /admin/refunds/:id 的段值是申请的内部 ID，订单号、理由、审核人邮箱、令牌与幂等键只在页面内存与请求里，
 // 列表的筛选与页码只在页面模块的内存里；促销活动列表 /admin/promotions 不带段值，新建 /admin/promotions/new 的 new 是固定段，
-// 活动编辑 /admin/promotions/:id 的段值是活动的内部 ID，这三个地址里都不带查询参数；Stripe 待处理 /admin/stripe-pending、后台商品 /admin/products、后台分类 /admin/categories、运费与演示汇率 /admin/shipping、库存重置结果 /admin/stock-resets、店铺装修 /admin/store-design 与站点设置 /admin/settings 不带段值）：
+// 活动编辑 /admin/promotions/:id 与前台预览 /admin/promotions/:id/preview 的段值是活动的内部 ID，这四个地址里都不带查询参数
+// （前台预览里被预览的前台位置只在页面内存的内存路由里，见下方 MemoryRouter）；Stripe 待处理 /admin/stripe-pending、后台商品 /admin/products、后台分类 /admin/categories、运费与演示汇率 /admin/shipping、库存重置结果 /admin/stock-resets、店铺装修 /admin/store-design 与站点设置 /admin/settings 不带段值）：
 // App.tsx 不给它们套前台框架，前台页头、菜单与页脚也没有指向它们的入口（UX A01「前台不放入口链接」）。
 // 会员登录 /login 的号码与密码只在页面内存与请求体里；登录成功后回到的来源页只记在路由的内存里（见下方「来源页」）。
 // 忘记密码 /forgot-password 的号码、验证码、新密码与 CSRF 令牌只在页面内存与请求里。
@@ -61,6 +62,7 @@ export const ROUTE_PATHS = [
   "/admin/promotions",
   "/admin/promotions/new",
   "/admin/promotions/:id",
+  "/admin/promotions/:id/preview",
   "/admin/shipping",
   "/admin/stock-resets",
   "/admin/store-design",
@@ -170,6 +172,11 @@ export function adminRefundsOrderPath(orderId: number): RoutePath {
 // 后台促销活动编辑区的实际路径：段值为活动的内部 ID。
 export function adminPromotionPath(id: number): RoutePath {
   return `/admin/promotions/${String(id)}`;
+}
+
+// 后台促销活动前台预览的实际路径：段值为活动的内部 ID。
+export function adminPromotionPreviewPath(id: number): RoutePath {
+  return `/admin/promotions/${String(id)}/preview`;
 }
 
 // 未知路径落到首页。
@@ -387,7 +394,7 @@ export function watchUnload(target: UnloadTarget, guarded: boolean): () => void 
   };
 }
 
-interface RouterContextValue {
+export interface RouterContextValue {
   // 当前实际路径（如 /products/crew-neck-tee）。
   path: RoutePath;
   // 当前查询串：空串，或以 ? 开头。
@@ -471,6 +478,60 @@ export function RouterProvider({ children, initialPath }: RouterProviderProps) {
     () => ({ path, search, pattern: match.pattern, params: match.params, navigate, replace, source: readSource, setLeaveGuard }),
     [path, search, match, navigate, replace, readSource, setLeaveGuard],
   );
+  return <RouterContext.Provider value={value}>{children}</RouterContext.Provider>;
+}
+
+// 内存路由（前台预览 A12，UX 0.20 A12「前台预览」，HANDOFF 0.98 落实写法（4）、（8））：位置由调用方受控给出，
+// 提供与 RouterProvider 相同的 useRouter 值，所以里面的前台页面与站内链接照常工作；navigate 与 replace 只调用 onNavigate，
+// 不写历史记录与地址栏（地址栏始终是外面的页面），是否换位置由调用方决定。没有来源页（source 为 null），离开拦截为空操作。
+// 换了页面（路径变了）后回到页面顶部，同 RouterProvider；navigate 到当前位置时只回到顶部。
+export interface MemoryRouterProps {
+  location: RouteLocation;
+  onNavigate: (next: RouteLocation) => void;
+  children: ReactNode;
+}
+
+const NO_SOURCE = (): RoutePath | null => null;
+const NO_LEAVE_GUARD = (): void => undefined;
+
+function scrollToTop(): void {
+  if (typeof window !== "undefined") {
+    window.scrollTo(0, 0);
+  }
+}
+
+// 内存路由给出的 useRouter 值：位置为 location，navigate 与 replace 把目标（未知路径落到首页）交给 onNavigate。
+export function memoryRouterValue(location: RouteLocation, onNavigate: (next: RouteLocation) => void): RouterContextValue {
+  const match = matchRoute(location.path) ?? HOME_MATCH;
+  return {
+    path: location.path,
+    search: location.search,
+    pattern: match.pattern,
+    params: match.params,
+    navigate: (next, nextSearch = "") => {
+      const target = resolveLocation(next, normalizeSearch(nextSearch));
+      if (sameLocation(location, target)) {
+        scrollToTop();
+      } else {
+        onNavigate(target);
+      }
+    },
+    replace: (next, nextSearch = "") => {
+      onNavigate(resolveLocation(next, normalizeSearch(nextSearch)));
+    },
+    source: NO_SOURCE,
+    setLeaveGuard: NO_LEAVE_GUARD,
+  };
+}
+
+export function MemoryRouter({ location, onNavigate, children }: MemoryRouterProps) {
+  const value = useMemo(() => memoryRouterValue(location, onNavigate), [location, onNavigate]);
+
+  // 只在换页面时回到顶部；同一页面只改查询串（如商品列表换筛选）时不动。
+  useEffect(() => {
+    scrollToTop();
+  }, [location.path]);
+
   return <RouterContext.Provider value={value}>{children}</RouterContext.Provider>;
 }
 

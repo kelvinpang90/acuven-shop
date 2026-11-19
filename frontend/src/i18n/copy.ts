@@ -3365,6 +3365,36 @@ export const COPY = {
     zh: "深色",
     ms: "Gelap",
   },
+  "admin.preview_home": {
+    en: "Home",
+    zh: "首页",
+    ms: "Utama",
+  },
+  "admin.preview_list": {
+    en: "Product list",
+    zh: "商品列表",
+    ms: "Senarai produk",
+  },
+  "admin.preview_detail": {
+    en: "Product page",
+    zh: "商品详情",
+    ms: "Halaman produk",
+  },
+  "admin.preview_cart": {
+    en: "Cart",
+    zh: "购物车",
+    ms: "Troli",
+  },
+  "admin.preview_sale": {
+    en: "Sale page",
+    zh: "活动专题页",
+    ms: "Halaman jualan",
+  },
+  "admin.promo_preview_needs_time": {
+    en: "To preview on the storefront, save a start time and an end time that's still ahead.",
+    zh: "保存开始时间与尚未过去的结束时间后，才能在前台预览。",
+    ms: "Untuk pratonton di kedai, simpan masa mula dan masa tamat yang belum berlalu.",
+  },
   "admin.accent": {
     en: "Accent colour",
     zh: "主色",
@@ -3929,6 +3959,16 @@ export const COPY = {
     en: "Checkout is off in preview.",
     zh: "预览中不能结账。",
     ms: "Pembayaran dimatikan dalam pratonton.",
+  },
+  "promo.preview_bar": {
+    en: "Preview — only you can see this sale here. Checkout is turned off.",
+    zh: "预览：只有你看得到这个活动，预览中不能结账。",
+    ms: "Pratonton — hanya anda boleh melihat jualan ini di sini. Pembayaran dimatikan.",
+  },
+  "promo.preview_exit": {
+    en: "Close preview",
+    zh: "关闭预览",
+    ms: "Tutup pratonton",
   },
 } as const satisfies Record<string, CopyEntry>;
 

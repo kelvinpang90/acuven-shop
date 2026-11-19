@@ -764,6 +764,14 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-promo-ai__lang { display: flex; flex-wrap: wrap; gap: 6px; }
 .site-admin-promo-ai__review { margin: 0; padding: 6px 8px; }
 
+/* 后台促销活动的前台预览 A12（SHOP-TASK-280，A12-states 的前台预览条）：预览条的 sticky 定位、排列、间距与内边距来自设计系统的
+   .acs-admin.acs-admin__previewbar，在被预览的 .acs 之前；页签按钮内边距 6px 10px（同视觉稿的页签），去掉按钮的外边距与边框，禁用时不显示手形；
+   读取中与失败时预览条之下的提示区内边距 24px 20px（提示照后台 .acs-admin__alert）。
+   视觉稿的页签是链接，本页按落实写法为按钮：页签的文字颜色、当前页签的底色与字重、按钮的底色、字体与圆角 site.css 写不了，记在任务记录的偏离里 */
+.acs-admin__previewbar nav > button { margin: 0; padding: 6px 10px; border-style: none; cursor: pointer; }
+.acs-admin__previewbar nav > button:disabled { cursor: default; }
+.site-promo-preview__status { display: grid; gap: 12px; padding: 24px 20px; }
+
 /* 后台店铺装修 A08 的页头（A08-desktop）：标题与演示说明上下排列（间距 16px）；说明内边距 10px 12px。
    说明的底色、文字颜色、字号、圆角与 ★ 图形 site.css 写不了，记在 docs/TODO.md 的偏离里 */
 .site-admin-store-design { display: grid; gap: 16px; }

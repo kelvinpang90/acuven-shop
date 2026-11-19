@@ -14,6 +14,7 @@ import AdminCouponsPage from "./pages/AdminCouponsPage";
 import AdminOrdersPage from "./pages/AdminOrdersPage";
 import AdminProductsPage from "./pages/AdminProductsPage";
 import AdminPromotionEditPage from "./pages/AdminPromotionEditPage";
+import AdminPromotionPreviewPage from "./pages/AdminPromotionPreviewPage";
 import AdminPromotionsPage from "./pages/AdminPromotionsPage";
 import AdminRefundsPage from "./pages/AdminRefundsPage";
 import AdminShippingPage from "./pages/AdminShippingPage";
@@ -80,6 +81,8 @@ const PAGES: Readonly<Record<RoutePattern, ComponentType>> = {
   // 新建与编辑是同一页（前者没有活动 ID，后者的段值为活动的内部 ID）。
   "/admin/promotions/new": AdminPromotionEditPage,
   "/admin/promotions/:id": AdminPromotionEditPage,
+  // 前台预览以 /admin 开头、照后台页直接渲染：预览条与被预览的前台（店铺装修、活动、预览上下文、内存路由与 SiteFrame）都由本页自己提供。
+  "/admin/promotions/:id/preview": AdminPromotionPreviewPage,
   "/admin/shipping": AdminShippingPage,
   "/admin/stock-resets": AdminStockResetsPage,
   "/admin/store-design": AdminStoreDesignPage,

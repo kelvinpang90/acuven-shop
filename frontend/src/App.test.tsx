@@ -49,8 +49,13 @@ const cases = ROUTE_PATHS.flatMap((path) => LANGUAGES.map((language): [string, L
 describe("App", () => {
   // 需求：所有商品、金额、支付与发货都是演示，页面须持续、清楚地标注这一点（原外壳页测试的意图，改由全站框架守住）。
   // 后台页（以 /admin 开头）不套前台框架，按 docs/UX.md「管理后台总体」「每页顶部常驻 [admin.demo_banner]」断言后台横幅。
+  // SHOP-TASK-280：前台预览 /admin/promotions/:id/preview 不用后台框架，显示的是预览条与（读到之后）前台的演示横幅，只为它排除这一条
+  // （UX 0.20 A12「前台预览」「顶部常驻 [promo.preview_bar]」，见 pages/AdminPromotionPreviewPage.test.tsx）。
   it("labels every page as a demo", () => {
     for (const [path, language] of cases) {
+      if (path === "/admin/promotions/:id/preview") {
+        continue;
+      }
       const banner = path.startsWith("/admin") ? COPY["admin.demo_banner"][language] : COPY["common.demo_banner"][language];
       expect(render(path, language)).toContain(banner);
     }
