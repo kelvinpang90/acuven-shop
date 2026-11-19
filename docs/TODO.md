@@ -27,9 +27,8 @@
 
 <!-- openclaw:planning-v1:begin -->
 ### 当前计划
-1. `SHOP-TASK-279` 购物车 P04 在预览中的计价与禁用结账
-2. `SHOP-TASK-280` 后台促销活动的前台预览页（路由 /admin/promotions/:id/preview、预览条与页签）
-3. `SHOP-TASK-272` 后台促销活动 A12 的状态操作（发布、撤回、提前结束、复制、删除与前台预览）
+1. `SHOP-TASK-280` 后台促销活动的前台预览页（路由 /admin/promotions/:id/preview、预览条与页签）
+2. `SHOP-TASK-272` 后台促销活动 A12 的状态操作（发布、撤回、提前结束、复制、删除与前台预览）
 
 ### 已阻塞
 

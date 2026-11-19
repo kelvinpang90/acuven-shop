@@ -6394,7 +6394,7 @@ tasks:
       运营者落实写法（HANDOFF 0.98）：frontend/src/pages/CartPage.tsx 以 usePreview() 判断：不为 null 时计价改用 fetchPreviewQuote（活动 ID 与 CSRF 令牌取自预览上下文，经现有的 latestQuoter 传入，其余重新计价与 pending 的写法不变），桌面摘要与手机底部固定栏的 cart.checkout 都为禁用的按钮（不是链接，不跳转），各自旁边显示 promo.preview_no_checkout；为 null 时一切照旧。会员说明等其余内容照现有写法显示。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 11 条：预览的计价只经后台接口，结账与下单按钮禁用，不产生订单；页面只显示计价结果，不碰个人资料。
       拆分：P04 的预览一层（7 个允许路径：页面与测试，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入），依赖 SHOP-TASK-277。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-277
     acceptance_criteria:
