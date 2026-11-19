@@ -6459,7 +6459,7 @@ tasks:
       运营者落实写法（HANDOFF 0.98）：（1）按已保存的状态显示操作（不可用的不显示）：草稿为保存、发布、复制、删除、预览；未开始为保存、撤回、复制、预览；进行中为保存、提前结束、复制；已结束只有复制。手机上保存之外的操作收在 admin.promo_more 的菜单里（按钮切换显隐）。（2）发布、撤回、提前结束、复制与预览都作用于已保存的版本：有未保存的修改时点这些按钮只显示 admin.promo_save_first，不发请求、不打开预览。（3）提前结束、撤回与删除先弹确认框（admin.promo_end_confirm、admin.promo_withdraw_confirm、admin.promo_delete_confirm，按钮为该操作本身与 common.cancel），写法照 A10 的 site-admin__confirm（common.cancel 自动聚焦、Escape 等于取消）。发布不弹确认框。删除有未保存的修改时同样只弹确认框（删除丢掉本页修改）。（4）结果：发布、撤回与提前结束成功后以返回的活动为新基准（状态标签与可改范围随之更新），显示 admin.promo_saved；复制成功后以站内跳转进入 adminPromotionPath(新草稿 ID)，新页面显示 admin.promo_copied（沿用 SHOP-TASK-270 的一次性提示）；删除成功后以 replace 回到列表。失败的提示与保存相同（SHOP-TASK-270 落实写法（4），含 publish_missing、overlap 与 changed）。（5）admin.promo_preview 以新标签页打开 SHOP-TASK-280 的 adminPromotionPreviewPath(活动 ID)（window.open，带 noopener）；已保存的开始或结束时间为空，或已保存的结束时间不晚于马来西亚当前时刻（当前 UTC 时间加 8 小时取到分钟，与 YYYY-MM-DDTHH:MM 按字符串比较）时按钮禁用，旁边显示 admin.promo_preview_needs_time。视觉稿里 site.css 写不了的颜色、字号、字重与底色不搬，记入任务记录的偏离，评审不以此要求修改。
       设计闸门：DESIGN 1.23（提交 b7f9355）「节日促销活动」第 2、11 条：状态操作带读取时的版本号提交，核对、审计与发布条件在服务端；页面只按状态显示操作与确认，不碰金额计算与个人资料。
       拆分：A12 状态操作一层（7 个允许路径：编辑页与测试，router.tsx、App.tsx、copy.ts 与 site.css 按页面任务的惯例列入），依赖 SHOP-TASK-270（编辑区）与 280（预览页的路径）。
-    status: ready
+    status: done
     depends_on:
       - SHOP-TASK-270
       - SHOP-TASK-280
