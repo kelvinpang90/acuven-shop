@@ -1,15 +1,26 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import type { ChangeEvent, Dispatch, FormEvent, ReactNode, SetStateAction, SyntheticEvent } from "react";
+import type { ChangeEvent, Dispatch, FormEvent, KeyboardEvent, ReactNode, SetStateAction, SyntheticEvent } from "react";
 
 import type { AiProposal } from "../api/adminPromotionAi";
 import type { PosterSlot } from "../api/adminPromotionPoster";
-import { createAdminPromotion, MAX_PROMOTION_ID, readAdminPromotion, readAdminPromotions, saveAdminPromotion } from "../api/adminPromotions";
-import type { AdminPromotion, PromotionProblem, PromotionRead, PromotionsRead, PromotionWrite } from "../api/adminPromotions";
+import {
+  copyAdminPromotion,
+  createAdminPromotion,
+  deleteAdminPromotion,
+  endAdminPromotion,
+  MAX_PROMOTION_ID,
+  publishAdminPromotion,
+  readAdminPromotion,
+  readAdminPromotions,
+  saveAdminPromotion,
+  withdrawAdminPromotion,
+} from "../api/adminPromotions";
+import type { AdminPromotion, PromotionDelete, PromotionProblem, PromotionRead, PromotionsRead, PromotionState, PromotionWrite } from "../api/adminPromotions";
 import AdminFrame, { AdminAlert, LANGUAGE_LABEL, useUnsavedConfirm } from "../components/AdminFrame";
 import { LANGUAGES } from "../i18n/copy";
 import type { CopyKey, Language } from "../i18n/copy";
 import { htmlLang, useCopy } from "../i18n/language";
-import { ADMIN_LOGIN_PATH, ADMIN_PROMOTION_NEW_PATH, ADMIN_PROMOTIONS_PATH, adminPromotionPath, Link, useRouter } from "../router";
+import { ADMIN_LOGIN_PATH, ADMIN_PROMOTION_NEW_PATH, ADMIN_PROMOTIONS_PATH, adminPromotionPath, adminPromotionPreviewPath, Link, useRouter } from "../router";
 import type { RouteParams, RoutePath, RoutePattern } from "../router";
 import { startDeferred } from "./AdminOrderDetail";
 import AdminPromotionAi, { aiRuleProblems, applyProposal } from "./AdminPromotionAi";
@@ -32,7 +43,8 @@ import type { CopyField, PromotionForm, PromotionFormProblem } from "./promotion
 // SHOP-TASK-275 在装饰区之后接上海报区（AdminPromotionPoster.tsx，海报模式与替代文字计入未保存与提交；海报图上传即替换、立即生效、不随保存提交、
 // 不改版本，所以只换 promotion 上的海报图，不改表单、基准与版本号）；SHOP-TASK-274 在装饰区末尾接上编辑区预览（AdminPromotionEditorPreview.tsx，
 // 传入当前的表单与已保存的桌面海报图，随未保存的输入即时更新，任何状态都显示）；SHOP-TASK-276 在海报区之后接上 AI 区（AdminPromotionAi.tsx，描述只在该区
-// 内存里、不进表单与提交；点 admin.ai_apply 才把提案的装饰与 12 个文案字段填回表单，计入未保存、经普通保存提交；已结束只读）；状态操作由之后的任务接上。
+// 内存里、不进表单与提交；点 admin.ai_apply 才把提案的装饰与 12 个文案字段填回表单，计入未保存、经普通保存提交；已结束只读）；SHOP-TASK-272 在操作栏
+// 保存之外接上状态操作（发布、撤回、提前结束、复制、删除与前台预览，按已保存的状态显示，手机收在 admin.promo_more 里；见下方 STATE_ACTIONS 起的各段）。
 // - 新建先以 readAdminPromotions 取 CSRF 令牌，保存为 createAdminPromotion，成功后以 replace 换到新 ID 的页面并在那里显示 admin.promo_saved（本模块里存的
 //   一次性提示）；已有活动以 readAdminPromotion 读取，保存为 saveAdminPromotion（带读取到的 version），成功后以返回的活动为新基准。段值不是不超过
 //   MAX_PROMOTION_ID 的正整数即不存在，不发请求。
@@ -72,9 +84,10 @@ export function takePromotionNotice(id: number): CopyKey | null {
 }
 
 // 操作栏下方的结果提示：成功（role 为 status）、版本不符等（admin.promo_changed 与 admin.reload）、取值不合格（admin.promo_invalid 下逐条列出）、
-// 与其他已发布活动时间重叠（admin.promo_overlap）、网络中断与其他失败。
+// 与其他已发布活动时间重叠（admin.promo_overlap）、网络中断与其他失败；有未保存修改时点状态操作或预览为 admin.promo_save_first（SHOP-TASK-272）。
 export type EditNotice =
   | { kind: "done"; key: CopyKey }
+  | { kind: "saveFirst" }
   | { kind: "changed" }
   | { kind: "invalid"; products: string[]; publishMissing: boolean; other: boolean }
   | { kind: "overlap"; name: string }
@@ -82,7 +95,8 @@ export type EditNotice =
 
 // 编辑区：promotion 为最近一次读取或保存给的活动（新建尚未保存时为 null），base 为比较基准，form 为已填的值；locked 为保存时服务端答 rules_locked 后
 // 时间与同用开关（及规则）只读，直到离开本页或 admin.reload；checked 为点过保存而字段检查不合格，此后按当前的值在字段旁提示；aiChecked 为点过
-// admin.ai_generate 而规则参数不合格，此后按当前的值只在规则参数旁提示（SHOP-TASK-276）；saving 为保存进行中。
+// admin.ai_generate 而规则参数不合格，此后按当前的值只在规则参数旁提示（SHOP-TASK-276）；saving 为写请求（保存或状态操作）进行中，此时操作栏的按钮都禁用；
+// acting 为进行中的状态操作（保存时为 null）；confirm 为打开着的确认框；more 为手机上 admin.promo_more 的菜单是否展开（SHOP-TASK-272）。
 export interface Editor {
   promotion: AdminPromotion | null;
   csrfToken: string;
@@ -92,6 +106,9 @@ export interface Editor {
   checked: boolean;
   aiChecked: boolean;
   saving: boolean;
+  acting: StateAction | null;
+  confirm: ConfirmAction | null;
+  more: boolean;
   notice: EditNotice | null;
 }
 
@@ -102,7 +119,20 @@ export const LOADING: EditState = { status: "loading" };
 
 export function openEditor(promotion: AdminPromotion | null, csrfToken: string, notice: EditNotice | null = null): Editor {
   const base = promotion === null ? newPromotionForm() : formFromPromotion(promotion);
-  return { promotion, csrfToken, base, form: base, locked: false, checked: false, aiChecked: false, saving: false, notice };
+  return {
+    promotion,
+    csrfToken,
+    base,
+    form: base,
+    locked: false,
+    checked: false,
+    aiChecked: false,
+    saving: false,
+    acting: null,
+    confirm: null,
+    more: false,
+    notice,
+  };
 }
 
 // 按状态的可改范围（UX A12「状态与可用操作」）：已结束全部只读、不显示保存；进行中（或保存时被答 rules_locked）开始与结束时间、同用开关只读。
@@ -198,7 +228,7 @@ export function lockRules(editor: Editor): Editor {
   };
 }
 
-// 对当前状态的一次改动：只改保存进行中的编辑区（离开或重新读取之后的结果不覆盖新的页面）。
+// 对当前状态的一次改动：只改写请求进行中的编辑区（离开或重新读取之后的结果不覆盖新的页面）。
 export type EditChange = (current: EditState) => EditState;
 
 function withSavingEditor(change: (editor: Editor) => Editor): EditChange {
@@ -206,7 +236,7 @@ function withSavingEditor(change: (editor: Editor) => Editor): EditChange {
 }
 
 function settle(notice: EditNotice | null): EditChange {
-  return withSavingEditor((editor) => ({ ...editor, saving: false, notice }));
+  return withSavingEditor((editor) => ({ ...editor, saving: false, acting: null, notice }));
 }
 
 // 保存的结果之后要做的：回到 A01、换到新建活动的页面、重新取 CSRF 令牌，或改动当前状态。
@@ -243,7 +273,7 @@ export function saveStep(write: PromotionWrite, created: boolean): SaveStep {
       }
       const notice = invalidNotice(write.problems);
       if (codes.includes("rules_locked")) {
-        return { kind: "change", change: withSavingEditor((editor) => ({ ...lockRules(editor), saving: false, notice })) };
+        return { kind: "change", change: withSavingEditor((editor) => ({ ...lockRules(editor), saving: false, acting: null, notice })) };
       }
       return { kind: "change", change: settle(notice) };
     }
@@ -274,7 +304,7 @@ export function csrfStep(read: PromotionRead | PromotionsRead): EditChange | "lo
   const notice: EditNotice = { kind: "alert", key: "common.error_retry" };
   if (read.kind === "ok") {
     const csrfToken = read.csrf_token;
-    return withSavingEditor((editor) => ({ ...editor, csrfToken, saving: false, notice }));
+    return withSavingEditor((editor) => ({ ...editor, csrfToken, saving: false, acting: null, notice }));
   }
   return settle(notice);
 }
@@ -519,6 +549,227 @@ export async function submitPromotion(editor: Editor, signal: AbortSignal, moves
   }
 }
 
+// 状态操作（SHOP-TASK-272，UX A12「状态与可用操作」与说明的「提前结束、撤回、删除」「前台预览」两条，HANDOFF 0.98 落实写法（1）–（5））。
+// 保存之外的操作：发请求的五个，与只打开新标签页的预览；先弹确认框的为撤回、提前结束与删除。
+export type StateAction = "publish" | "withdraw" | "end" | "copy" | "delete";
+export type BarAction = StateAction | "preview";
+export type ConfirmAction = "withdraw" | "end" | "delete";
+
+// 按已保存的状态显示的操作（common.save 之外，依次照 UX 线框；不可用的不显示）：草稿为发布、复制、删除、预览；未开始为撤回、复制、预览；
+// 进行中为提前结束、复制；已结束只有复制。新建尚未保存时没有。
+export const STATE_ACTIONS: Readonly<Record<PromotionState, readonly BarAction[]>> = {
+  draft: ["publish", "copy", "delete", "preview"],
+  scheduled: ["withdraw", "copy", "preview"],
+  running: ["end", "copy"],
+  ended: ["copy"],
+};
+
+export function barActions(editor: Editor): readonly BarAction[] {
+  return editor.promotion === null ? [] : STATE_ACTIONS[editor.promotion.state];
+}
+
+export const ACTION_LABEL: Readonly<Record<BarAction, CopyKey>> = {
+  publish: "admin.promo_publish",
+  withdraw: "admin.promo_withdraw",
+  end: "admin.promo_end_now",
+  copy: "admin.promo_copy",
+  delete: "admin.promo_delete",
+  preview: "admin.promo_preview",
+};
+
+export const CONFIRM_TEXT: Readonly<Record<ConfirmAction, CopyKey>> = {
+  withdraw: "admin.promo_withdraw_confirm",
+  end: "admin.promo_end_confirm",
+  delete: "admin.promo_delete_confirm",
+};
+
+function needsConfirm(action: BarAction): action is ConfirmAction {
+  return action === "withdraw" || action === "end" || action === "delete";
+}
+
+// 马来西亚当前时刻（落实写法（5））：当前 UTC 时间加 8 小时取到分钟，写成「YYYY-MM-DDTHH:MM」。
+export function malaysiaMinute(nowMs: number): string {
+  return new Date(nowMs + 8 * 60 * 60 * 1000).toISOString().slice(0, 16);
+}
+
+// 前台预览的禁用条件（UX A12 说明「前台预览」）：已保存的开始或结束时间为空，或已保存的结束时间不晚于 now（同为「YYYY-MM-DDTHH:MM」，按字符串比较）。
+export function previewNeedsTime(promotion: AdminPromotion, now: string): boolean {
+  const startsAt = promotion.starts_at ?? "";
+  const endsAt = promotion.ends_at ?? "";
+  return startsAt === "" || endsAt === "" || endsAt <= now;
+}
+
+// 在新标签页打开前台预览（带 noopener）。
+export function openPreview(path: RoutePath, target: Pick<Window, "open"> = window): void {
+  target.open(path, "_blank", "noopener");
+}
+
+// 点操作的副作用：run 发状态操作的请求，open 在新标签页打开前台预览。
+export interface ActionEffects {
+  run: (editor: Editor, action: StateAction) => void;
+  open: (path: RoutePath) => void;
+}
+
+// 开始一次状态操作：按钮都禁用、该操作标 aria-busy，确认框与菜单收起，先前的提示收起。
+export function startAction(editor: Editor, action: StateAction): Editor {
+  return { ...editor, saving: true, acting: action, confirm: null, more: false, notice: null };
+}
+
+// 点操作栏的操作（落实写法（2）（3）（5））：写请求进行中、该状态不提供的操作不变。删除之外有未保存修改时只显示 admin.promo_save_first（不发请求、
+// 不打开预览）；预览按钮禁用时不变，否则打开 adminPromotionPreviewPath；撤回、提前结束与删除打开确认框（删除有未保存修改时同样只弹确认框）；
+// 发布与复制立即提交。now 为马来西亚当前时刻（malaysiaMinute）。点过之后手机菜单收起。
+export function pressAction(editor: Editor, action: BarAction, now: string, effects: ActionEffects): Editor {
+  const { promotion } = editor;
+  if (editor.saving || promotion === null || !barActions(editor).includes(action)) {
+    return editor;
+  }
+  if (action !== "delete" && isDirty(editor.form, editor.base)) {
+    return { ...editor, more: false, notice: { kind: "saveFirst" } };
+  }
+  if (action === "preview") {
+    if (previewNeedsTime(promotion, now)) {
+      return editor;
+    }
+    effects.open(adminPromotionPreviewPath(promotion.id));
+    return editor.more ? { ...editor, more: false } : editor;
+  }
+  if (needsConfirm(action)) {
+    return { ...editor, more: false, confirm: action };
+  }
+  effects.run(editor, action);
+  return startAction(editor, action);
+}
+
+// 确认框里点该操作本身：提交并关闭确认框；没有确认框或写请求进行中时不变。
+export function confirmAction(editor: Editor, run: ActionEffects["run"]): Editor {
+  const { confirm } = editor;
+  if (confirm === null || editor.saving) {
+    return editor;
+  }
+  run(editor, confirm);
+  return startAction(editor, confirm);
+}
+
+// 确认框里点 common.cancel 或按 Escape：只关闭确认框。
+export function cancelConfirm(editor: Editor): Editor {
+  return editor.confirm === null ? editor : { ...editor, confirm: null };
+}
+
+// 手机上点 admin.promo_more：切换菜单的显隐。
+export function toggleMore(editor: Editor): Editor {
+  return { ...editor, more: !editor.more };
+}
+
+// 状态操作的结果之后要做的：同保存（SaveStep，状态操作不会给 created），另有复制成功换到新草稿、删除成功回到列表。
+export type ActionStep = SaveStep | { kind: "copied"; id: number } | { kind: "deleted" };
+
+// 按状态操作的结果决定（落实写法（4））：发布、撤回与提前结束成功后以返回的活动为新基准（状态标签与可改范围随之更新，保存时的锁定一并解除），
+// 显示 admin.promo_saved；复制成功为 copied（新草稿的 ID），删除成功为 deleted；失败的提示与保存相同（saveStep）。
+export function actionStep(action: StateAction, result: PromotionWrite | PromotionDelete): ActionStep {
+  if (result.kind !== "ok") {
+    return saveStep(result, false);
+  }
+  if (!("promotion" in result)) {
+    return { kind: "deleted" };
+  }
+  const { promotion } = result;
+  if (action === "copy") {
+    return { kind: "copied", id: promotion.id };
+  }
+  return { kind: "change", change: withSavingEditor((editor) => openEditor(promotion, editor.csrfToken, { kind: "done", key: "admin.promo_saved" })) };
+}
+
+// 状态操作用到的请求，测试以替身代替。
+export interface PromotionActionApi {
+  readOne: typeof readAdminPromotion;
+  publish: typeof publishAdminPromotion;
+  withdraw: typeof withdrawAdminPromotion;
+  end: typeof endAdminPromotion;
+  copy: typeof copyAdminPromotion;
+  remove: typeof deleteAdminPromotion;
+}
+
+export const PROMOTION_ACTION_API: PromotionActionApi = {
+  readOne: readAdminPromotion,
+  publish: publishAdminPromotion,
+  withdraw: withdrawAdminPromotion,
+  end: endAdminPromotion,
+  copy: copyAdminPromotion,
+  remove: deleteAdminPromotion,
+};
+
+// 状态操作的换页另有站内跳转（复制成功后进入新草稿，留下本页的历史记录）。
+export interface ActionMoves extends EditMoves {
+  navigate: (path: RoutePath) => void;
+}
+
+// 发出一次状态操作：都作用于已保存的版本（带读取到的 version，复制只带 ID），带 CSRF 令牌。
+function sendAction(action: StateAction, promotion: AdminPromotion, csrfToken: string, signal: AbortSignal, api: PromotionActionApi): Promise<PromotionWrite | PromotionDelete> {
+  const { id, version } = promotion;
+  switch (action) {
+    case "publish":
+      return api.publish(id, version, csrfToken, signal);
+    case "withdraw":
+      return api.withdraw(id, version, csrfToken, signal);
+    case "end":
+      return api.end(id, version, csrfToken, signal);
+    case "copy":
+      return api.copy(id, csrfToken, signal);
+    case "delete":
+      return api.remove(id, version, csrfToken, signal);
+  }
+}
+
+// 提交状态操作（是否可点、确认与未保存修改的判断在调用之前，见 pressAction 与 confirmAction）。复制成功先存一次性提示 admin.promo_copied，再以站内跳转
+// 进入 adminPromotionPath(新草稿 ID)；删除成功以 replace 回到列表；401 回到 A01；403 时照保存重新取令牌（readAdminPromotion，只取 csrf_token）。
+// signal 中止（离开页面）之后不再更新。
+export async function runAction(
+  editor: Editor,
+  action: StateAction,
+  signal: AbortSignal,
+  moves: ActionMoves,
+  api: PromotionActionApi = PROMOTION_ACTION_API,
+): Promise<void> {
+  const { promotion, csrfToken } = editor;
+  if (promotion === null) {
+    return;
+  }
+  const result = await sendAction(action, promotion, csrfToken, signal, api);
+  if (signal.aborted) {
+    return;
+  }
+  const step = actionStep(action, result);
+  switch (step.kind) {
+    case "login":
+      moves.replace(ADMIN_LOGIN_PATH);
+      return;
+    case "copied":
+      stashPromotionNotice(step.id, "admin.promo_copied");
+      moves.navigate(adminPromotionPath(step.id));
+      return;
+    case "deleted":
+      moves.replace(ADMIN_PROMOTIONS_PATH);
+      return;
+    case "change":
+      moves.update(step.change);
+      return;
+    case "created":
+      // 只有新建的保存会给 created，状态操作不会。
+      return;
+    case "csrf":
+      break;
+  }
+  const reread = csrfStep(await api.readOne(promotion.id, signal));
+  if (signal.aborted) {
+    return;
+  }
+  if (reread === "login") {
+    moves.replace(ADMIN_LOGIN_PATH);
+  } else {
+    moves.update(reread);
+  }
+}
+
 // 各区块的展开状态：首次渲染（含服务端渲染）全部展开；挂载后在手机宽度上收起基本信息与规则区之外的区块。
 export type Panel = "basic" | "rules" | "combine" | "texts" | "decoration" | "poster" | "ai";
 export type PanelsOpen = Readonly<Record<Panel, boolean>>;
@@ -579,6 +830,11 @@ export interface EditHandlers {
   onAiApply: (proposal: AiProposal) => void;
   onAiRulesChecked: (rulesInvalid: boolean) => void;
   onAiReread: (promotionId: number | null, signal: AbortSignal) => Promise<RereadOutcome>;
+  // 状态操作（SHOP-TASK-272）：点操作栏的操作、确认框里点该操作或取消、手机上切换 admin.promo_more 的菜单。
+  onAction: (action: BarAction) => void;
+  onConfirm: () => void;
+  onCancelConfirm: () => void;
+  onMore: () => void;
 }
 
 // 一个字段与其旁的 admin.promo_field_invalid（不合格时）；输入框以 aria-describedby 指向提示。
@@ -624,6 +880,12 @@ function NoticeView({ notice, onReload }: { notice: EditNotice; onReload: () => 
           {t(notice.key)}
         </p>
       );
+    case "saveFirst":
+      return (
+        <p className="site-admin-promo-edit__save-first" role="status">
+          {t("admin.promo_save_first")}
+        </p>
+      );
     case "changed":
       return (
         <div className="acs-admin__alert site-admin-promo-edit__changed" role="alert">
@@ -657,6 +919,109 @@ function NoticeView({ notice, onReload }: { notice: EditNotice; onReload: () => 
   }
 }
 
+// 操作栏（A12-states「各状态的操作组合」与 A12-phone）：common.save（已结束不显示）之后为按已保存状态的操作（STATE_ACTIONS）。桌面并排；手机上它们收在
+// admin.promo_more 的菜单里，admin.promo_more 切换菜单的显隐（aria-expanded 标明是否展开，桌面不显示它）。写请求进行中时都禁用，进行中的那一个标
+// aria-busy。前台预览禁用时其下为 admin.promo_preview_needs_time（按钮以 aria-describedby 指向它）。已结束只有 admin.promo_copy，为主要按钮，其余为次要按钮。
+export function PromotionActionBar({ editor, now, handlers }: { editor: Editor; now: string; handlers: EditHandlers }) {
+  const t = useCopy();
+  const menuId = useId();
+  const noteId = useId();
+  const { promotion } = editor;
+  const ended = isEnded(editor);
+  const actions = barActions(editor);
+  return (
+    <div className="acs-admin__panel site-admin-promo-edit__actions">
+      {!ended && (
+        <button className="acs-admin__btn" type="submit" disabled={editor.saving} aria-busy={editor.saving && editor.acting === null}>
+          {t("common.save")}
+        </button>
+      )}
+      {promotion !== null && actions.length > 0 && (
+        <>
+          <button
+            className="acs-admin__btn acs-admin__btn--secondary site-admin-promo-edit__more"
+            type="button"
+            aria-expanded={editor.more}
+            aria-controls={menuId}
+            onClick={handlers.onMore}
+          >
+            {t("admin.promo_more")}
+          </button>
+          <div id={menuId} className={editor.more ? "acs-admin__panel site-admin-promo-edit__menu site-admin-promo-edit__menu--open" : "acs-admin__panel site-admin-promo-edit__menu"}>
+            {actions.map((action) => {
+              const press = () => {
+                handlers.onAction(action);
+              };
+              if (action === "preview") {
+                const blocked = previewNeedsTime(promotion, now);
+                return (
+                  <span key={action} className="site-admin-promo-edit__preview">
+                    <button
+                      className="acs-admin__btn acs-admin__btn--secondary"
+                      type="button"
+                      disabled={editor.saving || blocked}
+                      aria-describedby={blocked ? noteId : undefined}
+                      onClick={press}
+                    >
+                      {t(ACTION_LABEL[action])}
+                    </button>
+                    {blocked && (
+                      <span id={noteId} className="acs-admin__muted">
+                        {t("admin.promo_preview_needs_time")}
+                      </span>
+                    )}
+                  </span>
+                );
+              }
+              return (
+                <button
+                  key={action}
+                  className={ended ? "acs-admin__btn" : "acs-admin__btn acs-admin__btn--secondary"}
+                  type="button"
+                  disabled={editor.saving}
+                  aria-busy={editor.acting === action}
+                  onClick={press}
+                >
+                  {t(ACTION_LABEL[action])}
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// 确认框（UX A12 说明「提前结束、撤回、删除都先弹确认框」，照 A10 的 site-admin__confirm）：admin.promo_end_confirm、admin.promo_withdraw_confirm 或
+// admin.promo_delete_confirm，按钮依次为 common.cancel（次要，打开时取得焦点）与该操作本身（主要）；Escape 等同取消。
+export function PromotionConfirm({ action, onCancel, onConfirm }: { action: ConfirmAction; onCancel: () => void; onConfirm: () => void }) {
+  const t = useCopy();
+  const labelId = useId();
+  return (
+    <div
+      className="site-admin__overlay"
+      onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+        if (event.key === "Escape") {
+          onCancel();
+        }
+      }}
+    >
+      <div className="acs-admin__panel site-admin__confirm" role="dialog" aria-modal="true" aria-labelledby={labelId}>
+        <p id={labelId}>{t(CONFIRM_TEXT[action])}</p>
+        <div className="site-admin__confirm-actions">
+          <button className="acs-admin__btn acs-admin__btn--secondary" type="button" autoFocus onClick={onCancel}>
+            {t("common.cancel")}
+          </button>
+          <button className="acs-admin__btn" type="button" onClick={onConfirm}>
+            {t(ACTION_LABEL[action])}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BackLink() {
   const t = useCopy();
   return (
@@ -666,9 +1031,10 @@ function BackLink() {
   );
 }
 
-// 编辑区：标题行（admin.promo_back、已保存的内部名称与状态标签；新建尚未保存时只有 admin.promo_back）、操作栏（common.save，已结束时不显示）、
-// 结果提示、演示说明，再下为基本信息、规则、同用开关、文案、装饰、海报与 AI 七个区块。lists 为规则范围用的分类与商品列表。
-function EditorView({ editor, panels, lists, handlers }: { editor: Editor; panels: PanelsOpen; lists: ScopeLists; handlers: EditHandlers }) {
+// 编辑区：标题行（admin.promo_back、已保存的内部名称与状态标签；新建尚未保存时只有 admin.promo_back）、操作栏（common.save，已结束时不显示；
+// 其后为按状态的操作）、结果提示、演示说明，再下为基本信息、规则、同用开关、文案、装饰、海报与 AI 七个区块，最后为打开着的确认框。
+// lists 为规则范围用的分类与商品列表，now 为马来西亚当前时刻（前台预览的禁用条件）。
+function EditorView({ editor, panels, lists, now, handlers }: { editor: Editor; panels: PanelsOpen; lists: ScopeLists; now: string; handlers: EditHandlers }) {
   const t = useCopy();
   const { promotion, form } = editor;
   const ended = isEnded(editor);
@@ -693,13 +1059,7 @@ function EditorView({ editor, panels, lists, handlers }: { editor: Editor; panel
           </div>
         )}
       </div>
-      {!ended && (
-        <div className="acs-admin__panel site-admin-promo-edit__actions">
-          <button className="acs-admin__btn" type="submit" disabled={editor.saving} aria-busy={editor.saving}>
-            {t("common.save")}
-          </button>
-        </div>
-      )}
+      <PromotionActionBar editor={editor} now={now} handlers={handlers} />
       {editor.notice !== null && <NoticeView notice={editor.notice} onReload={handlers.onReload} />}
       {ended && <p className="site-admin-promo-edit__state">{t("admin.promo_ended_readonly")}</p>}
       <p className="site-admin-promo-edit__note">
@@ -852,6 +1212,7 @@ function EditorView({ editor, panels, lists, handlers }: { editor: Editor; panel
           onLogin={handlers.onLogin}
         />
       </PanelBox>
+      {editor.confirm !== null && <PromotionConfirm action={editor.confirm} onCancel={handlers.onCancelConfirm} onConfirm={handlers.onConfirm} />}
     </form>
   );
 }
@@ -862,12 +1223,14 @@ export interface AdminPromotionEditViewProps {
   handlers: EditHandlers;
   // 规则范围用的列表；没给时为读取中。
   lists?: ScopeLists;
+  // 马来西亚当前时刻（malaysiaMinute）；没给（挂载后取得时钟之前）时为空串，前台预览只按已保存的时间是否为空判断禁用。
+  now?: string;
 }
 
 // 内容区：读取中只有 admin.promo_back（标 aria-busy）；不存在与读取失败只有 admin.promo_back 与提示；取到后为编辑区。
-export function AdminPromotionEditView({ state, panels, handlers, lists = SCOPE_LOADING }: AdminPromotionEditViewProps) {
+export function AdminPromotionEditView({ state, panels, handlers, lists = SCOPE_LOADING, now = "" }: AdminPromotionEditViewProps) {
   if (state.status === "ready") {
-    return <EditorView editor={state.editor} panels={panels} lists={lists} handlers={handlers} />;
+    return <EditorView editor={state.editor} panels={panels} lists={lists} now={now} handlers={handlers} />;
   }
   return (
     <div className="site-admin-promo-edit" aria-busy={state.status === "loading"}>
@@ -893,12 +1256,14 @@ function pageMoves(setState: Dispatch<SetStateAction<EditState>>, replace: (path
 
 // 框架的内容区：框架确认已登录后才挂载，挂载时取用一次性提示并读取一次；离开页面时中止。
 export function AdminPromotionEditContent() {
-  const { pattern, params, replace } = useRouter();
+  const { pattern, params, replace, navigate } = useRouter();
   const segment = params.id;
   const target = useMemo(() => editTarget(pattern, segment === undefined ? {} : { id: segment }), [pattern, segment]);
   const [state, setState] = useState<EditState>(LOADING);
   const [panels, setPanels] = useState<PanelsOpen>(ALL_OPEN);
   const [lists, setLists] = useState<ScopeLists>(SCOPE_LOADING);
+  // 马来西亚当前时刻（前台预览的禁用条件）：编辑区打开后取一次，之后每次点操作栏的操作时更新。
+  const [now, setNow] = useState("");
   // 本页的请求（读取、保存、admin.reload 与 403 后重新取令牌）共用的中止；离开页面时中止。
   const lifetime = useRef<AbortController | null>(null);
   const opened = state.status === "ready";
@@ -927,11 +1292,27 @@ export function AdminPromotionEditContent() {
     });
   }, [opened, replace]);
 
+  useEffect(() => {
+    if (!opened) {
+      return undefined;
+    }
+    return startDeferred(new AbortController(), () => {
+      setNow(malaysiaMinute(Date.now()));
+    });
+  }, [opened]);
+
   useUnsavedConfirm(hasUnsavedChanges(state));
 
   const edit = (change: (current: Editor) => Editor) => {
     setState((current) => (current.status === "ready" ? { status: "ready", editor: change(current.editor) } : current));
   };
+
+  // 状态操作的提交：用本页的中止，复制成功以站内跳转进入新草稿。
+  const actionRunner =
+    (controller: AbortController): ActionEffects["run"] =>
+    (editor, action) => {
+      void runAction(editor, action, controller.signal, { ...pageMoves(setState, replace), navigate });
+    };
 
   const handlers: EditHandlers = {
     onField: (field, value) => {
@@ -982,9 +1363,42 @@ export function AdminPromotionEditContent() {
       edit((current) => checkAiRules(current, rulesInvalid));
     },
     onAiReread: (promotionId, signal) => rereadAiToken(promotionId, signal, setState),
+    onAction: (action) => {
+      const controller = lifetime.current;
+      if (state.status !== "ready" || controller === null) {
+        return;
+      }
+      const current = malaysiaMinute(Date.now());
+      setNow(current);
+      const next = pressAction(state.editor, action, current, {
+        run: actionRunner(controller),
+        open: (path) => {
+          openPreview(path);
+        },
+      });
+      if (next !== state.editor) {
+        setState({ status: "ready", editor: next });
+      }
+    },
+    onConfirm: () => {
+      const controller = lifetime.current;
+      if (state.status !== "ready" || controller === null) {
+        return;
+      }
+      const next = confirmAction(state.editor, actionRunner(controller));
+      if (next !== state.editor) {
+        setState({ status: "ready", editor: next });
+      }
+    },
+    onCancelConfirm: () => {
+      edit(cancelConfirm);
+    },
+    onMore: () => {
+      edit(toggleMore);
+    },
   };
 
-  return <AdminPromotionEditView state={state} panels={panels} handlers={handlers} lists={lists} />;
+  return <AdminPromotionEditView state={state} panels={panels} handlers={handlers} lists={lists} now={now} />;
 }
 
 export default function AdminPromotionEditPage() {
