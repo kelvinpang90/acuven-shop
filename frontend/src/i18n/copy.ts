@@ -2800,6 +2800,41 @@ export const COPY = {
     zh: "全部活动",
     ms: "Semua promosi",
   },
+  "admin.promo_publish": {
+    en: "Publish",
+    zh: "发布",
+    ms: "Terbitkan",
+  },
+  "admin.promo_withdraw": {
+    en: "Back to draft",
+    zh: "撤回为草稿",
+    ms: "Kembali ke draf",
+  },
+  "admin.promo_end_now": {
+    en: "End now",
+    zh: "提前结束",
+    ms: "Tamatkan sekarang",
+  },
+  "admin.promo_copy": {
+    en: "Copy as new draft",
+    zh: "复制为新草稿",
+    ms: "Salin sebagai draf baharu",
+  },
+  "admin.promo_delete": {
+    en: "Delete draft",
+    zh: "删除草稿",
+    ms: "Padam draf",
+  },
+  "admin.promo_preview": {
+    en: "Preview on the storefront",
+    zh: "在前台预览",
+    ms: "Pratonton di kedai",
+  },
+  "admin.promo_more": {
+    en: "More",
+    zh: "更多",
+    ms: "Lagi",
+  },
   "admin.promo_saved": {
     en: "Saved.",
     zh: "已保存。",
@@ -2845,10 +2880,35 @@ export const COPY = {
     zh: "发布需要至少一条规则、英文标题、开始时间与晚于现在的结束时间；海报为上传图时还需两张图与英文替代文字。",
     ms: "Untuk menerbitkan, tambah sekurang-kurangnya satu peraturan, tajuk Inggeris, masa mula (boleh sudah berlalu) dan masa tamat yang belum berlalu; untuk poster imej, tambah juga kedua-dua imej dan teks alternatif Inggeris.",
   },
+  "admin.promo_end_confirm": {
+    en: "End this promotion now? It can't be restarted.",
+    zh: "现在结束这个活动？结束后不能恢复。",
+    ms: "Tamatkan promosi ini sekarang? Ia tidak boleh dimulakan semula.",
+  },
+  "admin.promo_withdraw_confirm": {
+    en: "Move this promotion back to draft? It won't start until you publish it again.",
+    zh: "把这个活动撤回为草稿？重新发布之前不会开始。",
+    ms: "Kembalikan promosi ini ke draf? Ia tidak akan bermula sehingga anda menerbitkannya semula.",
+  },
+  "admin.promo_delete_confirm": {
+    en: "Delete this draft? This can't be undone.",
+    zh: "删除这个草稿？删除后无法恢复。",
+    ms: "Padam draf ini? Ini tidak boleh dibuat asal.",
+  },
+  "admin.promo_copied": {
+    en: "Copied. This is the new draft; set its time before publishing.",
+    zh: "已复制。这是新草稿，发布前请设定时间。",
+    ms: "Disalin. Ini draf baharu; tetapkan masanya sebelum diterbitkan.",
+  },
   "admin.promo_ended_readonly": {
     en: "This promotion has ended. It can only be copied.",
     zh: "这个活动已结束，只能复制。",
     ms: "Promosi ini telah tamat. Ia hanya boleh disalin.",
+  },
+  "admin.promo_save_first": {
+    en: "Save your changes first. Preview, publish and the other actions use the saved version.",
+    zh: "请先保存。预览、发布等操作都按已保存的内容进行。",
+    ms: "Simpan perubahan dahulu. Pratonton, terbitan dan tindakan lain menggunakan versi yang disimpan.",
   },
   "admin.promo_basic": {
     en: "Basics",

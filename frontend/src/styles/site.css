@@ -672,6 +672,17 @@ a.site-admin-refunds__clear { text-decoration: none; }
 .site-admin-promo-edit__lang > legend { padding: 0 4px; }
 .site-admin-promo-edit__copy-label { display: flex; justify-content: space-between; gap: 8px; }
 
+/* 后台促销活动编辑区 A12 的状态操作（A12-states「各状态的操作组合」、三个确认框与「预览按钮禁用」，SHOP-TASK-272）：common.save 之后的操作与它排在
+   同一行（间距 8px，可换行，顶端对齐）；桌面上操作的菜单不成框（display: contents），admin.promo_more 不显示；前台预览按钮与其下的
+   admin.promo_preview_needs_time 上下排列（间距 6px，靠左，最宽 320px）；admin.promo_save_first 内边距 10px 12px。确认框沿用 .site-admin__confirm。
+   提前结束与删除确认按钮的危险色、admin.promo_save_first 与 admin.promo_copied 的底色与文字颜色、预览说明的字号与 admin.promo_more 后的 ▾
+   site.css 写不了，记在任务记录的偏离里 */
+.site-admin-promo-edit__actions { align-items: flex-start; }
+.site-admin-promo-edit__actions .site-admin-promo-edit__more { display: none; }
+.site-admin-promo-edit__actions .site-admin-promo-edit__menu { display: contents; }
+.site-admin-promo-edit__preview { display: grid; gap: 6px; justify-items: start; max-width: 320px; }
+.site-admin-promo-edit__save-first { margin: 0; padding: 10px 12px; }
+
 /* 后台促销活动编辑区 A12 的规则区（A12-editor-desktop，SHOP-TASK-271）：各条规则与 admin.rule_add 上下排列（间距 14px）；每条规则内边距 14px、各项间距 10px，
    首行为编号（24px 见方，居中）与类别名（间距 10px），(↑)(↓) 与 admin.rule_remove 靠右（间距 6px）。范围的分类勾选与已选商品可换行（行距 6px、列距 14px），
    商品搜索框 260px；方式单选与输入框一行（间距 18px，框与单位 6px）；满额每档一行（间距 10px），admin.rule_add_tier 与 admin.rule_add 靠左；数字输入框 120px。
@@ -1495,6 +1506,16 @@ a.site-admin-refunds__clear { text-decoration: none; }
   .site-admin-promo-edit__langs { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .site-admin-promo-edit__lang { gap: 8px; }
   .site-admin-promo-edit .acs-admin__input { min-height: 44px; }
+
+  /* 状态操作（A12-phone，SHOP-TASK-272）：底部操作栏只有 common.save 与 admin.promo_more（按内容宽，垂直居中）；其余操作收在菜单里，菜单收起时不显示，
+     展开时为操作栏右上方的面板（距右 14px、距操作栏 8px，宽 260px 且不超出屏幕两侧 14px，内边距 10px），各操作上下排列（间距 8px）、占满宽度；
+     前台预览与其说明不限宽；admin.promo_save_first 内边距 8px 10px */
+  .site-admin-promo-edit__actions { align-items: center; }
+  .site-admin-promo-edit__actions .site-admin-promo-edit__more { display: inline-flex; flex-grow: 0; }
+  .site-admin-promo-edit__actions .site-admin-promo-edit__menu { display: none; }
+  .site-admin-promo-edit__actions .site-admin-promo-edit__menu--open { display: grid; gap: 8px; position: absolute; right: 14px; bottom: calc(100% + 8px); box-sizing: border-box; width: 260px; max-width: calc(100vw - 28px); padding: 10px; }
+  .site-admin-promo-edit__preview { justify-items: stretch; max-width: none; }
+  .site-admin-promo-edit__save-first { padding: 8px 10px; }
 
   /* 规则区（A12-phone）：各条规则间距 10px，每条内边距 10px、各项间距 8px；类别名独占首行，(↑)(↓) 与 admin.rule_remove 移到每条的末尾；商品搜索框占满宽度；
      满额每档的门槛与优惠两列并排（间距 8px），admin.rule_remove_tier 在其下靠左；按钮与选择至少 44px 高 */

@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { createElement, isValidElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AiProposal } from "../api/adminPromotionAi";
-import type { AdminPromotion, AdminPromotionRule, PromotionProblem, PromotionRead, PromotionsRead, PromotionWrite } from "../api/adminPromotions";
+import type { AdminPromotion, AdminPromotionRule, PromotionDelete, PromotionProblem, PromotionRead, PromotionsRead, PromotionWrite } from "../api/adminPromotions";
 import App from "../App";
 import { AdminFrameView } from "../components/AdminFrame";
 import type { FrameState } from "../components/AdminFrame";
@@ -13,9 +14,22 @@ import { LANGUAGE_STORAGE_KEY, LanguageProvider } from "../i18n/language";
 import { ADMIN_PROMOTION_NEW_PATH, adminPromotionPath, matchRoute, resolvePath, RouterProvider } from "../router";
 import type { RoutePath } from "../router";
 import AdminPromotionEditPage, {
+  ACTION_LABEL,
+  actionStep,
   ALL_OPEN,
   AdminPromotionEditView,
   applyAiProposal,
+  barActions,
+  cancelConfirm,
+  confirmAction,
+  malaysiaMinute,
+  openPreview,
+  pressAction,
+  previewNeedsTime,
+  PromotionConfirm,
+  runAction,
+  STATE_ACTIONS,
+  toggleMore,
   changeCopy,
   changeDecoration,
   changeField,
@@ -38,12 +52,13 @@ import AdminPromotionEditPage, {
   rereadPosterToken,
   saveStep,
   shownProblems,
+  startAction,
   stashPromotionNotice,
   startSaving,
   submitPromotion,
   takePromotionNotice,
 } from "./AdminPromotionEditPage";
-import type { Editor, EditHandlers, EditMoves, EditState, PanelsOpen, PromotionApi } from "./AdminPromotionEditPage";
+import type { ActionMoves, BarAction, Editor, EditHandlers, EditMoves, EditState, PanelsOpen, PromotionActionApi, PromotionApi, StateAction } from "./AdminPromotionEditPage";
 import { PACK_LABEL, pickFestivalPalette, pickPack, pickVariant } from "./AdminPromotionDecoration";
 import { pickPosterMode } from "./AdminPromotionPoster";
 import { addRule, mapRule, moveRule, removeRule } from "./AdminPromotionRules";
@@ -243,6 +258,10 @@ const NO_HANDLERS: EditHandlers = {
   onAiApply: () => undefined,
   onAiRulesChecked: () => undefined,
   onAiReread: () => Promise.resolve("failed"),
+  onAction: () => undefined,
+  onConfirm: () => undefined,
+  onCancelConfirm: () => undefined,
+  onMore: () => undefined,
 };
 
 function renderView(state: EditState, language: Language, panels: PanelsOpen = ALL_OPEN): string {
@@ -1842,5 +1861,433 @@ describe("AdminPromotionEditPage AI", () => {
     await expect(rereadAiToken(7, signal, saved.moves.update, fakeApi({ readOne }))).resolves.toBe("ok");
     expect(readOne).toHaveBeenCalledWith(7, signal);
     expect(editorOf(saved.state)).toEqual({ ...edited, csrfToken: "csrf-3" });
+  });
+});
+
+describe("AdminPromotionEditPage state actions", () => {
+  // 渲染时的马来西亚当前时刻：早于替身活动的结束时间（2027-02-12T23:59）。
+  const NOW = "2027-01-01T00:00";
+  const STATES = ["draft", "scheduled", "running", "ended"] as const;
+  // 每个状态操作用来测试的状态（该状态提供这个操作）与它的请求替身。
+  const STATE_OF: Record<StateAction, (typeof STATES)[number]> = { publish: "draft", withdraw: "scheduled", end: "running", copy: "ended", delete: "draft" };
+  const API_OF: Record<StateAction, keyof PromotionActionApi> = { publish: "publish", withdraw: "withdraw", end: "end", copy: "copy", delete: "remove" };
+  const STATE_ACTION_LIST = ["publish", "withdraw", "end", "copy", "delete"] as const;
+
+  type AnyElement = ReactElement<Record<string, unknown>>;
+
+  // 元素树：展开子组件（直接调用，仍在语言的上下文里），用来取按钮的处理函数与属性（不模拟点击）。照 A08 标志段测试的写法。
+  function expand(node: ReactNode): AnyElement[] {
+    if (Array.isArray(node)) {
+      return node.flatMap((child: ReactNode) => expand(child));
+    }
+    if (!isValidElement(node)) {
+      return [];
+    }
+    const found = node as AnyElement;
+    if (typeof found.type === "function") {
+      const component = found.type as (props: Record<string, unknown>) => ReactNode;
+      return [found, ...expand(component(found.props))];
+    }
+    return [found, ...expand(found.props.children as ReactNode)];
+  }
+
+  function confirmTree(props: Parameters<typeof PromotionConfirm>[0]): AnyElement[] {
+    let found: AnyElement[] = [];
+    const probe = () => {
+      found = expand(createElement(PromotionConfirm, props));
+      return null;
+    };
+    renderToStaticMarkup(wrap(createElement(probe), "en", EDIT_PATH));
+    return found;
+  }
+
+  function renderAt(state: EditState, language: Language, now = NOW): string {
+    return renderToStaticMarkup(wrap(<AdminPromotionEditView state={state} panels={ALL_OPEN} handlers={NO_HANDLERS} now={now} />, language, EDIT_PATH));
+  }
+
+  function actionBar(html: string): string {
+    return element(html, "div", "site-admin-promo-edit__actions");
+  }
+
+  // 某个文字的按钮的开始标签。
+  function buttonTag(html: string, text: string): Map<string, string> {
+    const found = [...html.matchAll(/(<button\b[^>]*>)([^<]*)<\/button>/g)].find((m) => unescapeHtml(m[2] ?? "") === text);
+    if (found === undefined) {
+      throw new Error(`no button ${text}`);
+    }
+    return attributes(found[1] ?? "");
+  }
+
+  function editorIn(state: (typeof STATES)[number], overrides: Partial<AdminPromotion> = {}): Editor {
+    return openEditor(promotion({ state, ...overrides }), "csrf-1");
+  }
+
+  function fakeActionApi(overrides: Partial<PromotionActionApi>): PromotionActionApi {
+    const unexpected = () => Promise.reject(new Error("unexpected request"));
+    return { readOne: unexpected, publish: unexpected, withdraw: unexpected, end: unexpected, copy: unexpected, remove: unexpected, ...overrides };
+  }
+
+  // 以 editor 发出一次状态操作（结果以替身给出），返回记录、替身与 signal。
+  async function runWith(editor: Editor, action: StateAction, result: PromotionWrite | PromotionDelete, extra: Partial<PromotionActionApi> = {}) {
+    const record = recorder(ready(startAction(editor, action)));
+    const navigated: RoutePath[] = [];
+    const moves: ActionMoves = {
+      ...record.moves,
+      navigate: (path) => {
+        navigated.push(path);
+      },
+    };
+    const reply = vi.fn(() => Promise.resolve(result));
+    const api = fakeActionApi({ [API_OF[action]]: reply, ...extra });
+    const signal = new AbortController().signal;
+    await runAction(editor, action, signal, moves, api);
+    return { record, navigated, reply, api, signal };
+  }
+
+  function effects() {
+    return { run: vi.fn<(editor: Editor, action: StateAction) => void>(), open: vi.fn<(path: RoutePath) => void>() };
+  }
+
+  // UX 0.20 A12「状态与可用操作」表「草稿 | 全部 | 保存、发布、复制、删除、预览」「已发布未开始 | … | 保存、撤回为草稿、复制、预览」
+  // 「进行中 | … | 保存、提前结束、复制」「已结束 | … | 复制」与线框「（按下表的状态显示，不可用的不显示）」：操作栏按已保存的状态只显示这些操作
+  // （admin.promo_more 之后依次排列）；已结束没有 common.save，admin.promo_copy 为主要按钮；新建尚未保存时只有 common.save。按已保存的状态，不按未保存的输入。
+  it.each(LANGUAGES)("shows the actions of each saved state in %s", (language) => {
+    const t = (key: CopyKey) => COPY[key][language];
+    expect(STATE_ACTIONS).toEqual({
+      draft: ["publish", "copy", "delete", "preview"],
+      scheduled: ["withdraw", "copy", "preview"],
+      running: ["end", "copy"],
+      ended: ["copy"],
+    });
+    const expected: Record<(typeof STATES)[number], CopyKey[]> = {
+      draft: ["common.save", "admin.promo_more", "admin.promo_publish", "admin.promo_copy", "admin.promo_delete", "admin.promo_preview"],
+      scheduled: ["common.save", "admin.promo_more", "admin.promo_withdraw", "admin.promo_copy", "admin.promo_preview"],
+      running: ["common.save", "admin.promo_more", "admin.promo_end_now", "admin.promo_copy"],
+      ended: ["admin.promo_more", "admin.promo_copy"],
+    };
+    for (const state of STATES) {
+      const editor = changeField(editorIn(state), "name", "Unsaved name");
+      const bar = actionBar(renderAt(ready(editor), language));
+      expect(textNodes(bar), state).toEqual(expected[state].map(t));
+      const secondary = ["acs-admin__btn", "acs-admin__btn--secondary"];
+      const kinds = tags(bar, "button").map((tag) => classes(tag));
+      const actions = state === "ended" ? [["acs-admin__btn"]] : barActions(editor).map(() => secondary);
+      expect(kinds, state).toEqual([...(state === "ended" ? [] : [["acs-admin__btn"]]), [...secondary, "site-admin-promo-edit__more"], ...actions]);
+    }
+    expect(barActions(openEditor(null, "csrf-1"))).toEqual([]);
+    expect(textNodes(actionBar(renderAt(ready(openEditor(null, "csrf-1")), language)))).toEqual([t("common.save")]);
+    expect(Object.keys(ACTION_LABEL).sort()).toEqual(["copy", "delete", "end", "preview", "publish", "withdraw"]);
+  });
+
+  // UX 0.20 A12 手机「操作栏固定在底部，[common.save] 之外的操作收在 [admin.promo_more] ▾ 里」与落实写法（1）「手机上保存之外的操作收在 admin.promo_more 的
+  // 菜单里（按钮切换显隐）」：admin.promo_more 以 aria-controls 指向操作的菜单、aria-expanded 标明显隐；点它切换菜单的显隐，点菜单里的操作后菜单收起。
+  it.each(LANGUAGES)("toggles the more menu on phones in %s", (language) => {
+    const closed = editorIn("draft");
+    let bar = actionBar(renderAt(ready(closed), language));
+    const more = buttonTag(bar, COPY["admin.promo_more"][language]);
+    expect(more.get("type")).toBe("button");
+    expect(more.get("aria-expanded")).toBe("false");
+    const menu = element(bar, "div", "site-admin-promo-edit__menu");
+    const menuTag = attributes(tags(menu, "div")[0] ?? "");
+    expect(menuTag.get("id")).toBe(more.get("aria-controls"));
+    expect(menuTag.get("class")).toBe("acs-admin__panel site-admin-promo-edit__menu");
+    expect(textNodes(menu)).toEqual(["admin.promo_publish", "admin.promo_copy", "admin.promo_delete", "admin.promo_preview"].map((key) => COPY[key as CopyKey][language]));
+
+    const open = toggleMore(closed);
+    expect(open.more).toBe(true);
+    bar = actionBar(renderAt(ready(open), language));
+    expect(buttonTag(bar, COPY["admin.promo_more"][language]).get("aria-expanded")).toBe("true");
+    expect(attributes(tags(element(bar, "div", "site-admin-promo-edit__menu"), "div")[0] ?? "").get("class")).toBe(
+      "acs-admin__panel site-admin-promo-edit__menu site-admin-promo-edit__menu--open",
+    );
+    expect(toggleMore(open)).toEqual(closed);
+
+    for (const action of ["publish", "delete", "preview"] as const) {
+      expect(pressAction(open, action, NOW, effects()).more, action).toBe(false);
+    }
+    const ended = toggleMore(editorIn("ended"));
+    expect(pressAction(ended, "copy", NOW, effects()).more).toBe(false);
+  });
+
+  // UX 0.20 A12 说明「前台预览」「发布、撤回为草稿、提前结束与复制都作用于已保存的版本：有未保存修改时这些按钮同样先提示 [admin.promo_save_first]，
+  // 不连同未保存的输入一起提交」与「有未保存修改时先提示 [admin.promo_save_first]」：有未保存修改时点发布、撤回、提前结束、复制与预览只显示
+  // admin.promo_save_first，不发请求、不打开预览、不弹确认框；保存之后（没有未保存修改）照常。
+  it.each(LANGUAGES)("only asks to save first when there are unsaved changes in %s", async (language) => {
+    const request = vi.fn(() => Promise.reject(new Error("unexpected request")));
+    vi.stubGlobal("fetch", request);
+    // 已结束全部只读、不会有未保存修改，复制与预览用草稿。
+    for (const action of ["publish", "withdraw", "end", "copy", "preview"] as const) {
+      const state = action === "preview" || action === "copy" ? "draft" : STATE_OF[action];
+      const editor = changeCopy(editorIn(state), "badge_en", "Edited");
+      const effect = effects();
+      const pressed = pressAction(editor, action, NOW, effect);
+      expect(effect.run, action).not.toHaveBeenCalled();
+      expect(effect.open, action).not.toHaveBeenCalled();
+      expect(pressed, action).toEqual({ ...editor, notice: { kind: "saveFirst" } });
+      const html = renderAt(ready(pressed), language);
+      expect(html).toContain(`<p class="site-admin-promo-edit__save-first" role="status">${escapeHtml(COPY["admin.promo_save_first"][language])}</p>`);
+      expect(html).not.toContain('role="dialog"');
+      // 改值之后提示收起。
+      expect(changeCopy(pressed, "badge_en", "Edited again").notice).toBeNull();
+    }
+    await Promise.resolve();
+    expect(request).not.toHaveBeenCalled();
+    const clean = effects();
+    pressAction(editorIn("draft"), "publish", NOW, clean);
+    expect(clean.run).toHaveBeenCalledTimes(1);
+  });
+
+  // UX 0.20 A12 说明「提前结束、撤回、删除都先弹确认框：[admin.promo_end_confirm]、[admin.promo_withdraw_confirm]、[admin.promo_delete_confirm]，按钮为该操作本身
+  // （[admin.promo_end_now]、[admin.promo_withdraw]、[admin.promo_delete]）与 ( [common.cancel] )，与 A08 移除标志的确认框写法相同」：点这三个只打开确认框、
+  // 不发请求（删除有未保存修改时同样只弹确认框）；确认框为 role dialog、aria-modal、aria-labelledby 指向说明，按钮依次为 common.cancel（次要）与该操作（主要）。
+  it.each(LANGUAGES)("asks before withdrawing, ending and deleting in %s", (language) => {
+    const cases = [
+      ["withdraw", "admin.promo_withdraw_confirm", "admin.promo_withdraw"],
+      ["end", "admin.promo_end_confirm", "admin.promo_end_now"],
+      ["delete", "admin.promo_delete_confirm", "admin.promo_delete"],
+    ] as const;
+    for (const [action, text, label] of cases) {
+      const editor = editorIn(STATE_OF[action]);
+      expect(renderAt(ready(editor), language)).not.toContain('role="dialog"');
+      const effect = effects();
+      const asking = pressAction(editor, action, NOW, effect);
+      expect(effect.run, action).not.toHaveBeenCalled();
+      expect(asking, action).toEqual({ ...editor, confirm: action });
+      const html = renderAt(ready(asking), language);
+      const dialogTag = tags(html, "div").find((tag) => attributes(tag).get("role") === "dialog") ?? "";
+      expect(classes(dialogTag)).toEqual(["acs-admin__panel", "site-admin__confirm"]);
+      expect(attributes(dialogTag).get("aria-modal")).toBe("true");
+      const labelId = attributes(dialogTag).get("aria-labelledby") ?? "";
+      expect(labelId).not.toBe("");
+      const dialog = element(html, "div", "site-admin__confirm");
+      expect(dialog).toContain(`<p id="${escapeHtml(labelId)}">${escapeHtml(COPY[text][language])}</p>`);
+      expect(tags(dialog, "button").map((tag) => [attributes(tag).get("type"), classes(tag)])).toEqual([
+        ["button", ["acs-admin__btn", "acs-admin__btn--secondary"]],
+        ["button", ["acs-admin__btn"]],
+      ]);
+      expect(textNodes(dialog)).toEqual([COPY[text][language], COPY["common.cancel"][language], COPY[label][language]]);
+    }
+    // 删除有未保存修改时同样只弹确认框（删除丢掉本页修改）。
+    const edited = changeCopy(editorIn("draft"), "badge_en", "Edited");
+    const effect = effects();
+    expect(pressAction(edited, "delete", NOW, effect)).toEqual({ ...edited, confirm: "delete" });
+    expect(effect.run).not.toHaveBeenCalled();
+    // 发布不弹确认框，直接提交。
+    const publish = effects();
+    expect(pressAction(editorIn("draft"), "publish", NOW, publish).confirm).toBeNull();
+    expect(publish.run).toHaveBeenCalledTimes(1);
+  });
+
+  // 同上原句「与 A08 移除标志的确认框写法相同」（落实写法（3）「common.cancel 自动聚焦、Escape 等于取消」）：common.cancel 带 autoFocus，取消与 Escape 只关闭
+  // 确认框、不发请求；点该操作本身才提交一次（带打开确认框时的编辑区），之后确认框关闭、按钮都禁用、该操作标 aria-busy。
+  it("cancels or confirms the dialog", () => {
+    const onCancel = vi.fn(() => undefined);
+    const onConfirm = vi.fn(() => undefined);
+    const tree = confirmTree({ action: "end", onCancel, onConfirm });
+    const buttons = tree.filter((node) => node.type === "button");
+    expect(buttons.map((node) => [node.props.onClick, node.props.autoFocus])).toEqual([
+      [onCancel, true],
+      [onConfirm, undefined],
+    ]);
+    const overlay = tree.find((node) => node.props.className === "site-admin__overlay");
+    const keyDown = overlay?.props.onKeyDown as (event: { key: string }) => unknown;
+    keyDown({ key: "Enter" });
+    expect(onCancel).not.toHaveBeenCalled();
+    keyDown({ key: "Escape" });
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    for (const action of ["withdraw", "end", "delete"] as const) {
+      const editor = editorIn(STATE_OF[action]);
+      const asking = pressAction(editor, action, NOW, effects());
+      expect(cancelConfirm(asking)).toEqual(editor);
+      expect(cancelConfirm(editor)).toBe(editor);
+      const run = vi.fn<(editor: Editor, action: StateAction) => void>();
+      expect(confirmAction(editor, run)).toBe(editor);
+      const confirmed = confirmAction(asking, run);
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(run).toHaveBeenCalledWith(asking, action);
+      expect(confirmed).toEqual({ ...editor, saving: true, acting: action });
+      expect(confirmAction(confirmed, run)).toBe(confirmed);
+      expect(pressAction(confirmed, action, NOW, effects())).toBe(confirmed);
+      const bar = actionBar(renderAt(ready(confirmed), "en"));
+      expect(renderAt(ready(confirmed), "en")).not.toContain('role="dialog"');
+      expect(buttonTag(bar, COPY[ACTION_LABEL[action]].en).get("aria-busy")).toBe("true");
+      expect(buttonTag(bar, COPY["common.save"].en).get("aria-busy")).toBe("false");
+      expect(tags(bar, "button").filter((tag) => !classes(tag).includes("site-admin-promo-edit__more")).every((tag) => attributes(tag).has("disabled"))).toBe(true);
+    }
+  });
+
+  // UX 0.20 A12「结果提示：[admin.promo_saved] / …」与 UX-COPY admin.promo_saved「保存、发布、撤回、提前结束成功」，落实写法（4）「发布、撤回与提前结束成功后
+  // 以返回的活动为新基准（状态标签与可改范围随之更新），显示 admin.promo_saved」：请求带读取到的 version 与 CSRF 令牌；成功后状态标签、操作与只读随返回的状态更新。
+  it.each(LANGUAGES)("takes the returned promotion after publishing, withdrawing and ending in %s", async (language) => {
+    const cases = [
+      ["publish", "scheduled"],
+      ["withdraw", "draft"],
+      ["end", "ended"],
+    ] as const;
+    for (const [action, next] of cases) {
+      const editor = { ...editorIn(STATE_OF[action]), locked: true };
+      const returned = promotion({ state: next, version: 4 });
+      const { record, reply, signal, navigated } = await runWith(editor, action, { kind: "ok", promotion: returned });
+      expect(reply).toHaveBeenCalledWith(7, 3, "csrf-1", signal);
+      expect(record.state).toEqual(ready(openEditor(returned, "csrf-1", { kind: "done", key: "admin.promo_saved" })));
+      expect(navigated).toEqual([]);
+      expect(record.replaced).toEqual([]);
+      const html = renderAt(record.state, language);
+      expect(html).toContain(`<p class="site-admin-promo-edit__done" role="status">${escapeHtml(COPY["admin.promo_saved"][language])}</p>`);
+      expect(element(html, "div", "site-admin-promo-edit__title")).toContain(
+        `<span class="${PROMOTION_STATE_CLASS[next]}">${escapeHtml(COPY[PROMOTION_STATE_LABEL[next]][language])}</span>`,
+      );
+      expect(textNodes(element(html, "div", "site-admin-promo-edit__menu"))).toEqual(STATE_ACTIONS[next].map((item: BarAction) => COPY[ACTION_LABEL[item]][language]));
+    }
+  });
+
+  // UX 0.20 A12 说明「复制成功后进入新草稿的编辑区，显示 [admin.promo_copied]」与落实写法（4）「复制成功后以站内跳转进入 adminPromotionPath(新草稿 ID)，新页面显示
+  // admin.promo_copied（沿用 SHOP-TASK-270 的一次性提示）」：复制只带 ID 与 CSRF 令牌；成功后以 navigate（不是 replace）进入新草稿，读取后显示一次 admin.promo_copied。
+  it.each(LANGUAGES)("moves to the copied draft and shows copied there once in %s", async (language) => {
+    for (const state of STATES) {
+      const copied = promotion({ id: 42, version: 1, state: "draft", starts_at: null, ends_at: null });
+      const { record, reply, signal, navigated } = await runWith(editorIn(state), "copy", { kind: "ok", promotion: copied });
+      expect(reply).toHaveBeenCalledWith(7, "csrf-1", signal);
+      expect(navigated).toEqual([adminPromotionPath(42)]);
+      expect(record.replaced).toEqual([]);
+      const page = recorder();
+      const readOne = vi.fn(() => Promise.resolve<PromotionRead>({ kind: "ok", promotion: copied, csrf_token: "csrf-42" }));
+      await loadEditor({ kind: "existing", id: 42 }, new AbortController().signal, page.moves, takePromotionNotice(42), fakeApi({ readOne }));
+      expect(editorOf(page.state).notice).toEqual({ kind: "done", key: "admin.promo_copied" });
+      expect(renderAt(page.state, language)).toContain(
+        `<p class="site-admin-promo-edit__done" role="status">${escapeHtml(COPY["admin.promo_copied"][language])}</p>`,
+      );
+      expect(takePromotionNotice(42)).toBeNull();
+    }
+  });
+
+  // 落实写法（4）「删除成功后以 replace 回到列表」（UX 0.20 A12「去向」之外不另设页面）：删除带读取到的 version 与 CSRF 令牌，成功后以 replace 回到 /admin/promotions。
+  it("goes back to the list after deleting", async () => {
+    const { record, reply, signal, navigated } = await runWith(editorIn("draft"), "delete", { kind: "ok" });
+    expect(reply).toHaveBeenCalledWith(7, 3, "csrf-1", signal);
+    expect(record.replaced).toEqual([PROMOTIONS_PATH]);
+    expect(navigated).toEqual([]);
+    expect(actionStep("delete", { kind: "ok" })).toEqual({ kind: "deleted" });
+  });
+
+  // UX 0.20 A12 说明「规则」中「发布条件不满足时整次不生效：[admin.promo_invalid] 下逐条列出问题（…发布条件为 [admin.promo_publish_missing]），与其他已发布活动
+  // 时间重叠为 [admin.promo_overlap]…；版本不符为 [admin.promo_changed] 与 ( [admin.reload] )」与落实写法（4）「失败的提示与保存相同」：每种状态操作失败时的提示同保存，
+  // 本页不变、按钮恢复可用；401 回到 A01；不存在只剩 common.error_retry 与 admin.promo_back。
+  it.each(LANGUAGES)("shows the same failures as saving for every state action in %s", async (language) => {
+    const failures: [PromotionWrite, Editor["notice"]][] = [
+      [{ kind: "invalid", problems: [problem("publish_missing")] }, { kind: "invalid", products: [], publishMissing: true, other: false }],
+      [{ kind: "overlap", name: "Hari <Raya>" }, { kind: "overlap", name: "Hari <Raya>" }],
+      [{ kind: "changed" }, { kind: "changed" }],
+      [{ kind: "state", state: "running" }, { kind: "changed" }],
+      [{ kind: "ended" }, { kind: "changed" }],
+      [{ kind: "network" }, { kind: "alert", key: "common.network_check" }],
+      [{ kind: "failed" }, { kind: "alert", key: "common.error_retry" }],
+    ];
+    for (const action of STATE_ACTION_LIST) {
+      const editor = editorIn(STATE_OF[action]);
+      for (const [write, notice] of failures) {
+        const { record, navigated } = await runWith(editor, action, write);
+        expect(editorOf(record.state), `${action} ${write.kind}`).toEqual({ ...editor, notice });
+        expect(navigated).toEqual([]);
+        expect(record.replaced).toEqual([]);
+      }
+      const none = await runWith(editor, action, { kind: "none" });
+      expect(none.record.replaced).toEqual(["/admin/login"]);
+      const missing = await runWith(editor, action, { kind: "missing" });
+      expect(missing.record.state).toEqual({ status: "gone", error: "common.error_retry" });
+    }
+    const publish = await runWith(editorIn("draft"), "publish", { kind: "invalid", problems: [problem("publish_missing")] });
+    expect(textNodes(element(renderAt(publish.record.state, language), "div", "site-admin-promo-edit__invalid"))).toEqual([
+      COPY["admin.promo_invalid"][language],
+      COPY["admin.promo_publish_missing"][language],
+    ]);
+    const overlap = await runWith(editorIn("scheduled"), "withdraw", { kind: "overlap", name: "Hari <Raya>" });
+    expect(renderAt(overlap.record.state, language)).toContain(escapeHtml(formatCopy(COPY["admin.promo_overlap"][language], { name: "Hari <Raya>" })));
+    const changed = await runWith(editorIn("running"), "end", { kind: "changed" });
+    const changedHtml = renderAt(changed.record.state, language);
+    expect(changedHtml).toContain(escapeHtml(COPY["admin.promo_changed"][language]));
+    expect(changedHtml).toContain(escapeHtml(COPY["admin.reload"][language]));
+  });
+
+  // 落实写法（4）「失败的提示与保存相同」中 SHOP-TASK-270 的 csrf（显示 common.error_retry 并重新取 CSRF 令牌，只换令牌）：状态操作被答 403 时以 readAdminPromotion
+  // 重取令牌，不再重试该操作；离开页面（中止）之后的结果不再更新页面。
+  it("reads a new CSRF token after csrf and ignores results after leaving", async () => {
+    for (const action of STATE_ACTION_LIST) {
+      const editor = editorIn(STATE_OF[action]);
+      const readOne = vi.fn(() => Promise.resolve<PromotionRead>({ kind: "ok", promotion: promotion({ version: 9 }), csrf_token: "csrf-2" }));
+      const { record, reply, signal } = await runWith(editor, action, { kind: "csrf" }, { readOne });
+      expect(reply).toHaveBeenCalledTimes(1);
+      expect(readOne).toHaveBeenCalledWith(7, signal);
+      expect(editorOf(record.state)).toEqual({ ...editor, csrfToken: "csrf-2", notice: { kind: "alert", key: "common.error_retry" } });
+    }
+    const controller = new AbortController();
+    const editor = editorIn("draft");
+    const record = recorder(ready(startAction(editor, "publish")));
+    const publish = vi.fn(() => {
+      controller.abort();
+      return Promise.resolve<PromotionWrite>({ kind: "ok", promotion: promotion({ state: "scheduled" }) });
+    });
+    await runAction(editor, "publish", controller.signal, { ...record.moves, navigate: () => undefined }, fakeActionApi({ publish }));
+    expect(record.state).toEqual(ready(startAction(editor, "publish")));
+  });
+
+  // UX 0.20 A12 说明「前台预览」「[admin.promo_preview] 在新标签页打开前台预览，显示的是已保存的内容」与落实写法（5）「以新标签页打开 SHOP-TASK-280 的
+  // adminPromotionPreviewPath(活动 ID)（window.open，带 noopener）」：点预览不发请求，打开 /admin/promotions/<活动 ID>/preview；打开时带 _blank 与 noopener。
+  it("opens the storefront preview in a new tab", () => {
+    for (const state of ["draft", "scheduled"] as const) {
+      const editor = editorIn(state);
+      const effect = effects();
+      expect(pressAction(editor, "preview", NOW, effect)).toBe(editor);
+      expect(effect.open).toHaveBeenCalledWith("/admin/promotions/7/preview");
+      expect(effect.run).not.toHaveBeenCalled();
+    }
+    // 进行中与已结束不提供预览。
+    for (const state of ["running", "ended"] as const) {
+      const effect = effects();
+      pressAction(editorIn(state), "preview", NOW, effect);
+      expect(effect.open).not.toHaveBeenCalled();
+    }
+    const target = { open: vi.fn<(url?: string | URL, name?: string, features?: string) => null>(() => null) };
+    openPreview("/admin/promotions/7/preview", target);
+    expect(target.open).toHaveBeenCalledWith("/admin/promotions/7/preview", "_blank", "noopener");
+  });
+
+  // UX 0.20 A12 说明「前台预览」「前台预览的唯一禁用条件是：已保存的内容里没有开始时间或结束时间，或结束时间已过——这时 [admin.promo_preview] 禁用并显示
+  // [admin.promo_preview_needs_time]」与落实写法（5）「马来西亚当前时刻（当前 UTC 时间加 8 小时取到分钟…按字符串比较）」：开始为空、结束为空、结束不晚于当前时
+  // 禁用并在旁显示说明（按钮以 aria-describedby 指向它），点它不打开；结束晚于当前时可用、没有说明。按已保存的时间，不按未保存的输入。
+  it.each(LANGUAGES)("disables the preview without a saved time or after the end in %s", (language) => {
+    expect(malaysiaMinute(Date.UTC(2026, 10, 19, 16, 30, 59))).toBe("2026-11-20T00:30");
+    expect(malaysiaMinute(Date.UTC(2027, 0, 1, 0, 0, 0))).toBe("2027-01-01T08:00");
+    const label = COPY["admin.promo_preview"][language];
+    const note = escapeHtml(COPY["admin.promo_preview_needs_time"][language]);
+    const blocked: [string, Partial<AdminPromotion>][] = [
+      ["no start", { starts_at: null }],
+      ["no end", { ends_at: null }],
+      ["end now", { ends_at: NOW }],
+      ["end passed", { ends_at: "2026-12-31T23:59" }],
+    ];
+    for (const [name, overrides] of blocked) {
+      for (const state of ["draft", "scheduled"] as const) {
+        const editor = editorIn(state, overrides);
+        expect(previewNeedsTime(editor.promotion ?? promotion(), NOW), name).toBe(true);
+        const bar = actionBar(renderAt(ready(editor), language));
+        const button = buttonTag(bar, label);
+        expect(button.has("disabled"), name).toBe(true);
+        const preview = element(bar, "span", "site-admin-promo-edit__preview");
+        expect(preview).toContain(`<span id="${escapeHtml(button.get("aria-describedby") ?? "")}" class="acs-admin__muted">${note}</span>`);
+        const effect = effects();
+        expect(pressAction(editor, "preview", NOW, effect), name).toBe(editor);
+        expect(effect.open, name).not.toHaveBeenCalled();
+      }
+    }
+    // 结束晚于当前：可用，没有说明；未保存的空时间不影响。
+    const later = changeField(editorIn("draft", { ends_at: "2027-01-01T00:01" }), "starts_at", "");
+    const bar = actionBar(renderAt(ready(later), language));
+    expect(buttonTag(bar, label).has("disabled")).toBe(false);
+    expect(buttonTag(bar, label).has("aria-describedby")).toBe(false);
+    expect(bar).not.toContain(note);
+    expect(previewNeedsTime(promotion({ ends_at: "2027-01-01T00:01" }), NOW)).toBe(false);
   });
 });
